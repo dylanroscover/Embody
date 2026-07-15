@@ -4,7 +4,7 @@ import { Picture } from "astro:assets";
 import { TdnViewer } from "@embody/tdn-viewer";
 import Base from "../layouts/Base.astro";
 import { sampleTdn } from "../fixtures/sample-tdn";
-import { specimenThumbnail } from "../lib/specimenThumb";
+import { resultImage } from "../lib/specimenThumb";
 import { fixtureSummaries } from "../lib/specimenFallback";
 import { listSpecimensForCollection } from "../server/db";
 import heroShot from "../assets/embody-screenshot.png";
@@ -35,7 +35,7 @@ const jsonLd = {
   applicationCategory: "DeveloperApplication",
   operatingSystem: "Windows, macOS",
   description:
-    "Open-source TouchDesigner toolkit. Envoy is an MCP server with 48 tools that lets AI assistants build, wire, parameterize, and debug a live TouchDesigner session; Embody externalizes the network to version-control-friendly text; TDN is the diffable YAML network format that makes both possible.",
+    "Open-source TouchDesigner toolkit. Envoy is an MCP server with 52 tools that lets AI assistants build, wire, parameterize, and debug a live TouchDesigner session; Embody externalizes the network to version-control-friendly text; TDN is the diffable YAML network format that makes both possible.",
   url: "https://embody.tools/",
   downloadUrl: "https://github.com/dylanroscover/Embody/releases/latest",
   softwareHelp: "https://dylanroscover.github.io/Embody/",
@@ -47,7 +47,7 @@ const jsonLd = {
   publisher: { "@type": "Organization", name: "TEC", url: "https://tec.design" },
   softwareRequirements: "TouchDesigner 2025.32280 or later",
   keywords:
-    "TouchDesigner, MCP, Model Context Protocol, AI agent, externalization, version control, TDN, generative art, creative coding, Claude Code, Cursor, Windsurf"
+    "TouchDesigner, MCP, Model Context Protocol, AI agent, externalization, version control, TDN, generative art, creative coding, Claude Code, Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot"
 };
 ---
 
@@ -60,7 +60,7 @@ const jsonLd = {
   <!-- HERO -->
   <section class="hero">
     <div class="hero-graph" aria-hidden="true">
-      <TdnViewer tdn={sampleTdn} height="100%" client:only="react" />
+      <TdnViewer tdn={sampleTdn} height="100%" showAnnotations={false} client:only="react" />
     </div>
     <div class="container hero__inner">
       <p class="eyebrow">open source &middot; MIT &middot; TouchDesigner 2025+</p>
@@ -116,16 +116,27 @@ const jsonLd = {
       </p>
 
       <div class="card-grid">
-        {featured.map((specimen) => (
+        {featured.map((specimen) => {
+          // Real rendered cover: author-uploaded R2 thumbnail > baked render for
+          // known slugs > procedural placeholder. Mirrors /collection and the
+          // detail pages (SpecimenCover) so the teaser never shows the generic
+          // placeholder when a real result exists.
+          const cover = resultImage({
+            slug: specimen.slug,
+            name: specimen.name,
+            category: specimen.category,
+            thumbnailKey: specimen.thumbnail_key,
+          });
+          return (
           <a class="specimen-card pillar" href={`/c/${specimen.slug}`}>
             <div class="thumb">
               <img
-                src={specimenThumbnail(specimen)}
+                src={cover.src}
                 width="640"
                 height="360"
                 loading="lazy"
                 decoding="async"
-                alt={`${specimen.name} node preview placeholder`}
+                alt={cover.baked ? `${specimen.name} rendered result` : `${specimen.name} preview placeholder`}
               />
             </div>
             <div class="specimen-card__body">
@@ -142,7 +153,8 @@ const jsonLd = {
               <p>{specimen.description}</p>
             </div>
           </a>
-        ))}
+          );
+        })}
       </div>
 
       <p class="start__cta">
@@ -240,15 +252,31 @@ const jsonLd = {
     z-index: 2;
     display: flex;
     flex-direction: column;
-    gap: 3rem;
+    /* Same shared rhythm token as nav->eyebrow and eyebrow->heading, so every
+       gap down the hero is identical: nav = eyebrow = headline = CTAs = shot. */
+    gap: var(--stack-gap);
   }
 
   .hero__inner .eyebrow {
     margin: 0;
+    /* Same leading-trim as the headline so the eyebrow's box hugs its ink and
+       the nav->eyebrow / eyebrow->headline gaps read as a true 48px, not the
+       font's line box. Keeps the hero stack uniform ink-to-ink. */
+    text-box-trim: trim-both;
+    text-box-edge: cap alphabetic;
+  }
+
+  /* Headline + eyebrow stay left-aligned; the CTA row and the shot share the
+     container's center axis so the small button cluster reads as a deliberate
+     focal funnel rather than stranded against the centered screenshot. */
+  .hero__ctas {
+    align-self: center;
   }
 
   .hero__shot {
     max-width: 900px;
+    align-self: center;
+    width: 100%;
   }
 
   .section--collection .card-grid {

@@ -107,7 +107,7 @@ class TestMCPFlagsPosition(EmbodyTestCase):
         result = self.envoy._get_network_layout(comp_path=parent.path)
         self.assertDictHasKey(result, 'operators')
         self.assertEqual(result['count'], 2)
-        names = {o['name'] for o in result['operators']}
+        names = {o['path'].rsplit('/', 1)[-1] for o in result['operators']}
         self.assertEqual(names, {'child_a', 'child_b'})
 
     def test_get_network_layout_entry_has_position_fields(self):
@@ -117,6 +117,9 @@ class TestMCPFlagsPosition(EmbodyTestCase):
         entry = result['operators'][0]
         for key in ('nodeX', 'nodeY', 'nodeWidth', 'nodeHeight'):
             self.assertDictHasKey(entry, key)
+        self.assertNotIn('name', entry)
+        self.assertNotIn('family', entry)
+        self.assertNotIn('nodeCenterX', entry)
         self.assertDictHasKey(result, 'bounding_box')
 
     def test_get_network_layout_annotations_toggle(self):

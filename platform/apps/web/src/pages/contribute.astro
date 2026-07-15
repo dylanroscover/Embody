@@ -158,6 +158,16 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
           <span class="submit-file__name" data-file-name>no file chosen</span>
         </span>
       </label>
+      <label class="submit-field">
+        <span>cover video <em>(optional MP4, H.264, 16:9, max 10 MB)</em></span>
+        <span class="submit-file" data-video-file>
+          <input type="file" name="video" accept="video/mp4" class="submit-file__input" data-video-input />
+          <span class="submit-file__btn" aria-hidden="true">choose video</span>
+          <span class="submit-file__name" data-video-name>no file chosen</span>
+        </span>
+        <small class="submit-hint">shown 16:9 (center-cropped to fit); about 1280x720 looks best. a poster frame is extracted automatically as the cover image, so the grid stays fast. supply a thumbnail above to override it.</small>
+        <small class="submit-error" data-error-for="video" role="alert"></small>
+      </label>
       <div class="submit-field">
         <span class="submit-field__label" id="vislbl">visibility</span>
         <div class="vis-seg" role="radiogroup" aria-labelledby="vislbl">
@@ -308,6 +318,91 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
     return canvas.toDataURL("image/webp", 0.82);
   }
 
+  // Client-side video limits, mirrored from the server (putCoverVideo / the video
+  // route): MP4 / H.264 only, <= 10 MB. The server re-validates by magic bytes, so
+  // this is only a fast pre-upload guard, not the real gate.
+  const VIDEO_MAX_BYTES = 10 * 1024 * 1024;
+
+  // Extract the first frame of a chosen video as a 640x360 (16:9) cover-cropped
+  // WebP data URL, using the SAME cover math as thumbDataUrl. This poster is fed
+  // into the existing thumbnail path so a video cover always carries a fast static
+  // image and the grid / og pipeline is reused unchanged. Resolves with the data
+  // URL, or rejects if the frame cannot be drawn.
+  function videoPosterDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const video = document.createElement("video");
+      video.muted = true;
+      video.preload = "auto";
+      // Some browsers only decode a frame for playsInline muted video off-DOM.
+      video.playsInline = true;
+      let settled = false;
+      let watchdog;
+      const cleanup = () => {
+        if (watchdog) clearTimeout(watchdog);
+        URL.revokeObjectURL(url);
+        video.removeAttribute("src");
+        video.load();
+      };
+      const fail = (err) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(err instanceof Error ? err : new Error("video decode failed"));
+      };
+      const draw = () => {
+        if (settled) return;
+        try {
+          const W = 640;
+          const H = 360;
+          const canvas = document.createElement("canvas");
+          canvas.width = W;
+          canvas.height = H;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("canvas unavailable");
+          const vw = video.videoWidth;
+          const vh = video.videoHeight;
+          if (!vw || !vh) throw new Error("video has no dimensions");
+          // cover: scale to fill the 16:9 box, then center-crop the overflow.
+          const scale = Math.max(W / vw, H / vh);
+          const dw = vw * scale;
+          const dh = vh * scale;
+          ctx.drawImage(video, (W - dw) / 2, (H - dh) / 2, dw, dh);
+          const dataUrl = canvas.toDataURL("image/webp", 0.82);
+          settled = true;
+          cleanup();
+          resolve(dataUrl);
+        } catch (err) {
+          fail(err);
+        }
+      };
+      video.addEventListener("error", () => fail(new Error("video could not be loaded")));
+      video.addEventListener("seeked", draw, { once: true });
+      // Once the first frame is available, seek slightly in so we capture real
+      // content rather than a possible black leader frame; drawing happens on seeked.
+      video.addEventListener(
+        "loadeddata",
+        () => {
+          try {
+            const target = Math.min(0.1, (video.duration || 1) / 2);
+            if (video.currentTime === target) draw();
+            else video.currentTime = target;
+          } catch {
+            draw();
+          }
+        },
+        { once: true }
+      );
+      // Watchdog: some browsers/codecs silently never fire "seeked" for a tiny
+      // seek, which would hang the submit forever (the promise never settles).
+      // After 4s, force a best-effort draw (captures the current frame, or
+      // rejects if none is decodable) so the promise ALWAYS settles.
+      watchdog = setTimeout(draw, 4000);
+      video.src = url;
+      video.load();
+    });
+  }
+
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!goBtn) return;
@@ -374,7 +469,9 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
     // result in R2 (putThumbnail). Skipped when no file is chosen.
     let thumbnail;
     const thumbFile = data.get("thumbnail");
-    if (thumbFile && typeof thumbFile === "object" && "size" in thumbFile && thumbFile.size > 0) {
+    const hasExplicitThumb =
+      thumbFile && typeof thumbFile === "object" && "size" in thumbFile && thumbFile.size > 0;
+    if (hasExplicitThumb) {
       if (thumbFile.size > 8_000_000) {
         setStatus("thumbnail source is too large (max 8 MB).", "error");
         return;
@@ -385,6 +482,40 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
         console.error("thumbnail resize failed", err);
         setStatus("could not process the thumbnail image.", "error");
         return;
+      }
+    }
+
+    // Optional cover video: validated client-side (MP4 + <= 10 MB) before any
+    // upload, then uploaded in a SECOND request AFTER the metadata POST succeeds
+    // (a 10 MB video is far too large to base64 into the JSON payload). When no
+    // explicit thumbnail was chosen, auto-extract the first frame as the poster
+    // and feed it into the EXISTING thumbnail path, so the grid / og pipeline is
+    // reused unchanged.
+    let videoFile;
+    const rawVideo = data.get("video");
+    if (rawVideo && typeof rawVideo === "object" && "size" in rawVideo && rawVideo.size > 0) {
+      if (rawVideo.type !== "video/mp4") {
+        setFieldError("video", "cover video must be an MP4 (H.264) file.");
+        setStatus("cover video must be an MP4 (H.264) file.", "error");
+        return;
+      }
+      if (rawVideo.size > VIDEO_MAX_BYTES) {
+        setFieldError("video", "cover video is too large (max 10 MB).");
+        setStatus("cover video is too large (max 10 MB).", "error");
+        return;
+      }
+      setFieldError("video", "");
+      videoFile = rawVideo;
+      // Auto-extract the poster only when the author has not supplied one.
+      if (!thumbnail) {
+        try {
+          thumbnail = await videoPosterDataUrl(rawVideo);
+        } catch (err) {
+          console.error("poster extraction failed", err);
+          setFieldError("video", "could not read a poster frame from that video.");
+          setStatus("could not read a poster frame from the cover video.", "error");
+          return;
+        }
       }
     }
 
@@ -423,8 +554,42 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
         setStatus(body.detail || body.error || `contribution failed (${res.status}).`, "error");
         return;
       }
+
+      // Step two: upload the cover video (if one was selected) to the specimen's
+      // video route as multipart/form-data. The specimen (with its poster) is
+      // already saved, so a failed video upload is NON-FATAL -- the cover stays an
+      // image and the author can retry from Edit.
+      const newSlug = body.slug;
+      if (videoFile && newSlug) {
+        setStatus("uploading cover video...", "pending");
+        try {
+          const videoForm = new FormData();
+          videoForm.append("video", videoFile);
+          const vres = await fetch(`/api/specimens/${encodeURIComponent(newSlug)}/video`, {
+            method: "POST",
+            body: videoForm
+          });
+          if (!vres.ok) {
+            setStatus(
+              "cover image saved, but the video upload failed. you can retry from Edit.",
+              "error"
+            );
+            window.setTimeout(() => window.location.assign(`/c/${newSlug}`), 1800);
+            return;
+          }
+        } catch (verr) {
+          console.error("video upload failed", verr);
+          setStatus(
+            "cover image saved, but the video upload failed. you can retry from Edit.",
+            "error"
+          );
+          window.setTimeout(() => window.location.assign(`/c/${newSlug}`), 1800);
+          return;
+        }
+      }
+
       setStatus("contributed. redirecting to your specimen...", "ok");
-      window.location.assign(`/c/${body.slug}`);
+      window.location.assign(`/c/${newSlug}`);
     } catch (err) {
       console.error("submit failed", err);
       setStatus("something went wrong. please try again.", "error");
@@ -742,6 +907,19 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
       else fileName.removeAttribute("data-has-file");
     });
   }
+
+  // Same filename mirror for the optional cover-video picker.
+  const videoInput = document.querySelector("[data-video-input]") as HTMLInputElement | null;
+  const videoName = document.querySelector("[data-video-name]") as HTMLElement | null;
+  if (videoInput && videoName) {
+    const PLACEHOLDER = "no file chosen";
+    videoInput.addEventListener("change", () => {
+      const picked = videoInput.files?.[0]?.name ?? "";
+      videoName.textContent = picked || PLACEHOLDER;
+      if (picked) videoName.setAttribute("data-has-file", "");
+      else videoName.removeAttribute("data-has-file");
+    });
+  }
 </script>
 
 <style>
@@ -1053,6 +1231,11 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
 
   .submit-turnstile .cf-turnstile {
     margin-top: 0.25rem;
+    /* Reserve the managed widget's box (~300x65) so the async Cloudflare iframe
+       lands into pre-sized space instead of expanding 0 -> 65px and shoving the
+       submit footer down after paint. Production-only widget, so DEV never sees
+       the shift -- the reserve just makes the first paint match the mounted size. */
+    min-height: 65px;
   }
 
   /* ---- App-native file picker ----

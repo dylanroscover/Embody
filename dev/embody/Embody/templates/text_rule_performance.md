@@ -70,6 +70,10 @@ On any stop condition, immediately STOP, report the offending metric and op path
 - **GLSL**: never write unbounded `for` or `while` loops. Cap iterations with a constant. Bounds-check every dynamic array index with `TD_NUM_*_INPUTS` guards. Check the Info DAT for compile errors before relying on the op.
 - **Python via `execute_python`**: keep calls short and non-blocking. No synchronous blocking I/O or `sleep` on the main thread. No `TOP.sample()` in loops; use `numpyArray()`. Avoid `store()` in hot paths. Chunk large builds across frames. See [td-python.md](td-python.md#threading) and [td-python.md](td-python.md#cook-model).
 
+## Movie export
+
+Recording or exporting ANY movie/image sequence -> MUST load /movie-export FIRST -- the default Realtime flag silently produces duplicate-frame judder, and async file readers serve stale frames that pass every container check.
+
 ## Diagnosing CPU vs GPU Bottleneck
 
 Per [Optimize](https://docs.derivative.ca/Optimize), if dropping render resolution to 64x64 does not raise fps, the bottleneck is CPU, not GPU. A Null/In/Out op with a large `cpuCookTime` or `childrenCPUCookTime` signals a CPU-overload cook cascade.

@@ -1,17 +1,22 @@
 format: tdn
 version: '2.0'
 build: 15
-generator: Embody/6.0.25
+generator: Embody/6.0.105
 td_build: 099.2025.32820
-source_file: Embody-6.25.toe
-exported_at: '2026-06-13T05:52:38Z'
+source_file: Embody-6.105.toe
+exported_at: '2026-07-06T08:57:11Z'
 network_path: /embody/Embody/help
 options:
   include_dat_content: false
   include_storage: true
+type_defaults:
+  textDAT:
+    parameters:
+      language: python
+    size: [130, 90]
 type: opviewerCOMP
 parameters:
-  opviewer: ./text_help
+  opviewer: ./text_help_display
   w: 500
   h: 600
   display: false
@@ -29,8 +34,10 @@ operators:
   parameters:
     file: embody/Embody/help/text_help.py
     syncfile: true
-    language: python
-  size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
   - py
+- name: text_help_display
+  type: textDAT
+  position: [0, -200]
+  color: [0.5, 0.5, 0.5]

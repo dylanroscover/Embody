@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 660
-generator: Embody/6.0.60
+build: 784
+generator: Embody/6.0.126
 td_build: 099.2025.32820
-source_file: Embody-6.61.toe
-exported_at: '2026-06-29T00:35:10Z'
+source_file: Embody-6.126.toe
+exported_at: '2026-07-14T20:02:20Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -25,15 +25,6 @@ type_defaults:
     color: [0.9, 0.3, 0.4]
   baseCOMP:
     size: [160, 130]
-  windowCOMP:
-    parameters:
-      title: =me
-      borders: false
-      includedialog: false
-      reloadbuiltin: false
-    color: [0.3, 0.5, 0.9]
-    tags:
-    - tdn
   tableDAT:
     parameters:
       syncfile: true
@@ -44,41 +35,24 @@ type_defaults:
 type: containerCOMP
 custom_pars:
   Embody:
-  - name: Status
-    style: Str
-    readOnly: true
-    help: Current Embody status (read-only). Shows whether Embody is initialized and running.
-    value: Enabled
-  - name: Disable
+  - name: Setupwizard
     style: Pulse
-    help: 'Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable.'
-  - name: Update
-    style: Pulse
-    label: Enable/Update
-    help: 'Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table.'
-  - name: Refresh
-    style: Pulse
-    help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
-  - name: Performmode
-    style: Toggle
-    label: Perform Mode
-  - name: Createexternalizationstable
-    style: Pulse
-    label: Create Externalizations Table
-    startSection: true
-    help: Creates the externalizations tracking table as a sibling operator if it does not already exist. Safe to pulse at any time — no-op if the table is already connected. Use this to recover if the table was lost after an Embody upgrade.
-  - name: Externalizations
-    style: DAT
-    label: Externalizations Table
-    help: Reference to the externalizations tracking table DAT (stored in TSV format). Lists all externalized operators with their paths, types, timestamps, and dirty state.
-    value: /embody/externalizations
-  - name: Openexternalizationstable
-    style: Pulse
-    label: Open Externalizations Table
-    help: Opens the externalizations tracking table in a floating viewer window.
+    label: Setup Wizard
+    help: Open the Embody setup wizard to review or change your mode, AI assistant, and where config files are written.
+  - name: Embodymode
+    style: Menu
+    label: Mode
+    default: auto
+    menuNames:
+    - auto
+    - advanced
+    menuLabels:
+    - Auto - manage everything
+    - Advanced - ask first
+    help: How Embody handles invasive, project-level changes (git config, .venv, MCP/AI config files, network ops). 'Auto' manages everything silently -- recommended for most users. 'Advanced' asks before each such change and keeps the footprint minimal -- for users who want full control.
   - name: Folder
     style: Folder
-    label: Externalizations Folder
+    label: Ext. Folder (Rel. to Project)
     startSection: true
     help: Root folder where externalized files are saved. All .tox, .py, .json, and other externalized files are written relative to this folder.
   - name: Externalizeproject
@@ -86,76 +60,37 @@ custom_pars:
     label: Externalize Full Project
     startSection: true
     help: Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content.
-  - name: Detectduplicatepaths
+  - name: Disable
+    style: Pulse
+    startSection: true
+    help: 'Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable.'
+  - name: Update
+    style: Pulse
+    label: Enable / Update
+    help: 'Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table.'
+  - name: Refresh
+    style: Pulse
+    help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
+  - name: Performmode
     style: Toggle
-    label: Detect Duplicate Paths
-    help: When enabled, warns if multiple operators resolve to the same externalized file path. Helps catch naming conflicts.
-    value: true
-  - name: Templatemaster
+    label: Perform Mode
+    startSection: true
+  - name: Status
     style: Str
-    label: Template Master Name
-    default: __template__
-    help: When duplicate external paths are detected, an operator whose path contains a folder/COMP with this exact name is auto-selected as the master (the rest are tagged as clones), with no prompt. Matches only when exactly one operator in the group contains this name. Clear this field to always choose the master manually, or set it to your own naming convention (e.g. '_master').
-  - name: Localtimestamps
-    style: Toggle
-    label: Local Timestamps
-    default: true
-    help: When enabled, timestamps in the externalizations table are displayed in your local timezone instead of UTC.
-  - name: Toxrestoreonstart
-    style: Toggle
-    label: Restore toxes on Start
-    help: When enabled, automatically restores TOX-strategy COMPs from .tox files on disk when the project opens. Useful when COMPs were externalized but the .toe was not saved.
-    value: true
-  - name: Datrestoreonstart
-    style: Toggle
-    label: Restore DATs on Start
-    default: true
-    help: When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs.
-  - name: Filecleanup
-    style: Menu
-    label: File Cleanup
+    label: Embody Status
     startSection: true
-    default: ask
-    menuNames:
-    - ask
-    - keep
-    - delete
-    menuLabels:
-    - Ask
-    - Always Keep Files
-    - Always Delete Files
-    help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-    value: delete
-  - name: Tdndatsafety
-    style: Menu
-    label: Content Safety
-    default: ask
-    menuNames:
-    - ask
-    - externalize
-    - ignore
-    menuLabels:
-    - Ask Each Save
-    - Always Externalize
-    - Never Ask
-    help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
-  - name: Openmanager
-    style: Pulse
-    label: Open Manager
-    startSection: true
-    help: Opens the Embody Manager window, which provides a list view of all externalized operators with status, actions, and strategy management.
-  - name: Closemanager
-    style: Pulse
-    label: Close Manager
-    help: Closes the Embody Manager window.
+    readOnly: true
+    help: Current Embody status (read-only). Shows whether Embody is initialized and running.
+    value: Enabled
   Tags:
   - name: Toxtags
     style: Header
     label: tox Tags
     help: Tag strings and operator colors for TOX externalization. COMPs tagged with the Tox tag are externalized as .tox files.
-  - name: Toxtagcolorr
+  - name: Toxtagcolor
     style: RGBA
     label: tox Tag Color
+    size: 3
     help: Color applied to tox-tagged COMP operators in the network editor. Makes externalized COMPs visually identifiable.
     values: [0.325, 0.8, 0.3]
   - name: Toxtag
@@ -168,14 +103,16 @@ custom_pars:
     label: DAT Tags
     startSection: true
     help: Tag strings and operator colors for DAT externalization. DATs are tagged with format-specific tags (py, json, xml, etc.) and externalized to matching file types.
-  - name: Dattagcolorr
+  - name: Dattagcolor
     style: RGBA
     label: DAT Tag Color
+    size: 3
     help: Color applied to DAT-tagged operators in the network editor. Makes externalized DATs visually identifiable.
     values: [0.9, 0.3, 0.4]
-  - name: Clonetagcolorr
+  - name: Clonetagcolor
     style: RGBA
     label: Clone Tag Color
+    size: 3
     help: Color applied to clone-tagged operators in the network editor. Distinguishes cloned externalized operators from originals.
     values: [1, 0.7, 0.1]
   - name: Pytag
@@ -332,7 +269,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 06:21:35 UTC
+    value: Saved 11:20:53 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -373,28 +310,39 @@ custom_pars:
     default: '0'
     menuNames:
     - claudecode
+    - codex
+    - gemini
+    - vscode
     - cursor
-    - copilot
     - windsurf
+    - copilot
     - none
     menuLabels:
     - Claude Code
+    - Codex
+    - Gemini
+    - VS Code
     - Cursor
-    - GitHub Copilot
     - Windsurf
+    - GitHub Copilot
     - None
     help: Selects the AI client used with Envoy. Determines which MCP configuration file format is generated (e.g. .mcp.json for Claude Code).
     value: claudecode
+  - name: Launchaiclient
+    style: Pulse
+    label: Launch AI Client
+    help: 'Open the AI client selected above at the project root: editors (VS Code, Cursor, Windsurf, Copilot) open the folder as a workspace; CLI tools (Claude Code, Codex, Gemini) open in a new terminal at the root.'
   - name: Aiprojectroot
     style: Menu
     label: AI Project Root
+    startSection: true
     default: gitroot
     menuNames:
     - gitroot
     - projectfolder
     - custom
     menuLabels:
-    - Git root
+    - Git repository root
     - Project folder (.toe directory)
     - Custom
     help: Where Embody writes AI config (AGENTS.md, CLAUDE.md, .claude/, .cursor/, .mcp.json, .embody/). "Git root" (default) writes at the top of the git repo. "Project folder" writes alongside the .toe -- use this when your TD project lives in a subdirectory of a larger repo and you open that subdirectory as your AI tool workspace.
@@ -411,9 +359,8 @@ custom_pars:
   - name: Envoyport
     style: Int
     label: Envoy Port
-    default: 9876
+    default: 9870
     help: 'Port number for the Envoy MCP server (default: 9870). Changing while running automatically restarts the server on the new port.'
-    value: 9870
   - name: Embotenable
     style: Toggle
     label: Embot
@@ -425,6 +372,37 @@ custom_pars:
     label: Envoy Follow
     default: true
     help: Camera follows the operator Envoy is working on, panning the network editor to it. Works with or without the Embot character shown.
+  - name: Autoexternalize
+    style: Menu
+    label: Auto-Externalize New Ops
+    startSection: true
+    default: neither
+    menuNames:
+    - neither
+    - dats
+    - comps
+    - both
+    menuLabels:
+    - Neither
+    - DATs
+    - COMPs
+    - DATs and COMPs
+    help: 'Auto-tag operators that Envoy creates via create_op for externalization to version-control-friendly files. Neither = off. DATs = externalize created DATs (source files). COMPs = externalize created COMPs (TDN). DATs and COMPs = both. Only ops at an externalization boundary are tagged -- never ops already inside an externalized COMP, palette clones, or Embody itself. Additive only: it never deletes files or removes tags.'
+  - name: Toolpermissions
+    style: Menu
+    label: Tool Permissions
+    default: all
+    menuNames:
+    - all
+    - some
+    - prompt
+    - leave
+    menuLabels:
+    - Don't prompt for any tool
+    - Prompt for some tools (read-only auto-approved)
+    - Prompt for all tools
+    - Leave settings file alone
+    help: Whether Embody pre-approves Envoy MCP tool calls in .claude/settings.local.json so Claude Code isn't prompted on every tool use. all = pre-approve all Envoy tools (no prompts). some = pre-approve read-only/query tools only; tools that create/edit/delete/execute still prompt. prompt = pre-approve nothing; every tool prompts. leave = never create or modify settings.local.json. Except for 'leave', Embody also whitelists the OS temp directory so captured TOP images can be read without a prompt. The setup wizard sets this; you can change it here anytime.
   - name: Envoystatus
     style: Str
     label: Envoy Status
@@ -453,49 +431,14 @@ custom_pars:
     help: Folder where log files are saved. Defaults to dev/logs/ in the project directory. Files are named <project>_YYMMDD.log.
     value: logs
   UI:
-  - name: Enablekeyboardshortcuts
-    style: Toggle
-    label: Enable Keyboard Shortcuts
-    help: Enables/disables all Embody keyboard shortcuts. Turn off if shortcuts conflict with other tools.
-    value: true
-  - name: Addtagshort
-    style: Str
-    label: Add Externalization Tag
-    startSection: true
-    readOnly: true
-    help: 'Keyboard shortcut for adding an externalization tag to the selected operator(s). Default: double-press Left Ctrl.'
-    value: lctrl-lctrl (lclick op & press 2x)
-  - name: Openmanagershort
-    style: Str
+  - name: Openmanager
+    style: Pulse
     label: Open Manager
-    readOnly: true
-    help: Keyboard shortcut for opening the Embody Manager window.
-    value: ctrl/cmd + lshift + o
-  - name: Initializeupdateshort
-    style: Str
-    label: Initialize/Update All
-    readOnly: true
-    help: Keyboard shortcut for triggering Initialize/Update All (Ctrl+Shift+U). Saves all dirty externalized operators to disk.
-    value: ctrl/cmd + lshift + u
-  - name: Saveshort
-    style: Str
-    label: Update Current COMP
-    readOnly: true
-    help: Keyboard shortcut for updating/saving the current COMP to its externalized file.
-    value: ctrl/cmd + alt + u
-  - name: Exportprojecttdn
-    style: Str
-    label: Export Project to TDN
-    startSection: true
-    default: ctrl/cmd + lshift + e
-    readOnly: true
-    help: Export the entire project network to a single .tdn file at your project root.
-  - name: Exportcomptdn
-    style: Str
-    label: Export Current COMP to TDN
-    default: ctrl/cmd + alt + e
-    readOnly: true
-    help: Export the current COMP network to a .tdn file.
+    help: Opens the Embody Manager window, which provides a list view of all externalized operators with status, actions, and strategy management.
+  - name: Closemanager
+    style: Pulse
+    label: Close Manager
+    help: Closes the Embody Manager window.
   - name: Textcolor
     style: RGBA
     label: Text Color
@@ -562,13 +505,195 @@ custom_pars:
     label: TDN Saved Color
     help: Color indicator for TDN-strategy operators that are saved and up-to-date.
     values: [0.153552, 0.376081, 0.457, 1]
+  Shortcuts:
+  - name: Enablekeyboardshortcuts
+    style: Toggle
+    label: Enable Keyboard Shortcuts
+    default: true
+    help: Master switch for Embody's keyboard shortcuts. When off, the Keyboard In DAT is disabled and no Embody shortcut (including the tagger double-tap) fires.
+  - name: Shortcutmanager
+    style: Str
+    label: Open Manager
+    startSection: true
+    default: ctrl+shift+o
+    help: 'Keyboard shortcut for Open Manager. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+shift+o
+  - name: Recordmanager
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Open Manager: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcutupdateall
+    style: Str
+    label: Update All Externalizations
+    startSection: true
+    default: ctrl+shift+u
+    help: 'Keyboard shortcut for Update All Externalizations. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+shift+u
+  - name: Recordupdateall
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Update All Externalizations: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcutupdatecomp
+    style: Str
+    label: Update Current COMP
+    startSection: true
+    default: ctrl+alt+u
+    help: 'Keyboard shortcut for Update Current COMP. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+alt+u
+  - name: Recordupdatecomp
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Update Current COMP: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcutrefresh
+    style: Str
+    label: Refresh Tracking
+    startSection: true
+    default: ctrl+shift+r
+    help: 'Keyboard shortcut for Refresh Tracking. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+shift+r
+  - name: Recordrefresh
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Refresh Tracking: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcutexportproject
+    style: Str
+    label: Export Project to TDN
+    startSection: true
+    default: ctrl+shift+e
+    help: 'Keyboard shortcut for Export Project to TDN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+shift+e
+  - name: Recordexportproject
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Export Project to TDN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcutexportcomp
+    style: Str
+    label: Export Current COMP to TDN
+    startSection: true
+    default: ctrl+alt+e
+    help: 'Keyboard shortcut for Export Current COMP to TDN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+alt+e
+  - name: Recordexportcomp
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Export Current COMP to TDN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcutcopytdn
+    style: Str
+    label: Copy Selected COMP as TDN
+    startSection: true
+    default: ctrl+shift+c
+    help: 'Keyboard shortcut for Copy Selected COMP as TDN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+shift+c
+  - name: Recordcopytdn
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Copy Selected COMP as TDN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcuttagger
+    style: Menu
+    label: Tagger Double-Tap Key
+    startSection: true
+    default: lctrl
+    menuSource: op('./shortcuts').module.taggerMenu()
+    help: 'Modifier key that opens the tagger for the operator under the cursor when double-tapped (two presses within half a second). Entries are physical keys and adapt per platform: macOS offers Left Ctrl plus left/right Cmd (Apple keyboards have no right Ctrl); Windows/Linux offers left/right Ctrl (no Cmd key). A choice a platform''s keyboard lacks falls back to its closest key -- the saved value is never rewritten, so it round-trips between platforms intact. Off disables the tagger shortcut.'
+  - name: Resetshortcuts
+    style: Pulse
+    label: Reset Shortcuts to Defaults
+    startSection: true
+    help: Restore all keyboard shortcuts (and the tagger double-tap key) to factory defaults.
+  Advanced:
+  - name: Createexternalizationstable
+    style: Pulse
+    label: Create Externalizations Table
+    startSection: true
+    help: Creates the externalizations tracking table as a sibling operator if it does not already exist. Safe to pulse at any time — no-op if the table is already connected. Use this to recover if the table was lost after an Embody upgrade.
+  - name: Externalizations
+    style: DAT
+    label: Externalizations Table
+    help: Reference to the externalizations tracking table DAT (stored in TSV format). Lists all externalized operators with their paths, types, timestamps, and dirty state.
+    value: /embody/externalizations
+  - name: Openexternalizationstable
+    style: Pulse
+    label: Open Externalizations Table
+    help: Opens the externalizations tracking table in a floating viewer window.
+  - name: Detectduplicatepaths
+    style: Toggle
+    label: Detect Duplicate Paths
+    startSection: true
+    help: When enabled, warns if multiple operators resolve to the same externalized file path. Helps catch naming conflicts.
+    value: true
+  - name: Templatemaster
+    style: Str
+    label: Template Master Name
+    default: __template__
+    help: When duplicate external paths are detected, an operator whose path contains a folder/COMP with this exact name is auto-selected as the master (the rest are tagged as clones), with no prompt. Matches only when exactly one operator in the group contains this name. Clear this field to always choose the master manually, or set it to your own naming convention (e.g. '_master').
+  - name: Localtimestamps
+    style: Toggle
+    label: Local Timestamps
+    default: true
+    help: When enabled, timestamps in the externalizations table are displayed in your local timezone instead of UTC.
+  - name: Toxrestoreonstart
+    style: Toggle
+    label: Restore toxes on Start
+    help: When enabled, automatically restores TOX-strategy COMPs from .tox files on disk when the project opens. Useful when COMPs were externalized but the .toe was not saved.
+    value: true
+  - name: Datrestoreonstart
+    style: Toggle
+    label: Restore DATs on Start
+    default: true
+    help: When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs.
+  - name: Filecleanup
+    style: Menu
+    label: File Cleanup
+    startSection: true
+    default: ask
+    menuNames:
+    - ask
+    - keep
+    - delete
+    menuLabels:
+    - Ask
+    - Always Keep Files
+    - Always Delete Files
+    help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
+    value: keep
+  - name: Toxdropexpr
+    style: Menu
+    label: Dropped .tox Expression
+    startSection: true
+    default: ask
+    menuNames:
+    - ask
+    - clean
+    - ignore
+    menuLabels:
+    - Ask
+    - Always Clean
+    - Always Ignore
+    help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
+  - name: Tdndatsafety
+    style: Menu
+    label: Content Safety
+    default: ask
+    menuNames:
+    - ask
+    - externalize
+    - ignore
+    menuLabels:
+    - Ask Each Save
+    - Always Externalize
+    - Never Ask
+    help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
+  - name: Uninstall
+    style: Pulse
+    startSection: true
+    help: 'Removes Embody from this project: deletes Embody-generated config (CLAUDE.md / AGENTS.md / .claude / .cursor / ...), Embody''s .venv, and .embody/ state; strips only Embody''s block from shared files (.gitignore, .gitattributes, .mcp.json); un-sets the .tdn git diff driver. Your own files, externalized .tox / .tdn / .py, and the Embody COMP are NOT removed. Asks for confirmation first.'
   About:
   - name: Version
     style: Str
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.60
+    value: 6.0.126
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -585,7 +710,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 660
+    value: 784
   - name: Github
     style: Pulse
     label: GitHub
@@ -596,7 +721,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-06-29 00:35:10 UTC
+    value: 2026-07-14 20:02:19 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -646,8 +771,13 @@ storage:
   expand_order: []
   _start_in_progress: true
   git_status:
-    /embody/Embody/EnvoyExt: ' M'
-  _watchdog_gen: 441
+    /embody/externalizations: ' M'
+    /embody/unit_tests/test_sandbox: ' M'
+    /embody/unit_tests/test_delete_cleanup: ' M'
+    /embody/Embody/EmbodyExt: ' M'
+    /embody/Embody: ' M'
+    /embody: ' M'
+  _watchdog_gen: 893
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -789,13 +919,14 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
-  _clip_watch_gen: 205
-  _suppress_dialogs: true
+  _clip_watch_gen: 658
+  _shortcut_rec_gen: 139
+  _init_complete: true
 operators:
 - name: help
   type: opviewerCOMP
   parameters:
-    opviewer: ./text_help
+    opviewer: ./text_help_display
     w: 500
     h: 600
     display: false
@@ -831,8 +962,8 @@ operators:
     marginl: 5
     marginr: 5
     reloadbuiltin: false
-  position: [250, 50]
-  size: [257, 250]
+  position: [300, 75]
+  size: [160, 86]
   comp_inputs:
   - manager
   tdn_ref: embody/Embody/list.tdn
@@ -842,7 +973,7 @@ operators:
     callbacks: fifo1_callbacks
     fromop: =parent()
     maxlines: 100
-  position: [-700, 400]
+  position: [-275, 200]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
 - name: null2
@@ -850,7 +981,7 @@ operators:
   parameters:
     cooktype: selective
     autoexportroot: =parent()
-  position: [-325, -525]
+  position: [-300, -525]
   size: [130, 90]
   inputs:
   - select1
@@ -858,7 +989,7 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/TDNExt.py
-  position: [-300, 400]
+  position: [-700, 600]
   tags:
   - py
 - name: tagger
@@ -896,8 +1027,32 @@ operators:
     exttcop: =tdu.Timecode()
     rate: =me.time.rate
     autoexportroot: =parent()
-  position: [-625, -275]
+  position: [-700, -275]
   size: [130, 90]
+- name: wizard
+  type: containerCOMP
+  parameters:
+    w: 500
+    h: 440
+    bgcolorr: 0.11
+    bgcolorg: 0.12
+    bgcolorb: 0.115
+    bgalpha: 1
+    align: verttb
+    spacing: 10
+  position: [1200, 225]
+  size: [160, 130]
+  storage:
+    step: 0
+    sel:
+      mode: advanced
+    step_id: summary
+    sel_mode: auto
+    sel_assistant: claudecode
+    sel_client: ''
+    sel_root: gitroot
+    sel_permissions: all
+  tdn_ref: embody/Embody/wizard.tdn
 - name: execute
   type: executeDAT
   parameters:
@@ -912,7 +1067,7 @@ operators:
     language: input
   flags:
   - display
-  position: [-300, 200]
+  position: [-700, 200]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -940,7 +1095,7 @@ operators:
     topborder: bordera
     align: verttb
     reloadbuiltin: false
-  position: [650, 250]
+  position: [500, 475]
   size: [160, 92]
   tdn_ref: embody/Embody/manager.tdn
 - name: parexec
@@ -953,7 +1108,7 @@ operators:
     defaultreadencoding: cp1252
     syncfile: true
     language: input
-  position: [-300, 100]
+  position: [-700, 100]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -963,7 +1118,7 @@ operators:
   parameters:
     channames: click
     autoexportroot: =parent()
-  position: [-475, -525]
+  position: [-500, -525]
   size: [130, 90]
   inputs:
   - mousein1
@@ -992,7 +1147,7 @@ operators:
     - object: op('./ToolbarExt').module.ToolbarExt(me)
       name: ToolbarExt
       promote: true
-  position: [300, 350]
+  position: [300, 200]
   size: [160, 76]
   storage:
     _tip_trace:
@@ -1016,10 +1171,10 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/EnvoyExt.py
-  position: [-300, 500]
+  position: [-700, 700]
   tags:
-  - TDExtension
   - py
+  - TDExtension
 - name: mousein1
   type: mouseinCHOP
   parameters:
@@ -1027,7 +1182,7 @@ operators:
     lbuttonname: click
     rate: =me.time.rate
     autoexportroot: =parent()
-  position: [-625, -525]
+  position: [-700, -525]
   size: [130, 90]
 - name: EmbodyExt
   type: textDAT
@@ -1035,7 +1190,28 @@ operators:
     file: embody/Embody/EmbodyExt.py
     defaultreadencoding: cp1252
     extension: py
-  position: [-300, 600]
+  position: [-700, 800]
+  tags:
+  - py
+- name: envoy_ops
+  type: textDAT
+  parameters:
+    file: embody/Embody/envoy_ops.py
+  position: [-500, 400]
+  tags:
+  - py
+- name: envoy_viz
+  type: textDAT
+  parameters:
+    file: embody/Embody/envoy_viz.py
+  position: [-500, 600]
+  tags:
+  - py
+- name: shortcuts
+  type: textDAT
+  parameters:
+    file: embody/Embody/shortcuts.py
+  position: [-500, -375]
   tags:
   - py
 - name: templates
@@ -1057,14 +1233,49 @@ operators:
   tags:
   - tdn
   tdn_ref: embody/Embody/Collection.tdn
+- name: embody_git
+  type: textDAT
+  parameters:
+    file: embody/Embody/embody_git.py
+  position: [-275, 700]
+  tags:
+  - py
+- name: envoy_read
+  type: textDAT
+  parameters:
+    file: embody/Embody/envoy_read.py
+  position: [-500, 800]
+  tags:
+  - py
+- name: envoy_setup
+  type: textDAT
+  parameters:
+    file: embody/Embody/envoy_setup.py
+  position: [-500, 700]
+  tags:
+  - py
 - name: keyboardin1
   type: keyboardinDAT
   parameters:
     active: ~parent.Embody.par.Enablekeyboardshortcuts
     callbacks: keyboardin_callbacks
     fromop: =parent()
-  position: [-325, -275]
+  position: [-300, -275]
   size: [130, 90]
+- name: embody_admin
+  type: textDAT
+  parameters:
+    file: embody/Embody/embody_admin.py
+  position: [-700, 400]
+  tags:
+  - py
+- name: envoy_layout
+  type: textDAT
+  parameters:
+    file: embody/Embody/envoy_layout.py
+  position: [-500, 500]
+  tags:
+  - py
 - name: windowHeader
   type: containerCOMP
   parameters:
@@ -1094,11 +1305,30 @@ operators:
       style: COMP
       label: Window COMP
       value: /embody/Embody/window_manager
-  position: [300, 475]
-  size: [160, 130]
+  position: [300, 300]
+  size: [160, 76]
   comp_inputs:
   - manager
   tdn_ref: embody/Embody/windowHeader.tdn
+- name: embody_launch
+  type: textDAT
+  parameters:
+    file: embody/Embody/embody_launch.py
+  position: [-275, 800]
+  tags:
+  - py
+- name: window_wizard
+  type: windowCOMP
+  parameters:
+    winop: wizard
+    title: Set up Embody
+    justifyh: center
+    justifyv: center
+    winw: 500
+    winh: 480
+  position: [1200, 675]
+  size: [160, 130]
+  color: [0.67, 0.67, 0.67]
 - name: _envoy_perform
   type: performCHOP
   parameters:
@@ -1117,7 +1347,7 @@ operators:
     performmode: true
     gputemp: true
     autoexportroot: =parent()
-  position: [-625, -650]
+  position: [-700, -650]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   comment: Envoy project performance monitor
@@ -1125,7 +1355,7 @@ operators:
   - embody_internal
 - name: embot_template
   type: baseCOMP
-  position: [-1400, -1400]
+  position: [-700, -1200]
   color: [0.67, 0.67, 0.67]
   annotations:
   - name: envoy_bot_arm_l
@@ -1180,19 +1410,26 @@ operators:
   type: windowCOMP
   parameters:
     winop: manager
+    title: =me
     ignoretaskbar: false
     justifyh: center
     justifyv: center
     winoffsetx: -12
+    borders: false
     cursorvisible: alwaysvisible
+    includedialog: false
+    reloadbuiltin: false
   position: [500, 675]
   size: [154, 89]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   tdn_ref: embody/Embody/window_manager.tdn
 - name: fifo1_callbacks
   type: textDAT
   parameters:
     file: embody/Embody/fifo1_callbacks.py
-  position: [-700, 300]
+  position: [-275, 100]
   tags:
   - py
   dock: fifo1
@@ -1206,7 +1443,7 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/timer_callbacks.py
-  position: [-625, -375]
+  position: [-700, -375]
   tags:
   - py
   dock: timer1
@@ -1214,7 +1451,7 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/CatalogManagerExt.py
-  position: [-300, 300]
+  position: [-700, 500]
   tags:
   - py
 - name: divergent_defaults
@@ -1227,11 +1464,18 @@ operators:
   type: windowCOMP
   parameters:
     winop: tagger
+    title: =me
     justifyh: mouse
     justifyv: mouse
     winoffsetx: 110
+    borders: false
+    includedialog: false
+    reloadbuiltin: false
   position: [900, 675]
   size: [110, 157]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   tdn_ref: embody/Embody/window_tagging_menu.tdn
 - name: chopexec_exit_tagger
   type: chopexecuteDAT
@@ -1243,7 +1487,7 @@ operators:
     valuechange: false
     file: embody/Embody/chopexec_exit_tagger.py
     syncfile: true
-  position: [-325, -650]
+  position: [-300, -650]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1253,14 +1497,14 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/keyboardin_callbacks.py
-  position: [-325, -375]
+  position: [-300, -375]
   tags:
   - py
   dock: keyboardin1
 annotations:
 - name: annotate1
   mode: annotate
-  title: Claude Config
+  title: Envoy Config
   text: CLAUDE.md template and .claude/ rule/skill templates for user-project generation.
   position: [-770, -1270]
   size: [600, 370]
@@ -1276,8 +1520,8 @@ annotations:
   mode: annotate
   title: Logic
   text: Core extensions (Embody, Envoy, TDN), lifecycle callbacks, parameter handlers, logging, and CLAUDE.md template.
-  position: [-770, 30]
-  size: [670, 830]
+  position: [-770, -3]
+  size: [670, 1001]
   color: [0.485, 0.0, 0.2748]
   opacity: 0.9
 - name: annotation_tagging
@@ -1292,7 +1536,7 @@ annotations:
   mode: annotate
   title: UI
   text: 'All user-facing components: toolbar, list view, tagger panel, manager window, and popup windows.'
-  size: [1300, 1000]
+  size: [1620, 1000]
   color: [0.45, 0.45, 0.45]
   opacity: 0.9
 - name: annotation_windows
@@ -1300,6 +1544,6 @@ annotations:
   title: Windows
   text: Popup windows for the tagging menu and externalization manager UI.
   position: [100, 600]
-  size: [1140, 310]
+  size: [1398, 310]
   color: [0.574, 0.574, 0.574]
   opacity: 0.9

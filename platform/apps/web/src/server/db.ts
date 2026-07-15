@@ -88,6 +88,8 @@ export interface InsertSpecimenInput {
   sizeBytes: number;
   scan: CapabilityJson;
   thumbnailKey?: string;
+  /** R2 key for the cover video (videos/{sha256}). Omitted = image-only cover. */
+  videoKey?: string;
   parsedTdn?: unknown;
 }
 
@@ -107,7 +109,9 @@ interface SpecimenSummaryRow {
   requires: string;
   op_count: number;
   thumbnail_key: string | null;
+  video_key: string | null;
   author_handle: string;
+  author_avatar_url: string | null;
   tier: string;
   visibility: string;
   likes_count: number;
@@ -140,7 +144,9 @@ const SUMMARY_COLUMNS = [
   "s.requires",
   "s.op_count",
   "s.thumbnail_key",
+  "s.video_key",
   "u.handle AS author_handle",
+  "u.avatar_url AS author_avatar_url",
   "s.tier",
   "s.visibility",
   "s.likes_count",
@@ -298,7 +304,12 @@ export async function listSpecimensForCollection(
   // requires is a JSON array; filter to specimens whose list CONTAINS the value.
   const requires = (options.requires ?? "").trim();
   if (requires) {
-    where.push("EXISTS (SELECT 1 FROM json_each(s.requires) WHERE value = ?)");
+    // json_each throws on a malformed `requires` (a legacy scalar like 'none'),
+    // which would crash the whole listing -- guard with json_valid so one bad
+    // row degrades to "no requirements" instead of taking down the query.
+    where.push(
+      "EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(s.requires) THEN s.requires ELSE '[]' END) WHERE value = ?)"
+    );
     filterParams.push(requires);
   }
 
@@ -396,7 +407,7 @@ export async function getCollectionFacets(db: D1Database): Promise<CollectionFac
   const requires = await db
     .prepare(
       `SELECT DISTINCT je.value AS value
-       FROM specimens s, json_each(s.requires) je
+       FROM specimens s, json_each(CASE WHEN json_valid(s.requires) THEN s.requires ELSE '[]' END) je
        WHERE s.visibility = 'public' AND je.value <> ''
          AND s.author_id NOT IN (SELECT id FROM users_profile WHERE banned = 1)
        ORDER BY je.value COLLATE NOCASE ASC`
@@ -728,10 +739,10 @@ export async function insertSpecimenWithVersion(
       .prepare(
         `INSERT INTO specimens (
            id, slug, author_id, title, description, category, level, requires,
-           op_count, family_summary, current_version_id, thumbnail_key, license,
-           visibility, tier, scan_status, capability_json
+           op_count, family_summary, current_version_id, thumbnail_key, video_key,
+           license, visibility, tier, scan_status, capability_json
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?,
                  'community', ?, ?)`
       )
       .bind(
@@ -746,6 +757,7 @@ export async function insertSpecimenWithVersion(
         opCount,
         versionId,
         input.thumbnailKey ?? "",
+        input.videoKey ?? null,
         license,
         visibility,
         scanStatus,
@@ -906,6 +918,22 @@ export async function getSpecimenForEdit(
 // separate "new version" path. parsedTdn (the unchanged current network) is
 // passed only so the FTS mirror's dat_text is preserved on re-sync: syncSpecimensFts
 // does INSERT OR REPLACE on the whole row, so omitting dat_text would wipe it.
+// Set (or clear) ONLY a specimen's cover-video key, without touching any other
+// metadata or the FTS mirror. Used by the video attach/replace/remove route -- a
+// single-column UPDATE is both cheaper than a full updateSpecimenMetadata re-sync
+// and safe: it cannot disturb tags, categories, or the FTS dat_text. Pass null to
+// remove the cover video (clears video_key to NULL).
+export async function setSpecimenVideoKey(
+  db: D1Database,
+  specimenId: string,
+  videoKey: string | null
+): Promise<void> {
+  await db
+    .prepare("UPDATE specimens SET video_key = ?, updated_at = datetime('now') WHERE id = ?")
+    .bind(videoKey, specimenId)
+    .run();
+}
+
 export async function updateSpecimenMetadata(
   db: D1Database,
   input: {
@@ -922,6 +950,12 @@ export async function updateSpecimenMetadata(
     requires?: string[];
     /** New R2 thumbnail key. Omitted/undefined leaves the existing thumbnail untouched. */
     thumbnailKey?: string;
+    /** New R2 cover-video key. Omitted/undefined leaves the existing video untouched. */
+    videoKey?: string;
+    /** Explicitly clear video_key to NULL (remove the cover video). Distinct from
+     * an omitted videoKey, which leaves the existing video as-is. When true,
+     * videoKey is ignored. */
+    clearVideo?: boolean;
     parsedTdn?: Record<string, unknown> | null;
   }
 ): Promise<void> {
@@ -938,19 +972,38 @@ export async function updateSpecimenMetadata(
   // Only overwrite thumbnail_key when a new key is supplied -- an edit that
   // doesn't change the image leaves the column as-is.
   const newThumb = typeof input.thumbnailKey === "string" && input.thumbnailKey ? input.thumbnailKey : null;
+  // The cover video has THREE states: leave as-is (omitted/undefined), set to a
+  // new key, or explicitly clear to NULL (clearVideo). clearVideo wins over any
+  // supplied videoKey; a supplied key overwrites; omitting both leaves it as-is.
+  const newVideo = typeof input.videoKey === "string" && input.videoKey ? input.videoKey : null;
+  const touchVideo = input.clearVideo === true || newVideo !== null;
+
+  // Build the optional trailing SET fragments (thumbnail then video) and their
+  // bind values in lock-step so the placeholders and params stay aligned. When
+  // clearing, video_key is set to NULL inline (no bind param).
+  const setVideo = touchVideo ? (input.clearVideo === true ? ", video_key = NULL" : ", video_key = ?") : "";
+  const setExtra = `${newThumb ? ", thumbnail_key = ?" : ""}${setVideo}`;
+  const setExtraParams: (string | number)[] = [];
+  if (newThumb) setExtraParams.push(newThumb);
+  if (touchVideo && input.clearVideo !== true && newVideo) setExtraParams.push(newVideo);
 
   const statements: D1PreparedStatement[] = [
     db
       .prepare(
         `UPDATE specimens
             SET title = ?, description = ?, category = ?, level = ?,
-                requires = ?, license = ?${newThumb ? ", thumbnail_key = ?" : ""}, updated_at = datetime('now')
+                requires = ?, license = ?${setExtra}, updated_at = datetime('now')
           WHERE id = ?`
       )
       .bind(
-        ...(newThumb
-          ? [title, description, category, level, requires, license, newThumb, input.specimenId]
-          : [title, description, category, level, requires, license, input.specimenId])
+        title,
+        description,
+        category,
+        level,
+        requires,
+        license,
+        ...setExtraParams,
+        input.specimenId
       ),
     // Tags are a full replace: drop the existing links, re-add the new set.
     db.prepare("DELETE FROM specimen_tags WHERE specimen_id = ?").bind(input.specimenId),
@@ -1529,7 +1582,9 @@ function rowToSummary(row: SpecimenSummaryRow): SpecimenSummary {
     requires: parseRequires(row.requires),
     op_count: Number(row.op_count ?? 0),
     thumbnail_key: row.thumbnail_key ?? "",
+    video_key: row.video_key ?? null,
     author_handle: row.author_handle,
+    author_avatar_url: row.author_avatar_url ?? null,
     tier: normalizeTier(row.tier),
     visibility: normalizeVisibility(row.visibility),
     likes_count: Number(row.likes_count ?? 0),
@@ -1999,5 +2054,29 @@ export async function getThumbnailKeyForSlug(
     .bind(slug, viewerId ?? "")
     .first<{ thumbnail_key: string | null }>();
   const key = row?.thumbnail_key ?? "";
+  return key ? key : null;
+}
+
+// The R2 key of a public specimen's author-uploaded cover video, or null when it
+// has none. Backs GET /api/specimens/:slug/video.
+export async function getVideoKeyForSlug(
+  db: D1Database,
+  slug: string,
+  // When set to the signed-in user's id, that user can also resolve the video of
+  // their OWN non-public (private/unlisted) specimen -- so an author viewing a
+  // draft sees its cover, matching getSpecimenBySlug's visibility rule. Without it
+  // (anonymous / other viewer), only public specimens resolve.
+  viewerId?: string | null
+): Promise<string | null> {
+  const row = await db
+    .prepare(
+      `SELECT video_key FROM specimens
+        WHERE slug = ? AND (visibility = 'public' OR author_id = ?)
+          AND author_id NOT IN (SELECT id FROM users_profile WHERE banned = 1)
+        LIMIT 1`
+    )
+    .bind(slug, viewerId ?? "")
+    .first<{ video_key: string | null }>();
+  const key = row?.video_key ?? "";
   return key ? key : null;
 }

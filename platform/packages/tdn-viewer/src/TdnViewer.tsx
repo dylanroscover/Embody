@@ -23,22 +23,85 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { GraphAnnotation, GraphNode, NormalizedGraph, RGB } from "@embody/contracts";
-import { parseTDN, parseTDNLevel } from "./parseTDN";
+import { operatorsAtLevel, parseTDN, parseTDNLevel } from "./parseTDN";
+
+/**
+ * The operator a viewer click selected, with the raw TDN fields a properties
+ * panel needs. Carried both to the optional `onSelect` callback and on a
+ * `tdnviewer:select` DOM CustomEvent (detail) so a non-React host (an Astro
+ * page) can render the panel without a serialized callback prop. `null` = the
+ * selection was cleared (a click on empty canvas).
+ */
+export interface TdnSelection {
+  /** Drill path to the current level (COMP names, deepest last); empty at root. */
+  path: string[];
+  /** Node id at this level (the operator name). */
+  id: string;
+  name: string;
+  type: string;
+  family: string;
+  /** True when this is a COMP with a sub-network to enter (double-click). */
+  isComp: boolean;
+  /** Operators nested directly inside (0 for a leaf op). */
+  childCount: number;
+  comment?: string;
+  tags?: string[];
+  /** Built-in parameters the network customized (non-default values only). */
+  parameters?: Record<string, unknown>;
+  /** Custom parameter pages (COMPs): { pageName: [par, ...] }. */
+  customPars?: Record<string, unknown>;
+  /** DAT text content (shader source, scripts, tables) when the TDN captured it,
+      normalized to a single newline-joined string. Shown as a code block. */
+  datContent?: string;
+}
+
+/** Mirrors React Flow's `PaddingWithUnit` (it isn't re-exported from
+    @xyflow/react), so per-side fitView padding typechecks against fitView. */
+type PaddingValue = number | `${number}px` | `${number}%`;
+type PaddingObject = {
+  top?: PaddingValue;
+  right?: PaddingValue;
+  bottom?: PaddingValue;
+  left?: PaddingValue;
+  x?: PaddingValue;
+  y?: PaddingValue;
+};
 
 export interface TdnViewerProps {
   tdn: Record<string, unknown>;
   className?: string;
   height?: number | string;
   /**
-   * Enable COMP drill-down: a COMP that contains operators becomes clickable
-   * (single click enters its sub-network), and a breadcrumb "address bar" climbs
-   * back out to the root -- a 1:1, TD-faithful walk of the network. When false
-   * (the default), the whole network is flattened into one plane (the dense
-   * hero / card-cover thumbnail view).
+   * Enable COMP drill-down + operator selection: a single click selects any
+   * operator (highlighted, and surfaced via onSelect / the tdnviewer:select
+   * event for a properties panel), and a double click on a COMP enters its
+   * sub-network, with a breadcrumb "address bar" to climb back out -- a 1:1,
+   * TD-faithful walk of the network. When false (the default), the whole network
+   * is flattened into one inert plane (the dense hero / card-cover thumbnail).
    */
   navigable?: boolean;
   /** Label for the root crumb in the breadcrumb bar (e.g. the specimen name). */
   rootLabel?: string;
+  /**
+   * Selection callback (navigable only). Also dispatched as a `tdnviewer:select`
+   * DOM CustomEvent on document, so an Astro page can subscribe without passing a
+   * (non-serializable) function prop into the island.
+   */
+  onSelect?: (selection: TdnSelection | null) => void;
+  /**
+   * fitView padding -- a number (all sides, fraction of the viewport) or per-side
+   * values with units, e.g. { left: '27%', right: '27%' }. The app shell passes
+   * per-side percentages so the network fits the free area BETWEEN the floating
+   * panels instead of being clipped behind them. Defaults to a tight 0.24 (used
+   * by the flattened card-cover thumbnails, which have no panels).
+   */
+  fitPadding?: PaddingValue | PaddingObject;
+  /**
+   * Draw annotation (annotateCOMP) boxes. Default true. Set false for a clean,
+   * purely-decorative graph (e.g. the landing-page hero background) where a
+   * partial annotation box would just be clutter.
+   */
+  showAnnotations?: boolean;
 }
 
 type OperatorNodeData = {
@@ -59,57 +122,15 @@ type OperatorNodeData = {
   /** True when this is a COMP with a sub-network to drill into (navigable view
       only). Drives the clickable cursor + hover state. */
   canEnter: boolean;
+  /** True when this op is the current selection (drives the highlight ring). */
+  selected: boolean;
 };
 
-// Tile footprint used for the docked-row layout (matches tdnViewer.css).
-const TILE_W = 168;
-const TILE_H = 84;
-const DOCK_VGAP = 46; // gap below the host to the docked row
-const DOCK_HGAP = 36; // gap between docked tiles in the row
-const NODE_GAP = 24; // minimum gap kept between main tiles when nudging overlaps
-
-// Nudge any overlapping main-node tiles apart in place. The viewer draws a fixed
-// TILE_W x TILE_H box per op, often larger than TD's own node spacing, so tightly
-// packed networks collide. This is a minimal relaxation: only nodes that actually
-// overlap move, along the axis of least penetration, leaving the rest of the
-// authored layout intact. Deterministic (stable id order); a few passes converge.
-function resolveOverlaps(
-  pos: Map<string, { x: number; y: number }>,
-  w: number,
-  h: number,
-  gap: number
-): void {
-  const ids = [...pos.keys()].sort();
-  const minDx = w + gap;
-  const minDy = h + gap;
-  const MAX_ITERS = 24;
-  for (let iter = 0; iter < MAX_ITERS; iter++) {
-    let moved = false;
-    for (let i = 0; i < ids.length; i++) {
-      const a = pos.get(ids[i]!)!;
-      for (let j = i + 1; j < ids.length; j++) {
-        const b = pos.get(ids[j]!)!;
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const penX = minDx - Math.abs(dx);
-        const penY = minDy - Math.abs(dy);
-        if (penX > 0 && penY > 0) {
-          if (penX <= penY) {
-            const push = (penX / 2) * (dx < 0 ? -1 : 1);
-            a.x -= push;
-            b.x += push;
-          } else {
-            const push = (penY / 2) * (dy < 0 ? -1 : 1);
-            a.y -= push;
-            b.y += push;
-          }
-          moved = true;
-        }
-      }
-    }
-    if (!moved) break;
-  }
-}
+// Fallback node footprint, used only when an operator (and its type default)
+// carries no size in the TDN. Real sizes come straight from the TDN for a 1:1
+// layout; see toFlowElements.
+const DEFAULT_W = 130;
+const DEFAULT_H = 90;
 
 type OperatorNode = Node<OperatorNodeData, "operator">;
 
@@ -202,20 +223,137 @@ function fitViewDuration(duration: number): number {
   return duration;
 }
 
-export function TdnViewer({ tdn, className, height = 520, navigable = false, rootLabel }: TdnViewerProps) {
+export function TdnViewer({
+  tdn,
+  className,
+  height = 520,
+  navigable = false,
+  rootLabel,
+  onSelect,
+  fitPadding = 0.24,
+  showAnnotations = true
+}: TdnViewerProps) {
   // Drill-down path: each segment a COMP name, deepest last. Empty = root. Only
   // meaningful when `navigable`; the flatten view ignores it.
   const [path, setPath] = useState<string[]>([]);
+  // Currently-selected operator (navigable only); null when nothing is selected.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Mirror of selectedId updated synchronously, so rapid arrow-key presses don't
+  // read a stale value between React renders.
+  const selectedIdRef = useRef<string | null>(null);
   // A different network entirely (e.g. switching specimens) resets to its root.
   useEffect(() => {
     setPath([]);
+    setSelectedId(null);
   }, [tdn]);
 
   const graph = useMemo(
     () => (navigable ? parseTDNLevel(tdn, path) : parseTDN(tdn)),
     [tdn, path, navigable]
   );
-  const { nodes, edges } = useMemo(() => toFlowElements(graph), [graph]);
+  const { nodes, edges } = useMemo(
+    () => toFlowElements(graph, showAnnotations),
+    [graph, showAnnotations]
+  );
+
+  // Raw operator records at the current level, keyed by node id (the op name),
+  // so a selection can carry the op's parameters / custom_pars / comment / tags
+  // to the properties panel without re-walking the tree.
+  const opRecords = useMemo(() => {
+    const map = new Map<string, Record<string, unknown>>();
+    if (!navigable) return map;
+    for (const op of operatorsAtLevel(tdn, path)) {
+      const name = typeof op.name === "string" ? op.name : null;
+      if (name) map.set(name, op);
+    }
+    return map;
+  }, [tdn, path, navigable]);
+
+  // Emit a selection to the optional callback AND as a document CustomEvent, so
+  // an Astro page (which can't pass a function prop into the island) can render
+  // the properties panel by subscribing to `tdnviewer:select`.
+  const emitSelect = useCallback(
+    (selection: TdnSelection | null) => {
+      onSelect?.(selection);
+      if (typeof document !== "undefined") {
+        document.dispatchEvent(new CustomEvent("tdnviewer:select", { detail: selection }));
+      }
+    },
+    [onSelect]
+  );
+
+  // Operators at the current level, keyed by id -- for selection lookups from
+  // both clicks and arrow-key navigation.
+  const nodeById = useMemo(() => {
+    const map = new Map<string, GraphNode>();
+    for (const n of graph.nodes) map.set(n.id, n);
+    return map;
+  }, [graph]);
+
+  const buildSelection = useCallback(
+    (id: string): TdnSelection | null => {
+      const gn = nodeById.get(id);
+      if (!gn) return null;
+      const raw = opRecords.get(id);
+      const params =
+        raw && isPlainRecord(raw.parameters)
+          ? raw.parameters
+          : raw && isPlainRecord(raw.pars)
+            ? (raw.pars as Record<string, unknown>)
+            : undefined;
+      const customPars = raw && isPlainRecord(raw.custom_pars) ? raw.custom_pars : undefined;
+      // DAT text content (a shader's GLSL, a script DAT's Python, a table). The
+      // TDN may store it as one string or an array of lines -- normalize to one.
+      const rawContent = raw ? raw.dat_content : undefined;
+      const datContent =
+        typeof rawContent === "string"
+          ? rawContent
+          : Array.isArray(rawContent)
+            ? rawContent.map((line) => (typeof line === "string" ? line : String(line))).join("\n")
+            : undefined;
+      return {
+        path: [...path],
+        id,
+        name: gn.name,
+        type: gn.type,
+        family: gn.family,
+        isComp: (gn.childCount ?? 0) > 0,
+        childCount: gn.childCount ?? 0,
+        comment: raw && typeof raw.comment === "string" ? raw.comment : undefined,
+        tags: raw && Array.isArray(raw.tags) ? (raw.tags as string[]) : undefined,
+        parameters: params,
+        customPars: customPars as Record<string, unknown> | undefined,
+        datContent
+      };
+    },
+    [nodeById, opRecords, path]
+  );
+
+  // Single entry point for changing the selection: updates the ref (sync),
+  // React state (highlight), and notifies the panel.
+  const applySelection = useCallback(
+    (id: string | null) => {
+      selectedIdRef.current = id;
+      setSelectedId(id);
+      emitSelect(id ? buildSelection(id) : null);
+    },
+    [emitSelect, buildSelection]
+  );
+  // Keep the ref in sync when selection is cleared by the reset effects below.
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  // Tag the selected operator so OperatorTile can draw the highlight ring.
+  const selectedNodes = useMemo(
+    () =>
+      nodes.map((node) =>
+        node.type === "operator"
+          ? { ...node, data: { ...node.data, selected: node.id === selectedId } }
+          : node
+      ),
+    [nodes, selectedId]
+  );
 
   const style = useMemo<CSSProperties>(
     () => ({
@@ -224,34 +362,118 @@ export function TdnViewer({ tdn, className, height = 520, navigable = false, roo
     [height]
   );
 
-  // Double-click anywhere fits the WHOLE graph into view (a reset), instead of
-  // React Flow's default zoom-IN -- zoomOnDoubleClick is disabled below so the
-  // two don't conflict.
+  // Double-click on EMPTY canvas fits the WHOLE graph into view (a reset),
+  // instead of React Flow's default zoom-IN (zoomOnDoubleClick is disabled
+  // below). A double-click on a node is handled separately (enter a COMP), so
+  // bail when the gesture started on a node -- otherwise entering would also fit.
   const rfRef = useRef<ReactFlowInstance<TdnFlowNode, Edge> | null>(null);
-  const handleDoubleClick = useCallback(() => {
-    rfRef.current?.fitView({ padding: 0.24, duration: fitViewDuration(320) });
+  const handleDoubleClick = useCallback((event: ReactMouseEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest?.(".react-flow__node")) return;
+    rfRef.current?.fitView({ padding: fitPadding, duration: fitViewDuration(320) });
   }, []);
 
-  // Click a COMP-with-children to descend into its sub-network. `event.detail`
-  // gates out the 2nd click of a double-click so a quick double-tap can't push
-  // the same segment twice (which would point the path at a non-existent op).
+  // Single click selects any operator (and surfaces its parameters). `event.detail`
+  // gates out the 2nd click of a double-click so the selection doesn't fight the
+  // enter gesture below.
   const handleNodeClick = useCallback(
     (event: ReactMouseEvent, node: TdnFlowNode) => {
-      if (event.detail > 1) return;
-      if (node.type !== "operator" || !node.data.canEnter) return;
+      if (!navigable || event.detail > 1) return;
+      if (node.type !== "operator") return;
+      applySelection(node.id);
+    },
+    [navigable, applySelection]
+  );
+
+  // Double click a COMP-with-children to descend into its sub-network.
+  const handleNodeDoubleClick = useCallback(
+    (_event: ReactMouseEvent, node: TdnFlowNode) => {
+      if (!navigable || node.type !== "operator" || !node.data.canEnter) return;
       setPath((prev) => [...prev, node.id]);
     },
-    []
+    [navigable]
   );
+
+  // Click on empty canvas clears the selection.
+  const handlePaneClick = useCallback(() => {
+    if (!navigable) return;
+    applySelection(null);
+  }, [navigable, applySelection]);
+
+  // Arrow keys move the selection to the nearest operator in that direction
+  // (TD coords: up = +y). A directional score prefers close + axis-aligned ops.
+  const arrowSelect = useCallback(
+    (dir: "left" | "right" | "up" | "down"): boolean => {
+      const currentId = selectedIdRef.current;
+      if (!currentId) return false;
+      const cur = nodeById.get(currentId);
+      if (!cur) return false;
+      const cx = cur.x + (cur.w ?? DEFAULT_W) / 2;
+      const cy = cur.y + (cur.h ?? DEFAULT_H) / 2;
+      let best: GraphNode | null = null;
+      let bestScore = Infinity;
+      for (const n of nodeById.values()) {
+        if (n.id === currentId) continue;
+        const dx = n.x + (n.w ?? DEFAULT_W) / 2 - cx;
+        const dy = n.y + (n.h ?? DEFAULT_H) / 2 - cy;
+        let inDir = false;
+        let along = 0;
+        let off = 0;
+        if (dir === "right") { inDir = dx > 1; along = dx; off = Math.abs(dy); }
+        else if (dir === "left") { inDir = dx < -1; along = -dx; off = Math.abs(dy); }
+        else if (dir === "up") { inDir = dy > 1; along = dy; off = Math.abs(dx); }
+        else { inDir = dy < -1; along = -dy; off = Math.abs(dx); }
+        if (!inDir) continue;
+        // Heavily penalize off-axis distance so arrows follow rows/columns: a
+        // directly-aligned op wins over a nearer diagonal one.
+        const score = along + off * 4;
+        if (score < bestScore) { bestScore = score; best = n; }
+      }
+      if (!best) return false;
+      applySelection(best.id);
+      return true;
+    },
+    [nodeById, applySelection]
+  );
+
+  useEffect(() => {
+    if (!navigable) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) {
+        return;
+      }
+      const dir =
+        e.key === "ArrowRight" ? "right"
+        : e.key === "ArrowLeft" ? "left"
+        : e.key === "ArrowUp" ? "up"
+        : e.key === "ArrowDown" ? "down"
+        : null;
+      if (!dir) return;
+      if (arrowSelect(dir)) e.preventDefault();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [navigable, arrowSelect]);
   // Re-fit the view whenever the displayed network changes (entering/leaving a
   // COMP), since React Flow only auto-fits on the initial mount.
   useEffect(() => {
     if (!navigable) return;
     const id = window.setTimeout(() => {
-      rfRef.current?.fitView({ padding: 0.24, duration: fitViewDuration(300) });
+      rfRef.current?.fitView({ padding: fitPadding, duration: fitViewDuration(300) });
     }, 60);
     return () => window.clearTimeout(id);
   }, [navigable, path]);
+
+  // The selected op no longer exists after a level change -- clear it (and tell
+  // the panel) whenever the path changes. Also fires on mount, seeding the panel
+  // with its empty/placeholder state.
+  useEffect(() => {
+    if (!navigable) return;
+    setSelectedId(null);
+    emitSelect(null);
+  }, [navigable, path, emitSelect]);
 
   // Fullscreen modal: a single control opens the graph as a full-viewport
   // overlay (the same ReactFlow, resized via CSS), with Escape / a close button
@@ -273,7 +495,7 @@ export function TdnViewer({ tdn, className, height = 520, navigable = false, roo
   // Re-fit after the container resizes (entering/leaving fullscreen).
   useEffect(() => {
     const id = window.setTimeout(() => {
-      rfRef.current?.fitView({ padding: 0.24, duration: fitViewDuration(220) });
+      rfRef.current?.fitView({ padding: fitPadding, duration: fitViewDuration(220) });
     }, 60);
     return () => window.clearTimeout(id);
   }, [fullscreen]);
@@ -296,12 +518,17 @@ export function TdnViewer({ tdn, className, height = 520, navigable = false, roo
       onDoubleClick={handleDoubleClick}
     >
       {navigable && (
-        <nav className="tdn-viewer__breadcrumb" aria-label="network path">
+        <nav
+          className="tdn-viewer__breadcrumb"
+          aria-label="network path"
+          title="Network path - where you are in the network. Double-click a COMP to enter it; click a level here to climb back out."
+        >
           <button
             type="button"
             className="tdn-crumb"
             onClick={() => setPath([])}
             disabled={path.length === 0}
+            title={path.length === 0 ? "Network root" : "Back to root"}
           >
             {rootLabel || "root"}
           </button>
@@ -321,7 +548,7 @@ export function TdnViewer({ tdn, className, height = 520, navigable = false, roo
         </nav>
       )}
       <ReactFlow
-        nodes={nodes}
+        nodes={selectedNodes}
         edges={edges}
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
@@ -330,8 +557,10 @@ export function TdnViewer({ tdn, className, height = 520, navigable = false, roo
           rfRef.current = instance;
         }}
         onNodeClick={navigable ? handleNodeClick : undefined}
+        onNodeDoubleClick={navigable ? handleNodeDoubleClick : undefined}
+        onPaneClick={navigable ? handlePaneClick : undefined}
         fitView
-        fitViewOptions={{ padding: 0.24 }}
+        fitViewOptions={{ padding: fitPadding }}
         minZoom={0.12}
         maxZoom={1.8}
         nodesDraggable={false}
@@ -346,11 +575,13 @@ export function TdnViewer({ tdn, className, height = 520, navigable = false, roo
         onlyRenderVisibleElements
         preventScrolling
       >
+        {/* A single, very faint line grid -- subtle/minimalist, and (being a
+            React Flow Background) it pans AND zooms with the network like TD. */}
         <Background
-          color="rgba(200, 208, 201, 0.10)"
+          variant={BackgroundVariant.Lines}
           gap={32}
-          size={1}
-          variant={BackgroundVariant.Dots}
+          lineWidth={1}
+          color="rgba(200, 208, 201, 0.035)"
         />
         {!fullscreen && (
           <Controls position="top-right" showZoom={false} showFitView={false} showInteractive={false}>
@@ -378,7 +609,13 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
   const inputHandles = Array.from({ length: Math.max(data.inputCount, 1) }, (_, index) => index);
   const compHandles = Array.from({ length: data.compInputCount }, (_, index) => index);
 
-  const className = data.canEnter ? "tdn-operator tdn-operator--enterable" : "tdn-operator";
+  const className = [
+    "tdn-operator",
+    data.canEnter ? "tdn-operator--enterable" : "",
+    data.selected ? "tdn-operator--selected" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className={className} style={{ "--family-color": data.familyColor } as CSSProperties}>
@@ -477,7 +714,10 @@ function AnnotationBox({ data }: NodeProps<AnnotationNode>) {
   );
 }
 
-function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: Edge[] } {
+function toFlowElements(
+  graph: NormalizedGraph,
+  showAnnotations: boolean
+): { nodes: TdnFlowNode[]; edges: Edge[] } {
   const inputCounts = new Map<string, number>();
   const compInputCounts = new Map<string, number>();
   const refSources = new Set<string>();
@@ -495,8 +735,10 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
     counts.set(edge.to, Math.max(counts.get(edge.to) ?? 0, edge.inputIndex + 1));
   }
 
-  // Dock relationships: group docked ops under a host that actually exists in the
-  // graph, so we can re-lay them in a tidy row under that host.
+  // Dock relationships -- used now only for the dock TETHER edges + the dock
+  // handle flags. Docked ops keep their REAL TDN positions (no re-layout), so
+  // they sit exactly where TD placed them (typically a row under their host,
+  // inside the host's annotation) for a faithful 1:1 view.
   const byId = new Map<string, GraphNode>(graph.nodes.map((n) => [n.id, n]));
   const dockedByHost = new Map<string, GraphNode[]>();
   const dockedIds = new Set<string>();
@@ -509,88 +751,40 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
     }
   }
 
-  // Main (non-docked) tiles at raw TD coords, then nudge overlaps apart so no two
-  // main tiles collide. Docks are placed afterwards relative to the RESOLVED host
-  // position, so they ride along with any host the nudge moved.
-  const mainPos = new Map<string, { x: number; y: number }>();
-  for (const node of graph.nodes) {
-    if (!dockedIds.has(node.id)) mainPos.set(node.id, { x: node.x, y: -node.y });
-  }
-  resolveOverlaps(mainPos, TILE_W, TILE_H, NODE_GAP);
-
-  const dockedPos = new Map<string, { x: number; y: number }>();
-  for (const [hostId, list] of dockedByHost) {
-    const host = mainPos.get(hostId);
-    if (!host) continue; // host is itself docked (degenerate) -- skip re-layout
-    const ordered = [...list].sort((a, b) => a.x - b.x || a.id.localeCompare(b.id));
-    const step = TILE_W + DOCK_HGAP;
-    const rowWidth = (ordered.length - 1) * step;
-    const hostCenter = host.x + TILE_W / 2;
-    const rowTop = host.y + TILE_H + DOCK_VGAP;
-    ordered.forEach((node, i) => {
-      dockedPos.set(node.id, {
-        x: hostCenter - rowWidth / 2 - TILE_W / 2 + i * step,
-        y: rowTop
-      });
-    });
-  }
-
-  const nodes: TdnFlowNode[] = graph.nodes.map((node) => ({
-    id: node.id,
-    type: "operator",
-    position: dockedPos.get(node.id) ?? mainPos.get(node.id) ?? {
-      x: node.x,
-      y: -node.y
-    },
-    data: {
-      name: node.name,
-      type: node.type,
-      family: node.family,
-      familyColor: FAMILY_COLORS[node.family] ?? FAMILY_COLORS.OBJECT,
-      inputCount: inputCounts.get(node.id) ?? 0,
-      compInputCount: compInputCounts.get(node.id) ?? 0,
-      isDockHost: dockedByHost.has(node.id),
-      isDocked: dockedIds.has(node.id),
-      isRefSource: refSources.has(node.id),
-      isRefTarget: refTargets.has(node.id),
-      // childCount is only set by the single-level parse, so canEnter is
-      // naturally false in the flattened (non-navigable) view.
-      canEnter: (node.childCount ?? 0) > 0
-    },
-    draggable: false,
-    selectable: false
-  }));
-
-  // Resolved position of every operator tile (annotations are pushed later and
-  // never obstruct wires, so they're excluded).
-  const finalPos = new Map<string, { x: number; y: number }>(
-    nodes.map((n) => [n.id, n.position])
-  );
-
-  // A data wire that runs straight across an intervening same-row tile reads
-  // poorly. If another MAIN tile sits in the wire's horizontal span at its row,
-  // return a raised centreY so the wire arcs just above the highest such tile.
-  const LIFT_CLEARANCE = 28;
-  const liftFor = (from: string, to: string): number | undefined => {
-    const s = finalPos.get(from);
-    const t = finalPos.get(to);
-    if (!s || !t) return undefined;
-    const sy = s.y + TILE_H / 2;
-    const ty = t.y + TILE_H / 2;
-    if (Math.abs(sy - ty) > TILE_H) return undefined; // not the same row
-    const xMin = Math.min(s.x + TILE_W, t.x);
-    const xMax = Math.max(s.x + TILE_W, t.x);
-    if (xMax - xMin < TILE_W * 0.4) return undefined; // adjacent -> nothing between
-    const edgeY = (sy + ty) / 2;
-    let top = Infinity;
-    for (const [id, p] of mainPos) {
-      if (id === from || id === to) continue;
-      if (p.x + TILE_W > xMin && p.x < xMax && edgeY >= p.y && edgeY <= p.y + TILE_H) {
-        top = Math.min(top, p.y);
-      }
-    }
-    return top === Infinity ? undefined : top - LIFT_CLEARANCE;
-  };
+  // Every node at its REAL TD position + size. TD positions are the BOTTOM-LEFT
+  // corner with Y up; React Flow positions are the TOP-LEFT with Y down, so the
+  // top-left Y is -(y + height). Annotations convert the same way (see
+  // annotationToNode), so operators land exactly inside their annotation COMP --
+  // the 1:1 layout TD itself shows.
+  const nodes: TdnFlowNode[] = graph.nodes.map((node) => {
+    const w = node.w ?? DEFAULT_W;
+    const h = node.h ?? DEFAULT_H;
+    return {
+      id: node.id,
+      type: "operator",
+      position: { x: node.x, y: -(node.y + h) },
+      style: { width: w, height: h },
+      data: {
+        name: node.name,
+        type: node.type,
+        family: node.family,
+        familyColor: FAMILY_COLORS[node.family] ?? FAMILY_COLORS.OBJECT ?? "#b9b09d",
+        inputCount: inputCounts.get(node.id) ?? 0,
+        compInputCount: compInputCounts.get(node.id) ?? 0,
+        isDockHost: dockedByHost.has(node.id),
+        isDocked: dockedIds.has(node.id),
+        isRefSource: refSources.has(node.id),
+        isRefTarget: refTargets.has(node.id),
+        // childCount is only set by the single-level parse, so canEnter is
+        // naturally false in the flattened (non-navigable) view.
+        canEnter: (node.childCount ?? 0) > 0,
+        // Set per-render by the selectedNodes memo in TdnViewer.
+        selected: false
+      },
+      draggable: false,
+      selectable: false
+    };
+  });
 
   const edges: Edge[] = graph.edges.map((edge, index) => {
     // Parameter reference (e.g. a Feedback TOP's Target, a Render TOP's camera):
@@ -623,16 +817,13 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
         }
       };
     }
-    const liftY = edge.comp ? undefined : liftFor(edge.from, edge.to);
     return {
       id: `${edge.from}->${edge.to}:${edge.comp ? "comp" : "in"}:${edge.inputIndex}:${index}`,
       source: edge.from,
       target: edge.to,
       sourceHandle: "out",
       targetHandle: edge.comp ? `comp-in-${edge.inputIndex}` : `in-${edge.inputIndex}`,
-      // Arc over an intervening same-row tile when one is detected (LiftedEdge).
-      type: liftY !== undefined ? "lifted" : "smoothstep",
-      ...(liftY !== undefined ? { data: { liftY } } : {}),
+      type: "smoothstep",
       animated: edge.comp,
       focusable: false,
       selectable: false,
@@ -660,7 +851,8 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
         target: node.id,
         sourceHandle: "dock-out",
         targetHandle: "dock-in",
-        type: "smoothstep",
+        // Straight tether (host bottom -> docked top): no orthogonal jog.
+        type: "straight",
         focusable: false,
         selectable: false,
         style: {
@@ -672,8 +864,10 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
     }
   }
 
-  for (const annotation of graph.annotations) {
-    nodes.push(annotationToNode(annotation, nodes.length));
+  if (showAnnotations) {
+    for (const annotation of graph.annotations) {
+      nodes.push(annotationToNode(annotation, nodes.length));
+    }
   }
 
   return { nodes, edges };
@@ -692,7 +886,10 @@ function annotationToNode(annotation: GraphAnnotation, index: number): Annotatio
       text: annotation.text ?? "",
       width: annotation.w || 280,
       height: annotation.h || 160,
-      color: annotation.color ? rgbToCss(annotation.color, 0.32) : "rgba(200, 208, 201, 0.24)"
+      // Full-opacity color; the CSS color-mixes it against the viewer's line /
+      // panel colors so the container stays visible even when the authored color
+      // is dark (which, at low alpha, vanished against the dark canvas).
+      color: annotation.color ? rgbToCss(annotation.color, 1) : "rgb(150, 160, 152)"
     },
     draggable: false,
     selectable: false,
@@ -711,4 +908,8 @@ function channel(value: number): number {
 function handlePercent(index: number, count: number): number {
   if (count <= 1) return 50;
   return 20 + (index * 60) / (count - 1);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

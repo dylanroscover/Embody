@@ -17,20 +17,206 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Optional, Any, Callable
-from queue import Queue, Empty
-from threading import Lock, Event, Thread
-import colorsys
+import asyncio
+import contextvars
+import fnmatch
 import json
-import math
-import random
+import os
+import re
 import subprocess
 import sys
 import tempfile
+import urllib.parse
+import urllib.request
 import time
-import asyncio
+from html import unescape
+from queue import Queue, Empty
+from threading import Lock, Event, Thread
+from typing import Optional, Any, Callable
 
 ENVOY_VERSION = "1.4.0"
+
+# Per-request session identity, set by the ASGI middleware from the
+# X-Envoy-Session / X-Envoy-Label headers the bridge sends. anyio's
+# to_thread.run_sync copies the caller's context into tool threads, so
+# tool functions and _execute_in_td read the same values. (None, None)
+# for clients that connect without a bridge (direct HTTP).
+_SESSION_CTX = contextvars.ContextVar('envoy_session', default=(None, None))
+
+# --- Multi-session Phase 2: touch map + peer advisories ---
+
+# Operations that MUTATE authored state. Only these record touches in the
+# shared touch map; read operations still RECEIVE advisories but leave no
+# trace themselves.
+_WRITE_OPERATIONS = frozenset({
+    'create_op', 'delete_op', 'set_parameter', 'connect_ops',
+    'disconnect_op', 'copy_op', 'rename_op', 'execute_python',
+    'set_dat_content', 'edit_dat_content', 'set_op_flags',
+    'set_op_position', 'layout_children', 'externalize_op',
+    'remove_externalization_tag', 'save_externalization',
+    'create_extension', 'import_network', 'create_annotation',
+    'set_annotation', 'run_tests', 'batch_operations',
+})
+
+# Coarse scopes for operations whose footprint is not a single op path.
+_SPECIAL_SCOPES = {
+    'execute_python': 'project:python',
+    'run_tests': 'project:tests',
+}
+
+_TOUCH_WINDOW_S = 600     # advisories consider touches this recent
+_CONFLICT_WINDOW_S = 60   # peer WRITE inside this + own WRITE = conflict
+_ADVISORY_DEDUP_S = 300   # same (peer, scope) advisory re-served after this
+_TOUCH_RING_CAP = 8       # touches kept per scope
+_TOUCH_SCOPE_CAP = 200    # scopes kept (evict oldest-touched beyond this)
+
+_PATH_PARAM_KEYS = ('op_path', 'parent_path', 'source_path', 'dest_path',
+                    'target_path', 'comp_path', 'root_path')
+
+
+# --- Recovery hints: reactive guidance on error envelopes ---
+#
+# When a tool returns {'error': ...}, match the message against this small
+# curated table and ride a 'recovery_hints' list back on the envelope so the
+# agent's NEXT step is steered instead of a blind retry of the same failing
+# call. Purely additive -- a match adds a hint, a miss changes nothing, and a
+# fault here never touches the response (the caller wraps it in try/except).
+# The reactive cousin of the .claude skills: the same hard-won knowledge,
+# delivered at the moment of failure rather than relying on a pre-loaded doc.
+#
+# Each entry is (compiled_regex, cause, action, next_tools). Keep it small and
+# tuned to errors an agent ACTUALLY hits -- noise here trains the agent to
+# ignore the block. `next_tools` are real Envoy tool names.
+_RECOVERY_HINT_RULES = [
+    (re.compile(r'(operator|parent|source|destination|comp|op) not found'
+                r'|does not exist|no operator at', re.IGNORECASE),
+     'the operator path does not resolve',
+     "Never guess paths. Call query_network on the parent COMP (or '/') to "
+     "list real children, or find_children to search by name, then retry with "
+     "a verified path. The active network is "
+     "execute_python: result = ui.panes.current.owner.path.",
+     ['query_network', 'find_children', 'get_op']),
+
+    (re.compile(r'parameter not found|no parameter', re.IGNORECASE),
+     'no parameter by that name on the operator',
+     "List the operator's real parameters with get_op (or read_tdn for a TDN "
+     "COMP) before setting. Custom-parameter names are Capitalized; built-in "
+     "names are lowercase.",
+     ['get_op', 'get_parameter']),
+
+    (re.compile(r'is not a top|is not a comp|\(family:|wrong family',
+                re.IGNORECASE),
+     'the operator is the wrong family for this tool',
+     "Check the operator's family with get_op. capture_top needs a TOP; "
+     "connect_ops needs compatible families; annotations need a COMP.",
+     ['get_op', 'query_network']),
+
+    (re.compile(r'no pixel data available', re.IGNORECASE),
+     'the TOP produced an empty texture (zero resolution or never cooked)',
+     "Check the TOP's resolution and whether it cooked "
+     "(get_op_performance -> cookedThisFrame), verify a Null terminates the "
+     "chain and no bypass flag is set, then force a cook and retry. See the "
+     "debug-operator skill.",
+     ['get_op_performance', 'get_op_errors', 'get_op']),
+
+    (re.compile(r'thread conflict|outside the main thread|main-thread',
+                re.IGNORECASE),
+     'a TD object was touched off the main thread, or a raw op was returned',
+     "Don't return raw op()/parent() objects from execute_python -- assign "
+     "strings instead (result = op('x').path). Resolve any values on the main "
+     "thread before returning.",
+     ['execute_python']),
+
+    (re.compile(r'unknown (op|operator) type|not a valid operator'
+                r"|has no attribute '\w+(TOP|CHOP|SOP|DAT|COMP|MAT|POP)'",
+                re.IGNORECASE),
+     'the operator type name is misspelled or unavailable in this build',
+     "Operator type names are exact (e.g. noiseTOP, not noise). Confirm the "
+     "spelling and availability via get_docs before create_op.",
+     ['get_docs', 'get_td_classes']),
+
+    (re.compile(r'timed out after|operation timed out', re.IGNORECASE),
+     'the operation exceeded the MCP timeout (main-thread work too heavy)',
+     "Break the work into smaller steps; check get_project_performance for a "
+     "cook stall, and prefer batch_operations over many single calls.",
+     ['get_project_performance', 'batch_operations']),
+]
+
+
+def _recovery_hints_for(message: str) -> list:
+    """Return recovery-hint dicts for an error message (empty if none match).
+
+    Pure and side-effect free so it is unit-testable without TD. Collects
+    every matching rule, capped at 2 to stay token-lean."""
+    if not message:
+        return []
+    hints = []
+    for pattern, cause, action, next_tools in _RECOVERY_HINT_RULES:
+        if pattern.search(message):
+            hints.append({
+                'cause': cause,
+                'action': action,
+                'next_tools': list(next_tools),
+            })
+            if len(hints) >= 2:
+                break
+    return hints
+
+
+def _scope_overlaps(a: str, b: str) -> bool:
+    """True when two scopes denote overlapping territory.
+
+    Op-path scopes overlap when one equals the other or is an ancestor,
+    segment-aware ('/a/b' vs '/a/bc' do NOT overlap). file:/project:
+    scopes match exactly.
+    """
+    if a == b:
+        return True
+    if a.startswith('/') and b.startswith('/'):
+        shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+        return longer.startswith(shorter + '/')
+    return False
+
+
+def _scopes_for_operation(operation: str, params: dict, result=None) -> list:
+    """Scope strings an operation touches: op paths from its params (and
+    the created path from its result) plus coarse special scopes. Pure
+    inspection -- file-scope expansion happens on the main thread where
+    the externalizations table lives.
+    """
+    scopes = []
+    special = _SPECIAL_SCOPES.get(operation)
+    if special:
+        scopes.append(special)
+    params = params or {}
+    if operation == 'batch_operations':
+        for sub in (params.get('operations') or [])[:16]:
+            if isinstance(sub, dict):
+                scopes.extend(_scopes_for_operation(
+                    sub.get('tool', ''), sub.get('params') or {}))
+    else:
+        for key in _PATH_PARAM_KEYS:
+            value = params.get(key)
+            if isinstance(value, str) and value.startswith('/'):
+                scopes.append(value)
+        if operation == 'rename_op':
+            base = params.get('op_path')
+            new_name = params.get('new_name')
+            if (isinstance(base, str) and isinstance(new_name, str)
+                    and '/' in base):
+                scopes.append(base.rsplit('/', 1)[0] + '/' + new_name)
+        if isinstance(result, dict):
+            created = result.get('path')
+            if isinstance(created, str) and created.startswith('/'):
+                scopes.append(created)
+    seen = set()
+    deduped = []
+    for s in scopes:
+        if s not in seen:
+            seen.add(s)
+            deduped.append(s)
+    return deduped[:8]
+
 
 class EnvoyMCPServer:
     """
@@ -57,11 +243,204 @@ class EnvoyMCPServer:
         self.lock: Lock = Lock()
         self.running: bool = True
 
+        # Session presence registry: sid -> entry dict. Lives on sys so it
+        # survives worker recreation across extension reinits / server
+        # restarts (same pattern as sys._envoy_queues). Touched from the
+        # ASGI middleware (event loop) and tool threads -- guard with
+        # _sessions_lock. Pure Python only; never holds TD objects.
+        existing_sessions = getattr(sys, '_envoy_sessions', None)
+        self._sessions: dict = existing_sessions if isinstance(existing_sessions, dict) else {}
+        sys._envoy_sessions = self._sessions
+        # One shared lock guards _sessions AND _touches; it lives on sys so
+        # the MAIN thread (touch recording, advisory scans) and the worker
+        # (registry, get_sessions) coordinate across reinits.
+        existing_lock = getattr(sys, '_envoy_sessions_lock', None)
+        self._sessions_lock: Lock = existing_lock if existing_lock is not None else Lock()
+        sys._envoy_sessions_lock = self._sessions_lock
+        # Touch map: scope -> ring of {'sid', 'tool', 'ts'} for recent WRITE
+        # operations. Written by the main thread, read by get_sessions.
+        existing_touches = getattr(sys, '_envoy_touches', None)
+        self._touches: dict = existing_touches if isinstance(existing_touches, dict) else {}
+        sys._envoy_touches = self._touches
+        # Claim leases (Phase 3): scope -> {'sid','label','note','ts','ttl'}.
+        # Cooperative write leases; guarded by the same shared lock.
+        existing_claims = getattr(sys, '_envoy_claims', None)
+        self._claims: dict = existing_claims if isinstance(existing_claims, dict) else {}
+        sys._envoy_claims = self._claims
+
+        self._docs_state = {'resolved': False, 'root': None, 'index': None, 'cache': {}}
+
         # Import mcp only when server is instantiated (in worker thread)
         from mcp.server.fastmcp import FastMCP, Image
         self._Image = Image  # Store for use in tool functions
-        self.mcp = FastMCP("Envoy", host="127.0.0.1", port=port, stateless_http=True)
+        # The MCP SDK auto-enables this for host="127.0.0.1" since about
+        # 1.10, but pin it explicitly so a default change cannot silently
+        # drop the Host/Origin validation that defeats DNS rebinding/CSRF
+        # from a local browser. Idea prompted by TDMCP's 1.1.46 security work.
+        transport_security = None
+        try:
+            from mcp.server.transport_security import TransportSecuritySettings
+            transport_security = TransportSecuritySettings(
+                enable_dns_rebinding_protection=True,
+                allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"],
+                allowed_origins=[
+                    "http://127.0.0.1:*",
+                    "http://localhost:*",
+                    "http://[::1]:*",
+                ],
+            )
+        except Exception as e:
+            print(f'[Envoy][WARNING] Transport security settings unavailable; '
+                  f'continuing without explicit FastMCP transport_security: {e}')
+        mcp_kwargs = {
+            'host': "127.0.0.1",
+            'port': port,
+            'stateless_http': True,
+        }
+        if transport_security is not None:
+            mcp_kwargs['transport_security'] = transport_security
+        self.mcp = FastMCP("Envoy", **mcp_kwargs)
         self._register_tools()
+
+    def _touch_session(self, sid: str, label: str = None,
+                       operation: str = None) -> None:
+        """Register or refresh a session in the presence registry.
+
+        Called from the ASGI middleware on every headered HTTP request and
+        from _execute_in_td to attribute the current operation. Worker-side
+        pure Python only (mcp-safety thread boundary).
+        """
+        now = time.time()
+        with self._sessions_lock:
+            entry = self._sessions.get(sid)
+            if entry is None:
+                pid = None
+                try:
+                    pid = int(str(sid).split('-', 1)[0])
+                except Exception:
+                    pass
+                entry = {'sid': sid, 'label': label or sid, 'pid': pid,
+                         'first_seen': now, 'requests': 0, 'last_tool': None}
+                self._sessions[sid] = entry
+            if label:
+                entry['label'] = label
+            if operation:
+                entry['last_tool'] = operation
+            else:
+                entry['requests'] += 1
+            entry['last_seen'] = now
+            # Lazy prune: drop sessions silent for over an hour.
+            if len(self._sessions) > 8:
+                for stale_sid in [k for k, v in self._sessions.items()
+                                  if now - v.get('last_seen', 0) > 3600]:
+                    del self._sessions[stale_sid]
+
+    def _sessions_snapshot(self) -> dict:
+        """Presence list for get_sessions. Worker-side pure Python."""
+        now = time.time()
+        with self._sessions_lock:
+            self._prune_claims_locked(now)
+            sessions = [dict(v) for v in self._sessions.values()]
+            claims_by = {}
+            for held_scope, claim in self._claims.items():
+                claims_by.setdefault(claim['sid'], []).append({
+                    'scope': held_scope,
+                    'note': claim.get('note', ''),
+                    'expires_in_s': round(claim['ts'] + claim['ttl'] - now, 1)})
+            touched_by = {}
+            for scope, ring in self._touches.items():
+                for touch in ring:
+                    touched_by.setdefault(touch['sid'], []).append(
+                        (touch['ts'], scope, touch['tool']))
+        for e in sessions:
+            idle = now - e.get('last_seen', now)
+            e['idle_s'] = round(idle, 1)
+            e['stale'] = idle > 90
+            recent = sorted(touched_by.get(e['sid'], []), reverse=True)[:5]
+            if recent:
+                e['recent_scopes'] = [
+                    {'scope': scope, 'tool': tool, 'age_s': round(now - ts, 1)}
+                    for ts, scope, tool in recent]
+            held = claims_by.get(e['sid'])
+            if held:
+                e['claims'] = held
+        sessions.sort(key=lambda e: e.get('last_seen', 0), reverse=True)
+        return {'sessions': sessions, 'count': len(sessions)}
+
+    def _prune_claims_locked(self, now):
+        """Drop expired claims and claims whose holder went silent for 10
+        minutes. Caller holds _sessions_lock."""
+        for held_scope in list(self._claims):
+            claim = self._claims[held_scope]
+            holder = self._sessions.get(claim['sid'])
+            holder_seen = holder.get('last_seen', 0) if holder else 0
+            # '_anon' holders (headerless clients) are never in the
+            # registry -- for them only the TTL applies, or their claims
+            # would evaporate on the next prune.
+            holder_silent = (claim['sid'] != '_anon'
+                             and now - holder_seen > 600)
+            if now > claim['ts'] + claim['ttl'] or holder_silent:
+                del self._claims[held_scope]
+
+    def _claim_scope(self, sid, label, scope, note, ttl):
+        """Grant/refuse a cooperative write lease. Worker-side pure Python."""
+        scope = (scope or '').strip()
+        if not (scope.startswith('/') or scope.startswith('file:')
+                or scope.startswith('project:')):
+            return {'error': "scope must be an op path ('/comp/op'), "
+                             "'file:<repo-relative-path>', or 'project:<name>'"}
+        if scope.startswith('/') and len(scope) > 1:
+            scope = scope.rstrip('/')
+        try:
+            ttl = max(30, min(3600, int(ttl)))
+        except Exception:
+            ttl = 300
+        me = sid or '_anon'
+        now = time.time()
+        with self._sessions_lock:
+            self._prune_claims_locked(now)
+            for held_scope, claim in self._claims.items():
+                if claim['sid'] == me:
+                    continue
+                if _scope_overlaps(scope, held_scope):
+                    return {'granted': False,
+                            'holder': {
+                                'label': claim.get('label') or claim['sid'],
+                                'scope': held_scope,
+                                'note': claim.get('note', ''),
+                                'age_s': round(now - claim['ts'], 1),
+                                'expires_in_s': round(
+                                    claim['ts'] + claim['ttl'] - now, 1)},
+                            'hint': 'Coordinate with the holder, work in a '
+                                    'different subtree, or wait for expiry.'}
+            self._claims[scope] = {'sid': me, 'label': label or me,
+                                   'note': (note or '')[:200],
+                                   'ts': now, 'ttl': ttl}
+            if len(self._claims) > 64:
+                oldest_first = sorted(self._claims.items(),
+                                      key=lambda kv: kv[1]['ts'])
+                for stale_scope, _claim in oldest_first[:len(self._claims) - 64]:
+                    del self._claims[stale_scope]
+        return {'granted': True, 'scope': scope, 'ttl': ttl,
+                'renewal': 'your own tool calls touching this scope renew '
+                           'the lease; it expires on TTL or session silence'}
+
+    def _release_scope(self, sid, scope):
+        """Release a lease held by this session. Worker-side pure Python."""
+        me = sid or '_anon'
+        scope = (scope or '').strip()
+        if scope.startswith('/') and len(scope) > 1:
+            scope = scope.rstrip('/')
+        with self._sessions_lock:
+            claim = self._claims.get(scope)
+            if claim is None:
+                return {'released': False, 'reason': 'no claim on that scope'}
+            if claim['sid'] != me:
+                return {'released': False,
+                        'reason': 'held by another session',
+                        'holder': claim.get('label') or claim['sid']}
+            del self._claims[scope]
+        return {'released': True, 'scope': scope}
 
     def _execute_in_td(self, operation: str, params: dict,
                        timeout: float = 30.0) -> dict:
@@ -72,11 +451,18 @@ class EnvoyMCPServer:
             event = Event()
             self.pending_requests[request_id] = {'event': event, 'result': None}
 
+        # Attribute the operation to the calling session (if the request
+        # arrived through a bridge that sent identity headers).
+        sid, _label = _SESSION_CTX.get()
+        if sid:
+            self._touch_session(sid, operation=operation)
+
         # Queue request to main thread via Thread Manager's refresh queue
         self.add_to_refresh_queue({
             'id': request_id,
             'operation': operation,
-            'params': params
+            'params': params,
+            'sid': sid
         })
 
         # Wait for response (with timeout)
@@ -91,8 +477,23 @@ class EnvoyMCPServer:
             del self.pending_requests[request_id]
         return result
 
-    def check_responses(self) -> None:
+    def check_responses(self, first_response: dict = None) -> None:
         """Check for responses from main thread"""
+        def process_response(response):
+            request_id = response['id']
+            with self.lock:
+                pending = self.pending_requests.get(request_id)
+            if pending is not None:
+                pending['result'] = response['result']
+                pending['event'].set()
+            else:
+                # Orphaned response -- request already timed out and was removed
+                print(f'[Envoy][WARNING] Orphaned response for request {request_id} '
+                      f'(likely timed out). Operation still executed on main thread.')
+
+        if first_response is not None:
+            process_response(first_response)
+
         while True:
             try:
                 response = self.response_queue.get_nowait()
@@ -107,16 +508,7 @@ class EnvoyMCPServer:
                 if not expected:
                     print(f'[Envoy][WARNING] check_responses unexpected error: {type(e).__name__}: {e}')
                 break
-            request_id = response['id']
-            with self.lock:
-                pending = self.pending_requests.get(request_id)
-            if pending is not None:
-                pending['result'] = response['result']
-                pending['event'].set()
-            else:
-                # Orphaned response -- request already timed out and was removed
-                print(f'[Envoy][WARNING] Orphaned response for request {request_id} '
-                      f'(likely timed out). Operation still executed on main thread.')
+            process_response(response)
 
     def _register_tools(self):
         """Register all MCP tools"""
@@ -125,6 +517,10 @@ class EnvoyMCPServer:
         def create_op(parent_path: str, op_type: str, name: str = None) -> dict:
             """
             Create a new operator in TouchDesigner.
+
+            Auto-positions the new op clear of siblings, and snaps any docked
+            companions it spawns (callback/shader/info DATs) into a tight row
+            hugging the host's bottom edge (docks_placed in the result).
 
             Args:
                 parent_path: Path to parent COMP (e.g., "/project1" or "/project1/base1")
@@ -141,30 +537,37 @@ class EnvoyMCPServer:
             })
 
         @self.mcp.tool()
-        def delete_op(op_path: str) -> dict:
+        def delete_op(op_path: str, override: bool = False) -> dict:
             """
             Delete an operator.
 
             Args:
                 op_path: Full path to the operator (e.g., "/project1/base1")
+                override: Bypass the multi-session gate when another live
+                    session claimed this scope or wrote it very recently.
 
             Returns:
                 Dict with success status
             """
-            return self._execute_in_td('delete_op', {'op_path': op_path})
+            return self._execute_in_td('delete_op', {'op_path': op_path,
+                                                     'override': override})
 
         @self.mcp.tool()
-        def get_op(op_path: str) -> dict:
+        def get_op(op_path: str, include_defaults: bool = False) -> dict:
             """
-            Get detailed information about an operator.
+            Get operator info; parameters are non-default only by default.
 
             Args:
                 op_path: Full path to the operator
+                include_defaults: True returns all parameters
 
             Returns:
-                Dict with operator info including type, family, parameters, inputs, outputs
+                Dict with type, family, parameters, inputs, outputs, children
             """
-            return self._execute_in_td('get_op', {'op_path': op_path})
+            return self._execute_in_td('get_op', {
+                'op_path': op_path,
+                'include_defaults': include_defaults,
+            })
 
         @self.mcp.tool()
         def set_parameter(op_path: str, par_name: str, value: str = None,
@@ -172,6 +575,11 @@ class EnvoyMCPServer:
                          bind_expr: str = None) -> dict:
             """
             Set a parameter value, expression, bind expression, or mode on an operator.
+
+            Invalid Menu values are rejected with the valid menuNames because
+            TD would otherwise silently coerce them to index 0. Sequence-block
+            parameters auto-grow their sequence, e.g. const5name grows
+            numBlocks to 6.
 
             Args:
                 op_path: Full path to the operator
@@ -194,21 +602,37 @@ class EnvoyMCPServer:
             })
 
         @self.mcp.tool()
-        def get_parameter(op_path: str, par_name: str) -> dict:
+        def get_parameter(op_path: str, par_name: str = None,
+                         search: str = None, search_in: str = 'any',
+                         depth: int = 2, max_results: int = 50,
+                         details: bool = False) -> dict:
             """
-            Get a parameter value from an operator.
+            Read one parameter compactly, or search parameters by glob/substring.
+
+            Single-parameter mode is compact by default; details=True restores
+            full metadata. Search mode ignores details. search_in='value'
+            evaluates scanned values; search_in='any' evaluates constants only.
 
             Args:
                 op_path: Full path to the operator
-                par_name: Parameter name
+                par_name: Parameter name for single-parameter mode
+                search: Glob or substring pattern for search mode
+                search_in: Field to search: name, value, expr, or any
+                depth: Child search depth
+                max_results: Maximum search hits to return
+                details: True returns full metadata in single-parameter mode
 
             Returns:
-                Dict with parameter value, mode, expression, bind expression,
-                export source, label, min/max, and default value
+                Compact parameter info or search hits
             """
             return self._execute_in_td('get_parameter', {
                 'op_path': op_path,
-                'par_name': par_name
+                'par_name': par_name,
+                'search': search,
+                'search_in': search_in,
+                'depth': depth,
+                'max_results': max_results,
+                'details': details,
             })
 
         @self.mcp.tool()
@@ -261,7 +685,7 @@ class EnvoyMCPServer:
                          op_type: str = None,
                          include_utility: bool = False) -> dict:
             """
-            List all operators in a network/container.
+            List operators in a network/container.
 
             Args:
                 parent_path: Path to parent COMP to search in (default "/")
@@ -270,7 +694,7 @@ class EnvoyMCPServer:
                 include_utility: If True, include utility operators like annotations (default False)
 
             Returns:
-                Dict with list of operators and their basic info
+                Dict with operator path/type/family/depth; name = last path segment
             """
             return self._execute_in_td('query_network', {
                 'parent_path': parent_path,
@@ -283,6 +707,9 @@ class EnvoyMCPServer:
         def copy_op(source_path: str, dest_parent: str, new_name: str = None) -> dict:
             """
             Copy an operator to a new location.
+
+            Auto-positions the copy clear of siblings and re-hugs its docked
+            companions below it (docks_placed in the result).
 
             Args:
                 source_path: Path to operator to copy
@@ -421,6 +848,29 @@ class EnvoyMCPServer:
                 'module_name': module_name
             })
 
+        @self.mcp.tool()
+        def get_docs(query: str, section: str = None, source: str = 'auto',
+                     max_chars: int = 20000) -> dict:
+            """Look up official TouchDesigner documentation (docs.derivative.ca).
+
+            Resolves operator pages ("Movie File In TOP", "moviefileinTOP"), Python
+            class pages ("CHOP Class"), and concept articles. Prefers the local
+            offline help mirror when the TD installation has one (version-exact,
+            instant); falls back to the live docs.derivative.ca wiki API.
+
+            Args:
+                query: Page name or topic (e.g. "noiseTOP", "Timer CHOP", "Instancing")
+                section: Optional section heading from a previous call's
+                    sections_available -- returns just that section
+                source: 'auto' (offline then web), 'offline', or 'web'
+                max_chars: Truncate content to this many characters (default 20000)
+
+            Returns:
+                Dict with title, source, sections_available, content (markdown-ish
+                text), and optional url / matches / truncated fields.
+            """
+            return self._get_docs(query, section, source, max_chars)
+
         # === MCP Prompts ===
 
         @self.mcp.prompt()
@@ -490,40 +940,16 @@ class EnvoyMCPServer:
                            rows: list = None, clear: bool = False,
                            confirm_wipe: bool = False) -> dict:
             """
-            Full-replace the content of a DAT operator. NOT incremental --
-            the entire DAT is replaced by what you send.
+            Replace a DAT's entire text or table content.
 
-            For partial edits to text DATs, prefer edit_dat_content --
-            it takes old_string/new_string and only sends the changed
-            substring across the wire (much cheaper for large DATs).
-
-            Workflow for full replace:
-              1. get_dat_content(op_path) to read the current content
-              2. Modify the returned content in memory
-              3. set_dat_content(op_path, text=full_modified_content)
-
-            Sending only the part you changed will destroy everything else.
-
-            Guardrails:
-              - No-content guard: refuses calls with no actionable args
-                (text=None, rows=None, clear=False -- you passed nothing).
-              - Wipe guard: refuses calls that would leave the DAT empty
-                (text="", rows=[], or clear=True with no replacement
-                content) unless confirm_wipe=True. Most "wipe" calls are
-                accidents from malformed input -- the guard interrupts
-                so you can verify intent before destroying content.
+            Refuses no-content calls and any wipe unless confirm_wipe=True.
 
             Args:
                 op_path: Path to the DAT operator
-                text: Full text content to set (replaces entire DAT)
-                rows: List of lists to set as table rows (replaces entire table)
-                clear: Optional. Redundant when text/rows is also provided
-                    (assignment already replaces the entire content).
-                    Use alone with confirm_wipe=True to explicitly empty
-                    a DAT (e.g. resetting a FIFO log).
-                confirm_wipe: Safety flag. Set True ONLY when you have
-                    explicitly verified the DAT should become empty.
-                    Default False refuses wipes.
+                text: Full text replacement; text="" is a wipe
+                rows: Full table replacement; rows=[] is a wipe
+                clear: Empty the DAT; redundant when text/rows is provided
+                confirm_wipe: Required when the result would be empty
 
             Returns:
                 Dict with success status, or {'error': ...} if a guard trips
@@ -541,52 +967,20 @@ class EnvoyMCPServer:
                              new_string: str, replace_all: bool = False,
                              confirm_wipe: bool = False) -> dict:
             """
-            Surgical text edit on a DAT -- replaces old_string with
-            new_string. Token-efficient alternative to set_dat_content
-            for partial edits: only the changed substring crosses the
-            wire, not the whole DAT.
+            Replace text in a DAT without sending the whole DAT.
 
-            Mirrors Claude Code's Edit tool semantics:
-              - old_string must appear exactly once by default. If it
-                appears multiple times, either widen old_string with
-                surrounding context or pass replace_all=True.
-              - old_string and new_string must differ.
-              - old_string must be non-empty.
-
-            Text-only. For tables, use set_dat_content(rows=...) --
-            string matching across cells is a different beast.
-
-            Workflow for partial text edits:
-              1. (Optional) get_dat_content(op_path) to inspect current
-                 content if you don't already know what's there.
-              2. edit_dat_content(op_path, old_string=..., new_string=...)
-              No second round-trip needed for the write.
-
-            Guardrails:
-              - Refuses non-text DATs (use set_dat_content for tables).
-              - Refuses empty old_string (would match every position).
-              - Refuses old_string == new_string (no-op).
-              - Wipe guard: if the resulting text would be empty,
-                requires confirm_wipe=True (mirrors set_dat_content).
-              - Not-found error includes diagnostics (DAT length, row
-                count, case-insensitive hint) so the caller can
-                self-correct without another round-trip.
+            Text DATs only. old_string must appear exactly once unless
+            replace_all=True. Refuses wipes without confirm_wipe=True.
 
             Args:
                 op_path: Path to the DAT operator
-                old_string: Text to find. Must be unique unless
-                    replace_all=True. Must not be empty.
-                new_string: Replacement text. Must differ from
-                    old_string.
-                replace_all: When True, replaces every occurrence.
-                    When False (default), requires unique match.
-                confirm_wipe: Safety flag. Set True ONLY when the
-                    edit is intended to leave the DAT empty.
+                old_string: Text to find; non-empty and unique by default
+                new_string: Replacement text; must differ from old_string
+                replace_all: True replaces every occurrence
+                confirm_wipe: Required when the edit would leave the DAT empty
 
             Returns:
-                Dict with success, path, replacements (count of
-                substitutions made), numRows, numCols. Or
-                {'error': ...} if a guard trips.
+                Dict with success, path, replacements, numRows, and numCols
             """
             return self._execute_in_td('edit_dat_content', {
                 'op_path': op_path,
@@ -618,18 +1012,18 @@ class EnvoyMCPServer:
                         expose: bool = None, allowCooking: bool = None,
                         selected: bool = None) -> dict:
             """
-            Set flags/properties on an operator.
+            Set one or more flags/properties on an operator.
 
             Args:
                 op_path: Path to the operator
-                bypass: Bypass flag (operator is skipped in chain)
-                lock: Lock flag (DAT contents locked from editing/cooking)
-                display: Display flag (blue flag, marks output for display)
-                render: Render flag (purple flag, marks for rendering)
-                viewer: Viewer flag (shows viewer on node tile)
+                bypass: Bypass flag
+                lock: Lock flag
+                display: Display flag
+                render: Render flag
+                viewer: Viewer flag
                 current: Current flag (yellow flag)
-                expose: Expose flag (hides node from network view when False)
-                allowCooking: Allow cooking flag (COMPs only)
+                expose: Expose flag
+                allowCooking: Allow cooking flag
                 selected: Selected flag in network editor
 
             Returns:
@@ -666,16 +1060,17 @@ class EnvoyMCPServer:
         @self.mcp.tool()
         def get_network_layout(comp_path: str, include_annotations: bool = True) -> dict:
             """
-            Get positions and sizes of all operators (and optionally annotations) in a COMP.
-            Use this instead of calling get_op_position repeatedly for each operator.
+            Get compact positions and sizes for all children in a COMP.
 
             Args:
                 comp_path: Path to the parent COMP
                 include_annotations: Whether to include annotation positions (default True)
 
             Returns:
-                Dict with operators list (path, name, type, nodeX, nodeY, nodeWidth, nodeHeight,
-                nodeCenterX, nodeCenterY), annotations list, and bounding_box of all operators
+                Dict with operator path/type/nodeX/nodeY/nodeWidth/nodeHeight;
+                centers are nodeX+nodeWidth/2 and nodeY+nodeHeight/2. Docked
+                companions carry dockedTo (their host's name) so the Verify
+                step can confirm every dock hugs its host.
             """
             return self._execute_in_td('get_network_layout', {
                 'comp_path': comp_path,
@@ -688,6 +1083,10 @@ class EnvoyMCPServer:
                            color: list = None, comment: str = None) -> dict:
             """
             Set an operator's position, size, color, or comment in the network editor.
+
+            Moving an op carries its docked companions along: they are re-hugged
+            in a tight row below the new position (docks_moved in the result).
+            Position the host FIRST if you also plan to place a dock explicitly.
 
             Args:
                 op_path: Path to the operator
@@ -734,20 +1133,19 @@ class EnvoyMCPServer:
                               color: list = None, opacity: float = None,
                               name: str = None) -> dict:
             """
-            Create an annotation (Comment, Network Box, or Annotate) in the network editor.
-            Annotations are visual documentation elements for grouping, labeling, or documenting operators.
+            Create a Comment, Network Box, or Annotate in the network editor.
 
             Args:
-                parent_path: Path to parent COMP where the annotation will be created
-                mode: Annotation mode - "annotate" (default, has title bar), "comment", or "networkbox"
+                parent_path: Path to parent COMP
+                mode: "annotate" (default), "comment", or "networkbox"
                 text: Body text content
-                title: Title bar text (for Network Box and Annotate modes)
+                title: Title bar text
                 x: X position in the network editor
                 y: Y position in the network editor
                 width: Width of the annotation
                 height: Height of the annotation
-                color: Background color as [r, g, b] floats (0.0-1.0)
-                opacity: Opacity of the annotation (0.0-1.0)
+                color: Background color as [r, g, b] floats
+                opacity: Opacity from 0.0 to 1.0
                 name: Optional name for the annotation operator
 
             Returns:
@@ -1023,19 +1421,17 @@ class EnvoyMCPServer:
                              ext_index: int = None,
                              existing_comp: bool = False) -> dict:
             """
-            Create a TouchDesigner extension: a baseCOMP with a text DAT
-            containing a Python extension class, wired up and initialized.
+            Create or attach a TouchDesigner extension COMP and code DAT.
 
             Args:
-                parent_path: Where to create the new COMP, OR path to an
-                             existing COMP if existing_comp=True
-                class_name: Python class name (e.g., "MyExtension")
-                name: COMP name (defaults to class_name). Ignored if existing_comp=True
-                code: Full Python class code. If omitted, generates minimal boilerplate
-                promote: Promote capitalized methods to COMP level (default True)
-                ext_name: Custom extension name (defaults to class_name)
-                ext_index: Extension slot 0-3 (auto-detects first empty if omitted)
-                existing_comp: If True, parent_path IS the target COMP (no new COMP created)
+                parent_path: Parent COMP path, or target COMP when existing_comp=True
+                class_name: Python class name
+                name: New COMP name; ignored when existing_comp=True
+                code: Full class code; omitted generates boilerplate
+                promote: Promote capitalized methods to COMP level
+                ext_name: Custom extension name
+                ext_index: Extension slot 0-3; omitted auto-detects
+                existing_comp: True attaches to parent_path instead of creating
 
             Returns:
                 Dict with comp_path, dat_path, class_name, ext_index, success status
@@ -1084,7 +1480,8 @@ class EnvoyMCPServer:
 
         @self.mcp.tool()
         def import_network(target_path: str, tdn: dict,
-                          clear_first: bool = False) -> dict:
+                          clear_first: bool = False,
+                          override: bool = False) -> dict:
             """
             Import a .tdn network into a TouchDesigner COMP, recreating all operators.
 
@@ -1092,6 +1489,9 @@ class EnvoyMCPServer:
                 target_path: Destination COMP path to import into
                 tdn: The .tdn JSON document (full document or just the operators array)
                 clear_first: If True, delete all existing children before importing
+                override: Bypass the multi-session gate when another live
+                    session claimed this COMP or wrote it very recently
+                    (applies only with clear_first=True)
 
             Returns:
                 Dict with import results and created operator paths
@@ -1100,6 +1500,7 @@ class EnvoyMCPServer:
                 'target_path': target_path,
                 'tdn': tdn,
                 'clear_first': clear_first,
+                'override': override,
             })
 
         @self.mcp.tool()
@@ -1108,35 +1509,19 @@ class EnvoyMCPServer:
                      max_depth: int = None,
                      embed_all: bool = False) -> dict:
             """
-            Read the network under comp_path as a TDN dict (live in-memory
-            state, never written to disk). Prefer this over get_op /
-            query_network when exploring more than ~3 operators -- it's
-            typically 20-90x fewer tokens thanks to default-omission,
-            type_defaults, and par_templates compaction.
+            Read live authored state under comp_path as a compact TDN dict.
 
-            Scope cost by passing a specific comp_path. Pass max_depth to
-            cap nesting if you're reading a large root. Works in all
-            Tdnmode values (Off / Export / Full) -- reads live state,
-            not the .tdn files on disk.
-
-            When NOT to use: if you need evaluated-expression runtime
-            values, cook errors, DAT/CHOP/TOP output data, cook timing,
-            or operator flag state after runtime mutation. Use
-            get_parameter, get_op_errors, get_dat_content, capture_top,
-            or get_op_flags respectively for those.
+            This is authored-state, not runtime: use runtime probes for
+            evaluated values, cook errors, output pixels/data, timing, or flags.
 
             Args:
                 comp_path: Root COMP to read (default "/" for entire project)
                 include_dat_content: Include DAT text/table content
-                    (default None = use Embeddatsintdns toggle)
                 max_depth: Maximum recursion depth (None = unlimited)
-                embed_all: If True, recurse into TDN-tagged COMPs instead
-                    of skipping their children. Produces a self-contained
-                    view of the entire subtree.
+                embed_all: Recurse into TDN-tagged COMPs instead of skipping
 
             Returns:
-                Dict with the .tdn JSON document under 'tdn' on success,
-                or 'error' on failure.
+                Dict with the TDN document under 'tdn', or {'error': ...}
             """
             return self._execute_in_td('read_tdn', {
                 'comp_path': comp_path,
@@ -1148,43 +1533,18 @@ class EnvoyMCPServer:
         def diff_tdn(target: str = "",
                      max_changed_ops: int = 200,
                      max_bytes: int = 60000) -> dict:
-            """Show what is UNSAVED in TouchDesigner's TDN networks: the live
-            in-memory network(s) vs the on-disk .tdn file(s).
+            """Diff live in-memory TDN state against on-disk .tdn files.
 
-            THIS is the tool to answer "what changed in <X>.tdn?", "what changed
-            in this COMP?", "what have I/you not saved yet?", or "what's changed
-            across the project?" for TDN-externalized COMPs. It sees what git
-            cannot: git only reads files on disk; this reads TD's live state.
-            (For committed/history diffs, use git -- the .tdn diff driver Embody
-            installs keeps those clean too.)
-
-            Scope by `target`:
-              - omit it (or pass ""/"/"/"project") -> PROJECT-WIDE: every live
-                TDN COMP, summarized (which ones changed + counts). Use this for
-                "what's changed in the project / what haven't I saved."
-              - a COMP path ("/project1/scene") OR a .tdn file path / bare
-                filename ("tooltip.tdn", resolved to its COMP) -> that one COMP
-                in full per-field detail.
-
-            Read-only, non-interactive, pull-only: never prompts, never mutates
-            TD, not auto-run.
+            Empty target (or "/" / "project") returns a project summary; a
+            COMP path or .tdn filename returns that COMP in detail. Read-only.
 
             Args:
-                target: empty = whole project; else a COMP path or .tdn file.
-                max_changed_ops: Cap on reported changed operators; an honest
-                    'truncated' flag is set when exceeded.
-                max_bytes: Soft cap on envelope size; past it, per-field change
-                    bodies are dropped (changed_keys retained).
+                target: Empty for whole project, else COMP path or .tdn file
+                max_changed_ops: Cap reported changed operators
+                max_bytes: Soft response cap; changed_keys remain when trimmed
 
             Returns:
-                Single COMP: a diff envelope -- schema_version, baseline
-                ('disk'), comp_path, file, file_exists, changed,
-                counts{added,removed,modified}, added[], removed[],
-                modified[{path,name,type,kind,changed_keys,changes}] where each
-                change is {old,new} (old=disk, new=live), truncated, warnings.
-                Project-wide: {scope:'project', changed_count, clean_count,
-                skipped_count, changed:[<envelope per changed COMP>], skipped,
-                truncated}. On failure: {'error': ...}.
+                Diff envelope, project summary, or {'error': ...}
             """
             return self._execute_in_td('diff_tdn', {
                 'target': target,
@@ -1197,36 +1557,54 @@ class EnvoyMCPServer:
 
         @self.mcp.tool()
         def capture_top(op_path: str, format: str = "jpeg", quality: float = 0.8,
-                        max_resolution: int = 640, inline: bool = False) -> list:
+                        max_resolution: int = 640, inline: bool = False,
+                        sample_grid: int = 0) -> list:
             """
-            Capture a TOP operator's output as an image.
+            Capture a TOP as a temp image file or sampled RGBA grid.
 
-            Returns the image saved to a temp file; Read that path to view it.
-            Inline base64 previews are token-heavy, so they are OFF by default --
-            pass inline=True to also embed a small preview in the response.
+            File path is returned by default; inline=True embeds a small preview.
+            sample_grid>=2 returns an NxN RGBA grid instead, clamped 2..32 with
+            row 0 at image top-left; image format args are ignored.
+
+            The returned text carries a Quality verdict computed from the raw
+            pixels (luminance stats, alpha coverage): a FAIL flags a
+            black / flat / fully-transparent frame so you can tell an empty
+            render from a real one WITHOUT reading the image. Never declare a
+            visual task done on a FAIL verdict.
 
             Args:
-                op_path: Path to a TOP operator (e.g., "/project1/null1")
-                format: Image format - "jpeg" (smaller, lossy) or "png" (lossless)
-                quality: JPEG compression quality 0.0-1.0 (ignored for PNG)
-                max_resolution: Max pixels on longest edge. 0 = native resolution.
-                inline: If True, also embed a small base64 preview (token-heavy).
+                op_path: Path to a TOP operator
+                format: "jpeg" or "png"
+                quality: JPEG compression quality 0.0-1.0
+                max_resolution: Max pixels on longest edge; 0 = native
+                inline: True embeds a small base64 preview
+                sample_grid: >=2 returns an RGBA sample grid
 
             Returns:
-                Text metadata with the saved file path; plus an inline image if inline=True.
+                Saved path text (with a Quality verdict line), inline image
+                content, or sample-grid dict
             """
             import base64
             import os
             import uuid
+
+            try:
+                sample_grid_value = int(sample_grid or 0)
+            except Exception:
+                sample_grid_value = 0
 
             result = self._execute_in_td('capture_top', {
                 'op_path': op_path,
                 'format': format,
                 'quality': quality,
                 'max_resolution': max_resolution,
+                'sample_grid': sample_grid_value,
             })
 
             if 'error' in result:
+                return result
+
+            if sample_grid_value >= 2:
                 return result
 
             # Decode the base64 image data from the main thread
@@ -1242,6 +1620,24 @@ class EnvoyMCPServer:
             info = (f"TOP capture: {result['original_width']}x{result['original_height']}"
                     f" -> {result['width']}x{result['height']} {result['format'].upper()}"
                     f" ({size_kb:.1f} KB)\nSaved to: {file_path}")
+
+            # Surface the black/empty-frame verdict as text so the agent can
+            # branch on it WITHOUT reading the image -- enforces the
+            # "never declare a visual task done on a black frame" rule.
+            q = result.get('quality') or {}
+            if q:
+                if q.get('pass'):
+                    info += (f"\nQuality: OK (max_lum={q.get('max_luminance')}, "
+                             f"std={q.get('std_luminance')})")
+                else:
+                    info += (f"\nQuality: FAIL {q.get('fail_reasons')} "
+                             f"(max_lum={q.get('max_luminance')}, "
+                             f"mean_lum={q.get('mean_luminance')}"
+                             + (f", mean_alpha={q['mean_alpha']}"
+                                if 'mean_alpha' in q else '') + ") -- the frame "
+                             f"is likely black/empty/transparent. Do NOT declare "
+                             f"the task done; load /debug-operator and fix the "
+                             f"chain, then re-capture.")
 
             # Inline base64 images are token-heavy, so only embed when the caller
             # explicitly asks (inline=True) and the image is small. By default
@@ -1276,13 +1672,83 @@ class EnvoyMCPServer:
             })
 
         @self.mcp.tool()
-        def run_tests(suite_name: str = None, test_name: str = None) -> dict:
+        def get_sessions() -> dict:
+            """
+            List AI client sessions currently connected to this Envoy server.
+
+            Each session is one AI client window (e.g. one Claude Code
+            session) connected through its own bridge process. Check this
+            at session start and before large or destructive operations
+            (import_network with clear_first, delete_op on a COMP, project
+            save, test runs) so concurrent sessions don't clobber each
+            other's work.
+
+            Returns:
+                Dict with 'sessions' (newest-activity first: sid, label,
+                pid, first_seen, last_seen, idle_s, requests, last_tool,
+                recent_scopes = op paths/files this session recently
+                modified, claims = scopes this session holds via
+                claim_scope, stale = no traffic for >90s), 'count', and 'you'
+                (the caller's own sid, or null for clients that connect
+                without a bridge). Sessions silent for over an hour are
+                dropped. Responses to ANY tool also carry a '_peers'
+                advisory list automatically when your request overlaps
+                territory another session touched recently; an entry with
+                conflict=true means a peer WROTE there within the last
+                minute -- stop and coordinate before proceeding.
+            """
+            # Answered on the worker thread from pure-Python state -- no
+            # TD access, so no main-thread round-trip (mcp-safety).
+            snapshot = self._sessions_snapshot()
+            sid, _label = _SESSION_CTX.get()
+            snapshot['you'] = sid
+            return snapshot
+
+        @self.mcp.tool()
+        def claim_scope(scope: str, note: str = "", ttl: int = 300) -> dict:
+            """
+            Claim a cooperative write lease so peer sessions avoid a scope.
+
+            Overlapping claims and destructive ops are refused while the lease
+            is live; own writes renew it and silence/TTL expires it.
+
+            Args:
+                scope: Op path prefix, file:<repo-relative>, or project:<name>
+                note: Short intent shown to peers
+                ttl: Lease seconds, 30-3600 (default 300).
+
+            Returns:
+                {'granted': True, ...} or {'granted': False, 'holder': {...}}
+            """
+            # Worker-side pure Python -- no TD access (mcp-safety).
+            sid, label = _SESSION_CTX.get()
+            return self._claim_scope(sid, label, scope, note, ttl)
+
+        @self.mcp.tool()
+        def release_scope(scope: str) -> dict:
+            """
+            Release a scope you claimed with claim_scope.
+
+            Args:
+                scope: The exact scope string you claimed.
+
+            Returns:
+                {'released': bool} plus a reason when not released.
+            """
+            sid, _label = _SESSION_CTX.get()
+            return self._release_scope(sid, scope)
+
+        @self.mcp.tool()
+        def run_tests(suite_name: str = None, test_name: str = None,
+                      override: bool = False) -> dict:
             """
             Run Embody test suites and return results.
 
             Args:
                 suite_name: Run only this suite (e.g., "test_path_utils"). Omit to run all.
                 test_name: Run only this test method within the suite.
+                override: Bypass the multi-session gate when another live
+                    session holds project:tests or wrote very recently.
 
             Returns:
                 Dict with passed/failed/error/skip counts and full results list
@@ -1301,7 +1767,9 @@ class EnvoyMCPServer:
             self.add_to_refresh_queue({
                 'id': -1,  # Sentinel -- no normal response expected
                 'operation': 'run_tests',
-                'params': {'suite_name': suite_name, 'test_name': test_name},
+                'params': {'suite_name': suite_name, 'test_name': test_name,
+                           'override': override},
+                'sid': _SESSION_CTX.get()[0],
             })
 
             # Block worker thread until tests finish, timeout, or shutdown.
@@ -1326,7 +1794,7 @@ class EnvoyMCPServer:
         # --- Batch Operations ---
 
         @self.mcp.tool()
-        def batch_operations(operations: list) -> dict:
+        def batch_operations(operations: list, override: bool = False) -> dict:
             """
             Execute multiple operations in a single request.
 
@@ -1341,7 +1809,286 @@ class EnvoyMCPServer:
             Returns:
                 Dict with 'results' (list in same order), 'count', and 'success' (false if any failed)
             """
-            return self._execute_in_td('batch_operations', {'operations': operations})
+            return self._execute_in_td('batch_operations', {
+                'operations': operations,
+                'override': override,
+            })
+
+    # === get_docs: official TD documentation lookup ===
+    # Design adapted from Derivative's TDMCP get_docs, with permission.
+
+    def _get_docs(self, query, section, source, max_chars) -> dict:
+        # NOTE: _get_docs and its helpers run on the WORKER thread (the tool
+        # wrapper calls self._get_docs directly -- pure file/HTTP work kept off
+        # the main thread). They must live on the facade: mod.* is a TD object
+        # and is unavailable off the main thread (ext-diet WP4 gate finding).
+        try:
+            query = (query or '').strip()
+            if not query:
+                return {'error': 'Provide query'}
+            section = (section or '').strip() or None
+            source = (source or 'auto').strip().lower()
+            if source not in ('auto', 'offline', 'web'):
+                return {'error': 'Invalid source. Use: auto, offline, web'}
+            try:
+                max_chars = int(max_chars)
+            except Exception:
+                max_chars = 20000
+            max_chars = max(1, max_chars)
+
+            cache_key = (query.lower(), section.lower() if section else None,
+                         source, int(max_chars))
+            cache = self._docs_state['cache']
+            if cache_key in cache:
+                return cache[cache_key]
+
+            doc = None
+            offline_reason = None
+            web_reason = None
+
+            if source in ('auto', 'offline'):
+                try:
+                    doc = self._docsOffline(query)
+                    if doc is None:
+                        offline_reason = 'offline mirror missing or no match'
+                except Exception as e:
+                    offline_reason = f'offline lookup failed: {e}'
+                    doc = None
+                if isinstance(doc, dict) and doc.get('matches'):
+                    result = {'source': 'offline', 'matches': doc['matches']}
+                    cache[cache_key] = result
+                    if len(cache) > 20:
+                        cache.pop(next(iter(cache)))
+                    return result
+
+            if doc is None and source in ('auto', 'web'):
+                try:
+                    doc = self._docsWeb(query)
+                    if doc is None:
+                        web_reason = 'web lookup found no match'
+                    elif isinstance(doc, dict) and doc.get('error'):
+                        web_reason = doc['error']
+                        doc = None
+                except Exception as e:
+                    web_reason = f'web lookup failed: {e}'
+                    doc = None
+
+            if doc is None:
+                tried = []
+                if source in ('auto', 'offline'):
+                    tried.append(offline_reason or 'offline mirror missing or no match')
+                if source in ('auto', 'web'):
+                    tried.append(web_reason or 'web lookup found no match')
+                return {'error': 'Documentation lookup failed: ' + '; '.join(tried)}
+
+            sections_available, sections = self._docsSplitSections(doc.get('text') or '')
+            content = doc.get('text') or ''
+            if section:
+                wanted = section.lower()
+                title = None
+                for candidate in sections_available:
+                    if candidate.lower() == wanted:
+                        title = candidate
+                        break
+                if title is None:
+                    for candidate in sections_available:
+                        if candidate.lower().startswith(wanted):
+                            title = candidate
+                            break
+                if title is None:
+                    return {
+                        'error': f'Section not found: {section}',
+                        'sections_available': sections_available,
+                    }
+                content = sections.get(title.lower(), '')
+
+            truncated = len(content) > max_chars
+            if truncated:
+                content = content[:max_chars]
+            result = {
+                'title': doc.get('title'),
+                'source': doc.get('source'),
+                'sections_available': sections_available,
+                'content': content,
+            }
+            if doc.get('url'):
+                result['url'] = doc['url']
+            if truncated:
+                result['truncated'] = True
+            cache[cache_key] = result
+            if len(cache) > 20:
+                cache.pop(next(iter(cache)))
+            return result
+        except Exception as e:
+            return {'error': f'Documentation lookup failed: {e}'}
+
+    def _docsOfflineRoot(self):
+        if self._docs_state['resolved']:
+            return self._docs_state['root']
+        root_path = None
+        result = self._execute_in_td('get_docs_roots', {})
+        if not (isinstance(result, dict) and 'roots' in result
+                and not result.get('error')):
+            return None
+        try:
+            for candidate in result.get('roots', []):
+                if os.path.isdir(candidate):
+                    root_path = candidate
+                    break
+        except Exception:
+            root_path = None
+        self._docs_state['resolved'] = True
+        self._docs_state['root'] = root_path
+        return root_path
+
+    def _docsOffline(self, query):
+        root_path = self._docsOfflineRoot()
+        if root_path is None:
+            return None
+        if self._docs_state['index'] is None:
+            index = {}
+            for filename in os.listdir(root_path):
+                if not filename.lower().endswith(('.htm', '.html')):
+                    continue
+                stem = os.path.splitext(filename)[0]
+                key = self._docsNormalize(stem)
+                if key and key not in index:
+                    index[key] = filename
+            self._docs_state['index'] = index
+
+        index = self._docs_state['index']
+        key = self._docsNormalize(query)
+        if not key:
+            return None
+
+        def read_doc(filename):
+            path = os.path.join(root_path, filename)
+            with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                html_src = f.read()
+            stem = os.path.splitext(filename)[0]
+            return {
+                'title': stem.replace('_', ' '),
+                'source': 'offline',
+                'text': self._docsHtmlToText(html_src),
+            }
+
+        if key in index:
+            return read_doc(index[key])
+
+        candidates = [filename for index_key, filename in index.items()
+                      if key in index_key or index_key in key]
+        if len(candidates) == 1:
+            return read_doc(candidates[0])
+        if 2 <= len(candidates) <= 8:
+            return {
+                'source': 'offline',
+                'matches': [
+                    os.path.splitext(filename)[0].replace('_', ' ')
+                    for filename in candidates
+                ],
+            }
+        return None
+
+    def _docsWeb(self, query):
+        try:
+            headers = {'User-Agent': 'Embody-Envoy-get_docs'}
+            search_params = urllib.parse.urlencode({
+                'action': 'query',
+                'list': 'search',
+                'format': 'json',
+                'srlimit': 5,
+                'srsearch': query,
+            })
+            search_url = 'https://docs.derivative.ca/api.php?' + search_params
+            request = urllib.request.Request(search_url, headers=headers)
+            with urllib.request.urlopen(request, timeout=8) as response:
+                data = json.loads(response.read().decode('utf-8', errors='replace'))
+            results = data.get('query', {}).get('search', [])
+            if not results:
+                return {'error': 'web lookup found no match'}
+            title = results[0].get('title')
+            if not title:
+                return {'error': 'web lookup returned no title'}
+
+            parse_params = urllib.parse.urlencode({
+                'action': 'parse',
+                'format': 'json',
+                'prop': 'text',
+                'page': title,
+            })
+            parse_url = 'https://docs.derivative.ca/api.php?' + parse_params
+            request = urllib.request.Request(parse_url, headers=headers)
+            with urllib.request.urlopen(request, timeout=8) as response:
+                data = json.loads(response.read().decode('utf-8', errors='replace'))
+            html_src = data.get('parse', {}).get('text', {}).get('*')
+            if html_src is None:
+                return {'error': 'web lookup returned no page content'}
+            return {
+                'title': title,
+                'source': 'web',
+                'url': f'https://docs.derivative.ca/{title.replace(" ", "_")}',
+                'text': self._docsHtmlToText(html_src),
+            }
+        except Exception as e:
+            return {'error': f'web lookup failed: {e}'}
+
+    @staticmethod
+    def _docsNormalize(name: str) -> str:
+        return re.sub(r'[^a-z0-9]', '', (name or '').lower())
+
+    @staticmethod
+    def _docsHtmlToText(html_src: str) -> str:
+        text = html_src or ''
+        text = re.sub(r'(?is)<(script|style)[^>]*>.*?</\1>', '', text)
+        text = re.sub(r'(?i)<h([1-4])[^>]*>',
+                      lambda m: '\n' + ('#' * int(m.group(1))) + ' ', text)
+        text = re.sub(r'(?i)</h[1-4]>', '\n', text)
+        text = re.sub(r'(?i)<li[^>]*>', '\n- ', text)
+        text = re.sub(r'(?i)</li>', '\n', text)
+        text = re.sub(
+            r'(?i)</?(p|div|tr|br|table|tbody|thead|tfoot|td|th|ul|ol)[^>]*>',
+            '\n',
+            text,
+        )
+        text = re.sub(r'(?s)<[^>]+>', '', text)
+        text = unescape(text)
+        text = text.replace('\ufeff', '').replace('[edit]', '')
+        text = re.sub(r'[ \t\r\f\v]+', ' ', text)
+        text = re.sub(r' *\n *', '\n', text)
+        # MediaWiki boilerplate, removed AFTER whitespace normalization so the
+        # line anchors see trimmed lines: the nav skeleton renders as bare '-'
+        # / 'Jump to ...' lines, and nested headline spans strand '#' markers
+        # on their own line -- regluing them keeps sections drill-down-able.
+        text = re.sub(r'(?m)^(?:-|Jump to navigation|Jump to search)$\n?', '', text)
+        text = re.sub(r'(?m)^(#{1,6})\n+(?=\S)', r'\1 ', text)
+        # The mirror's page footer (Personal tools / Namespaces / Views / ...)
+        # starts at a '## Personal tools' heading -- nothing after it is page
+        # content, so cut there rather than blocklist each footer heading.
+        cut = re.search(r'(?m)^#{1,6} Personal tools$', text)
+        if cut:
+            text = text[:cut.start()]
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        return text.strip()
+
+    @staticmethod
+    def _docsSplitSections(text: str):
+        sections_available = []
+        buffers = {'': []}
+        current = ''
+        for line in (text or '').splitlines():
+            match = re.match(r'^(#{1,6})\s+(.+?)\s*$', line)
+            if match:
+                current = match.group(2).strip()
+                # MediaWiki chrome headings still bucket their text away from
+                # real sections, but are not offered for section= drill-down.
+                if current.lower() not in ('contents', 'navigation menu'):
+                    sections_available.append(current)
+                buffers.setdefault(current.lower(), []).append(line)
+            else:
+                buffers.setdefault(current.lower(), []).append(line)
+        sections = {key: '\n'.join(lines).strip()
+                    for key, lines in buffers.items()}
+        return sections_available, sections
 
     def run(self) -> None:
         """Run the MCP server (blocking) with graceful shutdown support"""
@@ -1422,12 +2169,18 @@ class EnvoyMCPServer:
 
         # Response checker is pure Python (no TD objects), so a plain thread is fine
         def response_checker():
-            import time  # local import survives DAT recompilation
             while self.running and not self.shutdown_event.is_set():
                 try:
-                    self.check_responses()
-                    time.sleep(0.01)
+                    # Was a 10ms poll adding ~5ms mean latency per call (audit finding).
+                    response = self.response_queue.get(timeout=0.25)
+                    self.check_responses(response)
                 except Exception as e:
+                    try:
+                        expected = isinstance(e, Empty)
+                    except NameError:
+                        expected = type(e).__name__ == 'Empty'
+                    if expected:
+                        continue
                     if not self.shutdown_event.is_set():
                         print(f'[Envoy][WARNING] response_checker exiting: {e}')
                     break
@@ -1465,13 +2218,54 @@ class EnvoyMCPServer:
                         return
                     raise
 
-        starlette_app = _SuppressDisconnect(starlette_app)
+        # Session identity capture: read the bridge's X-Envoy-Session /
+        # X-Envoy-Label headers, update the presence registry, and stash
+        # the identity in _SESSION_CTX for the duration of the request so
+        # tool functions can attribute their work. Pure Python only --
+        # never touches TD objects (mcp-safety thread boundary).
+        worker = self
+
+        class _SessionCapture:
+            def __init__(self, app):
+                self.app = app
+
+            async def __call__(self, scope, receive, send):
+                sid = label = None
+                if scope.get('type') == 'http':
+                    try:
+                        hdrs = {k.decode('latin-1').lower(): v.decode('latin-1')
+                                for k, v in (scope.get('headers') or [])}
+                        sid = hdrs.get('x-envoy-session') or None
+                        label = hdrs.get('x-envoy-label') or None
+                    except Exception:
+                        sid = label = None
+                    if sid:
+                        try:
+                            worker._touch_session(sid, label)
+                        except Exception:
+                            pass
+                token = _SESSION_CTX.set((sid, label))
+                try:
+                    await self.app(scope, receive, send)
+                finally:
+                    _SESSION_CTX.reset(token)
+
+        starlette_app = _SuppressDisconnect(_SessionCapture(starlette_app))
 
         config = uvicorn.Config(
             starlette_app,
             host="127.0.0.1",
             port=self.port,
             log_level="warning",
+            # TD replaces sys.stdout with a Textport catcher, and some builds
+            # (e.g. 2025.32460 on Windows) ship one WITHOUT isatty(). uvicorn's
+            # default log formatter probes sys.stdout.isatty() when use_colors
+            # is unset, so Config() itself raises ("Unable to configure
+            # formatter 'default'") before the socket ever binds -- and the
+            # liveness watchdog then restarts the dead worker forever. An
+            # explicit False skips the probe entirely (ANSI color codes would
+            # be garbage in the Textport anyway).
+            use_colors=False,
         )
         uvi_server = uvicorn.Server(config)
 
@@ -1559,7 +2353,15 @@ class EnvoyExt:
         sys._envoy_queues = _q_registry
         self.current_task: Optional[Any] = None
         self._server_gen: int = 0  # Generation counter for stale callback detection
-        self._last_served_log_id: int = 0
+        # Per-session piggyback cursors: sid (or '_anon') -> last served log
+        # id. A single shared cursor let whichever session polled first
+        # CONSUME warnings meant for everyone (multi-session bug); each
+        # session now tracks its own position in the log ring.
+        self._log_cursors: dict = {}
+        # Advisory dedup: sid -> {(peer_sid, scope): last_served_ts}. Keeps
+        # _peers token-lean; conflicts bypass it. Reset on reinit is fine.
+        self._advisories_served: dict = {}
+        self._peer_hint_served: set = set()
         self._restart_count: int = 0
         self._deadTicks: int = 0  # consecutive watchdog ticks seeing a dead/refused socket
         self._last_start_time: float = 0.0  # time.time() when Start() was called
@@ -1590,10 +2392,16 @@ class EnvoyExt:
         self._venv_recreated: bool = False  # Guard: only auto-recreate venv once per session
         # Background dependency-bootstrap state (see Start / _beginAsyncBootstrap).
         # _bootstrap_result is None while the worker runs, then (ok, [(level, msg)..])
-        # once it finishes; the main-thread poll reads it. _bootstrapping guards
-        # against overlapping bootstraps from repeated Start() calls.
+        # plus import-gate status once it finishes; the main-thread poll reads
+        # it. _bootstrapping guards against overlapping bootstraps from repeated
+        # Start() calls.
         self._bootstrap_result: Optional[tuple] = None
         self._bootstrapping: bool = False
+        # Background first-import warmup for the ready-venv fast path. Kept
+        # separate from dependency bootstrap because no install work is needed.
+        self._import_gate_result: Optional[tuple] = None
+        self._import_gate_running: bool = False
+        self._undo_active: bool = False  # re-entrancy guard: batch sub-ops must not nest undo blocks
 
         # --- Live build visualization (smooth follow of the active op) ---
         # The network editor glides to centre on the op Envoy just touched.
@@ -1647,7 +2455,6 @@ class EnvoyExt:
         self._viz_bot_pending_cleanup: set = set()    # nets whose left-behind bot to tear down off-screen
         self._crash_trace_enabled: bool = False       # diagnostic: flush a breadcrumb per viz annotation-graph op
         self._crash_trace_f = None                    # open handle to the breadcrumb file
-        self._ensureVizParams()                       # self-heal the Embot + Envoy Follow toggles
 
         # Get Thread Manager from TDResources
         self.ThreadManager = op.TDResources.ThreadManager
@@ -1708,7 +2515,9 @@ class EnvoyExt:
         # proceeds; the rest exit as stale -- one live loop per save, not ~N.
         _wd_gen = self.ownerComp.fetch('_watchdog_gen', 0) + 1
         self.ownerComp.store('_watchdog_gen', _wd_gen)
-        run(f"op('{self.ownerComp.path}').ext.Envoy._watchdogTick({_wd_gen})",
+        # Pending run() calls can outlive COMP replacement during upgrades.
+        run("o = op(%r)\nif o and o.valid: o.ext.Envoy._watchdogTick(%d)" %
+            (self.ownerComp.path, _wd_gen),
             delayMilliSeconds=4000)
 
         # If a deferred test run was in progress, unblock the old worker
@@ -2007,6 +2816,9 @@ class EnvoyExt:
         if self._bootstrapping:
             self._log('Dependency install already in progress (Start ignored)', 'DEBUG')
             return
+        if self._import_gate_running:
+            self._log('Import gate warm-up already in progress (Start ignored)', 'DEBUG')
+            return
 
         # Resolve git root silently -- Start() never prompts. Dialogs belong only
         # in _enableEnvoy() / InitGit() which are explicitly user-initiated.
@@ -2029,13 +2841,17 @@ class EnvoyExt:
             self._beginAsyncBootstrap(git_root, spec)
             return
 
-        # Fast path: environment already usable. _setupEnvironment here is the
-        # cheap branch (sys.path wiring + the mcp.server import gate); no install
-        # happens. A False return means the venv is present but broken -- abort,
-        # because continuing would crash _runServer with an inscrutable
-        # 'No module named mcp.server' traceback.
-        if not Embody._setupEnvironment():
+        # Fast path: environment already usable. Wire sys.path inline because
+        # that is cheap, but run the first mcp.server import gate on a worker
+        # thread. Cold-importing MCP pulls in pydantic/starlette/uvicorn and can
+        # freeze TD for several seconds on first open after install/upgrade.
+        if not Embody._wirePythonPaths(spec):
             self.ownerComp.par.Envoystatus = 'Error: Python environment not ready'
+            self._log(
+                Embody._importGateFailureMessage(
+                    spec['site_packages'], 'venv site-packages path is missing'),
+                'ERROR',
+            )
             self._log(
                 'Aborting Envoy start -- Python environment is not ready. '
                 'See textport above for the underlying failure.',
@@ -2043,6 +2859,78 @@ class EnvoyExt:
             )
             return
 
+        if getattr(sys, '_envoy_import_gate_ok', False):
+            self._continueStart(git_root)
+            return
+
+        self._beginAsyncImportGate(git_root, spec)
+
+    def _beginAsyncImportGate(self, git_root, spec) -> None:
+        """Warm the MCP import stack on a worker thread for the ready-venv path."""
+        self._import_gate_running = True
+        self._import_gate_result = None
+        self.ownerComp.par.Envoystatus = 'Preparing Python environment...'
+        self._log(
+            'Warming the MCP Python stack on a background thread -- first open '
+            'after install/upgrade can take a few seconds; TD stays responsive.',
+            'INFO',
+        )
+        import_gate_check = op.Embody.ext.Embody._importGateCheck
+
+        def worker():
+            try:
+                result = import_gate_check()
+            except BaseException as e:
+                result = (False, str(e) or e.__class__.__name__)
+            # Atomic publish: the main-thread poll reads this single attribute.
+            self._import_gate_result = result
+
+        Thread(target=worker, daemon=True).start()
+        run('args[0]._pollImportGate(args[1], args[2])',
+            self, git_root, spec, delayFrames=15)
+
+    def _pollImportGate(self, git_root, spec) -> None:
+        """Main-thread poll for the fast-path background MCP import gate."""
+        # Stale-instance guard: a save/recompile may have replaced this EnvoyExt
+        # while the worker ran. The fresh instance owns startup now.
+        try:
+            if self.ownerComp.ext.Envoy is not self:
+                return
+        except Exception:
+            return
+
+        result = self._import_gate_result
+        if result is None:
+            run('args[0]._pollImportGate(args[1], args[2])',
+                self, git_root, spec, delayFrames=15)
+            return
+
+        self._import_gate_running = False
+        ok, message = result
+
+        # The user may have toggled Envoy off while the import gate warmed.
+        if not self.ownerComp.par.Envoyenable.eval():
+            self._log('Envoy disabled during Python environment prep -- not starting.', 'DEBUG')
+            if not str(self.ownerComp.par.Envoystatus.eval()).startswith(
+                    ('Error', 'Disabled', 'Off')):
+                self.ownerComp.par.Envoystatus = 'Disabled'
+            return
+
+        if not ok:
+            self.ownerComp.par.Envoystatus = 'Error: Python environment not ready'
+            self._log(
+                op.Embody.ext.Embody._importGateFailureMessage(
+                    spec['site_packages'], message),
+                'ERROR',
+            )
+            self._log(
+                'Aborting Envoy start -- Python environment is not ready. '
+                'See textport above for the underlying failure.',
+                'ERROR',
+            )
+            return
+
+        sys._envoy_import_gate_ok = True
         self._continueStart(git_root)
 
     def _beginAsyncBootstrap(self, git_root, spec) -> None:
@@ -2051,34 +2939,50 @@ class EnvoyExt:
 
         Keeps TouchDesigner responsive during the venv build / pip install that
         a fresh install or a version upgrade triggers. The worker runs
-        EmbodyExt._installDependencies (which touches no TD objects); its log
-        lines are captured and replayed on the main thread by _pollBootstrap,
-        because EmbodyExt.Log writes the FIFO DAT and reads parameters.
+        EmbodyExt._installDependencies, wires sys.path, and warms the MCP import
+        gate; its log lines are captured and replayed on the main thread by
+        _pollBootstrap, because EmbodyExt.Log writes the FIFO DAT and reads
+        parameters.
         """
         self._bootstrapping = True
         self._bootstrap_result = None
+        import os as _os
+        self._venv_existed = _os.path.isdir(spec['venv_dir'])  # only record a venv Embody creates
         self.ownerComp.par.Envoystatus = 'Installing deps... (one-time)'
         self._log(
             'Installing Envoy Python dependencies in the background (one-time '
             'setup). TouchDesigner stays responsive; MCP will connect when this '
             'finishes.')
         Embody = op.Embody.ext.Embody
+        wire_python_paths = Embody._wirePythonPaths
+        import_gate_check = Embody._importGateCheck
 
         def worker():
             msgs = []
+            gate_ok = False
+            gate_msg = ''
             try:
                 ok = Embody._installDependencies(
                     spec, log=lambda m, lvl='INFO': msgs.append((lvl, m)))
-            except Exception as e:
+            except BaseException as e:
                 ok = False
                 msgs.append(('ERROR', f'Dependency install crashed: {e}'))
+            if ok:
+                try:
+                    if wire_python_paths(spec):
+                        gate_ok, gate_msg = import_gate_check()
+                    else:
+                        gate_msg = 'venv site-packages path is missing'
+                except BaseException as e:
+                    gate_msg = str(e) or e.__class__.__name__
             # Atomic publish: the main-thread poll reads this single attribute.
-            self._bootstrap_result = (ok, msgs)
+            self._bootstrap_result = (ok, msgs, gate_ok, gate_msg)
 
         Thread(target=worker, daemon=True).start()
-        run('args[0]._pollBootstrap(args[1])', self, git_root, delayFrames=30)
+        run('args[0]._pollBootstrap(args[1], args[2])',
+            self, git_root, spec, delayFrames=30)
 
-    def _pollBootstrap(self, git_root) -> None:
+    def _pollBootstrap(self, git_root, spec) -> None:
         """Main-thread poll for the background dependency install (see
         _beginAsyncBootstrap). Replays captured log lines, honors a mid-install
         Envoy-disable, then finishes the start or reports failure."""
@@ -2093,11 +2997,12 @@ class EnvoyExt:
         result = self._bootstrap_result
         if result is None:
             # Worker still installing -- check again shortly.
-            run('args[0]._pollBootstrap(args[1])', self, git_root, delayFrames=30)
+            run('args[0]._pollBootstrap(args[1], args[2])',
+                self, git_root, spec, delayFrames=30)
             return
 
         self._bootstrapping = False
-        ok, msgs = result
+        ok, msgs, gate_ok, gate_msg = result
         for lvl, m in msgs:
             self._log(m, lvl)
 
@@ -2117,21 +3022,35 @@ class EnvoyExt:
                 'See messages above.', 'ERROR')
             return
 
-        # Install done. Confirm the import on the main thread (preserves the
-        # careful pydantic_core handling in _verifyMcpImportable); deps are now
-        # current so _setupEnvironment takes its fast branch -- no second install.
-        if not op.Embody.ext.Embody._setupEnvironment():
+        # The worker created the venv (if it didn't already exist) -- record it
+        # for Uninstall. Best-effort; must never block the start.
+        try:
+            if not getattr(self, '_venv_existed', True):
+                Embody = op.Embody.ext.Embody
+                Embody._manifestRecordVenv(
+                    str(Embody._findProjectRoot()), Embody._venvPaths()['venv_dir'])
+        except Exception:
+            pass
+
+        if not gate_ok:
             self.ownerComp.par.Envoystatus = 'Error: Python environment not ready'
+            self._log(
+                op.Embody.ext.Embody._importGateFailureMessage(
+                    spec['site_packages'], gate_msg),
+                'ERROR',
+            )
             return
+        sys._envoy_import_gate_ok = True
         self._continueStart(git_root)
 
     def _continueStart(self, git_root) -> None:
         """Finish Envoy startup once the Python environment is confirmed ready.
 
-        Runs on the main thread -- either inline from Start() (fast path) or
-        from _pollBootstrap() after a background dependency install. Allocates
-        the port, spawns the server worker via the Thread Manager, and writes
-        the MCP / git config files.
+        Runs on the main thread -- either inline from Start() after the session
+        import-gate flag is already warm, from _pollImportGate(), or from
+        _pollBootstrap() after a background dependency install. Allocates the
+        port, spawns the server worker via the Thread Manager, and writes the
+        MCP / git config files.
         """
         base_port = self.ownerComp.par.Envoyport.eval()
         port = self._findAvailablePort(base_port)
@@ -2255,25 +3174,40 @@ class EnvoyExt:
         # Auto-configure project files.
         # Each step is independent -- one failure must not block the others.
         # MCP + AI config: always co-located, honoring Aiprojectroot.
+        #
+        # This is a startup Start: in Advanced mode a config write must NOT pop a
+        # modal here (it would block the restore chain), so _startup_config_pass
+        # makes the guards DEFER + breadcrumb. The setup wizard's _consent_bulk
+        # (set before it flipped Envoyenable) takes precedence, so a consented
+        # first-run still applies. Cleared in the finally so it can't stick.
+        Embody = op.Embody.ext.Embody
+        prior_pass = Embody._startup_config_pass
+        Embody._startup_config_pass = True
         try:
-            target_dir = op.Embody.ext.Embody._findProjectRoot()
-        except Exception:
-            # Defensive fallback for older deployments
-            target_dir = git_root if git_root != 'no-git' else None
-        self._configureMCPClient(port, target_dir=target_dir)
-        try:
-            op.Embody.ext.Embody._upgradeEnvoy()
-        except Exception as e:
-            self._log(f'Could not auto-configure AI client files: {e}', 'WARNING')
+            try:
+                target_dir = Embody._findProjectRoot()
+            except Exception:
+                # Defensive fallback for older deployments
+                target_dir = git_root if git_root != 'no-git' else None
+            self._configureMCPClient(port, target_dir=target_dir)
+            try:
+                Embody._upgradeEnvoy()
+            except Exception as e:
+                self._log(f'Could not auto-configure AI client files: {e}', 'WARNING')
 
-        # Git config: only when a git repo exists. Always lives at the git
-        # root regardless of Aiprojectroot -- .gitignore/.gitattributes are
-        # git's files, not Embody's.
-        if git_root != 'no-git':
-            from pathlib import Path
-            git_path = Path(git_root)
-            self._configureGitignore(git_path)
-            self._configureGitattributes(git_path)
+            # Git config: only when a git repo exists. Always lives at the git
+            # root regardless of Aiprojectroot -- .gitignore/.gitattributes are
+            # git's files, not Embody's.
+            if git_root != 'no-git':
+                from pathlib import Path
+                git_path = Path(git_root)
+                self._configureGitignore(git_path)
+                self._configureGitattributes(git_path)
+        finally:
+            Embody._startup_config_pass = prior_pass
+            # Clear the wizard's batch consent now its deferred-Start writes are
+            # done (the bounded timer in _enableEnvoyResolved is the backstop).
+            Embody._consent_bulk = False
 
     def _pollStartup(self, gen: int) -> None:
         """Main-thread poll (H1): declare 'Running' only after the worker
@@ -2412,7 +3346,9 @@ class EnvoyExt:
 
         # Always reschedule -- the loop is instance-tied; only the identity guard
         # above ends it. A transient tick error never kills self-healing.
-        run(f"op({self.ownerComp.path!r}).ext.Envoy._watchdogTick({gen})",
+        # Pending run() calls can outlive COMP replacement during upgrades.
+        run("o = op(%r)\nif o and o.valid: o.ext.Envoy._watchdogTick(%d)" %
+            (self.ownerComp.path, gen),
             fromOP=self.ownerComp, delayMilliSeconds=4000)
 
     def _probeAlive(self) -> bool:
@@ -2568,29 +3504,320 @@ class EnvoyExt:
 
     # === Thread Manager Callbacks (run on main thread) ===
 
-    def _attachNotableLogs(self, result):
+    _GATED_OPERATIONS = ('delete_op', 'import_network', 'run_tests',
+                         'batch_operations')
+
+    def _destructiveTargets(self, operation, params):
+        """(scopes, reason) the destructive gate protects for this
+        operation, or ([], '') when nothing is gated."""
+        params = params or {}
+        if operation == 'delete_op':
+            target = params.get('op_path')
+            if isinstance(target, str) and target.startswith('/'):
+                return [target], 'delete_op'
+            return [], ''
+        if operation == 'import_network':
+            if not params.get('clear_first'):
+                return [], ''
+            target = params.get('target_path')
+            if isinstance(target, str) and target.startswith('/'):
+                return [target], 'import_network(clear_first=True)'
+            return [], ''
+        if operation == 'run_tests':
+            return ['project:tests'], 'run_tests'
+        if operation == 'batch_operations':
+            gated = []
+            for sub in (params.get('operations') or [])[:32]:
+                if not isinstance(sub, dict):
+                    continue
+                sub_params = sub.get('params') or {}
+                if sub_params.get('override'):
+                    continue
+                sub_scopes, _reason = self._destructiveTargets(
+                    sub.get('tool', ''), sub_params)
+                gated.extend(sub_scopes)
+            if gated:
+                return gated, 'batch_operations (destructive sub-operations)'
+            return [], ''
+        return [], ''
+
+    def _checkDestructiveGate(self, sid, operation, params):
+        """Refuse a destructive operation when a LIVE peer session claimed
+        an overlapping scope or wrote it within the conflict window, unless
+        override=True. Returns the error dict to send back, or None to
+        proceed. Advisory-first design: everything else only warns."""
+        if operation not in self._GATED_OPERATIONS:
+            return None
+        if (params or {}).get('override'):
+            return None
+        targets, reason = self._destructiveTargets(operation, params)
+        if not targets:
+            return None
+        lock, touches, sessions = self._touchStores()
+        claims = getattr(sys, '_envoy_claims', None)
+        if lock is None:
+            return None
+        me = sid or '_anon'
+        now = time.time()
+        with lock:
+            live = {s for s, v in (sessions or {}).items()
+                    if now - v.get('last_seen', 0) < 600}
+            for held_scope, claim in (claims or {}).items():
+                if claim['sid'] == me or claim['sid'] not in live:
+                    continue
+                if now > claim['ts'] + claim['ttl']:
+                    continue
+                if not any(_scope_overlaps(target, held_scope)
+                           for target in targets):
+                    continue
+                holder = (sessions or {}).get(claim['sid']) or {}
+                label = holder.get('label') or claim.get('label') or claim['sid']
+                note = claim.get('note', '') or 'no note'
+                self._log(
+                    'MULTI-SESSION GATE: refused ' + reason + ' -- "' + label
+                    + '" holds ' + held_scope + ' (' + note + ')', 'WARNING')
+                return {'error': 'MULTI-SESSION GATE: ' + reason
+                                 + ' refused -- session "' + label
+                                 + '" holds a claim on ' + held_scope
+                                 + ' (' + note + ', expires in '
+                                 + str(round(claim['ts'] + claim['ttl'] - now))
+                                 + 's). Coordinate, work in another subtree,'
+                                 + ' wait for expiry, or pass override=True'
+                                 + ' if you are certain.',
+                        'holder': {'label': label, 'scope': held_scope,
+                                   'note': claim.get('note', '')}}
+            for scope, ring in (touches or {}).items():
+                if not any(_scope_overlaps(target, scope)
+                           for target in targets):
+                    continue
+                for touch in reversed(ring):
+                    if touch['sid'] == me:
+                        continue
+                    age = now - touch['ts']
+                    if age > _CONFLICT_WINDOW_S:
+                        break  # ring is chronological; older ones only
+                    peer = (sessions or {}).get(touch['sid']) or {}
+                    label = peer.get('label') or touch['sid']
+                    self._log(
+                        'MULTI-SESSION GATE: refused ' + reason + ' -- "'
+                        + label + '" wrote ' + scope + ' '
+                        + str(round(age, 1)) + 's ago', 'WARNING')
+                    return {'error': 'MULTI-SESSION GATE: ' + reason
+                                     + ' refused -- session "' + label
+                                     + '" wrote ' + scope + ' only '
+                                     + str(round(age, 1)) + 's ago. Check'
+                                     + ' get_sessions, coordinate, or pass'
+                                     + ' override=True if you are certain.',
+                            'peer': {'label': label, 'scope': scope,
+                                     'tool': touch['tool'],
+                                     'age_s': round(age, 1)}}
+        return None
+    @staticmethod
+    def _touchStores():
+        """Shared multi-session stores (created by the worker; None-safe
+        before the first server start)."""
+        return (getattr(sys, '_envoy_sessions_lock', None),
+                getattr(sys, '_envoy_touches', None),
+                getattr(sys, '_envoy_sessions', None))
+
+    def _expandFileScopes(self, scopes):
+        """Append file: scopes for op-path scopes covered by the
+        externalizations table (the op's own row, or a tracked ancestor
+        such as a TDN COMP). Main thread only -- reads the live table."""
+        out = list(scopes)
+        try:
+            table = op.Embody.ext.Embody.Externalizations
+            if not table or table.numRows < 2:
+                return out
+            rows = []
+            for r in range(1, table.numRows):
+                tracked_path = table[r, 'path'].val
+                rel_file = table[r, 'rel_file_path'].val
+                if tracked_path and rel_file:
+                    rows.append((tracked_path, rel_file))
+            for scope in scopes:
+                if not scope.startswith('/'):
+                    continue
+                matches = [(tracked_path, rel_file)
+                           for tracked_path, rel_file in rows
+                           if scope == tracked_path
+                           or scope.startswith(tracked_path + '/')]
+                # Most specific first; keep at most 2 (the op's own file +
+                # its nearest tracked ancestor, e.g. the enclosing .tdn).
+                # Broader ancestors (a project-root .tdn) would make every
+                # write in the project overlap every other one.
+                matches.sort(key=lambda m: len(m[0]), reverse=True)
+                for _tracked, rel_file in matches[:2]:
+                    file_scope = 'file:' + rel_file.replace('\\', '/')
+                    if file_scope not in out:
+                        out.append(file_scope)
+        except Exception:
+            pass
+        return out[:12]
+
+    def _recordTouches(self, sid, operation, scopes):
+        """Record a WRITE operation's scopes in the shared touch map."""
+        if operation not in _WRITE_OPERATIONS or not scopes:
+            return
+        lock, touches, _sessions = self._touchStores()
+        if lock is None or touches is None:
+            return
+        entry = {'sid': sid or '_anon', 'tool': operation, 'ts': time.time()}
+        with lock:
+            # Lease renewal: the holder's own writes refresh their claims.
+            claims = getattr(sys, '_envoy_claims', None)
+            if claims:
+                for held_scope, claim in claims.items():
+                    if claim['sid'] == entry['sid'] and any(
+                            _scope_overlaps(s, held_scope) for s in scopes):
+                        claim['ts'] = entry['ts']
+            for scope in scopes:
+                ring = touches.setdefault(scope, [])
+                ring.append(entry)
+                del ring[:-_TOUCH_RING_CAP]
+            if len(touches) > _TOUCH_SCOPE_CAP:
+                oldest_first = sorted(touches.items(),
+                                      key=lambda kv: kv[1][-1]['ts'])
+                for stale_scope, _ring in oldest_first[:len(touches) - _TOUCH_SCOPE_CAP]:
+                    del touches[stale_scope]
+
+    def _attachPeerAdvisories(self, result, sid, operation, scopes):
+        """Attach _peers: recent overlapping WRITE activity by OTHER
+        sessions. conflict=true when both sides are writes within
+        _CONFLICT_WINDOW_S -- the response-side half of the relay (the
+        shipped rule tells agents to treat a conflict as a hard stop,
+        same contract as LAYOUT WARNING)."""
+        if not scopes or not isinstance(result, dict):
+            return
+        lock, touches, sessions = self._touchStores()
+        if lock is None or touches is None:
+            return
+        me = sid or '_anon'
+        now = time.time()
+        is_write = operation in _WRITE_OPERATIONS
+        candidates = []
+        with lock:
+            served = self._advisories_served.setdefault(me, {})
+            for scope, ring in touches.items():
+                if not any(_scope_overlaps(s, scope) for s in scopes):
+                    continue
+                for touch in reversed(ring):
+                    peer_sid = touch['sid']
+                    if peer_sid == me:
+                        continue
+                    age = now - touch['ts']
+                    if age > _TOUCH_WINDOW_S:
+                        continue
+                    conflict = is_write and age < _CONFLICT_WINDOW_S
+                    dedup_key = (peer_sid, scope)
+                    if (not conflict and
+                            now - served.get(dedup_key, 0) < _ADVISORY_DEDUP_S):
+                        continue
+                    peer = (sessions or {}).get(peer_sid) or {}
+                    candidates.append({
+                        '_sid': peer_sid,
+                        '_key': dedup_key,
+                        'label': peer.get('label', peer_sid),
+                        'scope': scope,
+                        'tool': touch['tool'],
+                        'age_s': round(age, 1),
+                        'conflict': conflict,
+                    })
+                    break  # newest relevant touch per scope suffices
+            # One entry per peer: conflicts first, then op-path scopes over
+            # file: scopes (more actionable), then newest. Extra scopes for
+            # the same peer are redundant token weight. Mark served ONLY
+            # what is actually emitted, so collapsed entries surface later.
+            candidates.sort(key=lambda a: (
+                not a['conflict'],
+                0 if a['scope'].startswith('/') else 1,
+                a['age_s']))
+            advisories = []
+            seen_peers = set()
+            for cand in candidates:
+                if cand['_sid'] in seen_peers:
+                    continue
+                seen_peers.add(cand['_sid'])
+                served[cand['_key']] = now
+                advisories.append({k: v for k, v in cand.items()
+                                   if not k.startswith('_')})
+                if len(advisories) >= 3:
+                    break
+            if len(served) > 128:
+                for old_key in sorted(served, key=served.get)[:64]:
+                    del served[old_key]
+        if advisories:
+            result['_peers'] = advisories
+            if me not in self._peer_hint_served:
+                result['_hint'] = 'load /multi-session-etiquette'
+                self._peer_hint_served.add(me)
+            if any(a['conflict'] for a in advisories):
+                worst = advisories[0]
+                self._log(
+                    'CONFLICT WARNING: session "{}" wrote {} ({}s ago) -- '
+                    'coordinate before continuing'.format(
+                        worst['label'], worst['scope'], worst['age_s']),
+                    'WARNING')
+
+    def _baselineLogCursor(self, sid):
+        """On first sight of a session (main thread, BEFORE executing its
+        operation), start its cursor at the current end of the log ring so
+        it is served exactly the warnings its own operations generate from
+        here on -- not the whole ring's history, and not nothing."""
+        key = sid or '_anon'
+        if key in self._log_cursors:
+            return
+        log_buffer = getattr(op.Embody.ext.Embody, '_log_buffer', None)
+        latest = log_buffer[-1]['id'] if log_buffer else 0
+        # Crude cap so a long-lived TD session accumulating many
+        # short-lived sids cannot grow unbounded; re-serving up to 8
+        # warnings once after a clear is harmless.
+        if len(self._log_cursors) > 64:
+            self._log_cursors.clear()
+        self._log_cursors[key] = latest
+
+    def _attachNotableLogs(self, result, sid=None):
         """Piggyback only WARNING/ERROR logs onto a response, capped small, to
-        keep MCP responses token-lean. The served-cursor still advances over
-        ALL new entries so nothing is re-served on the next call; the full
-        INFO/DEBUG/SUCCESS history is available on demand via the get_logs tool.
-        (INFO noise -- 'Processing:', the echoed code, 'completed successfully'
-        -- previously rode along on every single response.)"""
+        keep MCP responses token-lean. Cursors are PER SESSION (sid from the
+        bridge headers; '_anon' for direct clients): each session's cursor
+        advances over ALL entries new to IT, so one session polling cannot
+        consume warnings meant for another. The full INFO/DEBUG/SUCCESS
+        history is available on demand via the get_logs tool."""
         log_buffer = getattr(op.Embody.ext.Embody, '_log_buffer', None)
         if not log_buffer:
             return
+        key = sid or '_anon'
+        last_served = self._log_cursors.get(key, 0)
         recent = [e for e in log_buffer
-                  if e['id'] > self._last_served_log_id]
+                  if e['id'] > last_served]
         if not recent:
             return
-        self._last_served_log_id = recent[-1]['id']
+        self._log_cursors[key] = recent[-1]['id']
         notable = [e for e in recent
                    if e.get('level') in ('WARNING', 'ERROR')]
         if notable:
             result['_logs'] = notable[-8:]
 
-    def _send_response(self, request_id, result):
+    def _attachRecoveryHints(self, result):
+        """On an error envelope, attach curated next-step guidance keyed off
+        the message so the agent recovers instead of retrying blindly. Never
+        raises -- an ergonomics layer must not be able to break a response."""
+        try:
+            if not isinstance(result, dict):
+                return
+            message = result.get('error')
+            if not isinstance(message, str) or 'recovery_hints' in result:
+                return
+            hints = _recovery_hints_for(message)
+            if hints:
+                result['recovery_hints'] = hints
+        except Exception:
+            pass
+
+    def _send_response(self, request_id, result, sid=None):
         """Send a response back to the worker thread (token-lean log piggyback)."""
-        self._attachNotableLogs(result)
+        self._attachRecoveryHints(result)
+        self._attachNotableLogs(result, sid)
 
         self.response_queue.put({
             'id': request_id,
@@ -2635,17 +3862,59 @@ class EnvoyExt:
             request_id = info.get('id')
             operation = info['operation']
             params = info.get('params', {})
+            sid = info.get('sid')
+
+            # Baseline this session's log cursor BEFORE executing, so the
+            # response carries the warnings THIS operation generates.
+            self._baselineLogCursor(sid)
+
+            # Multi-session Phase 3: destructive-op gate. Refusal is
+            # instant and skips execution entirely.
+            try:
+                gate = self._checkDestructiveGate(sid, operation, params)
+            except Exception:
+                gate = None
+            if gate is not None:
+                if isinstance(request_id, int) and request_id >= 0:
+                    self._send_response(request_id, gate, sid)
+                else:
+                    # Deferred op (run_tests uses the -1 sentinel): deliver
+                    # the refusal through its dedicated event holder.
+                    pending = getattr(sys, '_envoy_pending_test', None)
+                    if pending:
+                        pending['holder']['result'] = gate
+                        pending['event'].set()
+                continue
 
             self._log(f'Processing: {operation}')
 
             result = self._execute_operation(operation, params)
+
+            # Multi-session Phase 2: record write touches and gather peer
+            # advisories. Never let awareness break the operation itself.
+            try:
+                scopes = self._expandFileScopes(
+                    _scopes_for_operation(operation, params, result))
+                # Failed operations didn't mutate -- don't record them as
+                # writes. Exception: a failed batch may have partially
+                # succeeded (stops on first error), so it still counts.
+                failed = isinstance(result, dict) and 'error' in result
+                if not failed or operation == 'batch_operations':
+                    self._recordTouches(sid, operation, scopes)
+            except Exception:
+                scopes = []
 
             # Deferred operations (e.g. run_tests) return None --
             # the worker thread handles its own response via Event
             if result is None:
                 continue
 
-            self._send_response(request_id, result)
+            try:
+                self._attachPeerAdvisories(result, sid, operation, scopes)
+            except Exception:
+                pass
+
+            self._send_response(request_id, result, sid)
 
         # Live build visualization (opt-in): camera follow + node pulse + the
         # dancing builder-bot. Runs every frame AFTER the drain loop. Wrapped so
@@ -2713,8 +3982,30 @@ class EnvoyExt:
 
     # === Operation Routing ===
 
+    # Operations whose handlers mutate TD state. Each top-level call is wrapped
+    # in one ui.undo block so the user can Ctrl+Z anything an agent does
+    # (adapted from Derivative's TDMCP, with permission). Read-only ops,
+    # run_tests (deferred across frames -- an undo block must never span
+    # frames), cook_op (cooking is not an undoable edit), and disk-only ops
+    # (export_network, save_externalization) stay unwrapped.
+    _UNDOABLE_OPS = frozenset({
+        'create_op', 'delete_op', 'copy_op', 'rename_op',
+        'set_parameter', 'connect_ops', 'disconnect_op',
+        'execute_python', 'set_dat_content', 'edit_dat_content',
+        'set_op_flags', 'set_op_position', 'layout_children',
+        'exec_op_method', 'externalize_op', 'remove_externalization_tag',
+        'create_extension', 'import_network',
+        'create_annotation', 'set_annotation',
+        'batch_operations',
+    })
+
     def _execute_operation(self, operation: str, params: dict) -> dict:
         """Route operation to appropriate handler"""
+        # 'override' belongs to the multi-session gate, not the handlers
+        # (dispatch is handler(**params)); strip it here so batch
+        # sub-operations that loop back through are covered too.
+        if params and 'override' in params:
+            params = {k: v for k, v in params.items() if k != 'override'}
         handlers = {
             'create_op': self._create_op,
             'delete_op': self._delete_op,
@@ -2752,6 +4043,8 @@ class EnvoyExt:
             'get_td_classes': self._get_td_classes,
             'get_td_class_details': self._get_td_class_details,
             'get_module_help': self._get_module_help,
+            # Documentation root discovery for worker-side get_docs
+            'get_docs_roots': self._get_docs_roots,
             # Embody integration
             'externalize_op': self._externalize_op,
             'remove_externalization_tag': self._remove_externalization_tag,
@@ -2794,7 +4087,12 @@ class EnvoyExt:
                         op.Embody.ext.Embody._preRiskyCheckpoint(operation, params)
                     except Exception:
                         pass
-                result = handler(**params)
+                undo_open = self._beginUndoBlock(operation)
+                try:
+                    result = handler(**params)
+                finally:
+                    if undo_open:
+                        self._endUndoBlock()
                 # Record where Envoy is building for the re-center camera.
                 # Routed here (not at the _onRefresh chokepoint) so each sub-op
                 # of a batch_operations call is seen -- batches loop back through
@@ -2807,163 +4105,44 @@ class EnvoyExt:
                 return {'error': str(e)}
         return {'error': f'Unknown operation: {operation}'}
 
+    def _beginUndoBlock(self, operation: str) -> bool:
+        if operation not in self._UNDOABLE_OPS or self._undo_active:
+            return False
+        try:
+            ui.undo.startBlock(f'Envoy {operation}')
+            self._undo_active = True
+            return True
+        except Exception as e:
+            self._log(f'Could not start undo block for {operation}: {e}', 'WARNING')
+            return False
+
+    def _endUndoBlock(self) -> None:
+        self._undo_active = False
+        try:
+            ui.undo.endBlock()
+        except Exception as e:
+            # annotateCOMP creation tears down open undo blocks TD-internally,
+            # making endBlock raise "Cannot end non existent undo operation"
+            # (gotcha documented by TDMCP); never break dispatch for that.
+            self._log(f'Could not end undo block: {e}', 'DEBUG')
+
     # === Live Build Visualization: smooth follow + navigate to the active op ===
-    # While Claude builds via MCP, the network editor follows Envoy's work so the
-    # user can watch in real time:
-    #   - within the viewed network it smoothly GLIDES to centre on the op just
-    #     touched (ease-out, one step per frame);
-    #   - when the work moves to a network NO pane is showing, it NAVIGATES a
-    #     network-editor pane into that COMP and SNAPS to frame the op (you cannot
-    #     glide across networks -- different coordinate spaces -- so it cuts).
-    # Opt-in (Embotenable for the character, Envoyfollow for the camera), main-thread
-    # only (driven from _onRefresh, which fires
-    # every frame), and side-effect-free w.r.t. saved files: it only writes
-    # pane.owner / pane.x / pane.y (view state -- not externalized, and verified to
-    # add no operator to project.modified). home()/homeSelected() are deliberately
-    # NOT used -- no-ops on an unfocused pane, which is what an MCP build presents.
-    #
-    # No throttle parameter: a move happens at most once per frame (after the
-    # request drain loop), so a 50-op batch_operations is a single move to its
-    # last op, never a strobe. The frame rate is the rate limiter, not a knob.
-    #
-    # Yield: if the user pans/zooms/navigates the follow pane, _userTookOver adopts
-    # their view as the new baseline and (re)arms an idle cooldown -- so we resume
-    # only after they stop, never give up forever, never yank them mid-interaction.
-
-    _VIZ_EASE = 0.4         # fraction of the remaining distance covered per frame (snappy -> stays on Embot)
-    _VIZ_EPS = 1.0          # network units; closer than this -> snap and release
-    _VIZ_TAKEOVER_S = 6.0   # seconds to yield after the user's last interaction
-    _VIZ_ZOOM = 0.55        # framing zoom while following -- zoomed out for context
-    _VIZ_TAKEOVER_PAN = 12.0   # min pan (network units) that counts as a user takeover
-    _VIZ_TAKEOVER_ZOOM = 0.08  # min zoom change that counts as a user takeover
-    _VIZ_IDLE_S = 30.0      # seconds of quiet before the bot + pulse retire (survives thinking pauses)
-    _VIZ_PULSE_S = 0.45     # seconds for a node's colour pulse to fade back
-    _VIZ_PULSE_COLOR = (0.15, 0.85, 0.70)    # Envoy accent (cyan-green)
-    # The builder-bot is a little figure of 8 minimal networkbox annotations
-    # (no text header) -- head, 2 eyes, body, 2 arms, 2 legs. Each part:
-    # (suffix, centre-offset-x, centre-offset-y, base-w, base-h, is_eye).
-    # Offsets are network units from the figure's anchor (y up). Body first so
-    # later parts (head, eyes) draw on top.
-    _VIZ_BOT_PREFIX = 'envoy_bot_'
-    _VIZ_BOT_PARTS = (
-        ('body',   0.0,    0.0,   30.0, 34.0, False),
-        ('arm_l', -22.0,   3.0,    9.0, 26.0, False),
-        ('arm_r',  22.0,   3.0,    9.0, 26.0, False),
-        ('leg_l',  -8.0,  -29.0,  11.0, 24.0, False),
-        ('leg_r',   8.0,  -29.0,  11.0, 24.0, False),
-        ('head',   0.0,   31.0,   34.0, 26.0, False),
-        ('eye_l',  -8.0,  35.0,   12.0, 13.0, True),
-        ('eye_r',   8.0,  35.0,   12.0, 13.0, True),
-    )
-    # Robotic motion: the figure JUMPS from node to node (parabolic arc, snappy
-    # ease) and does a small stepped hover when idle. Squash is subtle and only
-    # applied on landing.
-    _VIZ_JUMP_DUR = 0.52      # seconds per hop between nodes
-    _VIZ_JUMP_ARC = 55.0      # hop arc height (network units)
-    # Off-view assembly. Copying an annotateCOMP into a net you're VIEWING costs ~280ms
-    # (the in-viewport redraw); copying it OUTSIDE the viewport costs ~100ms (verified).
-    # So on an on-screen spawn Embot assembles at a staging point parked just past the
-    # viewport edge, then swoops in whole -- the per-part copies render off-view (much
-    # shallower fps sag) and the user sees a clean entrance instead of a stuttering
-    # build. _VIZ_STAGE_MARGIN is how far past the viewport edge to park; the swoop home
-    # uses _VIZ_ENTRANCE_DUR (slower than a normal hop, since it covers a big distance).
-    _VIZ_STAGE_MARGIN = 700.0   # network units past the viewport edge for the staging point
-    _VIZ_ENTRANCE_DUR = 0.95    # seconds for the swoop-in from staging (vs _VIZ_JUMP_DUR hops)
-    # Stepping cadence: how long Embot dwells on each queued op before advancing to
-    # the next. >= the jump so a hop lands before the next begins. When the queue
-    # backs up (a fat batch) the dwell shrinks toward _VIZ_HOP_MIN so he races to
-    # catch the wave -- but every op still gets its own visible hop, never skipped.
-    _VIZ_HOP_DWELL = 0.8      # base dwell per hop (queue empty)
-    _VIZ_HOP_MIN = 0.32       # floor dwell when the queue is deep
-    _VIZ_QUEUE_CAP = 24       # hard cap on pending hops (drop oldest beyond this)
-    # On-screen spawn pacing. Copying ONE annotateCOMP into a net you are LOOKING AT
-    # forces a ~70ms annotation-layer redraw -- a single dropped frame that cannot be
-    # made cheaper (the cost is the editor relayout, not the copy; verified by stripping
-    # the annotate's internals to no effect). What CAN be fixed is the clustering: the
-    # old spread copied one part every frame, so 9 hitches landed back-to-back and read
-    # as a ~1s freeze. Spacing the copies _VIZ_ASSEMBLE_INTERVAL frames apart isolates
-    # each hitch (smooth motion between them) so assembly reads as "building himself".
-    # Off-screen spawns use one fast block copy and ignore this entirely -- only the
-    # on-screen spread is gated. Higher = smoother but slower to finish assembling.
-    _VIZ_ASSEMBLE_INTERVAL = 32     # frames between on-screen part copies (~0.53s @ 60fps)
-    # Build order for the on-screen spread: body + head + speech first so he is instantly
-    # recognizable as "here", then limbs, then eyes -- never a half-built torso sitting
-    # limbless for seconds. Names match _VIZ_BOT_PARTS suffixes (+ the speech bubble).
-    _VIZ_ASSEMBLE_ORDER = ('body', 'head', 'speech', 'arm_l', 'arm_r',
-                           'leg_l', 'leg_r', 'eye_l', 'eye_r')
-    _VIZ_HOVER_AMP = 3.0      # idle hover amplitude (network units)
-    _VIZ_HOVER_FREQ = 3.0     # idle hover frequency
-    _VIZ_SQUASH = 0.07        # landing squash amount (subtle)
-    # Occasional happy squint -- eyes briefly flatten + spread, reading as a content
-    # "^_^". Much rarer than the blink so it stays a gentle accent, not a tic. The
-    # 10px annotate-size floor means a squint only reads if the eyes are tall enough
-    # to flatten FROM -- hence the eyes are a bit bigger now (see _VIZ_BOT_PARTS).
-    _VIZ_SQUINT_GAP_MIN = 9.0    # min seconds between squints
-    _VIZ_SQUINT_GAP_MAX = 17.0   # max seconds between squints
-    _VIZ_SQUINT_DUR = 1.1        # how long a squint holds
-    _VIZ_SQUINT_FLATTEN = 0.74   # eye HEIGHT scale while squinting (toward the 10px floor)
-    _VIZ_SQUINT_WIDEN = 1.18     # eye WIDTH scale while squinting (the smile spread)
-    # Embot does an occasional gesture, cycling through several types so it stays
-    # varied: a wave, an arms-up shrug, an arms-up pump, and -- now and then
-    # -- a full-body robot dance. Any single gesture (incl. the wave) is therefore
-    # infrequent.
-    _VIZ_GESTURE_GAP_MIN = 4.0  # min seconds between gestures (randomized)
-    _VIZ_GESTURE_GAP_MAX = 11.0 # max seconds between gestures
-    _VIZ_GESTURE_DUR = 1.6      # how long a hand gesture lasts
-    _VIZ_DANCE_DUR = 3.0        # the robot dance runs a bit longer
-    _VIZ_WAVE_LIFT = 28.0       # how high the right arm raises to wave
-    _VIZ_WAVE_FREQ = 14.0       # wiggle speed of the wave
-    _VIZ_WAVE_AMP = 9.0         # wiggle amplitude of the wave
-    # Colour reflects "thinking time" -- how long since the last build op. Cool
-    # (cyan/blue) when Envoy just acted; warming through green/yellow to red the
-    # longer it goes between actions (a heavier "thinking" gap). Resets cool on
-    # each new op.
-    _VIZ_WARM_S = 14.0        # seconds of thinking to ramp fully cool -> warm
-    _VIZ_COOL_HUE = 0.58      # short/quick: cool blue-cyan
-    _VIZ_WARM_HUE = 0.0       # long/thought-heavy: warm red
-
-    # Operations that count as "building" and should move the camera. Read-only
-    # ops (get_*, query_network, read_tdn, capture_top) and batch_operations
-    # itself (its sub-ops route back through _execute_operation individually) are
-    # excluded. delete_op is excluded too: the op is gone post-dispatch and a
-    # deletion has no centre to frame.
-    _VIZ_MUTATING_OPS = frozenset({
-        'create_op', 'import_network', 'connect_ops', 'copy_op',
-        'create_annotation', 'create_extension', 'set_parameter',
-        'set_op_position', 'set_dat_content', 'edit_dat_content',
-        'rename_op', 'set_op_flags',
-    })
+    # Embot mascot + network-editor camera follow. The whole subsystem now lives
+    # in the envoy_viz module DAT (mod.envoy_viz); all _VIZ_* constants moved
+    # there. State (self._viz_*) stays on this ext (see __init__). The methods
+    # below are delegating stubs -- external callers (execute.py _vizCleanup,
+    # _onRefresh ticks, the dispatch chokepoint) keep working.
+    # Main-thread only.
 
     def _noteVizActivity(self, operation: str, params: dict, result) -> None:
-        """Enqueue the op Envoy just acted on as a follow hop and stamp the activity
-        time. Hot path -- called for every sub-op of a batch (all in one frame), so
-        it must ENQUEUE rather than overwrite: the pump steps Embot through the hops
-        one at a time. Consecutive touches of the SAME op (e.g. create_op then
-        set_op_position on it) collapse into one hop, refining the caption. Never
-        raises."""
+        """Enqueue the op Envoy just acted on as a follow hop -- see envoy_viz.
+
+        Never raises: viz is decoration, and this runs at the dispatch
+        chokepoint where an escaping exception would fail the tool call
+        itself -- the guard must cover the mod.envoy_viz lookup too (a
+        broken/renamed module DAT must not take Envoy down with it)."""
         try:
-            if operation not in self._VIZ_MUTATING_OPS:
-                return
-            target = self._resolveActiveOp(operation, params, result)
-            if not target:
-                return
-            caption = self._actionText(operation, target)
-            self._viz_last_activity = absTime.seconds
-            q = self._viz_target_queue
-            # Collapse against the WHOLE pending queue, not just the last entry: a
-            # whole batch enqueues before the pump pops anything, so create_op +
-            # set_op_position + the later connect_ops that all touch one node fold
-            # into its single pending hop (latest caption wins) -- no backtracking
-            # to an op he already stepped past. Once a hop is popped it leaves the
-            # queue, so a genuinely later touch correctly re-hops.
-            for i, (p, _c) in enumerate(q):
-                if p == target:
-                    q[i] = (target, caption)
-                    break
-            else:
-                q.append((target, caption))
-                if len(q) > self._VIZ_QUEUE_CAP:
-                    del q[0]                      # bound the backlog; oldest gives way
+            return mod.envoy_viz.noteVizActivity(self, operation, params, result)
         except Exception:
             pass
 
@@ -3098,903 +4277,125 @@ class EnvoyExt:
         except Exception:
             pass
 
-    def _ensureVizParams(self) -> None:
-        """Create the Embot (character) + Envoy Follow (camera) toggles on the Envoy
-        page if missing, so the feature is controllable on any load. They were added
-        live in a session and vanished on restart; this self-heals them on every init
-        -- idempotent, and they bake into the .toe on save. Mirrors
-        EmbodyExt._ensureAutosaveParams. Called once from __init__; never raises (the
-        viz tick no-ops cleanly while a param is briefly absent)."""
-        try:
-            comp = self.ownerComp
-            page = None
-            for pg in comp.customPages:
-                if pg.name == 'Envoy':
-                    page = pg
-                    break
-            if page is None:
-                return
-            if not hasattr(comp.par, 'Embotenable'):
-                p = page.appendToggle('Embotenable', label='Embot')[0]
-                p.default = True
-                p.val = True
-                p.startSection = True
-                p.order = 5.0
-                p.help = ('Show the Embot builder mascot. He appears on each operator '
-                          'Envoy creates or edits and narrates what it does. Off hides '
-                          'him entirely (no character, no camera movement).')
-            if not hasattr(comp.par, 'Envoyfollow'):
-                f = page.appendToggle('Envoyfollow', label='Envoy Follow')[0]
-                f.default = True
-                f.val = True
-                f.order = 5.6
-                f.help = ('Camera follows the operator Envoy is working on, panning '
-                          'the network editor to it. Works with or without the Embot '
-                          'character shown.')
-        except Exception as e:
-            try:
-                self._log('_ensureVizParams failed: %s' % e, 'DEBUG')
-            except Exception:
-                pass
-
     def _vizTick(self) -> None:
-        """Once-per-frame visualization driver (after the drain loop): retire
-        artifacts when idle/disabled/saving, advance the colour pulse + bot dance,
-        and follow the active op. Fully guarded -- never breaks the refresh loop."""
-        try:
-            # Perform mode or the save window: tear everything down so nothing can
-            # bake into the .toe (belt-and-suspenders with onProjectPreSave).
-            if getattr(self.ownerComp.ext.Embody, '_performMode', False):
-                self._vizCleanup()
-                return
-            if self.ownerComp.fetch('_suppress_dialogs', False, search=False):
-                self._vizCleanup()
-                return
-            show_bot = self.ownerComp.par.Embotenable.eval()   # render the character
-            follow = self.ownerComp.par.Envoyfollow.eval()     # camera tracks the active op
-            if not show_bot and not follow:
-                self._vizCleanup()
-                return
-            now = absTime.seconds
-            # Quiet for a while -> retire the bot + restore any pulse.
-            if self._viz_last_activity and (now - self._viz_last_activity) > self._VIZ_IDLE_S:
-                self._vizCleanup()
-                self._viz_target_op = None
-                return
-            self._pulseTick(now)
-            self._vizPumpQueue(now)
-            if self._viz_target_op:
-                self._trackActive(now, follow, show_bot)
-            if show_bot:
-                self._cleanupDeadBots()   # tear down a left-behind bot off-screen
-                self._assembleTick()      # copy one template part per frame (no freeze)
-                self._botDance(now)
-            elif self._viz_bot_net:
-                self._destroyBot()        # camera-only: ensure no character lingers
-        except Exception as e:
-            try:
-                self._log(f'Viz tick skipped: {type(e).__name__}: {e}', 'DEBUG')
-            except Exception:
-                pass
+        """Once-per-frame visualization driver -- see envoy_viz."""
+        return mod.envoy_viz.vizTick(self)
 
     def _vizPumpQueue(self, now: float) -> None:
-        """Advance through queued hops one at a time so Embot visibly STEPS from node
-        to node -- a batch enqueues many in a single frame, and without this he would
-        only ever appear on the last. Each hop is held for a dwell (>= the jump, so it
-        lands before the next begins); the dwell shrinks as the backlog grows so he
-        races to catch a fat batch, but never skips an op."""
-        q = self._viz_target_queue
-        if not q or now < self._viz_hop_until:
-            return
-        path, caption = q.pop(0)
-        self._viz_target_op = path
-        self._viz_action_text = caption
-        dwell = self._VIZ_HOP_DWELL - 0.05 * len(q)   # deeper backlog -> quicker steps
-        self._viz_hop_until = now + (dwell if dwell > self._VIZ_HOP_MIN
-                                     else self._VIZ_HOP_MIN)
+        """Advance queued follow hops one at a time -- see envoy_viz."""
+        return mod.envoy_viz.vizPumpQueue(self, now)
 
     def _trackActive(self, now: float, follow: bool, show_bot: bool) -> None:
-        """For the active op: stand Embot on it (if show_bot / Embotenable) and pan the
-        network editor to it (if follow / Envoyfollow). Independent -- the camera frames
-        the OP itself, so it follows Envoy's work whether or not the character renders."""
-        target = op(self._viz_target_op) if self._viz_target_op else None
-        if not target or not target.valid:
-            self._viz_target_op = None
-            return
-        # A docked DAT (e.g. a callbacks DAT) renders attached to its host even
-        # though its own nodeX/nodeY is elsewhere -- stand on the HOST (the op you
-        # actually see). The speech bubble still names the real op.
-        try:
-            if target.dock is not None:
-                target = target.dock
-        except Exception:
-            pass
-        net = target.parent()
-        if net is None:
-            return
-        # --- the character (Embotenable) ---
-        if show_bot:
-            self._pulseStart(target, now)    # ping the node colour
-            self._placeBot(net, target, now) # bring the dancing bot to the op
-        # --- the camera (Envoyfollow) -- frames the op, bot-independent ---
-        if not follow:
-            return
-        # First time we follow in this network, establish our wide _VIZ_ZOOM (once,
-        # applied by _glideStep). The glide otherwise only PANS, so if the pane sat
-        # at a tight zoom the follow would track him at that tight zoom.
-        if net.path != self._viz_follow_net:
-            self._viz_follow_net = net.path
-            self._viz_zoom_pending = True
-        self._highlightOp(target)            # mark Envoy's focus (changes selection ->
-                                             # only when actually following)
-        pane, navigate = self._pickFollowPane(net)
-        if pane is None:
-            return
-        if navigate:
-            self._navigateAndFrame(pane, net, target)
-        else:
-            self._glideStep(pane, target)
+        """Stand Embot on / pan camera to the active op -- see envoy_viz."""
+        return mod.envoy_viz.trackActive(self, now, follow, show_bot)
 
     def _pickFollowPane(self, net: 'COMP'):
-        """Choose the pane to follow `net` in, and whether it must be navigated.
-        Prefers a network-editor pane already showing `net` (-> glide); else the
-        current/first network-editor pane (-> navigate into net). Returns
-        (pane, navigate_bool), or (None, False) if the user has taken over."""
-        try:
-            neteditors = [p for p in ui.panes
-                          if str(p.type) == 'PaneType.NETWORKEDITOR']
-            if not neteditors:
-                return None, False
-            netpath = net.path
-            pane = next((p for p in neteditors
-                         if p.owner is not None and p.owner.path == netpath), None)
-            navigate = False
-            if pane is None:
-                cur_id = ui.panes.current.id
-                pane = next((p for p in neteditors if p.id == cur_id), neteditors[0])
-                navigate = True
-            if self._userTookOver(pane):
-                return None, False
-            return pane, navigate
-        except Exception:
-            return None, False
+        """Choose the pane to follow a network in -- see envoy_viz."""
+        return mod.envoy_viz.pickFollowPane(self, net)
 
     def _userTookOver(self, pane) -> bool:
-        """True only while the user has deliberately navigated the pane to a DIFFERENT
-        network -- then we briefly yield it to them. Pan/zoom changes are deliberately
-        IGNORED: TD auto-frames (pans + zooms into) a freshly-spawned node, a change we
-        did NOT make, and treating that as 'the user took over' froze the follow for
-        ~6s while Embot raced off -- the camera then snapped to the last node instead
-        of ever tracking him. Following him beats honouring a transient auto-frame; a
-        real owner change (the user clicking into another network) still yields."""
-        now = absTime.seconds
-        cur = self._viewTuple(pane)              # (id, owner, x, y, zoom)
-        if now < self._viz_settle_until:
-            self._viz_last_view = cur            # our navigate is still settling -> adopt
-            return False
-        lv = self._viz_last_view
-        if lv and lv[0] == cur[0] and lv[1] != cur[1]:   # OWNER changed -> user navigated away
-            self._viz_takeover_until = now + self._VIZ_TAKEOVER_S
-        self._viz_last_view = cur                # always re-baseline (no stale pan/zoom compare)
-        return now < self._viz_takeover_until
+        """True while the user has navigated the follow pane away -- see envoy_viz."""
+        return mod.envoy_viz.userTookOver(self, pane)
 
     def _navigateAndFrame(self, pane, net: 'COMP', target: 'OP') -> None:
-        """Cut `pane` into `net` and SNAP to frame `target` (coordinate spaces
-        differ across networks, so gliding from the old view is meaningless).
-        Releases the target -- subsequent same-network ops glide from here."""
-        # Set ONLY the owner here. pane.x/pane.y/zoom set in the same frame as the
-        # owner change do NOT stick (the pane is mid-navigation), and the stale
-        # values then misfired takeover and froze the follow. Owner alone sticks;
-        # we do NOT clear the target, so the glide -- which runs in-network on the
-        # following frames, where pan writes DO stick -- pans to the target.
-        pane.owner = net
-        self._recordView(pane)
-        self._viz_settle_until = absTime.seconds + 0.4
-        # TD auto-frames the new (often near-empty) network on the owner change,
-        # which zooms WAY in. Re-apply our wide _VIZ_ZOOM on the next frame -- setting
-        # it here (same frame as owner) would not stick.
-        self._viz_zoom_pending = True
+        """Cut a pane into a network and frame the target op -- see envoy_viz."""
+        return mod.envoy_viz.navigateAndFrame(self, pane, net, target)
 
     def _glideStep(self, pane, target: 'OP') -> None:
-        """One frame of an ease toward the active OP's standing point -- the spot where
-        Embot stands (op centre-x, top edge), computed from the OP so the camera follows
-        whether or not the character is rendered. `target` is the CURRENT pump op (the
-        one the bot is on), not a stale queue entry. Pan only; releases the pane once it
-        has caught the op and nothing is left queued."""
-        if self._viz_zoom_pending:
-            try:
-                pane.zoom = self._VIZ_ZOOM   # undo TD's auto-frame zoom-in (once, sticks now)
-            except Exception:
-                pass
-            self._viz_zoom_pending = False
-        cx = target.nodeX + target.nodeWidth / 2.0
-        cy = target.nodeY + target.nodeHeight + self._botFootGap()   # Embot's standing centre
-        dx = cx - pane.x
-        dy = cy - pane.y
-        if abs(dx) < self._VIZ_EPS and abs(dy) < self._VIZ_EPS:
-            pane.x = cx
-            pane.y = cy
-            if not self._viz_target_queue:   # on him AND nothing left to build/visit
-                self._viz_target_op = None   # -> release the pane to the user
-        else:
-            pane.x = pane.x + dx * self._VIZ_EASE
-            pane.y = pane.y + dy * self._VIZ_EASE
-        # Pan only -- zoom is set once on navigate. Easing zoom per-frame made the
-        # read-back jitter trip _userTookOver, freezing the follow.
-        self._recordView(pane)
+        """One eased frame of the camera glide toward the op -- see envoy_viz."""
+        return mod.envoy_viz.glideStep(self, pane, target)
 
     def _highlightOp(self, target: 'OP') -> None:
-        """Select + make-current the op being worked, so Envoy's focus is visibly
-        marked. Only deselects the op WE previously highlighted -- the user's own
-        selections elsewhere are left alone. Best-effort; never raises."""
-        try:
-            prev = self._viz_selected_op
-            if prev and prev != target.path:
-                po = op(prev)
-                if po and po.valid:
-                    po.selected = False
-            target.selected = True
-            target.current = True
-            self._viz_selected_op = target.path
-        except Exception:
-            pass
-
-    # --- colour pulse on the active op ---
+        """Select + make-current the op being worked -- see envoy_viz."""
+        return mod.envoy_viz.highlightOp(self, target)
 
     def _pulseStart(self, target: 'OP', now: float) -> None:
-        """Begin a colour pulse on `target` (snapshot its colour first). No-op if
-        we are already pulsing this op."""
-        if self._viz_pulse_op == target.path:
-            return
-        self._restorePulse()
-        try:
-            self._viz_pulse_orig = tuple(target.color)
-            self._viz_pulse_op = target.path
-            self._viz_pulse_start = now
-        except Exception:
-            self._viz_pulse_op = None
+        """Begin a colour pulse on the active op -- see envoy_viz."""
+        return mod.envoy_viz.pulseStart(self, target, now)
 
     def _pulseTick(self, now: float) -> None:
-        """Fade the active pulse from the accent colour back to the op's original."""
-        if not self._viz_pulse_op:
-            return
-        o = op(self._viz_pulse_op)
-        if not o or not o.valid:
-            self._viz_pulse_op = None
-            return
-        t = (now - self._viz_pulse_start) / self._VIZ_PULSE_S
-        if t >= 1.0:
-            self._restorePulse()
-            return
-        ac = self._VIZ_PULSE_COLOR
-        og = self._viz_pulse_orig or (0.67, 0.67, 0.67)
-        k = 1.0 - t   # accent weight fades to 0
-        try:
-            o.color = (og[0] + (ac[0] - og[0]) * k,
-                       og[1] + (ac[1] - og[1]) * k,
-                       og[2] + (ac[2] - og[2]) * k)
-        except Exception:
-            self._restorePulse()
+        """Fade the active pulse back to the op's colour -- see envoy_viz."""
+        return mod.envoy_viz.pulseTick(self, now)
 
     def _restorePulse(self) -> None:
-        """Restore the pulsing op's original colour and clear pulse state."""
-        p = self._viz_pulse_op
-        if p and self._viz_pulse_orig is not None:
-            o = op(p)
-            if o and o.valid:
-                try:
-                    o.color = self._viz_pulse_orig
-                except Exception:
-                    pass
-        self._viz_pulse_op = None
-        self._viz_pulse_orig = None
-
-    # --- the dancing builder-bot (ephemeral annotation) ---
+        """Restore the pulsing op's original colour -- see envoy_viz."""
+        return mod.envoy_viz.restorePulse(self)
 
     def _placeBot(self, net: 'COMP', target: 'OP', now: float) -> None:
-        """Ensure the figure exists in `net` and set its destination so it STANDS
-        on top of the active op (feet on the node's top edge). A new node triggers
-        a hop; a network change snaps. Motion + colour come from _botDance."""
-        prev_net = self._viz_bot_net
-        if not self._ensureBot(net):
-            return
-        dest = (target.nodeX + target.nodeWidth / 2.0,
-                target.nodeY + target.nodeHeight + self._botFootGap())
-        self._viz_bot_dest = dest           # current op standing point (swoop target)
-        if self._viz_bot_pos is None or prev_net != self._viz_bot_net:
-            self._viz_jump_dur = self._VIZ_JUMP_DUR
-            if self._viz_bot_build_queue:
-                # ON-SCREEN spread spawn: assemble at an off-view staging point (just past
-                # the viewport edge) so each annotate copy renders OUTSIDE the viewport
-                # (~100ms vs ~280ms in-view -> a far shallower fps sag). He swoops in once
-                # whole -- the entrance is fired from _assembleTick when the queue drains.
-                stage = (dest[0] + self._stageOffset(net), dest[1])
-                self._viz_bot_stage = stage
-                self._viz_bot_pos = stage
-                self._viz_bot_from = stage
-                self._viz_bot_target = stage
-                self._viz_bot_pending_entrance = True
-            else:
-                # off-screen (dive) block spawn -- already cheap -> snap onto the op
-                self._viz_bot_pos = dest
-                self._viz_bot_from = dest
-                self._viz_bot_target = dest
-                self._viz_bot_pending_entrance = False
-            self._viz_bot_jump_t0 = now - self._viz_jump_dur   # already standing
-            return
-        if self._viz_bot_build_queue:
-            return                          # still assembling off-view -> hold at staging
-        if dest != self._viz_bot_target:
-            self._viz_jump_dur = self._VIZ_JUMP_DUR
-            self._viz_bot_from = self._viz_bot_pos    # hop from where we are now
-            self._viz_bot_target = dest
-            self._viz_bot_jump_t0 = now
+        """Bring Embot to stand on the active op -- see envoy_viz."""
+        return mod.envoy_viz.placeBot(self, net, target, now)
 
     def _stageOffset(self, net: 'COMP') -> float:
-        """Network-units to the RIGHT of the active op to park Embot while he assembles,
-        so his per-part copies render OUTSIDE the viewport (cheap) instead of inside it.
-        Derived from the viewing pane's zoom so it always clears the right edge; falls
-        back to a generous fixed value if no pane is found."""
-        try:
-            for p in ui.panes:
-                if str(p.type) == 'PaneType.NETWORKEDITOR' and \
-                        p.owner is not None and p.owner.path == net.path:
-                    return (ui.windowWidth / 2.0) / max(p.zoom, 0.05) + self._VIZ_STAGE_MARGIN
-        except Exception:
-            pass
-        return 3000.0
+        """Off-view staging offset for spread assembly -- see envoy_viz."""
+        return mod.envoy_viz.stageOffset(self, net)
 
     def _botFootGap(self) -> float:
-        """Distance from the figure centre down to its feet, so it stands with
-        feet on the node's top edge."""
-        return max(h / 2.0 - oy for (_s, _ox, oy, _w, h, _e) in self._VIZ_BOT_PARTS)
+        """Figure-centre to feet distance -- see envoy_viz."""
+        return mod.envoy_viz.botFootGap(self)
 
     def _ensureTemplate(self):
-        """Build (once) and return Embot's source template -- a parked container in
-        the Embody COMP holding the 9 styled annotation parts. annotateCOMP creation
-        is ~90ms each, so the ~1s to build all of them is paid ONCE here (and it bakes
-        into Embody on save, so shipped builds never pay it at all). Every COMP switch
-        then just copyOPs the parts forward -- far cheaper than recreating them. The
-        template lives inside Embody on purpose: it is a saved static asset, never an
-        animated/live bot, so _botUnsafeNet (which forbids a LIVE bot here) is moot."""
-        try:
-            host = self.ownerComp
-            tmpl = host.op('embot_template')
-            if tmpl and tmpl.op(self._VIZ_BOT_PREFIX + 'body') and \
-                    tmpl.op(self._VIZ_BOT_PREFIX + 'speech'):
-                return tmpl
-            if tmpl:
-                tmpl.destroy()                  # partial/stale -> rebuild clean
-            self._crashTrace('ensureTemplate BUILD (creating annotateCOMPs)')
-            tmpl = host.create(baseCOMP, 'embot_template')
-            tmpl.nodeX, tmpl.nodeY = -1400, -1400   # parked out of the way
-            skin = colorsys.hsv_to_rgb(self._VIZ_COOL_HUE, 0.95, 1.0)  # default cool
-            for (suffix, ox, oy, w, h, is_eye) in self._VIZ_BOT_PARTS:
-                p = tmpl.create(annotateCOMP)
-                p.name = self._VIZ_BOT_PREFIX + suffix
-                p.selected = False
-                p.par.Mode = 'networkbox'
-                p.par.Titletext = ''
-                p.par.Bodytext = ''
-                try:
-                    p.par.Titleheight = 0       # minimal box -- no text header
-                except Exception:
-                    pass
-                p.par.Backcoloralpha = 1.0
-                if is_eye:
-                    p.par.Backcolorr, p.par.Backcolorg, p.par.Backcolorb = 0.0, 0.0, 0.0
-                else:
-                    p.par.Backcolorr, p.par.Backcolorg, p.par.Backcolorb = skin
-                p.nodeWidth = w
-                p.nodeHeight = h
-            sp = tmpl.create(annotateCOMP)      # the speech bubble (titled)
-            sp.name = self._VIZ_BOT_PREFIX + 'speech'
-            sp.selected = False
-            sp.par.Titletext = 'Embot'
-            sp.par.Bodytext = ''
-            sp.par.Backcolorr = 0.12
-            sp.par.Backcolorg = 0.12
-            sp.par.Backcolorb = 0.17
-            sp.par.Backcoloralpha = 0.95
-            sp.par.Bodyfontsize = 11
-            sp.nodeWidth = 185
-            sp.nodeHeight = 74
-            return tmpl
-        except Exception:
-            return None
+        """Build/return Embot's source template -- see envoy_viz."""
+        return mod.envoy_viz.ensureTemplate(self)
 
     def _ensureBot(self, net: 'COMP') -> bool:
-        """Ensure Embot is present (or assembling) in `net`. On a network change he is
-        COPIED from the template ONE PART PER FRAME (see _assembleTick) rather than in
-        a single block copyOPs. This per-frame spread is the version that ran stably
-        for hours; the block copy that replaced it was implicated in repeated TD
-        crashes and was reverted. Returns False where a bot must not live."""
-        netpath = net.path
-        if self._viz_bot_net == netpath:
-            return True                         # already here (assembled or assembling)
-        if self._botUnsafeNet(net):
-            return False
-        self._crashTrace('ensureBot NET-CHANGE %s -> %s' % (self._viz_bot_net, netpath))
-        if self._ensureTemplate() is None:
-            return False
-        # Defer teardown of the bot we're LEAVING (destroying ops from an on-screen net
-        # forces a redraw per op); tear it down a frame later, off-screen.
-        if self._viz_bot_net and self._viz_bot_net != netpath:
-            self._viz_bot_pending_cleanup.add(self._viz_bot_net)
-        self._viz_bot_pending_cleanup.discard(netpath)   # re-entering -> keep its parts
-        self._viz_bot_pos = None
-        self._viz_bot_from = None
-        self._viz_bot_target = None
-        self._viz_bot_net = netpath
-        self._viz_last_skin = None              # force a recolour onto the new parts
-        # FAST + SAFE spawn. A single copyOPs of all 9 parts HARD-CRASHES TD when the
-        # target net is ON-SCREEN (instantiating many annotateCOMPs concurrent with the
-        # editor redraw -- pinpointed via crash trace: TD died inside copyOPs). But it
-        # is crash-free AND ~4x faster into an OFF-SCREEN net. _ensureBot runs BEFORE
-        # the follow's navigate, so a net we are about to dive into is still off-screen
-        # here -> block-copy it. Only when the net is already displayed do we fall back
-        # to the per-frame spread (slower, but safe on a live net).
-        if self._netIsDisplayed(net):
-            # net ON-SCREEN: spaced spread. A single block copyOPs into a displayed net
-            # crashes TD; the owner-swap that dodged the crash broke the pane's render
-            # (owning the project root). So we copy ONE part at a time, but spaced
-            # _VIZ_ASSEMBLE_INTERVAL frames apart (not every frame) so the per-part redraw
-            # hitches stay isolated instead of fusing into a freeze. Order is body/head/
-            # speech first (recognizable immediately), then limbs, then eyes.
-            valid = {s for (s, _ox, _oy, _w, _h, _e) in self._VIZ_BOT_PARTS}
-            valid.add('speech')
-            self._viz_bot_build_queue = [self._VIZ_BOT_PREFIX + s
-                                         for s in self._VIZ_ASSEMBLE_ORDER if s in valid]
-            # Copy nothing yet -- _placeBot (runs right after this, same frame) computes the
-            # off-view staging point, then _assembleTick copies the parts there. Copying
-            # part #1 here would land it in-view (staging not set) and pay the full cost.
-            self._viz_assemble_next_frame = absTime.frame
-        else:
-            # net OFF-SCREEN (about to navigate into it): ONE fast block copyOPs.
-            self._viz_bot_build_queue = []
-            self._blockSpawn(net)
-        return True
+        """Ensure Embot is present/assembling in a network -- see envoy_viz."""
+        return mod.envoy_viz.ensureBot(self, net)
 
     def _netIsDisplayed(self, net: 'COMP') -> bool:
-        """True if any network-editor pane currently shows `net` -- i.e. a block copy
-        into it would redraw the editor and crash TD. Called BEFORE the follow's
-        navigate, so a net we are about to dive into reads False (still off-screen).
-        Any doubt -> True, so we take the safe spread path."""
-        try:
-            np = net.path
-            for p in ui.panes:
-                if str(p.type) == 'PaneType.NETWORKEDITOR' and \
-                        p.owner is not None and p.owner.path == np:
-                    return True
-        except Exception:
-            return True
-        return False
+        """True if a network-editor pane shows the net -- see envoy_viz."""
+        return mod.envoy_viz.netIsDisplayed(self, net)
 
     def _blockSpawn(self, net: 'COMP') -> None:
-        """Copy ALL 9 parts into `net` in ONE copyOPs (~180ms, one frame -- vs the
-        ~9-frame, ~464ms spread). ONLY called by _ensureBot when `net` is OFF-SCREEN
-        (a sub-COMP we are about to navigate into): copyOPs of many annotateCOMPs into
-        a DISPLAYED net hard-crashes TD (the editor redraw -- pinpointed via crash
-        trace), and the off-screen owner-swap that once dodged that crash broke the
-        pane render, so displayed nets use the safe spread instead. Clears orphans;
-        colours on arrival."""
-        tmpl = self._ensureTemplate()
-        if tmpl is None:
-            return
-        for c in list(net.children):            # clear orphans
-            if c.name.startswith(self._VIZ_BOT_PREFIX) and c.valid:
-                try:
-                    c.destroy()
-                except Exception:
-                    pass
-        srcs = [tmpl.op(self._VIZ_BOT_PREFIX + s)
-                for (s, _ox, _oy, _w, _h, _e) in self._VIZ_BOT_PARTS]
-        srcs.append(tmpl.op(self._VIZ_BOT_PREFIX + 'speech'))
-        srcs = [s for s in srcs if s]
-        try:
-            self._crashTrace('blockSpawn COPY %d -> %s (off-screen)' % (len(srcs), net.path))
-            new = net.copyOPs(srcs)
-            self._crashTrace('blockSpawn COPIED %s' % net.path)
-        except Exception:
-            return
-        idle = absTime.seconds - self._viz_last_activity
-        f = min(1.0, max(0.0, idle / self._VIZ_WARM_S))
-        hue = round((self._VIZ_COOL_HUE +
-                     (self._VIZ_WARM_HUE - self._VIZ_COOL_HUE) * f) * 36.0) / 36.0
-        skin = colorsys.hsv_to_rgb(hue, 0.95, 1.0)
-        for n in new:
-            n.selected = False
-            bn = n.name
-            if bn.endswith('speech'):
-                continue
-            if bn.endswith('eye_l') or bn.endswith('eye_r'):
-                n.par.Backcolorr, n.par.Backcolorg, n.par.Backcolorb = 0.0, 0.0, 0.0
-            else:
-                n.par.Backcolorr, n.par.Backcolorg, n.par.Backcolorb = skin
+        """One-shot block copy of all parts into an off-screen net -- see envoy_viz."""
+        return mod.envoy_viz.blockSpawn(self, net)
 
     def _assembleStep(self, net: 'COMP') -> None:
-        """Copy ONE queued template part into `net` -- the per-frame unit of Embot's
-        spread assembly. Colours each part on arrival (skin for the body, black for
-        eyes) so it looks right immediately, independent of _botDance's recolour
-        throttle. The speech bubble keeps its own template styling."""
-        q = self._viz_bot_build_queue
-        if not q:
-            return
-        tmpl = self._ensureTemplate()
-        if tmpl is None:
-            self._viz_bot_build_queue = []
-            return
-        name = q.pop(0)
-        src = tmpl.op(name)
-        if not src or net.op(name):             # missing source / already present
-            return
-        # copyOPs lands the copy at the SOURCE's coords, and the copy's cost is set by
-        # whether THAT landing spot is in the viewport. So park the source at the off-view
-        # staging point first -> the copy lands off-view and pays ~100ms, not ~280ms.
-        # (_botDance then arranges the copies into the figure wherever the bot stands.)
-        stage = self._viz_bot_stage
-        if stage:
-            try:
-                src.nodeX, src.nodeY = stage[0], stage[1]
-            except Exception:
-                pass
-        try:
-            self._crashTrace('assembleStep COPY %s -> %s' % (name, net.path))
-            new = net.copyOPs([src])
-            self._crashTrace('assembleStep COPIED %s' % name)
-            idle = absTime.seconds - self._viz_last_activity
-            f = min(1.0, max(0.0, idle / self._VIZ_WARM_S))
-            hue = round((self._VIZ_COOL_HUE +
-                         (self._VIZ_WARM_HUE - self._VIZ_COOL_HUE) * f) * 36.0) / 36.0
-            skin = colorsys.hsv_to_rgb(hue, 0.95, 1.0)
-            pos = self._viz_bot_pos
-            for n in new:
-                n.selected = False
-                bn = n.name
-                if bn.endswith('speech'):
-                    # Place the bubble at the head on arrival so it never flashes at
-                    # its copied (0,0) spot before _botDance catches it.
-                    if pos:
-                        n.nodeX = pos[0] - n.nodeWidth / 2.0
-                        n.nodeY = pos[1] + 58.0
-                    continue
-                if bn.endswith('eye_l') or bn.endswith('eye_r'):
-                    n.par.Backcolorr, n.par.Backcolorg, n.par.Backcolorb = 0.0, 0.0, 0.0
-                else:
-                    n.par.Backcolorr, n.par.Backcolorg, n.par.Backcolorb = skin
-        except Exception:
-            pass
+        """Copy one queued template part into the net -- see envoy_viz."""
+        return mod.envoy_viz.assembleStep(self, net)
 
     def _assembleTick(self) -> None:
-        """Drive Embot's spread assembly: one template part copied every
-        _VIZ_ASSEMBLE_INTERVAL frames until he is whole. He assembles at an off-view
-        staging point (see _placeBot) so each copy renders outside the viewport; once the
-        queue drains he swoops in via _startEntrance. Runs each frame so assembly completes
-        even after the follow target clears (idle mid-build)."""
-        q = self._viz_bot_build_queue
-        if q and absTime.frame >= self._viz_assemble_next_frame:
-            netpath = self._viz_bot_net
-            net = op(netpath) if netpath else None
-            if not net or not net.valid:
-                self._viz_bot_build_queue = []
-            else:
-                self._assembleStep(net)
-                self._viz_assemble_next_frame = absTime.frame + self._VIZ_ASSEMBLE_INTERVAL
-        # Assembly finished -> swoop in from the off-view staging point.
-        if not self._viz_bot_build_queue and self._viz_bot_pending_entrance:
-            self._startEntrance()
+        """Drive Embot's spread assembly per frame -- see envoy_viz."""
+        return mod.envoy_viz.assembleTick(self)
 
     def _startEntrance(self) -> None:
-        """Fire Embot's swoop from the off-view staging point onto his destination op,
-        once off-view assembly has completed. Uses the slower entrance duration so the
-        long travel reads as a deliberate fly-in, not a teleport."""
-        self._viz_bot_pending_entrance = False
-        dest = self._viz_bot_dest
-        if dest is None or self._viz_bot_pos is None:
-            return
-        self._viz_bot_from = self._viz_bot_pos
-        self._viz_bot_target = dest
-        self._viz_jump_dur = self._VIZ_ENTRANCE_DUR
-        self._viz_bot_jump_t0 = absTime.seconds
+        """Fire Embot's swoop from staging onto his op -- see envoy_viz."""
+        return mod.envoy_viz.startEntrance(self)
 
     def _cleanupDeadBots(self) -> None:
-        """Tear down a bot left behind by a switch -- ONE network per frame, now that
-        the navigate has moved it off-screen so destroying its parts no longer redraws
-        the editor. Never touches the live bot's net or the Embody template."""
-        pend = self._viz_bot_pending_cleanup
-        if not pend:
-            return
-        netpath = pend.pop()
-        if netpath == self._viz_bot_net:
-            return
-        net = op(netpath)
-        if net and net.valid:
-            self._crashTrace('cleanupDead ENTER %s' % netpath)
-            for c in list(net.children):
-                if c.name.startswith(self._VIZ_BOT_PREFIX) and c.valid:
-                    try:
-                        c.destroy()
-                    except Exception:
-                        pass
-            self._crashTrace('cleanupDead DONE %s' % netpath)
+        """Tear down a left-behind bot, one net per frame -- see envoy_viz."""
+        return mod.envoy_viz.cleanupDeadBots(self)
 
     def _botDance(self, now: float) -> None:
-        """Animate the figure: a robotic HOP from node to node (parabolic arc,
-        snappy ease, subtle landing squash) and a small stepped idle hover, with a
-        vibrant colour cycle. Pure UI-attr + annotation colour writes (cook-free)."""
-        np = self._viz_bot_net
-        if not np or self._viz_bot_target is None:
-            return
-        net = op(np)
-        if not net:
-            self._viz_bot_net = None
-            return
-        if (now - self._viz_last_paint) < 0.033:    # cap figure repaint at ~30fps
-            return
-        self._viz_last_paint = now
-        t = (now - self._viz_bot_jump_t0) / self._viz_jump_dur
-        sx = sy = 1.0
-        if t < 1.0:                                   # mid-hop
-            e = 1.0 - (1.0 - t) * (1.0 - t)           # easeOutQuad (snappy)
-            fx, fy = self._viz_bot_from
-            tx, ty = self._viz_bot_target
-            px = fx + (tx - fx) * e
-            py = fy + (ty - fy) * e + self._VIZ_JUMP_ARC * math.sin(math.pi * t)
-            if t > 0.82:                              # subtle squash on landing
-                k = (t - 0.82) / 0.18
-                sx = 1.0 + self._VIZ_SQUASH * k
-                sy = 1.0 - self._VIZ_SQUASH * k
-        else:                                         # standing still (robotic; no idle churn)
-            tx, ty = self._viz_bot_target
-            px, py = tx, ty
-        self._viz_bot_pos = (px, py)
-        # --- random gestures at random intervals (not a fixed loop) ---
-        if t >= 1.0 and now >= self._viz_gesture_end and now >= self._viz_next_gesture:
-            if random.random() < 0.18:
-                gtype = 3                               # robot dance, now and then
-            else:
-                gtype = int(random.random() * 3)        # 0 wave / 1 reach / 2 pump
-                if gtype == self._viz_gesture_type:     # avoid an immediate repeat
-                    gtype = (gtype + 1) % 3
-            self._viz_gesture_type = gtype
-            self._viz_gesture_start = now
-            self._viz_gesture_end = now + (self._VIZ_DANCE_DUR if gtype == 3 else self._VIZ_GESTURE_DUR)
-            self._viz_next_gesture = self._viz_gesture_end + self._VIZ_GESTURE_GAP_MIN + \
-                random.random() * (self._VIZ_GESTURE_GAP_MAX - self._VIZ_GESTURE_GAP_MIN)
-        active = (t >= 1.0) and (now < self._viz_gesture_end)
-        gi = self._viz_gesture_type
-        gdur = self._viz_gesture_end - self._viz_gesture_start
-        gp = now - self._viz_gesture_start
-        genv = math.sin(math.pi * (gp / gdur)) if (active and gdur > 0.0) else 0.0
-        if active and gi == 3:                          # robot dance: full-body sway + bob
-            px = px + round(math.sin(gp * 6.0)) * 11.0 * genv
-            py = py + abs(math.sin(gp * 9.0)) * 7.0 * genv
-        # Quantized "thinking" colour -- changes a few times/sec, not 60. Writing
-        # colour + positions on every part every frame forced a continuous
-        # network-editor redraw and halved the FPS; quantize + the moving check
-        # below keep idle frames write-free.
-        idle = now - self._viz_last_activity
-        f = min(1.0, max(0.0, idle / self._VIZ_WARM_S))
-        hue = round((self._VIZ_COOL_HUE + (self._VIZ_WARM_HUE - self._VIZ_COOL_HUE) * f) * 36.0) / 36.0
-        skin = colorsys.hsv_to_rgb(hue, 0.95, 1.0)
-        recolor = (skin != self._viz_last_skin)
-        self._viz_last_skin = skin
-        # Only repaint when actually animating (a jump or a gesture) or when the
-        # quantized colour ticks -- otherwise leave the parts untouched so idle
-        # frames cost nothing.
-        # Periodic eye blink. TD clamps annotation node size to a 10px MINIMUM, so a
-        # Y-squash of the 9px eyes cannot render -- instead the eyes briefly take the
-        # face/skin colour (closed -> invisible) then return to black. Written only on
-        # the open<->closed TRANSITION (2 colour writes per blink), so it costs almost
-        # nothing and does NOT force a full-figure repaint.
-        if now >= self._viz_next_blink:
-            self._viz_blink_end = now + 0.13                          # blink lasts ~0.13s
-            self._viz_next_blink = now + 2.0 + random.random() * 3.5  # next blink in 2-5.5s
-        blinking = now < self._viz_blink_end
-        if blinking != self._viz_eyes_closed:
-            if blinking:
-                # match the body's ACTUAL current colour (recolor lags the computed
-                # skin) so the eyes truly vanish into the face.
-                _bp = net.op(self._VIZ_BOT_PREFIX + 'body')
-                eye_col = ((_bp.par.Backcolorr.eval(), _bp.par.Backcolorg.eval(),
-                            _bp.par.Backcolorb.eval()) if (_bp and _bp.valid) else skin)
-            else:
-                eye_col = (0.0, 0.0, 0.0)
-            for _es in ('eye_l', 'eye_r'):
-                _ep = net.op(self._VIZ_BOT_PREFIX + _es)
-                if _ep and _ep.valid:
-                    _ep.par.Backcolorr, _ep.par.Backcolorg, _ep.par.Backcolorb = eye_col
-            self._viz_eyes_closed = blinking
-        # Occasional happy squint -- far rarer than the blink. The eyes flatten toward
-        # the 10px floor and spread a little wider for ~1s, reading as a content "^_^".
-        # Applied via the parts loop below (eye gw/gh when squinting), so it costs only
-        # the 2 transition frames it forces, not a per-frame repaint.
-        if self._viz_next_squint == 0.0:
-            self._viz_next_squint = now + self._VIZ_SQUINT_GAP_MIN   # never squint on spawn
-        if now >= self._viz_next_squint:
-            self._viz_squint_end = now + self._VIZ_SQUINT_DUR
-            self._viz_next_squint = now + self._VIZ_SQUINT_GAP_MIN + \
-                random.random() * (self._VIZ_SQUINT_GAP_MAX - self._VIZ_SQUINT_GAP_MIN)
-        squinting = now < self._viz_squint_end
-        squint_changed = (squinting != self._viz_squinting)
-        self._viz_squinting = squinting
-        moving = (t < 1.0) or active or bool(self._viz_bot_build_queue)
-        if moving or recolor or squint_changed:
-            self._crashTrace('botDance PARTS moving=%d recolor=%d t=%.2f %s' %
-                             (int(moving), int(recolor), t, np))
-            for (suffix, ox, oy, w, h, is_eye) in self._VIZ_BOT_PARTS:
-                p = net.op(self._VIZ_BOT_PREFIX + suffix)
-                if not p or not p.valid:
-                    continue
-                gw = gh = 1.0
-                if active:
-                    if gi == 0 and suffix == 'arm_r':                  # wave
-                        oy = oy + self._VIZ_WAVE_LIFT * genv
-                        ox = ox + math.sin(gp * self._VIZ_WAVE_FREQ) * self._VIZ_WAVE_AMP * genv
-                    elif gi == 1 and suffix in ('arm_l', 'arm_r'):     # shrug: lift arms straight up (no scaling)
-                        oy = oy + 16.0 * genv
-                    elif gi == 2 and suffix in ('arm_l', 'arm_r'):     # both arms pump up
-                        oy = oy + self._VIZ_WAVE_LIFT * 0.75 * genv
-                    elif gi == 3:                                      # robot dance: limbs + head
-                        if suffix == 'arm_l':
-                            oy = oy + 20.0 * genv * (0.5 + 0.5 * math.sin(gp * 7.0))
-                        elif suffix == 'arm_r':
-                            oy = oy + 20.0 * genv * (0.5 + 0.5 * math.sin(gp * 7.0 + math.pi))
-                        elif suffix in ('head', 'eye_l', 'eye_r'):
-                            ox = ox + round(math.sin(gp * 6.0)) * 4.0 * genv
-                if is_eye and squinting:                    # happy squint: flatten + spread
-                    gw *= self._VIZ_SQUINT_WIDEN
-                    gh *= self._VIZ_SQUINT_FLATTEN
-                pw, ph = w * sx * gw, h * sy * gh
-                p.nodeWidth = pw
-                p.nodeHeight = ph
-                p.nodeX = (px + ox * sx) - pw / 2.0
-                p.nodeY = (py + oy * sy) - ph / 2.0
-                if recolor:
-                    if is_eye:
-                        # open -> black; mid-blink -> track the body's NEW skin so the
-                        # eyes stay vanished even if the thinking-colour ticks.
-                        p.par.Backcolorr, p.par.Backcolorg, p.par.Backcolorb = \
-                            (skin if blinking else (0.0, 0.0, 0.0))
-                    else:
-                        p.par.Backcolorr, p.par.Backcolorg, p.par.Backcolorb = skin
-            self._crashTrace('botDance PARTS-DONE')
-        # Speech bubble: follow + a Claude-Code-style typewriter -> spinner + dots.
-        # The spinner only runs while actively building (idle < a few sec) so an
-        # idle Embot does not churn redraws.
-        sp = net.op(self._VIZ_BOT_PREFIX + 'speech')
-        if sp and sp.valid:
-            # Anchor the bubble to Embot's BASE position (_viz_bot_pos, captured before
-            # the dance sway is added to px/py), NOT the animated px/py. So it follows
-            # only while he HOPS to a new node, and stays put while he dances/gestures
-            # in place -- saving a per-frame bubble redraw during every dance. The
-            # changed-guard still (re)places it once after a hop and skips otherwise.
-            bp = self._viz_bot_pos or (px, py)
-            sx_sp = bp[0] - sp.nodeWidth / 2.0
-            sy_sp = bp[1] + 58.0
-            if abs(sp.nodeX - sx_sp) > 0.5 or abs(sp.nodeY - sy_sp) > 0.5:
-                sp.nodeX = sx_sp
-                sp.nodeY = sy_sp
-            act = self._viz_action_text
-            if act != self._viz_speech_src:
-                self._viz_speech_src = act
-                self._viz_speech_t0 = now
-            if self._viz_target_queue:        # actively stepping: show the CURRENT
-                self._viz_speech_t0 = now     # caption instantly. The typewriter could
-                line = act                    # not keep up with fast hops, so it lagged
-                                              # a step behind; reset it for when we settle.
-            else:
-                shown = act[:int((now - self._viz_speech_t0) * 45.0)]
-                if len(shown) < len(act):
-                    line = shown + '_'                        # typing (settled, faster)
-                elif idle < 4.0:                              # working -> spinner + dots
-                    line = '%s %s%s' % ('|/-\\'[int(now * 4.0) % 4], act, '.' * (int(now * 2.0) % 4))
-                else:
-                    line = act                                # idle -> static (no churn)
-            if sp.par.Bodytext.eval() != line:
-                self._crashTrace('botDance SPEECH-WRITE')
-                sp.par.Bodytext = line
-                self._crashTrace('botDance SPEECH-DONE')
+        """Animate the figure: hop, hover, gesture, colour -- see envoy_viz."""
+        return mod.envoy_viz.botDance(self, now)
 
     def _botUnsafeNet(self, net: 'COMP') -> bool:
-        """True if a bot must NOT be created in `net` -- it would risk being saved.
-        Unsafe: under /local, under the Embody COMP (ExportPortableTox captures
-        Embody's descendants), or inside any TDN-strategy COMP (captured by .tdn
-        export)."""
-        try:
-            if net.path.startswith('/local'):
-                return True
-            embody_path = self.ownerComp.path
-            tdn = self.ownerComp.ext.Embody._getTDNPaths()
-            p = net
-            while p is not None and p.path != '/':
-                if p.path == embody_path or p.path in tdn:
-                    return True
-                p = p.parent()
-        except Exception:
-            return True   # any doubt -> do not create
-        return False
+        """True if a bot must not be created in the net -- see envoy_viz."""
+        return mod.envoy_viz.botUnsafeNet(self, net)
 
     def _destroyBot(self) -> None:
-        """Remove all figure parts if present."""
-        np = self._viz_bot_net
-        if np:
-            net = op(np)
-            if net:
-                self._crashTrace('destroyBot ENTER %s' % np)
-                for c in list(net.children):
-                    if c.name.startswith(self._VIZ_BOT_PREFIX) and c.valid:
-                        try:
-                            self._crashTrace('destroyBot DESTROY %s' % c.name)
-                            c.destroy()
-                        except Exception:
-                            pass
-                self._crashTrace('destroyBot DONE %s' % np)
-        self._viz_bot_net = None
-        self._viz_bot_pos = None
-        self._viz_bot_from = None
-        self._viz_bot_target = None
-        self._viz_bot_build_queue = []
+        """Remove all figure parts if present -- see envoy_viz."""
+        return mod.envoy_viz.destroyBot(self)
 
     def _vizCleanup(self) -> None:
-        """Retire all live visualization artifacts (restore pulse, destroy bot).
-        Idempotent and safe to call from the save path."""
-        self._restorePulse()
-        self._destroyBot()
-        # Flush any deferred off-screen teardowns NOW -- the save path must leave no
-        # bot parts behind in any network.
-        for netpath in list(self._viz_bot_pending_cleanup):
-            net = op(netpath)
-            if net and net.valid:
-                for c in list(net.children):
-                    if c.name.startswith(self._VIZ_BOT_PREFIX) and c.valid:
-                        try:
-                            c.destroy()
-                        except Exception:
-                            pass
-        self._viz_bot_pending_cleanup = set()
-        self._viz_target_queue = []
-        self._viz_hop_until = 0.0
-        self._viz_follow_net = None   # re-establish zoom next time we follow somewhere
+        """Retire all live visualization artifacts -- see envoy_viz."""
+        return mod.envoy_viz.vizCleanup(self)
 
     def _viewTuple(self, pane) -> tuple:
-        """A comparable snapshot of a pane's view state (id, owner, pan, zoom)."""
-        owner_path = pane.owner.path if pane.owner else None
-        return (pane.id, owner_path, round(pane.x, 2), round(pane.y, 2),
-                round(pane.zoom, 4))
+        """Comparable snapshot of a pane's view state -- see envoy_viz."""
+        return mod.envoy_viz.viewTuple(self, pane)
 
     def _recordView(self, pane) -> None:
-        """Remember what WE last set the pane to (baseline for takeover detect)."""
-        self._viz_last_view = self._viewTuple(pane)
+        """Remember what we last set the pane to -- see envoy_viz."""
+        return mod.envoy_viz.recordView(self, pane)
 
     # === TD Operations (Main Thread Only) ===
 
     # --- Logging ---
 
     def _get_logs(self, level=None, count=50, since_id=None, source=None):
-        """Get filtered log entries from Embody's ring buffer."""
-        buffer = getattr(op.Embody.ext.Embody, '_log_buffer', None)
-        if buffer is None:
-            return {'error': 'Log buffer not initialized'}
-
-        count = min(count or 50, 200)
-        entries = list(buffer)
-
-        if since_id is not None:
-            entries = [e for e in entries if e['id'] > since_id]
-        if level:
-            entries = [e for e in entries if e['level'] == level.upper()]
-        if source:
-            entries = [e for e in entries if source.lower() in e['source'].lower()]
-
-        entries = entries[-count:]
-
-        return {
-            'entries': entries,
-            'count': len(entries),
-            'total_in_buffer': len(buffer),
-            'latest_id': buffer[-1]['id'] if buffer else 0,
-        }
+        """Get filtered log entries from Embody's ring buffer -- see envoy_read."""
+        return mod.envoy_read.get_logs(self, level, count, since_id, source)
 
     # --- Testing ---
 
@@ -4119,149 +4520,147 @@ class EnvoyExt:
     # --- Operator Management ---
 
     def _create_op(self, parent_path: str, op_type: str, name: str = None) -> dict:
-        """Create an operator"""
-        parent = op(parent_path)
-        if not parent:
-            return {'error': f'Parent not found: {parent_path}'}
-
-        if not hasattr(parent, 'create'):
-            return {'error': f'Cannot create children in {parent_path} (not a COMP)'}
-
-        try:
-            # op_type can be a string like 'baseCOMP', 'noiseTOP', etc.
-            new_op = parent.create(op_type, name) if name else parent.create(op_type)
-            self._find_non_overlapping_position(parent, new_op)
-            return {
-                'success': True,
-                'path': new_op.path,
-                'name': new_op.name,
-                'type': new_op.OPType,
-                'family': new_op.family,
-                'nodeX': new_op.nodeX,
-                'nodeY': new_op.nodeY
-            }
-        except Exception as e:
-            return {'error': f'Failed to create operator: {e}'}
+        """Create an operator -- see envoy_ops."""
+        return mod.envoy_ops.create_op(self, parent_path, op_type, name)
 
     def _delete_op(self, op_path: str) -> dict:
-        """Delete an operator"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
+        """Delete an operator -- see envoy_ops."""
+        return mod.envoy_ops.delete_op(self, op_path)
 
-        try:
-            name = target.name
-            # Purge TDN tracking for this op + any tracked TDN descendant BEFORE
-            # destroying, so an unsaved delete + crash can't leave an orphan row
-            # that export-mode autosave recovery would resurrect on next open.
-            try:
-                op.Embody.ext.Embody._purgeTDNTracking(op_path)
-            except Exception:
-                pass
-            target.destroy()
-            return {'success': True, 'deleted': op_path, 'name': name}
-        except Exception as e:
-            return {'error': f'Failed to delete operator: {e}'}
+    def _get_op(self, op_path: str, include_defaults: bool = False) -> dict:
+        """Get operator information -- see envoy_read."""
+        return mod.envoy_read.get_op(self, op_path, include_defaults)
 
-    def _get_op(self, op_path: str) -> dict:
-        """Get operator information"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        info = {
-            'path': target.path,
-            'name': target.name,
-            'type': target.OPType,
-            'family': target.family,
-            'valid': target.valid,
-        }
-
-        # Get parameters
-        params = {}
-        for p in target.pars():
-            try:
-                params[p.name] = {
-                    'value': str(p.eval()),
-                    'mode': str(p.mode),
-                    'label': p.label,
-                }
-            except Exception as e:
-                self._log(f'Could not read parameter {p.name} on {op_path}: {e}', 'DEBUG')
-                params[p.name] = {'value': 'N/A', 'mode': 'N/A'}
-        info['parameters'] = params
-
-        # Get inputs/outputs
-        info['inputs'] = [inp.path if inp else None for inp in target.inputs]
-        info['outputs'] = [out.path if out else None for out in target.outputs]
-
-        # COMP-specific info
-        if hasattr(target, 'children'):
-            info['children'] = [child.name for child in target.children]
-
-        return self._maybe_offload_to_file(info, 'get_op')
+    # Sole consumer is envoy_ops.grow_sequence_for (via ext._SEQ_PAR_RE) --
+    # kept here so the module DAT needs no re import.
+    _SEQ_PAR_RE = re.compile(r'^([A-Za-z]+?)(\d+)([A-Za-z0-9]*)$')
 
     def _set_parameter(self, op_path: str, par_name: str, value=None,
                       mode: str = None, expr: str = None,
                       bind_expr: str = None) -> dict:
-        """Set a parameter value, expression, bind expression, or mode"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
+        """Set a parameter value, expression, bind expression, or mode -- see envoy_ops."""
+        return mod.envoy_ops.set_parameter(self, op_path, par_name, value, mode, expr, bind_expr)
 
-        if not hasattr(target.par, par_name):
-            return {'error': f'Parameter not found: {par_name}'}
-
-        try:
-            par = getattr(target.par, par_name)
-
-            # Set expression (automatically switches to EXPRESSION mode)
-            if expr is not None:
-                par.expr = expr
-                par.mode = ParMode.EXPRESSION
-            # Set bind expression (automatically switches to BIND mode)
-            elif bind_expr is not None:
-                par.bindExpr = bind_expr
-                par.mode = ParMode.BIND
-            # Set constant value (with type coercion for numeric/toggle pars)
-            elif value is not None:
-                if isinstance(value, str) and par.isNumber:
-                    try:
-                        value = int(value) if par.isInt else float(value)
-                    except (ValueError, TypeError):
-                        pass  # Let TD handle the string as-is
-                elif isinstance(value, str) and par.isToggle:
-                    value = value not in ('0', 'false', 'False', '')
-                par.val = value
-
-            # Set mode explicitly if provided (overrides auto-set above)
-            if mode is not None:
-                mode_map = {
-                    'constant': ParMode.CONSTANT,
-                    'expression': ParMode.EXPRESSION,
-                    'export': ParMode.EXPORT,
-                    'bind': ParMode.BIND,
-                }
-                par_mode = mode_map.get(mode.lower())
-                if par_mode is None:
-                    return {'error': f'Invalid mode: {mode}. Use: constant, expression, export, bind'}
-                par.mode = par_mode
-
-            return {
-                'success': True,
-                'path': op_path,
-                'parameter': par_name,
-                'value': str(par.eval()),
-                'mode': str(par.mode)
-            }
-        except Exception as e:
-            return {'error': f'Failed to set parameter: {e}'}
-
-    def _get_parameter(self, op_path: str, par_name: str) -> dict:
+    def _get_parameter(self, op_path: str, par_name: str = None,
+                      search: str = None, search_in: str = 'any',
+                      depth: int = 2, max_results: int = 50,
+                      details: bool = False) -> dict:
         """Get a parameter value with full details"""
         target = op(op_path)
         if not target:
             return {'error': f'Operator not found: {op_path}'}
+
+        if search is not None:
+            valid_search = ('name', 'value', 'expr', 'any')
+            search_in = (search_in or 'any').lower()
+            if search_in not in valid_search:
+                return {'error': 'Invalid search_in. Use: name, value, expr, any'}
+            try:
+                depth = int(depth)
+            except Exception:
+                depth = 2
+            depth = max(0, depth)
+            try:
+                max_results = int(max_results)
+            except Exception:
+                max_results = 50
+            max_results = min(500, max(1, max_results))
+
+            # Finding absolute-path expressions project-wide is an Embody
+            # code-review rule turned into a query (idea from TDMCP).
+            pattern = str(search).lower()
+            if not any(ch in pattern for ch in '*?['):
+                pattern = f'*{pattern}*'
+
+            ops_to_scan = [target]
+            try:
+                ops_to_scan.extend(target.findChildren(maxDepth=depth))
+            except Exception:
+                pass
+
+            hits = []
+            truncated = False
+            for o in ops_to_scan:
+                try:
+                    pars = o.pars()
+                except Exception:
+                    continue
+                for p in pars:
+                    try:
+                        mode_name = p.mode.name
+                    except Exception:
+                        mode_name = str(getattr(p, 'mode', ''))
+
+                    matched = False
+                    if search_in in ('name', 'any'):
+                        matched = fnmatch.fnmatch(p.name.lower(), pattern)
+
+                    value_text = None
+                    if search_in in ('value', 'any') and not matched:
+                        if search_in == 'any' and mode_name != 'CONSTANT':
+                            pass
+                        else:
+                            try:
+                                value_text = str(p.eval())
+                                matched = fnmatch.fnmatch(value_text.lower(), pattern)
+                            except Exception:
+                                pass
+
+                    if search_in in ('expr', 'any') and not matched:
+                        if mode_name == 'EXPRESSION':
+                            try:
+                                matched = fnmatch.fnmatch(str(p.expr).lower(), pattern)
+                            except Exception:
+                                pass
+                        elif mode_name == 'BIND':
+                            try:
+                                matched = fnmatch.fnmatch(str(p.bindExpr).lower(), pattern)
+                            except Exception:
+                                pass
+
+                    if not matched:
+                        continue
+                    if value_text is None:
+                        try:
+                            value_text = str(p.eval())
+                        except Exception as e:
+                            value_text = f'<eval error: {e}>'
+                    hit = {
+                        'op': o.path,
+                        'par': p.name,
+                        'value': value_text,
+                        'mode': mode_name,
+                    }
+                    if mode_name == 'EXPRESSION':
+                        try:
+                            hit['expr'] = p.expr
+                        except Exception:
+                            pass
+                    elif mode_name == 'BIND':
+                        try:
+                            hit['bindExpr'] = p.bindExpr
+                        except Exception:
+                            pass
+                    hits.append(hit)
+                    if len(hits) >= max_results:
+                        truncated = True
+                        break
+                if truncated:
+                    break
+
+            result = {
+                'root': op_path,
+                'pattern': search,
+                'search_in': search_in,
+                'count': len(hits),
+                'results': hits,
+            }
+            if truncated:
+                result['truncated'] = True
+            return result
+
+        if par_name is None:
+            return {'error': 'Provide par_name, or search for pattern mode'}
 
         if not hasattr(target.par, par_name):
             return {'error': f'Parameter not found: {par_name}'}
@@ -4274,11 +4673,14 @@ class EnvoyExt:
                 'value': str(par.eval()),
                 'mode': str(par.mode),
                 'label': par.label,
-                'default': str(par.default),
-                'isCustom': par.isCustom,
-                'readOnly': par.readOnly,
-                'style': par.style,
             }
+            if details:
+                result.update({
+                    'default': str(par.default),
+                    'isCustom': par.isCustom,
+                    'readOnly': par.readOnly,
+                    'style': par.style,
+                })
 
             # Mode-specific details
             if par.mode.name == 'EXPRESSION':
@@ -4288,10 +4690,11 @@ class EnvoyExt:
                 result['bindMaster'] = par.bindMaster.path if par.bindMaster else None
             elif par.mode.name == 'EXPORT':
                 result['exportOP'] = par.exportOP.path if par.exportOP else None
-                result['exportSource'] = str(par.exportSource) if par.exportSource else None
+                if details:
+                    result['exportSource'] = str(par.exportSource) if par.exportSource else None
 
             # Numeric range info
-            if par.isNumber:
+            if details and par.isNumber:
                 result['min'] = par.min
                 result['max'] = par.max
                 result['clampMin'] = par.clampMin
@@ -4302,8 +4705,9 @@ class EnvoyExt:
             # Menu info
             if par.isMenu:
                 result['menuNames'] = par.menuNames
-                result['menuLabels'] = par.menuLabels
-                result['menuIndex'] = par.menuIndex
+                if details:
+                    result['menuLabels'] = par.menuLabels
+                    result['menuIndex'] = par.menuIndex
 
             return result
         except Exception as e:
@@ -4312,227 +4716,30 @@ class EnvoyExt:
     def _connect_ops(self, source_path: str, dest_path: str,
                           source_index: int = 0, dest_index: int = 0,
                           comp: bool = False) -> dict:
-        """Connect two operators"""
-        source = op(source_path)
-        dest = op(dest_path)
-
-        if not source:
-            return {'error': f'Source not found: {source_path}'}
-        if not dest:
-            return {'error': f'Destination not found: {dest_path}'}
-
-        try:
-            if comp:
-                if not hasattr(source, 'outputCOMPConnectors'):
-                    return {'error': f'Source {source_path} has no COMP connectors (not a COMP)'}
-                if not hasattr(dest, 'inputCOMPConnectors'):
-                    return {'error': f'Destination {dest_path} has no COMP connectors (not a COMP)'}
-                if source_index >= len(source.outputCOMPConnectors):
-                    return {'error': f'Source COMP output index {source_index} out of range'}
-                if dest_index >= len(dest.inputCOMPConnectors):
-                    return {'error': f'Destination COMP input index {dest_index} out of range'}
-                source.outputCOMPConnectors[source_index].connect(dest.inputCOMPConnectors[dest_index])
-            else:
-                if source_index >= len(source.outputConnectors):
-                    return {'error': f'Source output index {source_index} out of range'}
-                if dest_index >= len(dest.inputConnectors):
-                    return {'error': f'Destination input index {dest_index} out of range'}
-                source.outputConnectors[source_index].connect(dest.inputConnectors[dest_index])
-
-            return {
-                'success': True,
-                'source': source_path,
-                'destination': dest_path,
-                'source_index': source_index,
-                'dest_index': dest_index,
-                'comp': comp
-            }
-        except Exception as e:
-            return {'error': f'Failed to connect: {e}'}
+        """Connect two operators -- see envoy_ops."""
+        return mod.envoy_ops.connect_ops(self, source_path, dest_path, source_index, dest_index, comp)
 
     def _disconnect_op(self, op_path: str, input_index: int = 0,
                             comp: bool = False) -> dict:
-        """Disconnect an operator's input"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        try:
-            if comp:
-                if not hasattr(target, 'inputCOMPConnectors'):
-                    return {'error': f'{op_path} has no COMP connectors (not a COMP)'}
-                if input_index >= len(target.inputCOMPConnectors):
-                    return {'error': f'COMP input index {input_index} out of range'}
-                target.inputCOMPConnectors[input_index].disconnect()
-            else:
-                if input_index >= len(target.inputConnectors):
-                    return {'error': f'Input index {input_index} out of range'}
-                target.inputConnectors[input_index].disconnect()
-
-            return {'success': True, 'path': op_path, 'input_index': input_index, 'comp': comp}
-        except Exception as e:
-            return {'error': f'Failed to disconnect: {e}'}
+        """Disconnect an operator's input -- see envoy_ops."""
+        return mod.envoy_ops.disconnect_op(self, op_path, input_index, comp)
 
     def _query_network(self, parent_path: str = "/", recursive: bool = False,
                       op_type: str = None, include_utility: bool = False) -> dict:
-        """List operators in a network"""
-        parent = op(parent_path)
-        if not parent:
-            return {'error': f'Parent not found: {parent_path}'}
-
-        if not hasattr(parent, 'children'):
-            return {'error': f'{parent_path} is not a COMP'}
-
-        def get_ops(comp, depth=0):
-            results = []
-            if include_utility:
-                children = comp.findChildren(includeUtility=True, depth=1)
-            else:
-                children = comp.children
-            for child in children:
-                # Filter by type if specified
-                if op_type and child.OPType != op_type and child.family != op_type:
-                    if recursive and hasattr(child, 'children'):
-                        results.extend(get_ops(child, depth + 1))
-                    continue
-
-                info = {
-                    'path': child.path,
-                    'name': child.name,
-                    'type': child.OPType,
-                    'family': child.family,
-                    'depth': depth
-                }
-                if include_utility and child.type == 'annotate':
-                    info['utility'] = True
-                results.append(info)
-
-                if recursive and hasattr(child, 'children'):
-                    results.extend(get_ops(child, depth + 1))
-
-            return results
-
-        operators = get_ops(parent)
-        result = {
-            'parent': parent_path,
-            'count': len(operators),
-            'operators': operators
-        }
-        return self._maybe_offload_to_file(result, 'query_network')
+        """List operators in a network -- see envoy_read."""
+        return mod.envoy_read.query_network(self, parent_path, recursive, op_type, include_utility)
 
     def _copy_op(self, source_path: str, dest_parent: str, new_name: str = None) -> dict:
-        """Copy an operator"""
-        source = op(source_path)
-        dest = op(dest_parent)
-
-        if not source:
-            return {'error': f'Source not found: {source_path}'}
-        if not dest:
-            return {'error': f'Destination parent not found: {dest_parent}'}
-        if not hasattr(dest, 'copy'):
-            return {'error': f'{dest_parent} is not a COMP'}
-
-        try:
-            new_op = dest.copy(source, name=new_name) if new_name else dest.copy(source)
-            self._find_non_overlapping_position(dest, new_op)
-            return {
-                'success': True,
-                'source': source_path,
-                'new_path': new_op.path,
-                'new_name': new_op.name,
-                'nodeX': new_op.nodeX,
-                'nodeY': new_op.nodeY
-            }
-        except Exception as e:
-            return {'error': f'Failed to copy: {e}'}
+        """Copy an operator -- see envoy_ops."""
+        return mod.envoy_ops.copy_op(self, source_path, dest_parent, new_name)
 
     def _get_connections(self, op_path: str) -> dict:
-        """Get all connections for an operator"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        inputs = []
-        for i, inp in enumerate(target.inputs):
-            inputs.append({
-                'index': i,
-                'connected_to': inp.path if inp else None
-            })
-
-        outputs = []
-        for i, connector in enumerate(target.outputConnectors):
-            connected = [conn.owner.path for conn in connector.connections]
-            outputs.append({
-                'index': i,
-                'connected_to': connected
-            })
-
-        result = {
-            'path': op_path,
-            'inputs': inputs,
-            'outputs': outputs
-        }
-
-        # Include COMP connections (top/bottom) if this is a COMP
-        if hasattr(target, 'inputCOMPConnectors'):
-            comp_inputs = []
-            for i, connector in enumerate(target.inputCOMPConnectors):
-                connected = [conn.owner.path for conn in connector.connections]
-                comp_inputs.append({
-                    'index': i,
-                    'connected_to': connected
-                })
-            result['comp_inputs'] = comp_inputs
-
-            comp_outputs = []
-            for i, connector in enumerate(target.outputCOMPConnectors):
-                connected = [conn.owner.path for conn in connector.connections]
-                comp_outputs.append({
-                    'index': i,
-                    'connected_to': connected
-                })
-            result['comp_outputs'] = comp_outputs
-
-        return result
+        """Get all connections for an operator -- see envoy_read."""
+        return mod.envoy_read.get_connections(self, op_path)
 
     def _lintLayout(self, comp):
-        """Return layout-violation strings for a COMP's direct children: ops
-        stacked at (0,0), overlapping ops, and docked DATs scattered far from
-        their host. Enforces network-layout.md after execute_python, which --
-        unlike create_op -- uses raw comp.create()/copy() and never positions."""
-        try:
-            kids = [c for c in comp.children if c.type != 'annotate']
-        except Exception:
-            return []
-        if len(kids) < 2 or len(kids) > 250:
-            return []
-        docked = set()
-        for c in kids:
-            for d in getattr(c, 'docked', ()):
-                docked.add(d.path)
-        main = [c for c in kids if c.path not in docked]
-        issues = []
-        zeros = [c for c in main if c.nodeX == 0 and c.nodeY == 0]
-        if len(zeros) >= 2:
-            issues.append('%d ops stacked at (0,0): %s'
-                          % (len(zeros), ', '.join(z.name for z in zeros[:6])))
-        n = len(main)
-        if n <= 80:
-            ov = 0
-            for i in range(n):
-                a = main[i]
-                for j in range(i + 1, n):
-                    b = main[j]
-                    if (a.nodeX < b.nodeX + b.nodeWidth and a.nodeX + a.nodeWidth > b.nodeX and
-                            a.nodeY < b.nodeY + b.nodeHeight and a.nodeY + a.nodeHeight > b.nodeY):
-                        ov += 1
-            if ov:
-                issues.append('%d overlapping op pair(s)' % ov)
-        scattered = sum(1 for c in main for d in getattr(c, 'docked', ())
-                        if abs(d.nodeX - c.nodeX) > 500 or abs(d.nodeY - c.nodeY) > 500)
-        if scattered:
-            issues.append('%d docked DAT(s) scattered far from host' % scattered)
-        return issues
+        """Layout lint for a COMP's direct children -- see envoy_layout."""
+        return mod.envoy_layout.lint_layout(comp)
 
     def _lintNewOps(self, pre_paths):
         """After execute_python, WARN if it left newly-created ops piled at
@@ -4543,12 +4750,30 @@ class EnvoyExt:
             return
         try:
             new_parents = {}
+            new_ops = []
             for o in root.findChildren(maxDepth=12):
                 if o.path in pre_paths:
                     continue
+                new_ops.append(o)
                 par = o.parent()
                 if par is not None:
                     new_parents.setdefault(par.path, par)
+            # Auto-hug scattered docks of ops created by THIS call before
+            # linting: TD drops a new host's shader/callback/info DATs at
+            # arbitrary coordinates, and raw comp.create() never fixes them.
+            # Only scattered rows are touched, so a deliberate near-host
+            # placement (e.g. docks to the host's right) is left alone.
+            hugged = 0
+            for o in new_ops:
+                docks = self._sameNetworkDocks(o)
+                if docks and any(abs(d.nodeX - o.nodeX) > 350
+                                 or abs(d.nodeY - o.nodeY) > 350 for d in docks):
+                    hugged += self._placeDockedOps(o)
+            if hugged:
+                self._log(
+                    'LAYOUT: auto-hugged %d scattered docked op(s) below their '
+                    'newly-created host(s); re-run get_network_layout if you '
+                    'planned positions around them.' % hugged, 'WARNING')
             for par in new_parents.values():
                 issues = self._lintLayout(par)
                 if issues:
@@ -4557,6 +4782,30 @@ class EnvoyExt:
                         + '. execute_python does NOT auto-position ops (create_op does); '
                         'run get_network_layout and reposition per network-layout.md.',
                         'WARNING')
+            self._warnAutoExternalizeBypass(new_ops)
+        except Exception:
+            pass
+
+    def _warnAutoExternalizeBypass(self, new_ops):
+        """When the Autoexternalize preference is on, ops created via
+        execute_python bypass it -- only create_op is the auto-externalize
+        chokepoint. Warn for any new op that WOULD have been auto-externalized
+        (uses EmbodyExt's pure boundary decision, so no false positives on ops
+        already captured by an externalized ancestor), steering callers to
+        create_op as the preferred creation path."""
+        try:
+            emb = op.Embody.ext.Embody
+            if op.Embody.par.Autoexternalize.eval() == 'neither':
+                return
+            bypassed = [o.path for o in new_ops if emb._autoExternalizeTagFor(o)]
+            if bypassed:
+                shown = ', '.join(bypassed[:5]) + ('...' if len(bypassed) > 5 else '')
+                self._log(
+                    'AUTO-EXTERNALIZE BYPASS: ' + str(len(bypassed)) + ' op(s) created '
+                    'via execute_python were NOT auto-externalized (' + shown + '). '
+                    'create_op is the preferred creation path and auto-externalizes; '
+                    'recreate via create_op, or tag manually with externalize_op.',
+                    'WARNING')
         except Exception:
             pass
 
@@ -4570,7 +4819,9 @@ class EnvoyExt:
             # the exact path that keeps dropping ops at (0,0); _lintNewOps below
             # turns that into a WARNING on the response.
             try:
-                pre_paths = set(o.path for o in root.findChildren(maxDepth=12))
+                # Matched pair with _rollbackNewOps maxDepth; ops created
+                # deeper than the snapshot depth are invisible to rollback.
+                pre_paths = set(o.path for o in root.findChildren(maxDepth=20))
             except Exception:
                 pre_paths = None
 
@@ -4595,769 +4846,152 @@ class EnvoyExt:
             return {'success': True}
         except Exception as e:
             self._log(f'execute_python failed: {e}', 'ERROR')
-            return {'error': f'Execution failed: {e}'}
+            removed = self._rollbackNewOps(pre_paths)
+            msg = f'Execution failed: {e}'
+            if removed:
+                msg += f' (rolled back {removed} operator(s) the script created before failing)'
+            return {'error': msg}
+
+    def _rollbackNewOps(self, pre_paths) -> int:
+        """A failed execute_python must not leave a half-built network: destroy
+        ops the script created before the exception (documented contract in
+        rules/td-ui.md). Parameter changes to PRE-EXISTING ops are NOT rolled
+        back -- only creations. Best-effort; returns count destroyed."""
+        count = 0
+        if pre_paths is None:
+            return 0
+        try:
+            post = []
+            # Matched pair with _execute_python snapshot maxDepth; ops created
+            # deeper than the snapshot depth are invisible to rollback.
+            for o in root.findChildren(maxDepth=20):
+                try:
+                    if o.valid and o.path not in pre_paths:
+                        post.append(o)
+                except Exception:
+                    pass
+            post.sort(key=lambda o: o.path.count('/'))
+            destroyed_roots = []
+            for o in post:
+                try:
+                    path = o.path
+                    if any(path.startswith(root_path + '/')
+                           for root_path in destroyed_roots):
+                        continue
+                    if not o.valid:
+                        continue
+                    o.destroy()
+                    destroyed_roots.append(path)
+                    count += 1
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return count
 
     # === Introspection & Diagnostics (Main Thread Only) ===
 
-    def _get_td_info(self) -> dict:
-        """Get TouchDesigner environment and Envoy server info"""
+    def _get_docs_roots(self) -> dict:
+        """Candidate offline-help mirror locations (App Class, main thread)."""
         try:
-            import td as _td
-            version = _td.app.version
-            build = _td.app.build
-            # app.osName reports "Windows 10" on Win 11 (same NT 10.0 kernel);
-            # EmbodyExt._osLabel() disambiguates via the build number.
-            try:
-                os_name = self.ownerComp.ext.Embody._osLabel()
-            except Exception:
-                os_name = _td.app.osName
-            return {
-                'server': f'TouchDesigner {version}.{build}',
-                'version': f'{version}.{build}',
-                'osName': os_name,
-                'osVersion': _td.app.osVersion,
-                'envoyVersion': ENVOY_VERSION,
-            }
+            samples = str(app.samplesFolder).replace('\\', '/').rstrip('/')
+            roots = [samples + '/Learn/offlineHelp/https.docs.derivative.ca']
+            return {'roots': roots}
         except Exception as e:
-            return {'error': f'Failed to get TD info: {e}'}
+            return {'roots': [], 'error': f'Failed to get docs roots: {e}'}
+
+    def _get_td_info(self) -> dict:
+        """Get TouchDesigner environment and Envoy server info -- see envoy_read."""
+        return mod.envoy_read.get_td_info(self)
 
     def _get_op_errors(self, op_path: str, recurse: bool = True) -> dict:
-        """Get error and warning messages for an operator and its children"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        all_errors = []
-        all_warnings = []
-
-        for severity, method_name, output_list in [
-            ('error', 'errors', all_errors),
-            ('warning', 'warnings', all_warnings),
-        ]:
-            if hasattr(target, method_name) and callable(getattr(target, method_name)):
-                try:
-                    output = getattr(target, method_name)(recurse=recurse)
-                    if output:
-                        for line in output.strip().split('\n'):
-                            line = line.strip()
-                            if not line:
-                                continue
-                            # TD format: "Message text (node_path)"
-                            if '(' in line and line.endswith(')'):
-                                message_part, path_part = line.rsplit('(', 1)
-                                node_path = path_part.rstrip(')')
-                                message = message_part.strip()
-                                node = op(node_path)
-                                if node and node.valid:
-                                    output_list.append({
-                                        'nodePath': node.path,
-                                        'nodeName': node.name,
-                                        'opType': node.OPType,
-                                        'message': message,
-                                    })
-                                else:
-                                    output_list.append({
-                                        'nodePath': node_path,
-                                        'nodeName': '',
-                                        'opType': '',
-                                        'message': message,
-                                    })
-                            else:
-                                output_list.append({
-                                    'nodePath': target.path,
-                                    'nodeName': target.name,
-                                    'opType': target.OPType,
-                                    'message': line,
-                                })
-                except Exception as e:
-                    self._log(f'Error getting {severity}s from {op_path}: {e}', 'WARNING')
-
-        return {
-            'path': target.path,
-            'errorCount': len(all_errors),
-            'warningCount': len(all_warnings),
-            'hasErrors': bool(all_errors),
-            'hasWarnings': bool(all_warnings),
-            'errors': all_errors,
-            'warnings': all_warnings,
-        }
+        """Get error and warning messages for an operator and its children -- see envoy_read."""
+        return mod.envoy_read.get_op_errors(self, op_path, recurse)
 
     def _exec_op_method(self, op_path: str, method: str,
                           args: list = None, kwargs: dict = None) -> dict:
-        """Call a method on a TD operator"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        if not hasattr(target, method):
-            return {'error': f'Method "{method}" not found on {op_path}'}
-
-        func = getattr(target, method)
-        if not callable(func):
-            return {'error': f'"{method}" is not callable on {op_path}'}
-
-        try:
-            result = func(*(args or []), **(kwargs or {}))
-            # Process result for JSON serialization
-            processed = self._process_result(result)
-            return {'success': True, 'result': processed}
-        except Exception as e:
-            return {'error': f'Method execution failed: {e}'}
+        """Call a method on a TD operator -- see envoy_read."""
+        return mod.envoy_read.exec_op_method(self, op_path, method, args, kwargs)
 
     def _get_td_classes(self) -> dict:
-        """List all Python classes/modules in the td module"""
-        try:
-            import td as _td
-            import inspect
-            classes = []
-            for name, obj in inspect.getmembers(_td):
-                if name.startswith('_'):
-                    continue
-                description = inspect.getdoc(obj) or ''
-                classes.append({
-                    'name': name,
-                    'description': description,
-                })
-            return {'classes': classes}
-        except Exception as e:
-            return {'error': f'Failed to get TD classes: {e}'}
+        """List all Python classes/modules in the td module -- see envoy_read."""
+        return mod.envoy_read.get_td_classes(self)
 
     def _get_td_class_details(self, class_name: str) -> dict:
-        """Get detailed info about a specific TD Python class"""
-        try:
-            import td as _td
-            import inspect
-
-            if not hasattr(_td, class_name):
-                return {'error': f'Class not found in td module: {class_name}'}
-
-            obj = getattr(_td, class_name)
-            methods = []
-            properties = []
-
-            for name, member in inspect.getmembers(obj):
-                if name.startswith('_'):
-                    continue
-                try:
-                    info = {
-                        'name': name,
-                        'description': inspect.getdoc(member) or '',
-                        'type': type(member).__name__,
-                    }
-                    if (inspect.isfunction(member) or inspect.ismethod(member)
-                            or inspect.ismethoddescriptor(member)):
-                        methods.append(info)
-                    else:
-                        properties.append(info)
-                except Exception as e:
-                    self._log(f'Could not inspect member {name} on {class_name}: {e}', 'DEBUG')
-                    pass
-
-            return {
-                'name': class_name,
-                'type': type(obj).__name__,
-                'description': inspect.getdoc(obj) or '',
-                'methods': methods,
-                'properties': properties,
-            }
-        except Exception as e:
-            return {'error': f'Failed to get class details: {e}'}
+        """Get detailed info about a specific TD Python class -- see envoy_read."""
+        return mod.envoy_read.get_td_class_details(self, class_name)
 
     def _get_module_help(self, module_name: str) -> dict:
-        """Get Python help text for a TD module or class"""
-        try:
-            import td as _td
-            import pydoc
-            import importlib
-
-            target = None
-            name = module_name.strip()
-
-            # Try dotted names (e.g., "td.tdu.Position")
-            if '.' in name:
-                parts = name.split('.')
-                if parts[0] == 'td':
-                    obj = _td
-                    for part in parts[1:]:
-                        if hasattr(obj, part):
-                            obj = getattr(obj, part)
-                        else:
-                            obj = None
-                            break
-                    target = obj
-
-            # Try direct attribute of td
-            if target is None and hasattr(_td, name):
-                target = getattr(_td, name)
-
-            # Try importing as module
-            if target is None:
-                try:
-                    target = importlib.import_module(name)
-                except (ImportError, ModuleNotFoundError):
-                    pass
-
-            if target is None:
-                return {'error': f'Module not found: {module_name}'}
-
-            help_text = pydoc.render_doc(target)
-            # Strip backspace formatting from pydoc output
-            cleaned = []
-            for char in help_text:
-                if char == '\b':
-                    if cleaned:
-                        cleaned.pop()
-                else:
-                    cleaned.append(char)
-            help_text = ''.join(cleaned)
-
-            return {
-                'moduleName': module_name,
-                'helpText': help_text,
-            }
-        except Exception as e:
-            return {'error': f'Failed to get help: {e}'}
-
-    def _process_result(self, result) -> object:
-        """Process a method result for JSON serialization"""
-        if result is None or isinstance(result, (int, float, str, bool)):
-            return result
-        if isinstance(result, (list, tuple)):
-            return [self._process_result(item) for item in result]
-        if isinstance(result, dict):
-            return {k: self._process_result(v) for k, v in result.items()}
-        # TD operator objects -> path string
-        if hasattr(result, 'path') and hasattr(result, 'valid'):
-            return result.path
-        return str(result)
+        """Get Python help text for a TD module or class -- see envoy_read."""
+        return mod.envoy_read.get_module_help(self, module_name)
 
     # === DAT Content Operations (Main Thread Only) ===
 
     def _get_dat_content(self, op_path: str, format: str = "auto") -> dict:
-        """Get DAT content as text or table data"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-        if target.family != 'DAT':
-            return {'error': f'{op_path} is not a DAT (family: {target.family})'}
-
-        try:
-            result = {
-                'path': op_path,
-                'numRows': target.numRows,
-                'numCols': target.numCols,
-                'isTable': target.isTable,
-                'isText': target.isText,
-            }
-
-            use_table = (format == "table") or (format == "auto" and target.isTable)
-
-            if use_table:
-                rows = []
-                for r in range(target.numRows):
-                    row = []
-                    for c in range(target.numCols):
-                        row.append(target[r, c].val)
-                    rows.append(row)
-                result['rows'] = rows
-                result['format'] = 'table'
-            else:
-                result['text'] = target.text
-                result['format'] = 'text'
-
-            return result
-        except Exception as e:
-            return {'error': f'Failed to get DAT content: {e}'}
+        """Get DAT content as text or table data -- see envoy_read."""
+        return mod.envoy_read.get_dat_content(self, op_path, format)
 
     def _set_dat_content(self, op_path: str, text: str = None,
                         rows: list = None, clear: bool = False,
                         confirm_wipe: bool = False) -> dict:
-        """Set DAT content from text or table rows.
-
-        Two guardrails:
-        1. No-content guard: refuses calls with no actionable content
-           (text=None, rows=None, clear=False) -- caller passed nothing.
-        2. Wipe guard: refuses calls that would leave the DAT empty
-           (text='', rows=[], or clear=True without replacement content)
-           unless confirm_wipe=True. Catches the common accident pattern
-           where an agent sends empty content from a malformed call and
-           silently destroys user content.
-
-        Note: `clear=True` is redundant when `text` or `rows` is also
-        provided -- the assignment already replaces the entire content.
-        """
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-        if target.family != 'DAT':
-            return {'error': f'{op_path} is not a DAT (family: {target.family})'}
-
-        # No-content guard: caller passed nothing actionable. This is the
-        # same failure shape as a wipe (silent confused call returning
-        # success) so we refuse it the same way.
-        if text is None and rows is None and not clear:
-            return {'error': (
-                f'No content provided for {op_path}. Pass text=, rows=, '
-                f'or clear=True with confirm_wipe=True. set_dat_content '
-                f'is full-replace -- if you want to edit existing content, '
-                f'call get_dat_content first to read it.'
-            )}
-
-        # Wipe detection -- check the *resulting* state, not just inputs.
-        # `clear=True, text="hello"` is an atomic replace, NOT a wipe.
-        if not confirm_wipe:
-            wipe_reason = None
-            if text == '':
-                wipe_reason = "text=''"
-            elif rows is not None and len(rows) == 0:
-                wipe_reason = 'rows=[]'
-            elif clear and text is None and rows is None:
-                wipe_reason = 'clear=True with no replacement content'
-            if wipe_reason is not None:
-                return {'error': (
-                    f'Refusing to wipe DAT {op_path}: call would set '
-                    f'content to empty ({wipe_reason}). This is almost '
-                    f'always an accident -- set_dat_content is full-'
-                    f'replace, not incremental. Likely fix: call '
-                    f'get_dat_content first, edit the returned content, '
-                    f'then send the complete result. Only retry with '
-                    f'confirm_wipe=True if you have already verified the '
-                    f'DAT must become empty (e.g. resetting a FIFO log).'
-                )}
-
-        try:
-            if clear:
-                target.clear()
-
-            if text is not None:
-                target.text = text
-            elif rows is not None:
-                target.clear()
-                for row in rows:
-                    target.appendRow(row)
-
-            return {
-                'success': True,
-                'path': op_path,
-                'numRows': target.numRows,
-                'numCols': target.numCols,
-            }
-        except Exception as e:
-            return {'error': f'Failed to set DAT content: {e}'}
+        """Set DAT content from text or table rows -- see envoy_ops."""
+        return mod.envoy_ops.set_dat_content(self, op_path, text, rows, clear, confirm_wipe)
 
     def _edit_dat_content(self, op_path: str, old_string: str,
                          new_string: str, replace_all: bool = False,
                          confirm_wipe: bool = False) -> dict:
-        """Surgical text edit on a DAT -- replaces old_string with
-        new_string. Mirrors Claude Code's Edit tool: by default
-        old_string must appear exactly once in the DAT's text.
-
-        Token-efficient alternative to set_dat_content for partial
-        edits: only the changed substring crosses the wire, not the
-        whole DAT.
-
-        Text-only. Tables should use set_dat_content(rows=...) -- string
-        matching across cells is a different beast.
-
-        Guardrails:
-        - Refuse empty old_string (would match every position).
-        - Refuse old_string == new_string (no-op).
-        - Refuse non-text DATs (point caller at set_dat_content).
-        - Wipe guard: if the resulting text is empty, require
-          confirm_wipe=True (mirrors set_dat_content semantics).
-        - Not-found error includes diagnostics so the caller can
-          self-correct without a second get_dat_content round-trip.
-        """
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-        if target.family != 'DAT':
-            return {'error': f'{op_path} is not a DAT (family: {target.family})'}
-        if not target.isText:
-            return {'error': (
-                f'{op_path} is not a text DAT (isText=False). '
-                f'edit_dat_content is text-only -- use set_dat_content '
-                f'with rows= for table DATs.'
-            )}
-
-        if old_string == '':
-            return {'error': (
-                f'old_string is empty. edit_dat_content requires a '
-                f'non-empty search string -- an empty string would '
-                f'match every position in the DAT.'
-            )}
-        if old_string == new_string:
-            return {'error': (
-                f'old_string and new_string are identical -- this '
-                f'would be a no-op. If you meant to verify content, '
-                f'use get_dat_content instead.'
-            )}
-
-        current = target.text
-        count = current.count(old_string)
-        if count == 0:
-            ci_match = old_string.lower() in current.lower()
-            hint = (
-                ' A case-insensitive search would have matched -- '
-                'check the casing of old_string.'
-            ) if ci_match else ''
-            return {'error': (
-                f'old_string not found in {op_path} '
-                f'(DAT length: {len(current)} chars, '
-                f'{target.numRows} rows).{hint} Call get_dat_content '
-                f'to inspect current content.'
-            )}
-        if count > 1 and not replace_all:
-            return {'error': (
-                f'old_string appears {count} times in {op_path}; '
-                f'edit_dat_content requires a unique match by default. '
-                f'Either widen old_string with surrounding context to '
-                f'make it unique, or pass replace_all=True to replace '
-                f'every occurrence.'
-            )}
-
-        if replace_all:
-            new_text = current.replace(old_string, new_string)
-        else:
-            new_text = current.replace(old_string, new_string, 1)
-
-        if new_text == '' and not confirm_wipe:
-            return {'error': (
-                f'Refusing to wipe DAT {op_path}: this edit would '
-                f'leave the DAT empty. Pass confirm_wipe=True if '
-                f'this is intentional (e.g. resetting a FIFO log).'
-            )}
-
-        try:
-            target.text = new_text
-            return {
-                'success': True,
-                'path': op_path,
-                'replacements': count if replace_all else 1,
-                'numRows': target.numRows,
-                'numCols': target.numCols,
-            }
-        except Exception as e:
-            return {'error': f'Failed to edit DAT content: {e}'}
+        """Surgical text edit on a DAT -- see envoy_ops."""
+        return mod.envoy_ops.edit_dat_content(self, op_path, old_string, new_string, replace_all, confirm_wipe)
 
     # === TOP Capture (Main Thread Only) ===
 
     def _capture_top(self, op_path: str, format: str = 'jpeg',
-                     quality: float = 0.8, max_resolution: int = 640) -> dict:
-        """Capture a TOP operator's output as a compressed image."""
-        import base64
-
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-        if target.family != 'TOP':
-            return {'error': f'{op_path} is not a TOP (family: {target.family})'}
-
-        if format not in ('jpeg', 'png'):
-            return {'error': f'Unsupported format: {format}. Use "jpeg" or "png".'}
-        if not (0.0 <= quality <= 1.0):
-            return {'error': f'Quality must be between 0.0 and 1.0, got {quality}'}
-
-        try:
-            import numpy as np
-            import cv2
-
-            # Force cook so we get current output
-            target.cook(force=True)
-
-            original_w = target.width
-            original_h = target.height
-
-            # Capture pixel data from GPU
-            arr = target.numpyArray()  # float32 [H, W, C], bottom-up
-            if arr is None or arr.size == 0:
-                return {'error': f'No pixel data available from {op_path}'}
-
-            # Flip vertically (TD textures are bottom-up)
-            arr = np.flipud(arr)
-
-            # Convert float32 [0,1] to uint8 [0,255]
-            arr = (np.clip(arr, 0.0, 1.0) * 255.0).astype(np.uint8)
-
-            # Convert color channels for cv2 (expects BGR/BGRA)
-            channels = arr.shape[2] if arr.ndim == 3 else 1
-            if channels == 4:
-                arr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGRA)
-            elif channels == 3:
-                arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
-            elif channels == 2:
-                # Luminance + Alpha: extract luminance only
-                arr = arr[:, :, 0]
-
-            # Resize if needed
-            h, w = arr.shape[:2]
-            if max_resolution > 0 and max(h, w) > max_resolution:
-                scale = max_resolution / max(h, w)
-                new_w = int(w * scale)
-                new_h = int(h * scale)
-                arr = cv2.resize(arr, (new_w, new_h),
-                                 interpolation=cv2.INTER_AREA)
-
-            # Encode to image format
-            if format == 'jpeg':
-                params = [cv2.IMWRITE_JPEG_QUALITY, int(quality * 100)]
-                success, buf = cv2.imencode('.jpg', arr, params)
-            else:
-                success, buf = cv2.imencode('.png', arr)
-
-            if not success:
-                return {'error': f'Failed to encode image as {format}'}
-
-            image_data = buf.tobytes()
-            out_h, out_w = arr.shape[:2]
-
-            return {
-                'success': True,
-                'image_b64': base64.b64encode(image_data).decode('ascii'),
-                'width': out_w,
-                'height': out_h,
-                'original_width': original_w,
-                'original_height': original_h,
-                'format': format,
-                'size_bytes': len(image_data),
-            }
-        except Exception as e:
-            return {'error': f'Failed to capture TOP: {e}'}
+                     quality: float = 0.8, max_resolution: int = 640,
+                     inline: bool = False, sample_grid: int = 0) -> dict:
+        """Capture a TOP operator's output as a compressed image -- see envoy_read."""
+        return mod.envoy_read.capture_top(self, op_path, format, quality, max_resolution, inline, sample_grid)
 
     # === Operator Flags Operations (Main Thread Only) ===
 
     def _get_op_flags(self, op_path: str) -> dict:
-        """Get all flags for an operator"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        try:
-            result = {
-                'path': op_path,
-                'bypass': target.bypass,
-                'lock': target.lock,
-                'display': target.display,
-                'render': target.render,
-                'viewer': target.viewer,
-                'current': target.current,
-                'expose': target.expose,
-                'selected': target.selected,
-            }
-            if target.isCOMP:
-                result['allowCooking'] = target.allowCooking
-            return result
-        except Exception as e:
-            return {'error': f'Failed to get flags: {e}'}
+        """Get all flags for an operator -- see envoy_read."""
+        return mod.envoy_read.get_op_flags(self, op_path)
 
     def _set_op_flags(self, op_path: str, bypass: bool = None, lock: bool = None,
                      display: bool = None, render: bool = None,
                      viewer: bool = None, current: bool = None,
                      expose: bool = None, allowCooking: bool = None,
                      selected: bool = None) -> dict:
-        """Set flags on an operator"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        try:
-            if bypass is not None:
-                target.bypass = bypass
-            if lock is not None:
-                target.lock = lock
-            if display is not None:
-                target.display = display
-            if render is not None:
-                target.render = render
-            if viewer is not None:
-                target.viewer = viewer
-            if current is not None:
-                target.current = current
-            if expose is not None:
-                target.expose = expose
-            if selected is not None:
-                target.selected = selected
-            if allowCooking is not None and target.isCOMP:
-                target.allowCooking = allowCooking
-
-            return self._get_op_flags(op_path)
-        except Exception as e:
-            return {'error': f'Failed to set flags: {e}'}
+        """Set flags on an operator -- see envoy_ops."""
+        return mod.envoy_ops.set_op_flags(self, op_path, bypass, lock, display, render, viewer, current, expose, allowCooking, selected)
 
     # === Node Positioning & Layout (Main Thread Only) ===
 
+    def _sameNetworkDocks(self, host):
+        """Same-network docked companions -- see envoy_layout."""
+        return mod.envoy_layout.same_network_docks(host)
+
+    def _placeDockedOps(self, host):
+        """Hug docked companions below their host -- see envoy_layout."""
+        return mod.envoy_layout.place_docked_ops(host)
+
     def _find_non_overlapping_position(self, parent, new_op):
-        """Reposition new_op so it doesn't overlap any sibling in the parent COMP."""
-        MARGIN = 20
-
-        siblings = [child for child in parent.children if child.path != new_op.path]
-        if not siblings:
-            return  # No siblings -- default position is fine
-
-        w = new_op.nodeWidth
-        h = new_op.nodeHeight
-
-        # Collect sibling bounding rectangles
-        rects = [(s.nodeX, s.nodeY, s.nodeWidth, s.nodeHeight) for s in siblings]
-
-        def has_overlap(x, y):
-            for (sx, sy, sw, sh) in rects:
-                if (x < sx + sw + MARGIN and x + w + MARGIN > sx and
-                        y < sy + sh + MARGIN and y + h + MARGIN > sy):
-                    return True
-            return False
-
-        # If current position is already clear, nothing to do
-        if not has_overlap(new_op.nodeX, new_op.nodeY):
-            return
-
-        # Grid scan: cell size = op dimensions + margin
-        step_x = w + MARGIN
-        step_y = h + MARGIN
-
-        # Start from top-left corner of existing layout
-        origin_x = min(r[0] for r in rects)
-        origin_y = max(r[1] for r in rects)  # highest Y = top
-
-        for row in range(20):
-            for col in range(20):
-                test_x = origin_x + col * step_x
-                test_y = origin_y - row * step_y  # scan downward
-                if not has_overlap(test_x, test_y):
-                    new_op.nodeX = int(test_x)
-                    new_op.nodeY = int(test_y)
-                    return
+        """Auto-position clear of real siblings -- see envoy_layout."""
+        return mod.envoy_layout.find_non_overlapping_position(parent, new_op)
 
     def _get_op_position(self, op_path: str) -> dict:
-        """Get operator position and visual properties"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        try:
-            return {
-                'path': op_path,
-                'nodeX': target.nodeX,
-                'nodeY': target.nodeY,
-                'nodeWidth': target.nodeWidth,
-                'nodeHeight': target.nodeHeight,
-                'nodeCenterX': target.nodeCenterX,
-                'nodeCenterY': target.nodeCenterY,
-                'color': list(target.color),
-                'comment': target.comment,
-            }
-        except Exception as e:
-            return {'error': f'Failed to get position: {e}'}
+        """Get operator position and visual properties -- see envoy_read."""
+        return mod.envoy_read.get_op_position(self, op_path)
 
     def _get_network_layout(self, comp_path: str, include_annotations: bool = True) -> dict:
-        """Get positions of all operators and annotations in a COMP"""
-        parent_op = op(comp_path)
-        if not parent_op:
-            return {'error': f'COMP not found: {comp_path}'}
-        if not hasattr(parent_op, 'children'):
-            return {'error': f'{comp_path} is not a COMP'}
-
-        try:
-            operators = []
-            min_x = min_y = float('inf')
-            max_x = max_y = float('-inf')
-
-            for child in parent_op.children:
-                entry = {
-                    'path': child.path,
-                    'name': child.name,
-                    'type': child.OPType,
-                    'family': child.family,
-                    'nodeX': child.nodeX,
-                    'nodeY': child.nodeY,
-                    'nodeWidth': child.nodeWidth,
-                    'nodeHeight': child.nodeHeight,
-                    'nodeCenterX': child.nodeCenterX,
-                    'nodeCenterY': child.nodeCenterY,
-                }
-                operators.append(entry)
-                min_x = min(min_x, child.nodeX)
-                min_y = min(min_y, child.nodeY)
-                max_x = max(max_x, child.nodeX + child.nodeWidth)
-                max_y = max(max_y, child.nodeY + child.nodeHeight)
-
-            result = {
-                'comp_path': comp_path,
-                'count': len(operators),
-                'operators': operators,
-            }
-
-            if operators:
-                result['bounding_box'] = {
-                    'min_x': min_x,
-                    'min_y': min_y,
-                    'max_x': max_x,
-                    'max_y': max_y,
-                    'width': max_x - min_x,
-                    'height': max_y - min_y,
-                }
-
-            if include_annotations:
-                annotations = []
-                for child in parent_op.findChildren(type=annotateCOMP, includeUtility=True, depth=1):
-                    annotations.append({
-                        'path': child.path,
-                        'name': child.name,
-                        'nodeX': child.nodeX,
-                        'nodeY': child.nodeY,
-                        'nodeWidth': child.nodeWidth,
-                        'nodeHeight': child.nodeHeight,
-                        'text': child.par.text.eval() if hasattr(child.par, 'text') else '',
-                    })
-                result['annotations'] = annotations
-
-            return self._maybe_offload_to_file(result, 'get_network_layout')
-
-        except Exception as e:
-            return {'error': f'Failed to get network layout: {e}'}
+        """Get positions of all operators and annotations in a COMP -- see envoy_read."""
+        return mod.envoy_read.get_network_layout(self, comp_path, include_annotations)
 
     def _set_op_position(self, op_path: str, x: int = None, y: int = None,
                         width: int = None, height: int = None,
                         color: list = None, comment: str = None) -> dict:
-        """Set operator position and visual properties"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        try:
-            if x is not None:
-                target.nodeX = x
-            if y is not None:
-                target.nodeY = y
-            if width is not None:
-                target.nodeWidth = width
-            if height is not None:
-                target.nodeHeight = height
-            if color is not None:
-                target.color = tuple(color)
-            if comment is not None:
-                target.comment = comment
-
-            result = self._get_op_position(op_path)
-
-            # Check for overlaps with siblings after repositioning
-            if (x is not None or y is not None) and target.parent():
-                MARGIN = 20
-                overlaps = []
-                tx, ty, tw, th = target.nodeX, target.nodeY, target.nodeWidth, target.nodeHeight
-                for sibling in target.parent().children:
-                    if sibling.path == target.path:
-                        continue
-                    sx, sy, sw, sh = sibling.nodeX, sibling.nodeY, sibling.nodeWidth, sibling.nodeHeight
-                    if (tx < sx + sw + MARGIN and tx + tw + MARGIN > sx and
-                            ty < sy + sh + MARGIN and ty + th + MARGIN > sy):
-                        overlaps.append(sibling.name)
-                if overlaps:
-                    result['overlap_warning'] = f'Overlaps with: {", ".join(overlaps)}. Reposition to avoid.'
-
-            return result
-        except Exception as e:
-            return {'error': f'Failed to set position: {e}'}
+        """Set operator position and visual properties -- see envoy_ops."""
+        return mod.envoy_ops.set_op_position(self, op_path, x, y, width, height, color, comment)
 
     def _layout_children(self, op_path: str) -> dict:
         """Auto-layout children in a COMP"""
@@ -5381,563 +5015,75 @@ class EnvoyExt:
                            width: int = None, height: int = None,
                            color: list = None, opacity: float = None,
                            name: str = None) -> dict:
-        """Create an annotation in the network editor."""
-        parent = op(parent_path)
-        if not parent:
-            return {'error': f'Parent not found: {parent_path}'}
-        if not hasattr(parent, 'create'):
-            return {'error': f'Cannot create annotations in {parent_path} (not a COMP)'}
-
-        valid_modes = ('comment', 'networkbox', 'annotate')
-        if mode not in valid_modes:
-            return {'error': f'Invalid mode: {mode}. Use: {", ".join(valid_modes)}'}
-
-        try:
-            ann = parent.create('annotateCOMP')
-
-            # Set mode first (affects default sizing/appearance)
-            ann.par.Mode = mode
-
-            # Rename if requested (TD ignores name param on create for annotations)
-            if name:
-                ann.name = name
-
-            # Set body text
-            if text:
-                ann.par.Bodytext = text
-
-            # Set title text
-            if title:
-                ann.par.Titletext = title
-
-            # Apply readable default sizes when not specified
-            if width is None and height is None:
-                # Estimate height from text line count
-                lines = text.count('\n') + 1 if text else 1
-                ann.nodeWidth = 400
-                ann.nodeHeight = max(200, 60 + lines * 22)
-
-            # Set position
-            if x is not None:
-                ann.nodeX = x
-            if y is not None:
-                ann.nodeY = y
-
-            # Set explicit size (overrides defaults above)
-            if width is not None:
-                ann.nodeWidth = width
-            if height is not None:
-                ann.nodeHeight = height
-
-            # Set background color
-            if color is not None:
-                ann.par.Backcolorr = color[0]
-                ann.par.Backcolorg = color[1]
-                ann.par.Backcolorb = color[2]
-
-            # Set opacity
-            if opacity is not None:
-                ann.par.Opacity = opacity
-
-            return {
-                'success': True,
-                'path': ann.path,
-                'name': ann.name,
-                'mode': mode,
-                'nodeX': ann.nodeX,
-                'nodeY': ann.nodeY,
-                'nodeWidth': ann.nodeWidth,
-                'nodeHeight': ann.nodeHeight,
-            }
-        except Exception as e:
-            return {'error': f'Failed to create annotation: {e}'}
+        """Create an annotation in the network editor -- see envoy_ops."""
+        return mod.envoy_ops.create_annotation(self, parent_path, mode, text, title, x, y, width, height, color, opacity, name)
 
     def _get_annotations(self, parent_path: str) -> dict:
-        """List all annotations in a COMP."""
-        parent = op(parent_path)
-        if not parent:
-            return {'error': f'Parent not found: {parent_path}'}
-        if not parent.isCOMP:
-            return {'error': f'{parent_path} is not a COMP'}
+        """List all annotations in a COMP -- see envoy_read."""
+        return mod.envoy_read.get_annotations(self, parent_path)
 
-        try:
-            import td as _td
-            ann_class = getattr(_td, 'annotateCOMP', None)
-            kwargs = {'includeUtility': True, 'depth': 1}
-            if ann_class is not None:
-                kwargs['type'] = ann_class
-
-            annotations = parent.findChildren(**kwargs)
-
-            # If class resolution failed, filter by type string
-            if ann_class is None:
-                annotations = [c for c in annotations if c.type == 'annotate']
-
-            results = []
-            for ann in annotations:
-                info = {
-                    'path': ann.path,
-                    'name': ann.name,
-                    'mode': ann.par.Mode.eval(),
-                    'body_text': ann.par.Bodytext.eval(),
-                    'title_text': ann.par.Titletext.eval(),
-                    'nodeX': ann.nodeX,
-                    'nodeY': ann.nodeY,
-                    'nodeWidth': ann.nodeWidth,
-                    'nodeHeight': ann.nodeHeight,
-                    'opacity': ann.par.Opacity.eval(),
-                    'back_color': [
-                        ann.par.Backcolorr.eval(),
-                        ann.par.Backcolorg.eval(),
-                        ann.par.Backcolorb.eval(),
-                    ],
-                    'enclosed_ops': [o.path for o in ann.enclosedOPs],
-                }
-                results.append(info)
-
-            return {
-                'parent': parent_path,
-                'count': len(results),
-                'annotations': results,
-            }
-        except Exception as e:
-            return {'error': f'Failed to get annotations: {e}'}
+    def _resolve_annotation(self, op_path: str):
+        """Resolve an annotation path, including utility-flagged ones -- see envoy_read."""
+        return mod.envoy_read.resolve_annotation(self, op_path)
 
     def _set_annotation(self, op_path: str, text: str = None, title: str = None,
                         color: list = None, opacity: float = None,
                         width: int = None, height: int = None,
                         x: int = None, y: int = None) -> dict:
-        """Modify an existing annotation."""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Annotation not found: {op_path}'}
-        if target.type != 'annotate':
-            return {'error': f'{op_path} is not an annotation (type: {target.type})'}
-
-        try:
-            if text is not None:
-                target.par.Bodytext = text
-            if title is not None:
-                target.par.Titletext = title
-            if color is not None:
-                target.par.Backcolorr = color[0]
-                target.par.Backcolorg = color[1]
-                target.par.Backcolorb = color[2]
-            if opacity is not None:
-                target.par.Opacity = opacity
-            if width is not None:
-                target.nodeWidth = width
-            if height is not None:
-                target.nodeHeight = height
-            if x is not None:
-                target.nodeX = x
-            if y is not None:
-                target.nodeY = y
-
-            return {
-                'success': True,
-                'path': op_path,
-                'mode': target.par.Mode.eval(),
-                'body_text': target.par.Bodytext.eval(),
-                'title_text': target.par.Titletext.eval(),
-                'nodeX': target.nodeX,
-                'nodeY': target.nodeY,
-                'nodeWidth': target.nodeWidth,
-                'nodeHeight': target.nodeHeight,
-                'opacity': target.par.Opacity.eval(),
-            }
-        except Exception as e:
-            return {'error': f'Failed to set annotation: {e}'}
+        """Modify an existing annotation -- see envoy_ops."""
+        return mod.envoy_ops.set_annotation(self, op_path, text, title, color, opacity, width, height, x, y)
 
     def _get_enclosed_ops(self, op_path: str) -> dict:
-        """Get annotation/operator enclosure relationships."""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        try:
-            if target.type == 'annotate':
-                enclosed = target.enclosedOPs
-                return {
-                    'path': op_path,
-                    'is_annotation': True,
-                    'enclosed_ops': [
-                        {'path': o.path, 'name': o.name, 'type': o.OPType}
-                        for o in enclosed
-                    ],
-                    'count': len(enclosed),
-                }
-            else:
-                enclosing = target.enclosedBy
-                return {
-                    'path': op_path,
-                    'is_annotation': False,
-                    'enclosing_annotations': [
-                        {'path': a.path, 'name': a.name, 'mode': a.par.Mode.eval()}
-                        for a in enclosing
-                    ],
-                    'count': len(enclosing),
-                }
-        except Exception as e:
-            return {'error': f'Failed to get enclosure info: {e}'}
+        """Get annotation/operator enclosure relationships -- see envoy_read."""
+        return mod.envoy_read.get_enclosed_ops(self, op_path)
 
     # === Extended Operator Management (Main Thread Only) ===
 
     def _rename_op(self, op_path: str, new_name: str) -> dict:
-        """Rename an operator"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        try:
-            old_name = target.name
-            target.name = new_name
-            return {
-                'success': True,
-                'old_name': old_name,
-                'new_name': target.name,
-                'new_path': target.path,
-            }
-        except Exception as e:
-            return {'error': f'Failed to rename: {e}'}
+        """Rename an operator -- see envoy_ops."""
+        return mod.envoy_ops.rename_op(self, op_path, new_name)
 
     def _cook_op(self, op_path: str, force: bool = True,
                       recurse: bool = False) -> dict:
-        """Cook an operator"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        try:
-            target.cook(force=force, recurse=recurse)
-            return {
-                'success': True,
-                'path': op_path,
-                'cookFrame': target.cookFrame,
-            }
-        except Exception as e:
-            return {'error': f'Failed to cook: {e}'}
+        """Cook an operator -- see envoy_ops."""
+        return mod.envoy_ops.cook_op(self, op_path, force, recurse)
 
     def _find_children(self, op_path: str, name: str = None, type: str = None,
                       depth: int = None, tags: list = None,
                       text: str = None, comment: str = None,
                       include_utility: bool = False) -> dict:
-        """Search for operators using COMP.findChildren"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-        if not target.isCOMP:
-            return {'error': f'{op_path} is not a COMP'}
-
-        try:
-            import td as _td
-            kwargs = {}
-            if name is not None:
-                kwargs['name'] = name
-            if type is not None:
-                # Try to resolve as a TD class (e.g., "baseCOMP" -> td.baseCOMP)
-                td_class = getattr(_td, type, None)
-                if td_class is not None and hasattr(td_class, '__mro__'):
-                    kwargs['type'] = td_class
-                # Otherwise we'll filter by OPType string after search
-            if depth is not None:
-                kwargs['depth'] = depth
-            if tags is not None:
-                kwargs['tags'] = tags
-            if text is not None:
-                kwargs['text'] = text
-            if comment is not None:
-                kwargs['comment'] = comment
-            if include_utility:
-                kwargs['includeUtility'] = True
-
-            children = target.findChildren(**kwargs)
-
-            # If type was provided but not resolved to a TD class, filter by OPType/type string
-            if type is not None and 'type' not in kwargs:
-                children = [c for c in children if c.OPType == type or c.type == type]
-
-            results = []
-            for child in children:
-                results.append({
-                    'path': child.path,
-                    'name': child.name,
-                    'type': child.OPType,
-                    'family': child.family,
-                })
-            return {
-                'parent': op_path,
-                'count': len(results),
-                'operators': results
-            }
-        except Exception as e:
-            return {'error': f'Failed to find children: {e}'}
+        """Search for operators using COMP.findChildren -- see envoy_read."""
+        return mod.envoy_read.find_children(self, op_path, name, type, depth, tags, text, comment, include_utility)
 
     def _get_op_performance(self, op_path: str, include_children: bool = False) -> dict:
-        """Get performance data for an operator"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        try:
-            result = {
-                'path': op_path,
-                'cpuCookTime': target.cpuCookTime,
-                'gpuCookTime': target.gpuCookTime,
-                'cookFrame': target.cookFrame,
-                'cookedThisFrame': target.cookedThisFrame,
-                'totalCooks': target.totalCooks,
-                'cpuMemory': target.cpuMemory,
-                'gpuMemory': target.gpuMemory,
-            }
-
-            if include_children and target.isCOMP:
-                result['childrenCPUCookTime'] = target.childrenCPUCookTime
-                result['childrenGPUCookTime'] = target.childrenGPUCookTime
-                result['childrenCPUMemory'] = target.childrenCPUMemory()
-                result['childrenGPUMemory'] = target.childrenGPUMemory()
-
-            return result
-        except Exception as e:
-            return {'error': f'Failed to get performance: {e}'}
+        """Get performance data for an operator -- see envoy_read."""
+        return mod.envoy_read.get_op_performance(self, op_path, include_children)
 
     def _get_project_performance(self, include_hotspots: int = 0) -> dict:
-        """Get project-level performance via Perform CHOP."""
-        try:
-            perform = self.ownerComp.op('_envoy_perform')
-            if not perform:
-                return {'error': 'Perform CHOP (_envoy_perform) not found inside Embody'}
-
-            def chan_val(name, default=0):
-                ch = perform.chan(name)
-                return ch.eval() if ch is not None else default
-
-            result = {
-                'timing': {
-                    'fps': chan_val('fps'),
-                    'frameTimeMs': chan_val('msec'),
-                    'cookRate': chan_val('cookrate'),
-                    'cookRealTime': bool(chan_val('cookrealtime')),
-                    'timeSliceMs': chan_val('timeslice_msec'),
-                    'timeSliceStep': chan_val('timeslice_step'),
-                },
-                'memory': {
-                    'gpuMemUsedMB': chan_val('gpu_mem_used'),
-                    'totalGpuMemMB': chan_val('total_gpu_mem'),
-                    'cpuMemUsedMB': chan_val('cpu_mem_used'),
-                },
-                'frameHealth': {
-                    'droppedFrames': int(chan_val('dropped_frames')),
-                    'cookedLastFrame': bool(chan_val('cook')),
-                    'activeOps': int(chan_val('active_ops')),
-                    'totalOps': int(chan_val('total_ops')),
-                },
-                'gpu': {
-                    'chipTemperatureC': chan_val('gpu0_chip_temp'),
-                    'boardTemperatureC': chan_val('gpu0_board_temp'),
-                },
-                'performMode': bool(chan_val('perform_mode')),
-            }
-
-            if include_hotspots > 0:
-                result['hotspots'] = self._get_performance_hotspots(include_hotspots)
-
-            return result
-        except Exception as e:
-            return {'error': f'Failed to get project performance: {e}'}
-
-    def _get_performance_hotspots(self, top_n: int) -> list:
-        """Return the top N most expensive COMPs by combined cook time."""
-        comps = []
-        for child in root.findChildren(type=COMP, maxDepth=1):
-            cpu_cook = child.childrenCPUCookTime
-            gpu_cook = child.childrenGPUCookTime
-            comps.append({
-                'path': child.path,
-                'name': child.name,
-                'cpuCookTimeMs': cpu_cook,
-                'gpuCookTimeMs': gpu_cook,
-                'combinedCookTimeMs': cpu_cook + gpu_cook,
-                'cpuMemoryBytes': child.childrenCPUMemory(),
-                'gpuMemoryBytes': child.childrenGPUMemory(),
-            })
-        comps.sort(key=lambda c: c['combinedCookTimeMs'], reverse=True)
-        return comps[:top_n]
+        """Get project-level performance via Perform CHOP -- see envoy_read."""
+        return mod.envoy_read.get_project_performance(self, include_hotspots)
 
     # === Embody Integration ===
 
     def _externalize_op(self, op_path: str, tag_type: str = None) -> dict:
-        """Tag an operator for Embody externalization and write it to disk"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        try:
-            # Determine tag based on operator type if not specified
-            if not tag_type:
-                if target.family == 'COMP':
-                    tag_type = 'tox'
-                elif target.family == 'DAT':
-                    tag_type = op.Embody.ext.Embody._inferDATTagValue(target)
-                else:
-                    return {'error': f'Cannot externalize {target.family} operators'}
-
-            # Apply the tag and run Update to externalize to disk
-            op.Embody.ext.Embody.applyTagToOperator(target, tag_type)
-            op.Embody.Update()
-
-            file_path = target.par.file.eval() if target.family == 'DAT' else target.par.externaltox.eval()
-            return {
-                'success': True,
-                'path': op_path,
-                'tag': tag_type,
-                'file': file_path
-            }
-        except Exception as e:
-            return {'error': f'Failed to tag: {e}'}
+        """Tag an operator for Embody externalization and write it to disk -- see envoy_ops."""
+        return mod.envoy_ops.externalize_op(self, op_path, tag_type)
 
     def _remove_externalization_tag(self, op_path: str) -> dict:
-        """Remove Embody externalization tag and clean up"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        try:
-            # Get all tags and remove them
-            tags = op.Embody.ext.Embody.getTags()
-            removed = []
-            for tag in tags:
-                if target.tags and tag in target.tags:
-                    target.tags.remove(tag)
-                    removed.append(tag)
-
-            # Run Update to process the subtraction
-            if removed:
-                op.Embody.Update()
-
-            return {
-                'success': True,
-                'path': op_path,
-                'removed_tags': removed
-            }
-        except Exception as e:
-            return {'error': f'Failed to remove tag: {e}'}
+        """Remove Embody externalization tag and clean up -- see envoy_ops."""
+        return mod.envoy_ops.remove_externalization_tag(self, op_path)
 
     def _get_externalizations(self) -> dict:
-        """Get all externalized operators"""
-        try:
-            table = op.Embody.ext.Embody.Externalizations
-            if not table:
-                return {'error': 'Externalizations table not found'}
-
-            headers = [table[0, c].val for c in range(table.numCols)]
-            has_strategy = 'strategy' in headers
-            externalizations = []
-            for row in range(1, table.numRows):
-                rel = table[row, 'rel_file_path'].val
-                strategy = (table[row, 'strategy'].val if has_strategy
-                            else table[row, 'type'].val) or 'tox'
-                try:
-                    abs_path = str(op.Embody.ext.Embody.buildAbsolutePath(
-                        op.Embody.ext.Embody.normalizePath(rel)))
-                except Exception:
-                    abs_path = rel
-                externalizations.append({
-                    'path': table[row, 'path'].val,
-                    'type': table[row, 'type'].val,
-                    'strategy': strategy,
-                    'file_path': rel,
-                    'absolute_path': abs_path,
-                    'timestamp': table[row, 'timestamp'].val,
-                    'dirty': table[row, 'dirty'].val,
-                    'build': table[row, 'build'].val,
-                    # Hint so an agent seeing a dirty TDN row knows the tool
-                    # that explains exactly what changed (live vs on-disk).
-                    'recommended_tool': 'diff_tdn' if strategy == 'tdn' else None,
-                })
-
-            return {
-                'count': len(externalizations),
-                'externalizations': externalizations
-            }
-        except Exception as e:
-            return {'error': f'Failed to get externalizations: {e}'}
+        """Get all externalized operators -- see envoy_read."""
+        return mod.envoy_read.get_externalizations(self)
 
     def _save_externalization(self, op_path: str) -> dict:
-        """Force save an externalized operator"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        try:
-            if target.family == 'COMP':
-                strategy = op.Embody.ext.Embody._getCompStrategy(target)
-                if strategy == 'tdn':
-                    op.Embody.SaveTDN(op_path)
-                else:
-                    op.Embody.Save(op_path)
-            elif target.family == 'DAT':
-                if hasattr(target.par, 'syncfile') and target.par.syncfile.eval():
-                    return {
-                        'success': True,
-                        'path': op_path,
-                        'note': 'DAT is file-synced automatically by TouchDesigner'
-                    }
-                else:
-                    return {'error': f'DAT at {op_path} does not have file sync enabled -- not externalized'}
-            else:
-                return {'error': f'Operator family "{target.family}" is not supported for save_externalization'}
-
-            return {'success': True, 'path': op_path}
-        except Exception as e:
-            return {'error': f'Failed to save: {e}'}
+        """Force save an externalized operator -- see envoy_ops."""
+        return mod.envoy_ops.save_externalization(self, op_path)
 
     def _get_externalization_status(self, op_path: str) -> dict:
-        """Get externalization status for an operator"""
-        target = op(op_path)
-        if not target:
-            return {'error': f'Operator not found: {op_path}'}
-
-        try:
-            table = op.Embody.ext.Embody.Externalizations
-            if not table:
-                return {'error': 'Externalizations table not found'}
-
-            # Find the row for this operator
-            headers = [table[0, c].val for c in range(table.numCols)]
-            has_strategy = 'strategy' in headers
-            for row in range(1, table.numRows):
-                if table[row, 'path'].val == op_path:
-                    rel = table[row, 'rel_file_path'].val
-                    strategy = (table[row, 'strategy'].val if has_strategy
-                                else table[row, 'type'].val) or 'tox'
-                    try:
-                        abs_path = str(op.Embody.ext.Embody.buildAbsolutePath(
-                            op.Embody.ext.Embody.normalizePath(rel)))
-                    except Exception:
-                        abs_path = rel
-                    return {
-                        'path': op_path,
-                        'externalized': True,
-                        'type': table[row, 'type'].val,
-                        'strategy': strategy,
-                        'file_path': rel,
-                        'absolute_path': abs_path,
-                        'timestamp': table[row, 'timestamp'].val,
-                        'dirty': table[row, 'dirty'].val,
-                        'build': table[row, 'build'].val,
-                        'touch_build': table[row, 'touch_build'].val,
-                        # Hint so an agent seeing a dirty TDN row knows the
-                        # tool that explains what changed (live vs on-disk).
-                        'recommended_tool': 'diff_tdn' if strategy == 'tdn' else None,
-                    }
-
-            return {
-                'path': op_path,
-                'externalized': False
-            }
-        except Exception as e:
-            return {'error': f'Failed to get status: {e}'}
+        """Get externalization status for an operator -- see envoy_read."""
+        return mod.envoy_read.get_externalization_status(self, op_path)
 
     # === Extension Creation (Main Thread Only) ===
 
@@ -5946,1264 +5092,134 @@ class EnvoyExt:
                           promote: bool = True, ext_name: str = None,
                           ext_index: int = None,
                           existing_comp: bool = False) -> dict:
-        """Create a TD extension: COMP + text DAT + extension wiring"""
-
-        # Validate class_name
-        if not class_name.isidentifier():
-            return {'error': f'class_name must be a valid Python identifier, got: {class_name}'}
-
-        # Resolve or create the target COMP
-        created_comp = False
-        if existing_comp:
-            comp = op(parent_path)
-            if not comp:
-                return {'error': f'Operator not found: {parent_path}'}
-            if not comp.isCOMP:
-                return {'error': f'{parent_path} is not a COMP'}
-        else:
-            parent_op = op(parent_path)
-            if not parent_op:
-                return {'error': f'Parent not found: {parent_path}'}
-            if not hasattr(parent_op, 'create'):
-                return {'error': f'Cannot create children in {parent_path} (not a COMP)'}
-            comp_name = name or class_name
-            try:
-                comp = parent_op.create('baseCOMP', comp_name)
-                self._find_non_overlapping_position(parent_op, comp)
-                created_comp = True
-            except Exception as e:
-                return {'error': f'Failed to create COMP: {e}'}
-
-        # Find extension slot
-        if ext_index is not None:
-            if not (0 <= ext_index <= 3):
-                if created_comp:
-                    comp.destroy()
-                return {'error': f'ext_index must be 0-3, got {ext_index}'}
-            existing_val = getattr(comp.par, f'ext{ext_index}object').eval()
-            if existing_val:
-                if created_comp:
-                    comp.destroy()
-                return {'error': f'Extension slot {ext_index} is already in use (set to: {existing_val})'}
-        else:
-            ext_index = None
-            for i in range(4):
-                if not getattr(comp.par, f'ext{i}object').eval():
-                    ext_index = i
-                    break
-            if ext_index is None:
-                if created_comp:
-                    comp.destroy()
-                return {'error': f'All 4 extension slots are occupied on {comp.path}'}
-
-        # Check for name collision inside the COMP
-        existing_dat = comp.op(class_name)
-        if existing_dat:
-            if created_comp:
-                comp.destroy()
-            return {'error': f"An operator named '{class_name}' already exists in {comp.path}"}
-
-        # Create text DAT
-        try:
-            text_dat = comp.create('textDAT', class_name)
-        except Exception as e:
-            if created_comp:
-                comp.destroy()
-            return {'error': f'Failed to create text DAT: {e}'}
-
-        # Write extension code
-        if code:
-            text_dat.text = code
-        else:
-            text_dat.text = (
-                f'class {class_name}:\n'
-                f'    """\n'
-                f'    {class_name} description.\n'
-                f'    """\n'
-                f'\n'
-                f'    def __init__(self, ownerComp):\n'
-                f'        self.ownerComp = ownerComp\n'
-            )
-
-        # Set extension parameters
-        effective_ext_name = ext_name or class_name
-        try:
-            getattr(comp.par, f'ext{ext_index}object').val = (
-                f"op('./{class_name}').module.{class_name}(me)"
-            )
-            getattr(comp.par, f'ext{ext_index}name').val = effective_ext_name
-            getattr(comp.par, f'ext{ext_index}promote').val = promote
-        except Exception as e:
-            if created_comp:
-                comp.destroy()
-            else:
-                text_dat.destroy()
-            return {'error': f'Failed to set extension parameters: {e}'}
-
-        # Initialize the extension
-        init_warning = None
-        try:
-            comp.initializeExtensions(ext_index)
-        except Exception as e:
-            init_warning = f'Extension created but initialization failed: {e}. Check the code for errors.'
-
-        # Ensure viewer flag stays off (initializeExtensions can activate it)
-        comp.viewer = False
-
-        result = {
-            'success': True,
-            'comp_path': comp.path,
-            'comp_name': comp.name,
-            'dat_path': text_dat.path,
-            'class_name': class_name,
-            'ext_index': ext_index,
-            'ext_name': effective_ext_name,
-            'promote': promote,
-            'created_comp': created_comp,
-        }
-
-        if init_warning:
-            result['warning'] = init_warning
-
-        return result
+        """Create a TD extension: COMP + text DAT + extension wiring -- see envoy_ops."""
+        return mod.envoy_ops.create_extension(self, parent_path, class_name, name, code, promote, ext_name, ext_index, existing_comp)
 
     # === TDN Network Format (Main Thread Only) ===
 
     def _export_network(self, root_path='/', include_dat_content=True,
                        output_file=None, max_depth=None, embed_all=False):
-        """Delegate to TDN extension for network export."""
-        if not getattr(self.ownerComp.ext, 'TDN', None):
-            return {'error': 'TDN extension not loaded on Embody COMP'}
-        # Protect .tdn files belonging to other tracked TDN COMPs
-        protected = self.ownerComp.ext.Embody._getAllTrackedTDNFiles(
-            exclude_path=root_path) if output_file else None
-        result = self.ownerComp.ext.TDN.ExportNetwork(
-            root_path=root_path,
-            include_dat_content=include_dat_content,
-            output_file=output_file,
-            max_depth=max_depth,
-            cleanup_protected=protected,
-            embed_all=embed_all,
-        )
-        # Token-lean: when the .tdn was written to a file, don't echo the whole
-        # document back -- return a compact summary and let the caller Read the
-        # file on demand (CLAUDE.md already prefers reading .tdn from disk).
-        if (output_file and isinstance(result, dict)
-                and result.get('file') and isinstance(result.get('tdn'), dict)):
-            doc = result.pop('tdn')
-            result['summary'] = {
-                'network_path': doc.get('network_path'),
-                'version': doc.get('version'),
-                'operators': len(doc.get('operators', [])),
-                'annotations': len(doc.get('annotations', [])),
-            }
-            result['note'] = ('Full .tdn written to file; Read the file for '
-                              'operators, params and DAT content.')
-        return result
+        """Delegate to TDN extension for network export -- see envoy_read."""
+        return mod.envoy_read.export_network(self, root_path, include_dat_content, output_file, max_depth, embed_all)
 
     def _import_network(self, target_path, tdn, clear_first=False):
-        """Delegate to TDN extension for network import."""
-        if not getattr(self.ownerComp.ext, 'TDN', None):
-            return {'error': 'TDN extension not loaded on Embody COMP'}
-        return self.ownerComp.ext.TDN.ImportNetwork(
-            target_path=target_path,
-            tdn=tdn,
-            clear_first=clear_first,
-        )
+        """Delegate to TDN extension for network import -- see envoy_ops."""
+        return mod.envoy_ops.import_network(self, target_path, tdn, clear_first)
 
     def _read_tdn(self, comp_path='/', include_dat_content=None,
                   max_depth=None, embed_all=False):
-        """Read a network subtree as a TDN dict (in-memory, no disk write).
-
-        Thin delegate over TDN.ExportNetwork(output_file=None). Kept as a
-        separate MCP tool so LLM-facing docs can emphasize the token-cost
-        win vs get_op/query_network walks.
-        """
-        if not getattr(self.ownerComp.ext, 'TDN', None):
-            return {'error': 'TDN extension not loaded on Embody COMP'}
-        return self.ownerComp.ext.TDN.ExportNetwork(
-            root_path=comp_path,
-            include_dat_content=include_dat_content,
-            output_file=None,
-            max_depth=max_depth,
-            embed_all=embed_all,
-        )
-    def _resolve_diff_target(self, target):
-        """Resolve a diff_tdn target to a TDN COMP path.
-
-        Accepts either a COMP path directly, or a .tdn file reference (absolute
-        path, repo-relative path, or bare filename like "tooltip.tdn"), which is
-        reverse-resolved through the externalizations table. Returns
-        (comp_path, None) on success or (None, error_message)."""
-        # A live COMP path wins outright.
-        if op(target) is not None:
-            return target, None
-        # Otherwise treat it as a .tdn file reference.
-        try:
-            table = op.Embody.ext.Embody.Externalizations
-        except Exception:
-            table = None
-        if not table:
-            return None, ('Operator not found and externalizations table '
-                          'unavailable: %s' % target)
-        norm = str(target).replace('\\', '/')
-        base = norm.rsplit('/', 1)[-1]
-        headers = [table[0, c].val for c in range(table.numCols)]
-        has_strategy = 'strategy' in headers
-        matches = []
-        for row in range(1, table.numRows):
-            rel = (table[row, 'rel_file_path'].val or '').replace('\\', '/')
-            try:
-                abs_p = str(op.Embody.ext.Embody.buildAbsolutePath(
-                    op.Embody.ext.Embody.normalizePath(rel))).replace('\\', '/')
-            except Exception:
-                abs_p = rel
-            strat = (table[row, 'strategy'].val if has_strategy
-                     else table[row, 'type'].val) or 'tox'
-            if norm in (abs_p, rel) or base == rel.rsplit('/', 1)[-1]:
-                matches.append((table[row, 'path'].val, strat))
-        if not matches:
-            return None, ('No externalized COMP found for %r (not a COMP path '
-                          'or a tracked .tdn file)' % target)
-        if len(matches) > 1:
-            comps = ', '.join(m[0] for m in matches)
-            return None, ('Ambiguous: %r matches multiple externalized files '
-                          '(%s). Pass the COMP path instead.' % (target, comps))
-        comp_path, strat = matches[0]
-        if strat != 'tdn':
-            return None, ('%s is externalized as %s, not tdn -- diff_tdn only '
-                          'applies to TDN-strategy COMPs.' % (comp_path, strat))
-        return comp_path, None
+        """Read a network subtree as a TDN dict (in-memory, no disk write) -- see envoy_read."""
+        return mod.envoy_read.read_tdn(self, comp_path, include_dat_content, max_depth, embed_all)
 
     def _diff_tdn(self, target='', max_changed_ops=200, max_bytes=60000):
-        """Show what is UNSAVED in TDN-externalized COMPs: live network(s) vs
-        the on-disk .tdn(s) -- the view git cannot provide.
-
-        `target` empty (or '/', 'project', '.', '*') -> PROJECT-WIDE: every live
-        TDN COMP, summarized (which changed + counts). Otherwise `target` is a
-        COMP path OR a .tdn file path/bare filename (resolved via the
-        externalizations table) -> that one COMP in full detail.
-
-        For committed/history diffs use git (the .tdn git diff driver keeps
-        those clean). Thin delegate to TDN.DiffLiveVsDisk / DiffAllLiveVsDisk.
-        Read-only, non-interactive, pull-only.
-        """
-        if not getattr(self.ownerComp.ext, 'TDN', None):
-            return {'error': 'TDN extension not loaded on Embody COMP'}
-        # Empty / whole-project target -> project-wide summary. Per-COMP detail
-        # uses DiffAllLiveVsDisk's own (smaller) caps; the handler's
-        # max_changed_ops governs the single-COMP path below.
-        if not target or str(target).strip() in ('', '/', 'project', '.', '*'):
-            return self.ownerComp.ext.TDN.DiffAllLiveVsDisk(max_bytes=max_bytes)
-        comp_path, err = self._resolve_diff_target(target)
-        if err:
-            return {'error': err}
-        return self.ownerComp.ext.TDN.DiffLiveVsDisk(
-            comp_path=comp_path,
-            max_changed_ops=max_changed_ops, max_bytes=max_bytes)
+        """Show what is UNSAVED in TDN-externalized COMPs vs on-disk .tdn -- see envoy_read."""
+        return mod.envoy_read.diff_tdn(self, target, max_changed_ops, max_bytes)
 
 
 
     # === Utility Methods ===
 
     def _configureMCPClient(self, port, target_dir=None):
-        """Auto-configure MCP client by writing .mcp.json and the STDIO bridge
-        script.  Uses STDIO transport so Claude Code always has tools available
-        (the bridge retries until Envoy is reachable).
-        Idempotent -- safe to call on every start.
-
-        Args:
-            port: The port Envoy is running on.
-            target_dir: Directory to write config files into. Defaults to
-                git root if available, else project.folder.
-        """
-        from pathlib import Path
-        try:
-            project_dir = Path(project.folder)
-
-            if target_dir is None:
-                # Find the git root by walking up from the .toe directory
-                for parent_path in [project_dir] + list(project_dir.parents):
-                    if (parent_path / '.git').exists():
-                        target_dir = parent_path
-                        break
-                if target_dir is None:
-                    target_dir = project_dir
-
-            target_dir = Path(target_dir)
-
-            # --- Deploy the STDIO bridge script ---
-            bridge_dir = target_dir / '.embody'
-            bridge_dir.mkdir(parents=True, exist_ok=True)
-            bridge_path = bridge_dir / 'envoy-bridge.py'
-
-            # Read bridge script from templates textDAT, else from disk fallback
-            bridge_content = None
-            try:
-                templates = self.ownerComp.op('templates')
-                bridge_dat = templates.op('text_envoy_bridge') if templates else None
-                if bridge_dat:
-                    bridge_content = bridge_dat.text
-            except Exception:
-                pass
-
-            if not bridge_content:
-                # Fallback: read from the externalized file in dev/embody/
-                source = Path(project.folder) / 'embody' / 'envoy_bridge.py'
-                if source.exists():
-                    bridge_content = source.read_text(encoding='utf-8')
-
-            if not bridge_content:
-                self._log(
-                    'Bridge script source not found -- falling back to HTTP transport',
-                    'WARNING')
-                self._configureMCPClientHTTP(target_dir, port)
-                return
-
-            # Write bridge script only if content changed -- preserving
-            # mtime prevents Claude Code's file watcher from restarting
-            # the MCP server mid-connection.
-            needs_write = True
-            if bridge_path.exists():
-                try:
-                    existing = bridge_path.read_text(encoding='utf-8')
-                    if existing == bridge_content:
-                        needs_write = False
-                except OSError:
-                    pass  # Can't read -- overwrite
-
-            if needs_write:
-                bridge_path.write_text(bridge_content, encoding='utf-8')
-                if sys.platform != 'win32':
-                    bridge_path.chmod(0o755)
-            else:
-                if sys.platform != 'win32':
-                    bridge_path.chmod(0o755)
-
-            # Migrate: remove old bridge from .claude/ if it exists
-            old_bridge = target_dir / '.claude' / 'envoy-bridge.py'
-            if old_bridge.exists():
-                try:
-                    old_bridge.unlink()
-                    self._log('Migrated: removed old .claude/envoy-bridge.py')
-                except OSError:
-                    pass
-
-            # Migrate: remove old files from previous locations
-            for old_name, desc in [('.envoy-tools-cache.json', 'tools cache'),
-                                    ('.envoy.json', 'envoy config'),
-                                    ('.embody.json', 'embody config')]:
-                old_file = target_dir / old_name
-                if old_file.exists():
-                    try:
-                        old_file.unlink()
-                        self._log(f'Migrated: removed old {old_name} ({desc})')
-                    except OSError:
-                        pass
-
-            # Prefer the venv Python (created from TD's Python) so the bridge
-            # works on machines without a system Python installation.
-            # Fall back to system PATH command if the venv doesn't exist yet.
-            if sys.platform == 'win32':
-                venv_python = project_dir / '.venv' / 'Scripts' / 'python.exe'
-            else:
-                venv_python = project_dir / '.venv' / 'bin' / 'python3'
-
-            if venv_python.is_file():
-                # Verify the venv Python actually executes -- catches stale
-                # pyvenv.cfg pointing to an uninstalled TD version, or
-                # code-signing mismatches after macOS TD upgrades.
-                # stdin=DEVNULL: without it, subprocess.run inside TD on
-                # Windows raises [WinError 50] (DuplicateHandle on TD's
-                # non-duplicatable GUI stdin handle) -- which then triggers
-                # the rmtree path below and destroys a healthy venv.
-                try:
-                    subprocess.run(
-                        [str(venv_python), '-c',
-                         'import sys; print(sys.version)'],
-                        capture_output=True, timeout=10, check=True,
-                        stdin=subprocess.DEVNULL)
-                    python_cmd = str(venv_python).replace('\\', '/')
-                except (subprocess.CalledProcessError,
-                        subprocess.TimeoutExpired, OSError) as e:
-                    if not self._venv_recreated:
-                        self._venv_recreated = True
-                        self._log(
-                            f'Venv corrupted ({type(e).__name__}: {e}), '
-                            f'recreating...', 'WARNING')
-                        import shutil
-                        shutil.rmtree(str(project_dir / '.venv'),
-                                      ignore_errors=True)
-                        op.Embody.ext.Embody._setupEnvironment()
-                        # Re-check after recreation
-                        if venv_python.is_file():
-                            try:
-                                subprocess.run(
-                                    [str(venv_python), '-c',
-                                     'import sys; print(sys.version)'],
-                                    capture_output=True, timeout=10,
-                                    check=True,
-                                    stdin=subprocess.DEVNULL)
-                                python_cmd = str(venv_python).replace(
-                                    '\\', '/')
-                                self._log('Venv recreated successfully',
-                                          'SUCCESS')
-                            except Exception as e2:
-                                self._log(
-                                    f'Venv recreation failed: {e2}. '
-                                    f'Using system Python.', 'ERROR')
-                                python_cmd = ('python' if sys.platform == 'win32'
-                                              else 'python3')
-                        else:
-                            self._log(
-                                'Venv recreation did not produce Python '
-                                'binary. Using system Python.', 'ERROR')
-                            python_cmd = ('python' if sys.platform == 'win32'
-                                          else 'python3')
-                    else:
-                        self._log(
-                            f'Venv Python still broken after recreation: '
-                            f'{e}. Using system Python.', 'WARNING')
-                        python_cmd = ('python' if sys.platform == 'win32'
-                                      else 'python3')
-            else:
-                python_cmd = 'python' if sys.platform == 'win32' else 'python3'
-
-            # --- Deploy the .tdn git diff driver (semantic git diffs) ---
-            self._configureTdnDiffDriver(target_dir, python_cmd)
-
-            # --- Write envoy.json project config ---
-            self._writeEnvoyConfig(target_dir / '.embody', port)
-
-            # --- Write .mcp.json with STDIO transport ---
-            mcp_file = target_dir / '.mcp.json'
-            # Use forward slashes even on Windows for JSON portability
-            bridge_abs = str(bridge_path).replace('\\', '/')
-            config_abs = str(
-                (target_dir / '.embody' / 'envoy.json')).replace('\\', '/')
-
-            # Read existing config to preserve other servers
-            config = {}
-            if mcp_file.exists():
-                try:
-                    config = json.loads(mcp_file.read_text(encoding='utf-8'))
-                except (json.JSONDecodeError, OSError) as e:
-                    self._log(f'Could not parse existing .mcp.json, will overwrite: {e}', 'DEBUG')
-
-            servers = config.get('mcpServers', {})
-            existing = servers.get('envoy', {})
-
-            # Check if already configured with matching STDIO bridge
-            expected_args = ['-u', bridge_abs, '--port', str(port),
-                             '--config', config_abs]
-            if (existing.get('type') == 'stdio'
-                    and existing.get('command') == python_cmd
-                    and existing.get('args') == expected_args):
-                self._log('MCP .mcp.json already configured (STDIO bridge)', 'DEBUG')
-                self._deploySettingsLocal(target_dir / '.claude')
-                return
-
-            servers['envoy'] = {
-                'type': 'stdio',
-                'command': python_cmd,
-                'args': expected_args,
-            }
-            config['mcpServers'] = servers
-            mcp_file.write_text(
-                json.dumps(config, indent=2) + '\n', encoding='utf-8')
-            self._log(f'Wrote MCP config to {mcp_file} (STDIO bridge -> port {port})')
-
-            # --- Deploy settings.local.json (auto-allow read-only MCP tools) ---
-            self._deploySettingsLocal(target_dir / '.claude')
-
-        except Exception as e:
-            self._log(f'Could not auto-configure MCP client: {e}', 'WARNING')
+        """Auto-configure MCP client (.mcp.json + STDIO bridge) -- see envoy_setup."""
+        return mod.envoy_setup.configure_mcp_client(self, port, target_dir)
 
     def _configureMCPClientHTTP(self, target_dir, port):
-        """Fallback: configure .mcp.json with direct HTTP transport.
-        Used when the STDIO bridge script cannot be deployed."""
-        url = f'http://localhost:{port}/mcp'
-        mcp_file = target_dir / '.mcp.json'
-
-        config = {}
-        if mcp_file.exists():
-            try:
-                config = json.loads(mcp_file.read_text(encoding='utf-8'))
-            except (json.JSONDecodeError, OSError):
-                pass
-
-        servers = config.get('mcpServers', {})
-        servers['envoy'] = {'type': 'http', 'url': url}
-        config['mcpServers'] = servers
-        mcp_file.write_text(
-            json.dumps(config, indent=2) + '\n', encoding='utf-8')
-        self._log(f'Wrote MCP config to {mcp_file} (HTTP fallback)')
+        """Fallback: configure .mcp.json with direct HTTP transport -- see envoy_setup."""
+        return mod.envoy_setup.configure_mcp_client_http(self, target_dir, port)
 
     def _registryPath(self):
-        """Path to .embody/envoy.json honoring Aiprojectroot.
+        """Path to .embody/envoy.json honoring Aiprojectroot -- see envoy_setup."""
+        return mod.envoy_setup.registry_path(self)
 
-        All registry I/O (port-conflict detection, RefreshRegistry,
-        deregistration) must go through here -- the registry must live
-        co-located with .mcp.json, which itself follows Aiprojectroot
-        via _findProjectRoot. Defaults to legacy git_root behavior if
-        the Embody extension isn't accessible (defensive).
-        """
-        from pathlib import Path
-        try:
-            root = op.Embody.ext.Embody._findProjectRoot()
-            return Path(root) / '.embody' / 'envoy.json'
-        except Exception:
-            git_root = self.ownerComp.fetch('_git_root', 'no-git')
-            if git_root == 'no-git':
-                return None
-            return Path(git_root) / '.embody' / 'envoy.json'
+    # Envoy MCP tools that only READ / query TD state -- safe to auto-approve
+    # under the 'some' tool-permissions posture. Anything that creates, edits,
+    # deletes, connects, executes, imports, or externalizes is deliberately
+    # omitted so it still prompts. Entries are the tool short-names; the
+    # permission strings written are 'mcp__envoy__<name>'.
+    READ_ONLY_TOOLS = [
+        'get_td_status', 'get_td_info', 'get_td_classes', 'get_td_class_details',
+        'get_op', 'get_op_errors', 'get_op_flags', 'get_op_position',
+        'get_op_performance', 'get_project_performance', 'get_parameter',
+        'get_connections', 'get_annotations', 'get_network_layout',
+        'get_dat_content', 'get_docs', 'get_module_help', 'get_logs',
+        'get_externalizations', 'get_externalization_status', 'get_sessions',
+        'query_network', 'find_children', 'get_enclosed_ops',
+        'read_tdn', 'diff_tdn', 'capture_top',
+    ]
+
+    def _toolPermissionsPosture(self):
+        """The Toolpermissions param value, defensively normalized -- see envoy_setup."""
+        return mod.envoy_setup.tool_permissions_posture(self)
+
+    def _tempReadDirs(self):
+        """Directories that must be readable for capture_top PNGs -- see envoy_setup."""
+        return mod.envoy_setup.temp_read_dirs(self)
+
+    def _loadSettingsBaseline(self):
+        """The NON-Envoy baseline settings dict -- see envoy_setup."""
+        return mod.envoy_setup.load_settings_baseline(self)
+
+    def _composeSettings(self, cfg, posture):
+        """Apply a tool-permissions posture onto a settings dict in place -- see envoy_setup."""
+        return mod.envoy_setup.compose_settings(self, cfg, posture)
+
+    def _settingsSatisfies(self, cfg, posture):
+        """True if an existing settings dict already matches `posture` -- see envoy_setup."""
+        return mod.envoy_setup.settings_satisfies(self, cfg, posture)
 
     def _deploySettingsLocal(self, claude_dir):
-        """Deploy settings.local.json to .claude/ from the template DAT.
-
-        Auto-allows read-only Envoy MCP tools so the user isn't prompted
-        for every query operation. Only writes if the file doesn't exist
-        yet -- never overwrites user customizations.
-        """
-        settings_path = claude_dir / 'settings.local.json'
-        if settings_path.exists():
-            self._log('settings.local.json already exists -- skipping', 'DEBUG')
-            return
-
-        settings_content = None
-        try:
-            templates = self.ownerComp.op('templates')
-            settings_dat = templates.op('text_settings_local') if templates else None
-            if settings_dat:
-                settings_content = settings_dat.text
-        except Exception:
-            pass
-
-        if not settings_content:
-            self._log('text_settings_local template not found -- skipping settings deployment', 'DEBUG')
-            return
-
-        claude_dir.mkdir(parents=True, exist_ok=True)
-        settings_path.write_text(settings_content, encoding='utf-8')
-        self._log(f'Deployed settings.local.json to {settings_path}')
+        """Write .claude/settings.local.json to match the Toolpermissions posture -- see envoy_setup."""
+        return mod.envoy_setup.deploy_settings_local(self, claude_dir)
 
     def _findGitRoot(self):
-        """Silently find the git repo root. Returns Path or 'no-git'. Never prompts."""
-        from pathlib import Path
-        project_dir = Path(project.folder).resolve()
-        try:
-            home_dir = Path.home().resolve()
-        except Exception:
-            home_dir = None
-        # Only stop at home_dir when it's actually an ancestor of project_dir.
-        # Otherwise (e.g. Windows project on D:\ while home is on C:\) the
-        # part-count comparison wrongly bailed before searching -- issue #19.
-        home_is_ancestor = bool(
-            home_dir and (home_dir == project_dir or home_dir in project_dir.parents)
-        )
-        for parent in [project_dir] + list(project_dir.parents):
-            if home_is_ancestor and parent == home_dir:
-                break
-            if (parent / '.git').exists():
-                self._log(f'Found git repo at {parent}', 'INFO')
-                return parent
-        self._log(f'No git repo found for {project_dir}', 'INFO')
-        return 'no-git'
+        """Silently find the git repo root. Returns Path or 'no-git' -- see envoy_setup."""
+        return mod.envoy_setup.find_git_root(self)
 
     def _checkOrInitGitRepo(self):
-        """Check for a git repo. If missing, prompt user to initialize one.
-        Only call from user-initiated flows (_enableEnvoy, InitGit) -- never
-        from automatic startup paths. Returns Path, 'no-git', or None (cancelled)."""
-        from pathlib import Path
-        import os, subprocess
-
-        project_dir = Path(project.folder).resolve()
-        try:
-            home_dir = Path.home().resolve()
-        except Exception:
-            home_dir = None
-
-        # Walk up looking for .git, but stop at the home directory only when
-        # home is actually an ancestor of project_dir (issue #19 -- previously
-        # the comparison broke for projects on a non-home drive on Windows).
-        home_is_ancestor = bool(
-            home_dir and (home_dir == project_dir or home_dir in project_dir.parents)
-        )
-        for parent in [project_dir] + list(project_dir.parents):
-            if home_is_ancestor and parent == home_dir:
-                break
-            if (parent / '.git').exists():
-                self._log(f'Found git repo at {parent}', 'INFO')
-                return parent
-
-        # No git repo found between project folder and home directory.
-        self._log(
-            f'No git repo found for {project_dir} (stopped at {home_dir})',
-            'INFO')
-
-        # Prompt user.
-        # Guard against concurrent calls: ui.messageBox blocks the main
-        # thread but TD's run() callbacks still fire, so a second Start()
-        # can reach here while the first dialog is open.
-        if getattr(self, '_git_prompt_active', False):
-            self._log('Git prompt already active (duplicate suppressed)', 'DEBUG')
-            return 'no-git'
-        self._git_prompt_active = True
-        try:
-            choice = op.Embody.ext.Embody._messageBox(
-                'Envoy -- Git Repository Recommended',
-                'A git repository is recommended for .gitignore and\n'
-                '.gitattributes management. No git repository was found.\n\n'
-                'MCP and AI client config files will be generated either way.\n\n'
-                f'Initialize a git repo in:\n  {project_dir}\n\n'
-                'Or browse to select a different folder (e.g. an existing repo root).\n'
-                'You can also run op.Embody.InitGit() later.',
-                buttons=['Cancel', 'Initialize Git Here', 'Browse for Folder', 'Start Without Git'])
-
-            if choice not in (1, 2, 3):  # Cancel or closed dialog
-                self.ownerComp.par.Envoyenable = False
-                self._log('Envoy cancelled -- no git repository.', 'INFO')
-                return None
-
-            if choice == 2:  # Browse for Folder
-                result = ui.chooseFolder(
-                    title='Select Git Repository Root', start=str(project_dir))
-                if not result:
-                    self.ownerComp.par.Envoyenable = False
-                    self._log('Envoy cancelled -- folder selection aborted.', 'INFO')
-                    return None
-                chosen = Path(result)
-                # If the chosen folder already contains a .git, use it directly
-                if (chosen / '.git').exists():
-                    self._log(f'Using existing git repo at {chosen}', 'SUCCESS')
-                    return chosen
-                # No .git there -- offer to initialize in that folder
-                init_choice = op.Embody.ext.Embody._messageBox(
-                    'Envoy -- Initialize Git',
-                    f'No git repo found in:\n  {chosen}\n\nInitialize git here?',
-                    buttons=['Cancel', 'Initialize Git'])
-                if init_choice not in (1,):
-                    self.ownerComp.par.Envoyenable = False
-                    return None
-                project_dir = chosen  # use chosen folder for init below
-
-            if choice in (1, 2):  # Initialize Git Here, or Browse -> confirmed init
-                try:
-                    # Strip git env vars that TD's embedded Python may set --
-                    # these can cause git init to produce a broken repository.
-                    clean_env = {
-                        k: v for k, v in os.environ.items()
-                        if k not in (
-                            'GIT_DIR', 'GIT_WORK_TREE',
-                            'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES',
-                        )
-                    }
-                    git_kwargs = dict(
-                        capture_output=True, text=True,
-                        cwd=str(project_dir), env=clean_env,
-                    )
-                    subprocess.run(['git', 'init'], check=True, **git_kwargs)
-                    self._log(f'Initialized git repo in {project_dir}', 'SUCCESS')
-
-                    # Verify the init produced a working repository
-                    verify = subprocess.run(
-                        ['git', 'rev-parse', '--is-inside-work-tree'],
-                        **git_kwargs)
-                    if verify.returncode != 0:
-                        self._log('Git verify failed after init -- retrying', 'WARNING')
-                        subprocess.run(['git', 'init'], check=True, **git_kwargs)
-                        verify = subprocess.run(
-                            ['git', 'rev-parse', '--is-inside-work-tree'],
-                            **git_kwargs)
-                        if verify.returncode != 0:
-                            raise RuntimeError(
-                                f'git rev-parse failed after retry: '
-                                f'{verify.stderr.strip()}')
-                        self._log('Git repo verified after retry', 'SUCCESS')
-
-                    # Git config files belong with git init (issue #8).
-                    self._configureGitignore(project_dir)
-                    self._configureGitattributes(project_dir)
-
-                    return project_dir
-                except Exception as e:
-                    self._log(f'Failed to initialize git repo: {e}', 'ERROR')
-                    op.Embody.ext.Embody._messageBox(
-                        'Envoy -- Git Initialization Failed',
-                        f'Could not initialize a git repository:\n\n  {e}\n\n'
-                        'Envoy will start without git. MCP and AI client\n'
-                        'config will be generated in the project folder.\n'
-                        '.gitignore and .gitattributes will be skipped.\n\n'
-                        'To add git later: run "git init" manually, then\n'
-                        'call op.Embody.InitGit() from the textport.',
-                        buttons=['OK'])
-                    # Fall through to start-without-git
-
-            # choice == 3 or git init failed -- start without git
-            self._log('Starting Envoy without git repo -- auto-config skipped.', 'WARNING')
-            return 'no-git'
-        finally:
-            self._git_prompt_active = False
+        """Check for a git repo, prompting to initialize one if missing -- see envoy_setup."""
+        return mod.envoy_setup.check_or_init_git_repo(self)
 
     @staticmethod
     def _atomicWriteJSON(path, data):
-        """Write JSON atomically via temp file + os.replace().
-        Retries on PermissionError (Windows file-in-use)."""
-        import os
-        from pathlib import Path
-        tmp = Path(str(path) + '.tmp')
-        content = json.dumps(data, indent=2) + '\n'
-        for attempt in range(3):
-            try:
-                tmp.write_text(content, encoding='utf-8')
-                os.replace(str(tmp), str(path))
-                return
-            except PermissionError:
-                if attempt < 2:
-                    import time as _time
-                    _time.sleep(0.1)
-                else:
-                    raise
+        """Write JSON atomically via temp file + os.replace() -- see envoy_setup."""
+        return mod.envoy_setup.atomic_write_json(path, data)
 
     def _instanceKey(self, toe_rel: str, existing_instances: dict) -> str:
-        """Compute a unique instance key from the toe filename.
-        Uses basename without .toe.  Appends -2, -3, etc. on collision
-        with a live instance (same or different toe_path).
-
-        Walks forward across TD's auto-version-bump on save: if this PID
-        is already registered and its registered toe_path STILL matches
-        the current path, the existing key is reused (no churn). If the
-        toe_path has changed (rename, save-as-version-up), a fresh key
-        is computed from the new basename and the caller is responsible
-        for pruning the stale entry under the old key.
-
-        If Envoyinstancename is set, uses that as the key instead."""
-        import os
-        from pathlib import Path
-
-        # User override via parameter
-        try:
-            custom = self.ownerComp.par.Envoyinstancename.eval()
-            if custom:
-                return custom
-        except:
-            pass
-
-        base = Path(toe_rel).stem  # e.g. 'Embody-5.251'
-        my_pid = os.getpid()
-
-        # Re-registration with same toe_path: keep the existing key.
-        # If the toe_path has changed, fall through and compute a new
-        # key from the current basename -- caller prunes the stale row.
-        for key, info in existing_instances.items():
-            if (info.get('td_pid') == my_pid
-                    and info.get('toe_path') == toe_rel):
-                return key
-
-        # Check if base key is free, held by a dead process, or held
-        # by our own previous (now-stale) registration.
-        if base not in existing_instances:
-            return base
-        existing_pid = existing_instances[base].get('td_pid', 0)
-        if not self._isPidAlive(existing_pid) or existing_pid == my_pid:
-            return base
-
-        # Base key is held by a live foreign process -- find a unique suffix
-        suffix = 2
-        while True:
-            candidate = f'{base}-{suffix}'
-            if candidate not in existing_instances:
-                return candidate
-            existing_pid = existing_instances[candidate].get('td_pid', 0)
-            if not self._isPidAlive(existing_pid) or existing_pid == my_pid:
-                return candidate
-            suffix += 1
+        """Compute a unique instance key from the toe filename -- see envoy_setup."""
+        return mod.envoy_setup.instance_key(self, toe_rel, existing_instances)
 
     @staticmethod
     def _isPidAlive(pid):
-        """Check whether a process with the given PID is alive.
-
-        CRITICAL: do NOT use ``os.kill(pid, 0)`` on Windows.  CPython's
-        posixmodule implements ``os.kill`` on Windows via
-        ``OpenProcess(PROCESS_ALL_ACCESS, ...)`` + ``TerminateProcess(handle, sig)``
-        regardless of ``sig`` -- when called with ``sig=0`` on a foreign
-        TD process Embody has access to, it would silently terminate that
-        process with exit code 0.  And when the PID is invalid in a
-        particular way (e.g. registry corruption, a wrapped-around PID,
-        a non-int), ``OpenProcess`` returns ``INVALID_HANDLE_VALUE``
-        instead of NULL; the subsequent ``TerminateProcess`` fails with
-        ``WinError 87`` and CPython's wrapper raises ``OSError`` *while
-        leaving the interpreter thread state inconsistent*, surfacing as
-        ``SystemError: <class 'OSError'> returned a result with an
-        exception set`` and intermittently aborting the process on the
-        next interpreter tick.  Mirror the bridge's safe pattern instead.
-        """
-        if not isinstance(pid, int) or pid <= 0:
-            return False
-        if sys.platform == 'win32':
-            try:
-                import ctypes
-                kernel32 = ctypes.windll.kernel32
-                SYNCHRONIZE = 0x00100000
-                handle = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
-                if handle:
-                    kernel32.CloseHandle(handle)
-                    return True
-                return False
-            except Exception:
-                return False
-        # POSIX: signal 0 is a real no-op liveness check.  Catch
-        # OverflowError too -- pid_t is int32 on most kernels and a
-        # registry that's been corrupted with a giant value would
-        # otherwise propagate the overflow up through _writeEnvoyConfig.
-        import os
-        try:
-            os.kill(pid, 0)
-            return True
-        except (ProcessLookupError, PermissionError):
-            return False
-        except (OSError, OverflowError, ValueError):
-            return False
+        """Check whether a process with the given PID is alive -- see envoy_setup."""
+        return mod.envoy_setup.is_pid_alive(pid)
 
     def _writeEnvoyConfig(self, embody_dir, port):
-        """Register this instance in the .embody/envoy.json instance registry.
-
-        The registry tracks all running Envoy instances so the bridge can
-        discover and switch between them.  Atomic writes prevent corruption
-        when multiple TD instances write concurrently.
-
-        Format:
-            {
-                "active": "Embody-5.251",
-                "td_executable": "/path/to/TouchDesigner",
-                "instances": {
-                    "Embody-5.251": {
-                        "toe_path": "dev/Embody-5.251.toe",
-                        "port": 9870,
-                        "td_pid": 12345
-                    }
-                }
-            }
-        """
-        import os
-        import td as _td
-        from pathlib import Path
-
-        embody_dir.mkdir(parents=True, exist_ok=True)
-        config_path = embody_dir / 'envoy.json'
-        # git_root is embody_dir's parent
-        git_root = embody_dir.parent
-
-        # Compute toe_path relative to git root
-        project_dir = Path(project.folder)
-        name = project.name
-        toe_file = project_dir / (name if name.endswith('.toe') else name + '.toe')
-        try:
-            toe_rel = str(toe_file.relative_to(git_root)).replace('\\', '/')
-        except ValueError:
-            toe_rel = str(toe_file).replace('\\', '/')
-
-        # Derive TD executable path from app.binFolder
-        bin_folder = Path(_td.app.binFolder)
-        if sys.platform == 'darwin':
-            td_executable = str(bin_folder.parent.parent)
-        elif sys.platform == 'win32':
-            exe = bin_folder / 'TouchDesigner.exe'
-            if not exe.exists():
-                exe = bin_folder / 'TouchDesigner099.exe'
-            td_executable = str(exe).replace('\\', '/')
-        else:
-            td_executable = str(bin_folder / 'TouchDesigner')
-
-        # Read existing config (migrate from old root-level .envoy.json)
-        existing = {}
-        if config_path.exists():
-            try:
-                existing = json.loads(
-                    config_path.read_text(encoding='utf-8'))
-            except (json.JSONDecodeError, OSError):
-                pass
-        elif (git_root / '.envoy.json').exists():
-            try:
-                existing = json.loads(
-                    (git_root / '.envoy.json').read_text(encoding='utf-8'))
-                self._log('Migrated: seeded envoy.json from old .envoy.json')
-            except (json.JSONDecodeError, OSError):
-                pass
-
-        # Migrate old flat format -> registry format
-        if 'instances' not in existing:
-            instances = {}
-            if 'toe_path' in existing:
-                # Wrap old flat config as a single instance
-                old_key = Path(existing['toe_path']).stem
-                instances[old_key] = {
-                    'toe_path': existing.get('toe_path', ''),
-                    'port': existing.get('port', port),
-                    'td_pid': existing.get('td_pid', 0),
-                }
-            existing = {
-                'active': existing.get('active', ''),
-                'td_executable': existing.get('td_executable', td_executable),
-                'instances': instances,
-            }
-
-        instances = existing.get('instances', {})
-        key = self._instanceKey(toe_rel, instances)
-        my_pid = os.getpid()
-
-        # Garbage-collect any registry rows whose PID is no longer
-        # alive. Embody only deregisters cleanly on graceful shutdown
-        # (Stop()/onDestroyTD); hard kills, force-quits, OS crashes,
-        # and Cmd+Q-without-Envoy-stop all leave dead rows behind that
-        # accumulate across sessions. Running this on every registry
-        # write keeps the file bounded.
-        dead_keys = [
-            k for k, info in list(instances.items())
-            if not self._isPidAlive(info.get('td_pid', 0))
-        ]
-        for dead_key in dead_keys:
-            del instances[dead_key]
-        if dead_keys:
-            self._log(
-                f'Pruned {len(dead_keys)} dead registry '
-                f'{"row" if len(dead_keys) == 1 else "rows"}: '
-                f'{", ".join(repr(k) for k in dead_keys)}', 'DEBUG')
-
-        # Prune stale entries under different keys for the same PID
-        # (left over from a prior toe rename, e.g. TD's save-time
-        # version bump). Keeps the registry walking forward instead of
-        # accumulating dead aliases.
-        stale_keys = [
-            k for k, info in list(instances.items())
-            if info.get('td_pid') == my_pid and k != key
-        ]
-        for stale_key in stale_keys:
-            del instances[stale_key]
-            self._log(
-                f'Pruned stale registry key "{stale_key}" '
-                f'(PID {my_pid} now registered as "{key}")', 'DEBUG')
-
-        # Build this instance's entry
-        new_entry = {
-            'toe_path': toe_rel,
-            'port': port,
-            'td_pid': my_pid,
-        }
-
-        # Check if already up-to-date (no stale prune happened either)
-        if (not stale_keys
-                and instances.get(key) == new_entry
-                and existing.get('active') == key):
-            self._log('envoy.json already up to date', 'DEBUG')
-            return
-
-        instances[key] = new_entry
-        existing['instances'] = instances
-        existing['active'] = key
-        existing['td_executable'] = td_executable
-
-        self._atomicWriteJSON(config_path, existing)
-        self._log(f'Registered instance "{key}" in envoy.json (port {port})')
+        """Register this instance in the .embody/envoy.json instance registry -- see envoy_setup."""
+        return mod.envoy_setup.write_envoy_config(self, embody_dir, port)
 
     def RefreshRegistry(self):
-        """Re-register this instance in envoy.json under its current
-        toe basename. Safe to call repeatedly (idempotent when nothing
-        has changed). Used after `project.save()` to walk the registry
-        forward across TD's save-time version bump -- the toe goes
-        from `Foo-5.398.toe` to `Foo-5.399.toe` and the registry needs
-        to follow.
-
-        Reads the running port from envoy.json by looking up our own
-        PID, since EnvoyExt does not retain a runtime port attribute
-        (the actual server lives on a worker thread)."""
-        import os
-
-        config_path = self._registryPath()
-        if config_path is None or not config_path.exists():
-            return
-
-        try:
-            existing = json.loads(config_path.read_text(encoding='utf-8'))
-        except (json.JSONDecodeError, OSError):
-            return
-
-        my_pid = os.getpid()
-        port = 0
-        for info in existing.get('instances', {}).values():
-            if info.get('td_pid') == my_pid:
-                port = info.get('port', 0)
-                break
-        if not port:
-            # We aren't in the registry yet (Envoy may have only just
-            # started, or not started at all). Nothing to refresh.
-            return
-
-        try:
-            self._writeEnvoyConfig(config_path.parent, port)
-        except Exception as e:
-            self._log(f'RefreshRegistry failed: {e}', 'WARNING')
+        """Re-register this instance in envoy.json under its current toe basename -- see envoy_setup."""
+        return mod.envoy_setup.refresh_registry(self)
 
     def _removeFromRegistry(self, git_root=None):
-        """Remove this instance from the .embody/envoy.json registry on shutdown.
-
-        Honors Aiprojectroot via _registryPath. The git_root kwarg is kept
-        for backward compatibility but only used as a defensive fallback
-        when the live registry path isn't resolvable.
-        """
-        import os
-        from pathlib import Path
-
-        config_path = self._registryPath()
-        if config_path is None and git_root is not None and git_root != 'no-git':
-            config_path = Path(git_root) / '.embody' / 'envoy.json'
-        if config_path is None or not config_path.exists():
-            return
-
-        try:
-            config = json.loads(config_path.read_text(encoding='utf-8'))
-        except (json.JSONDecodeError, OSError):
-            return
-
-        instances = config.get('instances', {})
-        if not instances:
-            return
-
-        # Find our entry by PID
-        my_pid = os.getpid()
-        my_key = None
-        for key, info in instances.items():
-            if info.get('td_pid') == my_pid:
-                my_key = key
-                break
-
-        if my_key is None:
-            return
-
-        del instances[my_key]
-        config['instances'] = instances
-
-        # If we were active, switch to first remaining instance (or null)
-        if config.get('active') == my_key:
-            remaining = list(instances.keys())
-            config['active'] = remaining[0] if remaining else None
-
-        try:
-            self._atomicWriteJSON(config_path, config)
-            self._log(f'Deregistered instance "{my_key}" from envoy.json')
-        except Exception as e:
-            self._log(f'Could not deregister from envoy.json: {e}', 'WARNING')
+        """Remove this instance from the .embody/envoy.json registry on shutdown -- see envoy_setup."""
+        return mod.envoy_setup.remove_from_registry(self, git_root)
 
     def _configureGitignore(self, git_root):
-        """Ensure .gitignore in the git root contains entries for
-        Embody/Envoy auto-generated files.
-        Idempotent -- only appends missing entries, preserves all existing content.
-        Migrates old `.claude/` blanket entry to specific entries."""
-        MANAGED_ENTRIES = [
-            # TouchDesigner project
-            'Backup/',
-            'logs/',
-            'CrashAutoSave*',
-            # Embody / Envoy
-            '.venv/',
-            '.mcp.json',
-            # Ignore .embody/ runtime files but keep committed project.json
-            '.embody/*',
-            '!.embody/project.json',
-            '.claude/settings.local.json',
-            '.claude/projects/',
-            '__pycache__/',
-            '.DS_Store',
-        ]
-
-        try:
-            gitignore = git_root / '.gitignore'
-
-            existing_content = ''
-            existing_lines = []
-            if gitignore.exists():
-                existing_content = gitignore.read_text(encoding='utf-8')
-                existing_lines = existing_content.splitlines()
-
-            # Migrate: remove stale entries from older Embody versions.
-            # NOTE: .envoy-tools-cache.json is intentionally kept gitignored
-            # (v5.0.356+) because a root-level cache can still be written
-            # by legacy paths; we don't want to accidentally commit it.
-            STALE_ENTRIES = {'.claude/', '.claude/envoy-bridge.py',
-                             '.envoy.json', '.embody.json',
-                             '.embody/envoy-bridge.py',
-                             '.embody/envoy-tools-cache.json',
-                             # v5.0.387: replaced by '.embody/*' + '!.embody/project.json'
-                             # so .embody/project.json (committed td_build pin) is tracked.
-                             '.embody/'}
-            existing_stripped = {line.strip() for line in existing_lines}
-            found_stale = STALE_ENTRIES & existing_stripped
-            if found_stale:
-                existing_lines = [
-                    line for line in existing_lines
-                    if line.strip() not in STALE_ENTRIES
-                ]
-                existing_content = '\n'.join(existing_lines)
-                if existing_content and not existing_content.endswith('\n'):
-                    existing_content += '\n'
-                self._log(f'Migrated .gitignore: removed stale entries {found_stale}')
-
-            existing_stripped = {line.strip() for line in existing_lines}
-            missing = [e for e in MANAGED_ENTRIES if e not in existing_stripped]
-
-            if not missing:
-                self._log('.gitignore already configured', 'DEBUG')
-                return
-
-            block = '\n# Embody / Envoy (auto-managed)\n'
-            block += '\n'.join(missing) + '\n'
-
-            if existing_content and not existing_content.endswith('\n'):
-                block = '\n' + block
-
-            gitignore.write_text(existing_content + block, encoding='utf-8')
-            self._log(f'Added {len(missing)} entries to .gitignore: {", ".join(missing)}')
-
-        except Exception as e:
-            self._log(f'Could not auto-configure .gitignore: {e}', 'WARNING')
+        """Ensure .gitignore contains Embody/Envoy auto-generated entries -- see envoy_setup."""
+        return mod.envoy_setup.configure_gitignore(self, git_root)
 
     def _configureGitattributes(self, git_root):
-        """Ensure .gitattributes normalizes line endings for TD-exported files
-        and enables semantic diffs for .tdn. TouchDesigner writes CRLF on all
-        platforms; this forces LF in git so externalized files don't show as
-        dirty after every TD save. The `diff=tdn` attribute pairs with the git
-        diff driver registered by _configureTdnDiffDriver, so `git diff` on a
-        .tdn shows only real network changes -- the volatile export header
-        (build/timestamp/version/source .toe) is stripped before diffing.
-        Idempotent -- migrates an existing managed block that predates the
-        diff driver."""
-        MANAGED_BLOCK = (
-            '\n# Embody / Envoy -- normalize TD line endings (auto-managed)\n'
-            '*.py text eol=lf\n'
-            '*.md text eol=lf\n'
-            '*.tdn text eol=lf diff=tdn\n'
-            '*.json text eol=lf\n'
-            '*.tsv text eol=lf\n'
-            '*.xml text eol=lf\n'
-            '*.toe binary\n'
-            '*.tox binary\n'
-        )
-        MARKER = 'Embody / Envoy'
-
-        try:
-            gitattr = git_root / '.gitattributes'
-            existing = ''
-            if gitattr.exists():
-                existing = gitattr.read_text(encoding='utf-8')
-
-            if MARKER in existing:
-                # Migrate a managed block that predates the .tdn diff driver.
-                if ('*.tdn text eol=lf diff=tdn' not in existing
-                        and '*.tdn text eol=lf' in existing):
-                    existing = existing.replace(
-                        '*.tdn text eol=lf', '*.tdn text eol=lf diff=tdn')
-                    gitattr.write_text(existing, encoding='utf-8')
-                    self._log(
-                        'Migrated .gitattributes: enabled .tdn semantic diff')
-                else:
-                    self._log('.gitattributes already configured', 'DEBUG')
-                return
-
-            if existing and not existing.endswith('\n'):
-                existing += '\n'
-
-            gitattr.write_text(existing + MANAGED_BLOCK, encoding='utf-8')
-            self._log('Added line-ending normalization to .gitattributes')
-
-        except Exception as e:
-            self._log(f'Could not auto-configure .gitattributes: {e}', 'WARNING')
+        """Ensure .gitattributes normalizes TD line endings + .tdn diffs -- see envoy_setup."""
+        return mod.envoy_setup.configure_gitattributes(self, git_root)
 
     def _configureTdnDiffDriver(self, target_dir, python_cmd):
-        """Deploy the .tdn git textconv script and register it as a git diff
-        driver in the repo. With the `*.tdn diff=tdn` attribute (set by
-        _configureGitattributes), this makes `git diff` / `git log -p` /
-        `git show` on .tdn files show only semantic network changes -- the
-        volatile export header is stripped before diffing, so re-exporting an
-        unchanged network produces an empty diff. This is the committed/on-disk
-        counterpart to the live `diff_tdn` MCP tool. The driver definition must
-        live in the repo's git config (git refuses to run textconv commands
-        defined by a cloned repo), so Embody configures it the same way it
-        manages .gitignore/.gitattributes/.mcp.json. Idempotent."""
-        from pathlib import Path
-        try:
-            target_dir = Path(target_dir)
-            embody_dir = target_dir / '.embody'
-            embody_dir.mkdir(parents=True, exist_ok=True)
-            script_path = embody_dir / 'tdn_textconv.py'
-
-            # Source from the templates textDAT, else the dev/embody fallback.
-            content = None
-            try:
-                templates = self.ownerComp.op('templates')
-                dat = templates.op('text_tdn_textconv') if templates else None
-                if dat:
-                    content = dat.text
-            except Exception:
-                pass
-            if not content:
-                source = Path(project.folder) / 'embody' / 'tdn_textconv.py'
-                if source.exists():
-                    content = source.read_text(encoding='utf-8')
-            if not content:
-                self._log(
-                    'tdn_textconv source not found -- skipping .tdn diff driver',
-                    'DEBUG')
-                return
-
-            # Write only if changed, to avoid touching mtime needlessly.
-            if not (script_path.exists()
-                    and script_path.read_text(encoding='utf-8') == content):
-                script_path.write_text(content, encoding='utf-8')
-
-            # Register the driver in the repo's git config (idempotent).
-            script_str = str(script_path).replace('\\', '/')
-            driver = '"%s" "%s"' % (python_cmd, script_str)
-            git_kwargs = dict(cwd=str(target_dir), capture_output=True,
-                              text=True, timeout=10,
-                              stdin=subprocess.DEVNULL)
-            current = subprocess.run(
-                ['git', 'config', '--get', 'diff.tdn.textconv'], **git_kwargs)
-            if (current.stdout or '').strip() != driver:
-                subprocess.run(
-                    ['git', 'config', 'diff.tdn.textconv', driver],
-                    check=True, **git_kwargs)
-                subprocess.run(
-                    ['git', 'config', 'diff.tdn.cachetextconv', 'false'],
-                    check=True, **git_kwargs)
-                self._log('Configured git diff driver for .tdn (semantic diffs)')
-
-        except (subprocess.SubprocessError, OSError) as e:
-            self._log(f'Could not configure .tdn git diff driver: {e}', 'DEBUG')
-        except Exception as e:
-            self._log(f'Could not deploy tdn_textconv: {e}', 'WARNING')
+        """Deploy the .tdn git textconv script and register the diff driver -- see envoy_setup."""
+        return mod.envoy_setup.configure_tdn_diff_driver(self, target_dir, python_cmd)
 
     def _cleanupTempFiles(self):
-        """Remove stale Envoy temp files (captures, offloaded responses) from /tmp.
-        Deletes files older than 24 hours matching envoy_* patterns."""
-        import glob
-        import os
-
-        tmp = tempfile.gettempdir()
-        patterns = [os.path.join(tmp, 'envoy_capture_*'),
-                    os.path.join(tmp, 'envoy_query_network_*'),
-                    os.path.join(tmp, 'envoy_get_op_*')]
-        cutoff = time.time() - 86400  # 24 hours ago
-        removed = 0
-        for pattern in patterns:
-            for path in glob.glob(pattern):
-                try:
-                    if os.path.getmtime(path) < cutoff:
-                        os.remove(path)
-                        removed += 1
-                except OSError:
-                    pass
-        if removed:
-            self._log(f'Cleaned up {removed} stale Envoy temp file(s)', 'DEBUG')
+        """Remove stale Envoy temp files from /tmp -- see envoy_setup."""
+        return mod.envoy_setup.cleanup_temp_files(self)
 
     def _maybe_offload_to_file(self, result: dict, label: str,
                                 threshold: int = 50000) -> dict:

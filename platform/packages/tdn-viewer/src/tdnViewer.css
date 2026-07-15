@@ -19,11 +19,10 @@
   overflow: hidden;
   border: 1px solid var(--tdn-line);
   border-radius: var(--radius, 14px);
-  background:
-    linear-gradient(rgba(200, 208, 201, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(200, 208, 201, 0.035) 1px, transparent 1px),
-    var(--tdn-bg);
-  background-size: 32px 32px;
+  /* Solid fill only -- the grid is drawn by React Flow's <Background>, which
+     pans and zooms WITH the network (a static CSS grid here would sit still,
+     fighting the moving graph). */
+  background: var(--tdn-bg);
 }
 
 .tdn-viewer .react-flow__controls {
@@ -58,18 +57,23 @@
 
 .tdn-operator {
   position: relative;
-  width: 168px;
-  min-height: 74px;
+  /* Fill the node box, which TdnViewer sizes to the operator's REAL TD footprint
+     (1:1 with TouchDesigner). */
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
   overflow: hidden;
   border: 1px solid var(--tdn-line-faint);
   border-radius: var(--radius-sm, 8px);
   background: color-mix(in srgb, var(--family-color) 14%, var(--tdn-panel) 86%);
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.28);
+  /* A tight, small-radius shadow: large-blur shadows on every tile re-rasterize
+     while panning/zooming and tank the frame rate. This stays cheap. */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   color: var(--tdn-text);
 }
 
-/* A COMP that can be drilled into: pointer cursor + a lift on hover so it reads
-   as openable, and a brightened family-color outline echoing the head bar. */
+/* A COMP that can be drilled into: pointer cursor + a brightened family-color
+   outline on hover so it reads as openable. Ring uses 0-blur spread (cheap). */
 .tdn-operator--enterable {
   cursor: pointer;
   transition: border-color 130ms ease, box-shadow 130ms ease;
@@ -78,15 +82,23 @@
 .tdn-operator--enterable:hover {
   border-color: color-mix(in srgb, var(--family-color) 64%, var(--tdn-line));
   box-shadow:
-    0 18px 46px rgba(0, 0, 0, 0.28),
-    0 0 0 1px color-mix(in srgb, var(--family-color) 52%, transparent),
-    0 0 20px color-mix(in srgb, var(--family-color) 26%, transparent);
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 0 0 1px color-mix(in srgb, var(--family-color) 52%, transparent);
+}
+
+/* The selected operator: a bright accent ring (0-blur spread, cheap) so it's
+   unmistakable which tile the properties panel is describing. */
+.tdn-operator--selected,
+.tdn-operator--enterable.tdn-operator--selected:hover {
+  border-color: var(--tdn-accent);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 0 0 2px var(--tdn-accent);
 }
 
 .tdn-operator__head {
   height: 12px;
   background: var(--family-color);
-  box-shadow: 0 0 22px color-mix(in srgb, var(--family-color) 42%, transparent);
 }
 
 .tdn-operator__body {
@@ -135,12 +147,17 @@
   bottom: -5px;
 }
 
-/* Dock connector: smaller and muted vs the accent data-flow handles, so a docked
-   op reads as "attached to" its host, not wired into the signal chain. */
+/* Dock connector: invisible anchor only. The dashed tether conveys the docking;
+   a visible dot sat half-outside the tile and got clipped by overflow:hidden, so
+   it's hidden for a cleaner, more minimal read (the edge still anchors here). */
 .tdn-handle.tdn-handle--dock {
-  width: 7px;
-  height: 7px;
-  background: rgba(150, 162, 154, 0.7);
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+  border: 0;
+  opacity: 0;
 }
 
 /* Ref-edge endpoints (e.g. a Feedback TOP's Target): invisible top connectors --
@@ -161,9 +178,11 @@
   align-content: start;
   gap: 8px;
   overflow: hidden;
-  border: 1px solid var(--annotation-color);
+  /* Mix the authored color with the viewer's line/panel colors so the container
+     (border + subtle fill) is always visible, even for dark annotation colors. */
+  border: 1px solid color-mix(in srgb, var(--annotation-color) 55%, var(--tdn-line));
   border-radius: var(--radius-sm, 8px);
-  background: color-mix(in srgb, var(--annotation-color) 18%, transparent);
+  background: color-mix(in srgb, var(--annotation-color) 12%, var(--tdn-panel));
   padding: 12px 14px;
   color: color-mix(in srgb, var(--tdn-text) 66%, transparent);
   font: 600 13px/1.3 var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
@@ -175,8 +194,9 @@
   color: color-mix(in srgb, var(--tdn-text) 82%, transparent);
 }
 
+/* Body text fills the full annotation width (wraps at the box edge), the way TD
+   lays out the annotateCOMP body -- no early max-width cap leaving a right gutter. */
 .tdn-annotation p {
-  max-width: 48ch;
   margin: 0;
   color: color-mix(in srgb, var(--tdn-text) 52%, transparent);
   line-height: 1.35;
@@ -210,15 +230,8 @@
   height: 100dvh !important;
   z-index: 9999;
   border-radius: 0;
-  /* Keep the inline viewer's dot-grid background instead of flattening to a
-     solid fill, so fullscreen matches the main-page view. (The base .tdn-viewer
-     background layers the grid over an opaque var(--tdn-bg), so the overlay
-     still fully covers the page.) */
-  background:
-    linear-gradient(rgba(200, 208, 201, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(200, 208, 201, 0.035) 1px, transparent 1px),
-    var(--tdn-bg);
-  background-size: 32px 32px;
+  /* Solid fill; the moving grid is React Flow's <Background> (see base rule). */
+  background: var(--tdn-bg);
 }
 .tdn-viewer__close {
   position: absolute;

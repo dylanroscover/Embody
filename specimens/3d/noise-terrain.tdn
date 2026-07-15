@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 3
-generator: Embody/6.0.39
+generator: Embody/6.0.113
 td_build: 099.2025.32820
-source_file: Embody-6.39.toe
-exported_at: '2026-06-22T03:49:43Z'
+source_file: Embody-6.113.toe
+exported_at: '2026-07-10T13:53:50Z'
 network_path: /specimen_lab/noise_terrain
 options:
   include_dat_content: true
@@ -58,6 +58,7 @@ par_templates:
   - label: Position
     name: Posx
     sequence: pt
+    size: 3
     style: XYZW
 type: baseCOMP
 custom_pars:
@@ -180,8 +181,6 @@ operators:
     ty: 6.2
     tz: 16
     rx: -13
-  flags:
-  - display
   position: [500, -330]
   size: [160, 130]
   color: [0.3, 0.5, 0.9]
@@ -201,9 +200,6 @@ operators:
   type: geometryCOMP
   parameters:
     material: glsl_snow
-  flags:
-  - display
-  - render
   size: [160, 130]
   color: [0.3, 0.5, 0.9]
   tags:
@@ -330,8 +326,6 @@ operators:
     rx: -22
     ry: -45
     lighttype: distant
-  flags:
-  - display
   position: [500, -580]
   size: [160, 130]
   color: [0.3, 0.5, 0.9]

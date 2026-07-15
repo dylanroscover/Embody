@@ -1,173 +1,51 @@
 '''
-Embody v5
+Embody v{{VERSION}}
 ===============
 
-Embody provides robust automated externalization for
-TouchDesigner projects. Any COMP or DAT operator(s) in your
-project can be tagged by pressing left control twice in a row
-while selected to automatically externalize it to a version-
-control-friendly file (.tox, .py, .json, etc.).
+Embody keeps TouchDesigner projects in version control. It
+externalizes your tagged COMPs and DATs to diffable files on
+disk (.tox, .tdn, .py, ...), so a binary .toe stops being the
+thing you have to trust -- the files are.
 
-Simply drag and drop the Embody .tox from the /release folder
-into your project to get started!
+Bundled with Embody is Envoy, an embedded MCP server that lets
+AI coding assistants (Claude Code and others) create, modify,
+connect, and query operators in your live TD session, and
+manage your externalizations -- all over a local connection.
 
-Getting Started
----------------
-1. Add the Embody .tox to your project
-2. Tag operators for externalization (lctrl-lctrl)
-3. Press ctrl-shift-u to initialize/update
-4. Work as normal -- externalized files are the source of truth
+The core loop
+-------------
+1. Tag an operator for externalization -- hover it and press
+   {{TAGGERTAP}}.
+2. Update -- press {{SC:Shortcutupdateall}}. Embody walks your
+   project and writes every tagged operator to disk.
+3. Work as normal. The externalized files on disk are the
+   source of truth; the .toe is just a container. Everything
+   tagged is recoverable from the files, even without saving.
 
-The default Tags are listed on the Tags page. These can be
-customized, but please do so before you enable Embody.
+To un-externalize, pulse Disable -- it removes only the files
+Embody tracks and leaves anything else in the folder alone.
 
-To enable (initialize), add your specified Tag(s) to any
-supported OP, set your externalization Folder, and pulse the
-Enable/Update button. Embody will search your entire project
-for tagged operators and externalize them with a folder
-structure mirroring your TouchDesigner network.
+Turning on Envoy (the MCP server)
+---------------------------------
+Toggle the Envoyenable parameter ON. Envoy starts on a local
+port and writes a .mcp.json into your project root so AI
+clients can discover it. Regenerate config at any time with
+op.Embody.InitEnvoy(); set up git with op.Embody.InitGit().
 
-You may also externalize all supported OPs in one step via
-the "Externalize Full Project" button.
+Getting around
+--------------
+{{SHORTCUTS}}
+Every shortcut is editable on the Embody COMP's Shortcuts
+parameter page -- type a combo, or pulse Record and press
+the keys. Leave a binding empty to disable it.
 
-Supported Operators
--------------------
-COMPs:
-- All COMPs except engine, time and annotate
+This panel is a quick orientation, not the manual. For the
+full reference -- supported formats, folder configuration,
+duplicate handling, the Manager UI, the TDN format, every
+Envoy tool, and troubleshooting -- see the docs:
 
-DATs:
-- Text DAT
-- Table DAT
-- Execute DAT
-- Parameter Execute DAT
-- Parameter Group Execute DAT
-- CHOP Execute DAT
-- DAT Execute DAT
-- OP Execute DAT
-- Panel Execute DAT
+  https://embody.tools
+  https://dylanroscover.github.io/Embody/
 
-Supported File Formats
-----------------------
-COMPs: .tox, .tdn (TDN strategy)
-DATs:  .py, .json, .xml, .html, .glsl, .frag, .vert,
-       .txt, .md, .rtf, .csv, .tsv, .dat
-
-Workflow
---------
-Embody keeps your external files up to date as you work.
-Press ctrl-shift-u to update all dirty externalizations, or
-ctrl-alt-u to update just the COMP you're currently inside.
-DATs are automatically synchronized by TouchDesigner via
-their Sync to File parameter.
-
-Embody also tracks parameter changes on externalized COMPs.
-When any parameter is modified, the COMP is marked dirty
-with a "Par" indicator, ensuring parameter tweaks are never
-lost.
-
-Automatic Restoration
----------------------
-You do not need to save your .toe file to preserve your
-externalized work. On project open, Embody automatically
-restores everything from the files on disk:
-
-- TOX-strategy COMPs: Restored from .tox files if missing
-  from the .toe (via the Toxrestoreonstart toggle)
-- TDN-strategy COMPs: Children are reconstructed from .tdn
-  JSON files (via the Tdncreateonstart toggle)
-- DATs: Synced from their external files via TouchDesigner's
-  native file parameter
-
-Your externalized files on disk are the source of truth.
-The .toe file is just a convenient container -- all tagged
-operators are fully recoverable from the external files.
-
-All file paths are normalized to forward slashes for cross-
-platform compatibility between Windows and macOS.
-
-To reset ('unexternalize'), pulse the Disable button. This
-deletes only files tracked by Embody. Untracked files in
-the externalization folder are preserved.
-
-Export Portable Tox
--------------------
-Export any COMP as a self-contained .tox file with all
-external file references and Embody tags stripped. The
-exported .tox works when loaded into any TouchDesigner
-project with no missing file errors and no Embody metadata.
-
-Use via the Actions menu in the Manager UI (click a COMP's
-strategy cell, then click "Export portable tox"), or call
-programmatically: op.Embody.ExportPortableTox(target, path)
-
-Non-system absolute paths are warned about but not stripped.
-
-Envoy (MCP Server)
----------------------
-Embody includes Envoy, an MCP (Model Context Protocol)
-server that enables AI coding assistants to interact with TouchDesigner
-programmatically. When enabled, Envoy lets you:
-
-- Create, modify, connect, and query operators
-- Read and write DAT content
-- Manage Embody externalizations
-- Execute Python code in TouchDesigner
-- Export/import networks via the TDN format
-
-To enable: toggle the Envoyenable parameter ON. The server
-starts on port 9870 by default and auto-creates a .mcp.json
-file in your project root for AI coding assistants to discover.
-
-You can regenerate Envoy config files at any time:
-  op.Embody.InitEnvoy()  -- MCP + AI client config
-  op.Embody.InitGit()    -- git repo + .gitignore/.gitattributes
-
-TDN Network Format
-------------------
-Embody can export and import TouchDesigner networks as human-
-readable .tdn YAML files (a JSON superset; legacy JSON .tdn still
-load). This captures operators, parameters, connections, and
-layout in a diffable format.
-
-Use ctrl-shift-e to export the full project, or ctrl-alt-e
-to export just the current network.
-
-Cascade TDN to child COMPs (Tdncascade toggle on TDN page):
-When enabled, tagging a COMP for TDN automatically tags all
-child COMPs too, so each gets its own .tdn file. This keeps
-individual files small and git-friendly instead of producing
-one large monolithic .tdn. Parent files store lightweight
-tdn_ref pointers to each child's .tdn file.
-
-Palette handling (Tdnpalettehandling on TDN page):
-When a TDN export encounters a TD palette COMP (e.g.
-abletonLink, Widget components), Embody decides whether to
-reference it (Black Box) or export its internals (Full
-Export). Ask (default) prompts on first encounter per COMP;
-your choice is remembered per-COMP via comp.store(). The
-four-button dialog also lets you flip the project-wide
-default to Black Box or Full Export for All so you aren't
-re-prompted for subsequent palette COMPs.
-
-Manager UI
-----------
-Press ctrl-shift-o to open the Manager, a TreeLister of all
-externalized operators and their metadata. From here you can:
-- View dirty state and build info for each operator
-- Navigate to any operator by clicking
-- Open file locations in your system file browser
-- Refresh, filter, and search externalizations
-- Trigger Initialize/Update or Reset
-
-Keyboard Shortcuts
-------------------
-ctrl-shift-o :   Open the Manager UI
-lctrl-lctrl :    Tag or manage the operator under the cursor
-                 (shows Actions menu for already-tagged operators)
-ctrl-shift-u :   Update all externalizations
-ctrl-alt-u :     Update only the current COMP you are inside
-ctrl-shift-r :   Refresh tracking state
-ctrl-shift-e :   Export the full project network to .tdn
-ctrl-alt-e :     Export the current network to .tdn
-
+The Github button on the Embody page opens the source repo.
 '''

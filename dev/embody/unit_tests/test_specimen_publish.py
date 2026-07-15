@@ -132,7 +132,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		super().setUp()
 		self.pub_op = op('/specimen_publish')
 		if self.pub_op is None:
-			self.skip('/specimen_publish DAT not present in this project')
+			self.skipTest('/specimen_publish DAT not present in this project')
 		self.mod = self.pub_op.module
 		# Snapshot the module globals we override so tearDown restores them.
 		self._saved_globals = {}
@@ -328,10 +328,10 @@ class TestSpecimenPublishLive(EmbodyTestCase):
 		super().setUp()
 		self.pub_op = op('/specimen_publish')
 		if self.pub_op is None:
-			self.skip('/specimen_publish DAT not present')
+			self.skipTest('/specimen_publish DAT not present')
 		lab = op('/specimen_lab')
 		if lab is None or not list(lab.children):
-			self.skip('/specimen_lab gallery not present (live-only test)')
+			self.skipTest('/specimen_lab gallery not present (live-only test)')
 		# Pick the first child COMP as the live specimen to publish.
 		self._live = None
 		for ch in lab.children:
@@ -339,7 +339,7 @@ class TestSpecimenPublishLive(EmbodyTestCase):
 				self._live = ch
 				break
 		if self._live is None:
-			self.skip('/specimen_lab has no COMP children')
+			self.skipTest('/specimen_lab has no COMP children')
 		self._tmp_out = tempfile.mkdtemp(prefix='specpub_live_')
 
 	def tearDown(self):

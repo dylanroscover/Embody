@@ -37,7 +37,7 @@ class TestTDNHelpers(EmbodyTestCase):
 
     def test_serializeValue_float_decimal_preserved(self):
         result = self.tdn._serializeValue(3.14)
-        self.assertApproxEqual(result, 3.14)
+        self.assertAlmostEqual(result, 3.14)
 
     def test_serializeValue_string_unchanged(self):
         self.assertEqual(self.tdn._serializeValue('hello'), 'hello')
@@ -144,7 +144,7 @@ class TestTDNHelpers(EmbodyTestCase):
 
     def test_serializeStorageValue_float(self):
         result = self.tdn._serializeStorageValue(3.14)
-        self.assertApproxEqual(result, 3.14)
+        self.assertAlmostEqual(result, 3.14)
 
     def test_serializeStorageValue_string(self):
         self.assertEqual(self.tdn._serializeStorageValue('hello'), 'hello')
@@ -324,3 +324,62 @@ class TestTDNHelpers(EmbodyTestCase):
         finally:
             if os.path.exists(path):
                 os.unlink(path)
+
+    # --- _findLockedNonDATs boundaries (issue #53) ---
+
+    def _lockedTop(self, parent, name):
+        t = parent.create(noiseTOP, name)
+        t.lock = True
+        return t
+
+    def test_findLocked_direct_child_reported(self):
+        root = self.sandbox.create(baseCOMP, 'lk_root')
+        t = self._lockedTop(root, 'locked_direct')
+        self.assertIn(t, self.tdn._findLockedNonDATs(root))
+
+    def test_findLocked_locked_dat_not_reported(self):
+        root = self.sandbox.create(baseCOMP, 'lk_root_dat')
+        d = root.create(textDAT, 'locked_dat')
+        d.lock = True
+        self.assertEqual(self.tdn._findLockedNonDATs(root), [])
+
+    def test_findLocked_under_tox_tagged_child_skipped(self):
+        # A nested TOX-strategy COMP preserves locked content in its own
+        # .tox -- the parent's TDN export must not warn about it.
+        root = self.sandbox.create(baseCOMP, 'lk_root_tox')
+        sub = root.create(baseCOMP, 'sub_tox')
+        sub.tags.add(self.embody.par.Toxtag.val)
+        self._lockedTop(sub, 'locked_nested')
+        self.assertEqual(self.tdn._findLockedNonDATs(root), [])
+
+    def test_findLocked_under_tdn_tagged_child_skipped(self):
+        # A nested TDN boundary raises its own warning when IT exports.
+        root = self.sandbox.create(baseCOMP, 'lk_root_tdn')
+        sub = root.create(baseCOMP, 'sub_tdn')
+        sub.tags.add(self.embody.par.Tdntag.val)
+        self._lockedTop(sub, 'locked_nested')
+        self.assertEqual(self.tdn._findLockedNonDATs(root), [])
+
+    def test_findLocked_under_exclude_tagged_child_skipped(self):
+        # An exclude-tagged subtree is invisible to TDN entirely.
+        root = self.sandbox.create(baseCOMP, 'lk_root_excl')
+        sub = root.create(baseCOMP, 'sub_excl')
+        sub.tags.add(self.embody.par.Tdnexcludetag.val)
+        self._lockedTop(sub, 'locked_nested')
+        self.assertEqual(self.tdn._findLockedNonDATs(root), [])
+
+    def test_findLocked_under_untagged_child_still_reported(self):
+        # Plain nested COMPs are serialized inline -- still this export's
+        # responsibility, so the warning must still fire.
+        root = self.sandbox.create(baseCOMP, 'lk_root_plain')
+        sub = root.create(baseCOMP, 'sub_plain')
+        t = self._lockedTop(sub, 'locked_nested')
+        self.assertIn(t, self.tdn._findLockedNonDATs(root))
+
+    def test_findLocked_tag_on_root_itself_ignored(self):
+        # Tags on the export root itself do not hide its own children --
+        # only tags strictly BETWEEN the child and the root form a boundary.
+        root = self.sandbox.create(baseCOMP, 'lk_root_self')
+        root.tags.add(self.embody.par.Tdntag.val)
+        t = self._lockedTop(root, 'locked_direct')
+        self.assertIn(t, self.tdn._findLockedNonDATs(root))

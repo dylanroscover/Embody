@@ -7,7 +7,9 @@ Anyone with a free [account](accounts.md) can share a network with the [Collecti
 - **TDN (YAML)** — paste your network as TDN. Export it from Embody with ++ctrl+shift+e++ (whole project) or ++ctrl+alt+e++ (current COMP), or copy a COMP with ++ctrl+shift+c++. Both YAML and legacy JSON are accepted.
 - **Title, description, tags.**
 - **Category, level, and hardware requirements** (e.g. MediaPipe, Kinect Azure, Audio — or none, for stock TouchDesigner).
-- **An optional thumbnail image.**
+- **A license** — an SPDX-style identifier picked from the license dropdown (defaults to `CC-BY-4.0`).
+- **An optional thumbnail image** (resized to 640x360), and/or an **optional cover video** (MP4/H.264, 16:9, max 10 MB — a poster frame is auto-extracted as the cover image).
+- **Visibility** — `private` (default), `public`, or `unlisted`. You can publish or unpublish anytime from the specimen page.
 
 ## The capability scan
 

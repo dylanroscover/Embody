@@ -1,5 +1,5 @@
 """
-Test suite: EmbodyExt._verifyMcpImportable.
+Test suite: Envoy Python environment setup helpers.
 
 Fast path must not tear down and re-import mcp.* on top of an
 already-loaded pydantic_core (Rust C extension). Re-running pydantic
@@ -15,9 +15,11 @@ introduced by the original sys.modules-clearing path in v5.0.393.
 """
 
 import os
+import importlib
 import shutil
 import sys
 import tempfile
+import threading
 import types
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
@@ -34,12 +36,18 @@ class TestVerifyMcpImportableFastPath(EmbodyTestCase):
 			k: v for k, v in sys.modules.items()
 			if k == 'mcp' or k.startswith('mcp.')
 		}
+		self._had_gate_flag = hasattr(sys, '_envoy_import_gate_ok')
+		self._saved_gate_flag = getattr(sys, '_envoy_import_gate_ok', None)
 
 	def tearDown(self):
 		# Restore exactly what was there before.
 		for k in [k for k in sys.modules if k == 'mcp' or k.startswith('mcp.')]:
 			del sys.modules[k]
 		sys.modules.update(self._saved)
+		if self._had_gate_flag:
+			sys._envoy_import_gate_ok = self._saved_gate_flag
+		elif hasattr(sys, '_envoy_import_gate_ok'):
+			delattr(sys, '_envoy_import_gate_ok')
 		super().tearDown()
 
 	def _clearMcp(self):
@@ -94,16 +102,55 @@ class TestVerifyMcpImportableFastPath(EmbodyTestCase):
 		half_loaded._sentinel = object()
 		sys.modules['mcp'] = half_loaded
 
-		# Either this succeeds (the venv really has mcp) or fails -- both
-		# are fine; what matters is that the fast path did NOT short-circuit
-		# on the half-loaded 'mcp' entry, so 'mcp' is either gone or
-		# replaced by a fresh module after the call.
-		self.ext._verifyMcpImportable('/dummy')
+		# What matters is that the fast path did NOT short-circuit on the
+		# half-loaded 'mcp' entry, so 'mcp' is cleared before the recovery
+		# import. Patch import_module so this test never imports the real MCP
+		# stack and then clears it again before later tests.
+		real_import_module = importlib.import_module
+
+		def fail_mcp_server(name, *args, **kwargs):
+			if name == 'mcp.server':
+				raise ImportError('sentinel import failure')
+			return real_import_module(name, *args, **kwargs)
+
+		importlib.import_module = fail_mcp_server
+		try:
+			self.ext._verifyMcpImportable('/dummy')
+		finally:
+			importlib.import_module = real_import_module
 
 		surviving = sys.modules.get('mcp')
 		self.assertIsNot(surviving, half_loaded,
 			'half-loaded mcp parent must have been cleared and re-imported '
 			'(or removed when import failed)')
+
+	def test_B01_import_gate_check_succeeds_and_is_thread_safe(self):
+		"""The split gate works in the dev env and from a plain Thread."""
+		if hasattr(sys, '_envoy_import_gate_ok'):
+			delattr(sys, '_envoy_import_gate_ok')
+		spec = self.ext._venvPaths()
+		self.assertTrue(self.ext._wirePythonPaths(spec))
+		ok, msg = self.ext._importGateCheck()
+		self.assertTrue(ok, msg)
+		self.assertEqual(msg, '')
+		self.assertTrue(getattr(sys, '_envoy_import_gate_ok', False))
+
+		gate = self.ext._importGateCheck
+		result = []
+
+		def worker():
+			result.append(gate())
+
+		t = threading.Thread(target=worker)
+		t.start()
+		t.join(30)
+		self.assertFalse(t.is_alive(), 'import gate thread timed out')
+		self.assertEqual(len(result), 1)
+		ok, msg = result[0]
+		self.assertTrue(ok, msg)
+		# Start() short-circuits on this sys flag; driving Start() needs a full
+		# Envoy server lifecycle, so the flag contract is asserted here instead.
+		self.assertTrue(getattr(sys, '_envoy_import_gate_ok', False))
 
 
 class TestVenvPaths(EmbodyTestCase):
@@ -138,6 +185,26 @@ class TestVenvPaths(EmbodyTestCase):
 		spec = self.ext._venvPaths()
 		self.assertIn('.venv', spec['venv_dir'])
 		self.assertTrue(spec['site_packages'].startswith(spec['venv_dir']))
+
+	def test_wire_python_paths_is_idempotent(self):
+		tmp = tempfile.mkdtemp(prefix='embody_pathtest_')
+		before = list(sys.path)
+		try:
+			venv_dir = os.path.join(tmp, '.venv')
+			site_packages = os.path.join(venv_dir, 'site-packages')
+			os.makedirs(site_packages)
+			spec = {'venv_dir': venv_dir, 'site_packages': site_packages}
+			start_count = sys.path.count(site_packages)
+
+			self.assertTrue(self.ext._wirePythonPaths(spec))
+			self.assertTrue(self.ext._wirePythonPaths(spec))
+
+			self.assertLessEqual(
+				sys.path.count(site_packages) - start_count, 1,
+				'_wirePythonPaths must not add duplicate site-packages entries')
+		finally:
+			sys.path[:] = before
+			shutil.rmtree(tmp, ignore_errors=True)
 
 
 class TestEnvironmentNeedsInstall(EmbodyTestCase):

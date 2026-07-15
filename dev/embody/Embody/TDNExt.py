@@ -7,7 +7,8 @@ properties are stored, keeping the output minimal.
 
 This extension lives on the Embody COMP and is callable via:
   - MCP tools (export_network / import_network) through Envoy
-  - TD UI (keyboard shortcut Ctrl+Shift+N, pulse parameters)
+  - TD UI (the Shortcuts-page export bindings, default ctrl+shift+e /
+    ctrl+alt+e -- cmd on macOS -- plus pulse parameters)
   - Direct Python: op.Embody.ext.TDN.ExportNetwork(...)
 """
 
@@ -190,6 +191,10 @@ SKIP_STORAGE_KEYS = {
 	'_tdn_stripped_paths', '_git_root',
 	'envoy_running', 'envoy_shutdown_event',
 	'expanded_paths', 'manage_file_path', 'visible_count', 'hover',
+	# Embody-managed recovery/restore markers -- live on the COMP shell in
+	# the .toe, never inside the .tdn (serializing _tdn_rel_path would make
+	# every pasted/imported copy claim the original's file).
+	'_tdn_rel_path', '_pending_tox_restore',
 }
 _SYSTEM_PATH_PREFIXES = tuple(p + '/' for p in SYSTEM_PATHS)
 
@@ -301,6 +306,13 @@ class TDNExt:
 		self._divergent_loaded: bool = False
 		# On-the-fly fallback cache for unknown TD builds.
 		self._runtime_creation_cache: dict[str, dict[str, Any]] = {}
+		# Per-OPType creation FLAG values. Flag defaults vary by type --
+		# object COMPs (geometryCOMP etc.) create with render/display ON,
+		# so the global DEFAULT_FLAGS table alone would silently drop a
+		# user's render-off through the round-trip. Populated lazily by
+		# _getCreationFlagDefaults; deliberately NOT cleared per export
+		# (creation defaults are stable for a TD session).
+		self._flag_defaults_cache: dict[str, dict[str, bool]] = {}
 		self._scan_workspace: Optional['COMP'] = None
 		# Palette component catalog: {name: {'type': op_type, 'min_children': N}}.
 		# Populated by CatalogManagerExt after palette scan completes.
@@ -318,7 +330,9 @@ class TDNExt:
 		try:
 			_clip_gen = self.ownerComp.fetch('_clip_watch_gen', 0) + 1
 			self.ownerComp.store('_clip_watch_gen', _clip_gen)
-			run(f"op({self.ownerComp.path!r}).ext.TDN._clipboardWatchTick({_clip_gen})",
+			# Pending run() calls can outlive COMP replacement during upgrades.
+			run("o = op(%r)\nif o and o.valid: o.ext.TDN._clipboardWatchTick(%d)" %
+				(self.ownerComp.path, _clip_gen),
 				fromOP=self.ownerComp, delayMilliSeconds=2500)
 		except Exception:
 			pass
@@ -1123,6 +1137,9 @@ class TDNExt:
 				if not skip_cleanup:
 					before_tdn = TDNExt._collectExistingTDNFiles(
 						scan_folder, root_path)
+					# Only files Embody tracks are deletion candidates --
+					# never reclaim a stray the user placed themselves.
+					before_tdn = self._restrictToTrackedTDN(before_tdn)
 
 				write_result = TDNExt._safe_write_tdn(
 					filepath, content, scan_folder)
@@ -1249,6 +1266,11 @@ class TDNExt:
 			proj_folder = metadata['project_folder']
 			before_tdn = TDNExt._collectExistingTDNFiles(
 				proj_folder, root_path)
+			# Only files Embody tracks are deletion candidates -- never
+			# reclaim a stray the user placed themselves. Computed on the
+			# main thread, BEFORE the write/track step, so a re-pathed
+			# row's OLD file is still reclaimed.
+			before_tdn = self._restrictToTrackedTDN(before_tdn)
 			# Protect .tdn files belonging to other tracked TDN COMPs
 			# so the stale-file cleanup doesn't delete them.
 			protected_files = list(
@@ -1633,6 +1655,31 @@ class TDNExt:
 		root_path = self._reexport_queue.pop(0)
 		self.ExportNetworkAsync(root_path=root_path, output_file='auto')
 
+	@staticmethod
+	def _validateOpDefs(op_defs, path='operators'):
+		"""Structural validation of an operators list, pre-import.
+
+		Returns an error string describing the first malformed entry, or
+		None when the structure is sound. Checks only SHAPE (every entry a
+		mapping, every children value a list, recursively) -- per-field
+		tolerance stays with the phases, which skip/warn per item. This
+		runs before clear_first so a malformed document can never destroy
+		children and then fail. Pure; unit-testable without TD.
+		"""
+		if not isinstance(op_defs, list):
+			return f'{path} must be a list, got {type(op_defs).__name__}'
+		for i, op_def in enumerate(op_defs):
+			if not isinstance(op_def, dict):
+				return (f'{path}[{i}] must be a mapping, got '
+						f'{type(op_def).__name__}')
+			children = op_def.get('children')
+			if children is not None:
+				err = TDNExt._validateOpDefs(
+					children, f'{path}[{i}].children')
+				if err:
+					return err
+		return None
+
 	def ImportNetwork(self, target_path: str, tdn: Union[dict[str, Any], list[dict[str, Any]]],
 					  clear_first: bool = False, restore_file_links: bool = False) -> dict[str, Any]:
 		"""
@@ -1696,94 +1743,62 @@ class TDNExt:
 			ui.status = f'TDN Import: {msg}'
 			return {'error': msg}
 
-		# Capture external wires on dest's own connectors before clear
-		# so they can be re-wired after the rebuild. When dest has no
-		# live wires (cold open, or already-stripped comp during post-save),
-		# fall back to wires stashed on dest via comp.store() by
-		# StripCompChildren.
-		captured_externals = []
-		if clear_first:
-			try:
-				captured_externals = self._captureExternalConnections(dest)
-			except Exception as e:
-				self._log(
-					f'External capture failed on {target_path}: {e}', 'DEBUG')
-			if not captured_externals:
-				try:
-					stashed = dest.fetch(
-						'_tdn_external_wires', [], search=False)
-					if stashed:
-						captured_externals = list(stashed)
-				except Exception:
-					pass
+		# Structural validation BEFORE anything destructive. Hand-edited
+		# .tdn files (an explicitly supported workflow) can carry stray
+		# scalars or malformed nesting; the dict-walking pre-phases below
+		# would raise on those, and with the old ordering that raise
+		# landed AFTER clear_first had already destroyed the children --
+		# leaving the COMP empty with no error result. Reject cheaply
+		# here, while the network is still untouched.
+		structure_error = TDNExt._validateOpDefs(op_defs)
+		if structure_error:
+			msg = f'Malformed TDN document: {structure_error}'
+			ui.status = f'TDN Import: {msg}'
+			self._log(msg, 'ERROR')
+			return {'error': msg}
 
-		if clear_first:
-			# Excluded COMPs are invisible to TDN -- the owning app owns
-			# their lifecycle. Never destroy them during clear_first: they
-			# are absent from the .tdn, so reconstruction would not recreate
-			# them, making destruction permanent data loss.
-			excluded_children = {
-				c.path for c in dest.children if self._hasExcludeTag(c)}
-			if excluded_children:
-				self._log(
-					f'Preserving {len(excluded_children)} excluded COMP(s) '
-					f'during clear of {dest.path}', 'DEBUG')
-			# Clear dock relationships pointing INTO the destroy set before
-			# destroying -- TD's engine raises an uncatchable tdError if a
-			# dock target is destroyed before its docked operator. This MUST
-			# include a preserved excluded child docked to a soon-destroyed
-			# sibling, else the preservation reintroduces that crash. Docks
-			# between two preserved excluded children are left intact.
-			for child in list(dest.children):
-				try:
-					if (child.dock is not None
-							and child.dock.path not in excluded_children):
-						child.dock = None
-				except Exception:
-					pass
-			for child in list(dest.children):
-				if child.path in excluded_children:
-					continue
-				try:
-					child.destroy()
-				except Exception as e:
-					self._log(f'Failed to destroy {child.path}: {e}', 'WARNING')
-			# Also destroy utility operators (annotations) which .children skips
-			try:
-				for u_op in dest.findChildren(depth=1, includeUtility=True):
-					if u_op.type == 'annotate':
-						try:
-							u_op.destroy()
-						except Exception as e:
-							self._log(f'Failed to destroy annotation {u_op.path}: {e}', 'WARNING')
-			except Exception:
-				pass
+		# ------------------------------------------------------------------
+		# PURE PRE-PHASES -- dict-only transforms that need no live network
+		# state. All of these run BEFORE clear_first so any surprise in the
+		# document can still abort the import with the children intact.
+		# ------------------------------------------------------------------
 
 		# Pre-phase: Resolve templates and merge type defaults
 		if isinstance(tdn, dict):
 			par_templates = tdn.get('par_templates', {})
 			type_defaults = tdn.get('type_defaults', {})
+			if par_templates and not isinstance(par_templates, dict):
+				self._log(
+					f'Ignoring malformed par_templates '
+					f'({type(par_templates).__name__})', 'WARNING')
+				par_templates = {}
+			if type_defaults and not isinstance(type_defaults, dict):
+				self._log(
+					f'Ignoring malformed type_defaults '
+					f'({type(type_defaults).__name__})', 'WARNING')
+				type_defaults = {}
 			if par_templates:
 				TDNExt._resolve_par_templates(op_defs, par_templates)
 			if type_defaults:
 				TDNExt._merge_type_defaults(op_defs, type_defaults)
 
-		# Pre-phase: Never overwrite a preserved excluded child. A live
-		# excluded COMP is kept by the clear_first pass above; if a stale
-		# .tdn still lists an op with the same name, drop that entry so the
-		# later create/merge phases don't reuse and mutate the app-owned COMP.
-		if dest is not None:
-			excluded_names = {c.name for c in dest.children
-							  if self._hasExcludeTag(c)}
-			if excluded_names:
-				before = len(op_defs)
-				op_defs = [d for d in op_defs
-						   if d.get('name') not in excluded_names]
-				if len(op_defs) != before:
-					self._log(
-						f'Skipping {before - len(op_defs)} stale import '
-						f'entry(ies) matching preserved excluded COMP(s) in '
-						f'{target_path}', 'INFO')
+		# Pre-phase: Never overwrite a preserved excluded child. Excluded
+		# COMPs survive the clear_first pass below; if a stale .tdn still
+		# lists an op with the same name, drop that entry so the later
+		# create/merge phases don't reuse and mutate the app-owned COMP.
+		# Computed from live children BEFORE the clear -- the destroy pass
+		# preserves exactly the excluded set, so the names are identical.
+		excluded_names = {c.name for c in dest.children
+						  if self._hasExcludeTag(c)}
+		if excluded_names:
+			before = len(op_defs)
+			op_defs = [d for d in op_defs
+					   if d.get('name') not in excluded_names]
+			if len(op_defs) != before:
+				self._log(
+					f'Skipping {before - len(op_defs)} stale import '
+					f'entry(ies) matching preserved excluded COMP(s) in '
+					f'{target_path}', 'INFO')
 
 		# Pre-phase: Skip children of nested TDN-externalized COMPs.
 		# If a child COMP has its own .tdn entry in the externalizations table,
@@ -1824,7 +1839,76 @@ class TDNExt:
 		for w in tox_ref_warnings:
 			self._log(w, 'WARNING')
 
+		# ------------------------------------------------------------------
+		# MUTATING SECTION -- from here on the live network is touched.
+		# Everything below runs inside the error boundary so any failure
+		# returns {'error': ...} (which reconstruction/post-save callers
+		# use to trigger backup rollback) instead of escaping.
+		# ------------------------------------------------------------------
+		captured_externals = []
 		try:
+			# Capture external wires on dest's own connectors before clear
+			# so they can be re-wired after the rebuild. When dest has no
+			# live wires (cold open, or already-stripped comp during
+			# post-save), fall back to wires stashed on dest via
+			# comp.store() by StripCompChildren.
+			if clear_first:
+				try:
+					captured_externals = self._captureExternalConnections(dest)
+				except Exception as e:
+					self._log(
+						f'External capture failed on {target_path}: {e}', 'DEBUG')
+				if not captured_externals:
+					try:
+						stashed = dest.fetch(
+							'_tdn_external_wires', [], search=False)
+						if stashed:
+							captured_externals = list(stashed)
+					except Exception:
+						pass
+
+			if clear_first:
+				# Excluded COMPs are invisible to TDN -- the owning app owns
+				# their lifecycle. Never destroy them during clear_first: they
+				# are absent from the .tdn, so reconstruction would not recreate
+				# them, making destruction permanent data loss.
+				excluded_children = {
+					c.path for c in dest.children if self._hasExcludeTag(c)}
+				if excluded_children:
+					self._log(
+						f'Preserving {len(excluded_children)} excluded COMP(s) '
+						f'during clear of {dest.path}', 'DEBUG')
+				# Clear dock relationships pointing INTO the destroy set before
+				# destroying -- TD's engine raises an uncatchable tdError if a
+				# dock target is destroyed before its docked operator. This MUST
+				# include a preserved excluded child docked to a soon-destroyed
+				# sibling, else the preservation reintroduces that crash. Docks
+				# between two preserved excluded children are left intact.
+				for child in list(dest.children):
+					try:
+						if (child.dock is not None
+								and child.dock.path not in excluded_children):
+							child.dock = None
+					except Exception:
+						pass
+				for child in list(dest.children):
+					if child.path in excluded_children:
+						continue
+					try:
+						child.destroy()
+					except Exception as e:
+						self._log(f'Failed to destroy {child.path}: {e}', 'WARNING')
+				# Also destroy utility operators (annotations) which .children skips
+				try:
+					for u_op in dest.findChildren(depth=1, includeUtility=True):
+						if u_op.type == 'annotate':
+							try:
+								u_op.destroy()
+							except Exception as e:
+								self._log(f'Failed to destroy annotation {u_op.path}: {e}', 'WARNING')
+				except Exception:
+					pass
+
 			created = []
 
 			# Snapshot pre-existing children so Phase 1 can distinguish
@@ -2277,7 +2361,11 @@ class TDNExt:
 		# externalized children produce shells that look like normal
 		# leaf COMPs and the importer cannot tell them apart.
 		if hasattr(target, 'children'):
-			is_palette = self._isPaletteClone(target)
+			# Blackbox eligibility = classified AND restorable. A palette
+			# clone whose master is disabled/unresolvable exports fully --
+			# there is nothing to re-clone from on rebuild.
+			is_palette = (self._isPaletteClone(target)
+						  and self._cloneRestorable(target))
 			handling = self._resolvePaletteHandling(target) if is_palette else None
 			if is_palette and handling == 'blackbox':
 				data['palette_clone'] = True
@@ -2294,13 +2382,13 @@ class TDNExt:
 					if 'parameters' not in data:
 						data['parameters'] = {}
 					data['parameters'].update(clone_source_params)
-				# Strip clone/enablecloning -- TD plumbing that
-				# parent.create() auto-sets on rebuild.
-				if 'parameters' in data:
-					for skip_par in _PALETTE_CLONE_SKIP_PARAMS:
-						data['parameters'].pop(skip_par, None)
-					if not data['parameters']:
-						del data['parameters']
+				# clone/enablecloning are KEPT in the export: a blackboxed
+				# entry has no children in the .tdn, so a rebuilt shell can
+				# only refill itself by re-cloning -- stripping the clone
+				# reference (as older versions did) left rebuilds empty.
+				# The import side applies them only when the created op
+				# didn't auto-set its own clone (see _applyPaletteCloneRef),
+				# which keeps stale references in old files harmless.
 			elif self._hasTDNTag(target) and not options.get('embed_all'):
 				# Child's network managed by its own .tdn file.
 				# Write a tdn_ref pointer for cross-validation.
@@ -2487,6 +2575,54 @@ class TDNExt:
 
 		self._runtime_creation_cache[op_type] = vals
 		return vals
+
+	def _getCreationFlagDefaults(self, target):
+		"""Per-OPType creation values for the DEFAULT_FLAGS set.
+
+		TD's flag defaults vary by operator type: a fresh geometryCOMP has
+		render=True and display=True, a fresh cameraCOMP has display=True
+		(verified live 2026-07-03), while most families match the global
+		DEFAULT_FLAGS table. Comparing every op against DEFAULT_FLAGS made
+		"render off" on an object COMP look like the default -- it was
+		omitted from export and came back ON after a round-trip (hidden
+		scene objects reappearing in renders).
+
+		Probes one throwaway instance per OPType (same pattern and
+		workspace as _getCreationValueOnTheFly), cached for the extension
+		lifetime. Falls back to DEFAULT_FLAGS on any probe failure.
+		"""
+		op_type = target.OPType
+		cached = self._flag_defaults_cache.get(op_type)
+		if cached is not None:
+			return cached
+
+		defaults = dict(DEFAULT_FLAGS)
+		try:
+			if self._scan_workspace is None or not self._scan_workspace.valid:
+				self._scan_workspace = self.ownerComp.create(
+					baseCOMP, '_defaults_workspace')
+				self._scan_workspace.viewer = False
+			import td as _td
+			cls = getattr(_td, op_type, None)
+			if cls is not None:
+				temp = self._scan_workspace.create(cls, '_flagprobe')
+				try:
+					for flag_name in DEFAULT_FLAGS:
+						if flag_name == 'allowCooking' and not temp.isCOMP:
+							continue
+						try:
+							defaults[flag_name] = bool(getattr(temp, flag_name))
+						except Exception:
+							pass
+				finally:
+					temp.destroy()
+		except Exception as e:
+			self._log(
+				f'Creation flag-default probe failed for {op_type}: {e}',
+				'DEBUG')
+
+		self._flag_defaults_cache[op_type] = defaults
+		return defaults
 
 	def _cleanupScanWorkspace(self):
 		"""Destroy the on-the-fly scan workspace if it exists."""
@@ -2771,6 +2907,15 @@ class TDNExt:
 		# Size for multi-component parameters (Float/Int with size > 1)
 		if len(group) > 1 and style in ('Float', 'Int'):
 			par_def['size'] = len(group)
+		else:
+			# Suffix styles: TD reports style 'RGBA' for both RGB (3) and
+			# RGBA (4) groups, and 'XYZW' for XY/XYZ/XYZW. Record the true
+			# arity when it differs from the style's full component count
+			# so the importer appends the right variant even when the
+			# group has no exported values.
+			style_suffixes = STYLE_SUFFIXES.get(style)
+			if style_suffixes and len(group) != len(style_suffixes):
+				par_def['size'] = len(group)
 
 		# Section break
 		if first_par.startSection:
@@ -2860,10 +3005,16 @@ class TDNExt:
 
 		Flags with a default of False are listed by name when True.
 		Flags with a default of True are listed with a '-' prefix when False.
-		Example: ['viewer', 'display'] or ['-expose']
+		Example: ['viewer', 'display'] or ['-expose', '-render']
+
+		Defaults are per-OPType creation values (_getCreationFlagDefaults),
+		not the global DEFAULT_FLAGS table -- object COMPs create with
+		render/display ON, so only a per-type baseline round-trips a
+		user's render-off/display-off correctly.
 		"""
 		flags = []
-		for flag_name, default_val in DEFAULT_FLAGS.items():
+		defaults = self._getCreationFlagDefaults(target)
+		for flag_name, default_val in defaults.items():
 			if flag_name == 'allowCooking' and not target.isCOMP:
 				continue
 			try:
@@ -3271,20 +3422,31 @@ class TDNExt:
 		return restored
 
 	def _isDATEditable(self, dat_op):
-		"""Test whether a DAT's text content is writable.
+		"""Test whether a DAT's content is writable, WITHOUT mutating it.
 
 		Some auto-created companion DATs (e.g. glsl1_info, popto1) are
 		read-only -- TD auto-generates their content and rejects writes
-		with "The operator is not editable".  This probe is per-instance
+		with "The operator is not editable". This check is per-instance
 		(not per-OPType) because read-only companions share OPType
 		'textDAT' with regular editable text DATs.
+
+		Uses TD's native `DAT.isEditable`. The previous write-probe
+		(`dat.text = dat.text`) CORRUPTED live table DATs: a table's
+		`.text` is its tab/newline-delimited flattening, which cannot
+		represent cells containing embedded newlines or tabs, so writing
+		it back destroyed those characters in the live network on every
+		export (verified 2026-07-03). isEditable matches the old probe's
+		semantics exactly -- True for locked DATs (content still exports),
+		False for wired and auto-generated DATs -- with zero side effects.
+
+		Fail-open on any error: the import side already downgrades
+		"not editable" write failures gracefully, while returning False
+		here would silently drop user content from the export.
 		"""
 		try:
-			original = dat_op.text
-			dat_op.text = original
-			return True
+			return bool(dat_op.isEditable)
 		except Exception:
-			return False
+			return True
 
 	# TD's default compute-shader template, used as a FALLBACK only when live
 	# capture fails. Live capture (below) is authoritative -- TD's default could
@@ -3447,6 +3609,16 @@ class TDNExt:
 					f'Failed to create {op_type} "{name}": {e}', 'WARNING')
 				continue
 
+			# NOTE on ENABLED clones with diverged children (e.g. a lister
+			# whose config diverges from its /sys master): TD fires a
+			# clone-establishment sync whenever clone/enablecloning is SET
+			# programmatically, and that sync deletes non-master children
+			# -- regardless of ordering (verified: establish-then-import,
+			# import-then-establish, and enable-last all wipe). Only TD's
+			# native .toe/.tox loader restores a diverged enabled clone,
+			# so such COMPs belong in TOX strategy (or tdn_exclude), not
+			# TDN. The export is still faithful; the limit is rebuild.
+
 			# Recurse into children for COMPs
 			children = op_def.get('children', [])
 			tdn_ref = op_def.get('tdn_ref')
@@ -3535,6 +3707,32 @@ class TDNExt:
 			return flat
 		return []
 
+	@staticmethod
+	def _customParGroupBase(par_def, par_name, suffixes):
+		"""Resolve a suffix-style custom par def to (base_name, arity).
+
+		Spec: 'name' is the group base name; arity comes from 'size'
+		(written when it differs from the style's full count), else the
+		values array, else the style's full component count.
+
+		Legacy compat: pre-'size' exports wrote the FIRST COMPONENT's
+		name for PARTIAL-arity groups ('Anchorx' for an XY group,
+		'Tintr' for RGB) -- full-arity groups were exported correctly.
+		Detectable as: no 'size', values prove partial arity, and the
+		name ends with the first suffix. Only then is the suffix
+		stripped, so spec-correct base names that merely END in a
+		suffix letter ('Labelbgcolor') are never mangled.
+		"""
+		comp_count = (par_def.get('size')
+					  or len(par_def.get('values', []))
+					  or len(suffixes))
+		base_name = par_name
+		if ('size' not in par_def
+				and 0 < len(par_def.get('values', [])) < len(suffixes)
+				and par_name.endswith(suffixes[0])):
+			base_name = par_name[:-len(suffixes[0])]
+		return base_name, comp_count
+
 	def _createCustomParsOnOp(self, target, custom_par_defs):
 		"""Create custom parameters on a single operator.
 
@@ -3586,25 +3784,25 @@ class TDNExt:
 					f'Unknown par style "{style}" for {par_name}', 'WARNING')
 				continue
 
-			# Multi-component styles: strip first suffix from par name
-			# (e.g., 'Tintr' -> 'Tint' for RGB, 'Posx' -> 'Pos' for XYZ)
+			# Spec: 'name' is the GROUP base name without any component
+			# suffix -- use it as-is. (An older blanket heuristic
+			# stripped a trailing suffix letter, mangling legitimate
+			# base names like 'Labelbgcolor' -> 'Labelbgcolo' + r/g/b.)
 			actual_par_name = par_name
 			suffixes = STYLE_SUFFIXES.get(style, [])
 			if suffixes:
-				first_suffix = suffixes[0]
-				if par_name.endswith(first_suffix):
-					actual_par_name = par_name[:-len(first_suffix)]
-
-				# TD reports 'RGBA' for both RGB (3) and RGBA (4),
-				# 'XYZW' for both XYZ (3) and XYZW (4). Infer from
-				# the values array length.
-				values_count = len(par_def.get('values', []))
-				if style == 'RGBA' and values_count <= 3:
+				actual_par_name, comp_count = self._customParGroupBase(
+					par_def, par_name, suffixes)
+				# TD reports style 'RGBA' for both RGB (3) and RGBA (4)
+				# groups, and 'XYZW' for XY/XYZ/XYZW -- pick the append
+				# variant from the true arity, never a silent downgrade
+				# to RGB for a values-less RGBA group.
+				if style == 'RGBA' and comp_count <= 3:
 					method_name = 'appendRGB'
 				elif style == 'XYZW':
-					if values_count <= 2:
+					if comp_count <= 2:
 						method_name = 'appendXY'
-					elif values_count <= 3:
+					elif comp_count <= 3:
 						method_name = 'appendXYZ'
 
 			append_method = getattr(page, method_name, None)
@@ -3809,10 +4007,18 @@ class TDNExt:
 
 			# Built-in parameters
 			is_palette_clone = op_def.get('palette_clone', False)
+			if is_palette_clone:
+				# A blackboxed entry carries no children -- content comes
+				# back ONLY by re-cloning. Apply the exported clone
+				# reference FIRST (master content populates), so the
+				# explicit parameter values below overwrite master values
+				# (the buttontype problem) instead of the reverse.
+				self._applyPaletteCloneRef(target, op_def)
 			for par_name, value in op_def.get('parameters', {}).items():
-				# Skip clone/enablecloning on palette clones -- these
-				# are auto-set by parent.create() and should not be
-				# overwritten. Old TDN files may still contain them.
+				# clone/enablecloning were handled by
+				# _applyPaletteCloneRef above for palette clones -- never
+				# set them again mid-loop, where a re-established clone
+				# cook would clobber values already applied.
 				if is_palette_clone and par_name in _PALETTE_CLONE_SKIP_PARAMS:
 					continue
 				self._setParValue(target, par_name, value)
@@ -3826,6 +4032,44 @@ class TDNExt:
 			children = op_def.get('children', [])
 			if children and target.isCOMP:
 				self._setParameters(target, children)
+
+	def _applyPaletteCloneRef(self, target, op_def):
+		"""Re-establish a blackboxed palette clone's link to its master.
+
+		A palette_clone entry carries no children in the .tdn -- the
+		rebuilt shell refills itself only by re-cloning, so the exported
+		clone reference must be applied. It is applied FIRST and the op
+		force-cooked, so the master's content (children, custom pars,
+		par values) lands before the explicit parameter values -- those
+		then overwrite master values, not the reverse.
+
+		The exported reference is used only when the created op did not
+		auto-set its own RESOLVING clone (native widgets do:
+		create(buttonCOMP) clones from /sys/TDTox/defaultCOMPs), so a
+		stale reference in an old .tdn never overwrites a healthy
+		auto-set link.
+		"""
+		params = op_def.get('parameters', {})
+		clone_val = params.get('clone')
+		if clone_val is None:
+			return  # pre-fix .tdn (reference was stripped) -- nothing to apply
+		clone_par = getattr(target.par, 'clone', None)
+		if clone_par is None:
+			return
+		try:
+			existing = clone_par.eval()
+			if existing is not None and hasattr(existing, 'path'):
+				return  # auto-set by create() and resolving -- keep it
+		except Exception:
+			pass  # broken auto-set value -- replace with the exported one
+		enable_val = params.get('enablecloning')
+		if enable_val is not None:
+			self._setParValue(target, 'enablecloning', enable_val)
+		self._setParValue(target, 'clone', clone_val)
+		try:
+			target.cook(force=True)
+		except Exception:
+			pass
 
 	def _setCustomParValues(self, target, flat_defs):
 		"""Set custom parameter values on a single operator from flat defs.
@@ -3861,13 +4105,11 @@ class TDNExt:
 				values = par_def['values']
 
 				if suffixes:
-					# Strip first suffix from par_name to get base
-					# (e.g., 'Tintr' -> 'Tint' for RGBA)
-					base_name = par_name
-					first_suffix = suffixes[0]
-					if par_name.endswith(first_suffix):
-						base_name = par_name[:-len(first_suffix)]
-
+					# 'name' is the group base name (spec) -- components
+					# are base+suffix, e.g. 'Labelbgcolor' + 'r'. Same
+					# legacy-compat resolution as creation.
+					base_name, _ = self._customParGroupBase(
+						par_def, par_name, suffixes)
 					# TD reports 'RGBA' for both RGB and RGBA;
 					# use values count to pick correct suffixes
 					actual_suffixes = suffixes[:len(values)]
@@ -4456,8 +4698,9 @@ class TDNExt:
 			# Recurse into COMPs (but skip palette clone children
 			# and TDN-tagged COMP children unless embed_all)
 			if hasattr(child, 'children'):
-				if self._isPaletteClone(child) and (
-						self._resolvePaletteHandling(child) == 'blackbox'):
+				if (self._isPaletteClone(child)
+						and self._cloneRestorable(child)
+						and self._resolvePaletteHandling(child) == 'blackbox'):
 					continue
 				if not embed_all and self._hasTDNTag(child):
 					continue
@@ -4580,6 +4823,46 @@ class TDNExt:
 	# =========================================================================
 	# STALE FILE CLEANUP
 	# =========================================================================
+
+	def _restrictToTrackedTDN(self, files: set) -> set:
+		"""Restrict stale-cleanup deletion candidates to files Embody tracks.
+
+		The stale sweep previously treated EVERY pre-existing .tdn under
+		the scan folder as a deletion candidate; anything not just
+		re-written and not in cleanup_protected was unlinked. For a
+		whole-project ('/') export that deleted files Embody never owned
+		(manual snapshots, downloaded specimens awaiting import), and for
+		sub-COMP exports it overrode an explicit "Keep Files" continuity
+		decision (an untracked-but-kept file inside the export subtree).
+
+		A file Embody never tracked is never Embody's to delete: deletion
+		candidates are the intersection with the externalizations table's
+		.tdn paths. Callers intersect BEFORE the write/track step, so a
+		row whose path is about to change still contributes its OLD file
+		as a legitimate candidate. Untracked orphans are left on disk
+		(clutter over data loss); recovery is tsv-driven and ignores them.
+		"""
+		if not files:
+			return set()
+		try:
+			tracked = self.ownerComp.ext.Embody._getAllTrackedTDNFiles()
+		except Exception:
+			# No table -> nothing is provably Embody's -> delete nothing.
+			return set()
+		resolved_tracked = set()
+		for p in tracked:
+			try:
+				resolved_tracked.add(str(Path(p).resolve()))
+			except Exception:
+				pass
+		kept = set()
+		for f in files:
+			try:
+				if str(Path(f).resolve()) in resolved_tracked:
+					kept.add(f)
+			except Exception:
+				pass
+		return kept
 
 	@staticmethod
 	def _collectExistingTDNFiles(base_folder, root_path='/'):
@@ -4799,6 +5082,8 @@ class TDNExt:
 		if not target.isCOMP:
 			return False
 
+		classified = False
+
 		# --- Strategy 1: catalog lookup ---
 		if self._palette_catalog:
 			entry = self._palette_catalog.get(target.name)
@@ -4816,7 +5101,7 @@ class TDNExt:
 					# Threshold is half the scanned count (tolerates user mods).
 					floor = max(1, min_children // 2) if min_children > 0 else 0
 					if floor == 0 or len(target.children) >= floor:
-						return True
+						classified = True
 
 		# --- Strategy 2: clone expression heuristic ---
 		# Exclude /sys/TDTox/defaultCOMPs/* - these are TD's native-operator
@@ -4824,28 +5109,69 @@ class TDNExt:
 		# by default). Not palette components; internals are minimal and
 		# export cleanly. Treated like any other normal COMP.
 		clone_par = getattr(target.par, 'clone', None)
-		if not clone_par:
+		# 'is None', never truthiness: bool(Par) EVALUATES the parameter,
+		# so a broken clone expression (e.g. a widget master that no
+		# longer exists) raises tdError outside any guard and aborts the
+		# whole export.
+		if clone_par is None:
 			return False
 		try:
 			clone_op = clone_par.eval()
-			if clone_op and hasattr(clone_op, 'path'):
-				cpath = clone_op.path
-				if cpath.startswith('/sys/TDTox/defaultCOMPs/'):
-					return False
-				if cpath.startswith('/sys/'):
-					return True
-			if clone_par.mode == ParMode.EXPRESSION:
-				expr = clone_par.expr
-				if 'defaultCOMPs' in expr:
-					return False
-				if any(s in expr for s in (
-						'TDBasicWidgets', 'TDResources', 'TDTox')):
-					return True
+		except Exception as e:
+			# Broken clone expression (e.g. a widget master that no longer
+			# exists). NOT a palette clone even if the expr names a palette
+			# source: blackboxing omits children on the promise the master
+			# restores them, and a missing master cannot -- full export is
+			# the only faithful serialization.
+			self._log(
+				f'Broken clone expression on {target.path} -- '
+				f'exporting fully: {e}', 'DEBUG')
+			return False
+		try:
+			if not classified:
+				if clone_op and hasattr(clone_op, 'path'):
+					cpath = clone_op.path
+					if cpath.startswith('/sys/TDTox/defaultCOMPs/'):
+						return False
+					if cpath.startswith('/sys/'):
+						classified = True
+				if not classified and clone_par.mode == ParMode.EXPRESSION:
+					expr = clone_par.expr
+					if 'defaultCOMPs' in expr:
+						return False
+					if any(s in expr for s in (
+							'TDBasicWidgets', 'TDResources', 'TDTox')):
+						classified = True
 		except Exception as e:
 			self._log(
 				f'Error checking palette clone for {target.path}: {e}',
 				'DEBUG')
-		return False
+			return False
+
+		return classified
+
+	def _cloneRestorable(self, target):
+		"""True when TD's cloning can refill this COMP from its master.
+
+		Blackboxing omits children/custom pars on the promise that
+		re-cloning restores them on rebuild. That promise requires
+		cloning to be ON and the master to resolve LIVE right now. A
+		disabled or unresolvable clone (e.g. TauCeti widgets whose expr
+		is "op.TDBasicWidgets... if hasattr(...) else ''") holds local
+		authored content that only a full export preserves -- gate every
+		blackbox decision on this, never on classification alone.
+		"""
+		try:
+			clone_par = getattr(target.par, 'clone', None)
+			if clone_par is None:
+				return False
+			enable_par = getattr(target.par, 'enablecloning', None)
+			if enable_par is not None and not enable_par.eval():
+				return False
+			clone_op = clone_par.eval()
+			return clone_op is not None and hasattr(clone_op, 'path')
+		except Exception:
+			return False
 
 	@staticmethod
 	def _isInsideAnimationCOMP(target):
@@ -4869,7 +5195,9 @@ class TDNExt:
 		so they survive the strip/restore rebuild cycle.
 		"""
 		clone_par = getattr(target.par, 'clone', None)
-		if not clone_par:
+		# 'is None', never truthiness -- bool(Par) evaluates the parameter
+		# and a broken clone expression raises (see _isPaletteClone).
+		if clone_par is None:
 			return {}
 		try:
 			clone_source = clone_par.eval()
@@ -5225,8 +5553,12 @@ class TDNExt:
 		style = first_par.style
 		suffixes = STYLE_SUFFIXES.get(style)
 
-		if suffixes and len(group) == len(suffixes):
-			# Strip the known suffix (e.g., 'x' from 'Posx')
+		# Strip the first component's suffix (e.g., 'x' from 'Posx').
+		# Partial-arity groups count too: TD reports style 'RGBA' for an
+		# RGB group and 'XYZW' for XY/XYZ, so requiring full arity here
+		# made partial groups export the COMPONENT name ('Anchorx',
+		# 'Tintr') instead of the base -- the spec requires the base.
+		if suffixes and 2 <= len(group) <= len(suffixes):
 			suffix = suffixes[0]
 			name = first_par.name
 			if name.endswith(suffix):
@@ -5658,7 +5990,21 @@ class TDNExt:
 		return str(output_file)
 
 	def _trackTDNExport(self, root_path, file_path, build_num=None, touch_build=None):
-		"""Add/update a TDN entry in the externalizations table."""
+		"""Add/update a TDN entry in the externalizations table.
+
+		Enrollment is deliberate, not a side effect: a NEW row is appended
+		only for COMPs carrying the TDN tag (plus the whole-project root
+		'/', which cannot carry tags and is excluded from strip/reconstruct
+		by _getTDNStrategyComps anyway). Previously ANY ad-hoc file export
+		inside the project folder appended a strategy='tdn' row, silently
+		subscribing an untagged COMP to the full save-strip/reconstruction
+		lifecycle. Updates to EXISTING rows are always applied.
+
+		Tracked COMPs also get a `_tdn_rel_path` storage pointer stamped on
+		the COMP itself -- a redundant recovery breadcrumb that survives in
+		the .toe shell even if the externalizations table is lost (see
+		EmbodyExt.RecoverOrphanShells).
+		"""
 		try:
 			table = self.ownerComp.ext.Embody.Externalizations
 			if not table:
@@ -5672,6 +6018,18 @@ class TDNExt:
 
 			build_str = str(build_num) if build_num is not None else ''
 			tb_str = str(touch_build) if touch_build is not None else ''
+
+			target = op(root_path)
+
+			def _stamp_recovery_pointer():
+				# Skip '/' -- root cannot go missing, and its storage is
+				# the project's own.
+				if target is None or root_path == '/':
+					return
+				try:
+					target.store('_tdn_rel_path', rel_path)
+				except Exception:
+					pass
 
 			# Check for strategy column (new schema)
 			headers = [table[0, c].val for c in range(table.numCols)]
@@ -5693,18 +6051,35 @@ class TDNExt:
 					table[i, 'dirty'] = ''
 					table[i, 'build'] = build_str
 					table[i, 'touch_build'] = tb_str
+					_stamp_recovery_pointer()
+					return
+
+			# New rows require deliberate enrollment: the TDN tag (or the
+			# whole-project root). An ad-hoc export of an untagged COMP
+			# writes its file but does NOT join the lifecycle.
+			if root_path != '/':
+				try:
+					tdn_tag = self.ownerComp.par.Tdntag.val
+				except Exception:
+					tdn_tag = ''
+				if not (target is not None and tdn_tag
+						and tdn_tag in target.tags):
+					self._log(
+						f'Ad-hoc TDN export of untagged {root_path} not '
+						f'tracked -- file written but not enrolled in the '
+						f'save/reconstruct lifecycle (tag it to enroll)',
+						'INFO')
 					return
 
 			# Add new row (schema-aware)
 			if has_strategy:
-				# Determine COMP type
-				target = op(root_path)
 				comp_type = target.type if target else 'base'
 				table.appendRow([root_path, comp_type, 'tdn', rel_path,
 								 timestamp, '', build_str, tb_str])
 			else:
 				table.appendRow([root_path, 'tdn', rel_path, timestamp,
 								 '', build_str, tb_str])
+			_stamp_recovery_pointer()
 		except Exception as e:
 			self._log(f'Failed to track TDN export: {e}', 'WARNING')
 
@@ -5759,13 +6134,7 @@ class TDNExt:
 			root_op: The COMP to scan (recursively)
 			context: 'export' shows ui.messageBox + log; 'import' logs only
 		"""
-		locked = []
-		for child in root_op.findChildren():
-			if child.lock and child.family in ('TOP', 'CHOP', 'SOP'):
-				if self._isInsideCloneOrReplicant(child, root_op):
-					continue
-				locked.append(child)
-
+		locked = self._findLockedNonDATs(root_op)
 		if not locked:
 			return
 
@@ -5803,6 +6172,23 @@ class TDNExt:
 				f'in {root_op.path}: {summary} -- these operators have no '
 				f'frozen data and should be unlocked to re-cook', 'WARNING')
 
+	def _findLockedNonDATs(self, root_op):
+		"""Collect locked TOP/CHOP/SOP ops this export is responsible for.
+
+		Skips ops inside clone/replicant interiors and ops below a nested
+		externalization boundary -- only locked content that THIS root's
+		TDN export would actually serialize (and lose) is reported.
+		"""
+		locked = []
+		for child in root_op.findChildren():
+			if child.lock and child.family in ('TOP', 'CHOP', 'SOP'):
+				if self._isInsideCloneOrReplicant(child, root_op):
+					continue
+				if self._isInsideNestedExternalization(child, root_op):
+					continue
+				locked.append(child)
+		return locked
+
 	def _isInsideCloneOrReplicant(self, child, root_op):
 		"""True if child is a descendant of a clone or replicant COMP.
 
@@ -5823,6 +6209,27 @@ class TDNExt:
 						return True
 				except Exception:
 					pass
+			p = p.parent()
+		return False
+
+	def _isInsideNestedExternalization(self, child, root_op):
+		"""True if child sits below a nested boundary this export skips.
+
+		Mirrors the exporter's recursion stops (_collectAllPaths /
+		_exportSingleOp): a tox/tdn-tagged COMP nested under root_op
+		owns its own export -- the exporter writes a tox_ref/tdn_ref
+		pointer instead of embedding its content. Locked data there is
+		that boundary's concern: a TOX-strategy COMP preserves locked
+		TOP/CHOP/SOP data fine in its own .tox, and a nested TDN-tagged
+		COMP raises this same warning when it exports itself. An
+		exclude-tagged subtree is invisible to TDN entirely, so its
+		locked content is the owning application's concern (issue #53).
+		"""
+		p = child.parent()
+		while p is not None and p is not root_op and p.path != '/':
+			if (self._hasTDNTag(p) or self._hasTOXTag(p)
+					or self._hasExcludeTag(p)):
+				return True
 			p = p.parent()
 		return False
 
@@ -5874,10 +6281,11 @@ class TDNExt:
 		return {'ok': True, 'name': comp.name, 'op_count': op_count, 'sha256': env['sha256']}
 
 	def CopySelectedToClipboard(self) -> dict:
-		"""Ctrl+Shift+C handler: copy the COMP selected in the current network
-		to the OS clipboard as a portable _embody_tdn envelope. Mirror of
-		PasteNetworkAsNewComp (Ctrl+Shift+V). No-op (logged) when the current
-		network has no single COMP selected.
+		"""Copy-TDN shortcut handler (Shortcutcopytdn binding, default
+		ctrl+shift+c / cmd+shift+c): copy the COMP selected in the current
+		network to the OS clipboard as a portable _embody_tdn envelope.
+		Mirror of PasteNetworkAsNewComp (clipboard auto-paste). No-op
+		(logged) when the current network has no single COMP selected.
 		"""
 		pane = ui.panes.current
 		owner = pane.owner if pane else None
@@ -6013,7 +6421,8 @@ class TDNExt:
 			pass
 
 	def PasteNetworkAsNewComp(self) -> dict:
-		"""Ctrl+Shift+V handler: create a new COMP at the current network and
+		"""Clipboard auto-paste handler (no key binding -- the watcher prompts
+		on inbound TDN): create a new COMP at the current network and
 		paste the clipboard TDN into it, named after the TDN (its network_path
 		basename, else slug). Accepts an Embody envelope or a bare .tdn
 		document. No-op (logged) when the clipboard holds neither.
@@ -6057,7 +6466,9 @@ class TDNExt:
 			self._clipboardWatchPoll()
 		except Exception:
 			pass
-		run(f"op({self.ownerComp.path!r}).ext.TDN._clipboardWatchTick({gen})",
+		# Pending run() calls can outlive COMP replacement during upgrades.
+		run("o = op(%r)\nif o and o.valid: o.ext.TDN._clipboardWatchTick(%d)" %
+			(self.ownerComp.path, gen),
 			fromOP=self.ownerComp, delayMilliSeconds=1500)
 
 	def _tdWindowActive(self) -> bool:

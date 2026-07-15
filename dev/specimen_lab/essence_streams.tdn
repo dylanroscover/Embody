@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 1
-generator: Embody/6.0.38
+generator: Embody/6.0.62
 td_build: 099.2025.32820
-source_file: Embody-6.39.toe
-exported_at: '2026-06-22T03:49:38Z'
+source_file: Embody-6.63.toe
+exported_at: '2026-07-01T00:54:33Z'
 network_path: /specimen_lab/essence_streams
 options:
   include_dat_content: false
@@ -162,6 +162,7 @@ custom_pars:
     normMin: 256.0
     normMax: 7680.0
     help: Render width (px). 3840 = 4K landscape, 2160 = 4K portrait. Drives every resolution-bearing op in this specimen.
+    value: 1080
   - name: Resh
     style: Int
     default: 2160
@@ -172,6 +173,7 @@ custom_pars:
     normMin: 256.0
     normMax: 7680.0
     help: Render height (px). 2160 = 4K landscape, 3840 = 4K portrait.
+    value: 1350
 color: [0.3, 0.5, 0.9]
 tags:
 - tdn
@@ -225,6 +227,34 @@ operators:
       valuey: =parent().par.Vignette.eval()
       valuez: =parent().par.Streams.eval()
       valuew: =absTime.seconds
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [1200, 0]
   inputs:
   - comp_bloom
@@ -253,6 +283,26 @@ operators:
       valuey: =parent().par.Syncline.eval()
       valuez: =parent().par.Brightness.eval()
       valuew: =absTime.seconds
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
 - name: glsl_bloomblur
   type: glslTOP
   parameters:
@@ -267,6 +317,34 @@ operators:
       valuex: =parent().par.Bloom.eval()
       valuey: 0.55
       valuez: =parent().par.Bloomwidth.eval()
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [600, -400]
   inputs:
   - res_down

@@ -185,12 +185,29 @@ class TestSmokeRelease(EmbodyTestCase):
         """Essential parameters exist on the Embody COMP."""
         required_pars = [
             'Status', 'Version', 'Build', 'Envoyenable', 'Envoyport',
-            'Logtofile', 'Logfolder', 'Filecleanup',
+            'Logtofile', 'Logfolder', 'Filecleanup', 'Toxdropexpr',
             'Tdnstriponsave', 'Refresh',
         ]
         for par_name in required_pars:
             par = getattr(self.embody.par, par_name, None)
             self.assertIsNotNone(par, f'Parameter {par_name} missing')
+
+    def test_v6_uninstall_pulse_and_handler_present(self):
+        """v6.0.108: the release .tox ships the Uninstall pulse (ordered right
+        after Disable) plus the promoted UninstallHandler / Uninstall /
+        PreviewUninstall API. Read-only -- never fires the pulse."""
+        un = getattr(self.embody.par, 'Uninstall', None)
+        self.assertIsNotNone(un, 'Uninstall param missing from the release build')
+        self.assertEqual(un.style, 'Pulse', 'Uninstall must be a Pulse parameter')
+        dis = getattr(self.embody.par, 'Disable', None)
+        self.assertIsNotNone(dis, 'Disable param missing')
+        self.assertGreater(un.order, dis.order,
+            'Uninstall should be ordered after Disable on the Embody page')
+        for method_name in ['UninstallHandler', 'Uninstall', 'PreviewUninstall']:
+            method = getattr(self.embody, method_name, None)
+            self.assertIsNotNone(method,
+                f'Promoted method {method_name} missing from the release build')
+            self.assertTrue(callable(method), f'{method_name} should be callable')
 
     def test_log_buffer_initialized(self):
         """Internal log buffer is initialized and operational."""
@@ -239,7 +256,7 @@ class TestSmokeRelease(EmbodyTestCase):
     def test_envoy_server_running_if_enabled(self):
         """If Envoyenable is True, the MCP server should be running."""
         if not self.embody.par.Envoyenable.eval():
-            self.skip('Envoy not enabled in this session')
+            self.skipTest('Envoy not enabled in this session')
         # Check status parameter (survives extension reinit) rather than
         # envoy_running store (reset to False on every __init__).
         status = str(self.embody.par.Envoystatus.eval())
@@ -404,7 +421,7 @@ class TestSmokeRelease(EmbodyTestCase):
         """Collection sub-COMP has scanner + safe_import DATs and CollectionExt."""
         collection = self.embody.op('Collection')
         if collection is None:
-            self.skip('Collection sub-COMP not present on the release .tox')
+            self.skipTest('Collection sub-COMP not present on the release .tox')
         self.assertIsNotNone(collection.op('scanner'),
             'Collection/scanner DAT must exist')
         self.assertIsNotNone(collection.op('safe_import'),
@@ -506,9 +523,9 @@ class TestSmokeRelease(EmbodyTestCase):
         """A glsl-language textDAT externalizes with the glsl tag to a .glsl file."""
         envoy = self.embody.ext.Envoy
         if envoy is None:
-            self.skip('Envoy extension not loaded on the release .tox')
+            self.skipTest('Envoy extension not loaded on the release .tox')
         if not hasattr(envoy, '_externalize_op'):
-            self.skip('Envoy._externalize_op not available on this .tox')
+            self.skipTest('Envoy._externalize_op not available on this .tox')
 
         glsl_tag = self.embody.par.Glsltag.eval()
         dat = self._make_sandbox_comp('v6_glsl_host').create(textDAT, 'shader')
@@ -548,7 +565,7 @@ class TestSmokeRelease(EmbodyTestCase):
         """The watchdog tick / revive / probe methods exist on the Envoy ext."""
         envoy = self.embody.ext.Envoy
         if envoy is None:
-            self.skip('Envoy extension not loaded on the release .tox')
+            self.skipTest('Envoy extension not loaded on the release .tox')
         for name in ('_watchdogTick', '_reviveDeadServer', '_probeAlive'):
             method = getattr(envoy, name, None)
             self.assertIsNotNone(method,
@@ -564,7 +581,7 @@ class TestSmokeRelease(EmbodyTestCase):
         instance armed its self-healing loop on init.
         """
         if self.embody.ext.Envoy is None:
-            self.skip('Envoy extension not loaded on the release .tox')
+            self.skipTest('Envoy extension not loaded on the release .tox')
         gen = self.embody.fetch('_watchdog_gen', 0)
         self.assertGreater(int(gen), 0,
             'Envoy watchdog generation must be > 0 (no loop was armed)')
@@ -595,7 +612,7 @@ class TestSmokeRelease(EmbodyTestCase):
             xform = src.create(transformPOP, 'pop_transform')
             grid.outputConnectors[0].connect(xform.inputConnectors[0])
         except Exception:
-            self.skip('POPs not available in this TD build')
+            self.skipTest('POPs not available in this TD build')
             return
 
         # (2) A custom Float left at its (non-zero) default value. The default
@@ -640,9 +657,9 @@ class TestSmokeRelease(EmbodyTestCase):
         speed = getattr(rf.par, 'Speed', None)
         self.assertIsNotNone(speed,
             'Custom Float parameter Speed was lost on import')
-        self.assertApproxEqual(speed.default, 2.5,
+        self.assertAlmostEqual(speed.default, 2.5,
             msg='Custom Float default value was not preserved')
-        self.assertApproxEqual(speed.eval(), 2.5,
+        self.assertAlmostEqual(speed.eval(), 2.5,
             msg='Custom Float live value (== default) was not preserved')
 
         # (3) Nested excluded COMP round-tripped with its exclude tag.

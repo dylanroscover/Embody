@@ -4,12 +4,12 @@
 
 TDN is the substrate that makes "create at the speed of thought" possible. It's the format your AI agent reads to understand what's on the screen, the format that lets you compare two attempts side by side, and the format a network rebuilds itself from on the next project open. Without it, AI-driven TouchDesigner work is one-directional — you generate, and you're stuck with what you got. With it, every step of the loop — generate, compare, revert, branch — runs at the speed of typing.
 
-TDN (TouchDesigner Network) is a YAML-based file format (a strict JSON superset, so legacy JSON .tdn files still parse) for representing TouchDesigner operator networks as human-readable, diffable text. It stores only non-default properties, keeping files minimal.
+TDN (TouchDesigner Network) is a YAML-based file format for representing TouchDesigner operator networks as human-readable, diffable text. It stores only non-default properties, keeping files minimal.
 
 - File extension: `.tdn`
 - MIME type: `application/yaml`
 - Encoding: UTF-8
-- Schema: [`tdn.schema.json`](../tdn.schema.json) — validates the parsed structure; YAML and JSON decode to the same object.
+- Schema: [`tdn.schema.yaml`](../tdn.schema.yaml) — validates the parsed structure.
 
 ---
 
@@ -34,6 +34,7 @@ type_defaults: { ... }
 par_templates: { ... }
 custom_pars: { ... }
 parameters: { ... }
+sequences: { ... }
 flags: [ ... ]
 color: [0.3, 0.5, 0.9]
 tags: [tdn]
@@ -43,12 +44,10 @@ operators: [ ... ]
 annotations: [ ... ]
 ```
 
-A legacy JSON `.tdn` (version `1.x`) is the same object encoded as JSON; v2.0 importers read both transparently (see [Back-compatibility](#back-compatibility)).
-
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
-| `version` | string | Yes | Format version. Currently `2.0`. Files `<2.0` are JSON; `>=2.0` are YAML. |
+| `version` | string | Yes | Format version. Currently `2.0`. See [Back-compatibility](#back-compatibility) for how older versions are read. |
 | `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. **Omitted entirely** when the COMP has no build tracking (an untracked or portable network — no externalizations-table row and no `Build` parameter). Older files may carry an explicit `build: null`; readers still accept it. |
 | `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/6.0.4"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
@@ -63,6 +62,7 @@ A legacy JSON `.tdn` (version `1.x`) is the same object encoded as JSON; v2.0 im
 | `par_templates` | object | No | Reusable custom parameter page definitions. See [Parameter Templates](#parameter-templates). |
 | `custom_pars` | object | No | Target COMP's own custom parameter definitions and values. Same format as operator-level [`custom_pars`](#custom-parameters). Only present if the target COMP has custom parameters. |
 | `parameters` | object | No | Target COMP's own non-default built-in parameter values. Same format as operator-level [`parameters`](#built-in-parameters). Only present if the target COMP has non-default built-in parameters. |
+| `sequences` | object | No | Target COMP's own built-in/custom parameter sequences with non-default block counts or values. Same format as operator-level [`sequences`](#built-in-parameter-sequences). Added in v1.3. |
 | `flags` | array | No | Target COMP's own non-default [flags](#flags). Same format as operator-level flags. Added in v1.1. |
 | `color` | `[r, g, b]` | No | Target COMP's node color, if different from default gray. RGB floats 0.0–1.0, rounded to 4 decimal places. Added in v1.1. |
 | `tags` | array of strings | No | Target COMP's tags, if any. Added in v1.1. |
@@ -117,8 +117,9 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `startup_storage` | object | No | Only if the operator has [startup storage entries](#startup-storage). Values restored via `storeStartupValue()` on import. |
 | `inputs` | array | No | Only if the operator has [operator-level connections](#operator-connections). |
 | `comp_inputs` | array | No | Only if the operator has [COMP-level connections](#comp-connections). COMPs only. |
-| `dat_content` | string or array | No | Only for DAT-family operators when `include_dat_content` is `true`. See [DAT Content](#dat-content). |
+| `dat_content` | string or array | No | Only for DAT-family operators when `include_dat_content` is `true` (or the DAT is inside an `animationCOMP`). See [DAT Content](#dat-content). |
 | `dat_content_format` | string | No | `"text"` or `"table"`. Present whenever `dat_content` is present. |
+| `dat_read_only` | boolean | No | `true` for a DAT whose content is read-only (TD auto-generates it and rejects writes on import). Written in place of `dat_content`. See [DAT Content](#dat-content). |
 | `children` | array | No | Only for COMPs with child operators (excluding palette clones). Contains nested operator objects. See [Children and Hierarchy](#children-and-hierarchy). |
 | `annotations` | array | No | Only for COMPs with [annotations](#annotations). Contains annotation objects. |
 | `palette_clone` | boolean | No | `true` if this COMP is cloned from the TouchDesigner palette (`/sys/`). When set, children are not exported (TD recreates them from the clone source). |
@@ -255,7 +256,7 @@ On project open, the `CatalogManager` extension checks whether a creation-values
 
 - Iterates every creatable operator type in TouchDesigner (TOPs, CHOPs, SOPs, DATs, MATs, COMPs, POPs)
 - Creates a temporary instance of each type
-- Records `p.val` (the actual value TD assigned) for every non-custom, non-read-only parameter
+- Records `p.val` (the actual value TD assigned) for every parameter, skipping custom, read-only, and sequence parameters, a small set of known non-portable parameter names and styles, and name-dependent values (e.g. callback-DAT paths that embed the probe operator's name)
 
 The catalog stores **all** creation values, not just divergent ones. This means TDN always has the ground-truth creation value for every parameter — `_getCreationDefault()` returns the catalog value directly, falling back to `p.default` only for parameters the catalog doesn't cover. The divergent-default problem (where `p.val` differs from `p.default`) is solved implicitly: by recording what TD actually assigns, the catalog captures both correct and divergent defaults without needing to distinguish between them.
 
@@ -394,7 +395,7 @@ The `$t` field names the template. Other keys are parameter value overrides (par
 | `name` | string | Always | Base name of the parameter. For multi-component parameters, this is the group name without any suffix (e.g., `"Pos"` for a group of `Posx`, `Posy`, `Posz`). |
 | `label` | string | If different from `name` | Display label shown in the parameter dialog. Omitted when the label matches the parameter name. |
 | `style` | string | Always | Parameter style. See [Supported Styles](#supported-styles). |
-| `size` | integer | Multi-component `Float`/`Int` only | Number of components when > 1 (e.g., `3` for a 3-component float). |
+| `size` | integer | Multi-component `Float`/`Int`; suffix-style groups with non-full arity | Number of components when > 1 (e.g., `3` for a 3-component float). Also written for suffix-style groups (`RGBA`, `XYZW`, …) whose component count differs from the style's full size — TouchDesigner reports style `RGBA` for both RGB (3) and RGBA (4) groups, and `XYZW` for XY/XYZ/XYZW, so `size` disambiguates (e.g. `3` for an RGB group). When omitted on a suffix-style group, importers use the `values` length, else the style's full component count. |
 | `default` | any | If non-standard | Default value. Omitted when the default is a standard value (`0`, `0.0`, `""`, or `false`). |
 | `min` | number | If != `0` | Minimum value. |
 | `max` | number | If != `1` | Maximum value. |
@@ -642,7 +643,7 @@ flags:
 
     **This is by design, not a bug.** Storing binary data would defeat TDN's purpose as a diffable, version-control-friendly format. A single locked 4K TOP could add over 100 MB to a `.tdn` file.
 
-    Embody warns you at save time if your network contains locked non-DAT operators.
+    Embody warns you at save time if your network contains locked non-DAT operators. The warning covers only operators the export itself serializes — locked content inside a nested tox/tdn-tagged child COMP (exported separately as its own boundary) or an exclude-tagged subtree does not trigger it.
 
 The `lock` flag applies to **all** operator families — DATs, TOPs, CHOPs, and SOPs — freezing their cooked output so it no longer updates from inputs or parameters. However, TDN only persists the frozen data for DATs.
 
@@ -793,8 +794,10 @@ For table-based DATs (tableDAT, etc.):
 DAT content is only included when:
 
 1. The operator belongs to the DAT family
-2. The `include_dat_content` option is `true`
+2. The `include_dat_content` option is `true`, **OR** the DAT lives inside an `animationCOMP` (its keys/channels/graph/attributes tableDATs hold all keyframe data and are always saved regardless of the option)
 3. The DAT has content (non-empty text or at least one row)
+
+**Read-only DATs.** When a DAT's content is read-only (e.g. `glsl1_info`, `popto1` — TD auto-generates their content and rejects writes on import), its text is **not** serialized. Instead the operator carries `dat_read_only: true` so the importer knows to skip content restoration for it.
 
 ### Boilerplate Omission
 
@@ -1090,20 +1093,28 @@ An operator is excluded if its path equals one of these or starts with one follo
 
 ## Import Process
 
-Importing a `.tdn` file reconstructs the network in a pre-phase plus eight sequential phases. This ordering ensures that dependencies are satisfied — for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
+Importing a `.tdn` file reconstructs the network in a pre-phase plus a series of ordered phases. This ordering ensures that dependencies are satisfied — for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
+
+When `clear_first` is set, existing children are destroyed before import — **except** COMPs tagged `exclude`, which are preserved. Excluded COMPs are invisible to TDN (absent from the `.tdn`), so destroying them would be permanent data loss; the owning app manages their lifecycle instead.
 
 | Phase | Action | Details |
 |-------|--------|---------|
-| Pre | **Resolve templates and defaults** | If `par_templates` is present, `$t` references in `custom_pars` are expanded to full definitions with value overrides. If `type_defaults` is present, shared properties are merged into each operator (`parameters` via dict merge, `flags`/`size`/`color`/`tags` via whole-value injection; operator-specific values take precedence). |
+| Pre | **Resolve templates and defaults** | If `par_templates` is present, `$t` references in `custom_pars` are expanded to full definitions with value overrides. If `type_defaults` is present, shared properties are merged into each operator (`parameters` via dict merge, `flags`/`size`/`color`/`tags` via whole-value injection; operator-specific values take precedence). Stale entries matching a preserved excluded COMP, and children of nested TDN/TOX-externalized COMPs, are dropped so their own files stay authoritative. |
 | 1 | **Create operators** | All operators are created depth-first. COMPs are created first so their children can be placed inside them. |
 | 2 | **Create custom parameters** | Custom parameter definitions are created on COMPs (pages, types, ranges, menu entries, defaults). |
+| 2.5 | **Expand sequences** | Built-in/custom parameter sequences (`sequences` key) have their block counts and sequence parameters created before any values are set. *Added in v1.3.* |
 | 3 | **Set parameter values** | Both built-in and custom parameter values are applied. `=` prefix sets expression mode, `~` prefix sets bind mode, all other values set constant mode. |
 | 4 | **Set flags** | Operator flags are applied. Array entries without `-` prefix set the flag to `true`; entries with `-` prefix set to `false`. |
+| 4a | **Warn about locked non-DATs** | Locked TOP/CHOP/SOP operators are flagged — the lock is preserved but the frozen pixel/channel/geometry data is not (see [Lock Flag Limitation](#lock-flag-limitation)). |
 | 5 | **Wire connections** | Operator and COMP connections are established. Source references are resolved (sibling name first, then full path). Array position equals input index. |
 | 6 | **Set DAT content** | Text or table data is loaded into DAT operators. |
 | 6a | **Restore storage** | Storage key-value pairs are restored via `op.store()`. `$type` wrappers are deserialized to Python types (tuple, set, bytes). |
-| 7 | **Set positions** | Node positions, sizes, colors, and comments are applied last. Missing position defaults to `[0, 0]`. |
+| 7 | **Set positions** | Node positions, sizes, colors, and comments are applied (later phases still follow). Missing position defaults to `[0, 0]`. |
+| 7b | **Set docking** | Docking relationships between operators are restored. |
 | 7a | **Create annotations** | Annotations are created from the `annotations` array (top-level and per-COMP). Each annotation is created as an `annotateCOMP` with `utility=True`, then its mode, title, body text, position, size, color, and opacity are set. |
+| 8 | **Restore file links** | File/syncfile parameters are restored on externalized DATs. |
+| 8.5 | **Restore TOX content** | `.tox` content is loaded into `tox_ref` shells so their internals are present immediately after import. |
+| 9 | **Apply target COMP properties** | The target COMP's own type, parameters, flags, color, tags, and comment are applied — last, so extension reinit triggered by recreating source DATs cannot overwrite them. |
 
 The importer accepts either a full `.tdn` document (with metadata) or just the `operators` array directly.
 
@@ -1215,7 +1226,7 @@ Developers should ignore unknown fields when parsing TDN documents. This ensures
 | Situation | Expected behavior |
 |-----------|-------------------|
 | Unknown field in any object | Ignore it. |
-| Missing required field (`name`, `type`) on an operator | Skip that operator, log an error. |
+| Missing required field (`name`, `type`) on an operator | Skip that operator silently (no log emitted). |
 | Missing connection source (operator not found) | Skip that connection, log a warning. |
 | Unrecognized custom parameter `style` | Skip that parameter definition, log a warning. |
 | Unrecognized flag name | Ignore it. |
@@ -1230,7 +1241,7 @@ Developers should ignore unknown fields when parsing TDN documents. This ensures
 
 ### General Principle
 
-Log warnings for anything skipped so the developer can inspect the result. Never abort an entire import because a single operator, parameter, or connection failed — the partial result is more useful than no result.
+Log warnings for skipped items where practical (a few malformed cases, like an op-def missing `name`/`type`, are skipped silently) so the developer can inspect the result. Never abort an entire import because a single operator, parameter, or connection failed — the partial result is more useful than no result.
 
 ---
 

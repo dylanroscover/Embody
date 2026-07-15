@@ -1,10 +1,10 @@
 # Keyboard Shortcuts
 
-## Quick Reference
+## Quick Reference (defaults)
 
 | Shortcut | Action |
 |----------|--------|
-| ++lctrl+lctrl++ | Tag and externalize the selected operator (press left control twice) |
+| ++lctrl+lctrl++ | Open the tagger UI for the hovered operator (press left control twice) |
 | ++ctrl+shift+u++ | Update all dirty externalizations |
 | ++ctrl+alt+u++ | Update only the current COMP you're working inside |
 | ++ctrl+shift+r++ | Refresh tracking state |
@@ -13,12 +13,84 @@
 | ++ctrl+alt+e++ | Export current COMP network to `.tdn` file |
 | ++ctrl+shift+c++ | Copy the selected COMP to the clipboard as a portable TDN envelope |
 
+On macOS the factory defaults use **Cmd** (`cmd+shift+o`, `cmd+alt+u`, …) —
+the platform's idiomatic app-shortcut modifier. `ctrl` and `cmd` name
+*distinct physical keys*: macOS keyboards have both (so `ctrl+shift+o` and
+`cmd+shift+o` are two different bindings there), while PC keyboards have
+only Ctrl — a Mac-authored `cmd+...` binding automatically fires via Ctrl
+on Windows/Linux. Saved values are never rewritten when a project changes
+platforms, so bindings round-trip intact.
+
+**Every shortcut is editable.** If a default collides with your own workflow
+hotkeys, remap or disable it on the Embody COMP's **Shortcuts** parameter
+page — see [Customizing Shortcuts](#customizing-shortcuts).
+
+## Customizing Shortcuts
+
+Open the Embody COMP's parameter dialog and switch to the **Shortcuts** page.
+Each action has an editable binding and a **Record** pulse:
+
+- **Type a combo** directly into the binding parameter — lowercase, joined
+  with `+`: modifiers (`ctrl`, `cmd`, `alt`, `shift`) plus one trigger key,
+  e.g. `ctrl+shift+o`, `cmd+alt+e`, or `alt+F5`. `ctrl` and `cmd` are
+  distinct physical keys on macOS (a combo may even use both, e.g.
+  `ctrl+cmd+k`); on Windows/Linux `cmd` bindings fire via Ctrl. Invalid
+  input reverts with a warning; anything you type is normalized to the
+  canonical form (`CMD + SHIFT + O` becomes `cmd+shift+o`). Trigger keys
+  can be letters, digits, most punctuation, `F1`–`F12`, or named keys like
+  `space`, `tab`, `enter`, `pageup`, `printscreen`. The characters `+`,
+  `-`, `.` and space act as separators, so they can't themselves be bound —
+  nor can ++esc++ (it cancels the recorder) or a modifier on its own.
+- **Or record one**: pulse **Record**, then press the keys you want. Held
+  modifiers preview in the status bar and never commit on their own — the
+  first *non-modifier* key commits the combo with whatever modifiers are
+  held at that instant. Press ++esc++ to cancel; an armed recorder times
+  out after 10 seconds if nothing is pressed.
+- **Disable a shortcut** by clearing its binding (empty = off). The
+  **Enable Keyboard Shortcuts** toggle at the top of the page switches all
+  of them (including the tagger double-tap) at once.
+- **Tagger Double-Tap Key** is a menu, not a combo — pick which physical
+  modifier key opens the tagger when double-tapped, or turn it off. The
+  choices adapt to the platform's keyboards: macOS offers Left Ctrl and
+  left/right **Cmd** (Apple keyboards have no right Ctrl key) plus Alt and
+  Shift; Windows/Linux offers left/right **Ctrl** (no Cmd key exists) plus
+  Alt and Shift. A choice the other platform's keyboard lacks falls back to
+  its closest key there (Cmd → Ctrl on Windows/Linux, Right Ctrl → Left
+  Ctrl on macOS) — the saved value is never rewritten, so it round-trips
+  between platforms intact.
+- **Reset Shortcuts to Defaults** restores the factory bindings above.
+
+Custom bindings are saved to `.embody/config.json` with the rest of your
+settings, so they survive Embody upgrades.
+
+### Conflicts
+
+- **Duplicates are blocked.** A combo may drive exactly one action: if,
+  while recording, you press a combo that another action already holds, a
+  dialog explains which action owns it and recording continues (with a
+  fresh timeout) so you can press a different combo — or ++esc++ to cancel.
+  Typing a duplicate into the parameter reverts with a warning. To swap
+  two bindings, clear one first.
+- **TD built-ins warn.** Assigning one of TouchDesigner's own shortcuts
+  (read live from `TouchShortcuts.txt`, including your user overrides)
+  logs a warning and shows it in the status bar.
+
+!!! warning "TouchDesigner built-ins cannot be suppressed"
+    Embody's Keyboard In DAT observes keys — it cannot block them. If you
+    bind an Embody action to a TD built-in like ++ctrl+z++, **both** will
+    fire. Prefer `ctrl+shift+...` / `ctrl+alt+...` combos that TD leaves
+    free, and heed the warning when one is reserved. Note that OS-level
+    shortcuts (macOS system hotkeys especially) are intercepted before TD
+    ever sees them and cannot be recorded or triggered at all.
+
 ## Tagging
 
-The double-tap ++lctrl++ shortcut works on the currently selected operator in the network editor. It tags the operator and externalizes it immediately:
+The double-tap ++lctrl++ shortcut (configurable — see above) works on the
+operator your cursor is hovering over in the network editor (not the current
+selection). It opens the tagger UI for that operator:
 
-- A visual tag appears on the operator and it is saved to disk in one step
-- Pressing ++lctrl+lctrl++ again on a tagged operator removes the tag
+- On an **untagged** operator, the tagger lets you pick how to externalize it — a strategy (TOX or TDN) for a COMP, or a file format for a DAT
+- On an **already-tagged** operator, the tagger lets you switch strategy, remove the tag, or save the externalization
 
 ## Update Operations
 
@@ -26,11 +98,11 @@ The double-tap ++lctrl++ shortcut works on the currently selected operator in th
 - **++ctrl+alt+u++** — Updates only the COMP you're currently inside. Useful for large projects where a full update takes too long.
 - **++ctrl+shift+r++** — Refreshes tracking state, re-scanning externalized operators for changes without writing files.
 
-!!! tip "Your externalized files are the source of truth"
-    You don't need to ++ctrl+s++ to preserve externalized work. Use ++ctrl+shift+u++ instead — it writes all dirty operators to files on disk. On project open, Embody restores everything automatically: TOX-strategy COMPs from `.tox` files and TDN-strategy COMPs from `.tdn` files.
+!!! tip "Keep your externalizations up to date"
+    Use ++ctrl+shift+u++ to write all dirty operators to files on disk. On project open, TOX-strategy COMPs are always restored from `.tox` files and DATs sync from their externalized source files (`.py`, `.txt`, `.json`, ...). TDN-strategy COMPs are reconstructed from `.tdn` files **only in Roundtrip mode** — in the default Export-on-Save mode the `.toe` stays authoritative and is not rebuilt from `.tdn` on open. See [TDN Mode](externalization.md#tdn-mode-master-switch).
 
-!!! warning "Ctrl+S strips TDN containers"
-    When you do save the `.toe` with ++ctrl+s++, Embody **temporarily strips all children** from TDN-strategy COMPs to keep the `.toe` file small. They are restored immediately after the save completes — but if TD crashes during the save, those children will be missing from the `.toe`. This is fine: they'll be reconstructed from `.tdn` files the next time the project opens. Just make sure you've updated your externalizations with ++ctrl+shift+u++ first.
+!!! warning "Roundtrip mode strips TDN containers on Ctrl+S"
+    In **Roundtrip mode** (and only when strip-on-save is enabled), saving the `.toe` with ++ctrl+s++ makes Embody **temporarily strip all children** from TDN-strategy COMPs to keep the `.toe` file small. They are restored immediately after the save completes — but if TD crashes during the save, those children will be missing from the `.toe`. This is fine: they'll be reconstructed from `.tdn` files the next time the project opens. Just make sure you've updated your externalizations with ++ctrl+shift+u++ first. In the default **Export-on-Save mode**, Ctrl+S does **not** strip: the `.toe` keeps its children and remains the source of truth.
 
 ## TDN Export
 

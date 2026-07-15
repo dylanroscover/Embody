@@ -108,7 +108,7 @@ class TestMCPAnnotations(EmbodyTestCase):
         )
         self.assertTrue(result.get('success'))
         ann = op(result['path'])
-        self.assertApproxEqual(ann.par.Backcolorr.eval(), 0.8, tolerance=0.01)
+        self.assertAlmostEqual(ann.par.Backcolorr.eval(), 0.8, delta=0.01)
 
     # =========================================================================
     # _create_annotation - errors
@@ -223,3 +223,54 @@ class TestMCPAnnotations(EmbodyTestCase):
             op_path='/nonexistent/path'
         )
         self.assertDictHasKey(result, 'error')
+
+    # =========================================================================
+    # Utility-flagged annotations (UI-created) -- path resolution regression
+    # =========================================================================
+
+    def test_set_annotation_resolves_utility_flagged(self):
+        """_set_annotation must modify a utility-flagged annotation by path.
+
+        Every UI-created annotation has utility=True, which hides it from
+        op(), parent.op() and .children entirely -- only
+        findChildren(includeUtility=True) sees it. A plain op() lookup
+        therefore failed for exactly the annotations users make by hand
+        (regression: 'Annotation not found' on a path get_annotations had
+        just listed).
+        """
+        create_result = self.envoy._create_annotation(
+            parent_path=self.workspace.path,
+            title='util resolve'
+        )
+        ann_path = create_result['path']
+        ann = self.envoy._resolve_annotation(ann_path)
+        self.assertIsNotNone(ann)
+        ann.utility = True  # match TD UI behavior
+
+        result = self.envoy._set_annotation(
+            op_path=ann_path,
+            title='resolved anyway',
+            width=555
+        )
+        self.assertFalse('error' in result,
+                         'set_annotation failed on utility-flagged '
+                         'annotation: {}'.format(result.get('error')))
+        self.assertEqual(result.get('title_text'), 'resolved anyway')
+
+    def test_get_enclosed_ops_resolves_utility_flagged(self):
+        """_get_enclosed_ops must resolve a utility-flagged annotation."""
+        create_result = self.envoy._create_annotation(
+            parent_path=self.workspace.path,
+            mode='networkbox',
+            x=-500, y=-500, width=2000, height=2000
+        )
+        ann_path = create_result['path']
+        ann = self.envoy._resolve_annotation(ann_path)
+        self.assertIsNotNone(ann)
+        ann.utility = True
+
+        result = self.envoy._get_enclosed_ops(op_path=ann_path)
+        self.assertFalse('error' in result,
+                         '_get_enclosed_ops failed on utility-flagged '
+                         'annotation: {}'.format(result.get('error')))
+        self.assertTrue(result.get('is_annotation'))

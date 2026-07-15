@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 39
-generator: Embody/6.0.43
+build: 44
+generator: Embody/6.0.121
 td_build: 099.2025.32820
-source_file: Embody-6.44.toe
-exported_at: '2026-06-24T17:39:38Z'
+source_file: Embody-6.122.toe
+exported_at: '2026-07-13T11:13:31Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -1917,7 +1917,7 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 7
+    rows: 49
     cols: 5
   flags:
   - viewer
@@ -1961,6 +1961,11 @@ operators:
   flags:
   - viewer
   position: [800, -1600]
+- name: test_shortcuts
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_shortcuts.py
+  position: [200, -3600]
 - name: test_git_status
   type: textDAT
   parameters:
@@ -2052,6 +2057,11 @@ operators:
   flags:
   - viewer
   position: [400, -600]
+- name: test_envoy_sessions
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_envoy_sessions.py
+  position: [600, -2600]
 - name: test_mcp_extensions
   type: textDAT
   parameters:
@@ -2087,6 +2097,11 @@ operators:
   flags:
   - viewer
   position: [400, -400]
+- name: test_launch_aiclient
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_launch_aiclient.py
+  position: [0, -3400]
 - name: test_mcp_annotations
   type: textDAT
   parameters:
@@ -2134,6 +2149,11 @@ operators:
   parameters:
     file: embody/unit_tests/test_tdn_diff_engine.py
   position: [200, -3200]
+- name: test_auto_externalize
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_auto_externalize.py
+  position: [0, -3600]
 - name: test_operator_queries
   type: textDAT
   parameters:
@@ -2272,12 +2292,13 @@ annotations:
   opacity: 0.5
 - name: annotate5
   mode: annotate
-  title: Envoy Infrastructure Tests (3)
+  title: Envoy Infrastructure Tests (4)
   text: |-
     Server lifecycle, STDIO bridge, thread communication,
-    queue processing, request throttling, log piggybacking
+    queue processing, request throttling, log piggybacking,
+    multi-session awareness (identity, presence, cursors)
   position: [-70, -2670]
-  size: [670, 330]
+  size: [870, 330]
   color: [0.35, 0.25, 0.35]
   opacity: 0.5
 - name: annotate6

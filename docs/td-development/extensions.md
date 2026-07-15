@@ -54,16 +54,18 @@ def onInitTD(self):
 
 ### Why this happens
 
-Embody uses TDN (TouchDesigner Network) files to externalize COMP contents as diffable YAML. On project open and after every save, Embody reconstructs TDN COMPs by calling `ImportNetwork` with `clear_first=True` — this deletes all children inside the COMP and recreates them from the `.tdn` file.
+Embody uses TDN (TouchDesigner Network) files to externalize COMP contents as diffable YAML. When Embody reconstructs a TDN COMP it calls `ImportNetwork` with `clear_first=True` — this deletes all children inside the COMP and recreates them from the `.tdn` file.
 
-The timing sequence on project open:
+**When reconstruction runs depends on `Tdnmode`.** In the experimental **Roundtrip** mode, every TDN COMP is reconstructed on project open (and stripped/restored on every save), so the timing below applies in full. In the default **Export-on-Save** mode the `.toe` stays authoritative on open — existing COMPs are **not** rebuilt, only a COMP *absent* from the `.toe` is reconstructed from its `.tdn`, and save does not strip. Even so, treat the deferral pattern below as the safe default: it also covers manual `import_network` reloads, which use `clear_first=True` in any mode.
+
+The timing sequence on project open (Roundtrip mode, or an absent-COMP recovery):
 
 1. **COMP shell is created** — the COMP exists but its children haven't been imported yet
 2. **Extension initializes** — `__init__` runs, then `onInitTD` fires at end of frame
 3. **TDN import runs** (frame 60) — deletes all children, recreates network from `.tdn` file
 4. **Extension state is lost** — anything `onInitTD` set up inside the COMP is gone
 
-A similar sequence occurs on every **Ctrl+S** due to the strip/restore cycle: children are stripped before save, then re-imported afterward. Extensions may reinitialize during this process.
+In **Roundtrip** mode a similar sequence occurs on every **Ctrl+S** due to the strip/restore cycle: children are stripped before save, then re-imported afterward. Extensions may reinitialize during this process. (Export-on-Save does not strip, so this save-time cycle does not apply there.)
 
 ### The fix: defer initialization
 
@@ -108,7 +110,7 @@ class MyFeatureExt:
 ```python
 # Promoted methods (uppercase) — called directly on the component:
 op.Embody.Update()
-op.Embody.Save()
+op.Embody.Save('/path/to/comp')   # Save() requires a COMP path argument
 
 # Non-promoted methods (lowercase) — through ext:
 op.Embody.ext.Embody.getExternalizedOps(COMP)

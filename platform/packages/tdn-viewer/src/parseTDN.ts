@@ -35,13 +35,40 @@ export function getNetworkAtPath(tdn: TdnDict, path: string[]): TdnDict | null {
 }
 
 /**
+ * The raw operator records at a single network level (the sub-network at `path`,
+ * or the root when empty). Same level the navigable viewer draws via
+ * parseTDNLevel -- use it to look up a selected node's raw fields (parameters,
+ * custom_pars, comment, tags) without re-walking the whole tree.
+ */
+export function operatorsAtLevel(tdn: TdnDict, path: string[]): TdnDict[] {
+  const net = getNetworkAtPath(tdn, path);
+  return net ? networkOperators(net) : [];
+}
+
+/**
  * Parse the WHOLE network into one flat graph, recursing into every nested COMP
  * so all descendants are drawn at once. This is the dense, all-in-one-plane view
  * (homepage hero, card-cover thumbnails). For the navigable, TD-faithful
  * one-level-at-a-time view, use parseTDNLevel instead.
  */
 export function parseTDN(tdn: TdnDict): NormalizedGraph {
-  return buildGraph(networkOperators(tdn), asRecords(tdn.annotations), true);
+  return buildGraph(networkOperators(tdn), asRecords(tdn.annotations), true, typeDefaultSizes(tdn));
+}
+
+// Per-type default node sizes from the document's `type_defaults`. An operator
+// that omits its own `size` inherits the default for its type (the TDN exporter
+// writes size per-op only when it differs), so we resolve it here for a faithful
+// 1:1 layout instead of falling back to a guessed tile size.
+function typeDefaultSizes(tdn: TdnDict): Map<string, [number, number]> {
+  const map = new Map<string, [number, number]>();
+  const defs = isRecord(tdn.type_defaults) ? tdn.type_defaults : null;
+  if (!defs) return map;
+  for (const [type, def] of Object.entries(defs)) {
+    if (!isRecord(def)) continue;
+    const size = readOptionalPair(def.size);
+    if (size) map.set(type, size);
+  }
+  return map;
 }
 
 /**
@@ -54,7 +81,8 @@ export function parseTDN(tdn: TdnDict): NormalizedGraph {
 export function parseTDNLevel(tdn: TdnDict, path: string[]): NormalizedGraph {
   const net = getNetworkAtPath(tdn, path);
   if (!net) return { nodes: [], edges: [], annotations: [] };
-  return buildGraph(networkOperators(net), asRecords(net.annotations), false);
+  // type_defaults live at the document root, not inside nested COMPs.
+  return buildGraph(networkOperators(net), asRecords(net.annotations), false, typeDefaultSizes(tdn));
 }
 
 // Shared engine for both parses. `recurse` decides whether a COMP's children are
@@ -63,7 +91,8 @@ export function parseTDNLevel(tdn: TdnDict, path: string[]): NormalizedGraph {
 function buildGraph(
   rootOperators: TdnDict[],
   rootAnnotations: TdnDict[],
-  recurse: boolean
+  recurse: boolean,
+  typeSizes: Map<string, [number, number]>
 ): NormalizedGraph {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -135,7 +164,9 @@ function buildGraph(
       if (type.toLowerCase() === "annotatecomp") continue;
 
       const position = readPair(op.position);
-      const size = readOptionalPair(op.size);
+      // Real op size: per-op `size`, else the type default, so the tile matches
+      // TD's actual node footprint (drives 1:1 placement inside annotations).
+      const size = readOptionalPair(op.size) ?? typeSizes.get(type);
       const color = readRGB(op.color);
 
       const node: GraphNode = {

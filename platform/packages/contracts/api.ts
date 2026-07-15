@@ -25,7 +25,18 @@ export interface SpecimenSummary {
   op_count: number;
   /** R2 key for the thumbnail. */
   thumbnail_key: string;
+  /**
+   * R2 key for the cover video (MP4/H.264), when the cover carries one. Null/absent
+   * = image-only cover. Video is purely additive: a video cover ALSO sets
+   * thumbnail_key with an auto-extracted poster, so this never replaces the poster.
+   */
+  video_key?: string | null;
   author_handle: string;
+  /**
+   * The author's avatar image URL when they have one set; null/absent means the
+   * consumer should render the letter-initial chip instead.
+   */
+  author_avatar_url?: string | null;
   tier: Tier;
   /** Total reactions across all emojis (denormalized; drives the "popular" sort). */
   likes_count: number;

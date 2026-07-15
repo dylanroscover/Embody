@@ -20,7 +20,7 @@
 //
 // All styles are scoped to this component.
 import SpecimenCoverGraph from "./SpecimenCoverGraph";
-import { resultImage } from "../lib/specimenThumb";
+import { resultImage, resultVideo } from "../lib/specimenThumb";
 
 interface Props {
   slug: string;
@@ -29,6 +29,12 @@ interface Props {
   /** R2 thumbnail key (non-empty when the author uploaded one). */
   thumbnailKey?: string;
   /**
+   * R2 video key (non-empty when the author uploaded a cover video). Purely
+   * additive: the poster (thumbnailKey) still renders unchanged; this only adds
+   * a hover-play <video> over it. Omitted/empty = image-only cover, as before.
+   */
+  videoKey?: string | null;
+  /**
    * Optional SSR graph (specimen-graphs fixture) for the first, server-rendered
    * page -- a fast paint with no fetch. Omit it and the island lazy-fetches the
    * graph itself; this is the path that scales to thousands of cards.
@@ -36,15 +42,26 @@ interface Props {
   tdn?: Record<string, unknown>;
 }
 
-const { slug, name, category, thumbnailKey, tdn } = Astro.props;
+const { slug, name, category, thumbnailKey, videoKey, tdn } = Astro.props;
 // RESULT layer image: uploaded thumbnail (if any) > baked render for known slugs
 // > procedural placeholder. Source of truth lives in lib/specimenThumb.
 const { src: thumb, baked: hasBaked } = resultImage({ slug, name, category, thumbnailKey });
+// RESULT layer video: the streaming route when the cover carries one, else null.
+// A video cover ALSO has a poster (thumb, above), so the result layer always
+// paints the static image first and the video only loads/plays on hover.
+const coverVideo = resultVideo({ slug, videoKey });
 // No rendered result yet -> the network graph IS the preview: open on it and lock
 // the toggle (there's nothing to flip to). A real/baked thumbnail keeps the normal
 // result-default with a working flip. Keep this in sync with the appended-card
 // template in collection/index.astro.
 const defaultView = hasBaked ? "result" : "network";
+// SSR the graph inline ONLY when it is the default, visible view (a non-baked
+// cover). On a baked cover the graph sits HIDDEN behind the result image until
+// the user flips, so inlining its nodes just bloats the document and the cold
+// SSR render for nothing -- drop it and let the client:visible island lazy-fetch
+// the graph on demand (the same path infinite-scroll/appended cards already
+// use). This strips ~all inline graph weight from /collection's first paint.
+const ssrTdn = hasBaked ? undefined : tdn;
 ---
 
 <!--
@@ -58,10 +75,28 @@ const defaultView = hasBaked ? "result" : "network";
 -->
 <div class="cover" data-cover={defaultView} data-cover-shell>
   <div class="cover__layer cover__layer--network" data-cover-interactive aria-hidden={hasBaked ? "true" : "false"}>
-    <SpecimenCoverGraph slug={slug} tdn={tdn} client:visible />
+    <SpecimenCoverGraph slug={slug} tdn={ssrTdn} client:visible />
   </div>
   <div class="cover__layer cover__layer--result" aria-hidden={hasBaked ? "false" : "true"}>
     <img src={thumb} loading="lazy" alt={hasBaked ? `${name} rendered result` : `${name} preview placeholder`} />
+    {/*
+      Cover video: the poster (the img above) shows until hover, then the
+      coverVideoHover controller sets src from data-cover-video and plays it.
+      NO src here (preload="none" fetches nothing until the controller acts);
+      poster reuses the same thumb URL so there's no flash swapping in.
+    */}
+    {coverVideo && (
+      <video
+        class="cover__video"
+        data-cover-video={coverVideo}
+        poster={thumb}
+        muted
+        loop
+        playsinline
+        preload="none"
+        aria-hidden="true"
+      ></video>
+    )}
     {!hasBaked && <span class="cover__soon mono">preview coming soon</span>}
   </div>
 
@@ -128,6 +163,19 @@ const defaultView = hasBaked ? "result" : "network";
     border-radius: 0;
   }
 
+  /* Collection's JS-appended cards (infinite scroll, and every card after a
+     search/facet/sort rebuild) mount the React viewer INTO this .cover-mount
+     wrapper, whereas SSR cards mount the astro-island directly (display:contents,
+     so the layer's box passes straight through). Without a box of its own the
+     wrapper is 0-height, so the viewer's `height:100%` (above) resolves to 0 and
+     the network cover collapses the instant the graph replaces the skeleton. Pin
+     it to the layer so appended covers match the SSR ones. Reaches appended cards
+     via the copied data-astro-cid scope stamps (buildCard -> applyScope). */
+  .cover__layer--network :global(.cover-mount) {
+    position: absolute;
+    inset: 0;
+  }
+
   /* Light skeleton shown while the cover island lazy-fetches its graph (and the
      resting state if that fetch fails -- never a broken viewer). Rendered by the
      SpecimenCoverGraph React island, so the selectors are :global. */
@@ -189,6 +237,27 @@ const defaultView = hasBaked ? "result" : "network";
     height: 100%;
     object-fit: cover;
     display: block;
+  }
+
+  /* Cover video sits ON TOP of the poster img, filling the layer. It is
+     invisible until it has a src (set on hover by the coverVideoHover
+     controller) -- until then the poster shows through underneath. The
+     [src] attribute presence is the "playing" signal, so no extra JS class is
+     needed to fade it in. */
+  .cover__video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    opacity: 0;
+    transition: opacity 160ms ease;
+    pointer-events: none;
+  }
+
+  .cover__video[src] {
+    opacity: 1;
   }
 
   .cover__soon {

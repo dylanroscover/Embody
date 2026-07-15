@@ -18,7 +18,7 @@ see.
 Embody removes that blindfold, and it's free and open source (MIT), running
 entirely on your human's own machine.
 
-- Envoy gives you eyes and hands inside the live session - 49 MCP tools to create
+- Envoy gives you eyes and hands inside the live session - 52 MCP tools to create
   operators, set parameters, wire connections, write extensions, read cook errors,
   run Python, and capture the rendered output.
 
@@ -65,7 +65,8 @@ INSTALL (FOR THE HUMAN - ABOUT FIVE MINUTES)
    writes the AI config files).
 4. Open your AI assistant in the same folder as the `.toe` and start talking.
 5. Tag operators for externalization by double-tapping lCtrl; save dirty ops with
-   Ctrl+Shift+U.
+   Ctrl+Shift+U (Cmd+Shift+U on macOS; every binding is remappable on the
+   Embody COMP's Shortcuts page).
 
 Full Quickstart: https://dylanroscover.github.io/Embody/quickstart/
 

@@ -6,11 +6,12 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.61-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.126-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
-[![MCP Tools](https://img.shields.io/badge/MCP_tools-49-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
+[![MCP Tools](https://img.shields.io/badge/MCP_tools-53-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/dylanroscover/Embody?style=flat-square&labelColor=181e1e&color=6ee668)](https://github.com/dylanroscover/Embody/stargazers)
+[![Downloads](https://img.shields.io/github/downloads/dylanroscover/Embody/total?style=flat-square&labelColor=181e1e&color=6ee668)](https://github.com/dylanroscover/Embody/releases)
 
 [**embody.tools**](https://embody.tools) &nbsp;&middot;&nbsp; [Documentation](https://dylanroscover.github.io/Embody/) &nbsp;&middot;&nbsp; [Manifesto](https://dylanroscover.github.io/Embody/manifesto/) &nbsp;&middot;&nbsp; [Changelog](https://dylanroscover.github.io/Embody/changelog/)
 
@@ -22,7 +23,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 ## Three Tools, One Idea
 
-**Envoy** — *forward velocity.* An embedded [MCP](https://modelcontextprotocol.io/) server lets [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) talk directly to your live TouchDesigner session. Create operators, wire them up, set parameters, write extensions, debug errors — by saying what you want. No copy-pasting code. No describing your network in chat. Idea → operators in seconds.
+**Envoy** — *forward velocity.* An embedded [MCP](https://modelcontextprotocol.io/) server lets [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [Cursor](https://www.cursor.com/), [Windsurf](https://windsurf.com/), and [GitHub Copilot](https://github.com/features/copilot) (via VS Code) talk directly to your live TouchDesigner session. Create operators, wire them up, set parameters, write extensions, debug errors — by saying what you want. No copy-pasting code. No describing your network in chat. Idea → operators in seconds.
 
 **Embody** — *lateral velocity.* Tag any operator and Embody externalizes it to files on disk that mirror your network hierarchy. Try a new direction, branch off a good one, restore the state from yesterday — all in seconds. Your externalized files are the source of truth, so every project opens already in flow.
 
@@ -32,14 +33,16 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 | | What | Why it matters |
 |---|---|---|
-| 🤖 | **Envoy MCP Server** | 49 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
+| 🤖 | **Envoy MCP Server** | 53 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
 | 📄 | **TDN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdn` file. |
-| 📦 | **Automatic Restoration** | Externalized operators rebuild themselves from disk on every project open. The `.toe` is no longer the source of truth — your files are. |
+| 📦 | **Automatic Restoration** | Externalized files are written on save, so any COMP can be recovered from disk. By default (Export-on-Save) the `.toe` stays authoritative on open; switch to Roundtrip mode to rebuild TDN-strategy COMPs from `.tdn` on every open. |
 | 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
 
 ---
 
 ## Quick Start
+
+**Requirements:** TouchDesigner **2025.32820 or later** (Windows / macOS). No Python setup needed — Envoy installs its own dependencies on first enable.
 
 ### 1. Project Setup
 
@@ -58,8 +61,8 @@ my-project/              ← project folder (optionally a git repo)
 ### 2. Install and Tag
 
 1. **Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project
-2. **Tag operators** — select any COMP or DAT and press `lctrl` twice to tag and externalize it
-3. **Work normally** — press `ctrl + shift + u` to update all externalizations, or `ctrl + alt + u` to update only the current COMP. On project open, Embody restores everything from disk automatically
+2. **Tag operators** — hover any COMP or DAT and press `lctrl` twice to open the tagger (pick a strategy for a COMP, a file format for a DAT)
+3. **Work normally** — press `ctrl + shift + u` to update all externalizations, or `ctrl + alt + u` to update only the current COMP. Externalized files are written on save; on open, the `.toe` stays authoritative by default (Export-on-Save), while Roundtrip mode also reconstructs TDN-strategy COMPs from disk
 
 > **Tip:** If no operators are tagged, Embody will externalize all eligible COMPs and DATs, which may slow down complex projects. Tagging selectively is recommended.
 
@@ -72,8 +75,11 @@ my-project/              ← project folder (optionally a git repo)
 | `ctrl + alt + u` | Update only the current COMP |
 | `ctrl + shift + r` | Refresh tracking state |
 | `ctrl + shift + o` | Open the Manager UI |
+| `ctrl + shift + c` | Copy the selected COMP to the clipboard as a portable TDN envelope |
 | `ctrl + shift + e` | Export entire project to `.tdn` file |
 | `ctrl + alt + e` | Export current COMP to `.tdn` file |
+
+These are the defaults — every shortcut is editable on the Embody COMP's **Shortcuts** parameter page (type a combo, or pulse **Record** and press the keys; empty disables it). See [Keyboard Shortcuts](https://dylanroscover.github.io/Embody/embody/keyboard-shortcuts/).
 
 For supported formats, folder configuration, duplicate handling, Manager UI, and more — see the [Embody docs](https://dylanroscover.github.io/Embody/embody/).
 
@@ -87,10 +93,10 @@ Embody includes **Envoy**, an embedded [MCP](https://modelcontextprotocol.io/) s
 
 1. **Enable Envoy** — toggle the `Envoyenable` parameter on the Embody COMP
 2. **Server starts** on `localhost:9870` (configurable via `Envoyport`)
-3. **Auto-configuration** — Envoy creates a `.mcp.json` in your git repo root
-4. **Connect** — open a Claude Code session (or restart your IDE) in the repo root — it picks up `.mcp.json` automatically
+3. **Auto-configuration** — Envoy creates a `.mcp.json` at your project root. By default this is the git repo root; set the `Aiprojectroot` parameter to `projectfolder` or a custom path to write it elsewhere. Projects without a git repo still get config generated in the `.toe` folder
+4. **Connect** — open a Claude Code session (or restart your IDE) at that root — it picks up `.mcp.json` automatically
 
-If your project isn't in a git repo, add `.mcp.json` manually to your project root:
+If you'd rather configure the client by hand, this is the `.mcp.json` Envoy writes:
 
 ```json
 {
@@ -115,15 +121,15 @@ If your project isn't in a git repo, add `.mcp.json` manually to your project ro
 | `create_extension` | Scaffold a full extension (COMP + DAT + wiring) |
 | `get_op_errors` | Inspect errors on any operator and its children |
 
-...and 37 more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
+...and 46 more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
 
-When Envoy starts, it generates a `CLAUDE.md` file in your project root with TD development patterns, the complete MCP tool reference, and project-specific guidance.
+When Envoy starts, it always generates an `AGENTS.md` file in your project root with TD development patterns and project-specific guidance. It also writes a client-specific config for whichever assistant you select in the `Aiclient` parameter (`CLAUDE.md` + `.claude/` for Claude Code, Cursor/Windsurf rules, Copilot instructions, `GEMINI.md` for Gemini; Codex reads `AGENTS.md` directly).
 
 ---
 
 ## TDN Network Format
 
-TDN (TouchDesigner Network) is the file format that makes the rest of Embody possible. It exports an entire operator network — operators, connections, parameters, layout, annotations, DAT content — as a single human-readable YAML file. Your AI agent can read it. You can read it. Any text tool can diff it. The network can rebuild itself from it on the next project open.
+TDN (TouchDesigner Network) is the file format that makes the rest of Embody possible. It exports an entire operator network — operators, connections, parameters, layout, annotations, DAT content — as a single human-readable YAML file. Your AI agent can read it. You can read it. Any text tool can diff it. The network can rebuild itself from it.
 
 This is the substrate. Every other capability — AI-driven building, version control, automatic restoration — builds on top of it.
 
@@ -156,7 +162,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **74 test suites** (1,727 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes **92 test suites** (2,090 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -187,6 +193,26 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.126**: Two field-reported fixes -- the TDN save-time **Locked Content Warning** now stops at nested externalization boundaries ([#53](https://github.com/dylanroscover/Embody/issues/53)): a locked TOP/CHOP/SOP inside a tox/tdn-tagged child COMP (or exclude-tagged subtree) is that boundary's own concern, so saving the TDN parent no longer pops a false positive; and non-file-backed DATs (selectDAT, mergeDAT, ...) at a tracked path no longer crash `Refresh()` with `td.tdAttributeError` ([#54](https://github.com/dylanroscover/Embody/issues/54)) -- `getExternalPath` returns `''` so the continuity check routes the row through the existing "replaced" recovery prompt, and `RemoveListerRow` completes its cleanup on such DATs (a residual sibling caught by the fresh-install smoke test). **92 suites / 2,090 tests**.
+- **6.0.123**: Editable keyboard shortcuts ([#50](https://github.com/dylanroscover/Embody/issues/50)) -- every binding is now a Str par on a new **Shortcuts** page: type a combo or pulse **Record** and press the keys (first non-modifier keydown commits, Esc cancels, 10s auto-disarm); empty disables; conflicts with other Embody bindings or TD built-ins warn without blocking; the tagger double-tap key is a menu; bindings persist across upgrades; `ctrl` and `cmd` are distinct physical keys on macOS while Mac-authored `cmd` bindings fold to Ctrl on PC (values never rewritten -- portable both ways); duplicates are blocked. **92 suites / 2,080 tests**.
+- **6.0.116**: Two field-reported fixes -- removing a TDN externalization now **sticks** ([#48](https://github.com/dylanroscover/Embody/issues/48)): the manager's X button strips the `tdn` tag / color / tracker entry so the save-time Update sweep can no longer resurrect the row and `.tdn` file it just deleted; and Envoy no longer **restart-loops** on TD builds whose Textport stdout lacks `isatty()` (confirmed 2025.32460 on Windows) -- `uvicorn.Config` now gets `use_colors=False` so the formatter never probes it. Plus self-rewriting version/minimum-build doc statements on every save (guarded by a new `test_version_sync` suite), a CONTRIBUTING.md for TD-mediated contributions, and five new specimen briefs (Riley, Rutt-Etra, Molnar, Calder, Ikeda). Fresh-install smoke-tested from the shipped `.tox`. **91 suites / 2,032 tests**.
+- **6.0.113**: TDN export survives broken widget clones ([#46](https://github.com/dylanroscover/Embody/issues/46)) -- a clone expression referencing a missing master aborted the whole export via Par truthiness; palette-clone blackboxing is now **restorability-gated** (disabled/unresolvable clones export in full instead of rebuilding empty) and blackboxed entries keep their clone reference so rebuilt shells actually restore; a failed initial TDN export **rolls the tag back** so re-tagging retries; RGBA/XYZW custom par groups round-trip without name mangling or dropped alpha (spec gains true-arity `size`). Verified end-to-end against the TauCeti preset manager (1,107 ops): fadetime 7/7 children + 124/124 custom pars. **90 suites / 2,019 tests**.
+- **6.0.111**: Deterministic COMP placement for AI agents -- the create-operator skill now anchors a new COMP's home on the container that holds the `Embody` COMP (`op.Embody.parent().path`), the level you chose, so builds land in the SAME network every run instead of `/` one time and `/project1` the next (a deliberately-opened pane overrides it; a bare-root `/` pane is ignored). Plus a **delete-the-default-torus** rule: a fresh `geometryCOMP`'s `torus1` keeps its RENDER flag on even after its DISPLAY flag auto-clears, so it renders a phantom torus behind your scene unless deleted. CLAUDE.md rules 3/5 realigned to the new default; the previously-unreleased v6.0.109 Envoy features (recovery hints, `capture_top` Quality verdict) are now documented on the Envoy pages. Docs-only -- **90 suites / 2,005 tests**.
+- **6.0.109**: Two agent-ergonomics wins from a competitor review -- **recovery hints** ride back on any tool `error` (`{cause, action, next_tools}`, matched to Envoy's real error strings) so the agent recovers instead of retrying blind, and `capture_top` now returns a **Quality verdict** (`is_black`/`is_flat`/`fully_transparent`/`pass`/`fail_reasons`) computed from raw pixels so an empty render is caught as data without reading the image. New `test_recovery_hints` suite (15) + 4 capture-verdict tests; both verified live from the release `.tox`. **90 suites / 2,005 tests**.
+- **6.0.108**: A one-click **Uninstall** for removing Embody from a project, guarded by a confirmation dialog. The new Uninstall pulse (Embody page, below Disable) computes the same non-destructive plan as `PreviewUninstall()`, shows a `ui.messageBox` spelling out exactly what will be removed (Embody-generated AI config, the `.venv`, `.embody/` state), modified (only Embody's block/key stripped from `.gitignore` / `.gitattributes` / `.mcp.json`), un-set (the `.tdn` git diff driver), and kept (files you edited) -- and only proceeds on confirm; Cancel or a save/test context is a no-op. Your externalized `.tox` / `.tdn` / `.py` and the Embody COMP are never touched. Distinct from Disable (which only removes externalization tags). New `test_uninstall_handler` (5) + a `test_smoke_release` assertion (fresh-install-verified live from the release `.tox`). **89 suites / 1,986 tests**.
+- **6.0.106**: The ext diet -- EnvoyExt (9,221 -> 5,110 lines) and EmbodyExt (10,217 -> 8,817) split into thin facades + eight focused module DATs with zero functional change and byte-identical MCP tool schemas; worker-thread code correctly kept on the facades; three latent bugs fixed (MCP-update notice never logged, a never-raises dispatch contract, annotations repelling the auto-position scan). Every package adversarially reviewed + live-gated. **88 suites / 1,979 tests**.
+- **6.0.104**: Docked operators hug their hosts mechanically -- `create_op`/`copy_op` place a new op's docked callback/shader/info DATs in a tight row under it, `set_op_position` carries docks along when a host moves, `execute_python` auto-hugs scattered docks of new ops (with a `LAYOUT WARNING`), the scattered-dock lint tightens 500 -> 350 units, and `get_network_layout` reports `dockedTo` for mechanical verification. Plus a docs transparency pass (honest build times, Auto-Externalize + Tool Permissions docs) and the Specimen brief set. **88 suites / 1,977 tests**.
+- **6.0.103**: A new "How should the AI ask permission?" setup-wizard step (Claude Code) lets you choose how much Embody pre-approves Envoy MCP tools in `.claude/settings.local.json` -- **Don't ask** (wildcard, no prompts), **Ask for some** (read-only only), **Ask for all**, or **Leave settings alone** -- stored on a new `Toolpermissions` parameter. Every written posture also whitelists the OS temp dir so `capture_top` PNGs read back without a prompt, and the writer merges into an existing file (preserving your other keys), idempotently. The setup `wizard` COMP is now externalized to TDN (`wizard.tdn` + `wizard/logic.py`/`clicks.py`). New `test_tool_permissions` suite: **88 suites / 1,972 tests**.
+- **6.0.99**: Setup-wizard layout polish -- option-button title/subtitle vertical centering and left alignment across all screens, the "Review" hint constrained to the content column (no right-edge clipping, no dead gap), and de-overlapped button tiles -- plus a new size-aware network-spacing rule (`step = size + gap`, both axes, panel widgets included).
+- **6.0.92**: Wizard title/subtitle ink alignment (renderer parity + bearing compensation, pixel-verified) and the post-install import gate moved off the main thread (no more multi-second freeze; 'Preparing Python environment...' status instead).
+- **6.0.91**: Rules diet -- always-loaded rules shrink ~60 percent into four new on-demand skills (movie-export, parameter-design, td-recovery, multi-session-etiquette; 13 shipped skills total), ~10k tokens reclaimed per session with every hard law kept inline behind MUST-load triggers.\n- **6.0.90**: Token/latency quick wins -- get_op non-default-only (~10k chars saved per COMP read), compact read shapes, 14k-char docstring diet, event-driven responses (~5ms/call), upgrade-traceback guards, and the new output-first visual convention (out1 + display flag = live backdrop while agents work).
+- **6.0.89**: Launch AI Client fixes -- Windows missing-CLI guard with install instructions (was a raw cmd error), missing VS Code launcher mapping, and failure dialogs on the pulse button.
+- **6.0.88**: Setup-wizard hotfix -- wizard buttons were dead in user projects (absolute panel-watcher paths, broken since 6.0.74); now relative + regression-tested.
+- **6.0.87**: Envoy hardening + 53 MCP tools: mutating MCP operations now sit in TD undo blocks (one `batch_operations` call = one Ctrl+Z step), new `get_docs` looks up official TouchDesigner docs from the version-exact offline mirror with docs.derivative.ca fallback, `capture_top(sample_grid=...)` returns token-cheap numeric RGBA grids + channel stats for visual verification, and transport security now pins FastMCP Host/Origin validation for DNS-rebinding/CSRF defense. New shipped `/pop-networks` skill adds POP-family builder guidance adapted from Derivative's TDMCPSkills with permission. Test sources now include **87 suites / 1,940 tests**.
+- **6.0.83**: Multi-session Envoy coordination, 52 MCP tools, and TDN stability hardening. Envoy now tracks live sessions, exposes `claim_scope` / `release_scope`, annotates responses with peer-session advisories, and gates destructive operations such as `delete_op`, `import_network(clear_first=True)`, `run_tests`, and `batch_operations` unless the caller opts in with `override=True`. TDN round-trips are safer: malformed imports validate before clearing, editable DAT capture no longer mutates the network, flag defaults round-trip more cleanly, stale cleanup only removes tracked `.tdn` files, ad-hoc exports stay untracked, and orphan shell recovery is preserved. The Setup Wizard client picker no longer shows a forced scrollbar, and the text layout has more right-side padding. The standalone VS Code AI-client token was removed; GitHub Copilot remains supported through VS Code. Release artifacts regenerated as `Embody-v6.0.83.tox`; docs and generated agent config now include the multi-session rules. Test sources now include **85 suites / 1,906 tests**.
+- **6.0.69**: A new **Dropped .tox Expression** control plus a **test-harness data-safety hardening**. `Toxdropexpr` (Embody page) governs how the continuity sweep treats the default expression TouchDesigner writes into a COMP's External .tox on drag-in (`me.parent().fileFolder + ...`): `Ask` prompts with a truncated list and **Clean / Ignore / Always Clean / Always Ignore** (the "Always" choices persist); Embody's own descendants are always cleaned. The bigger change is data safety: destructive whole-project test suites (those calling `Disable`/`ExternalizeProject`/`Reset` on the entire live project) now carry `DESTRUCTIVE = True`, are **excluded from every normal run**, and run only via the opt-in, save-gated `RunDestructiveTests(confirm_saved=True)` -- so a full `RunTests()` can never mutate your live project (new rule `rules/destructive-tests.md`). Also: removed `_ensureAutosaveParams`/`_ensureVizParams` self-heal bloat, hardened `checkOpsForContinuity` to never touch Embody's own subtree, re-entrancy-guarded `Filecleanup` so it can't get stuck at `delete`, and restored the `ReconstructTDNComps` export-mode log. New `test_toxdrop_expr` (10). Test suite **76 suites / 1,761 tests**.
+- **6.0.66**: A one-click **Launch AI Client** button on Embody's Envoy page -- pick your assistant in the `Aiclient` menu and Embody opens it at the project root: editors (VS Code, Cursor, Windsurf; Copilot -> VS Code) open the folder as a workspace, terminal CLIs (Claude Code, Codex, Gemini) open in a new terminal. It resolves the REAL app/exe (macOS LaunchServices via `/usr/bin/open -b <bundle>`; Windows the real `Code.exe`/`Cursor.exe` from install dirs) -- never a hijackable `code` shim -- and runs CLIs through a login-shell terminal so `~/.local/bin` tools resolve despite TD's Dock-truncated PATH. Fixes the Electron "dock bounces then closes" bug (TD sets `ELECTRON_RUN_AS_NODE=1`, forwarded by `open`; a new `_launchEnv()` strips it -- verified live with Cursor). Adds Gemini config (`GEMINI.md` importing `AGENTS.md`), `codex`/`gemini`/`vscode` menu tokens, per-tool install hints, and gitignores other clients' generated configs. Hardened by a **10-agent codex cross-platform review** (crash-safety, `bool` helper contracts, Windows shim `shutil.which` + cmd doubled-quote metachar-safety, `${SHELL:-/bin/zsh}`); macOS verified live, Windows review-verified. New `test_launch_aiclient` (17) + 7 `test_claude_config` tests. Test suite **75 suites / 1,751 tests**.
+- **6.0.62**: A performance-rule expansion shipped in the `.tox`. `rules/performance.md` (and its `text_rule_performance.md` template) gains a complete **Movie Export / Offline Rendering** playbook so an AI agent recording a movie never ships a juddered file: the **Realtime flag** (`project.realTime`, ON by default) silently *replicates* any frame TD can't cook within the `cookRate` budget -- the file ends up the right LENGTH but full of duplicates -- so the rule mandates going non-realtime, restoring the prior flag through one `_finish(prior)` exit helper (there is no `try/finally` across the async `run(delayFrames=...)` driver), monitoring the Movie File Out Info CHOP `total_frames_dropped` **during** the render and aborting on the first drop, and proving the result with SEPARATE length and uniqueness checks (`total_frames_dropped == 0` + `ffmpeg mpdecimate` / `framemd5`). Plus a deterministic per-frame export recipe and a correction that `performLongOperation` is not a real API. Agent guidance shipped in the build; test suite unchanged at **74 suites / 1,727 tests**.
 - **6.0.61**: An Embot polish pass that kills the spawn-time frame drops. Copying an annotateCOMP into the network you're *viewing* pays a ~280ms in-viewport redraw (and a block copy of all 9 parts crashes TD outright -- `copyOPs`, `ui.pasteOPs`, and a redraw-suppressed block all crash on repeat into a displayed net), but copying it *outside* the viewport costs ~100ms; so Embot now **assembles at an off-view staging point and swoops in once whole**, turning a multi-second fps sag into a clean entrance (dives still snap in place, already cheap). Plus paced/ordered assembly (body -> head -> speech -> limbs -> eyes, one part every 32 frames so hitches stay isolated), an occasional **happy squint** (eyes flatten + spread every ~9-17s; eyes bumped to 12x13 so the squint clears TD's 10px annotation-size floor), and a **shrug** that lifts the arms instead of stretching them. Runtime character/camera behavior in `EnvoyExt`; test suite unchanged at **74 suites / 1,727 tests**.
 - **6.0.57**: A live-build-visualization split plus a major embody.tools Collection upgrade. In TouchDesigner, the opt-in build visualization (v6.0.54) becomes two independent toggles -- **Embot** (the builder character that stands on each operator and narrates, in past tense, what he just did) and **Envoy Follow** (the network-editor camera that pans to the active op) -- and the camera now frames the *operator*, so it follows Envoy's work with or without the character shown. A new `_ensureVizParams()` recreates both toggles if missing so the feature survives a restart (they were added live and vanished); Embot's per-frame assembly is restored over a block `copyOPs` implicated in crashes; and follow no longer freezes for ~6s when TD auto-frames a freshly-spawned node. On the web: specimens gain **multiple categories** (up to 3, via a new `specimen_categories` join table + D1 migration `0010`, ANY-match facet filtering), **private drafts** with a one-click publish/unpublish toggle and an owner profile that splits public/private with a list/gallery view + inline edit/delete, a fixed **license picker** (SPDX vocabulary replacing free text), a better TDN editor (search match counter, go-to-line, paste-unwrap) and viewer (operator/annotation jump menu), an optional edit-time cover image, and a privacy pass that **self-hosts Inter** (drops the Google Fonts CDN) alongside new cookie + copyright/DMCA pages. Test suite **74 suites / 1,727 tests** (the visualization split is runtime UI; +2 web e2e cases).
 - **6.0.55**: A clipboard UX fix. Copying a COMP's network with `Ctrl+Shift+C` no longer immediately prompts to paste it back into TouchDesigner -- the clipboard watcher now distinguishes your own **outbound** copy (exported to share or paste elsewhere) from an **inbound** TDN (the web "embody it" button). `CopyNetworkToClipboard` seeds the watcher's last-seen signature with what it just wrote, so an outbound copy is skipped while a genuinely new inbound TDN still prompts. Smoke-tested clean in the shipped `.tox`. New `test_outbound_copy_does_not_prompt` + `test_inbound_after_outbound_still_prompts`. Test suite **74 suites / 1,727 tests**, all green.
@@ -265,6 +291,8 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 ## Contributors
 
 Originally derived from [External Tox Saver](https://github.com/franklin113/External-Tox-Saver) by [Tim Franklin](https://github.com/franklin113/). Refactored entirely by Dylan Roscover, with inspiration and guidance from Elburz Sorkhabi, Matthew Ragan and Wieland Hilker.
+
+Want to help? Start with [CONTRIBUTING.md](CONTRIBUTING.md) — this repo works differently from a typical Python project (TouchDesigner writes many of the files), and that page explains what is safe to change and how to run the tests.
 
 ## License
 

@@ -1,6 +1,6 @@
 # TDN Format
 
-**TDN** (TouchDesigner Network) is the substrate that makes the rest of Embody possible. It's a YAML-based file format (a strict JSON superset, so legacy JSON `.tdn` still load) for representing TouchDesigner operator networks as text — text your AI agent can read, text any diff tool can compare, text a network can rebuild itself from on the next project open. Unlike binary `.toe` and `.tox` files, a `.tdn` file is the network in a form anything can understand.
+**TDN** (TouchDesigner Network) is the substrate that makes the rest of Embody possible. It's a YAML-based file format for representing TouchDesigner operator networks as text — text your AI agent can read, text any diff tool can compare, text a network can rebuild itself from. Unlike binary `.toe` and `.tox` files, a `.tdn` file is the network in a form anything can understand.
 
 ## Why TDN?
 
@@ -10,7 +10,6 @@ Without a text format for networks, AI-driven TouchDesigner work is one-directio
 - **Human-readable YAML** — easy to read, diff, and review (in pull requests or any text comparison tool); multi-line scripts render as literal block scalars instead of escaped strings
 - **Aggressive deduplication** — shared properties are hoisted into type defaults and parameter templates, eliminating redundancy across operators
 - **Round-trip fidelity** — export a network, modify the YAML, import it back with identical results
-- **Reads legacy JSON** — `.tdn` files written by pre-2.0 builds (JSON) still import unchanged
 
 TDN is designed from the ground up to produce the **smallest possible output** while remaining fully readable. Every design decision — from shorthand prefixes to compact formatting — serves this goal.
 
@@ -42,9 +41,9 @@ No prefix means a constant value. This keeps the common case (constant parameter
 ## File Format
 
 - Extension: `.tdn`
-- MIME type: `application/yaml` (a strict JSON superset; legacy JSON `.tdn` still parse)
+- MIME type: `application/yaml`
 - Encoding: UTF-8
-- Schema: [`tdn.schema.json`](https://github.com/dylanroscover/Embody/blob/main/docs/tdn.schema.json) — validates the parsed structure (YAML and JSON decode to the same object)
+- Schema: [`tdn.schema.yaml`](https://github.com/dylanroscover/Embody/blob/main/docs/tdn.schema.yaml) — validates the parsed structure
 
 ## Usage
 
@@ -74,6 +73,7 @@ Works in all three `Tdnmode` values. See [Import & Export → Reading a Network]
     - `include_dat_content` — Include DAT text/table content
     - `output_file` — File path to write (use `"auto"` for automatic naming)
     - `max_depth` — Maximum recursion depth
+    - `embed_all` — Recurse into TDN-tagged COMPs instead of writing `tdn_ref` pointers, producing a self-contained export
 
 ### Import
 
@@ -88,8 +88,9 @@ Use the `import_network` MCP tool:
 COMPs can use TDN as their externalization strategy (instead of `.tox`). With TDN strategy:
 
 1. Press ++ctrl+shift+u++ to update — children are exported to `.tdn` files
-2. On project save (++ctrl+s++), children are stripped from the `.toe` to keep it small, then restored after save completes
-3. On project open, children are automatically reconstructed from the `.tdn` file — no need to save your `.toe` to preserve them
-4. In git, you see readable YAML diffs instead of binary changes
+2. On project save (++ctrl+s++), children are exported to `.tdn` — in the default **Export-on-Save** mode nothing is stripped from the `.toe`, so the `.toe` remains authoritative. In the experimental **Roundtrip** mode, children are also stripped from the `.toe` to keep it small, then restored after save completes.
+3. In git, you see readable YAML diffs instead of binary changes
 
-This is configured per-COMP through the Embody externalization interface.
+By default (Export-on-Save) the `.toe` is the source of truth on open, so COMPs are **not** rebuilt from `.tdn` — Embody only reconstructs a TDN COMP that is *absent* from the `.toe` (e.g. an agent built it and the `.toe` was never saved). In **Roundtrip** mode, every TDN COMP is reconstructed from its `.tdn` file on open.
+
+This is configured per-COMP through the Embody externalization interface, and the mode is set via the `Tdnmode` parameter (Off / Export-on-Save / Roundtrip).

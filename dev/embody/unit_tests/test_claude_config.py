@@ -3,8 +3,8 @@ Test suite: AI config generation pipeline in EmbodyExt.
 
 Tests _TEMPLATE_MAP_RULES / _TEMPLATE_MAP_SKILLS integrity, _writeTemplate,
 _writeClaudeMd, _writeAgentsMd, _writeClaudeCodeConfig, _writeCursorRules,
-_writeCopilotInstructions, _writeWindsurfRules, _clientFilesMissing,
-and _upgradeEnvoy condition logic.
+_writeCopilotInstructions, _writeWindsurfRules, _writeGeminiConfig,
+_clientFilesMissing, and _upgradeEnvoy condition logic.
 """
 
 import tempfile
@@ -34,13 +34,30 @@ class TestClaudeConfig(EmbodyTestCase):
 	# Group A: Template DAT integrity
 	# ------------------------------------------------------------------
 
+	def test_A00_no_absolute_paths_in_panel_watchers(self):
+		"""No panelexecuteDAT inside Embody may watch ABSOLUTE op paths.
+
+		Absolute paths only resolve at the dev project's install location
+		(/embody/Embody); in a user project the tox lands at /Embody and the
+		watcher silently resolves to nothing -- every wizard/UI click dies
+		with no error. This shipped broken in v6.0.74-87 (the setup wizard's
+		Next button did nothing in user projects) because the dev project
+		masked it. Parameter op-paths must be relative, per rules/td-python.md.
+		"""
+		offenders = []
+		for d in self.embody_ext.my.findChildren(type=panelexecuteDAT, maxDepth=8):
+			raw = d.par.panels.val
+			if any(tok.startswith('/') for tok in raw.split()):
+				offenders.append(d.path)
+		self.assertListEqual(offenders, [])
+
 	def test_A01_rules_map_has_expected_entries(self):
 		"""_TEMPLATE_MAP_RULES should have at least 3 rule entries."""
 		self.assertGreaterEqual(len(self.embody_ext._TEMPLATE_MAP_RULES), 3)
 
-	def test_A02_skills_map_has_8_entries(self):
-		"""_TEMPLATE_MAP_SKILLS should have exactly 8 skill entries."""
-		self.assertLen(self.embody_ext._TEMPLATE_MAP_SKILLS, 8)
+	def test_A02_skills_map_has_13_entries(self):
+		"""_TEMPLATE_MAP_SKILLS should have exactly 13 skill entries."""
+		self.assertLen(self.embody_ext._TEMPLATE_MAP_SKILLS, 13)
 
 	def test_A03_templates_comp_exists(self):
 		"""The templates COMP should exist inside Embody."""
@@ -352,11 +369,11 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertLen(rule_files, len(self.embody_ext._TEMPLATE_MAP_RULES))
 
 	def test_D05_skills_directories_count(self):
-		"""Eight skill directories should be created in .claude/skills/."""
+		"""One skill directory per _TEMPLATE_MAP_SKILLS entry in .claude/skills/."""
 		self._run_claude_pipeline()
 		skills_dir = self._temp_dir / '.claude' / 'skills'
 		skill_dirs = [d for d in skills_dir.iterdir() if d.is_dir()]
-		self.assertLen(skill_dirs, 8)
+		self.assertLen(skill_dirs, len(self.embody_ext._TEMPLATE_MAP_SKILLS))
 
 	def test_D06_idempotent_rerun(self):
 		"""Running the Claude pipeline twice should produce identical files."""
@@ -546,6 +563,35 @@ class TestClaudeConfig(EmbodyTestCase):
 				f'Content mismatch for {slug}.md')
 
 	# ------------------------------------------------------------------
+	# Group Dg: _writeGeminiConfig()
+	# ------------------------------------------------------------------
+
+	def test_Dg01_gemini_md_created(self):
+		"""_writeGeminiConfig should create GEMINI.md."""
+		self.embody_ext._writeGeminiConfig(self._temp_dir)
+		self.assertTrue((self._temp_dir / 'GEMINI.md').exists())
+
+	def test_Dg02_gemini_md_has_marker(self):
+		"""Generated GEMINI.md should contain the Embody/Envoy marker."""
+		self.embody_ext._writeGeminiConfig(self._temp_dir)
+		content = (self._temp_dir / 'GEMINI.md').read_text(encoding='utf-8')
+		self.assertIn(self.MARKER, content)
+
+	def test_Dg03_gemini_md_imports_agents(self):
+		"""GEMINI.md should import AGENTS.md via Gemini @import syntax (no duplication)."""
+		self.embody_ext._writeGeminiConfig(self._temp_dir)
+		content = (self._temp_dir / 'GEMINI.md').read_text(encoding='utf-8')
+		self.assertIn('@AGENTS.md', content)
+
+	def test_Dg04_gemini_md_idempotent(self):
+		"""Running _writeGeminiConfig twice should produce identical output."""
+		self.embody_ext._writeGeminiConfig(self._temp_dir)
+		first = (self._temp_dir / 'GEMINI.md').read_text(encoding='utf-8')
+		self.embody_ext._writeGeminiConfig(self._temp_dir)
+		second = (self._temp_dir / 'GEMINI.md').read_text(encoding='utf-8')
+		self.assertEqual(first, second)
+
+	# ------------------------------------------------------------------
 	# Group E: _clientFilesMissing() logic
 	# ------------------------------------------------------------------
 
@@ -617,6 +663,22 @@ class TestClaudeConfig(EmbodyTestCase):
 		"""Unknown client string: _clientFilesMissing returns False (safe default)."""
 		self.assertFalse(
 			self.embody_ext._clientFilesMissing(self._temp_dir, 'unknowntool'))
+
+	def test_E13_gemini_missing_when_no_file(self):
+		"""gemini: missing when GEMINI.md does not exist."""
+		self.assertTrue(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'gemini'))
+
+	def test_E14_gemini_not_missing_when_file_exists(self):
+		"""gemini: not missing when GEMINI.md exists."""
+		(self._temp_dir / 'GEMINI.md').write_text('x', encoding='utf-8')
+		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'gemini'))
+
+	def test_E15_codex_never_missing(self):
+		"""codex: covered by the always-written AGENTS.md, so never 'missing'."""
+		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'codex'))
 
 	# ------------------------------------------------------------------
 	# Group F: _findProjectRoot()

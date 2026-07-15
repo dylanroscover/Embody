@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { SUBMIT_CATEGORIES, SUBMIT_LEVELS, SUBMIT_LICENSES, SUBMIT_REQUIRE_GROUPS } from "@embody/contracts";
 import Base from "../../../layouts/Base.astro";
 import TdnYamlEditor from "../../../components/TdnYamlEditor";
-import { getCurrentTdnBlobForSlug, getSpecimenForEdit } from "../../../server/db";
+import { getCurrentTdnBlobForSlug, getSpecimenForEdit, getVideoKeyForSlug } from "../../../server/db";
 import { getTdn } from "../../../server/r2";
 
 export const prerender = false;
@@ -35,6 +35,16 @@ try {
   if (blob) currentTdn = (await getTdn(env.BLOBS, blob.key)) ?? "";
 } catch {
   currentTdn = "";
+}
+
+// Whether this specimen already carries a cover video, so the edit form can show
+// the "Remove video" control and reflect the current state. Passing the owner's
+// id resolves the key even for a private/unlisted draft (ownership verified above).
+let hasVideo = false;
+try {
+  hasVideo = Boolean(await getVideoKeyForSlug(env.DB, slug, user.id));
+} catch {
+  hasVideo = false;
 }
 
 const levelOptions = SUBMIT_LEVELS;
@@ -179,6 +189,22 @@ const currentLicenseLabel =
           <span class="submit-file__name" data-file-name>keep current</span>
         </span>
       </label>
+      <label class="submit-field">
+        <span>cover video <em>(optional MP4, H.264, 16:9, max 10 MB)</em></span>
+        <span class="submit-file" data-video-file>
+          <input type="file" name="video" accept="video/mp4" class="submit-file__input" data-video-input />
+          <span class="submit-file__btn" aria-hidden="true">choose video</span>
+          <span class="submit-file__name" data-video-name data-has-video={hasVideo ? "1" : "0"}>{hasVideo ? "current video kept" : "keep current"}</span>
+        </span>
+        <small class="submit-hint">shown 16:9 (center-cropped to fit); about 1280x720 looks best. choosing a new video also replaces the cover image with its extracted poster frame. supply a thumbnail above to override it.</small>
+        <small class="submit-error" data-error-for="video" role="alert"></small>
+        <button
+          type="button"
+          class="submit-remove-video"
+          data-remove-video
+          hidden={!hasVideo}
+        >remove video</button>
+      </label>
       </div>
 
       <div class="submit-col submit-col--tdn">
@@ -231,6 +257,65 @@ const currentLicenseLabel =
     else fileName.removeAttribute("data-has-file");
   });
 
+  // Cover-video picker + "remove video" control. The filename mirror shows the
+  // chosen file (or the current state); the remove button DELETEs the video and
+  // reverts the cover to image-only. Both track a live "has video" flag so the UI
+  // reflects the current server state after a remove.
+  const videoInput = document.querySelector("[data-video-input]") as HTMLInputElement | null;
+  const videoName = document.querySelector("[data-video-name]") as HTMLElement | null;
+  const removeVideoBtn = document.querySelector("[data-remove-video]") as HTMLButtonElement | null;
+  let hasVideo = videoName?.getAttribute("data-has-video") === "1";
+  const keepLabel = () => (hasVideo ? "current video kept" : "keep current");
+  const syncVideoUi = () => {
+    if (removeVideoBtn) removeVideoBtn.hidden = !hasVideo;
+    if (!videoName) return;
+    const picked = videoInput?.files && videoInput.files[0];
+    videoName.textContent = picked ? picked.name : keepLabel();
+    if (picked || hasVideo) videoName.setAttribute("data-has-file", "");
+    else videoName.removeAttribute("data-has-file");
+  };
+  videoInput?.addEventListener("change", () => {
+    setFieldError("video", "");
+    syncVideoUi();
+  });
+  syncVideoUi();
+
+  removeVideoBtn?.addEventListener("click", async (e) => {
+    // The button sits inside the file <label>; stop the click from also
+    // activating the label (which would pop the file picker).
+    e.preventDefault();
+    e.stopPropagation();
+    if (!hasVideo) return;
+    const slug = form?.dataset.slug ?? "";
+    if (!slug) return;
+    removeVideoBtn.disabled = true;
+    setStatus("removing cover video...", "pending");
+    try {
+      const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}/video`, {
+        method: "DELETE"
+      });
+      if (res.status === 401) {
+        window.location.assign(`/signin?next=${encodeURIComponent(`/c/${slug}/edit`)}`);
+        return;
+      }
+      if (!res.ok) {
+        setStatus("could not remove the cover video. please try again.", "error");
+        return;
+      }
+      // Cleared server-side; the poster (thumbnail) stays, so the cover reverts to
+      // image-only. Also clear any pending file pick so a subsequent save does not
+      // re-upload it.
+      hasVideo = false;
+      if (videoInput) videoInput.value = "";
+      syncVideoUi();
+      setStatus("cover video removed.", "ok");
+    } catch {
+      setStatus("could not remove the cover video. please try again.", "error");
+    } finally {
+      removeVideoBtn.disabled = false;
+    }
+  });
+
   // Resize a chosen thumbnail to a 640x360 (16:9) cover-cropped WebP on the
   // client, so a multi-MB original never gets uploaded for a small card slot.
   // The API + R2 also enforce WebP + a byte cap as defense in depth.
@@ -250,6 +335,90 @@ const currentLicenseLabel =
     ctx.drawImage(bitmap, (W - dw) / 2, (H - dh) / 2, dw, dh);
     bitmap.close();
     return canvas.toDataURL("image/webp", 0.82);
+  }
+
+  // Client-side video limits, mirrored from the server (putCoverVideo / the video
+  // route): MP4 / H.264 only, <= 10 MB. The server re-validates by magic bytes, so
+  // this is only a fast pre-upload guard, not the real gate.
+  const VIDEO_MAX_BYTES = 10 * 1024 * 1024;
+
+  // Extract the first frame of a chosen video as a 640x360 (16:9) cover-cropped
+  // WebP data URL, using the SAME cover math as thumbDataUrl. This poster is fed
+  // into the existing thumbnail path so a video cover always carries a fast static
+  // image and the grid / og pipeline is reused unchanged.
+  function videoPosterDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const video = document.createElement("video");
+      video.muted = true;
+      video.preload = "auto";
+      // Some browsers only decode a frame for playsInline muted video off-DOM.
+      video.playsInline = true;
+      let settled = false;
+      let watchdog: ReturnType<typeof setTimeout> | undefined;
+      const cleanup = () => {
+        if (watchdog) clearTimeout(watchdog);
+        URL.revokeObjectURL(url);
+        video.removeAttribute("src");
+        video.load();
+      };
+      const fail = (err: unknown) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(err instanceof Error ? err : new Error("video decode failed"));
+      };
+      const draw = () => {
+        if (settled) return;
+        try {
+          const W = 640;
+          const H = 360;
+          const canvas = document.createElement("canvas");
+          canvas.width = W;
+          canvas.height = H;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("canvas unavailable");
+          const vw = video.videoWidth;
+          const vh = video.videoHeight;
+          if (!vw || !vh) throw new Error("video has no dimensions");
+          // cover: scale to fill the 16:9 box, then center-crop the overflow.
+          const scale = Math.max(W / vw, H / vh);
+          const dw = vw * scale;
+          const dh = vh * scale;
+          ctx.drawImage(video, (W - dw) / 2, (H - dh) / 2, dw, dh);
+          const dataUrl = canvas.toDataURL("image/webp", 0.82);
+          settled = true;
+          cleanup();
+          resolve(dataUrl);
+        } catch (err) {
+          fail(err);
+        }
+      };
+      video.addEventListener("error", () => fail(new Error("video could not be loaded")));
+      video.addEventListener("seeked", draw, { once: true });
+      // Once the first frame is available, seek slightly in so we capture real
+      // content rather than a possible black leader frame; drawing happens on seeked.
+      video.addEventListener(
+        "loadeddata",
+        () => {
+          try {
+            const target = Math.min(0.1, (video.duration || 1) / 2);
+            if (video.currentTime === target) draw();
+            else video.currentTime = target;
+          } catch {
+            draw();
+          }
+        },
+        { once: true }
+      );
+      // Watchdog: some browsers/codecs silently never fire "seeked" for a tiny
+      // seek, which would hang the submit forever (the promise never settles).
+      // After 4s, force a best-effort draw (captures the current frame, or
+      // rejects if none is decodable) so the promise ALWAYS settles.
+      watchdog = setTimeout(draw, 4000);
+      video.src = url;
+      video.load();
+    });
   }
 
   function setFieldError(name: string, message: string) {
@@ -325,8 +494,10 @@ const currentLicenseLabel =
     // the server leaves the current cover untouched.
     let thumbnail: string | undefined;
     const thumbFile = data.get("thumbnail");
-    if (thumbFile && typeof thumbFile === "object" && "size" in thumbFile && thumbFile.size > 0) {
-      if (thumbFile.size > 8_000_000) {
+    const hasExplicitThumb =
+      thumbFile && typeof thumbFile === "object" && "size" in thumbFile && thumbFile.size > 0;
+    if (hasExplicitThumb) {
+      if ((thumbFile as File).size > 8_000_000) {
         setStatus("thumbnail source is too large (max 8 MB).", "error");
         return;
       }
@@ -336,6 +507,40 @@ const currentLicenseLabel =
         console.error("thumbnail resize failed", err);
         setStatus("could not process the thumbnail image.", "error");
         return;
+      }
+    }
+
+    // Optional replacement cover video: OMIT IF UNCHANGED -- with no new file the
+    // video_key is left untouched (no second request). When a new MP4 is chosen it
+    // is validated client-side, then uploaded in a SECOND request AFTER the metadata
+    // PUT succeeds. When no explicit thumbnail was chosen, the first frame is
+    // auto-extracted as the poster and sent through the EXISTING thumbnail path so
+    // the grid / og pipeline is reused unchanged.
+    let videoFile: File | undefined;
+    const rawVideo = data.get("video");
+    if (rawVideo && typeof rawVideo === "object" && "size" in rawVideo && rawVideo.size > 0) {
+      const vf = rawVideo as File;
+      if (vf.type !== "video/mp4") {
+        setFieldError("video", "cover video must be an MP4 (H.264) file.");
+        setStatus("cover video must be an MP4 (H.264) file.", "error");
+        return;
+      }
+      if (vf.size > VIDEO_MAX_BYTES) {
+        setFieldError("video", "cover video is too large (max 10 MB).");
+        setStatus("cover video is too large (max 10 MB).", "error");
+        return;
+      }
+      setFieldError("video", "");
+      videoFile = vf;
+      if (!thumbnail) {
+        try {
+          thumbnail = await videoPosterDataUrl(vf);
+        } catch (err) {
+          console.error("poster extraction failed", err);
+          setFieldError("video", "could not read a poster frame from that video.");
+          setStatus("could not read a poster frame from the cover video.", "error");
+          return;
+        }
       }
     }
 
@@ -373,6 +578,38 @@ const currentLicenseLabel =
         goBtn.textContent = original;
         return;
       }
+
+      // Step two: upload a newly-chosen cover video (if any) as multipart/form-data.
+      // The metadata (and any poster) is already saved, so a failed video upload is
+      // NON-FATAL -- the cover stays an image and the author can retry from Edit.
+      if (videoFile) {
+        setStatus("uploading cover video...", "pending");
+        try {
+          const videoForm = new FormData();
+          videoForm.append("video", videoFile);
+          const vres = await fetch(`/api/specimens/${encodeURIComponent(slug)}/video`, {
+            method: "POST",
+            body: videoForm
+          });
+          if (!vres.ok) {
+            setStatus(
+              "changes saved, but the video upload failed. you can retry from Edit.",
+              "error"
+            );
+            window.setTimeout(() => window.location.assign(`/c/${slug}`), 1800);
+            return;
+          }
+        } catch (verr) {
+          console.error("video upload failed", verr);
+          setStatus(
+            "changes saved, but the video upload failed. you can retry from Edit.",
+            "error"
+          );
+          window.setTimeout(() => window.location.assign(`/c/${slug}`), 1800);
+          return;
+        }
+      }
+
       setStatus("saved. returning to your specimen...", "ok");
       window.location.assign(`/c/${slug}`);
     } catch {
@@ -844,6 +1081,44 @@ const currentLicenseLabel =
   .submit-file__input:focus-visible ~ .submit-file__btn {
     outline: 2px solid var(--accent);
     outline-offset: 3px;
+  }
+
+  /* "Remove video" control: a quiet text button under the video picker, shown
+     only when a cover video exists. Tinted red-ish since it clears the cover
+     video (the poster/image cover stays). */
+  .submit-remove-video {
+    align-self: flex-start;
+    margin-top: 0.15rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    padding: 0.3rem 0.7rem;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 140ms ease, color 140ms ease;
+  }
+
+  .submit-remove-video:hover {
+    border-color: #ff9b9b;
+    color: #ff9b9b;
+  }
+
+  .submit-remove-video:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .submit-remove-video[hidden] {
+    display: none;
+  }
+
+  .submit-remove-video:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 
   .submit-field input,

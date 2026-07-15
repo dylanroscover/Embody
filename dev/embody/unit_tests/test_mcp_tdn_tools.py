@@ -109,9 +109,14 @@ class TestMCPTDNTools(EmbodyTestCase):
         tdn_chars = len(json.dumps(tdn_result['tdn']))
 
         # Walk fixture children via _get_op and sum the payload sizes.
+        # include_defaults=True: the 20-90x claim is about FULL operator
+        # state; compact get_op (v6.0.90 non-default-only diet) is itself
+        # ~5x leaner, which would undercut the ratio without changing what
+        # read_tdn saves vs a full-state walk.
         get_op_chars = 0
         for child in self.fixture.children:
-            op_result = self.envoy._get_op(op_path=child.path)
+            op_result = self.envoy._get_op(op_path=child.path,
+                                           include_defaults=True)
             get_op_chars += len(json.dumps(op_result))
 
         self.assertGreater(get_op_chars, 0,

@@ -6,10 +6,10 @@
 -- ASCII only.
 
 -- Dev auth-stub user (kept; specimens reference it as author_id).
--- Handle is 'embody.tools' so the public user page resolves at /u/embody.tools and
+-- Handle is 'envoy' so the public user page resolves at /u/envoy and
 -- matches the fallback author_handle in src/lib/specimenFallback.ts.
 INSERT OR REPLACE INTO users_profile (id, handle, avatar_url, bio, trust_level)
-VALUES ('dev-user', 'embody.tools', NULL, 'First-party Embody specimen author. Curating the transparent TDN Collection.', 'curator');
+VALUES ('dev-user', 'envoy', '/embody-mark.svg', 'First-party Embody specimen author. Curating the transparent TDN Collection.', 'curator');
 
 -- Rebuild the FTS5 mirror from scratch. Must match migration 0005's
 -- contentless_delete=1 form -- a plain content='' table breaks the
@@ -73,7 +73,7 @@ INSERT OR REPLACE INTO specimens (
     'A dense GPU particle swarm that flocks like a starling murmuration at dusk - cohering, separating, aligning, and flowing around a slow invisible attractor with curl-noise wander. True per-neighbor Reynolds flocking computed on the GPU (a Neighbor POP index list iterated in a GLSL POP), rendered as luminous additive point sprites.',
     'simulation',
     'advanced',
-    'none',
+    '[]',
     18,
     'POP,MAT',
     'ver-murmuration',
@@ -95,7 +95,7 @@ INSERT OR REPLACE INTO specimens (
     'A living Gray-Scott reaction-diffusion field. Two chemicals diffuse and react in a GPU feedback loop, growing organic maze and coral patterns that evolve continuously. Usable as a texture, displacement, or mask source.',
     'generative',
     'intermediate',
-    'none',
+    '[]',
     14,
     'TOP',
     'ver-reaction-diffusion',
@@ -117,7 +117,7 @@ INSERT OR REPLACE INTO specimens (
     'A reusable kaleidoscope compositor. Folds any TOP (or its built-in animated source) into an N-fold mirrored mandala that rotates, twists, breathes, and tumbles. Drop it onto any visual via the External source mode.',
     'compositing',
     'intermediate',
-    'none',
+    '[]',
     11,
     'TOP',
     'ver-kaleidoscope',
@@ -139,7 +139,7 @@ INSERT OR REPLACE INTO specimens (
     'A procedural snow-mountain scene. A GLSL POP compute shader displaces a grid into ridged-multifractal peaks that morph in place, shaded by a snow/rock GLSL MAT with elevation-based snow, sun/sky lighting, and atmospheric haze, composited under a procedural sky.',
     '3d',
     'advanced',
-    'none',
+    '[]',
     20,
     'POP,MAT,TOP',
     'ver-noise-terrain',
@@ -161,7 +161,7 @@ INSERT OR REPLACE INTO specimens (
     'A flowing GPU plasma. Two sine-wave fields at slightly detuned scales beat against each other into shimmering moire fringes, a slow rotating domain warp bends the coordinates into liquid motion, and the result is mapped through a cyclic cosine palette. Self-contained and stateless - one GLSL TOP, no input, no feedback - so it drops in anywhere as a VJ loop, texture, or displacement source.',
     'generative',
     'intermediate',
-    'none',
+    '[]',
     5,
     'TOP',
     'ver-plasma-interference',
@@ -183,7 +183,7 @@ INSERT OR REPLACE INTO specimens (
     'A raymarched 3D Mandelbulb fractal rendered entirely in one GLSL TOP. The classic distance estimator is marched per pixel against a slowly orbiting camera; orbit-trap values captured during iteration tint the surface, and soft shadows, a fresnel rim, and a proximity glow give it depth. No input, no feedback - a drop-in hero render, a looping VJ source, or a reference for distance-estimated raymarching.',
     'raymarching-sdf',
     'advanced',
-    'none',
+    '[]',
     5,
     'TOP',
     'ver-mandelbulb-march',
@@ -259,27 +259,27 @@ INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) VALUES
 
 -- FTS5 keyword mirror (rowid = specimen rowid; dat_text = key_ops).
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
-SELECT rowid, 'murmuration', 'Murmuration', 'A dense GPU particle swarm that flocks like a starling murmuration at dusk - cohering, separating, aligning, and flowing around a slow invisible attractor with curl-noise wander. True per-neighbor Reynolds flocking computed on the GPU (a Neighbor POP index list iterated in a GLSL POP), rendered as luminous additive point sprites.', 'simulation glsl pop flocking particles generative', 'embody.tools', 'particlePOP neighborPOP glslPOP pointspriteMAT'
+SELECT rowid, 'murmuration', 'Murmuration', 'A dense GPU particle swarm that flocks like a starling murmuration at dusk - cohering, separating, aligning, and flowing around a slow invisible attractor with curl-noise wander. True per-neighbor Reynolds flocking computed on the GPU (a Neighbor POP index list iterated in a GLSL POP), rendered as luminous additive point sprites.', 'simulation glsl pop flocking particles generative', 'envoy', 'particlePOP neighborPOP glslPOP pointspriteMAT'
 FROM specimens WHERE id = 'sp-murmuration';
 
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
-SELECT rowid, 'reaction-diffusion', 'Reaction-Diffusion (Gray-Scott)', 'A living Gray-Scott reaction-diffusion field. Two chemicals diffuse and react in a GPU feedback loop, growing organic maze and coral patterns that evolve continuously. Usable as a texture, displacement, or mask source.', 'feedback glsl generative simulation texture', 'embody.tools', 'feedbackTOP glslTOP'
+SELECT rowid, 'reaction-diffusion', 'Reaction-Diffusion (Gray-Scott)', 'A living Gray-Scott reaction-diffusion field. Two chemicals diffuse and react in a GPU feedback loop, growing organic maze and coral patterns that evolve continuously. Usable as a texture, displacement, or mask source.', 'feedback glsl generative simulation texture', 'envoy', 'feedbackTOP glslTOP'
 FROM specimens WHERE id = 'sp-reaction-diffusion';
 
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
-SELECT rowid, 'kaleidoscope', 'Kaleidoscope', 'A reusable kaleidoscope compositor. Folds any TOP (or its built-in animated source) into an N-fold mirrored mandala that rotates, twists, breathes, and tumbles. Drop it onto any visual via the External source mode.', 'compositing glsl mirror symmetry effect', 'embody.tools', 'glslTOP switchTOP inTOP'
+SELECT rowid, 'kaleidoscope', 'Kaleidoscope', 'A reusable kaleidoscope compositor. Folds any TOP (or its built-in animated source) into an N-fold mirrored mandala that rotates, twists, breathes, and tumbles. Drop it onto any visual via the External source mode.', 'compositing glsl mirror symmetry effect', 'envoy', 'glslTOP switchTOP inTOP'
 FROM specimens WHERE id = 'sp-kaleidoscope';
 
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
-SELECT rowid, 'noise-terrain', 'Ridged Mountain Terrain', 'A procedural snow-mountain scene. A GLSL POP compute shader displaces a grid into ridged-multifractal peaks that morph in place, shaded by a snow/rock GLSL MAT with elevation-based snow, sun/sky lighting, and atmospheric haze, composited under a procedural sky.', '3d glsl terrain geometry procedural', 'embody.tools', 'glslPOP glslMAT gridPOP renderTOP'
+SELECT rowid, 'noise-terrain', 'Ridged Mountain Terrain', 'A procedural snow-mountain scene. A GLSL POP compute shader displaces a grid into ridged-multifractal peaks that morph in place, shaded by a snow/rock GLSL MAT with elevation-based snow, sun/sky lighting, and atmospheric haze, composited under a procedural sky.', '3d glsl terrain geometry procedural', 'envoy', 'glslPOP glslMAT gridPOP renderTOP'
 FROM specimens WHERE id = 'sp-noise-terrain';
 
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
-SELECT rowid, 'plasma-interference', 'Plasma (Sine Interference)', 'A flowing GPU plasma. Two sine-wave fields at slightly detuned scales beat against each other into shimmering moire fringes, a slow rotating domain warp bends the coordinates into liquid motion, and the result is mapped through a cyclic cosine palette. Self-contained and stateless - one GLSL TOP, no input, no feedback - so it drops in anywhere as a VJ loop, texture, or displacement source.', 'generative glsl plasma palette vj texture', 'embody.tools', 'glslTOP'
+SELECT rowid, 'plasma-interference', 'Plasma (Sine Interference)', 'A flowing GPU plasma. Two sine-wave fields at slightly detuned scales beat against each other into shimmering moire fringes, a slow rotating domain warp bends the coordinates into liquid motion, and the result is mapped through a cyclic cosine palette. Self-contained and stateless - one GLSL TOP, no input, no feedback - so it drops in anywhere as a VJ loop, texture, or displacement source.', 'generative glsl plasma palette vj texture', 'envoy', 'glslTOP'
 FROM specimens WHERE id = 'sp-plasma-interference';
 
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
-SELECT rowid, 'mandelbulb-march', 'Mandelbulb March', 'A raymarched 3D Mandelbulb fractal rendered entirely in one GLSL TOP. The classic distance estimator is marched per pixel against a slowly orbiting camera; orbit-trap values captured during iteration tint the surface, and soft shadows, a fresnel rim, and a proximity glow give it depth. No input, no feedback - a drop-in hero render, a looping VJ source, or a reference for distance-estimated raymarching.', 'raymarching sdf glsl fractal 3d mandelbulb', 'embody.tools', 'glslTOP'
+SELECT rowid, 'mandelbulb-march', 'Mandelbulb March', 'A raymarched 3D Mandelbulb fractal rendered entirely in one GLSL TOP. The classic distance estimator is marched per pixel against a slowly orbiting camera; orbit-trap values captured during iteration tint the surface, and soft shadows, a fresnel rim, and a proximity glow give it depth. No input, no feedback - a drop-in hero render, a looping VJ source, or a reference for distance-estimated raymarching.', 'raymarching sdf glsl fractal 3d mandelbulb', 'envoy', 'glslTOP'
 FROM specimens WHERE id = 'sp-mandelbulb-march';
 
 -- Category membership (multi). Seed the join table from each specimen's primary

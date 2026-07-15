@@ -43,7 +43,7 @@ class TestUpdateSync(EmbodyTestCase):
     def test_externalizations_table_rows_have_valid_paths(self):
         table = self.embody_ext.Externalizations
         if not table or table.numRows <= 1:
-            self.skip('No externalizations to check')
+            self.skipTest('No externalizations to check')
         for i in range(1, table.numRows):
             path = table[i, 'path'].val
             self.assertTrue(path.startswith('/'),
@@ -52,7 +52,7 @@ class TestUpdateSync(EmbodyTestCase):
     def test_externalizations_table_rows_have_type(self):
         table = self.embody_ext.Externalizations
         if not table or table.numRows <= 1:
-            self.skip('No externalizations to check')
+            self.skipTest('No externalizations to check')
         for i in range(1, table.numRows):
             op_type = table[i, 'type'].val
             self.assertTrue(len(op_type) > 0,
@@ -61,7 +61,7 @@ class TestUpdateSync(EmbodyTestCase):
     def test_externalizations_table_rows_have_file_path(self):
         table = self.embody_ext.Externalizations
         if not table or table.numRows <= 1:
-            self.skip('No externalizations to check')
+            self.skipTest('No externalizations to check')
         for i in range(1, table.numRows):
             rel_path = table[i, 'rel_file_path'].val
             self.assertTrue(len(rel_path) > 0,
@@ -70,7 +70,7 @@ class TestUpdateSync(EmbodyTestCase):
     def test_externalizations_no_backslashes_in_paths(self):
         table = self.embody_ext.Externalizations
         if not table or table.numRows <= 1:
-            self.skip('No externalizations to check')
+            self.skipTest('No externalizations to check')
         for i in range(1, table.numRows):
             rel_path = table[i, 'rel_file_path'].val
             self.assertNotIn('\\', rel_path,

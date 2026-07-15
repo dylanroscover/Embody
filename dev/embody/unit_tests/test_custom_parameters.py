@@ -14,6 +14,15 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 
 class TestCustomParameters(EmbodyTestCase):
 
+    # DESTRUCTIVE: this suite calls Disable(removeTags=True) and
+    # _externalize_project_silent() against ext.root -- the ENTIRE LIVE PROJECT.
+    # That unlinks every tracked file project-wide and re-tags every COMP, which
+    # on 2026-07-01 deleted the crown-jewel specimen .tdn files when this ran as
+    # part of a full suite. The test runner EXCLUDES DESTRUCTIVE suites from all
+    # normal runs; they only run via the save-gated RunDestructiveTests().
+    # See .claude/rules/destructive-tests.md.
+    DESTRUCTIVE = True
+
     # ==================================================================
     # LIFECYCLE HOOKS
     # ==================================================================
@@ -401,7 +410,7 @@ class TestCustomParameters(EmbodyTestCase):
             # is reported by the resilience layer until bind is reconfirmed).
             if any(s in status for s in ('Waiting', 'Starting', 'Stopping',
                                          'Restarting', 'reinit')):
-                self.skip(f'Server in transitional state: {status}')
+                self.skipTest(f'Server in transitional state: {status}')
             self.assertIn('Running', status)
         else:
             # Server not running - just verify the par exists
@@ -421,7 +430,7 @@ class TestCustomParameters(EmbodyTestCase):
         """Verbose controls whether DEBUG messages go to FIFO."""
         fifo = self.embody_ext._fifo
         if not fifo:
-            self.skip('FIFO DAT not available')
+            self.skipTest('FIFO DAT not available')
 
         # With Verbose OFF, Debug should NOT go to FIFO
         parexec = self.embody.op('parexec')

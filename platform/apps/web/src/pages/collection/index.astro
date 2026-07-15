@@ -37,6 +37,13 @@ const DEFAULT_SORT = "az" as const;
 const requestedCategory = (Astro.url.searchParams.get("category") ?? "").trim();
 const requestedAuthor = (Astro.url.searchParams.get("author") ?? "").trim();
 
+// A ?category / ?author param must be validated against the facet whitelist
+// BEFORE we filter the list by it, which forces facets -> list to run in series.
+// With no such param (the bare /collection -- by far the common case) the list
+// query needs no validated input, so the two D1 reads run CONCURRENTLY instead,
+// shaving a full round-trip off the critical SSR path.
+const hasFilterParam = Boolean(requestedCategory || requestedAuthor);
+
 let firstPage: SpecimenSummary[];
 let totalCount: number;
 let nextCursor: string | null;
@@ -46,25 +53,40 @@ let activeCategory = "";
 let activeAuthor = "";
 
 try {
-  // Facets double as a D1 health probe AND the whitelist that validates the
-  // requested category/author (an unknown value is ignored, falling back to
-  // "all").
-  facets = await getCollectionFacets(env.DB);
-  activeCategory = facets.categories.includes(requestedCategory) ? requestedCategory : "";
-  activeAuthor = facets.authors.includes(requestedAuthor) ? requestedAuthor : "";
-  const response: ListResponse = await listSpecimensForCollection(env.DB, {
-    sort: DEFAULT_SORT,
-    pageSize: PAGE_SIZE,
-    category: activeCategory || undefined,
-    author: activeAuthor || undefined
-  });
+  let response: ListResponse;
+  if (hasFilterParam) {
+    // Facets double as a D1 health probe AND the whitelist that validates the
+    // requested category/author (an unknown value is ignored, falling back to
+    // "all"). Sequential: the list filter depends on the validated values.
+    facets = await getCollectionFacets(env.DB);
+    activeCategory = facets.categories.includes(requestedCategory) ? requestedCategory : "";
+    activeAuthor = facets.authors.includes(requestedAuthor) ? requestedAuthor : "";
+    response = await listSpecimensForCollection(env.DB, {
+      sort: DEFAULT_SORT,
+      pageSize: PAGE_SIZE,
+      category: activeCategory || undefined,
+      author: activeAuthor || undefined
+    });
+  } else {
+    // No filter to validate -> fetch facets (still the D1 health probe) and the
+    // first page in parallel. activeCategory/activeAuthor stay "".
+    [facets, response] = await Promise.all([
+      getCollectionFacets(env.DB),
+      listSpecimensForCollection(env.DB, { sort: DEFAULT_SORT, pageSize: PAGE_SIZE })
+    ]);
+  }
   // An empty UNFILTERED result means the DB has no rows (e.g. dev without a
   // seed) -- degrade to fixtures. An empty FILTERED result is legitimate.
   if (response.specimens.length === 0 && !activeCategory && !activeAuthor) throw new Error("empty");
   firstPage = response.specimens;
   totalCount = response.count;
   nextCursor = response.nextCursor ?? null;
-} catch {
+} catch (err) {
+  // A live-query failure must never blank the page -- degrade to the bundled
+  // fixture set. But log it: this silent fallback previously masked a single
+  // malformed-`requires` row that replaced the ENTIRE live Collection with
+  // fixtures, which was invisible until someone read the DB directly.
+  console.error("[collection] live query failed; showing fixtures:", err);
   usingFixtures = true;
   facets = {
     categories: [...new Set(fixtureSummaries.map((s) => s.category))].sort(),
@@ -295,6 +317,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
                 name={specimen.name}
                 category={specimen.category}
                 thumbnailKey={specimen.thumbnail_key}
+                videoKey={specimen.video_key}
                 tdn={usingFixtures ? (specimenGraph(specimen.slug) ?? sampleTdn) : specimenGraph(specimen.slug)}
               />
             </div>
@@ -358,7 +381,11 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
                   aria-label={`View ${specimen.author_handle}'s profile`}
                 >
                   <span class="specimen-card__author-by">by</span>
-                  <span class="specimen-card__author-avatar" aria-hidden="true">{specimen.author_handle.charAt(0).toUpperCase()}</span>
+                  <span class="specimen-card__author-avatar" aria-hidden="true">
+                    {specimen.author_avatar_url
+                      ? <img src={specimen.author_avatar_url} alt="" loading="lazy" />
+                      : specimen.author_handle.charAt(0).toUpperCase()}
+                  </span>
                   <span class="specimen-card__author-handle">@{specimen.author_handle}</span>
                 </a>
               </div>
@@ -401,6 +428,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     import { specimenThumbnail } from "../../lib/specimenThumb";
     import { reactionsClusterHtml } from "../../lib/reactions";
     import { initReactions } from "../../lib/reactionsClient";
+    import { initCoverVideoHover } from "../../lib/coverVideoHover";
 
     interface CopyResponse {
       envelope: unknown;
@@ -420,6 +448,11 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     // Emoji reactions: one delegated listener over the whole document covers SSR
     // cards AND client-appended ones. Anonymous visitors are bounced to /signin.
     initReactions({ signedIn: shell?.getAttribute("data-signed-in") === "1" });
+
+    // Cover-video hover-play: one delegated pair of listeners over the grid
+    // covers SSR AND appended cards (no per-card binding to leak). No-op on a
+    // coarse pointer or with reduced motion -- those keep the static poster.
+    if (grid) initCoverVideoHover({ scope: grid, cardSelector: "[data-specimen]" });
     const viewButtons = Array.from(
       document.querySelectorAll<HTMLElement>("[data-view-option]")
     );
@@ -571,7 +604,17 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
         }
         const card = target.closest<HTMLElement>("[data-specimen]");
         const href = card?.getAttribute("data-href");
-        if (href) window.location.href = href;
+        if (href) {
+          // Remember this collection view AS IT IS NOW (filters live in the URL),
+          // keyed to the specimen being opened, so ONLY that specimen's "Collection"
+          // breadcrumb returns here -- a specimen reached any other way keeps the
+          // canonical /collection.
+          try {
+            const slug = card?.getAttribute("data-slug") || "";
+            sessionStorage.setItem("embody:collection:return", JSON.stringify({ slug, url: location.pathname + location.search }));
+          } catch {}
+          window.location.href = href;
+        }
       });
     }
 
@@ -652,7 +695,18 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
         : BAKED_THUMBS.has(s.slug)
           ? `/specimens/${s.slug}.jpg`
           : specimenThumbnail({ slug: s.slug, name: s.name, category: s.category });
+      // Cover video route when the cover carries one (mirrors resultVideo in
+      // lib/specimenThumb). Poster + hover-play <video> live in the result layer;
+      // keep this branch in sync with SpecimenCover.astro's result layer.
+      const videoUrl = s.video_key ? `/api/specimens/${encodeURIComponent(s.slug)}/video` : "";
+      const videoEl = videoUrl
+        ? `<video class="cover__video" data-cover-video="${esc(videoUrl)}" poster="${esc(thumb)}" muted loop playsinline preload="none" aria-hidden="true"></video>`
+        : "";
       const initial = (s.author_handle || "?").charAt(0).toUpperCase();
+      // Uploaded/author avatar fills the chip; no avatar -> the letter-initial chip.
+      const avatarInner = s.author_avatar_url
+        ? `<img src="${esc(s.author_avatar_url)}" alt="" loading="lazy" />`
+        : esc(initial);
 
       const article = document.createElement("article");
       article.className = "specimen-card";
@@ -675,6 +729,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
             </div>
             <div class="cover__layer cover__layer--result" aria-hidden="${baked ? 'false' : 'true'}">
               <img src="${esc(thumb)}" loading="lazy" alt="${esc(s.name)} ${baked ? 'rendered result' : 'preview placeholder'}" />
+              ${videoEl}
               ${baked ? "" : '<span class="cover__soon mono">preview coming soon</span>'}
             </div>
             <div class="cover__flip" role="group" aria-label="${esc(s.name)} cover view">
@@ -699,7 +754,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
             <h3 class="specimen-card__name">${esc(s.name)}</h3>
             <a class="specimen-card__author mono" href="/u/${esc(s.author_handle)}" aria-label="View ${esc(s.author_handle)}'s profile">
               <span class="specimen-card__author-by">by</span>
-              <span class="specimen-card__author-avatar" aria-hidden="true">${esc(initial)}</span>
+              <span class="specimen-card__author-avatar" aria-hidden="true">${avatarInner}</span>
               <span class="specimen-card__author-handle">@${esc(s.author_handle)}</span>
             </a>
           </div>
@@ -734,6 +789,73 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
       return params.toString();
     }
 
+    // ---- URL state: make a filtered view survive a return trip ----------------
+    // Mirror the LIVE filter/sort/search into this page's own URL (replaceState,
+    // so one collection history entry, not one per keystroke). This is the fix for
+    // "I lost my place": browser Back, the specimen "Collection" breadcrumb, a
+    // shared link, and a cold reload all reconstruct the same set. pageSize/cursor
+    // stay OUT of the URL (they're transport detail); the default A-Z sort is
+    // omitted so a clean view stays a clean /collection.
+    function reflectUrl(): void {
+      if (usingFixtures) return; // no live API to reconstruct from -> keep URL clean
+      const params = new URLSearchParams();
+      const q = searchInput?.value.trim();
+      if (q) params.set("q", q);
+      if (categorySelect?.value) params.set("category", categorySelect.value);
+      if (levelSelect?.value) params.set("level", levelSelect.value);
+      if (authorSelect?.value) params.set("author", authorSelect.value);
+      if (sortSelect?.value && sortSelect.value !== "az") params.set("sort", sortSelect.value);
+      const qs = params.toString();
+      try { history.replaceState(history.state, "", qs ? `/collection?${qs}` : "/collection"); } catch {}
+    }
+
+    // Set a facet control to a value WITHOUT dispatching change (URL restore):
+    // writes the hidden native <select> AND the styled dropdown's label +
+    // aria-selected so its trigger shows the right value.
+    function setControl(native: HTMLSelectElement | null, value: string, fallback = ""): void {
+      if (!native) return;
+      const has = Array.from(native.options).some((o) => o.value === value);
+      // An unknown value (e.g. ?sort=bogus) resolves to the control's real default
+      // so its label/aria never desync (sort has no empty option, so fallback "az").
+      native.value = has ? value : fallback;
+      const dd = native.closest(".dd");
+      if (!dd) return;
+      const opt = dd.querySelector<HTMLElement>(`.dd__opt[data-value="${CSS.escape(native.value)}"]`);
+      const valEl = dd.querySelector<HTMLElement>(".dd__val");
+      if (valEl && opt) valEl.textContent = opt.textContent;
+      dd.querySelectorAll<HTMLElement>(".dd__opt").forEach((o) =>
+        o.setAttribute("aria-selected", String(o.getAttribute("data-value") === native.value))
+      );
+    }
+
+    // On load, make the controls + grid reflect the URL (a shared link, a cold
+    // browser-Back, or the specimen breadcrumb all arrive with ?q/category/...).
+    // SSR already painted the category/author-filtered A-Z first page, so we only
+    // re-query when the URL carries state SSR can't apply (q, level, non-default
+    // sort) -- category/author alone need no refetch, so the common path (a bare
+    // category link) shows no flash.
+    function syncControlsFromUrl(): void {
+      const params = new URLSearchParams(location.search);
+      // SSR applies category + author to the painted page (live D1 or the fixture
+      // fallback alike), so always reflect those in the controls.
+      setControl(categorySelect, params.get("category") ?? "");
+      setControl(authorSelect, params.get("author") ?? "");
+      // search / level / sort only take effect through a live API query. In fixtures
+      // mode there is no API to query, so leave them at their SSR defaults rather
+      // than show a value the (frozen) grid can't honor.
+      if (usingFixtures) return;
+      if (searchInput) searchInput.value = params.get("q") ?? "";
+      setControl(levelSelect, params.get("level") ?? "");
+      setControl(sortSelect, params.get("sort") ?? "az", "az");
+      // Re-query only when the RESOLVED controls carry state SSR didn't paint
+      // (q / level / non-default sort) -- category + author are already SSR-applied,
+      // so a bare category link needs no refetch (no flash).
+      const sortVal = sortSelect?.value ?? "";
+      const needsRequery =
+        Boolean(searchInput?.value.trim()) || Boolean(levelSelect?.value) || (Boolean(sortVal) && sortVal !== "az");
+      if (needsRequery) void runQuery();
+    }
+
     function setCount(total: number): void {
       if (countEl) countEl.textContent = `${total} specimen${total === 1 ? "" : "s"}`;
     }
@@ -751,6 +873,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
 
     // REPLACE the grid with a fresh server result (search / facet / sort change).
     async function runQuery(): Promise<void> {
+      reflectUrl(); // keep the address bar in sync with the live filters
       // Fixtures fallback (D1 unreachable at SSR): there is no live API set to
       // page over, so keep the painted SSR first page rather than blank it.
       if (usingFixtures) return;
@@ -831,6 +954,10 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
 
     // Initial sentinel visibility (hidden when there is no next page).
     syncSentinel();
+
+    // Reconcile controls + grid with the URL on load (shared link / cold Back /
+    // specimen breadcrumb arriving with ?q/category/level/sort/author).
+    syncControlsFromUrl();
 
     // ---- App-native dropdowns ----
     // Each .dd wraps a visually-hidden native <select> (the value source the
@@ -1497,6 +1624,20 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     font-size: 0.72rem;
     font-weight: 700;
     line-height: 1;
+    overflow: hidden; /* clip an author image to the round chip */
+  }
+
+  /* When the author has an avatar image, it fills the chip; drop the green
+     letter-chip background so a transparent PNG doesn't show a green ring. */
+  .specimen-card__author-avatar:has(img) {
+    background: none;
+  }
+  .specimen-card__author-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    display: block;
   }
 
   .specimen-card__author-handle {
@@ -1519,6 +1660,16 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     color: var(--text-muted);
     font-size: 0.84rem;
     line-height: 1.5;
+    /* Clamp to 2 lines so a long description (Mandelbulb March) truncates with an
+       ellipsis instead of stretching its list row far taller than a short one
+       (Kaleidoscope). Standardizes row heights and keeps the list lean. Only the
+       list view shows the desc -- gallery hides it via a higher-specificity
+       display:none, which still wins over this display:-webkit-box. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
   }
 
   /* Badges share the top row with the "embody it" button, which floats to the far
@@ -1687,16 +1838,34 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     padding: 0.8rem 1.15rem;
   }
 
+  /* Keep the title + author on ONE line. The row never wraps to a second line;
+     instead the title ellipsizes. The author -- who made this, the thing that
+     matters most in the collection -- is protected: it never shrinks, so it
+     stays fully readable while the title gives up width first. The max-width cap
+     is the only thing that can truncate the author, and only in the pathological
+     case of a very long handle -- which also keeps the title from ever being
+     starved to nothing (both truncate only if truly needed). */
+  .collection-shell[data-view="list"] .specimen-card__name-row {
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
   /* List rows have room -- enlarge the title so it's the clear visual anchor. */
   .collection-shell[data-view="list"] .specimen-card__name {
-    flex: 0 1 auto;
+    flex: 0 1 auto; /* the only shrinkable item -- the title absorbs all overflow */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 1.4rem;
     line-height: 1.2;
   }
 
   .collection-shell[data-view="list"] .specimen-card__name-row .specimen-card__author {
     order: 1;
-    flex: 0 1 auto;
+    flex: 0 0 auto; /* never shrinks: the author stays whole until the title has fully collapsed */
+    max-width: 60%; /* ... except a pathological handle is capped here (its handle then ellipsizes) */
+    min-width: 0;
   }
 
   @media (max-width: 640px) {

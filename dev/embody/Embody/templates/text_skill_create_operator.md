@@ -1,4 +1,4 @@
-﻿---
+---
 name: create-operator
 description: "MUST READ before calling create_op. Contains required verification, positioning, and error-checking steps."
 ---
@@ -8,21 +8,32 @@ description: "MUST READ before calling create_op. Contains required verification
 
 Follow these steps every time you create operators via MCP:
 
-1. **Choose the correct parent network**: NEVER create operators under `/local` or `/local/*`. The `/local` storage is not for project data. Always place new operators under the project root (e.g., `/project1/...`) or wherever the user's active network lives. If the user says "create in the current network," use `execute_python` with `result = ui.panes.current.owner.path` to find it — do NOT default to `/local`.
+1. **Choose the correct parent network -- ASSOCIATE with where the user already works.** Inconsistent placement is the #1 scoping bug (`/` one run, `/project1` the next). The fix is to anchor on the user's own structure, which is stable across runs -- not on a transient pane:
+    - **NEVER** create under `/local` or `/local/*` -- volatile storage, not saved with the `.toe`.
+    - **If the user named a target**, use it.
+    - **Default home = the container that holds the `Embody` COMP.** `execute_python` with `result = op.Embody.parent().path`. Embody in `/project1` -> build in `/project1`; Embody at the root `/` -> build at `/`. It returns the SAME home every run -- this is the consistency mechanism, and it is the level the user chose by placing Embody there.
+    - **Override only for deliberate navigation.** If the user has actively opened a specific content network to work in, build there instead (`ui.panes.current.owner.path`) -- UNLESS that pane is sitting at the bare root `/` (a non-deliberate default, e.g. right after the project opens), in which case ignore it and use the Embody home above. Never treat bare `/` as a content home.
+    - **Discover, never guess.** Confirm the real container names with `query_network` on `/` -- never hardcode `/project1` (it may be renamed, and there may be more than one).
+    - **Keep one task's COMPs together** under the SAME parent, grouped in one container / annotation. Don't split related COMPs across levels.
 2. **Discover the target network**: `query_network` on the target parent to confirm it exists and see existing operators
 3. **Scan existing layout**: Use `get_network_layout` on the parent COMP. Note each operator's `nodeX`, `nodeY`, `nodeWidth`, and `nodeHeight` — operators vary in size (100–300+ units wide)
 4. **Plan positions BEFORE creating**: Batch-compute grid-aligned positions for ALL operators you intend to create. Signal flow is left-to-right: inputs on the left, outputs on the right. Supporting operators (DATs feeding a TOP, CHOPs feeding parameters) go to the left of or below the operator they feed. Snap all coordinates to the 200-unit grid. See the Positioning Rules section below.
 5. **Create each operator**: `create_op` with the desired type and name
-6. **Position each operator**: `set_op_position` to place it at the pre-computed grid position. Auto-placement is NOT acceptable — it produces messy, unreadable networks. You MUST explicitly position every operator you create.
-7. **Connect**: `connect_ops` to wire inputs/outputs. Wires must flow left-to-right (positive X). If a wire would go backward, the downstream op is misplaced — reposition it.
-8. **Set OP-reference parameters with relative paths**: If the operator has parameters referencing other operators (Camera, Geometry, Lights, TOP, CHOP, etc.), use sibling names (`cam`) or relative paths (`../shared/lut`) — NEVER absolute paths (`/project1/scene/cam`). See `parameters.md` § OP-Reference Parameter Values.
-9. **Verify layout**: Call `get_network_layout` again. Confirm no overlaps, grid alignment is intact, and signal flows left-to-right.
-10. **Verify errors**: `get_op_errors` with `recurse=true` to check for errors and warnings. Fix all errors before considering the task complete
-11. **Visual verification**: For any renderable result (a TOP chain or a render), capture the output TOP with `capture_top` and confirm it actually renders (not black) and matches intent; for a 3D render, confirm a camera, a light, and geometry display/render flags are present. For anything but a trivial op, load the `/visual-aesthetics` skill to judge composition/value/color/contrast.
+6. **Position each operator**: `set_op_position` to place it at the pre-computed grid position. Auto-placement is NOT acceptable — it produces messy, unreadable networks. You MUST explicitly position every operator you create. Moving a host via `set_op_position` carries its docked companions along (re-hugged below the new spot, reported as `docks_moved`), so position the host FIRST and any deliberately-placed dock after.
+7. **Docked companions (callback/shader/info DATs)**: `create_op`, `copy_op`, and `set_op_position` auto-hug every docked op in a tight row ~30 units below its host (`docks_placed` / `docks_moved` in the result) — do not re-plan grid slots for them. Ops created inside `execute_python` get NO such placement at create time (Envoy only auto-hugs badly scattered docks after the call, with a `LAYOUT WARNING`); if you create dock-spawning ops (GLSL TOP/MAT, execute DATs, OSC in/out) in a script, place their docks yourself per `network-layout.md` § Docked Callback DATs.
+8. **Connect**: `connect_ops` to wire inputs/outputs. Wires must flow left-to-right (positive X). If a wire would go backward, the downstream op is misplaced — reposition it.
+9. **Set OP-reference parameters with relative paths**: If the operator has parameters referencing other operators (Camera, Geometry, Lights, TOP, CHOP, etc.), use sibling names (`cam`) or relative paths (`../shared/lut`) — NEVER absolute paths (`/project1/scene/cam`). See `parameters.md` § OP-Reference Parameter Values.
+10. **Verify layout**: Call `get_network_layout` again. Confirm no overlaps, grid alignment is intact, signal flows left-to-right, and every entry carrying `dockedTo` sits in a tight row just below its named host (docked ops are the one exception to 200-grid spacing — they hug).
+11. **Verify errors**: `get_op_errors` with `recurse=true` to check for errors and warnings. Fix all errors before considering the task complete
+12. **Visual verification**: For any renderable result (a TOP chain or a render), capture the output TOP with `capture_top` and confirm it actually renders (not black) and matches intent; for a 3D render, confirm a camera, a light, and geometry display/render flags are present. For anything but a trivial op, load the `/visual-aesthetics` skill to judge composition/value/color/contrast.
 
 ## Operator Type Preferences
 
 - **Prefer POPs over SOPs** for geometry and particle work. POPs (Point Operators) are GPU-accelerated and significantly more performant than SOPs (Surface operators). Only use SOPs when POP equivalents don't exist or when CPU-side geometry manipulation is specifically required.
+
+## Geometry COMP: delete the default torus
+
+A freshly created `geometryCOMP` ships with a default `torus1` SOP inside, **render flag ON**. The moment you add your OWN geometry to that COMP -- a SOP chain, a POP chain terminating in a `nullPOP`, or imported geometry -- **delete `torus1`** (or turn OFF its render flag). It is the RENDER flag (purple) that selects a SOP for the Render TOP, so leaving it on draws BOTH: your geometry AND a phantom torus. It is easy to miss: adding your own SOP auto-clears the torus's DISPLAY flag (blue, exclusive per viewer) so the SOP / geometry viewer looks correct, while its RENDER flag (non-exclusive) stays on and keeps drawing it in the render output. Applies to EVERY geometryCOMP you populate, not just POP builds. (TDN import already strips these auto-created defaults, so this bites only live `create_op` builds -- which is why it shows up in some projects and not others.)
 
 ## Positioning Rules
 
@@ -40,4 +51,7 @@ Follow these steps every time you create operators via MCP:
 - NEVER place an operator on top of another operator — always scan first
 - Never rely on `layout()` for production networks
 - New operators go near related operators, not at origin
+- Docked companions hug their host (~30 units below, never a full grid step away). The MCP tools enforce this; after any `execute_python` build, check every `dockedTo` entry in `get_network_layout` yourself
 - For current network location: `execute_python` with `result = ui.panes.current.owner.path`
+- Placing a COMP: anchor on where the user put Embody (`op.Embody.parent().path`) for a consistent home; override only when the user has deliberately navigated into a content network (never bare `/`); discover, never guess, `/project1`; keep one task's COMPs in one home
+- New `geometryCOMP`: delete its default `torus1` the moment you add your own geometry, or it renders a phantom torus behind your scene

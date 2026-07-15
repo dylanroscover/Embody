@@ -750,6 +750,24 @@ function pluralize(count: number, singular: string): string {
     letter-spacing: -0.01em;
   }
 
+  /* List rows keep the name to ONE line -- a long title (e.g. "Reaction-Diffusion
+     (Gray-Scott)") ellipsizes instead of wrapping the row taller. The row never
+     wraps; the name is the only shrinkable item, so the category tag stays put.
+     Gallery view is untouched -- it stacks name under the cover and has room. */
+  [data-specimens][data-view="list"] .specimen-row__main {
+    flex-wrap: nowrap;
+  }
+  [data-specimens][data-view="list"] .specimen-row__name {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  [data-specimens][data-view="list"] .specimen-row__cat {
+    flex: none;
+  }
+
   .specimen-row:hover {
     border-color: var(--border);
   }

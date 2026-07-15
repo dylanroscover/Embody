@@ -1,6 +1,6 @@
 # Embody
 
-**Embody** is the lateral velocity layer of the project. It solves the oldest problem in TouchDesigner: your work lives inside a binary `.toe` file that nothing outside TD can read, diff, or understand. Embody pulls your operators out of that file and into text and structured files on disk — files that mirror your network hierarchy, files your AI assistant can read, files git can diff, files that rebuild your network automatically the next time you open the project. The `.toe` stops being the source of truth. The files become the source of truth.
+**Embody** is the lateral velocity layer of the project. It solves the oldest problem in TouchDesigner: your work lives inside a binary `.toe` file that nothing outside TD can read, diff, or understand. Embody pulls your operators out of that file and into text and structured files on disk — files that mirror your network hierarchy, files your AI assistant can read, files git can diff, files that can restore your network the next time you open the project. The `.toe` is no longer the *only* record of your work — the files are a durable, reviewable copy git can track.
 
 ## Why Embody?
 
@@ -11,7 +11,7 @@ A `.toe` file is a black box. You can open it in TD and change things. You can s
 - **Let an AI read it** — without Embody, your AI assistant has no way to inspect what's inside your network. It can describe what *might* be there, but it cannot see what *is*
 - **Review it in a pull request** — a changed `.toe` shows up as a binary blob. There's nothing to review.
 
-Embody solves this by externalizing your operators to files — `.py`, `.tox`, `.tdn`, `.json` — that live in a folder structure mirroring your network hierarchy. Edit those files and the change is live the next time the project opens. Put them under version control and you have branching, diffing, and history for your TouchDesigner network.
+Embody solves this by externalizing the operators you tag to files — `.py`, `.tox`, `.tdn`, `.json` — that live in a folder structure mirroring your network hierarchy. Edit those files with your editor or an AI agent instead of wrestling a binary blob. Put them under version control and you have branching, diffing, and history for your TouchDesigner network.
 
 ## Key Design Principles
 
@@ -22,9 +22,9 @@ Embody maintains a two-way relationship between your `.toe` and the files on dis
 | Direction | When | What happens |
 |---|---|---|
 | **TD → disk** | ++ctrl+shift+u++ (Update) | Dirty COMPs and DATs write their current state to external files |
-| **Disk → TD** | Project open | All externalized operators rebuild from disk automatically |
+| **Disk → TD** | Project open | Externalized operators are restored from disk when the `.toe` doesn't already have them |
 
-The files are the persistent record. The `.toe` is a working state. On every project open, Embody restores everything that was externalized — TOX-strategy COMPs from `.tox` files, TDN-strategy COMPs from `.tdn` YAML files, and DATs via TouchDesigner's native file parameter.
+The files are the persistent record; the `.toe` carries a working copy. On project open, Embody restores what the recovered `.toe` is missing — TOX-strategy COMPs from `.tox` files, and (in the default **Export-on-Save** TDN mode) any TDN COMP absent from the `.toe`, such as one lost to a crash. DATs sync from disk via TouchDesigner's native file parameter. In the opt-in **Roundtrip** TDN mode, TDN COMP children are stripped on save and fully rebuilt from `.tdn` on open, so disk is the sole source of truth for those COMPs.
 
 ### Dirty Tracking
 
@@ -40,9 +40,9 @@ Every externalized COMP gets three parameters injected automatically:
 
 | Parameter | Value |
 |---|---|
-| `Buildnumber` | The Embody build number active at externalization time |
+| `Build` | The Embody build number active at externalization time |
 | `Touchbuild` | The TouchDesigner build number |
-| `Builddate` | UTC timestamp of the last externalization |
+| `Date` | UTC timestamp of the last externalization |
 
 This gives you a permanent record of which version of Embody and TD produced each externalized file — useful when debugging across machine setups or after upgrades.
 
@@ -66,6 +66,9 @@ For DATs, the format is determined by the DAT's content type — a Python DAT ex
     - ++ctrl+shift+u++ — Update (write all dirty operators to disk)
     - ++ctrl+shift+o++ — Open the Embody manager window
     - ++ctrl+shift+e++ — Export the entire project network to a `.tdn` file
+
+    These are the defaults — every binding is editable (or disableable) on the
+    Embody COMP's **Shortcuts** parameter page. See [Keyboard Shortcuts](keyboard-shortcuts.md).
 
 === "Python API"
 

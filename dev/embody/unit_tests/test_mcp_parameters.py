@@ -26,7 +26,7 @@ class TestMCPParameters(EmbodyTestCase):
         comp = self.sandbox.create(geometryCOMP, 'par_verify')
         self.envoy._set_parameter(
             op_path=comp.path, par_name='tx', value='10')
-        self.assertApproxEqual(comp.par.tx.eval(), 10.0)
+        self.assertAlmostEqual(comp.par.tx.eval(), 10.0)
 
     # --- _set_parameter (expression) ---
 
@@ -69,7 +69,7 @@ class TestMCPParameters(EmbodyTestCase):
     def test_get_parameter_has_metadata(self):
         comp = self.sandbox.create(geometryCOMP, 'meta_par')
         result = self.envoy._get_parameter(
-            op_path=comp.path, par_name='tx')
+            op_path=comp.path, par_name='tx', details=True)
         self.assertDictHasKey(result, 'label')
         self.assertDictHasKey(result, 'default')
 

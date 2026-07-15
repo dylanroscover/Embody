@@ -87,6 +87,20 @@ export function resultImage(
   };
 }
 
+/**
+ * Resolve a specimen's cover VIDEO route: the streaming endpoint when the cover
+ * carries a video (video_key set), otherwise null. Video is purely additive --
+ * the poster (resultImage above) is always present and unchanged; this only adds
+ * the hover/detail video source when one exists. Returns the same shape of URL
+ * the thumbnail route uses (slug URL-encoded).
+ */
+export function resultVideo(
+  specimen: { slug: string; videoKey?: string | null }
+): string | null {
+  if (!specimen.videoKey) return null;
+  return `/api/specimens/${encodeURIComponent(specimen.slug)}/video`;
+}
+
 function motifFor(category: string, seed: number): string {
   switch (category) {
     case "generative-abstract":

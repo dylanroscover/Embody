@@ -6,7 +6,7 @@
 
 TouchDesigner has no external API. A `.toe` file has no access surface — nothing outside TD can read it, write to it, or interact with what's running inside it. AI assistants hitting this wall have two options: describe what a network *might* look like and hope you can implement it, or stop. Neither is useful when you're mid-session with a half-built network in front of you.
 
-Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 49 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
+Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 53 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
 
 ## Key Design Principles
 
@@ -16,7 +16,7 @@ TD's Python runtime is single-threaded — all TD objects must be accessed from 
 
 ### Embedded, Not External
 
-Envoy lives inside your `.toe` as a COMP extension. It starts with your project, stops when you stop it, and automatically restarts on port change or crash (exponential backoff, up to 3 attempts). A **liveness watchdog** tied to the extension also keeps it alive across project saves and extension reloads — if the server socket dies, it force-frees the port and rebinds within seconds, with no manual toggle. There's no sidecar process to manage, no daemon to install, no separate server to launch. Enable it once in your Embody settings and it runs with your project from that point on.
+Envoy lives inside your `.toe` as a COMP extension. It starts with your project, stops when you stop it, and automatically restarts on port change or crash (exponential backoff, retrying for up to a 30-minute window before giving up). A **liveness watchdog** tied to the extension also keeps it alive across project saves and extension reloads — if the server socket dies, it force-frees the port and rebinds within seconds, with no manual toggle. There's no sidecar process to manage, no daemon to install, no separate server to launch. Enable it once in your Embody settings and it runs with your project from that point on.
 
 ### Coarse, Composable Tools
 
@@ -28,7 +28,7 @@ The server binds to `127.0.0.1` only and is not reachable from the network. The 
 
 ### Piggybacked Diagnostics
 
-Every MCP tool response includes a `_logs` field with up to 20 log entries generated since the previous call. The AI gets a running stream of what's happening inside TD — cook errors, warnings, extension messages — without polling separately. No context is lost between tool calls.
+When new WARNING/ERROR entries appear, an MCP tool response piggybacks a `_logs` field with up to 8 of them, generated since the previous call — INFO/DEBUG/SUCCESS noise is left off to stay token-lean and is available on demand via `get_logs`. The AI gets a running stream of what's going wrong inside TD — cook errors and warnings — without polling separately.
 
 ## How Envoy Works
 
@@ -45,7 +45,7 @@ The bridge handles the MCP protocol handshake locally and keeps bridge meta-tool
 
 ## Capabilities
 
-Envoy exposes **49 MCP tools** across 15 categories, plus 4 bridge meta-tools that run on the local STDIO bridge.
+Envoy exposes **53 MCP tools** across 16 categories, plus 4 bridge meta-tools that run on the local STDIO bridge.
 
 ### Operator Management
 
@@ -88,7 +88,7 @@ Toggle bypass, lock, display, render, viewer, expose, and cook permissions — i
 
 | Tool | Description |
 |---|---|
-| `get_op_flags` | Read all flags: bypass, lock, display, render, viewer, current, expose, allowCooking |
+| `get_op_flags` | Read all flags: bypass, lock, display, render, viewer, current, expose, selected, allowCooking |
 | `set_op_flags` | Set one or more flags in a single call |
 
 ### Positioning & Layout
@@ -152,6 +152,7 @@ Inspect the live TD Python API, check operator errors, and call operator methods
 | `get_td_classes` | List all Python classes/modules in the `td` module |
 | `get_td_class_details` | Methods, properties, and docs for a TD class |
 | `get_module_help` | Python help text for a module (supports dotted names like `td.tdu`) |
+| `get_docs` | Look up official TouchDesigner docs from the offline help mirror or docs.derivative.ca |
 
 ### Embody Integration
 
@@ -178,17 +179,27 @@ Read any COMP's live network as `.tdn` (no disk I/O), export it to disk, or impo
 
 ### TOP Capture
 
-`capture_top` downloads a TOP's current frame output as an image and returns it directly in the MCP response as an `ImageContent` attachment — meaning the AI actually *sees* the pixel output, not a description of it. This closes the visual feedback loop: the AI builds a compositing chain, captures the output, examines what's rendering, and iterates — without you describing the result in words.
+`capture_top` downloads a TOP's current frame output as an image the AI can actually *see* — not a description of it (by default the image is written to a temp file the AI reads; see below). This closes the visual feedback loop: the AI builds a compositing chain, captures the output, examines what's rendering, and iterates — without you describing the result in words.
 
-Small images (under 20 KB) are returned inline. Larger images are saved to a temp file and the path is returned. JPEG (default, 80% quality) and PNG are supported, with configurable maximum resolution (default: 640px long edge).
+By default (`inline=False`) the image is saved to a temp file and the path is returned — the AI reads that path to view it, since inline base64 previews are token-heavy. Pass `inline=True` to also embed a small base64 preview in the response. JPEG (default, 80% quality) and PNG are supported, with configurable maximum resolution (default: 640px long edge). Every capture also returns a **Quality verdict** from the raw pixels (`is_black` / `is_flat` / `fully_transparent` / `pass`), surfaced as a `Quality: OK|FAIL` line so the AI can tell an empty or black render from a real one without reading the image.
 
 | Tool | Description |
 |---|---|
-| `capture_top` | Capture a TOP's current output as an image; returns inline preview for small images |
+| `capture_top` | Capture a TOP's current output as an image; returns a temp-file path by default (`inline=True` also embeds a small preview) |
+
+### Multi-Session Awareness
+
+Several AI sessions can work on the same project at once without clobbering each other. Envoy identifies each session (`repo@branch` labels), tracks what territory each one touches, warns on overlap via `_peers` advisories, and refuses destructive operations on a live peer's turf. See [Multi-Session Coordination](multi-session.md).
+
+| Tool | Description |
+|---|---|
+| `get_sessions` | List connected sessions: labels, activity, recent scopes, claims |
+| `claim_scope` | Cooperative write lease on an op subtree, file, or project scope |
+| `release_scope` | Release a held lease (expiry also handles it) |
 
 ### Logging
 
-`get_logs` reads the ring buffer (up to 200 entries) with incremental polling via `since_id` — request only entries you haven't seen yet. Every tool response also piggybacks up to 20 recent entries automatically, so the AI is always looking at current state.
+`get_logs` reads the ring buffer (up to 200 entries) with incremental polling via `since_id` — request only entries you haven't seen yet. Tool responses also piggyback up to 8 recent WARNING/ERROR entries when any occur, so the AI is always looking at current state.
 
 | Tool | Description |
 |---|---|
@@ -229,14 +240,15 @@ These tools run on the local bridge process, not inside TD. They're available ev
 
 ## Auto-Configuration
 
-When Envoy starts for the first time, it generates a complete AI client configuration in your git repo root (or project folder if no git):
+When Envoy starts for the first time, it generates a complete AI client configuration at the location set by Embody's **AI Project Root** parameter — the git repo root by default (`gitroot`), or the `.toe`'s own folder (`projectfolder`), or a `custom` path you choose:
 
 | File | Purpose |
 |---|---|
 | `.mcp.json` | Registers Envoy's MCP bridge with Claude Code and other MCP clients |
-| `.claude/CLAUDE.md` | Project context for Claude Code — what Embody is, how the network is structured, what tools to use |
-| `.claude/rules/` | Always-loaded coding conventions — TD Python patterns, parameter rules, network layout, MCP safety |
-| `.claude/skills/` | On-demand reference — full MCP tool catalog, TD API reference, operator creation workflow, and more |
+| `AGENTS.md` | Always written — universal AI instructions read by all major AI tools (Codex, Cursor, etc.) |
+| `CLAUDE.md` | Project context for Claude Code — what Embody is, how the network is structured, what tools to use (client-specific; written when AI Client is Claude Code) |
+| `.claude/rules/` | Claude Code — always-loaded coding conventions (TD Python patterns, parameter rules, network layout, MCP safety) |
+| `.claude/skills/` | Claude Code — on-demand reference (full MCP tool catalog, TD API reference, operator creation workflow, and more) |
 | `.gitignore` / `.gitattributes` | Git entries for `.toe`/`.tox` binary handling and externalized file tracking |
 
 Regenerate at any time:
@@ -251,6 +263,9 @@ op.Embody.InitGit()     # Regenerate git config, then re-run InitEnvoy
 Envoy works with any MCP client:
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI and VS Code extension)
+- [Codex](https://github.com/openai/codex)
+- [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 - [Cursor](https://www.cursor.com/)
 - [Windsurf](https://windsurf.com/)
+- [GitHub Copilot](https://github.com/features/copilot) via [VS Code](https://code.visualstudio.com/)
 - Any other client that supports the MCP protocol

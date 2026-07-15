@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 14
-generator: Embody/6.0.25
+build: 21
+generator: Embody/6.0.113
 td_build: 099.2025.32820
-source_file: Embody-6.25.toe
-exported_at: '2026-06-13T05:52:37Z'
+source_file: Embody-6.114.toe
+exported_at: '2026-07-10T16:24:56Z'
 network_path: /embody/Embody/templates
 options:
   include_dat_content: false
@@ -51,7 +51,7 @@ operators:
   parameters:
     file: embody/Embody/templates/text_tdn_textconv.py
     language: python
-  position: [900, -600]
+  position: [0, -1000]
   tags:
   - py
 - name: text_rule_td_python
@@ -102,6 +102,38 @@ operators:
   position: [600, -400]
   tags:
   - md
+- name: text_skill_td_recovery
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_td_recovery.md
+    extension: md
+  position: [3300, -400]
+  tags:
+  - md
+- name: text_rule_multi_session
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_rule_multi_session.md
+    extension: md
+  position: [2700, 400]
+  tags:
+  - md
+- name: text_skill_movie_export
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_movie_export.md
+    extension: md
+  position: [2700, -400]
+  tags:
+  - md
+- name: text_skill_pop_networks
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_pop_networks.md
+    extension: md
+  position: [2400, -400]
+  tags:
+  - md
 - name: text_rule_github_release
   type: textDAT
   parameters:
@@ -150,6 +182,14 @@ operators:
   position: [900, -400]
   tags:
   - md
+- name: text_skill_parameter_design
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_parameter_design.md
+    extension: md
+  position: [3000, -400]
+  tags:
+  - md
 - name: text_skill_td_api_reference
   type: textDAT
   parameters:
@@ -177,12 +217,12 @@ operators:
 - name: text_rule_refresh_after_commit
   type: textDAT
   parameters:
-    file: embody/Embody/templates/text_rule_refresh_after_commit.py
+    file: embody/Embody/templates/text_rule_refresh_after_commit.md
     write: true
-    language: python
+    extension: md
   position: [1800, 400]
   tags:
-  - py
+  - md
 - name: text_skill_mcp_tools_reference
   type: textDAT
   parameters:
@@ -199,6 +239,14 @@ operators:
   position: [1200, 400]
   tags:
   - md
+- name: text_skill_multi_session_etiquette
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_multi_session_etiquette.md
+    extension: md
+  position: [3600, -400]
+  tags:
+  - md
 annotations:
 - name: annotate1
   mode: annotate
@@ -213,7 +261,7 @@ annotations:
   title: Rule Templates
   text: Auto-deployed rules for user projects
   position: [-70, 330]
-  size: [1770, 330]
+  size: [3069, 330]
   color: [0.45, 0.45, 0.45]
   opacity: 0.5
 - name: annotate3
@@ -221,6 +269,6 @@ annotations:
   title: Skill Templates
   text: Auto-deployed skills for Claude Code
   position: [-70, -470]
-  size: [2070, 330]
+  size: [3870, 330]
   color: [0.45, 0.45, 0.45]
   opacity: 0.5

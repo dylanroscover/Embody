@@ -6,6 +6,8 @@ repo_name: Embody
 
 theme:
   name: material
+  logo: assets/embody-logo.svg
+  favicon: assets/embody-mark.svg
   font:
     text: Open Sans
     code: Roboto Mono
@@ -75,24 +77,27 @@ nav:
   - Embody:
     - embody/index.md
     - Getting Started: embody/getting-started.md
+    - Setup Wizard: embody/setup-wizard.md
     - Externalization: embody/externalization.md
     - Keyboard Shortcuts: embody/keyboard-shortcuts.md
     - Manager UI: embody/manager-ui.md
     - Supported Formats: embody/supported-formats.md
     - Configuration: embody/configuration.md
+    - Parameter Reference: embody/parameters.md
     - Troubleshooting: embody/troubleshooting.md
   - Envoy:
     - envoy/index.md
     - Setup: envoy/setup.md
     - Claude Code Integration: envoy/claude-code.md
     - Tools Reference: envoy/tools-reference.md
+    - Multi-Session: envoy/multi-session.md
     - Architecture: envoy/architecture.md
     - Security: envoy/security.md
     - Troubleshooting: envoy/troubleshooting.md
   - TDN:
     - tdn/index.md
     - Specification: tdn/specification.md
-    - JSON Schema: tdn/schema.md
+    - YAML Schema: tdn/schema.md
     - Import & Export: tdn/import-export.md
     - Examples: tdn/examples.md
   - embody.tools:

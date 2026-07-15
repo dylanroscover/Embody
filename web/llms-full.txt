@@ -1,6 +1,6 @@
 # Embody + Envoy + TDN - full text for AI agents
 
-> Open-source TouchDesigner toolkit. Envoy is an MCP server (49 tools) that lets AI
+> Open-source TouchDesigner toolkit. Envoy is an MCP server (52 tools) that lets AI
 > assistants build, wire, parameterize, and debug a LIVE TouchDesigner session; Embody
 > externalizes the network to version-control-friendly text on disk; TDN is the diffable
 > YAML network format that makes both possible. Free, MIT, runs entirely on the user's
@@ -14,7 +14,7 @@ Sections below, in order:
   1. Quickstart
   2. Envoy - Setup
   3. Envoy - Claude Code Integration
-  4. Envoy - Tools Reference (the 49 MCP tools + 4 bridge meta-tools)
+  4. Envoy - Tools Reference (the 52 MCP tools + 4 bridge meta-tools)
   5. TDN - Specification
   6. TDN - Import & Export
   7. AI Instructions (AGENTS.md - critical rules for operating in a TD project)
@@ -40,7 +40,7 @@ Embody itself is free, open source (MIT), and runs entirely on your own machine 
 You need two things installed before you start:
 
 - **TouchDesigner 2025.32280 or later** - Windows or macOS. [Download from Derivative](https://derivative.ca/download).
-- **An AI assistant that speaks [MCP](https://modelcontextprotocol.io/)** (the open standard that lets AI tools drive other apps) - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (recommended), [Cursor](https://www.cursor.com/), or [Windsurf](https://windsurf.com/).
+- **An AI assistant that speaks [MCP](https://modelcontextprotocol.io/)** (the open standard that lets AI tools drive other apps) - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (recommended), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [Cursor](https://www.cursor.com/), [Windsurf](https://windsurf.com/), or GitHub Copilot via VS Code.
 
 !!! note "Never used an AI coding tool?"
     Claude Code is the gentlest place to start - it runs as a desktop app, a VS Code extension, or a web app, not only in a terminal. The first time, you'll create or sign in to a Claude account and then open a folder; you won't be writing code, just describing what you want in plain language. (The five-minute estimate above assumes TouchDesigner and your AI assistant are already installed - first-time installs take a little longer.)
@@ -111,7 +111,7 @@ You're not getting a screenshot or a code snippet to paste. You're getting the *
 
 While you were building, Embody was quietly doing the other half of its job: **every operator can be saved to disk as readable text**. That means every version of your network is something you can diff, review, restore, and hand back to the AI later - no binary black box, no lock-in.
 
-To tag an operator for externalization, select it and press ++lctrl++ twice. To save your changes, press ++ctrl+shift+u++. On the next project open, everything restores from disk automatically.
+To tag an operator for externalization, hover it and press ++lctrl++ twice. To save your changes, press ++ctrl+shift+u++. On the next project open, everything restores from disk automatically.
 
 That's the whole loop - generate, compare, revert, branch - and it all runs at the speed of typing.
 
@@ -145,7 +145,7 @@ The tool keeps up with you, instead of the other way around. That's the whole id
 You'll need:
 
 - **TouchDesigner 2025.32280** or later
-- An MCP-compatible client such as [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), or [Windsurf](https://windsurf.com/)
+- An MCP-compatible client such as [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Cursor](https://www.cursor.com/), [Windsurf](https://windsurf.com/), or GitHub Copilot via VS Code
 
 Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, etc.) when Envoy is first enabled - no manual Python setup required. This first install (and any later dependency upgrade) runs **in a background thread** so TouchDesigner stays responsive; the Embody COMP shows `Installing deps... (one-time)` while it works and switches to `Running on port ...` once MCP is ready. After that, every startup takes the fast path and skips the install entirely. Envoy validates the virtual environment on each startup and falls back to the system Python if the venv is broken (see [Broken Virtual Environment](troubleshooting.md#broken-virtual-environment)).
 
@@ -397,7 +397,7 @@ You can extend the generated configuration:
 
 # Tools Reference
 
-Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 52 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 ## Operator Management
 
@@ -2075,7 +2075,7 @@ This project uses **[Embody](https://github.com/dylanroscover/Embody)** (TouchDe
 - Envoy provides MCP tools for AI assistants to inspect and modify the live TD network
 - Use the `Aiclient` parameter on the Embody COMP to regenerate these files for your AI tool
 
-> **Note:** For Claude Code users, a `CLAUDE.md` with modular `.claude/rules/` and `.claude/skills/` is also generated. This `AGENTS.md` is the universal fallback read by Cursor, GitHub Copilot, Windsurf, Gemini, and others.
+> **Note:** For Claude Code users, a `CLAUDE.md` with modular `.claude/rules/` and `.claude/skills/` is also generated. This `AGENTS.md` is the universal fallback read by Codex, Cursor, GitHub Copilot, Windsurf, Gemini, and others.
 
 ---
 

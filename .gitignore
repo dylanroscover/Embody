@@ -30,9 +30,19 @@ site/
 Backup/
 logs/
 .tdn_backup/
-.embody/*
-!.embody/project.json
+**/.embody/*
+!**/.embody/project.json
 .envoy-tools-cache.json
+
+# Other AI clients' generated configs. This repo's own AI client is Claude Code
+# (.claude/, CLAUDE.md, AGENTS.md are committed -- .claude/ is the source of
+# truth for the shipped template DATs). Selecting a different Aiclient in Embody
+# regenerates the configs below, so keep them out of git.
+.cursor/
+.windsurf/
+.github/copilot-instructions.md
+.github/instructions/
+GEMINI.md
 
 # Promotion
 SUBMISSIONS.md
@@ -49,3 +59,16 @@ tmp/
 
 # Cloudflare Wrangler local state (web platform dev/deploy)
 .wrangler/
+
+# Marketing / promo assets -- not product code. Heavy ProRes renders (multi-GB),
+# exported covers and overlays, the source promo networks (dev/marketing_lab),
+# and one-off video probes. Keep these out of the product repo history; final
+# deliverables live on disk (back them up elsewhere if you want versioning).
+marketing/
+dev/marketing_lab/
+dev/_promo*
+
+# Embody / Envoy (auto-managed)
+.embody/*
+!.embody/project.json
+dev/embody/ext-diet-baseline/

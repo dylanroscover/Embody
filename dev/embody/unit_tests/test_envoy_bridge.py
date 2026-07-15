@@ -452,11 +452,11 @@ class TestBridgeWaitForEnvoy(EmbodyTestCase):
         # Should have retried using all RETRY_INTERVALS entries
         self.assertGreater(len(sleeps), 0, 'Should have retried at least once')
         # First sleep should match RETRY_INTERVALS[0]
-        self.assertApproxEqual(sleeps[0], bridge.RETRY_INTERVALS[0], tolerance=0.01)
+        self.assertAlmostEqual(sleeps[0], bridge.RETRY_INTERVALS[0], delta=0.01)
         # Verify several intervals match the schedule
         for i, expected in enumerate(bridge.RETRY_INTERVALS):
             if i < len(sleeps):
-                self.assertApproxEqual(sleeps[i], expected, tolerance=0.01)
+                self.assertAlmostEqual(sleeps[i], expected, delta=0.01)
 
     def test_retry_clamps_sleep_to_remaining_time(self):
         """Sleep duration is clamped to time remaining before deadline."""
@@ -514,8 +514,8 @@ class TestBridgeWaitForEnvoy(EmbodyTestCase):
         # Past the end of RETRY_INTERVALS, sleeps should cap at the last value
         self.assertGreater(len(sleeps), len(bridge.RETRY_INTERVALS))
         tail_sleep = sleeps[len(bridge.RETRY_INTERVALS)]
-        self.assertApproxEqual(
-            tail_sleep, bridge.RETRY_INTERVALS[-1], tolerance=0.01)
+        self.assertAlmostEqual(
+            tail_sleep, bridge.RETRY_INTERVALS[-1], delta=0.01)
 
 
 # =====================================================================
@@ -1410,6 +1410,9 @@ class TestBridgeProcessManagement(EmbodyTestCase):
 
     # --- find_all_td_pids: pgrep filtering on macOS/Linux ---
 
+    # _process_is_real_td (added v6.0.80) ps-checks each candidate PID;
+    # fake test PIDs would all be dropped as not-real-TD, so stub it True.
+    @patch.object(bridge, '_process_is_real_td', new=lambda pid: True)
     @patch.object(bridge, '_is_bridge_process')
     @patch('envoy_bridge.subprocess.run')
     def test_find_all_td_pids_filters_self_and_bridges(
@@ -1464,6 +1467,7 @@ class TestBridgeProcessManagement(EmbodyTestCase):
         mock_run.return_value = fake
         self.assertEqual(bridge.find_all_td_pids(), [])
 
+    @patch.object(bridge, '_process_is_real_td', new=lambda pid: True)
     @patch.object(bridge, '_is_bridge_process', return_value=False)
     @patch.object(bridge, '_process_cmdline')
     @patch('envoy_bridge.subprocess.run')
@@ -1772,6 +1776,20 @@ class TestBridgeToolListAugmentation(EmbodyTestCase):
         self.assertIn('create_op', names)
         self.assertIn('get_td_status', names)
         self.assertIn('launch_td', names)
+
+    def test_augment_tools_list_is_idempotent(self):
+        response = {
+            'jsonrpc': '2.0',
+            'id': 1,
+            'result': {'tools': [{'name': 'create_op'}]}
+        }
+
+        bridge.augment_tools_list(response)
+        bridge.augment_tools_list(response)
+
+        names = [t['name'] for t in response['result']['tools']]
+        self.assertEqual(names.count('get_td_status'), 1)
+        self.assertEqual(names.count('launch_td'), 1)
 
     def test_augment_no_result_key(self):
         response = {'jsonrpc': '2.0', 'id': 1, 'error': {'code': -1}}
@@ -2377,6 +2395,11 @@ class TestBridgeToolsListCache(EmbodyTestCase):
         self.assertGreaterEqual(
             len(tools_list_responses), 2,
             'Expected two tools/list responses (both should succeed)')
+
+        for response in tools_list_responses:
+            names = [t['name'] for t in response['result']['tools']]
+            self.assertEqual(names.count('get_td_status'), 1)
+            self.assertEqual(names.count('launch_td'), 1)
 
         self.assertEqual(
             tools_list_forward_count[0], 1,

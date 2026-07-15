@@ -92,6 +92,70 @@ class TestMCPTopCapture(EmbodyTestCase):
         self.assertEqual(result['width'], 64)
         self.assertEqual(result['height'], 64)
 
+    # --- Quality verdict (black/empty-frame detection) ---
+
+    def test_quality_present_and_passes_on_noise(self):
+        top = self.sandbox.create(noiseTOP, 'q_noise')
+        top.cook(force=True)
+        result = self.envoy._capture_top(op_path=top.path)
+        self.assertTrue(result.get('success'))
+        q = result.get('quality')
+        self.assertIsInstance(q, dict)
+        self.assertTrue(q.get('pass'), repr(q))
+        self.assertFalse(q.get('is_black'), repr(q))
+        self.assertEqual(q.get('fail_reasons'), [])
+        self.assertGreater(q.get('std_luminance'), 0.0)
+
+    def test_quality_flags_black_frame(self):
+        top = self.sandbox.create(constantTOP, 'q_black')
+        top.par.colorr = 0.0
+        top.par.colorg = 0.0
+        top.par.colorb = 0.0
+        top.par.alpha = 1.0
+        top.par.resolutionw = 64
+        top.par.resolutionh = 64
+        top.cook(force=True)
+        result = self.envoy._capture_top(op_path=top.path)
+        self.assertTrue(result.get('success'))
+        q = result['quality']
+        self.assertTrue(q['is_black'], repr(q))
+        self.assertFalse(q['pass'], repr(q))
+        self.assertIn('black_frame', q['fail_reasons'])
+
+    def test_quality_solid_color_is_flat_but_passes(self):
+        # A uniform fill is a VALID render -- flat is advisory, not a failure.
+        top = self.sandbox.create(constantTOP, 'q_solid')
+        top.par.colorr = 0.5
+        top.par.colorg = 0.5
+        top.par.colorb = 0.5
+        top.par.alpha = 1.0
+        top.par.resolutionw = 64
+        top.par.resolutionh = 64
+        top.cook(force=True)
+        result = self.envoy._capture_top(op_path=top.path)
+        q = result['quality']
+        self.assertTrue(q['is_flat'], repr(q))
+        self.assertFalse(q['is_black'], repr(q))
+        self.assertTrue(q['pass'], repr(q))
+        self.assertIn('flat_frame', q['fail_reasons'])
+
+    def test_quality_flags_fully_transparent(self):
+        top = self.sandbox.create(constantTOP, 'q_transp')
+        top.par.colorr = 1.0
+        top.par.colorg = 1.0
+        top.par.colorb = 1.0
+        top.par.alpha = 0.0
+        top.par.resolutionw = 64
+        top.par.resolutionh = 64
+        top.cook(force=True)
+        result = self.envoy._capture_top(op_path=top.path)
+        q = result['quality']
+        self.assertFalse(q['pass'], repr(q))
+        # premultiply may zero RGB too; either verdict is a correct failure.
+        self.assertTrue(
+            'fully_transparent' in q['fail_reasons']
+            or 'black_frame' in q['fail_reasons'], repr(q))
+
     # --- Error cases ---
 
     def test_capture_nonexistent_op(self):
