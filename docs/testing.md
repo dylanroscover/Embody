@@ -167,6 +167,54 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | Per-test deferred | `RunTests()` | One test per frame. Best for heavy suites. Non-blocking. **Default.** |
 | Per-suite deferred | `RunTestsDeferred()` | One suite per frame. Keeps TD responsive. |
 | Synchronous | `RunTestsSync()` | All tests in one frame. Blocks TD. Use for MCP. |
+| Destructive batch | `RunDestructiveTests(confirm_saved=True)` | Save-gated, isolated run of `DESTRUCTIVE` suites only. |
+| Agent tier | `RunAgentTests()` | Opt-in, async run of `AGENT` suites only (AI-client subprocesses). |
+
+## Test Tiers
+
+Suites are segregated into three tiers by class attribute. Normal runs
+(`RunTests` and friends) NEVER pick up the tagged tiers.
+
+| Tier | Tag | Entry point | What it is |
+|------|-----|-------------|------------|
+| Normal | (none) | `RunTests()` | Everything above: fast, safe, sandboxed. |
+| Destructive | `DESTRUCTIVE = True` | `RunDestructiveTests(confirm_saved=True)` | Whole-project mutators (Disable / ExternalizeProject / Reset). Save first; reopen the saved `.toe` after. |
+| Agent | `AGENT = True` (via `AgentTestCase`) | `RunAgentTests()` | External AI clients driving Envoy over MCP (below). |
+
+### Agent Tier (AI-client connectivity tests)
+
+Two layers verify that AI clients can actually reach and use Envoy's MCP
+tools, end to end:
+
+| Suite | Layer | What it proves |
+|-------|-------|----------------|
+| `test_agent_contract` | Tier 1 - deterministic, no LLM | Spawns the exact bridge command from `.mcp.json` via a stdlib MCP client (`agent_clients/mcp_contract_client.py`): handshake, full tool inventory vs manifest, create/write/read-back/batch/delete round-trip. |
+| `test_agent_smoke_claude` | Tier 2 - Claude Code headless | `claude -p` (subscription auth) discovers and correctly uses Envoy tools on scripted micro-tasks; verified against live TD state. |
+| `test_agent_smoke_codex` | Tier 2 - Codex CLI | `codex exec` with an inline `-c mcp_servers.envoy.*` config (Codex does not read `.mcp.json`); auth-gated by `codex login status`. |
+| `test_agent_runner` | Normal tier | Unit tests for the async agent-runner machinery itself (gating, job lifecycle, timeout kill, verdicts). Runs in every normal pass. |
+
+Prerequisites and behavior:
+
+- **CLIs + login**: `claude` and/or `codex` must be installed and logged in on
+  this machine. A missing CLI or failed `codex login status` reports a loud
+  **SKIP**, never a silent pass.
+- **Subscription usage, zero API billing**: the child environment strips
+  `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `CODEX_API_KEY`, so headless runs
+  use the stored Pro/Max (Claude) or ChatGPT (Codex) login.
+- **Async by design**: `RunAgentTests()` returns immediately and polls each
+  subprocess across frames -- MCP requests drain on TD's main thread, so a
+  blocking runner would deadlock the tools under test. Poll `GetResults()`
+  or watch the results DAT; a full run takes minutes.
+- **Verdicts come from primary evidence**: live TD state (the ops the agent
+  created, with exact token content) plus structured CLI output -- never the
+  agent's prose alone.
+- When the Envoy tool surface changes, update `EXPECTED_ENVOY_TOOLS` in
+  `test_agent_contract.py` deliberately; the inventory check fails on drift
+  in either direction. (The live server only re-registers tools on an Envoy
+  restart -- a mismatch right after editing `EnvoyExt.py` means "restart
+  Envoy" first.)
+
+See `.claude/rules/agent-tests.md` for the full conventions.
 
 ## Test Framework Features
 

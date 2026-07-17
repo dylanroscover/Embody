@@ -11,11 +11,15 @@ Usage:
     op.unit_tests.RunTestsSync()                          # Run all (synchronous, blocks TD)
     op.unit_tests.RunTestsDeferred()                      # Run all (one suite per frame)
     op.unit_tests.RunTestsDeferredPerTest()                # Run all (one test per frame)
+    op.unit_tests.RunAgentTests()                         # AGENT tier: AI-client subprocesses
     op.unit_tests.GetResults()                            # Get results dict
 """
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import time
 from collections import deque
 from unittest import SkipTest, TestCase
@@ -79,6 +83,167 @@ class EmbodyTestCase(TestCase):
 
 
 # =============================================================================
+# AGENT-TIER TEST CASE
+# =============================================================================
+
+class AgentTestCase(EmbodyTestCase):
+    """
+    Base class for AGENT-tier suites: tests that spawn external AI-client
+    subprocesses (claude -p, codex exec, the tier-1 MCP contract client) which
+    connect BACK to Envoy over MCP while TD keeps cooking.
+
+    Subclasses inherit ``AGENT = True`` and are therefore excluded from every
+    normal run and from RunDestructiveTests; they run only via
+    ``op.unit_tests.RunAgentTests()``.
+
+    A test method either asserts synchronously and returns None (reported like
+    a normal test), or returns a JOB SPEC built with ``self.job(...)``. The
+    runner launches the described subprocess WITHOUT blocking TD's main thread
+    (MCP requests drain there - blocking would deadlock the tools under test),
+    polls it across frames, and when it exits calls ``verify(result)`` on the
+    main thread. ``result`` is ``{'returncode', 'stdout', 'stderr',
+    'duration_s', 'timed_out'}``. In ``verify``: raise AssertionError to FAIL,
+    SkipTest to SKIP, return cleanly to PASS. ``verify`` may (and should)
+    inspect live TD state - the agent's side effects are the primary evidence.
+    """
+
+    AGENT = True
+
+    def job(self, argv=None, cmdline=None, timeout_s=240, env=None, cwd=None,
+            verify=None, label=None):
+        """Build a job spec for the agent runner.
+
+        Args:
+            argv:      Argument list for subprocess.Popen (preferred).
+            cmdline:   Full command-line string (Windows .cmd shim fallback).
+            timeout_s: Wall-clock deadline; on expiry the whole process TREE
+                       is killed and the test reports ERROR.
+            env:       Full child environment (see launchEnv()).
+            cwd:       Working directory (see neutralCwd()).
+            verify:    callable(result) -> None, run on the main thread.
+            label:     Short human-readable description for the log.
+        """
+        if not argv and not cmdline:
+            raise ValueError('job() needs argv or cmdline')
+        return {
+            'argv': list(argv) if argv else None,
+            'cmdline': cmdline,
+            'timeout_s': float(timeout_s),
+            'env': env,
+            'cwd': cwd,
+            'verify': verify,
+            'label': label or 'agent job',
+        }
+
+    # ------------------------------------------------------------------
+    # CLI + environment helpers
+    # ------------------------------------------------------------------
+
+    def resolveCli(self, cli):
+        """Absolute path of an installed AI CLI (claude/codex/gemini), or None.
+
+        Delegates to embody_launch.resolve_cli_abs - the same filesystem
+        probes the Launch AI Client button uses (no subprocess, main-thread
+        safe)."""
+        try:
+            launch = self.embody.op('embody_launch').module
+            return launch.resolve_cli_abs(self.embody_ext, cli)
+        except Exception:
+            return None
+
+    def requireCli(self, cli):
+        """Return the CLI's absolute path or SkipTest loudly when missing."""
+        path = self.resolveCli(cli)
+        if not path:
+            raise SkipTest(
+                f'{cli} CLI not installed (standard install locations probed) '
+                f'- install it and log in to run this agent test')
+        return path
+
+    def launchEnv(self, session_label):
+        """Cleaned child environment for AI-client subprocesses.
+
+        Starts from embody_launch.launch_env (TD-injected vars stripped - a
+        venv python child would otherwise inherit TD's PYTHONHOME/PYTHONPATH
+        and fail to import), then removes every API-key variable so headless
+        CLIs bill the user's SUBSCRIPTION login, never an API key, and labels
+        the session so Envoy peers can identify the test agent."""
+        try:
+            launch = self.embody.op('embody_launch').module
+            env = launch.launch_env(self.embody_ext)
+        except Exception:
+            env = dict(os.environ)
+        for key in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN',
+                    'OPENAI_API_KEY', 'CODEX_API_KEY'):
+            env.pop(key, None)
+        env['EMBODY_SESSION_LABEL'] = session_label
+        return env
+
+    def neutralCwd(self):
+        """A temp working directory outside the repo.
+
+        Running the CLI from here keeps project context (CLAUDE.md, AGENTS.md,
+        session rituals) out of the smoke task, so the agent does exactly the
+        micro-task and nothing else. Cleaned up in tearDownSuite."""
+        import tempfile
+        d = tempfile.mkdtemp(prefix='embody_agent_smoke_')
+        self._agent_tmpdirs = getattr(self, '_agent_tmpdirs', [])
+        self._agent_tmpdirs.append(d)
+        return d
+
+    def tearDownSuite(self):
+        """Remove temp dirs created via neutralCwd (scratch only, never repo)."""
+        import shutil
+        for d in getattr(self, '_agent_tmpdirs', []):
+            try:
+                shutil.rmtree(d)
+            except Exception:
+                pass
+        self._agent_tmpdirs = []
+
+    # ------------------------------------------------------------------
+    # Envoy bridge discovery (the SAME command Claude Code spawns)
+    # ------------------------------------------------------------------
+
+    def findMcpJson(self):
+        """Path of the repo's .mcp.json (walking up from project.folder), or None."""
+        import json
+        folder = project.folder
+        for _ in range(5):
+            candidate = os.path.join(folder, '.mcp.json')
+            if os.path.isfile(candidate):
+                try:
+                    with open(candidate, encoding='utf-8') as f:
+                        data = json.load(f)
+                    if 'envoy' in data.get('mcpServers', {}):
+                        return candidate
+                except Exception:
+                    pass
+            parent = os.path.dirname(folder)
+            if parent == folder:
+                break
+            folder = parent
+        return None
+
+    def envoyBridgeEntry(self):
+        """The envoy stdio server entry from .mcp.json: {'command', 'args'}.
+
+        This is EXACTLY what Claude Code spawns, so agent tests exercise the
+        same bridge command a real session uses. SkipTest when unavailable."""
+        import json
+        mcp_json = self.findMcpJson()
+        if mcp_json is None:
+            raise SkipTest('.mcp.json with an envoy server not found above '
+                           'project.folder - run op.Embody.InitEnvoy() first')
+        with open(mcp_json, encoding='utf-8') as f:
+            entry = json.load(f)['mcpServers']['envoy']
+        if entry.get('type') != 'stdio' or not entry.get('command'):
+            raise SkipTest('.mcp.json envoy entry is not a stdio bridge '
+                           '(HTTP fallback?) - agent tests need the bridge')
+        return entry
+
+
+# =============================================================================
 # TEST RUNNER EXTENSION
 # =============================================================================
 
@@ -90,6 +255,14 @@ class TestRunnerExt:
     runs them with sandbox isolation, and reports results.
     """
 
+    # COMP-storage keys for the saved continuity-dialog preferences. Storage
+    # (not instance attributes) so a mid-run extension reinit cannot lose the
+    # originals -- restore works from ANY instance, including the fresh one a
+    # reinit creates while an agent-tier run is in flight.
+    _FC_KEY = '_test_saved_filecleanup'
+    _TX_KEY = '_test_saved_toxdropexpr'
+    _AX_KEY = '_test_saved_autoexternalize'
+
     def __init__(self, ownerComp):
         self.ownerComp = ownerComp
         self.results_dat = self.ownerComp.op('results')
@@ -98,8 +271,9 @@ class TestRunnerExt:
         self._results = []
         self._deferred_queue = []
         self._deferred_test_filter = None
-        self._saved_filecleanup = None
-        self._saved_toxdropexpr = None
+        self._agent_queue = []
+        self._agent_delay_frames = 30
+        self._agent_run_id = None
 
     def _suppressFileCleanupDialog(self):
         """Neutralize continuity-sweep dialogs during tests.
@@ -113,14 +287,16 @@ class TestRunnerExt:
         # do NOT overwrite the saved value with the already-suppressed one --
         # that is how Filecleanup got stuck at 'delete' after an interrupted batch.
         try:
-            if self._saved_filecleanup is None:
-                self._saved_filecleanup = op.Embody.par.Filecleanup.eval()
+            if self.ownerComp.fetch(self._FC_KEY, None, search=False) is None:
+                self.ownerComp.store(self._FC_KEY,
+                                     op.Embody.par.Filecleanup.eval())
             op.Embody.par.Filecleanup = 'delete'
         except Exception:
             pass
         try:
-            if self._saved_toxdropexpr is None:
-                self._saved_toxdropexpr = op.Embody.par.Toxdropexpr.eval()
+            if self.ownerComp.fetch(self._TX_KEY, None, search=False) is None:
+                self.ownerComp.store(self._TX_KEY,
+                                     op.Embody.par.Toxdropexpr.eval())
             op.Embody.par.Toxdropexpr = 'ignore'
         except Exception:
             pass
@@ -128,15 +304,48 @@ class TestRunnerExt:
     def _restoreFileCleanupDialog(self):
         """Restore the original continuity-dialog preferences after tests."""
         try:
-            if self._saved_filecleanup is not None:
-                op.Embody.par.Filecleanup = self._saved_filecleanup
-                self._saved_filecleanup = None
+            saved = self.ownerComp.fetch(self._FC_KEY, None, search=False)
+            if saved is not None:
+                op.Embody.par.Filecleanup = saved
+                self.ownerComp.unstore(self._FC_KEY)
         except Exception:
             pass
         try:
-            if self._saved_toxdropexpr is not None:
-                op.Embody.par.Toxdropexpr = self._saved_toxdropexpr
-                self._saved_toxdropexpr = None
+            saved = self.ownerComp.fetch(self._TX_KEY, None, search=False)
+            if saved is not None:
+                op.Embody.par.Toxdropexpr = saved
+                self.ownerComp.unstore(self._TX_KEY)
+        except Exception:
+            pass
+
+    def _suppressAutoexternalize(self):
+        """Turn off Envoy auto-externalization for the agent-tier run.
+
+        Agent-driven create_op routes through Envoy's auto-externalize
+        chokepoint; with the preference at 'dats'/'both', every probe DAT an
+        agent creates would be tagged, written to disk under test_sandbox/,
+        and added to the TRACKED externalizations table -- churning repo
+        files on every run. Storage-backed like the dialog suppression so a
+        mid-run reinit cannot lose the original. The 'off' menu token is
+        discovered from the parameter, never hardcoded."""
+        try:
+            par = op.Embody.par.Autoexternalize
+            if self.ownerComp.fetch(self._AX_KEY, None, search=False) is None:
+                self.ownerComp.store(self._AX_KEY, par.eval())
+            off = next((n for n in par.menuNames
+                        if n not in ('dats', 'comps', 'both')), None)
+            if off is not None:
+                op.Embody.par.Autoexternalize = off
+        except Exception:
+            pass
+
+    def _restoreAutoexternalize(self):
+        """Restore the original Autoexternalize preference after agent runs."""
+        try:
+            saved = self.ownerComp.fetch(self._AX_KEY, None, search=False)
+            if saved is not None:
+                op.Embody.par.Autoexternalize = saved
+                self.ownerComp.unstore(self._AX_KEY)
         except Exception:
             pass
 
@@ -240,7 +449,7 @@ class TestRunnerExt:
         self._results = []
         self._initResultsTable()
         try:
-            suites = self._discoverTestSuites(suite_name, only_destructive=True)
+            suites = self._discoverTestSuites(suite_name, tier='destructive')
             self._log(f'Running {len(suites)} DESTRUCTIVE suite(s) in isolation '
                       f'(save-gated)', 'WARNING')
             for suite_class, module_name in suites:
@@ -253,6 +462,76 @@ class TestRunnerExt:
                   'design. Reopen the saved .toe to restore the live network '
                   'before continuing.', 'WARNING')
         return self._getSummary()
+
+    def RunAgentTests(self, suite_name=None, test_name=None, delay_frames=30):
+        """Run the AGENT-tier suites: external AI clients driving Envoy.
+
+        Suites tagged ``AGENT = True`` (usually by inheriting AgentTestCase)
+        spawn real AI-client subprocesses -- ``claude -p``, ``codex exec``, and
+        the tier-1 MCP contract client -- that connect back to Envoy over MCP
+        while TD keeps cooking. They are EXCLUDED from every normal run and
+        from RunDestructiveTests: they take minutes, consume the user's
+        subscription usage, and depend on CLIs being installed and logged in
+        on this machine (missing CLIs SKIP loudly, they never fail silently).
+
+        The runner never blocks the main thread: Envoy drains MCP requests
+        there (5 per frame), so blocking here would deadlock the very tools
+        under test. Each subprocess is polled every ``delay_frames`` frames
+        and killed (whole process tree) when its per-job timeout expires.
+
+        Fire-and-forget: returns ``{'started': True, ...}`` immediately; poll
+        GetResults() (or watch the results DAT / log) for completion. See
+        .claude/rules/agent-tests.md.
+        """
+        if self._running:
+            self._log('Tests already running', 'WARNING')
+            return {'error': 'Tests already running'}
+
+        self._running = True
+        self._suppressFileCleanupDialog()
+        self._results = []
+        self._agent_delay_frames = max(1, int(delay_frames))
+        self._initResultsTable()
+
+        suites = self._discoverTestSuites(suite_name, tier='agent')
+        self._log(f'Discovered {len(suites)} AGENT suite(s) '
+                  f'[async, polled every {self._agent_delay_frames} frames]')
+
+        self._agent_queue = []
+        for suite_class, module_name in suites:
+            methods = sorted(
+                m for m in dir(suite_class)
+                if m.startswith('test_') and callable(getattr(suite_class, m, None))
+            )
+            if test_name:
+                methods = [m for m in methods if m == test_name]
+            if methods:
+                self._agent_queue.append({
+                    'suite_class': suite_class,
+                    'module_name': module_name,
+                    'methods': methods,
+                    'sandbox': None,
+                    'instance': None,
+                    'method_index': 0,
+                    'setup_done': False,
+                    'job': None,
+                })
+
+        if not self._agent_queue:
+            self._running = False
+            self._restoreFileCleanupDialog()
+            self._reportSummary()
+            return self._getSummary()
+
+        # Generation token: persists on sys so it never resets across a
+        # reinit -- a stale tick from a dead run can never match a new run.
+        seq = int(getattr(sys, '_embody_agent_run_seq', 0)) + 1
+        sys._embody_agent_run_seq = seq
+        self._agent_run_id = seq
+        self._suppressAutoexternalize()
+        self._scheduleAgentTick()
+        return {'started': True, 'suites': len(self._agent_queue),
+                'run_id': seq}
 
     def RunTestsDeferred(self, suite_name=None, test_name=None, delay_frames=1):
         """
@@ -462,23 +741,397 @@ class TestRunnerExt:
         self._reportSummary()
 
     # =========================================================================
+    # AGENT-TIER EXECUTION (frame-driven subprocess polling)
+    # =========================================================================
+
+    def _scheduleAgentTick(self):
+        """Schedule the next agent-runner tick.
+
+        Uses the STRING-EXPRESSION run() form so the live extension is
+        re-resolved at fire time: agent jobs span many seconds, long enough
+        for an externalized-file save to reinit this extension mid-run, and a
+        bound-method callback would then fire on a stale instance. The
+        current run's generation token is embedded in the expression so a
+        stale tick can be recognized no matter what else changed."""
+        run(f"op.unit_tests.ext.TestRunnerExt._agentTick({self._agent_run_id})",
+            fromOP=self.ownerComp, delayFrames=self._agent_delay_frames)
+
+    def _agentTick(self, run_id=None):
+        """One firing of the frame-driven agent-runner state machine.
+
+        ``run_id`` is the generation token embedded in the scheduled
+        expression. A tick whose token does not match the CURRENT run (fresh
+        instance after a reinit, or a superseded chain) must not touch shared
+        state -- ``_running`` is shared by ALL run modes, so a stale tick
+        keying on it could finalize a normal run that started after the
+        reinit. Stale ticks only reap what the dead run left behind."""
+        if run_id is None or run_id != self._agent_run_id:
+            self._reapOrphanAgentJobs()
+            return
+        if not self._agent_queue:
+            self._finalizeAgentRun()
+            return
+
+        entry = self._agent_queue[0]
+        module_name = entry['module_name']
+
+        # A job in flight: poll it once; finish it when it exits.
+        job = entry['job']
+        if job is not None:
+            if self._pollAgentJobOnce(job) == 'running':
+                self._scheduleAgentTick()
+                return
+            result = self._finishAgentJob(job)
+            entry['job'] = None
+            method_name = entry['methods'][entry['method_index']]
+            status, message = self._classifyVerdict(
+                job['spec'].get('verify'), result)
+            self._recordAndAdvance(entry, method_name, status, message,
+                                   result['duration_s'] * 1000.0)
+            self._scheduleAgentTick()
+            return
+
+        # Lazy sandbox/instance init (mirrors the per-test deferred runner).
+        if entry['instance'] is None:
+            entry['sandbox'] = self._createSandbox(module_name)
+            try:
+                entry['instance'] = entry['suite_class'](
+                    sandbox=entry['sandbox'],
+                    embody=op.Embody,
+                    runner=self,
+                )
+            except Exception as e:
+                self._addResult(module_name, 'INIT', 'ERROR', str(e))
+                self._destroySandbox(entry['sandbox'])
+                self._agent_queue.pop(0)
+                self._scheduleAgentTick()
+                return
+
+        instance = entry['instance']
+
+        # Suite-level setup once
+        if not entry['setup_done']:
+            entry['setup_done'] = True
+            if hasattr(instance, 'setUpSuite'):
+                try:
+                    instance.setUpSuite()
+                except Exception as e:
+                    self._addResult(module_name, 'setUpSuite', 'ERROR', str(e))
+                    self._destroySandbox(entry['sandbox'])
+                    self._agent_queue.pop(0)
+                    self._scheduleAgentTick()
+                    return
+
+        if entry['method_index'] >= len(entry['methods']):
+            self._advanceAgentQueue(entry)
+            self._scheduleAgentTick()
+            return
+
+        method_name = entry['methods'][entry['method_index']]
+
+        # Per-test setUp
+        if hasattr(instance, 'setUp'):
+            try:
+                instance.setUp()
+            except Exception as e:
+                self._recordAndAdvance(entry, method_name, 'ERROR',
+                                       f'setUp failed: {e}')
+                self._scheduleAgentTick()
+                return
+
+        # Run the method: None = synchronous test; a dict = job spec.
+        t0 = time.perf_counter()
+        try:
+            spec = getattr(instance, method_name)()
+        except AssertionError as e:
+            self._recordAndAdvance(entry, method_name, 'FAIL', str(e),
+                                   (time.perf_counter() - t0) * 1000)
+            self._scheduleAgentTick()
+            return
+        except SkipTest as e:
+            self._recordAndAdvance(entry, method_name, 'SKIP', str(e),
+                                   (time.perf_counter() - t0) * 1000)
+            self._scheduleAgentTick()
+            return
+        except Exception as e:
+            self._recordAndAdvance(entry, method_name, 'ERROR',
+                                   f'{type(e).__name__}: {e}',
+                                   (time.perf_counter() - t0) * 1000)
+            self._scheduleAgentTick()
+            return
+
+        if spec is None:
+            self._recordAndAdvance(entry, method_name, 'PASS', '',
+                                   (time.perf_counter() - t0) * 1000)
+            self._scheduleAgentTick()
+            return
+
+        try:
+            entry['job'] = self._launchAgentJob(spec)
+        except Exception as e:
+            self._recordAndAdvance(entry, method_name, 'ERROR',
+                                   f'launch failed: {type(e).__name__}: {e}')
+            self._scheduleAgentTick()
+            return
+
+        self._log(f"agent job started: {module_name}.{method_name} "
+                  f"[{spec.get('label')}] timeout {int(spec['timeout_s'])}s "
+                  f"pid {entry['job']['proc'].pid}")
+        self._scheduleAgentTick()
+
+    def _recordAndAdvance(self, entry, method_name, status, message,
+                          duration_ms=0):
+        """Record a verdict, run per-test tearDown, advance the queue."""
+        self._addResult(entry['module_name'], method_name, status, message,
+                        duration_ms)
+        instance = entry['instance']
+        if instance is not None and hasattr(instance, 'tearDown'):
+            try:
+                instance.tearDown()
+            except Exception as e:
+                self._addResult(entry['module_name'],
+                                f'{method_name}:tearDown', 'ERROR', str(e))
+        entry['method_index'] += 1
+        self._advanceAgentQueue(entry)
+
+    def _advanceAgentQueue(self, entry):
+        """Pop the current suite once its methods are exhausted (with teardown)."""
+        if entry['method_index'] < len(entry['methods']):
+            return
+        instance = entry['instance']
+        if instance is not None and hasattr(instance, 'tearDownSuite'):
+            try:
+                instance.tearDownSuite()
+            except Exception as e:
+                self._addResult(entry['module_name'], 'tearDownSuite',
+                                'ERROR', str(e))
+        self._destroySandbox(entry['sandbox'])
+        self._agent_queue.pop(0)
+
+    def _finalizeAgentRun(self):
+        """Called when the agent queue is exhausted."""
+        self._running = False
+        self._agent_run_id = None
+        self._restoreFileCleanupDialog()
+        self._restoreAutoexternalize()
+        self._agent_queue = []
+        self._reportSummary()
+
+    # ---- job primitives (unit-testable without frames) ----------------------
+
+    def _launchAgentJob(self, spec):
+        """Start the subprocess described by a job spec (never blocks).
+
+        stdout/stderr go to temp FILES, not pipes: nobody reads while the
+        process runs, and an unread pipe blocks the child at ~64KB. stdin is
+        always DEVNULL (codex exec hangs forever probing a silent stdin pipe
+        on Windows - openai/codex#20919; claude -p needs no TTY)."""
+        import tempfile
+        if not isinstance(spec, dict) or not (spec.get('argv') or
+                                              spec.get('cmdline')):
+            raise ValueError(
+                'agent test method must return None or a job spec dict with '
+                'argv/cmdline (build one with AgentTestCase.job())')
+        stdout_f = tempfile.NamedTemporaryFile(
+            prefix='embody_agent_out_', suffix='.txt', delete=False)
+        stderr_f = tempfile.NamedTemporaryFile(
+            prefix='embody_agent_err_', suffix='.txt', delete=False)
+        popen_kwargs = {
+            'stdin': subprocess.DEVNULL,
+            'stdout': stdout_f,
+            'stderr': stderr_f,
+            'cwd': spec.get('cwd') or None,
+            'env': spec.get('env') or None,
+        }
+        if sys.platform == 'win32':
+            popen_kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+        else:
+            # Own process group so a timeout can kill the whole tree.
+            popen_kwargs['start_new_session'] = True
+        try:
+            if spec.get('cmdline'):
+                proc = subprocess.Popen(spec['cmdline'], **popen_kwargs)
+            else:
+                proc = subprocess.Popen(list(spec['argv']), **popen_kwargs)
+        finally:
+            stdout_f.close()
+            stderr_f.close()
+        job = {
+            'proc': proc,
+            'spec': spec,
+            'stdout_path': stdout_f.name,
+            'stderr_path': stderr_f.name,
+            'started': time.perf_counter(),
+            'deadline': time.perf_counter() + float(spec['timeout_s']),
+            'timed_out': False,
+        }
+        # Mirror the job on sys so a reinitialized instance can still reap
+        # it. The Popen OBJECT rides along: its open handle lets the reaper
+        # poll() before killing, so a recycled pid is never taskkilled.
+        mirror = getattr(sys, '_embody_agent_jobs', None)
+        if mirror is None:
+            mirror = {}
+            sys._embody_agent_jobs = mirror
+        mirror[proc.pid] = {'label': spec.get('label') or 'agent job',
+                            'proc': proc}
+        return job
+
+    def _pollAgentJobOnce(self, job):
+        """Return 'running' or 'done'; kill the process tree on deadline expiry."""
+        proc = job['proc']
+        if proc.poll() is None:
+            if time.perf_counter() < job['deadline']:
+                return 'running'
+            job['timed_out'] = True
+            self._killPidTree(proc.pid, proc=proc)
+        return 'done'
+
+    def _finishAgentJob(self, job):
+        """Collect output + exit state after a job finished or was killed."""
+        proc = job['proc']
+        try:
+            proc.wait(timeout=2)
+        except Exception:
+            pass
+        duration = time.perf_counter() - job['started']
+        result = {
+            'returncode': proc.returncode,
+            'stdout': self._readAgentFile(job['stdout_path']),
+            'stderr': self._readAgentFile(job['stderr_path']),
+            'duration_s': duration,
+            'timed_out': job['timed_out'],
+        }
+        mirror = getattr(sys, '_embody_agent_jobs', None)
+        if mirror:
+            mirror.pop(proc.pid, None)
+        return result
+
+    def _classifyVerdict(self, verify, result):
+        """Run a job's verify callback against its result -> (status, message).
+
+        verify runs on the MAIN thread so it may inspect live TD state - the
+        primary evidence that the agent's operations actually landed."""
+        if result['timed_out']:
+            tail = (result['stderr'] or result['stdout'] or '')[-300:]
+            return ('ERROR',
+                    f"timed out after {result['duration_s']:.0f}s; tail: {tail}")
+        if verify is None:
+            if result['returncode'] == 0:
+                return ('PASS', '')
+            tail = (result['stderr'] or result['stdout'] or '')[-300:]
+            return ('FAIL', f"exit code {result['returncode']}; tail: {tail}")
+        try:
+            verify(result)
+            return ('PASS', '')
+        except AssertionError as e:
+            return ('FAIL', str(e))
+        except SkipTest as e:
+            return ('SKIP', str(e))
+        except Exception as e:
+            return ('ERROR', f'{type(e).__name__}: {e}')
+
+    def _readAgentFile(self, path, max_bytes=262144):
+        """Read + delete a job's captured output file (tail only).
+
+        Seeks to the tail instead of reading the whole file: a wedged CLI in
+        a print loop can grow the capture file to gigabytes, and this runs on
+        TD's main thread -- only the last max_bytes are ever wanted."""
+        try:
+            size = os.path.getsize(path)
+            with open(path, 'rb') as f:
+                if size > max_bytes:
+                    f.seek(size - max_bytes)
+                data = f.read(max_bytes)
+            text = data.decode('utf-8', errors='replace')
+        except Exception as e:
+            return f'<unreadable: {e}>'
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+        return text
+
+    def _killPidTree(self, pid, proc=None):
+        """Kill a job subprocess AND its children.
+
+        claude/codex spawn the Envoy bridge as a child; killing only the
+        parent strands it. Windows: taskkill /T. POSIX: kill the process
+        group created via start_new_session."""
+        try:
+            if sys.platform == 'win32':
+                subprocess.run(
+                    ['taskkill', '/T', '/F', '/PID', str(pid)],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL, timeout=5,
+                    creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                import signal
+                os.killpg(os.getpgid(pid), signal.SIGKILL)
+        except Exception:
+            if proc is not None:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+
+    def _reapOrphanAgentJobs(self):
+        """Clean up after a reinit-interrupted (or superseded) agent run.
+
+        Kills leftover subprocesses via the sys mirror -- poll-first: an
+        entry whose Popen already exited is just dropped, so a recycled pid
+        is never taskkilled. Then, ONLY when no run is active on this
+        instance (restoring mid-run would un-suppress a live run's dialogs),
+        restores the suppressed preferences (storage-backed, so the fresh
+        instance still has the originals) and clears sandbox debris the dead
+        run left behind."""
+        mirror = getattr(sys, '_embody_agent_jobs', None) or {}
+        for pid in list(mirror):
+            info = mirror.pop(pid, None) or {}
+            proc = info.get('proc') if isinstance(info, dict) else None
+            label = info.get('label') if isinstance(info, dict) else info
+            if proc is not None and proc.poll() is not None:
+                continue  # already exited on its own; nothing to kill
+            self._log(f'reaping orphaned agent-test subprocess pid {pid} '
+                      f'({label}) - an interrupted agent run left it behind',
+                      'ERROR')
+            self._killPidTree(pid, proc=proc)
+        if not self._running:
+            self._restoreFileCleanupDialog()
+            self._restoreAutoexternalize()
+            try:
+                for child in list(self.sandbox_comp.children):
+                    child.destroy()
+            except Exception:
+                pass
+
+    # =========================================================================
     # TEST DISCOVERY
     # =========================================================================
 
-    def _discoverTestSuites(self, filter_name=None, only_destructive=False):
+    def _discoverTestSuites(self, filter_name=None, tier='normal'):
         """
         Discover test suites by loading .py files from dev/embody/unit_tests/.
 
         Loads externalized test .py files from disk via importlib, injecting
-        TD globals and EmbodyTestCase into each module before execution.
+        TD globals and the test base classes into each module before execution.
 
-        Suites that set the class attribute ``DESTRUCTIVE = True`` mutate the
-        WHOLE LIVE PROJECT (Disable / ExternalizeProject / Reset on ext.root)
-        and can delete/convert every tracked file. They are EXCLUDED from every
-        normal run and only surface when ``only_destructive=True`` (the
-        save-gated RunDestructiveTests batch). This is the guard that stops a
-        plain full run from ever nuking the live project. See
-        .claude/rules/destructive-tests.md.
+        Tiers (selected by class attributes on the suite):
+
+        - ``tier='normal'`` (every standard run): excludes BOTH tagged tiers.
+        - ``tier='destructive'``: ONLY suites tagged ``DESTRUCTIVE = True`` --
+          whole-project mutators (Disable / ExternalizeProject / Reset on
+          ext.root) that can delete/convert every tracked file; they run only
+          in the save-gated RunDestructiveTests batch. See
+          .claude/rules/destructive-tests.md.
+        - ``tier='agent'``: ONLY suites tagged ``AGENT = True`` (usually via
+          AgentTestCase) -- they spawn external AI-client subprocesses, take
+          minutes, and consume subscription usage; they run only via
+          RunAgentTests. See .claude/rules/agent-tests.md.
+
+        A suite tagged BOTH ways never surfaces anywhere (unsupported
+        combination -- fail safe by exclusion). This filter is the guard that
+        stops a plain full run from ever nuking the live project or silently
+        burning agent-CLI usage.
         """
         import os
         import importlib.util
@@ -541,6 +1194,7 @@ class TestRunnerExt:
 
                 # Inject test framework base classes so tests don't need to import them
                 mod.__dict__['EmbodyTestCase'] = EmbodyTestCase
+                mod.__dict__['AgentTestCase'] = AgentTestCase
                 mod.__dict__['SkipTest'] = SkipTest
 
                 # Inject common TD enums
@@ -560,14 +1214,24 @@ class TestRunnerExt:
                     obj = getattr(mod, attr_name)
                     if (isinstance(obj, type) and
                             obj is not EmbodyTestCase and
+                            obj is not AgentTestCase and
                             any(m.startswith('test_') for m in dir(obj))):
-                        # Destructive whole-project suites are segregated: they
-                        # ONLY run in the save-gated RunDestructiveTests batch,
-                        # never in a normal run. This is the single guard that
-                        # prevents a full run from nuking the live project.
+                        # Tier segregation: DESTRUCTIVE suites only run in the
+                        # save-gated RunDestructiveTests batch; AGENT suites
+                        # only via RunAgentTests; a normal run gets neither.
+                        # This is the single guard that prevents a full run
+                        # from nuking the live project or spawning AI clients.
                         is_destructive = bool(getattr(obj, 'DESTRUCTIVE', False))
-                        if is_destructive != only_destructive:
-                            continue
+                        is_agent = bool(getattr(obj, 'AGENT', False))
+                        if tier == 'destructive':
+                            if not is_destructive or is_agent:
+                                continue
+                        elif tier == 'agent':
+                            if not is_agent or is_destructive:
+                                continue
+                        else:
+                            if is_destructive or is_agent:
+                                continue
                         suites.append((obj, module_name))
 
             except Exception as e:
