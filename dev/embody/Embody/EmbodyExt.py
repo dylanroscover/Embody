@@ -3164,9 +3164,10 @@ class EmbodyExt:
         except Exception:
             pass
 
-    def _purgeTDNTracking(self, op_path: str) -> None:
-        """Remove the TDN tracking row(s) for op_path and any tracked TDN
-        DESCENDANT, called from delete_op BEFORE the op is destroyed.
+    def _purgeExternalizationTracking(self, op_path: str) -> None:
+        """Remove tracking row(s) + externalized file(s) for op_path and any
+        tracked DESCENDANT -- ANY strategy -- called from delete_op BEFORE the
+        op is destroyed.
 
         Without this, deleting a tracked TDN COMP leaves its row + .tdn on disk
         until the next continuity sweep; a crash in that window would let
@@ -3174,8 +3175,16 @@ class EmbodyExt:
         (it is tsv-driven, so a lingering row = a rebuild). Removing the row up
         front makes the deletion durable. `_removeTDNStrategy` removes the row
         synchronously (the safety hinge) and deletes the .tdn shortly after.
-        Best-effort; never raises into the delete path. Drops the paths from the
-        pending checkpoint queue too."""
+
+        Non-TDN strategies (py/tox/dat/json/...) previously were not purged at
+        all: delete_op left their row until a Refresh sweep reclaimed it and
+        left the externalized file on disk forever (issue #57 follow-up,
+        2026-07-16). They now get the same treatment: row removed up front,
+        file deleted shortly after (mirroring the TDN delete_file=True
+        semantics -- an explicit delete_op is intent to remove the entity).
+
+        Best-effort; never raises into the delete path. Drops the paths from
+        the pending checkpoint queue too."""
         try:
             # Never mutate the externalizations table during the save window
             # (table mutation during onProjectPreSave/strip is a fatal crash).
@@ -3188,18 +3197,63 @@ class EmbodyExt:
             if not table or table[0, 'strategy'] is None:
                 return
             prefix = op_path.rstrip('/') + '/'
-            to_remove = []
+            tdn_paths = []
+            other_paths = []
             for i in range(1, table.numRows):
-                if self._cellVal(i, 'strategy') != 'tdn':
-                    continue
                 p = self._cellVal(i, 'path')
-                if p == op_path or p.startswith(prefix):
-                    to_remove.append(p)
-            for p in to_remove:
+                if p != op_path and not p.startswith(prefix):
+                    continue
+                if self._cellVal(i, 'strategy') == 'tdn':
+                    tdn_paths.append(p)
+                else:
+                    other_paths.append((p, self._cellVal(i, 'rel_file_path')))
+            for p in tdn_paths:
                 self._pending_checkpoint_roots.discard(p)
                 self._removeTDNStrategy(p, delete_file=True)
+            for p, rel_path in other_paths:
+                # Row indices shift as rows are deleted -- re-resolve by path.
+                removed = False
+                for i in range(table.numRows - 1, 0, -1):
+                    if self._cellVal(i, 'path') == p:
+                        table.deleteRow(i)
+                        removed = True
+                        break
+                if removed:
+                    self.Log(
+                        f'Removed externalization tracking for deleted op {p}',
+                        'INFO')
+                if not rel_path:
+                    continue
+                # Shared-file guards, mirroring RemoveListerRow: never unlink
+                # a file that a clone-tagged op owns or that another live op
+                # still references (two ops CAN share one rel_file_path).
+                # Both checks must run NOW -- the op still exists (purge runs
+                # before target.destroy()).
+                normalized = self.normalizePath(rel_path)
+                oper = op(p)
+                is_clone = bool(oper) and 'clone' in oper.tags
+                other_refs = self._checkFileReferences(p, normalized)
+                if is_clone or other_refs:
+                    self.Log(
+                        f"Preserved file '{normalized}' (still in use)",
+                        'INFO')
+                    continue
+                full_path = self.buildAbsolutePath(normalized).resolve()
+                def _delete(fp=full_path, rp=rel_path, opp=p):
+                    try:
+                        if fp.is_file():
+                            fp.unlink()
+                            self.Log(
+                                f'Removed externalized file for deleted '
+                                f'op {opp} ({rp})', 'SUCCESS')
+                    except Exception as e:
+                        self.Log(
+                            f'Error removing externalized file: {e}',
+                            'ERROR')
+                run(_delete, delayFrames=5)
         except Exception as e:
-            self.Log(f'_purgeTDNTracking failed for {op_path}: {e}', 'DEBUG')
+            self.Log(f'_purgeExternalizationTracking failed for {op_path}: {e}',
+                     'DEBUG')
 
     def ExportPortableTox(self, target: 'OP' = None,
                           save_path: Optional[str] = None) -> bool:
@@ -4534,7 +4588,13 @@ class EmbodyExt:
             if old_abs.is_file():
                 try:
                     new_abs.parent.mkdir(parents=True, exist_ok=True)
-                    old_abs.rename(new_abs)
+                    # replace(), not rename(): when the target already exists
+                    # (Embody's own sweep can export the new-name .tdn before
+                    # this continuity path runs), rename() overwrites on
+                    # POSIX but raises FileExistsError on Windows -- leaking
+                    # the old .tdn on every rename (issue #57 follow-up,
+                    # observed as 'Error renaming TDN file' in test runs).
+                    old_abs.replace(new_abs)
                     self.Log(f"Renamed TDN file: {old_rel_file_path} -> {new_rel_path}", "SUCCESS")
                 except Exception as e:
                     self.Log(f"Error renaming TDN file", "ERROR", str(e))

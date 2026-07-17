@@ -14,8 +14,10 @@ _settingsSatisfies:
 
 Every written posture also whitelists the OS temp dir (tempfile.gettempdir())
 in additionalDirectories so a captured TOP (saved there by capture_top) can be
-Read without a prompt, and merges into an existing file preserving all
-non-Envoy keys, idempotently.
+Read without a prompt, pre-authorizes the sibling '<repo>-wt-*' worktree
+directories (Read/Edit rules from _worktreePermissionRules, so the
+isolated-worktree workflow never triggers per-file access prompts), and merges
+into an existing file preserving all non-Envoy keys, idempotently.
 
 SAFETY: not destructive. _composeSettings / _settingsSatisfies are pure. The
 _deploySettingsLocal cases write ONLY into throwaway temp dirs, save/restore the
@@ -106,7 +108,79 @@ class TestToolPermissions(EmbodyTestCase):
         self.assertFalse(forbidden & set(self._env.READ_ONLY_TOOLS),
                          "READ_ONLY_TOOLS must not contain any mutating tool")
 
+    # ---- _worktreePermissionRules (pure) ---------------------------------
+
+    def test_worktree_rules_shape(self):
+        # POSIX root and Windows root both normalize to '//'-anchored globs.
+        rules = self._env._worktreePermissionRules('/home/u/Git/Proj')
+        self.assertEqual(rules, ['Read(//home/u/Git/Proj-wt-*/**)',
+                                 'Edit(//home/u/Git/Proj-wt-*/**)'])
+        rules = self._env._worktreePermissionRules('C:\\Users\\u\\Git\\Proj')
+        self.assertEqual(rules, ['Read(//c/Users/u/Git/Proj-wt-*/**)',
+                                 'Edit(//c/Users/u/Git/Proj-wt-*/**)'])
+
+    def test_worktree_rules_no_root_degrades_to_empty(self):
+        # Pure function: no root (None/''/no-git) -> no rules, never a
+        # TD lookup, never a crash.
+        for root in ('no-git', None, ''):
+            self.assertEqual(self._env._worktreePermissionRules(root), [],
+                             f"root={root!r} must yield no rules")
+
+    def test_compose_adds_worktree_rules_every_posture(self):
+        root = '/home/u/Git/Proj'
+        want = set(self._env._worktreePermissionRules(root))
+        self.assertTrue(want, 'sanity: rules must be computable for a real root')
+        for posture in ('all', 'some', 'prompt'):
+            cfg = self._env._composeSettings(self._baseline(), posture, root)
+            allow = set(cfg['permissions']['allow'])
+            self.assertTrue(want <= allow,
+                            f"posture '{posture}' must pre-authorize sibling "
+                            f"'-wt-*' worktree access (got {sorted(allow)})")
+
+    # ---- _mirrorAiConfigToWorktrees (file I/O in a temp dir) -------------
+
+    def test_mirror_ai_config_into_sibling_worktrees(self):
+        base = Path(tempfile.mkdtemp())
+        root = base / 'Proj'
+        (root / '.claude').mkdir(parents=True)
+        (root / '.mcp.json').write_text('{"mcpServers": {}}')
+        (root / '.claude' / 'settings.local.json').write_text('{}')
+        wt = base / 'Proj-wt-task'
+        wt.mkdir()
+        (wt / '.git').write_text('gitdir: elsewhere')  # worktree marker
+        decoy = base / 'Proj-unrelated'
+        decoy.mkdir()  # no -wt- prefix -> must be skipped
+        stray = base / 'Proj-wt-notgit'
+        stray.mkdir()  # -wt- name but no .git -> must be skipped
+        self._env._mirrorAiConfigToWorktrees(root)
+        self.assertTrue((wt / '.mcp.json').is_file(),
+                        'worktree must receive .mcp.json')
+        self.assertTrue((wt / '.claude' / 'settings.local.json').is_file(),
+                        'worktree must receive settings.local.json')
+        self.assertFalse((decoy / '.mcp.json').exists(),
+                         'non-worktree sibling must not be touched')
+        self.assertFalse((stray / '.mcp.json').exists(),
+                         'folder without .git must not be touched')
+        # Idempotent: identical content is not rewritten (mtime preserved)
+        before = (wt / '.mcp.json').stat().st_mtime_ns
+        self._env._mirrorAiConfigToWorktrees(root)
+        self.assertEqual((wt / '.mcp.json').stat().st_mtime_ns, before,
+                         'unchanged mirror must not rewrite the file')
+
     # ---- _settingsSatisfies (pure) --------------------------------------
+
+    def test_satisfies_requires_worktree_rules(self):
+        # A file written by a pre-worktree Embody must NOT satisfy, so the
+        # next Envoy start upgrades it in place.
+        root = '/home/u/Git/Proj'
+        cfg = self._env._composeSettings(self._baseline(), 'all', root)
+        self.assertTrue(self._env._settingsSatisfies(cfg, 'all', root))
+        stale = copy.deepcopy(cfg)
+        stale['permissions']['allow'] = [
+            a for a in stale['permissions']['allow']
+            if '-wt-*' not in a]
+        self.assertFalse(self._env._settingsSatisfies(stale, 'all', root),
+                         'missing worktree rules must trigger a rewrite')
 
     def test_satisfies_matches_own_posture_only(self):
         for posture in ('all', 'some', 'prompt'):

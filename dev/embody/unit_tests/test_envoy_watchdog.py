@@ -95,6 +95,14 @@ class EnvoyWatchdogBase(EmbodyTestCase):
         # Patch the instance _log so WARNINGs are counted, not logged for real.
         self._patch(self.envoy, '_log',
                     lambda message, level='INFO': self._logs.append((message, level)))
+        # Tests must NEVER signal the LIVE server's shutdown event: a real
+        # _reviveDeadServer() call does self.shutdown_event.set(), which
+        # bounced the actual MCP server mid-full-run and poisoned later
+        # suites (2026-07-16 full-run-only failures in shortcuts/rename/
+        # watchdog). Swap in a throwaway Event; the patch-restore in
+        # tearDown puts the live one back untouched.
+        import threading as _threading
+        self._patch(self.envoy, 'shutdown_event', _threading.Event())
 
     def tearDown(self):
         while self._patches:
@@ -205,7 +213,13 @@ class TestReviveLogStormCooldown(EnvoyWatchdogBase):
     def test_revive_bumps_server_generation_and_clears_running(self):
         self.envoy._last_revive_time = 0.0
         self.embody.store('envoy_running', True)
+        # Model a STUCK start explicitly: _starting still set but its
+        # startup window long expired. Revive must proceed and clear it.
+        # (A start INSIDE its window is deliberately not revivable -- the
+        # in-flight guard added for the 2026-07-15 restart storm -- and a
+        # full test run can leave a live future deadline behind, so pin it.)
         self.envoy._starting = True
+        self.envoy._startup_deadline = 0.0
         gen_before = self.envoy._server_gen
 
         self.envoy._reviveDeadServer(was_running=True)

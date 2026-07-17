@@ -135,7 +135,10 @@ class TestLaunchAIClient(EmbodyTestCase):
 		body = self.embody_ext._buildTerminalScript(
 			self._temp_dir, 'claude', '/abs/bin/claude')
 		self.assertTrue(body.startswith('#!/bin/zsh -l\n'))
-		self.assertIn(f"cd '{self._temp_dir}'", body)
+		# The generator normalizes to forward slashes (a zsh script must
+		# never contain Windows separators), so expect the posix form.
+		posix_dir = str(self._temp_dir).replace('\\', '/')
+		self.assertIn(f"cd '{posix_dir}'", body)
 		self.assertIn('exec /abs/bin/claude', body)
 
 	def test_C02_absent_cli_gets_guard_and_login_shell(self):

@@ -15,6 +15,7 @@ import json
 import os
 import shutil
 import stat
+import sys
 import tempfile
 from pathlib import Path
 
@@ -95,6 +96,11 @@ class TestTDNCrashSafety(EmbodyTestCase):
 
 	def test_A04_atomic_write_readonly_dir_fails_cleanly(self):
 		"""Writing to a read-only directory should raise without leaving debris."""
+		if sys.platform == 'win32':
+			# chmod cannot write-protect a DIRECTORY on Windows (the readonly
+			# attribute is ignored for content changes; only ACLs block it),
+			# so the write succeeds and the contract is untestable here.
+			self.skipTest('chmod cannot write-protect a directory on Windows')
 		ro_dir = os.path.join(self._temp_dir, 'readonly')
 		os.makedirs(ro_dir)
 		os.chmod(ro_dir, stat.S_IRUSR | stat.S_IXUSR)

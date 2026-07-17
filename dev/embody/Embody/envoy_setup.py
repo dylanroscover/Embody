@@ -272,6 +272,7 @@ def configure_mcp_client(ext, port, target_dir=None):
                 and existing.get('args') == expected_args):
             ext._log('MCP .mcp.json already configured (STDIO bridge)', 'DEBUG')
             deploy_settings_local(ext, target_dir / '.claude')
+            mirror_ai_config_to_worktrees(ext, target_dir)
             return
 
         servers['envoy'] = {
@@ -296,14 +297,68 @@ def configure_mcp_client(ext, port, target_dir=None):
         # --- Deploy settings.local.json (auto-allow read-only MCP tools) ---
         deploy_settings_local(ext, target_dir / '.claude')
 
+        # --- Mirror gitignored AI config into sibling worktrees ---
+        mirror_ai_config_to_worktrees(ext, target_dir)
+
     except Exception as e:
         ext._log(f'Could not auto-configure MCP client: {e}', 'WARNING')
 
 
+def mirror_ai_config_to_worktrees(ext, root):
+    """Copy the gitignored AI config (.mcp.json, .claude/settings.local.json)
+    into sibling '<repo>-wt-*' git worktrees. Both files are gitignored by
+    design, so a fresh worktree checkout lacks them -- an AI session rooted
+    IN a worktree then has no Envoy MCP server config and no tool
+    permissions, and prompts on every call. Runs on every Envoy config
+    deploy; content is compared first so unchanged files are never
+    rewritten (no file-watcher churn). Worktrees are identified by the
+    '<root-name>-wt-' prefix AND a .git entry (a real checkout, not a
+    stray folder). The mirrored .mcp.json works verbatim: its bridge/
+    config paths are absolute into the main root, so a worktree session
+    talks to the same Envoy instance."""
+    from pathlib import Path
+    try:
+        root = Path(root)
+        prefix = root.name + '-wt-'
+        pairs = [(root / '.mcp.json', ('.mcp.json',)),
+                 (root / '.claude' / 'settings.local.json',
+                  ('.claude', 'settings.local.json'))]
+        mirrored = 0
+        for sib in root.parent.iterdir():
+            if not (sib.is_dir() and sib.name.startswith(prefix)
+                    and (sib / '.git').exists()):
+                continue
+            for src, rel in pairs:
+                if not src.is_file():
+                    continue
+                dst = sib.joinpath(*rel)
+                try:
+                    content = src.read_text(encoding='utf-8')
+                    if (dst.is_file()
+                            and dst.read_text(encoding='utf-8') == content):
+                        continue
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    dst.write_text(content, encoding='utf-8')
+                    mirrored += 1
+                except OSError as e:
+                    ext._log(f'Could not mirror {"/".join(rel)} into '
+                             f'{sib.name}: {e}', 'DEBUG')
+        if mirrored:
+            ext._log(f'Mirrored AI config into sibling worktrees '
+                     f'({mirrored} file(s))')
+    except Exception as e:
+        ext._log(f'Worktree config mirror skipped: {e}', 'DEBUG')
+
+
 def configure_mcp_client_http(ext, target_dir, port):
     """Fallback: configure .mcp.json with direct HTTP transport.
-    Used when the STDIO bridge script cannot be deployed."""
-    url = f'http://localhost:{port}/mcp'
+    Used when the STDIO bridge script cannot be deployed.
+
+    127.0.0.1, never localhost: the server binds IPv4-only and Windows
+    resolves localhost to ::1 first -- on hosts whose firewall stealth-drops
+    loopback SYNs every request burns ~2s on the doomed ::1 attempt before
+    falling back (issue #57)."""
+    url = f'http://127.0.0.1:{port}/mcp'
     mcp_file = target_dir / '.mcp.json'
 
     config = {}
@@ -365,6 +420,32 @@ def temp_read_dirs(ext):
     return dirs
 
 
+def worktree_permission_rules(ext, root):
+    """Claude Code permission rules that pre-authorize the sibling worktree
+    directories used by the isolated-worktree workflow (see
+    rules/worktree-td-safety.md): ``git worktree add ../<repo>-wt-<task>``
+    creates folders OUTSIDE the workspace, and without these rules Claude
+    Code prompts for access on every file it touches there. Read rules
+    cover Read/Glob/Grep; Edit rules cover Edit/Write. Uses Claude Code's
+    absolute-rule syntax: '//' prefix + POSIX slashes, lowercase drive
+    letter on Windows ('C:/Users/x' -> '//c/Users/x'). Pure string
+    computation: `root` comes from deploy_settings_local (the folder
+    holding .claude/); a missing/no-git root yields [] so callers degrade
+    gracefully."""
+    try:
+        if not root:
+            return []
+        p = str(root).replace('\\', '/').rstrip('/')
+        if not p or p == 'no-git' or p == '.':
+            return []
+        if len(p) >= 2 and p[1] == ':':  # Windows drive letter -> //c/...
+            p = '/' + p[0].lower() + p[2:]
+        pattern = '/' + p + '-wt-*/**'   # sibling '<repo>-wt-<task>' folders
+        return ['Read(%s)' % pattern, 'Edit(%s)' % pattern]
+    except Exception:
+        return []
+
+
 def load_settings_baseline(ext):
     """The NON-Envoy baseline settings dict (from the template DAT if
     present, else a built-in minimum). The Envoy allow entries + temp read
@@ -390,12 +471,14 @@ def load_settings_baseline(ext):
     }
 
 
-def compose_settings(ext, cfg, posture):
+def compose_settings(ext, cfg, posture, root=None):
     """Apply a tool-permissions posture onto a settings dict IN PLACE and
     return it. Preserves every non-Envoy key and every non-Envoy allow
     entry; replaces only the Envoy tool entries, ensures the temp read
-    dirs, and trusts the Envoy MCP server. `posture` is never 'leave'
-    here (the caller short-circuits that)."""
+    dirs and the sibling-worktree access rules (worktree_permission_rules
+    -- posture-independent, so the isolated-worktree workflow never
+    triggers per-file access prompts), and trusts the Envoy MCP server.
+    `posture` is never 'leave' here (the caller short-circuits that)."""
     perms = cfg.setdefault('permissions', {})
     # Strip prior Envoy entries so we author them fresh for this posture.
     allow = [a for a in perms.get('allow', [])
@@ -405,6 +488,9 @@ def compose_settings(ext, cfg, posture):
     elif posture == 'some':
         allow.extend(f'mcp__envoy__{t}' for t in ext.READ_ONLY_TOOLS)
     # posture == 'prompt': no Envoy entries -> every tool prompts.
+    for rule in worktree_permission_rules(ext, root):
+        if rule not in allow:
+            allow.append(rule)
     perms['allow'] = allow
     add = list(perms.get('additionalDirectories', []))
     for d in temp_read_dirs(ext):
@@ -421,10 +507,12 @@ def compose_settings(ext, cfg, posture):
     return cfg
 
 
-def settings_satisfies(ext, cfg, posture):
+def settings_satisfies(ext, cfg, posture, root=None):
     """True if an existing settings dict already matches `posture` (so no
     rewrite is needed). Semantic, order-insensitive -- avoids startup churn
-    from list reordering."""
+    from list reordering. Also requires the sibling-worktree access rules,
+    so settings written by pre-worktree Embody versions self-heal on the
+    next Envoy start."""
     if not isinstance(cfg, dict):
         return False
     perms = cfg.get('permissions', {}) or {}
@@ -433,9 +521,10 @@ def settings_satisfies(ext, cfg, posture):
              if a == 'mcp__envoy' or a.startswith('mcp__envoy__')]
     add = perms.get('additionalDirectories', []) or []
     temp_ok = all(d in add for d in temp_read_dirs(ext))
+    wt_ok = all(r in allow for r in worktree_permission_rules(ext, root))
     server_ok = (cfg.get('enableAllProjectMcpServers') is True
                  or 'envoy' in (cfg.get('enabledMcpjsonServers') or []))
-    if not (temp_ok and server_ok):
+    if not (temp_ok and wt_ok and server_ok):
         return False
     if posture == 'all':
         return 'mcp__envoy' in envoy
@@ -449,7 +538,9 @@ def settings_satisfies(ext, cfg, posture):
 def deploy_settings_local(ext, claude_dir):
     """Write .claude/settings.local.json to match the Toolpermissions
     posture, so Claude Code isn't prompted on every Envoy MCP tool call
-    (and so a captured TOP in the OS temp dir can be Read without a prompt).
+    (and so a captured TOP in the OS temp dir can be Read without a prompt,
+    and sibling '<repo>-wt-*' worktrees are accessible without per-file
+    prompts -- see worktree_permission_rules).
 
     Postures: all = auto-approve all Envoy tools (wildcard); some =
     read-only tools only; prompt = none; leave = don't touch the file.
@@ -460,6 +551,9 @@ def deploy_settings_local(ext, claude_dir):
     import copy
     posture = tool_permissions_posture(ext)
     settings_path = claude_dir / 'settings.local.json'
+    # The worktree rules anchor to the folder holding .claude/ -- the same
+    # root that holds .mcp.json and is the repo the worktrees sit beside.
+    wt_root = claude_dir.parent
 
     if posture == 'leave':
         ext._log('Tool permissions: leaving .claude/settings.local.json '
@@ -481,14 +575,15 @@ def deploy_settings_local(ext, claude_dir):
             return
 
     # Idempotent: an already-satisfying file is left exactly as-is.
-    if existing is not None and settings_satisfies(ext, existing, posture):
+    if existing is not None and settings_satisfies(
+            ext, existing, posture, root=wt_root):
         ext._log(f'settings.local.json already matches tool permissions '
                  f'({posture}) -- no change.', 'DEBUG')
         return
 
     base = copy.deepcopy(existing) if existing is not None \
         else load_settings_baseline(ext)
-    new_cfg = compose_settings(ext, base, posture)
+    new_cfg = compose_settings(ext, base, posture, root=wt_root)
     content = json.dumps(new_cfg, indent=2) + '\n'
     verb = 'update' if existed else 'create'
 
@@ -504,7 +599,8 @@ def deploy_settings_local(ext, claude_dir):
             if existed:  # merged into a user file -> Uninstall only reverses our unit
                 Embody._manifestRecordAppendedFile(
                     root, settings_path,
-                    'permissions (Envoy tools + temp read dirs)',
+                    'permissions (Envoy tools + temp read dirs + '
+                    'worktree access)',
                     kind='json_key')
             else:        # Embody created it -> safe to remove on Uninstall
                 Embody._manifestRecordCreatedFile(root, settings_path)

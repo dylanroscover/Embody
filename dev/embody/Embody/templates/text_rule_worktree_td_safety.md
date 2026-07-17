@@ -17,6 +17,27 @@ Any multi-step implementation work on externalized files happens in an
 **isolated git worktree** (`git worktree add ../<repo>-wt-<task> HEAD`),
 never in the tree a running TD session is loading from.
 
+## Access is pre-authorized -- keep the naming convention
+
+Envoy's generated `.claude/settings.local.json` contains Read/Edit rules
+for the sibling `<repo>-wt-*` pattern, so Claude Code never prompts for
+file access inside a worktree created with the recipe above. This only
+covers worktrees named `<repo>-wt-<task>` directly beside the repo -- a
+different name or location falls outside the pre-authorized pattern and
+prompts on every file. (Older generated settings gain the rules
+automatically the next time Envoy starts.)
+
+Sessions rooted IN a worktree are covered too: Envoy mirrors the
+gitignored AI config (`.mcp.json` + `.claude/settings.local.json`) into
+every sibling `<repo>-wt-*` worktree when it deploys config, so a session
+launched inside a worktree has the same MCP server and tool permissions
+as the main repo. A worktree created while Envoy was already running
+misses that sweep -- copy those two files from the repo root (or restart
+Envoy) before launching a session inside it.
+
+If other AI sessions are active, worktree tasks are also coordinated
+through claims -- see the Worktrees section of /multi-session-etiquette.
+
 ## The safe/unsafe windows
 
 1. **Editing in a worktree: TD may run freely.** A worktree is a separate

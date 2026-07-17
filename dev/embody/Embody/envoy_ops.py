@@ -66,11 +66,13 @@ def delete_op(ext, op_path: str) -> dict:
 
     try:
         name = target.name
-        # Purge TDN tracking for this op + any tracked TDN descendant BEFORE
-        # destroying, so an unsaved delete + crash can't leave an orphan row
-        # that export-mode autosave recovery would resurrect on next open.
+        # Purge externalization tracking (ANY strategy) for this op + any
+        # tracked descendant BEFORE destroying: an unsaved TDN delete + crash
+        # can't leave an orphan row that export-mode autosave recovery would
+        # resurrect on next open, and non-TDN rows/files no longer outlive
+        # their deleted op (issue #57 follow-up).
         try:
-            op.Embody.ext.Embody._purgeTDNTracking(op_path)
+            op.Embody.ext.Embody._purgeExternalizationTracking(op_path)
         except Exception:
             pass
         target.destroy()

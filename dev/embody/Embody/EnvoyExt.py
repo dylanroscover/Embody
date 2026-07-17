@@ -229,12 +229,19 @@ class EnvoyMCPServer:
     def __init__(self, request_queue: Optional[Queue], response_queue: Queue,
                  add_to_refresh_queue: Callable[[dict], None], port: int = 9870,
                  shutdown_event: Optional[Event] = None,
-                 startup_event: Optional[Event] = None) -> None:
+                 startup_event: Optional[Event] = None,
+                 gen: int = 0) -> None:
         self.request_queue: Optional[Queue] = request_queue
         self.response_queue: Queue = response_queue
         self.add_to_refresh_queue: Callable[[dict], None] = add_to_refresh_queue
         self.port: int = port
         self.shutdown_event: Event = shutdown_event or Event()
+        # Server generation this worker belongs to. Tagged onto
+        # sys._envoy_uvi_gen so _forceCloseOldServer can distinguish a STALE
+        # server handle (safe to force-close) from the CURRENT generation's
+        # just-started server (closing that one murders a healthy worker --
+        # one arm of the 2026-07-15 restart storm, issue #57 follow-up).
+        self.gen: int = gen
         # Set once uvicorn has actually bound + started serving (H1). The main
         # thread waits on this before declaring the server "Running".
         self.startup_event: Optional[Event] = startup_event
@@ -2272,6 +2279,7 @@ class EnvoyMCPServer:
         # Store on sys so EnvoyExt.Start() can force-close sockets
         # if the old server thread is stuck and won't release the port.
         sys._envoy_uvi_server = uvi_server
+        sys._envoy_uvi_gen = self.gen
 
         # Monitor shutdown_event and tell uvicorn to exit
         def shutdown_monitor():
@@ -2313,6 +2321,7 @@ class EnvoyMCPServer:
             # Start may have replaced it already).
             if getattr(sys, '_envoy_uvi_server', None) is uvi_server:
                 sys._envoy_uvi_server = None
+                sys._envoy_uvi_gen = 0
             if sys.platform.startswith('win'):
                 asyncio.set_event_loop_policy(None)
 
@@ -2352,7 +2361,11 @@ class EnvoyExt:
         }
         sys._envoy_queues = _q_registry
         self.current_task: Optional[Any] = None
-        self._server_gen: int = 0  # Generation counter for stale callback detection
+        # Generation counter for stale callback detection. Adopted from sys
+        # (not reset to 0) so an extension reinit cannot restart the count
+        # below a still-alive worker's sys._envoy_uvi_gen tag -- that would
+        # make _forceCloseOldServer's staleness compare lie forever.
+        self._server_gen: int = getattr(sys, '_envoy_server_gen', 0)
         # Per-session piggyback cursors: sid (or '_anon') -> last served log
         # id. A single shared cursor let whichever session polled first
         # CONSUME warnings meant for everyone (multi-session bug); each
@@ -2631,11 +2644,48 @@ class EnvoyExt:
         and does NOT flip the return -- waiting on those is pointless.
         The drain-wait in `_findAvailablePort` keys off this signal to
         skip the 500ms sleep when the port holder is foreign/zombie.
+
+        CURRENT-GENERATION SAFETY (issue #57 follow-up, 2026-07-15 storm):
+        when rapid start chains overlap (restart backoff + watchdog revive),
+        the live handle -- and the registered shutdown event -- can belong to
+        the CURRENT generation's just-started, healthy worker. Signaling or
+        closing THAT one murders the newborn server and feeds a self-
+        sustaining restart loop. So the staleness determination runs FIRST,
+        and a current-generation live worker makes this a no-op.
+
+        Known trade: a WEDGED current-generation worker (hung but still
+        bound) cannot be force-closed by a manual Stop()+Start() -- the port
+        scan drifts to port+1 for that start. Accepted deliberately: never
+        risk killing a possibly-healthy newborn. The watchdog recovers the
+        stable port once the socket actually probes dead (its revive bumps
+        the generation BEFORE its deferred Start, making force-close
+        effective on that pass).
         """
+        old_server = getattr(sys, '_envoy_uvi_server', None)
+        old_gen = getattr(sys, '_envoy_uvi_gen', 0)
+        if old_server is not None and old_gen >= self._server_gen:
+            self._log(
+                f'Skipping force-close: live server handle is current '
+                f'(gen {old_gen} >= gen {self._server_gen})', 'DEBUG')
+            return False
+
         # Signal all known shutdown events (housekeeping -- does not by
-        # itself indicate WE are holding a socket).
+        # itself indicate WE are holding a socket). Safe now: the current-
+        # generation live-worker case returned above, and the registry entry
+        # for this comp is either the previous (dead/stale) start's event or
+        # the current one whose worker has already exited.
         registry = getattr(sys, '_envoy_shutdown_events', {})
         for path, evt in registry.items():
+            if self._starting and evt is self.shutdown_event:
+                # An in-flight start owns this event. Its worker may not have
+                # stored its sys._envoy_uvi_server handle yet (first ~100ms),
+                # so the gen check above cannot see it -- signaling now would
+                # kill the newborn before uvicorn even starts (the exact
+                # dead-on-arrival loop of 2026-07-15).
+                self._log(
+                    f'Skipping shutdown signal for {path}: start in flight',
+                    'DEBUG')
+                continue
             if not evt.is_set():
                 self._log(f'Force-signaling shutdown event for {path}', 'DEBUG')
                 evt.set()
@@ -2648,8 +2698,6 @@ class EnvoyExt:
             pending_test['event'].set()
             sys._envoy_pending_test = None
 
-        # Force-close the old uvicorn server's sockets
-        old_server = getattr(sys, '_envoy_uvi_server', None)
         if old_server is not None:
             self._log('Force-closing old uvicorn server sockets', 'DEBUG')
             old_server.should_exit = True
@@ -2775,6 +2823,14 @@ class EnvoyExt:
 
     def Start(self) -> None:
         """Start MCP server via op.TDResources.ThreadManager"""
+        # Envoyenable is the master switch. Queued restart fires (auto-restart
+        # backoff, watchdog revive) can land AFTER the user -- or the give-up
+        # path in _scheduleRestart -- disabled Envoy; without this gate they
+        # kept spawning servers for minutes after 'Envoy disabled'
+        # (2026-07-15 storm, issue #57 follow-up).
+        if not self.ownerComp.par.Envoyenable.eval():
+            self._log('Start ignored -- Envoy is disabled', 'DEBUG')
+            return
         if self.ownerComp.fetch('envoy_running', False) or self._starting:
             self._log('Server already running/starting (duplicate Start ignored)',
                       'DEBUG')
@@ -3094,6 +3150,7 @@ class EnvoyExt:
         self._runtime_port = port
 
         self._server_gen += 1
+        sys._envoy_server_gen = self._server_gen
         gen = self._server_gen
         self._last_start_time = time.time()
         self._starting = True  # H1: starting window open (suppresses duplicate Start)
@@ -3150,7 +3207,7 @@ class EnvoyExt:
         self.current_task = self.ThreadManager.TDTask(
             target=self._runServer,
             args=(port, self.request_queue, self.response_queue,
-                  self.shutdown_event, startup_event),
+                  self.shutdown_event, startup_event, gen),
             SuccessHook=guarded_success,
             ExceptHook=guarded_error,
             RefreshHook=self._onRefresh
@@ -3368,11 +3425,16 @@ class EnvoyExt:
             fromOP=self.ownerComp, delayMilliSeconds=4000)
 
     def _probeAlive(self) -> bool:
-        """Fast localhost connect to the runtime port. True iff a listener answers.
+        """Fast 127.0.0.1 connect to the runtime port. True iff a listener answers.
 
-        Connection refused / timeout -> dead. Localhost makes this effectively
-        instant (refused returns immediately), so it never stalls the main-thread
-        tick. Unknown port -> True, so we never restart on missing info.
+        Connection refused / timeout -> dead. A LIVE listener completes the
+        TCP handshake at kernel level in ~1ms regardless of app load, so the
+        0.25s timeout never false-negatives a healthy server. Do NOT assume a
+        DEAD port refuses instantly: on some Windows hosts a firewall/WFP
+        layer stealth-drops loopback SYNs to closed ports and the refusal
+        takes ~2s (issue #57 environment) -- the 0.25s timeout is what CAPS
+        the main-thread stall in that case, so keep it short. Unknown port
+        -> True, so we never restart on missing info.
         """
         import socket
         port = getattr(self, '_runtime_port', None)
@@ -3419,6 +3481,18 @@ class EnvoyExt:
         # clears the 2s window.
         if time.monotonic() - self._last_revive_time < 2.0:
             return  # already revived for this death event -- drop the duplicate
+        # Never shoot down a bind attempt still inside its startup window:
+        # this path clears _starting and signals the CURRENT worker's
+        # shutdown event, which kills a healthy just-started server when it
+        # races a live start (one arm of the 2026-07-15 restart storm).
+        # A genuinely stuck start is still handled: once _startup_deadline
+        # passes, _pollStartup routes it to the error path, and this revive
+        # proceeds on a later tick.
+        if self._starting and time.time() < getattr(self, '_startup_deadline', 0.0):
+            self._log(
+                'Watchdog: revive skipped -- a start is in flight within its '
+                'startup window', 'DEBUG')
+            return
         self._last_revive_time = time.monotonic()
         port = getattr(self, '_runtime_port', None)
         self._log(
@@ -3428,6 +3502,7 @@ class EnvoyExt:
         # pending poll/watchdog) are treated as stale -- a single clean restart,
         # not ours plus a _scheduleRestart racing each other.
         self._server_gen += 1
+        sys._envoy_server_gen = self._server_gen
         try:
             self.shutdown_event.set()  # nudge a stuck worker to exit + free the socket
         except Exception:
@@ -3475,15 +3550,24 @@ class EnvoyExt:
 
     @staticmethod
     def _runServer(port: int, request_queue: Queue, response_queue: Queue,
-                   shutdown_event: Event, startup_event: Optional[Event] = None):
+                   shutdown_event: Event, startup_event: Optional[Event] = None,
+                   gen: int = 0):
         """
         Target function for TDTask - runs MCP server in worker thread.
         IMPORTANT: No TouchDesigner calls allowed here! This is static.
+
+        Returns an exit-context dict consumed by _onServerSuccess (the
+        SuccessHook receives the target's return value). `preset_shutdown`
+        is the restart-storm smoking gun: True means some kicker signaled
+        this worker's shutdown event BEFORE it even started serving -- the
+        dead-on-arrival signature of the 2026-07-15 loop.
         """
         def add_to_refresh(data):
             """Add data to the request queue (polled by RefreshHook on main thread)"""
             request_queue.put(data)
 
+        preset = shutdown_event.is_set()
+        t0 = time.monotonic()
         try:
             server = EnvoyMCPServer(
                 request_queue=None,  # Not used, we use InfoQueue
@@ -3492,8 +3576,25 @@ class EnvoyExt:
                 port=port,
                 shutdown_event=shutdown_event,
                 startup_event=startup_event,
+                gen=gen,
             )
             server.run()
+            ctx = {
+                'preset_shutdown': preset,
+                'shutdown_set': shutdown_event.is_set(),
+                'bound': bool(startup_event is not None
+                              and startup_event.is_set()),
+                'lifetime_s': round(time.monotonic() - t0, 3),
+                'gen': gen,
+            }
+            # Hand the exit context to _onServerSuccess via sys: the Thread
+            # Manager's SuccessHook does NOT deliver the target's return
+            # value (verified empirically 2026-07-16 -- the hook fires with
+            # no args). sys attrs are the established cross-thread channel
+            # here (same pattern as sys._envoy_uvi_server). Plain-data write
+            # from the worker; read + cleared on the main thread.
+            sys._envoy_exit_context = ctx
+            return ctx
         except OSError as e:
             if e.errno == 48 or 'address already in use' in str(e).lower():
                 raise RuntimeError(
@@ -3942,7 +4043,33 @@ class EnvoyExt:
 
     def _onServerSuccess(self, returnValue=None):
         """SuccessHook - Called when the thread task completes successfully"""
-        self._log('Server thread exited')
+        detail = ''
+        if not isinstance(returnValue, dict):
+            # ThreadManager's SuccessHook fires without the target's return
+            # value; the worker stashes its exit context on sys instead.
+            returnValue = getattr(sys, '_envoy_exit_context', None)
+            sys._envoy_exit_context = None
+        if isinstance(returnValue, dict):
+            detail = (f" (gen {returnValue.get('gen')}, "
+                      f"lifetime {returnValue.get('lifetime_s')}s, "
+                      f"bound: {returnValue.get('bound')})")
+            if returnValue.get('gen') != self._server_gen:
+                # A stale worker's late stash (or an unclaimed slot from a
+                # gen-staled exit) -- annotate rather than misattribute, and
+                # never raise the storm warning for it.
+                detail += ' [stale exit context]'
+            elif returnValue.get('preset_shutdown'):
+                # The worker found its own shutdown event ALREADY SET before
+                # serving a single request: a stale kicker (queued restart,
+                # revive, force-close) signaled the newborn. This is the
+                # dead-on-arrival signature of the 2026-07-15 restart storm
+                # -- surface it loudly instead of looping silently.
+                self._log(
+                    'Server worker was dead-on-arrival: its shutdown event '
+                    'was set before startup. A stale restart/revive/force-'
+                    'close signaled the new server (restart-storm signature).',
+                    'WARNING')
+        self._log(f'Server thread exited{detail}')
         self.ownerComp.store('envoy_running', False)
         self.current_task = None
         self._starting = False
@@ -3993,8 +4120,24 @@ class EnvoyExt:
             f'{delay:.0f}s, ~{remaining} min left in retry window): {reason}', 'WARNING')
         self.ownerComp.par.Envoystatus = (
             f'Restarting (attempt {self._restart_count}, ~{remaining} min left)...')
-        run(f"op('{self.ownerComp.path}').ext.Envoy.Start()",
+        # Generation-stamped landing point instead of a bare Start(): every
+        # death queues a restart, so a long storm stacks HUNDREDS of pending
+        # run() calls that all eventually fire (observed: 475 on 2026-07-15,
+        # still spawning ~2s apart while 'retry in 60s' was logged). Each
+        # fire re-checks the generation; any start/revive that happened in
+        # the meantime supersedes it into a no-op.
+        run(f"op('{self.ownerComp.path}').ext.Envoy._restartFire({self._server_gen})",
             fromOP=self.ownerComp, delayMilliSeconds=int(delay * 1000))
+
+    def _restartFire(self, expected_gen: int) -> None:
+        """Deferred landing point for _scheduleRestart's queued restart.
+
+        No-ops when superseded: a newer Start()/revive bumped the generation,
+        or the server is already up/starting (Start()'s own guards cover the
+        rest, including the Envoyenable master switch)."""
+        if expected_gen != self._server_gen:
+            return  # superseded by a newer start/revive -- stale queued restart
+        self.Start()
 
     # === Operation Routing ===
 
@@ -5207,6 +5350,10 @@ class EnvoyExt:
     def _worktreePermissionRules(self, root=None):
         """Allow rules pre-authorizing sibling '<repo>-wt-*' worktrees -- see envoy_setup."""
         return mod.envoy_setup.worktree_permission_rules(self, root)
+
+    def _mirrorAiConfigToWorktrees(self, root):
+        """Copy gitignored AI config into sibling '<repo>-wt-*' worktrees -- see envoy_setup."""
+        return mod.envoy_setup.mirror_ai_config_to_worktrees(self, root)
 
     def _composeSettings(self, cfg, posture, root=None):
         """Apply a tool-permissions posture onto a settings dict in place -- see envoy_setup."""
