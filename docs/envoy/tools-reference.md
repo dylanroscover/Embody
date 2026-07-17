@@ -12,7 +12,7 @@ Responses are compact by default; opt-in flags such as `include_defaults` and `d
 |------|-----------|-------------|
 | `create_op` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`) |
 | `create_extension` | `parent_path`, `class_name`, `name?`, `code?`, `promote?`, `ext_name?`, `ext_index?`, `existing_comp?` | Create a TD extension: baseCOMP + text DAT + extension wiring, initialized and ready to use |
-| `delete_op` | `op_path`, `override?` | Delete an operator. Refused while another live session claims the scope or wrote it in the last minute; `override=True` bypasses |
+| `delete_op` | `op_path`, `override?` | Delete an operator. Also purges its externalization tracking (any strategy) and the externalized file — unless the file is clone-owned or still referenced by another operator. Refused while another live session claims the scope or wrote it in the last minute; `override=True` bypasses |
 | `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location |
 | `rename_op` | `op_path`, `new_name` | Rename an operator |
 | `get_op` | `op_path`, `include_defaults?` | Get operator info. Parameters are NON-DEFAULT only by default; pass `include_defaults=True` for all parameters. Parameter-heavy COMPs are expensive in full detail, so prefer `read_tdn` for structure reads |
@@ -167,7 +167,7 @@ These tools run locally on the STDIO bridge script, not inside TouchDesigner. Th
 |------|-----------|-------------|
 | `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness, restart attempts remaining |
 | `launch_td` | `timeout?`, `project_path?` | Launch TD with the project's `.toe` file. Waits for Envoy to become reachable (default: 120s). Pass `project_path` (absolute, or relative to the git root) to open a different `.toe` |
-| `restart_td` | `timeout?`, `project_path?` | Gracefully quit TD and relaunch. Waits for exit before relaunching (default: 120s). Pass `project_path` to relaunch with a different `.toe` |
+| `restart_td` | `timeout?`, `project_path?` | Gracefully quit TD and relaunch. Waits for exit before relaunching (default: 120s). Pass `project_path` to relaunch with a different `.toe`. Targets only the active instance's verified process — other running TouchDesigner instances are never touched |
 | `switch_instance` | `instance?` | List all registered TD instances (omit `instance`) or switch to a different running instance. See [Multiple Instances](architecture.md#multiple-instances) |
 
 !!! info "Bridge architecture"

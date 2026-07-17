@@ -41,7 +41,7 @@ As soon as Embody finishes initializing, its [setup wizard](embody/setup-wizard.
 That single confirmation does everything for you:
 
 - Installs the MCP server's Python dependencies (~30 MB, in the background — TouchDesigner stays responsive)
-- Starts a local server on `localhost:9870`
+- Starts a local server on `127.0.0.1:9870`
 - Writes the AI config files into your project root — `CLAUDE.md`, `AGENTS.md`, `.mcp.json`, and a `.claude/` folder of rules and skills — so your assistant knows how to talk to TouchDesigner
 
 Clicked **Not now**, or want to change a choice later? Pulse the **Setup Wizard** parameter on the Embody component to re-run it anytime, or toggle **Envoy Enable** directly.
