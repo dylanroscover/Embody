@@ -42,23 +42,9 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 ## Quick Start
 
-**Requirements:** TouchDesigner **2025.32820 or later** (Windows / macOS). No Python setup needed — Envoy installs its own dependencies on first enable.
+**Requirements:** TouchDesigner **2025.32820 or later** (Windows / macOS). No Python setup needed — Envoy installs its own dependencies on first enable. No special folder structure either: Embody works in any project folder, and if you happen to use git, every change is also a clean diff for free.
 
-### 1. Project Setup
-
-Embody writes externalized files relative to your `.toe` location — no special folder structure required. Embody works in any project folder; if you happen to use git, every change is also a clean diff for free.
-
-```
-my-project/              ← project folder (optionally a git repo)
-├── my-project.toe       ← your TouchDesigner project
-├── base1/               ← externalized operators
-│   ├── base2.tox        ← COMP (TOX strategy)
-│   ├── base3.tdn        ← COMP (TDN strategy — diffable YAML)
-│   └── text1.py         ← DAT
-└── ...
-```
-
-### 2. Install and Tag
+### 1. Install and Tag
 
 1. **Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project. The **[Setup Wizard](https://dylanroscover.github.io/Embody/embody/setup-wizard/)** opens and walks you through the choices that matter — how much autonomy Embody gets, whether to enable the AI assistant (Envoy) and for which tool, permissions, and where config files live. Nothing changes until the final click, and you can re-run it anytime via the **Setup Wizard** pulse on the Embody COMP
 2. **Tag operators** — hover any COMP or DAT and press `lctrl` twice to open the tagger (pick a strategy for a COMP, a file format for a DAT)
@@ -66,7 +52,7 @@ my-project/              ← project folder (optionally a git repo)
 
 > **Tip:** If no operators are tagged, Embody will externalize all eligible COMPs and DATs, which may slow down complex projects. Tagging selectively is recommended.
 
-### 3. Keyboard Shortcuts
+### 2. Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -140,6 +126,23 @@ This is the substrate. Every other capability — AI-driven building, version co
 See the [full TDN specification](https://dylanroscover.github.io/Embody/tdn/specification/) for format details, import process, and round-trip guarantees.
 
 ---
+
+<details>
+<summary><strong>Where externalized files go</strong></summary>
+
+Embody writes externalized files relative to your `.toe` location, mirroring your network hierarchy — no special folder structure required:
+
+```
+my-project/              ← project folder (optionally a git repo)
+├── my-project.toe       ← your TouchDesigner project
+├── base1/               ← externalized operators
+│   ├── base2.tox        ← COMP (TOX strategy)
+│   ├── base3.tdn        ← COMP (TDN strategy — diffable YAML)
+│   └── text1.py         ← DAT
+└── ...
+```
+
+</details>
 
 <details>
 <summary><strong>Logging</strong></summary>
