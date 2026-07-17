@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.129
+
+Envoy watchdog false-revive fix plus MCP test-runner status hardening (issue #60 follow-up).
+
+- **Watchdog no longer revives a healthy cold start**: the liveness watchdog treated `Preparing Python environment...` (the fast-path import gate warming the MCP Python stack on a worker thread) as a settled state, probed the not-yet-bound socket, and force-revived the in-flight startup ~8s in -- observed 7 seconds after launch on a cold open. The status is now classified as transitional, so a slow first import gets the same ~24s stuck-grace as `Starting...`/`Restarting...`/`Reviving...`, and a genuinely orphaned import gate (extension reinit mid-warmup) still self-heals via the grace-path restart.
+- **Overlapping `run_tests` calls are refused**: a second MCP `run_tests` while one was active captured `Testing` as the "prior" Embody Status and restored that lie after the run (Status stuck at `Testing` forever), while overwriting the first caller's completion handle (30s transport timeout). The tool now refuses overlapping runs cleanly, keeps the prior Status in COMP storage so it survives an extension reinit mid-run, never captures the literal `Testing`, and the completion poll restores Status even when the pending handle was lost.
+- **`test_smoke_release.test_status_enabled` fixed**: it read the live Status par, which the MCP runner holds at `Testing` for the entire run -- a deterministic failure on every MCP-invoked run (misread as a revive race during the v6.0.128 release run). It now asserts against the saved prior status; a genuinely stuck `Testing` still fails loud. Watchdog suite +5 tests: `Preparing` transitional classification, stuck-gate grace restart, and the storage-backed status-restore contract.
+
 ## v6.0.128
 
 Issue #60 (default-startup-file freezes, timeline fighting, prompt nagging): five root-cause fixes across the catalog scan, the dropped-.tox sweep, settings persistence, and the Envoy venv probe -- plus a new shipped `worktree-td-safety` rule.

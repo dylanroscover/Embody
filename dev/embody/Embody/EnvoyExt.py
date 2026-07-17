@@ -3308,7 +3308,17 @@ class EnvoyExt:
             # long, never interrupt). An explicit Start 'Error' is also left alone
             # so a hard failure (e.g. broken venv) is not hammered every tick.
             installing = status.startswith('Installing')
-            transitional = status.startswith(('Starting', 'Restarting', 'Reviving'))
+            # 'Preparing' is the fast-path import gate warming the MCP Python
+            # stack on a worker thread -- a HEALTHY in-flight startup with no
+            # socket bound yet. Classifying it as settled probed dead and
+            # revived a cold first open ~8s in (issue #60 follow-up: revive
+            # 7s after launch while the gate was still importing).
+            # Transitional gives it the same ~24s stuck-grace as the other
+            # startup states, so a slow import is left alone and an orphaned
+            # gate (reinit mid-warmup, whose stale-instance poll exits
+            # without finishing the start) still self-heals below.
+            transitional = status.startswith(
+                ('Starting', 'Restarting', 'Reviving', 'Preparing'))
             if not enabled or installing or status.startswith('Error'):
                 self._deadTicks = 0
                 self._startingTicks = 0
@@ -4432,12 +4442,28 @@ class EnvoyExt:
         if not test_comp.extensionsReady:
             self._signalTestError(pending, 'Test framework extension not ready')
             return None
+        runner = getattr(test_comp.ext, 'TestRunnerExt', None)
+        if runner is not None and getattr(runner, '_running', False):
+            # Overlapping run_tests calls clobbered the saved Status
+            # ('Testing' captured as the "prior" value and restored after the
+            # run -> Status stuck at 'Testing' forever) and overwrote
+            # sys._envoy_pending_test, leaving the first caller's worker
+            # blocked until the transport timeout. Refuse the second run.
+            self._signalTestError(pending, 'A test run is already in progress')
+            return None
         try:
             # Suppress Embody's Update/Refresh cycle during tests to
             # prevent extension reinit from TDN re-exports triggered by
             # test-created operators making COMPs structurally dirty.
+            # The prior Status is kept in COMP storage, not an instance
+            # attribute: an extension reinit mid-run wipes the attribute and
+            # left Status stuck at 'Testing'. Never capture the literal
+            # 'Testing' (an interrupted run's leftover) -- the value already
+            # in storage is the true prior.
             embody = op.Embody
-            self._test_saved_status = embody.par.Status.eval()
+            prior = embody.par.Status.eval()
+            if prior != 'Testing':
+                embody.store('_test_saved_status', prior)
             embody.par.Status = 'Testing'
             test_comp.RunTestsDeferredPerTest(
                 suite_name=suite_name, test_name=test_name)
@@ -4449,11 +4475,20 @@ class EnvoyExt:
             return None
 
     def _restoreStatusAfterTests(self):
-        """Re-enable Embody's Update cycle after tests complete."""
-        saved = getattr(self, '_test_saved_status', None)
+        """Re-enable Embody's Update cycle after tests complete.
+
+        Storage-backed and idempotent: safe to call from any poll chain,
+        including one whose pending handle was lost or cancelled.
+        """
+        embody = op.Embody
+        saved = embody.fetch('_test_saved_status', None, search=False)
+        if saved is None:
+            # Legacy fallback: a pre-hardening save lived on the instance.
+            saved = getattr(self, '_test_saved_status', None)
         if saved is not None:
-            op.Embody.par.Status = saved
-            self._test_saved_status = None
+            embody.par.Status = saved
+        self._test_saved_status = None
+        embody.unstore('_test_saved_status')
 
     def _signalTestError(self, pending, message):
         """Signal an error to the waiting worker thread via the test Event."""
@@ -4469,16 +4504,20 @@ class EnvoyExt:
 
     def _pollTestCompletion(self):
         """Check if deferred test run has finished; signal worker thread if so."""
-        pending = getattr(sys, '_envoy_pending_test', None)
-        if pending is None:
-            return  # Already handled or cancelled
         test_comp = op.unit_tests
         if not test_comp or not test_comp.extensionsReady:
             self._schedulePollTestCompletion()
             return
         runner = getattr(test_comp.ext, 'TestRunnerExt', None)
         if runner and not runner._running:
+            # Restore Status BEFORE the pending check: a lost or cancelled
+            # sys._envoy_pending_test (e.g. a refused overlapping run cleared
+            # it) must not leave Status stuck at 'Testing'. The restore is
+            # storage-backed and idempotent, so a duplicate chain is safe.
             self._restoreStatusAfterTests()
+            pending = getattr(sys, '_envoy_pending_test', None)
+            if pending is None:
+                return  # Caller already handled/cancelled; Status restored.
             result = runner._getSummary()
             # Token-lean: drop the per-test PASS objects (the full suite is
             # ~1400 of them) -- keep the counts and only the failures/errors.
@@ -5165,13 +5204,17 @@ class EnvoyExt:
         """The NON-Envoy baseline settings dict -- see envoy_setup."""
         return mod.envoy_setup.load_settings_baseline(self)
 
-    def _composeSettings(self, cfg, posture):
-        """Apply a tool-permissions posture onto a settings dict in place -- see envoy_setup."""
-        return mod.envoy_setup.compose_settings(self, cfg, posture)
+    def _worktreePermissionRules(self, root=None):
+        """Allow rules pre-authorizing sibling '<repo>-wt-*' worktrees -- see envoy_setup."""
+        return mod.envoy_setup.worktree_permission_rules(self, root)
 
-    def _settingsSatisfies(self, cfg, posture):
+    def _composeSettings(self, cfg, posture, root=None):
+        """Apply a tool-permissions posture onto a settings dict in place -- see envoy_setup."""
+        return mod.envoy_setup.compose_settings(self, cfg, posture, root)
+
+    def _settingsSatisfies(self, cfg, posture, root=None):
         """True if an existing settings dict already matches `posture` -- see envoy_setup."""
-        return mod.envoy_setup.settings_satisfies(self, cfg, posture)
+        return mod.envoy_setup.settings_satisfies(self, cfg, posture, root)
 
     def _deploySettingsLocal(self, claude_dir):
         """Write .claude/settings.local.json to match the Toolpermissions posture -- see envoy_setup."""
