@@ -101,7 +101,7 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/unit_tests/test_sandbox/sandbox_test_custom_parameters2	base	tdn	embody/unit_tests/test_sandbox/sandbox_test_custom_parameters2.tdn	2026-06-20 20:36:03 UTC		1	099.2025.32820	0	0	0.3000,0.5000,0.9000
 /embody/unit_tests/test_sandbox/sandbox_test_custom_parameters1	base	tdn	embody/unit_tests/test_sandbox/sandbox_test_custom_parameters1.tdn	2026-06-20 20:36:03 UTC		1	099.2025.32820	0	0	0.3000,0.5000,0.9000
 /embody/unit_tests/test_sandbox/sandbox_test_custom_parameters	base	tdn	embody/unit_tests/test_sandbox/sandbox_test_custom_parameters.tdn	2026-06-20 20:36:03 UTC		1	099.2025.32820	0	0	0.3000,0.5000,0.9000
-/embody/unit_tests/test_sandbox	base	tdn	embody/unit_tests/test_sandbox.tdn	2026-07-14 20:02:19 UTC		686	099.2025.32820	400	0	0.3000,0.5000,0.9000
+/embody/unit_tests/test_sandbox	base	tdn	embody/unit_tests/test_sandbox.tdn	2026-07-17 01:50:01 UTC		710	099.2025.32820	400	0	0.3000,0.5000,0.9000
 /embody/unit_tests/test_rename_move_lifecycle	text	py	embody/unit_tests/test_rename_move_lifecycle.py	2026-06-20 20:36:03 UTC				200	-600	0.9000,0.3000,0.4000
 /embody/unit_tests/test_path_utils	text	py	embody/unit_tests/test_path_utils.py	2026-06-20 20:36:03 UTC				200	-800	0.9000,0.3000,0.4000
 /embody/unit_tests/test_param_tracker	text	py	embody/unit_tests/test_param_tracker.py	2026-06-20 20:36:03 UTC				400	-800	0.9000,0.3000,0.4000
@@ -209,7 +209,7 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/Embody/templates/text_envoy_bridge	text	py	embody/Embody/templates/text_envoy_bridge.py	2026-06-20 20:36:05 UTC				900	1200	0.9000,0.3000,0.4000
 /embody/Embody/templates/text_claude	text	md	embody/Embody/templates/text_claude.md	2026-06-20 20:36:05 UTC				0	1200	0.9000,0.3000,0.4000
 /embody/Embody/templates/text_agents_md	text	md	embody/Embody/templates/text_agents_md.md	2026-06-20 20:36:05 UTC				300	1200	0.9000,0.3000,0.4000
-/embody/Embody/templates	base	tdn	embody/Embody/templates.tdn	2026-07-10 16:24:56 UTC		21	099.2025.32820	-400	-1200	0.3000,0.5000,0.9000
+/embody/Embody/templates	base	tdn	embody/Embody/templates.tdn	2026-07-17 01:34:36 UTC		22	099.2025.32820	-400	-1200	0.3000,0.5000,0.9000
 /embody/Embody/tagger/replicator1_callbacks	text	py	embody/Embody/tagger/replicator1_callbacks.py	2026-06-20 20:36:05 UTC				-225	-160	0.9000,0.3000,0.4000
 /embody/Embody/tagger/replicator1	replicator	tdn	embody/Embody/tagger/replicator1.tdn	2026-06-20 20:36:05 UTC		1	099.2025.32820	-225	0	0.3000,0.5000,0.9000
 /embody/Embody/tagger/header/text1_callbacks	text	py	embody/Embody/tagger/header/text1_callbacks.py	2026-06-20 20:36:05 UTC				-200	-160	0.9000,0.3000,0.4000
@@ -238,17 +238,17 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/Embody/Collection/CollectionExt	text	py	embody/Embody/Collection/CollectionExt.py	2026-06-20 20:36:05 UTC				200	0	0.9000,0.3000,0.4000
 /embody/Embody/Collection	base	tdn	embody/Embody/Collection.tdn	2026-06-20 20:36:05 UTC		1	099.2025.32820	200	-550	0.3000,0.5000,0.9000
 /embody/Embody/CatalogManagerExt	text	py	embody/Embody/CatalogManagerExt.py	2026-06-20 20:36:05 UTC				-300	300	0.9000,0.3000,0.4000
-/embody/Embody	container	tdn	embody/Embody.tdn	2026-07-14 20:02:20 UTC		784	099.2025.32820	0	0	0.3000,0.5000,0.9000
-/embody	container	tdn	embody.tdn	2026-07-14 20:02:21 UTC		580	099.2025.32820	100	50	0.3000,0.5000,0.9000
+/embody/Embody	container	tdn	embody/Embody.tdn	2026-07-17 01:50:01 UTC		796	099.2025.32820	0	0	0.3000,0.5000,0.9000
+/embody	container	tdn	embody.tdn	2026-07-17 01:50:02 UTC		598	099.2025.32820	100	50	0.3000,0.5000,0.9000
 /embody/unit_tests/test_tdn_diff_engine	text	py	embody/unit_tests/test_tdn_diff_engine.py	2026-06-22 21:36:58 UTC				200	-3200	0.9000,0.3000,0.4000
 /embody/unit_tests/test_tdn_diff	text	py	embody/unit_tests/test_tdn_diff.py	2026-06-22 21:37:00 UTC				0	-3200	0.9000,0.3000,0.4000
 /embody/unit_tests/test_git_status	text	py	embody/unit_tests/test_git_status.py	2026-06-22 23:29:58 UTC				400	-3200	0.9000,0.3000,0.4000
 /marketing_lab/bg_plasma/glsl_plasma_pixel	text	glsl	marketing_lab/bg_plasma/glsl_plasma_pixel.glsl	2026-06-29 20:52:02 UTC				400	-150	0.9000,0.3000,0.4000
 /marketing_lab/bg_plasma/glsl_plasma_compute	text	glsl	marketing_lab/bg_plasma/glsl_plasma_compute.glsl	2026-06-29 20:52:02 UTC				250	-150	0.9000,0.3000,0.4000
-/marketing_lab/bg_plasma	base	tdn	marketing_lab/bg_plasma.tdn	2026-07-01 21:05:52 UTC		1	099.2025.32820	400	-800	0.3000,0.5000,0.9000
+/marketing_lab/bg_plasma	base	tdn	marketing_lab/bg_plasma.tdn	2026-07-17 01:50:02 UTC		1	099.2025.32820	400	-800	0.3000,0.5000,0.9000
 /marketing_lab/bg_claude_inside/glsl_mandelbulb_pixel	text	glsl	marketing_lab/bg_claude_inside/glsl_mandelbulb_pixel.glsl	2026-06-29 20:52:02 UTC				550	-120	0.9000,0.3000,0.4000
 /marketing_lab/bg_claude_inside/glsl_mandelbulb_compute	text	glsl	marketing_lab/bg_claude_inside/glsl_mandelbulb_compute.glsl	2026-06-29 20:52:02 UTC				250	-120	0.9000,0.3000,0.4000
-/marketing_lab/bg_claude_inside	base	tdn	marketing_lab/bg_claude_inside.tdn	2026-07-01 21:05:52 UTC		1	099.2025.32820	0	-800	0.3000,0.5000,0.9000
+/marketing_lab/bg_claude_inside	base	tdn	marketing_lab/bg_claude_inside.tdn	2026-07-17 01:50:02 UTC		1	099.2025.32820	0	-800	0.3000,0.5000,0.9000
 /embody/unit_tests/test_launch_aiclient	text	py	embody/unit_tests/test_launch_aiclient.py	2026-07-01 00:52:51 UTC				0	-3400	0.9000,0.3000,0.4000
 /embody/unit_tests/test_auto_externalize	text	py	embody/unit_tests/test_auto_externalize.py	2026-07-03 12:01:29 UTC				0	-3600	0.9000,0.3000,0.4000
 /embody/unit_tests/test_envoy_sessions	text	py	embody/unit_tests/test_envoy_sessions.py	2026-07-03 14:48:55 UTC				600	-2600	0.9000,0.3000,0.4000
@@ -271,3 +271,4 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/Embody/embody_admin	text	py	embody/Embody/embody_admin.py	2026-07-06 09:32:19 UTC				-700	400	0.9000,0.3000,0.4000
 /embody/Embody/shortcuts	text	py	embody/Embody/shortcuts.py	2026-07-13 01:33:36 UTC				-500	-375	0.9000,0.3000,0.4000
 /embody/unit_tests/test_shortcuts	text	py	embody/unit_tests/test_shortcuts.py	2026-07-13 01:49:19 UTC				200	-3600	0.9000,0.3000,0.4000
+/embody/Embody/templates/text_rule_worktree_td_safety	text	md	embody/Embody/templates/text_rule_worktree_td_safety.md	2026-07-17 01:34:34 UTC				3200	400	0.9000,0.3000,0.4000

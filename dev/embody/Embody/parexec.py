@@ -149,7 +149,12 @@ def onValueChange(par, prev):
 					parent.Embody.Log(f'Shortcut warning ({par.label}): {w}', 'WARNING')
 
 	if par.name in parent.Embody.ext.Embody._PERSISTED_PARAMS:
-		parent.Embody.ext.Embody._deferSaveSettings()
+		# Skip persistence while the test runner is flipping params for a
+		# run (it suppresses Toxdropexpr/Filecleanup and restores them
+		# after) -- a TD kill mid-run must not bake a suppressed value
+		# into config.json and silently convert the user's preference.
+		if not parent.Embody.ext.Embody._testRunnerActive():
+			parent.Embody.ext.Embody._deferSaveSettings()
 
 	return
 

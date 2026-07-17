@@ -41,6 +41,7 @@ class EmbodyExt:
         'text_rule_performance':             'performance',
         'text_rule_td_connectivity':         'td-connectivity',
         'text_rule_multi_session':           'multi-session',
+        'text_rule_worktree_td_safety':      'worktree-td-safety',
     }
 
     # Skill DAT name -> slug (Claude Code only)
@@ -80,6 +81,11 @@ class EmbodyExt:
         'Logfolder', 'Logtofile', 'Verbose', 'Print',
         'Detectduplicatepaths', 'Templatemaster', 'Localtimestamps',
         'Embodymode', 'Autoexternalize',
+        # Dropped-.tox expression handling: an "Always Clean/Ignore" answer
+        # must survive into the next session -- especially untitled projects
+        # spawned from a default startup file, which re-load baked .toe
+        # defaults every time and re-prompted forever (issue #60).
+        'Toxdropexpr',
         # TDN
         'Tdnmode',
         'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
@@ -195,6 +201,13 @@ class EmbodyExt:
         self._last_checkpoint_activity = 0.0   # time.monotonic()
         self._autosave_gen = 0
         self._autosave_armed = False
+
+        # COMP paths the user answered plain-Ignore for in the dropped-.tox
+        # dialog this session -- subsequent sweeps skip them instead of
+        # re-prompting (issue #60). Session-scoped by design: resets on
+        # extension reinit / project reload. 'Always Ignore' persists via
+        # the Toxdropexpr parameter instead.
+        self._toxdrop_ignored_session = set()
 
         # Logging configuration
         self.header = 'Embody >'
@@ -2108,11 +2121,25 @@ class EmbodyExt:
                 # too short, causing EADDRINUSE -> auto-restart exhaustion ->
                 # Envoyenable stuck.  60 frames (~1s) is a safer window.
                 run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=60)
+        elif settings_restored:
+            # Returning user in this project ROOT, but no table data yet --
+            # e.g. an untitled project spawned from a default startup file,
+            # or a fresh drop into a folder Embody was configured in before.
+            # The persisted config.json already records the user's Envoy
+            # decision; honor it instead of re-asking on every new project
+            # (issue #60: the opt-in modal re-queued per project forever).
+            if self.my.par.Envoyenable.eval():
+                run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=60)
         else:
-            # Fresh install (empty table). Always prompt -- even if a leftover
-            # config.json from a previous install in the same folder was
-            # restored, the user must explicitly opt in for this new project.
-            # Reset Envoyenable so the prompt is the gate, not old settings.
+            # Genuinely fresh install: empty table AND no config.json found
+            # anywhere (canonical root, alternate roots, ancestor walk-up).
+            # Prompt for explicit opt-in. NOTE the contract change for
+            # issue #60: when a config.json IS found (settings_restored),
+            # the elif above now honors its persisted Envoy decision
+            # without re-prompting -- previously every empty-table project
+            # re-prompted even with restored settings, which nagged users
+            # on every untitled project spawned from a default startup
+            # file. Reset Envoyenable so the prompt is the gate here.
             # Never queue (or flip Envoy off) while dialogs are suppressed --
             # a test run OR a project save in progress (_suppressDialogs). One of
             # three display-time gates (here, _promptEnvoy, _messageBox) that
@@ -4244,6 +4271,12 @@ class EmbodyExt:
         always cleaned silently -- that expression there is never intentional.
         User COMPs are routed to _resolveToxdropExternals, which applies the
         ``Toxdropexpr`` preference (clean / ignore / ask).
+
+        COMPs opted out of Embody via the exclude tag (on themselves OR any
+        ancestor -- the tag marks a whole app-managed subtree) are left
+        alone entirely: not listed, not prompted about, not cleaned (issue
+        #60: users tag their startup-file COMPs tdn_exclude precisely so
+        Embody never touches them).
         """
         comps_with_filefolder = self.root.findChildren(
             type=COMP,
@@ -4257,10 +4290,13 @@ class EmbodyExt:
             return
 
         embody_path = self.my.path
+        exclude_tag = self.my.par.Tdnexcludetag.eval()
         internal, external = [], []
         for comp in comps_with_filefolder:
             if comp.path == embody_path or comp.path.startswith(embody_path + '/'):
                 internal.append(comp)
+            elif self._hasExcludeTagInAncestry(comp, exclude_tag):
+                continue
             else:
                 external.append(comp)
 
@@ -4269,6 +4305,30 @@ class EmbodyExt:
             self._resetToxdropExpr(comp)
 
         self._resolveToxdropExternals(external)
+
+    def _hasExcludeTagInAncestry(self, comp, exclude_tag=None) -> bool:
+        """True if comp or any ancestor COMP carries the TDN exclude tag.
+
+        Broader than TDNExt._hasExcludeTag (which checks only the op's own
+        tags, per the TDN direct-child-of-boundary contract): sweeps like
+        the dropped-.tox check must honor the tag for the WHOLE tagged
+        subtree, since users tag a root COMP intending "Embody, leave all
+        of this alone".
+
+        exclude_tag: pass the pre-evaluated tag when calling in a loop
+        (e.g. the dropped-.tox sweep) to avoid re-evaluating the parameter
+        per COMP.
+        """
+        if exclude_tag is None:
+            exclude_tag = self.my.par.Tdnexcludetag.eval()
+        if not exclude_tag:
+            return False
+        o = comp
+        while o is not None and o.path != '/':
+            if o.isCOMP and o.type != 'annotate' and exclude_tag in o.tags:
+                return True
+            o = o.parent()
+        return False
 
     def _resolveToxdropExternals(self, external) -> None:
         """Apply the Toxdropexpr preference to a list of user COMPs carrying
@@ -4281,7 +4341,11 @@ class EmbodyExt:
                           a 4-button dialog: Clean / Ignore / Always Clean /
                           Always Ignore. The two "Always" buttons persist the
                           choice into ``Toxdropexpr`` so the user is not
-                          re-prompted.
+                          re-prompted. A plain Ignore is remembered for the
+                          session (``_toxdrop_ignored_session``) so subsequent
+                          sweeps don't re-ask about the same COMPs (issue #60);
+                          a dismissed/suppressed dialog (-1) is NOT remembered
+                          and re-offers on the next pass.
 
         Operates ONLY on the COMPs passed in -- never re-scans the project --
         so callers (and tests) control the blast radius.
@@ -4302,6 +4366,16 @@ class EmbodyExt:
         # preference == 'ask' -- prompt. _messageBox self-suppresses during
         # saves and test runs (returning -1), so no modal escapes; when
         # suppressed we do nothing and the sweep re-offers on the next pass.
+        # COMPs the user already answered plain-Ignore for THIS SESSION are
+        # dropped up front: every Refresh sweep re-runs this check, and
+        # re-asking about the same COMPs each sweep is the issue #60
+        # nagging loop. A new drop (new path) still prompts; the set
+        # resets on extension reinit / project reload.
+        ignored = getattr(self, '_toxdrop_ignored_session', set())
+        external = [c for c in external if c.path not in ignored]
+        if not external:
+            return
+
         count = len(external)
         shown = external[:self._MAX_TOXDROP_LISTED]
         op_list = '\n'.join(f'  - {comp.path}' for comp in shown)
@@ -4324,6 +4398,13 @@ class EmbodyExt:
         if choice in (0, 2):
             for comp in external:
                 self._resetToxdropExpr(comp)
+        elif choice == 1:
+            # Plain Ignore: honor it for the rest of the session instead
+            # of re-prompting on every subsequent sweep (issue #60).
+            # 'Always Ignore' persists via Toxdropexpr; this is the
+            # lighter, session-scoped variant.
+            self._toxdrop_ignored_session = (
+                ignored | {c.path for c in external})
         if choice == 2 and par:
             self.my.par.Toxdropexpr = 'clean'
             self.Log('Dropped .tox expression handling set to Always Clean',
@@ -6625,12 +6706,18 @@ class EmbodyExt:
                 output_file='auto', embed_all=True)
 
     def _shouldSkipOp(self, oper, paths_to_exclude):
-        """Check if operator should be skipped in project externalization."""
+        """Check if operator should be skipped in project externalization.
+
+        The exclude tag is honored for the WHOLE tagged subtree (ancestry
+        walk, issue #60): ExternalizeProject iterates a flat findChildren,
+        so an own-tag-only check would still tag every untagged descendant
+        inside an excluded tree.
+        """
         return (
             oper.path in paths_to_exclude or
             self.isReplicant(oper) or
             self.isInsideClone(oper) or
-            self.my.ext.TDN._hasExcludeTag(oper) or
+            self._hasExcludeTagInAncestry(oper) or
             oper.path.startswith('/local/') or
             oper.path == '/local'
         )

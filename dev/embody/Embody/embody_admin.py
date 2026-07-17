@@ -635,6 +635,11 @@ def save_settings(ext) -> None:
             try:
                 tmp.write_text(content, encoding='utf-8')
                 os.replace(str(tmp), str(path))
+                # DEBUG breadcrumb: persistence in UNTITLED projects
+                # depends on where this resolves (issue #60) -- when an
+                # "Always" answer doesn't survive a relaunch, this line
+                # is the diagnostic.
+                ext.Log(f'Settings saved to {path}', 'DEBUG')
                 return
             except PermissionError:
                 if attempt < 2:

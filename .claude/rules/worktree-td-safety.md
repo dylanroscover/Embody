@@ -1,0 +1,55 @@
+# Worktrees and a Running TouchDesigner
+
+Embody externalizes operators to files in this repo, and TouchDesigner
+hot-syncs them: source DATs (`.py` and other text files) have
+`syncfile=True`, so TD reloads a DAT -- and reinits any extension it backs --
+the moment its file changes on disk. That makes multi-step editing in the
+live tree dangerous: one mid-edit broken state hot-reloads straight into the
+running session.
+
+## The rule
+
+Any multi-step implementation work on externalized files happens in an
+**isolated git worktree** (`git worktree add ../<repo>-wt-<task> HEAD`),
+never in the tree a running TD session is loading from.
+
+## The safe/unsafe windows
+
+1. **Editing in a worktree: TD may run freely.** A worktree is a separate
+   directory; TD reads its externalized files from the main tree only and
+   cannot see worktree files. Implementation and iteration there never
+   touch the live session.
+
+2. **Landing the diff into the main tree: TD should not be running.** Every
+   file save into the externalization folder hot-reloads that DAT and can
+   reinit extensions. A multi-file port into a running TD produces a
+   mid-port inconsistent state (one extension reloaded, its peers not yet)
+   and can kill the Envoy server mid-operation. Land the whole diff as ONE
+   operation with TD closed -- or, if TD genuinely must stay up, confirm
+   with the user first, land file-by-file accepting one reinit per file,
+   and never while the user is mid-session with unsaved work.
+
+3. **After landing: start TD and verify.** Launch TD, let Embody's startup
+   restore phases complete, then verify for real: `get_op_errors` with
+   `recurse=true` on affected COMPs, exercise the changed behavior, and run
+   the project's tests if it has them. Worktree verification is
+   static-only -- TD always loads the main tree, so nothing is truly
+   tested until after the landing.
+
+## Drift check before landing (both directions)
+
+A running TD WRITES to the main tree: every save re-exports externalized
+files. Before porting a worktree diff, run `git status` / `git diff` in the
+MAIN tree. If the main tree has uncommitted changes to files the diff also
+touches, STOP and reconcile (rebase the worktree changes on top, or save +
+commit in TD first) -- never overwrite main-tree edits blindly.
+
+## Exceptions and cleanup
+
+- **Single-shot small fixes** (one save = one reload) may edit the live
+  tree directly -- announced first if the user is actively working in TD.
+- **Never let two writers** (two agents, or an agent + a human saving from
+  TD) edit the same checkout concurrently.
+- `git worktree remove <path>` once the diff has landed and been verified.
+  Stale worktrees accumulate silently; remove them as part of finishing
+  the task, not "later".

@@ -70,11 +70,26 @@ class CatalogManagerExt:
 		self._palette_queue = []          # list of rel_path strings
 		self._palette_results = {}        # {name: placed_type}
 		self._palette_workspace = None
-		# Timeline / cook state snapshot, taken before the palette scan.
+		# Guard against double-starting a scan: EnsureCatalogs can be
+		# reached more than once while a chunked scan is still in flight
+		# (an op-type-only catalog on disk does not trip the TDNExt
+		# idempotency check). Set when a scan starts, cleared when the
+		# palette phase finalizes or bails.
+		self._scan_in_flight = False
+		# Palette results already checkpointed to disk (see
+		# _checkpointPaletteScan); lets an interrupted first launch
+		# resume instead of restarting from zero (issue #60).
+		self._palette_checkpointed = 0
+		# (op_catalog, done_results) staged by EnsureCatalogs for the
+		# deferred resume (fired by _resumePaletteScan at ~frame 70).
+		self._pending_resume = None
+		# Timeline / cook state snapshot, re-taken at the START of every
+		# palette chunk and restored right after that chunk's loadTox calls.
 		# Loading some palette .tox files runs their init code, which can
-		# mutate GLOBAL timeline state (pause playback, change cookRate).
-		# We restore the snapshot after every chunk so a misbehaving
-		# component can't leave the timeline paused.
+		# mutate GLOBAL timeline state (pause playback, change cookRate);
+		# the per-chunk bracket undoes that without ever fighting the USER:
+		# a pause/rate change made between chunks is captured by the next
+		# chunk's snapshot and honored, not reverted (issue #60).
 		self._time_snapshot = None
 
 	def onDestroyTD(self):
@@ -106,6 +121,11 @@ class CatalogManagerExt:
 		except Exception:
 			pass
 
+		# A chunked scan is already working through its queue - don't
+		# start a second one on top of it.
+		if self._scan_in_flight:
+			return
+
 		self._build_str = f'{app.version}.{app.build}'
 		catalog_path = self._getCatalogPath(self._build_str)
 
@@ -113,15 +133,56 @@ class CatalogManagerExt:
 			# Catalog exists - load it
 			catalog = self._readCatalog(catalog_path)
 			if catalog:
-				self._populateTDNExt(catalog)
-				self._log(f'Loaded catalog for build {self._build_str}')
-				# Still check for cross-build patches
-				self._patchCrossBuildDefaults(catalog)
+				# Key PRESENCE marks a completed palette phase - an empty
+				# dict is the legitimate final state when no palette dir
+				# exists; '_palette_partial' marks a mid-scan checkpoint.
+				complete = ('_palette' in catalog
+							and not catalog.get('_palette_partial'))
+				if complete:
+					self._populateTDNExt(catalog)
+					self._log(f'Loaded catalog for build {self._build_str}')
+					# Still check for cross-build patches
+					self._patchCrossBuildDefaults(catalog)
+					return
+				# Incomplete: the op-type half is cached, but the palette
+				# phase never started (missing key) or was interrupted
+				# (partial checkpoint). Resume it instead of returning
+				# with a permanently incomplete catalog (issue #60:
+				# killing a struggling TD mid-scan used to restart from
+				# zero). Populate the OP-TYPE half only -- pushing a
+				# partial palette into TDNExt would trip the idempotency
+				# guard above after a mid-resume extension reinit and
+				# wedge the resume until the next launch.
+				op_catalog = {k: v for k, v in catalog.items()
+							  if not k.startswith('_')}
+				done = catalog.get('_palette', {})
+				self._populateTDNExt(op_catalog)
+				self._patchCrossBuildDefaults(op_catalog)
+				self._scan_in_flight = True
+				self._pending_resume = (op_catalog, done)
+				self._log(
+					f'Palette catalog incomplete ({len(done)} entries '
+					f'cached) - resuming palette scan')
+				# Defer past the frame 30-90 restore phases (execute.py):
+				# stacking heavy palette loadTox calls on top of
+				# RestoreTOXComps / ReconstructTDNComps makes the first
+				# seconds of a resumed launch needlessly choppy.
+				run('args[0]._resumePaletteScan()', self, delayFrames=60)
 				return
 
 		# No catalog - start background scan
 		self._log(f'No catalog for build {self._build_str}, scanning...')
+		self._scan_in_flight = True
 		self._startBackgroundScan()
+
+	def _resumePaletteScan(self):
+		"""Fire a deferred palette-scan resume queued by EnsureCatalogs."""
+		pending = self._pending_resume
+		self._pending_resume = None
+		if not pending:
+			return
+		op_catalog, done = pending
+		self._ensurePalette(op_catalog, resume_results=done)
 
 	# =================================================================
 	# Background Scan
@@ -150,10 +211,38 @@ class CatalogManagerExt:
 		self._workspace.nodeX = -1200
 		self._workspace.nodeY = -1600
 
-		self.ownerComp.par.Status = f'Scanning defaults (0/{self._scan_total})'
+		self._setScanStatus(f'Scanning defaults (0/{self._scan_total})')
 		run('args[0]._processChunk()', self, delayFrames=1)
 
+	def _setScanStatus(self, text):
+		"""Write a scan Status value UNLESS Embody is Disabled.
+
+		EnsureCatalogs runs regardless of the Status par (it is gated only
+		on Tdnmode), but Update() gates on Status == 'Disabled' -- so a
+		scan writing 'Scanning...' / 'Enabled' over 'Disabled' would
+		silently re-enable a user's disabled Embody (panel finding).
+		"""
+		if self.ownerComp.par.Status != 'Disabled':
+			self.ownerComp.par.Status = text
+
 	def _processChunk(self):
+		"""Drive one op-type scan chunk; a fatal error must not wedge the scan.
+
+		Any exception escaping the chunk body kills the run() chain -- if
+		that happened with _scan_in_flight still True, EnsureCatalogs
+		could never retry this session (the old code could). Clear the
+		flag and log loudly instead. (A LOST run() callback -- no
+		exception -- still wedges until the next launch, where the
+		checkpoint resume recovers.)
+		"""
+		try:
+			self._processChunkInner()
+		except Exception as e:
+			self._log(f'Op-type scan aborted: {e}', 'ERROR')
+			self._cleanupWorkspace()
+			self._scan_in_flight = False
+
+	def _processChunkInner(self):
 		"""Process a batch of op types, then yield to main thread."""
 		if not self._scan_queue:
 			self._finalizeScan()
@@ -204,7 +293,7 @@ class CatalogManagerExt:
 				self._scan_errors.append(f'{cls_name}: {e}')
 
 		# Update status
-		self.ownerComp.par.Status = (
+		self._setScanStatus(
 			f'Scanning defaults ({self._scan_count}/{self._scan_total})')
 
 		# Finalize in-band when the last chunk finishes. Otherwise, under
@@ -237,35 +326,52 @@ class CatalogManagerExt:
 		# Run cross-build patch check (uses op-type catalog)
 		self._patchCrossBuildDefaults(self._scan_results)
 
-		# Try bootstrap palette_catalog tableDAT first - if it covers
-		# the current build, skip the palette scan entirely (saves 5-7s
-		# per TD build on fresh installs).
+		# Persist the op-type half NOW, before the palette phase begins.
+		# The palette scan takes seconds, and the combined write used to
+		# be the ONLY write - a TD closed/killed mid-palette-scan lost
+		# everything and restarted from zero on the next launch (issue
+		# #60). With this file on disk (no '_palette' key = palette phase
+		# incomplete), the next EnsureCatalogs resumes at the palette
+		# phase instead.
+		self._writeCatalog(self._getCatalogPath(self._build_str),
+						   dict(self._scan_results))
+
+		self._ensurePalette(self._scan_results)
+
+		# Clean up op-type scan state
+		self._scan_results = {}
+		self._scan_errors = []
+
+	def _ensurePalette(self, op_catalog, resume_results=None):
+		"""Fill the palette half of the catalog.
+
+		Adopts the shipped bootstrap palette_catalog table when it covers
+		the current build (skips the runtime scan entirely, saving 5-7s
+		per TD build on fresh installs); otherwise runs the runtime
+		palette scan, resuming past already-checkpointed results when
+		resume_results is given.
+		"""
 		bootstrap_palette = self._loadBootstrapPalette(self._build_str)
 		if bootstrap_palette:
 			self._log(
 				f'Palette bootstrap hit: {len(bootstrap_palette)} entries '
 				f'for build {self._build_str} (skipping scan)')
 			self._palette_results = bootstrap_palette
-			self._op_catalog_pending = self._scan_results
-			self._scan_results = {}
-			self._scan_errors = []
+			self._op_catalog_pending = op_catalog
 			self._finalizePaletteScan()
 			return
 
 		# Bootstrap miss - fall back to runtime palette scan.
-		self._startPaletteScan(self._scan_results)
-
-		# Clean up op-type scan state
-		self._scan_results = {}
-		self._scan_errors = []
+		self._startPaletteScan(op_catalog, resume_results=resume_results)
 
 	# =================================================================
 	# Palette Component Scan
 	# =================================================================
 
 	PALETTE_CHUNK_SIZE = 1  # .tox files per frame - some palette .tox are heavy
+	PALETTE_CHECKPOINT_EVERY = 25  # partial-catalog write cadence (components)
 
-	def _startPaletteScan(self, op_catalog):
+	def _startPaletteScan(self, op_catalog, resume_results=None):
 		"""Begin async scan of all shipped palette .tox components.
 
 		Walks TD's palette directory, loads each .tox into a temp COMP,
@@ -273,13 +379,20 @@ class CatalogManagerExt:
 		combined catalog (op defaults + _palette mapping) to disk.
 
 		op_catalog is kept in closure so it can be written alongside
-		palette results in _finalizePaletteScan.
+		palette results in _finalizePaletteScan. resume_results seeds
+		already-scanned components (from a checkpoint written by an
+		interrupted earlier scan) so only the remainder is loaded.
 		"""
 		palette_dir = self._getPaletteDir()
 		if not palette_dir:
-			# Can't find palette - write op-type-only catalog and finish
-			self._writeCatalog(self._getCatalogPath(self._build_str), op_catalog)
-			self.ownerComp.par.Status = 'Enabled'
+			# Can't find palette - finalize with an explicit empty
+			# palette mapping so the catalog on disk reads as COMPLETE
+			# (key presence marks the palette phase done; its absence
+			# would trigger a pointless resume on every launch).
+			self._palette_results = (
+				dict(resume_results) if resume_results else {})
+			self._op_catalog_pending = op_catalog
+			self._finalizePaletteScan()
 			return
 
 		# Enumerate all .tox files, skipping blocklisted palettes whose
@@ -300,13 +413,28 @@ class CatalogManagerExt:
 		if skipped:
 			self._log(f'Palette scan skipping blocklisted: {sorted(skipped)}')
 
+		# Resume: drop components a prior interrupted scan already
+		# recorded (results are keyed by the .tox stem name).
+		if resume_results:
+			rel_paths = [
+				rp for rp in rel_paths
+				if os.path.splitext(os.path.basename(rp))[0]
+				not in resume_results]
+
 		if not rel_paths:
-			self._writeCatalog(self._getCatalogPath(self._build_str), op_catalog)
-			self.ownerComp.par.Status = 'Enabled'
+			# Nothing (left) to scan: empty palette dir, or every
+			# component was already checkpointed. Finalize with whatever
+			# results exist - writes the complete catalog.
+			self._palette_results = (
+				dict(resume_results) if resume_results else {})
+			self._op_catalog_pending = op_catalog
+			self._finalizePaletteScan()
 			return
 
 		self._palette_queue = sorted(rel_paths)
-		self._palette_results = {}
+		self._palette_results = (
+			dict(resume_results) if resume_results else {})
+		self._palette_checkpointed = len(self._palette_results)
 		self._palette_workspace = self.ownerComp.create(
 			baseCOMP, '_palette_workspace')
 		self._palette_workspace.viewer = False
@@ -321,19 +449,42 @@ class CatalogManagerExt:
 			'hardware, some are Windows-only) -- they are HARMLESS, do not '
 			'affect Embody or your project, and this one-time scan is cached '
 			'so it will not run again for this TD build.', 'INFO')
-		self.ownerComp.par.Status = (
-			f'Scanning palette (0/{len(self._palette_queue)})')
+		# Match the per-chunk formula (done/total incl. resumed results)
+		# so the denominator doesn't jump after the first chunk of a
+		# resumed scan.
+		done = len(self._palette_results)
+		self._setScanStatus(
+			f'Scanning palette ({done}/{done + len(self._palette_queue)})')
 
 		# Store op_catalog for combined write in _finalizePaletteScan
 		self._op_catalog_pending = op_catalog
 
-		# Snapshot global timeline/cook state - loading palette components
-		# can mutate it, and we must hand it back untouched.
-		self._snapshotTimeState()
+		# Timeline/cook state is snapshotted per-chunk inside
+		# _processPaletteChunk, never here: a scan-wide snapshot would
+		# revert user changes (e.g. pausing the timeline mid-scan) on
+		# every chunk (issue #60).
 
 		run('args[0]._processPaletteChunk()', self, delayFrames=1)
 
 	def _processPaletteChunk(self):
+		"""Drive one palette chunk; a fatal error must not wedge the scan.
+
+		Same rationale as _processChunk -- additionally checkpoint the
+		results gathered so far so the next launch resumes rather than
+		redoing them.
+		"""
+		try:
+			self._processPaletteChunkInner()
+		except Exception as e:
+			self._log(f'Palette scan aborted: {e}', 'ERROR')
+			try:
+				self._checkpointPaletteScan()
+			except Exception:
+				pass
+			self._cleanupWorkspace()
+			self._scan_in_flight = False
+
+	def _processPaletteChunkInner(self):
 		"""Process a batch of .tox files, then yield to main thread."""
 		if not self._palette_queue:
 			self._finalizePaletteScan()
@@ -345,57 +496,83 @@ class CatalogManagerExt:
 		palette_dir = self._getPaletteDir()
 		total = len(self._palette_results) + len(self._palette_queue) + len(chunk)
 
-		for rel_path in chunk:
-			tox_path = os.path.join(palette_dir, rel_path)
-			name = os.path.splitext(os.path.basename(rel_path))[0]
-			wrapper_name = '_pp_' + name[:28]  # short unique name
-			try:
-				existing = self._palette_workspace.op(wrapper_name)
-				if existing:
-					existing.destroy()
+		# Bracket THIS chunk's loadTox calls: snapshot now, restore right
+		# after. The snapshot must be per-chunk, not per-scan - a user
+		# pausing the timeline between chunks is captured here and
+		# honored, while a palette component's own pause/cookRate
+		# mutation inside the bracket is still undone (issue #60: the
+		# old scan-wide snapshot un-paused the user's timeline after
+		# every chunk for the whole scan). Accepted tradeoff: a palette
+		# component that mutates timeline state via a DEFERRED run()
+		# lands between brackets and reads as user state - if such a
+		# component surfaces, add it to _PALETTE_SCAN_BLOCKLIST.
+		self._snapshotTimeState()
+		try:
+			for rel_path in chunk:
+				tox_path = os.path.join(palette_dir, rel_path)
+				name = os.path.splitext(os.path.basename(rel_path))[0]
+				wrapper_name = '_pp_' + name[:28]  # short unique name
+				try:
+					existing = self._palette_workspace.op(wrapper_name)
+					if existing:
+						existing.destroy()
 
-				wrapper = self._palette_workspace.create(baseCOMP, wrapper_name)
-				wrapper.loadTox(tox_path)
+					wrapper = self._palette_workspace.create(baseCOMP, wrapper_name)
+					wrapper.loadTox(tox_path)
 
-				# Determine placed type: if the inner child has the same name
-				# as the .tox file, that child IS what TD places in the project.
-				# Otherwise the wrapper itself is the placed component.
-				children = wrapper.children
-				placed_type = wrapper.OPType  # fallback
-				if children:
-					inner = children[0]
-					if inner.name == name:
-						placed_type = inner.OPType
+					# Determine placed type: if the inner child has the same name
+					# as the .tox file, that child IS what TD places in the project.
+					# Otherwise the wrapper itself is the placed component.
+					children = wrapper.children
+					placed_type = wrapper.OPType  # fallback
+					if children:
+						inner = children[0]
+						if inner.name == name:
+							placed_type = inner.OPType
 
-				# Child count for false-positive rejection: a user-created
-				# COMP with the same name would typically be empty. Record
-				# the inner child count (not the wrapper) as a floor.
-				if children and inner.name == name:
-					child_count = len(inner.children)
-				else:
-					child_count = len(wrapper.children)
+					# Child count for false-positive rejection: a user-created
+					# COMP with the same name would typically be empty. Record
+					# the inner child count (not the wrapper) as a floor.
+					if children and inner.name == name:
+						child_count = len(inner.children)
+					else:
+						child_count = len(wrapper.children)
 
-				# Only record the first occurrence of each name (handles
-				# TDAbleton Live 11+ vs Live 9&10 duplicates - same type)
-				if name not in self._palette_results:
-					self._palette_results[name] = {
-						'type': placed_type,
-						'min_children': child_count,
-					}
+					# Only record the first occurrence of each name (handles
+					# TDAbleton Live 11+ vs Live 9&10 duplicates - same type)
+					if name not in self._palette_results:
+						self._palette_results[name] = {
+							'type': placed_type,
+							'min_children': child_count,
+						}
 
-				wrapper.destroy()
-			except Exception as e:
-				self._log(f'Palette scan error {name}: {e}')
-				existing = self._palette_workspace.op(wrapper_name)
-				if existing:
-					existing.destroy()
+					wrapper.destroy()
+				except Exception as e:
+					self._log(f'Palette scan error {name}: {e}')
+					# Guarded: if the WORKSPACE itself is gone (deleted
+					# mid-scan), this re-query raises and would otherwise
+					# escape the per-item handler and kill the run chain.
+					try:
+						existing = self._palette_workspace.op(wrapper_name)
+						if existing:
+							existing.destroy()
+					except Exception:
+						pass
+		finally:
+			# Loading a palette component may have paused playback or
+			# changed the cook rate - undo this chunk's global side
+			# effects before yielding.
+			self._restoreTimeState()
 
-		# Loading a palette component may have paused playback or changed
-		# the cook rate - undo any global side effects before yielding.
-		self._restoreTimeState()
+		# Checkpoint partial progress so an interrupted scan (user closes
+		# a struggling TD mid-first-launch) resumes on the next open
+		# instead of restarting from zero (issue #60).
+		if (len(self._palette_results) - self._palette_checkpointed
+				>= self.PALETTE_CHECKPOINT_EVERY):
+			self._checkpointPaletteScan()
 
 		done = len(self._palette_results)
-		self.ownerComp.par.Status = f'Scanning palette ({done}/{total})'
+		self._setScanStatus(f'Scanning palette ({done}/{total})')
 
 		# Finalize in-band on last chunk - same guard as op-type scan.
 		if not self._palette_queue:
@@ -403,6 +580,21 @@ class CatalogManagerExt:
 			return
 
 		run('args[0]._processPaletteChunk()', self, delayFrames=1)
+
+	def _checkpointPaletteScan(self):
+		"""Write the combined catalog with partial palette results.
+
+		The '_palette_partial' marker tells the next EnsureCatalogs that
+		the palette phase is incomplete and should resume from these
+		results. The final write in _finalizePaletteScan omits the
+		marker, making the catalog complete.
+		"""
+		combined = dict(self._op_catalog_pending or {})
+		combined['_palette'] = self._palette_results
+		combined['_palette_partial'] = True
+		self._writeCatalog(
+			self._getCatalogPath(self._build_str), combined)
+		self._palette_checkpointed = len(self._palette_results)
 
 	def _finalizePaletteScan(self):
 		"""Write combined catalog (op defaults + palette mapping) to disk."""
@@ -413,8 +605,10 @@ class CatalogManagerExt:
 				pass
 			self._palette_workspace = None
 
-		# Final restore in case the last chunk left state dirty.
-		self._restoreTimeState()
+		# No restore here: each chunk already restored inside its own
+		# snapshot/restore bracket, and a restore at finalize time could
+		# revert a USER change made in the one-frame gap since the last
+		# chunk (issue #60). Just drop the stale snapshot.
 		self._time_snapshot = None
 
 		self._log(
@@ -424,7 +618,7 @@ class CatalogManagerExt:
 			'expected and can be ignored.', 'INFO')
 
 		# Merge palette results into catalog under reserved _palette key
-		combined = dict(getattr(self, '_op_catalog_pending', {}))
+		combined = dict(self._op_catalog_pending or {})
 		combined['_palette'] = self._palette_results
 
 		catalog_path = self._getCatalogPath(self._build_str)
@@ -436,9 +630,10 @@ class CatalogManagerExt:
 		except Exception:
 			pass
 
-		self.ownerComp.par.Status = 'Enabled'
+		self._setScanStatus('Enabled')
 		self._palette_results = {}
 		self._op_catalog_pending = None
+		self._scan_in_flight = False
 
 	# =================================================================
 	# Cross-Build Patching
@@ -518,6 +713,12 @@ class CatalogManagerExt:
 		"""
 		shifted = {}
 		for op_type, current_params in current_catalog.items():
+			# Reserved keys are not op-type param dicts: '_palette_partial'
+			# is a bool (.items() would crash -- catalogs loaded from a
+			# resume checkpoint carry it) and '_palette' maps component
+			# names, not params (it produced garbage 'shifted' entries).
+			if op_type.startswith('_') or not isinstance(current_params, dict):
+				continue
 			source_params = source_catalog.get(op_type, {})
 			for par_name, current_val in current_params.items():
 				source_val = source_params.get(par_name)
@@ -773,17 +974,28 @@ class CatalogManagerExt:
 			return None
 
 	def _writeCatalog(self, path, catalog):
-		"""Write catalog dict to JSON file."""
+		"""Write catalog dict to JSON file (atomic: tmp + replace).
+
+		A TD crash mid-write must not leave a truncated
+		catalog_<build>.json - _readCatalog would fail to parse it and
+		silently trigger a full rescan on the next launch (issue #60).
+		"""
 		try:
 			os.makedirs(os.path.dirname(path), exist_ok=True)
 			content = json.dumps(catalog, separators=(',', ':'),
 								 sort_keys=True)
-			with open(path, 'w', encoding='utf-8') as f:
+			tmp = path + '.tmp'
+			with open(tmp, 'w', encoding='utf-8') as f:
 				f.write(content)
+			os.replace(tmp, path)
 			self._log(f'Wrote catalog to {os.path.basename(path)} '
 					  f'({len(catalog)} types)')
 		except Exception as e:
 			self._log(f'Error writing catalog: {e}')
+			try:
+				os.unlink(path + '.tmp')
+			except OSError:
+				pass
 
 	# =================================================================
 	# Value Helpers
@@ -811,13 +1023,24 @@ class CatalogManagerExt:
 	# =================================================================
 
 	def _cleanupWorkspace(self):
-		"""Destroy the scan workspace if it exists."""
+		"""Destroy the scan workspaces if they exist.
+
+		Covers BOTH workspaces: interrupted palette scans are a designed
+		state now (checkpoint/resume), so a mid-scan reinit or close must
+		not leak a visible _palette_workspace inside Embody.
+		"""
 		if self._workspace is not None:
 			try:
 				self._workspace.destroy()
 			except Exception:
 				pass
 			self._workspace = None
+		if self._palette_workspace is not None:
+			try:
+				self._palette_workspace.destroy()
+			except Exception:
+				pass
+			self._palette_workspace = None
 
 	# --- Timeline / cook state guard (around the palette scan) ---------
 

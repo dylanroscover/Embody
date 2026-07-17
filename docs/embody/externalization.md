@@ -124,6 +124,8 @@ The `Tdnexcludetag` parameter on the Embody COMP (default value: `tdn_exclude`) 
 
 **For app-managed copies**: when a runtime `.copy()` clones a COMP that has `tdn_exclude`, the clone inherits the tag and stays invisible to Embody. This is the recommended pattern for app-spawned content (Moonshine's `proj_<id>` projector chains, for example) — Embody won't track or interfere with the copies.
 
+**Startup prompts honor the tag too.** The dropped-`.tox` expression sweep (the "Dropped .tox Expression Detected" dialog that offers to clean TD's drag-in `externaltox` expression) skips any COMP carrying `tdn_exclude` — on itself **or on any ancestor**, so tagging a root COMP silences the prompt for its whole subtree. Tag the COMPs in a startup file `tdn_exclude` and Embody won't ask about them (issue #60). The project-wide **Externalize Full Project** scan skips tagged COMPs the same way.
+
 **Constraints:**
 
 - Only COMPs are excludable. Annotation COMPs are explicitly ineligible.

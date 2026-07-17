@@ -2390,6 +2390,12 @@ class EnvoyExt:
         self._startup_event: Optional[Event] = None
         self._startup_deadline: float = 0.0
         self._venv_recreated: bool = False  # Guard: only auto-recreate venv once per session
+        # Guard: probe each venv python binary at most once per session --
+        # Start() re-runs on every watchdog revive, and re-probing each time
+        # was a recurring synchronous main-thread stall (issue #60). Holds
+        # the PATH of the successfully probed interpreter (empty = none),
+        # so a mid-session project-root switch still probes the other venv.
+        self._venv_probe_ok: str = ''
         # Background dependency-bootstrap state (see Start / _beginAsyncBootstrap).
         # _bootstrap_result is None while the worker runs, then (ok, [(level, msg)..])
         # plus import-gate status once it finishes; the main-thread poll reads

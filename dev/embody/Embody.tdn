@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 784
+build: 796
 generator: Embody/6.0.126
 td_build: 099.2025.32820
-source_file: Embody-6.126.toe
-exported_at: '2026-07-14T20:02:20Z'
+source_file: Embody-6.127.toe
+exported_at: '2026-07-17T01:50:01Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -269,7 +269,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 11:20:53 UTC
+    value: Saved 01:47:37 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -409,7 +409,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-    value: Running on port 9870
+    value: Running on port 9871
   Logs:
   - name: Verbose
     style: Toggle
@@ -710,7 +710,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 784
+    value: 796
   - name: Github
     style: Pulse
     label: GitHub
@@ -721,7 +721,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-14 20:02:19 UTC
+    value: 2026-07-17 01:50:01 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -773,10 +773,16 @@ storage:
   git_status:
     /embody/externalizations: ' M'
     /embody/unit_tests/test_sandbox: ' M'
-    /embody/unit_tests/test_delete_cleanup: ' M'
+    /embody/Embody/templates: ' M'
+    /embody/Embody/parexec: ' M'
+    /embody/Embody/EnvoyExt: ' M'
     /embody/Embody/EmbodyExt: ' M'
+    /embody/Embody/CatalogManagerExt: ' M'
     /embody/Embody: ' M'
     /embody: ' M'
+    /embody/Embody/envoy_setup: ' M'
+    /embody/Embody/embody_admin: ' M'
+    /embody/Embody/templates/text_rule_worktree_td_safety: ??
   _watchdog_gen: 893
   _suite_proof_progress:
     todo:
@@ -920,8 +926,8 @@ storage:
         fail: 1
     pending_after: absent
   _clip_watch_gen: 658
-  _shortcut_rec_gen: 139
-  _init_complete: true
+  _shortcut_rec_gen: 167
+  _suppress_dialogs: true
 operators:
 - name: help
   type: opviewerCOMP
@@ -1014,7 +1020,7 @@ operators:
 - name: timer1
   type: timerCHOP
   parameters:
-    active: never
+    active: always
     deferpars: true
     length: 30
     lengthunits: frames
@@ -1173,8 +1179,8 @@ operators:
     file: embody/Embody/EnvoyExt.py
   position: [-700, 700]
   tags:
-  - py
   - TDExtension
+  - py
 - name: mousein1
   type: mouseinCHOP
   parameters:

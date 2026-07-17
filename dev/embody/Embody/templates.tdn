@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 21
-generator: Embody/6.0.113
+build: 22
+generator: Embody/6.0.126
 td_build: 099.2025.32820
-source_file: Embody-6.114.toe
-exported_at: '2026-07-10T16:24:56Z'
+source_file: Embody-6.126.toe
+exported_at: '2026-07-17T01:34:36Z'
 network_path: /embody/Embody/templates
 options:
   include_dat_content: false
@@ -196,6 +196,14 @@ operators:
     file: embody/Embody/templates/text_skill_td_api_reference.md
     extension: md
   position: [1500, -400]
+  tags:
+  - md
+- name: text_rule_worktree_td_safety
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_rule_worktree_td_safety.md
+    extension: md
+  position: [3200, 400]
   tags:
   - md
 - name: text_skill_visual_aesthetics

@@ -25,6 +25,11 @@ class TestToxdropExpr(EmbodyTestCase):
         self._saved_pref = self.embody.par.Toxdropexpr.eval()
         self._saved_resp = self.embody.fetch(
             '_smoke_test_responses', None, search=False)
+        # Session-scoped Ignore memory: isolate every test from answers
+        # given in earlier tests (sandbox COMP paths repeat across tests).
+        self._saved_ignored = getattr(
+            self.embody_ext, '_toxdrop_ignored_session', set())
+        self.embody_ext._toxdrop_ignored_session = set()
 
     def tearDown(self):
         # Sandbox children are auto-destroyed by the base tearDown; the internal
@@ -39,6 +44,7 @@ class TestToxdropExpr(EmbodyTestCase):
             self.embody.store('_smoke_test_responses', self._saved_resp)
         else:
             self.embody.unstore('_smoke_test_responses')
+        self.embody_ext._toxdrop_ignored_session = self._saved_ignored
         # Base tearDown clears the sandbox.
         for child in list(self.sandbox.children):
             try:
@@ -192,3 +198,118 @@ class TestToxdropExpr(EmbodyTestCase):
                       'overflow must collapse to "... and N more"')
         self.assertEqual(len(captured.get('buttons', [])), 4,
                          'the dialog must offer all four buttons')
+
+    # ----- session-scoped Ignore (issue #60) -------------------------------
+
+    def test_plain_ignore_remembered_for_session(self):
+        """After a plain Ignore, the same COMPs are not re-prompted on the
+        next sweep this session (issue #60 nagging loop)."""
+        self.embody.par.Toxdropexpr = 'ask'
+        comp = self._make()
+        self._seed(1)
+        self.embody_ext._resolveToxdropExternals([comp])
+        self.assertIn(comp.path, self.embody_ext._toxdrop_ignored_session,
+                      'plain Ignore must record the paths for the session')
+
+        # Second sweep: the dialog must not even fire for the same COMP.
+        emb = self.embody_ext  # resolve once so the instance shadow sticks
+        calls = []
+
+        def _unexpected(title, message, buttons):
+            calls.append(title)
+            return -1
+
+        emb._messageBox = _unexpected
+        try:
+            emb._resolveToxdropExternals([comp])
+        finally:
+            try:
+                del emb._messageBox
+            except Exception:
+                pass
+        self.assertEqual(calls, [],
+                         'session-ignored COMPs must not re-prompt')
+        self.assertTrue(self._dropped(comp),
+                        'the expression must still be untouched')
+
+    def test_dismissed_dialog_not_remembered(self):
+        """A dismissed/suppressed dialog (-1) must NOT mark COMPs ignored --
+        the sweep re-offers on a later pass (existing contract)."""
+        self.embody.par.Toxdropexpr = 'ask'
+        comp = self._make()
+        self.embody.unstore('_smoke_test_responses')
+        self.embody_ext._resolveToxdropExternals([comp])
+        self.assertNotIn(
+            comp.path,
+            getattr(self.embody_ext, '_toxdrop_ignored_session', set()),
+            'a dismissed dialog is not an answer and must not be remembered')
+
+    # ----- tdn_exclude opt-out (issue #60) ---------------------------------
+
+    def test_exclude_tag_ancestry_helper(self):
+        """_hasExcludeTagInAncestry honors the tag on the COMP itself AND on
+        any ancestor (the tag marks a whole app-managed subtree)."""
+        tag = self.embody.par.Tdnexcludetag.eval()
+        parent = self.sandbox.create(baseCOMP, 'excl_parent')
+        child = parent.create(baseCOMP, 'excl_child')
+        plain = self.sandbox.create(baseCOMP, 'excl_plain')
+
+        self.assertFalse(self.embody_ext._hasExcludeTagInAncestry(plain),
+                         'untagged COMP with untagged ancestors: not excluded')
+        parent.tags.add(tag)
+        self.assertTrue(self.embody_ext._hasExcludeTagInAncestry(parent),
+                        'own tag must exclude')
+        self.assertTrue(self.embody_ext._hasExcludeTagInAncestry(child),
+                        'an ancestor tag must exclude the whole subtree')
+        self.assertFalse(self.embody_ext._hasExcludeTagInAncestry(plain),
+                         'untagged sibling must stay unaffected')
+
+    def test_excluded_comps_skipped_by_sweep(self):
+        """_checkExternalToxPar must not route tdn_exclude'd COMPs (or their
+        descendants) to the resolver -- tagged subtrees are invisible to the
+        dropped-.tox sweep (issue #60)."""
+        tag = self.embody.par.Tdnexcludetag.eval()
+        excluded = self._make('excl_dropped')
+        excluded.tags.add(tag)
+        inner = excluded.create(baseCOMP, 'excl_inner')
+        inner.par.externaltox.expr = self.DEPRECATED_EXPR
+        included = self._make('incl_dropped')
+
+        emb = self.embody_ext  # resolve once so the instance shadow sticks
+        captured = []
+
+        def _capture_resolve(external):
+            captured.extend(c.path for c in external)
+
+        emb._resolveToxdropExternals = _capture_resolve
+        try:
+            emb._checkExternalToxPar()
+        finally:
+            try:
+                del emb._resolveToxdropExternals
+            except Exception:
+                pass
+
+        self.assertNotIn(excluded.path, captured,
+                         'a tagged COMP must be invisible to the sweep')
+        self.assertNotIn(inner.path, captured,
+                         "a tagged COMP's descendant must be invisible too")
+        self.assertIn(included.path, captured,
+                      'untagged COMPs must still reach the resolver')
+
+    def test_shouldskip_honors_ancestor_tag(self):
+        """ExternalizeProject's _shouldSkipOp must skip untagged
+        descendants inside a tdn_exclude'd tree -- the docs promise
+        ancestry semantics, and own-tag-only would re-tag app-managed
+        subtrees on a full-project externalize (issue #60)."""
+        tag = self.embody.par.Tdnexcludetag.eval()
+        root = self.sandbox.create(baseCOMP, 'skip_root')
+        root.tags.add(tag)
+        inner = root.create(baseCOMP, 'skip_inner')
+        plain = self.sandbox.create(baseCOMP, 'skip_plain')
+        self.assertTrue(self.embody_ext._shouldSkipOp(root, set()),
+                        'the tagged COMP itself must be skipped')
+        self.assertTrue(self.embody_ext._shouldSkipOp(inner, set()),
+                        'untagged descendants of a tagged COMP must be skipped')
+        self.assertFalse(self.embody_ext._shouldSkipOp(plain, set()),
+                         'untagged COMPs outside the tree must not be skipped')

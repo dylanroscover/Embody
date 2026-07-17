@@ -41,3 +41,15 @@ class TestSettingsPersistence(EmbodyTestCase):
         data = json.loads(self._read_config_bytes().decode('utf-8'))
         keys = list(data.keys())
         self.assertEqual(keys, sorted(keys))
+
+    def test_toxdropexpr_is_persisted(self):
+        """Toxdropexpr must be whitelisted: an Always Clean/Ignore answer has
+        to survive into the next session -- especially untitled projects from
+        a default startup file, which reload baked .toe defaults every open
+        and re-prompted forever without persistence (issue #60)."""
+        import json
+        self.assertIn('Toxdropexpr', self.embody_ext._PERSISTED_PARAMS)
+        self.embody_ext._saveSettings()
+        data = json.loads(self._read_config_bytes().decode('utf-8'))
+        self.assertIn('Toxdropexpr', data['params'],
+                      'Toxdropexpr must actually serialize into config.json')

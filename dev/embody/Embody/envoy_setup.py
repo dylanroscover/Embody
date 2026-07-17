@@ -137,7 +137,24 @@ def configure_mcp_client(ext, port, target_dir=None):
         else:
             venv_python = project_dir / '.venv' / 'bin' / 'python3'
 
-        if venv_python.is_file():
+        # Windows: keep the probe's console window from flashing over
+        # TD's GUI (subprocess of a GUI process opens a console briefly).
+        _probe_flags = (subprocess.CREATE_NO_WINDOW
+                        if sys.platform == 'win32' else 0)
+
+        if (venv_python.is_file()
+                and getattr(ext, '_venv_probe_ok', '') == str(venv_python)):
+            # THIS venv's python already probed successfully this
+            # extension session (keyed by path -- a mid-session project
+            # root switch must re-probe the other venv). Start() re-runs
+            # on every watchdog revive, and re-running the synchronous
+            # subprocess probe each time was a recurring main-thread
+            # stall (issue #60). NOTE: the in-process import gate
+            # (sys._envoy_import_gate_ok) is NOT a substitute for the
+            # probe -- it validates the venv's packages from TD's own
+            # interpreter, not the venv python binary itself.
+            python_cmd = str(venv_python).replace('\\', '/')
+        elif venv_python.is_file():
             # Verify the venv Python actually executes -- catches stale
             # pyvenv.cfg pointing to an uninstalled TD version, or
             # code-signing mismatches after macOS TD upgrades.
@@ -149,11 +166,21 @@ def configure_mcp_client(ext, port, target_dir=None):
                 subprocess.run(
                     [str(venv_python), '-c',
                      'import sys; print(sys.version)'],
-                    capture_output=True, timeout=10, check=True,
-                    stdin=subprocess.DEVNULL)
+                    capture_output=True, timeout=5, check=True,
+                    stdin=subprocess.DEVNULL, creationflags=_probe_flags)
                 python_cmd = str(venv_python).replace('\\', '/')
-            except (subprocess.CalledProcessError,
-                    subprocess.TimeoutExpired, OSError) as e:
+                ext._venv_probe_ok = str(venv_python)
+            except subprocess.TimeoutExpired:
+                # Slow is not corrupt: a cold disk or AV scan can stall a
+                # healthy interpreter past the timeout. Never rmtree a
+                # venv for being slow -- fall back to system Python for
+                # this config write and let a later Start() re-probe.
+                ext._log(
+                    'Venv Python probe timed out; using system Python '
+                    'for now (will re-probe on next start)', 'WARNING')
+                python_cmd = ('python' if sys.platform == 'win32'
+                              else 'python3')
+            except (subprocess.CalledProcessError, OSError) as e:
                 if not ext._venv_recreated:
                     ext._venv_recreated = True
                     ext._log(
@@ -169,11 +196,13 @@ def configure_mcp_client(ext, port, target_dir=None):
                             subprocess.run(
                                 [str(venv_python), '-c',
                                  'import sys; print(sys.version)'],
-                                capture_output=True, timeout=10,
+                                capture_output=True, timeout=5,
                                 check=True,
-                                stdin=subprocess.DEVNULL)
+                                stdin=subprocess.DEVNULL,
+                                creationflags=_probe_flags)
                             python_cmd = str(venv_python).replace(
                                 '\\', '/')
+                            ext._venv_probe_ok = str(venv_python)
                             ext._log('Venv recreated successfully',
                                      'SUCCESS')
                         except Exception as e2:
