@@ -48,6 +48,8 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 **Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project. The **[Setup Wizard](https://dylanroscover.github.io/Embody/embody/setup-wizard/)** opens and walks you through the choices that matter — how much autonomy Embody gets, whether to enable the AI assistant (Envoy) and for which tool, permissions, and where config files live. Nothing changes until the final click, and you can re-run it anytime via the **Setup Wizard** pulse on the Embody COMP.
 
+> **Updating Embody:** delete the old Embody COMP and drag the new `.tox` in its place. Your settings and tracked externalizations live on disk, so the new version picks them up automatically — and offers a quick re-scan to validate everything it's tracking.
+
 ### 2. Tag and Work
 
 1. **Tag operators** — hover any COMP or DAT and press `lctrl` twice to open the tagger (pick a strategy for a COMP, a file format for a DAT)
