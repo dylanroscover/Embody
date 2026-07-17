@@ -35,7 +35,7 @@ When new WARNING/ERROR entries appear, an MCP tool response piggybacks a `_logs`
 A tool call travels this path:
 
 1. **AI client** sends a tool call via the MCP protocol (STDIO)
-2. **Bridge script** (`.embody/envoy-bridge.py`) receives it and forwards to Envoy's HTTP server on localhost
+2. **Bridge script** (`.embody/envoy-bridge.py`) receives it and forwards to Envoy's HTTP server on `127.0.0.1`
 3. **Envoy** (worker thread) validates the request, enqueues the TD operation, and waits for the result
 4. **TD main thread** picks up the operation during `_onRefresh()`, executes it with full TD access, and posts the result
 5. **Envoy** returns the response to the bridge with recent log entries piggybacked
@@ -214,7 +214,7 @@ These tools run on the local bridge process, not inside TD. They're available ev
 |---|---|
 | `get_td_status` | Connection state, process liveness, crash detection, restart attempts, instance registry |
 | `launch_td` | Launch TD with the project's `.toe` file; waits for Envoy to become reachable |
-| `restart_td` | Gracefully quit and relaunch TD |
+| `restart_td` | Gracefully quit and relaunch TD (only the active instance — other TD instances are never touched) |
 | `switch_instance` | List registered TD instances or switch to a different running instance |
 
 ### Batch Operations

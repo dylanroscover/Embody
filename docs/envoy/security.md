@@ -1,6 +1,6 @@
 # Security Considerations
 
-Envoy is designed as a **local development tool** — it runs on `localhost` and is intended for use in trusted environments. Understanding its security model is important before deploying it in any shared or networked context.
+Envoy is designed as a **local development tool** — it runs on the loopback interface (`127.0.0.1`) and is intended for use in trusted environments. Understanding its security model is important before deploying it in any shared or networked context.
 
 ## Local-Only by Design
 
