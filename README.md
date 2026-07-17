@@ -44,28 +44,16 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 **Requirements:** TouchDesigner **2025.32820 or later** (Windows / macOS). No Python setup needed — Envoy installs its own dependencies on first enable. No special folder structure either: Embody works in any project folder, and if you happen to use git, every change is also a clean diff for free.
 
-### 1. Install and Tag
+### 1. Install
 
-1. **Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project. The **[Setup Wizard](https://dylanroscover.github.io/Embody/embody/setup-wizard/)** opens and walks you through the choices that matter — how much autonomy Embody gets, whether to enable the AI assistant (Envoy) and for which tool, permissions, and where config files live. Nothing changes until the final click, and you can re-run it anytime via the **Setup Wizard** pulse on the Embody COMP
-2. **Tag operators** — hover any COMP or DAT and press `lctrl` twice to open the tagger (pick a strategy for a COMP, a file format for a DAT)
-3. **Work normally** — press `ctrl + shift + u` to update all externalizations, or `ctrl + alt + u` to update only the current COMP. Externalized files are written on save; on open, the `.toe` stays authoritative by default (Export-on-Save), while Roundtrip mode also reconstructs TDN-strategy COMPs from disk
+**Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project. The **[Setup Wizard](https://dylanroscover.github.io/Embody/embody/setup-wizard/)** opens and walks you through the choices that matter — how much autonomy Embody gets, whether to enable the AI assistant (Envoy) and for which tool, permissions, and where config files live. Nothing changes until the final click, and you can re-run it anytime via the **Setup Wizard** pulse on the Embody COMP.
+
+### 2. Tag and Work
+
+1. **Tag operators** — hover any COMP or DAT and press `lctrl` twice to open the tagger (pick a strategy for a COMP, a file format for a DAT)
+2. **Work normally** — press `ctrl + shift + u` to update all externalizations, or `ctrl + alt + u` to update only the current COMP. Externalized files are written on save; on open, the `.toe` stays authoritative by default (Export-on-Save), while Roundtrip mode also reconstructs TDN-strategy COMPs from disk
 
 > **Tip:** If no operators are tagged, Embody will externalize all eligible COMPs and DATs, which may slow down complex projects. Tagging selectively is recommended.
-
-### 2. Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `lctrl + lctrl` | Tag or manage the operator under the cursor |
-| `ctrl + shift + u` | Update all externalizations |
-| `ctrl + alt + u` | Update only the current COMP |
-| `ctrl + shift + r` | Refresh tracking state |
-| `ctrl + shift + o` | Open the Manager UI |
-| `ctrl + shift + c` | Copy the selected COMP to the clipboard as a portable TDN envelope |
-| `ctrl + shift + e` | Export entire project to `.tdn` file |
-| `ctrl + alt + e` | Export current COMP to `.tdn` file |
-
-These are the defaults — every shortcut is editable on the Embody COMP's **Shortcuts** parameter page (type a combo, or pulse **Record** and press the keys; empty disables it). See [Keyboard Shortcuts](https://dylanroscover.github.io/Embody/embody/keyboard-shortcuts/).
 
 For supported formats, folder configuration, duplicate handling, Manager UI, and more — see the [Embody docs](https://dylanroscover.github.io/Embody/embody/).
 
@@ -124,6 +112,23 @@ This is the substrate. Every other capability — AI-driven building, version co
 - **Via Envoy**: `export_network` / `import_network` MCP tools
 
 See the [full TDN specification](https://dylanroscover.github.io/Embody/tdn/specification/) for format details, import process, and round-trip guarantees.
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `lctrl + lctrl` | Tag or manage the operator under the cursor |
+| `ctrl + shift + u` | Update all externalizations |
+| `ctrl + alt + u` | Update only the current COMP |
+| `ctrl + shift + r` | Refresh tracking state |
+| `ctrl + shift + o` | Open the Manager UI |
+| `ctrl + shift + c` | Copy the selected COMP to the clipboard as a portable TDN envelope |
+| `ctrl + shift + e` | Export entire project to `.tdn` file |
+| `ctrl + alt + e` | Export current COMP to `.tdn` file |
+
+These are the defaults — every shortcut is editable on the Embody COMP's **Shortcuts** parameter page (type a combo, or pulse **Record** and press the keys; empty disables it). See [Keyboard Shortcuts](https://dylanroscover.github.io/Embody/embody/keyboard-shortcuts/).
 
 ---
 
