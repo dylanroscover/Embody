@@ -12,7 +12,7 @@ Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, et
 ## Enabling Envoy
 
 1. **Enable Envoy**: Toggle the **Envoy Enable** parameter on the Embody COMP
-2. **Server starts**: Envoy runs on `localhost:9870` (configurable via **Envoy Port**)
+2. **Server starts**: Envoy runs on `127.0.0.1:9870` (configurable via **Envoy Port**)
 3. **Auto-configuration**: Envoy creates `.mcp.json` and AI client config files at the root chosen by the **AI Project Root** parameter — the git repo root by default (`gitroot`), or the `.toe`'s own folder (`projectfolder`), or a custom path. When `gitroot` is selected but no git repo exists, Envoy falls back to the project folder and still writes the config. If your project is in a git repo, Envoy also generates `.gitignore` and `.gitattributes` entries.
 4. **Connect your MCP client**: Start a new Claude Code session (or restart your IDE) — it picks up the `.mcp.json` automatically
 
@@ -38,7 +38,7 @@ If you prefer manual control, create `.mcp.json` in your project directory. You 
   "mcpServers": {
     "envoy": {
       "type": "http",
-      "url": "http://localhost:9870/mcp"
+      "url": "http://127.0.0.1:9870/mcp"
     }
   }
 }
@@ -105,6 +105,10 @@ By default, Claude Code asks for confirmation every time it wants to use an MCP 
 The choice is stored on the **Tool Permissions** (`Toolpermissions`) parameter on Embody's Envoy page, so you can change it anytime without re-running the wizard.
 
 Every written posture (all but *Leave*) also whitelists your operating system's temp directory in `additionalDirectories`, so a TOP captured with `capture_top` (saved to the temp dir) can be read back without a permission prompt.
+
+Every written posture also pre-authorizes **sibling worktree folders**: Read/Edit rules for the `<your-repo>-wt-*` pattern beside your project root, computed at runtime from wherever your repo actually lives (any drive, any OS). The AI worktree workflow (`git worktree add ../<repo>-wt-<task>` — see the generated `worktree-td-safety` rule) creates folders outside the workspace, which would otherwise trigger a permission prompt for every file the AI touches there. Settings written by older Embody versions gain these rules automatically the next time Envoy starts.
+
+Envoy also **mirrors the AI config into existing worktrees**: `.mcp.json` and `.claude/settings.local.json` are gitignored, so a fresh worktree checkout has neither — an AI session launched *inside* a worktree would find no Envoy MCP server and prompt for every tool. On each config deploy, Envoy copies both files into every sibling `<your-repo>-wt-*` worktree (identified by name pattern plus a `.git` entry), skipping files that are already up to date. A worktree created while Envoy was already running misses that sweep — copy the two files from the repo root, or restart Envoy, before launching a session inside it.
 
 **Existing files are preserved.** If a `.claude/settings.local.json` already exists, Embody updates only its Envoy tool entries and keeps everything else you have set (hooks, model, other `allow` patterns) — and it only rewrites when the posture actually changes. Choose *Leave settings alone* to keep Embody entirely hands-off.
 

@@ -31,6 +31,11 @@ Coverage:
   - _probeAlive against a real stdlib socket listener: open -> True, closed ->
     False, None port -> True.
   - _findAvailablePort fast path + force-free branch with monkeypatched helpers.
+  - 'Preparing Python environment...' (the fast-path import gate) is
+    TRANSITIONAL: no dead-socket revive mid-warmup; a wedged gate still
+    self-heals via the ~24s startup-grace restart.
+  - _run_tests Status stomp: the prior Status survives in COMP storage and
+    _restoreStatusAfterTests is idempotent, never resurrecting 'Testing'.
 """
 
 import socket
@@ -90,6 +95,14 @@ class EnvoyWatchdogBase(EmbodyTestCase):
         # Patch the instance _log so WARNINGs are counted, not logged for real.
         self._patch(self.envoy, '_log',
                     lambda message, level='INFO': self._logs.append((message, level)))
+        # Tests must NEVER signal the LIVE server's shutdown event: a real
+        # _reviveDeadServer() call does self.shutdown_event.set(), which
+        # bounced the actual MCP server mid-full-run and poisoned later
+        # suites (2026-07-16 full-run-only failures in shortcuts/rename/
+        # watchdog). Swap in a throwaway Event; the patch-restore in
+        # tearDown puts the live one back untouched.
+        import threading as _threading
+        self._patch(self.envoy, 'shutdown_event', _threading.Event())
 
     def tearDown(self):
         while self._patches:
@@ -200,7 +213,13 @@ class TestReviveLogStormCooldown(EnvoyWatchdogBase):
     def test_revive_bumps_server_generation_and_clears_running(self):
         self.envoy._last_revive_time = 0.0
         self.embody.store('envoy_running', True)
+        # Model a STUCK start explicitly: _starting still set but its
+        # startup window long expired. Revive must proceed and clear it.
+        # (A start INSIDE its window is deliberately not revivable -- the
+        # in-flight guard added for the 2026-07-15 restart storm -- and a
+        # full test run can leave a live future deadline behind, so pin it.)
         self.envoy._starting = True
+        self.envoy._startup_deadline = 0.0
         gen_before = self.envoy._server_gen
 
         self.envoy._reviveDeadServer(was_running=True)
@@ -430,6 +449,57 @@ class TestWatchdogReviveWhenDown(EnvoyWatchdogBase):
             len(self._revives), 1,
             'A dead socket while enabled must revive even with _init_complete=False')
 
+    def test_preparing_status_is_transitional_not_dead(self):
+        """REGRESSION (issue #60 follow-up): 'Preparing Python environment...'
+        is the fast-path import gate -- a healthy in-flight startup with no
+        socket bound yet. The watchdog used to classify it as settled: probe
+        dead for 2 ticks -> revive at ~8s, stomping a cold first open that
+        legitimately takes longer (observed: revive 7s after launch while the
+        gate was still importing). It must take the transitional branch -- no
+        probe, no dead-tick revive, startup grace accrues instead."""
+        live_gen = self.embody.fetch('_watchdog_gen', 1)
+        self.embody.par.Envoyenable = 1
+        self.embody.par.Envoystatus = 'Preparing Python environment...'
+        self.embody.store('envoy_running', False)
+        self.envoy._starting = False
+        self.envoy._deadTicks = 1            # would revive on the next dead tick
+        self.envoy._startingTicks = 0
+        self._patch(self.envoy, '_probeAlive',
+                    lambda: (_ for _ in ()).throw(
+                        AssertionError('probe must not run while preparing')))
+
+        self.envoy._watchdogTick(live_gen)
+
+        self.assertEqual(
+            len(self._revives), 0,
+            "'Preparing...' must never take the dead-socket revive path")
+        self.assertEqual(
+            self.envoy._deadTicks, 0,
+            "'Preparing...' must reset _deadTicks (transitional branch)")
+        self.assertEqual(
+            self.envoy._startingTicks, 1,
+            "'Preparing...' must accrue startup grace like the other "
+            "transitional states")
+
+    def test_preparing_stuck_24s_forces_restart(self):
+        """A genuinely wedged 'Preparing...' (an orphaned import gate after a
+        mid-warmup reinit, whose stale-instance poll exits without finishing
+        the start) must still self-heal via the ~24s startup-grace restart."""
+        live_gen = self.embody.fetch('_watchdog_gen', 1)
+        self.embody.par.Envoyenable = 1
+        self.embody.par.Envoystatus = 'Preparing Python environment...'
+        self.envoy._deadTicks = 0
+        self.envoy._startingTicks = 5        # one short of the >=6 threshold
+
+        self.envoy._watchdogTick(live_gen)
+
+        self.assertEqual(
+            len(self._revives), 1,
+            "A 'Preparing...' stuck past ~24s must force a restart")
+        self.assertEqual(
+            self.envoy._startingTicks, 0,
+            'The forced restart must reset _startingTicks')
+
 
 class TestProbeAlive(EnvoyWatchdogBase):
     """_probeAlive against a real stdlib socket listener (no MCP involved)."""
@@ -576,3 +646,71 @@ class TestFindAvailablePort(EnvoyWatchdogBase):
         self.assertEqual(
             result, busy,
             'After force-close frees the base port, it must be reused (no drift)')
+
+
+class TestRunTestsStatusRestore(EmbodyTestCase):
+    """The MCP _run_tests Status='Testing' stomp: the prior Status survives in
+    COMP storage (reinit-proof) and _restoreStatusAfterTests is idempotent.
+
+    These tests may themselves run INSIDE a live stomp window (invoked via MCP
+    run_tests, where Status=='Testing' and storage holds the real prior), so
+    setUp snapshots the live par + storage + instance attribute and tearDown
+    restores all three exactly -- the enclosing run's own restore still works.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.envoy = self.embody.ext.Envoy
+        self._saved_live = self.embody.par.Status.eval()
+        self._saved_store = self.embody.fetch(
+            '_test_saved_status', None, search=False)
+        self._saved_attr = getattr(self.envoy, '_test_saved_status', None)
+
+    def tearDown(self):
+        if self._saved_store is None:
+            self.embody.unstore('_test_saved_status')
+        else:
+            self.embody.store('_test_saved_status', self._saved_store)
+        self.envoy._test_saved_status = self._saved_attr
+        self.embody.par.Status = self._saved_live
+        super().tearDown()
+
+    def test_restore_reads_comp_storage(self):
+        """The stored prior wins, is applied, and is cleared after restore --
+        the reinit-proof path (an instance attribute would have been wiped)."""
+        self.embody.store('_test_saved_status', 'Enabled')
+        self.envoy._test_saved_status = None
+        self.embody.par.Status = 'Testing'
+
+        self.envoy._restoreStatusAfterTests()
+
+        self.assertEqual(self.embody.par.Status.eval(), 'Enabled',
+                         'Restore must apply the storage-backed prior Status')
+        self.assertIsNone(
+            self.embody.fetch('_test_saved_status', None, search=False),
+            'Restore must clear the stored prior (idempotent re-entry)')
+
+    def test_restore_falls_back_to_instance_attr(self):
+        """A legacy pre-hardening save on the instance still restores."""
+        self.embody.unstore('_test_saved_status')
+        self.envoy._test_saved_status = 'Enabled'
+        self.embody.par.Status = 'Testing'
+
+        self.envoy._restoreStatusAfterTests()
+
+        self.assertEqual(self.embody.par.Status.eval(), 'Enabled',
+                         'Restore must fall back to the legacy instance attr')
+        self.assertIsNone(self.envoy._test_saved_status,
+                          'Restore must clear the legacy instance attr')
+
+    def test_restore_noop_when_nothing_saved(self):
+        """No saved prior anywhere -> leave Status alone (a stuck 'Testing'
+        must stay visible and fail loud upstream, never be invented over)."""
+        self.embody.unstore('_test_saved_status')
+        self.envoy._test_saved_status = None
+        self.embody.par.Status = 'Testing'
+
+        self.envoy._restoreStatusAfterTests()
+
+        self.assertEqual(self.embody.par.Status.eval(), 'Testing',
+                         'With nothing saved, restore must not touch Status')

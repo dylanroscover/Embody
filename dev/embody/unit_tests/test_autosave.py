@@ -126,11 +126,12 @@ class TestAutosave(EmbodyTestCase):
 
     def test_delete_purges_tracking_no_resurrection(self):
         # Deleting a tracked TDN COMP must purge its row so recovery can't
-        # resurrect it (the delete-undo guard). _delete_op calls _purgeTDNTracking.
+        # resurrect it (the delete-undo guard). _delete_op calls
+        # _purgeExternalizationTracking.
         comp, abs_tdn = self._make_tdn('del_undo')
         self.embody_ext.Checkpoint(comp.path)
         comp_path = comp.path
-        self.embody_ext._purgeTDNTracking(comp_path)
+        self.embody_ext._purgeExternalizationTracking(comp_path)
         comp.destroy()
         tracked = [cp for cp, _ in self.embody_ext._getTDNStrategyComps()]
         self.assertNotIn(comp_path, tracked)
@@ -189,10 +190,52 @@ class TestAutosave(EmbodyTestCase):
     def test_purge_does_not_over_purge_prefix_sibling(self):
         comp, _ = self._make_tdn('cp')
         sib, _ = self._make_tdn('cp2')   # shares the 'cp' prefix
-        self.embody_ext._purgeTDNTracking(comp.path)
+        self.embody_ext._purgeExternalizationTracking(comp.path)
         tracked = [p for p, _ in self.embody_ext._getTDNStrategyComps()]
         self.assertNotIn(comp.path, tracked)
         self.assertIn(sib.path, tracked)  # sibling must survive
+
+    def test_purge_removes_non_tdn_rows(self):
+        # delete_op on an externalized DAT must remove its table row --
+        # previously only TDN rows were purged, leaving an orphan row + file
+        # behind until a Refresh sweep (issue #57 follow-up, 2026-07-16).
+        # The row removal is synchronous (asserted here); the file deletion
+        # is deferred via run(..., delayFrames=5) like the TDN path, so it
+        # cannot be observed inside a synchronous test -- clean it manually.
+        dat = self.sandbox.create(textDAT, 'purge_dat')
+        dat.text = '# purge me'
+        ext = self.embody_ext
+        ext.applyTagToOperator(dat, self.embody.par.Pytag.eval())
+        ext.ExternalizeImmediate(dat)
+        dat_path = dat.path
+        table = ext.Externalizations
+        rows = [i for i in range(1, table.numRows)
+                if table[i, 'path'].val == dat_path]
+        self.assertEqual(len(rows), 1, 'externalize should add one row')
+        rel = table[rows[0], 'rel_file_path'].val
+        abs_file = ext.buildAbsolutePath(ext.normalizePath(rel)).resolve()
+        try:
+            self.assertTrue(abs_file.is_file(),
+                            'externalized file should exist')
+            ext._purgeExternalizationTracking(dat_path)
+            dat.destroy()
+            rows_after = [i for i in range(1, table.numRows)
+                          if table[i, 'path'].val == dat_path]
+            self.assertEqual(rows_after, [],
+                             'row must be purged with the op (any strategy)')
+        finally:
+            # The deferred _delete fires ~5 frames later and no-ops if the
+            # file is already gone; remove it now so no orphan outlives the
+            # test regardless of assertion outcome. Same for the table row:
+            # a failed assertion must not leave an orphan row for a destroyed
+            # sandbox op in the LIVE externalizations table.
+            try:
+                abs_file.unlink()
+            except OSError:
+                pass
+            for i in range(table.numRows - 1, 0, -1):
+                if table[i, 'path'].val == dat_path:
+                    table.deleteRow(i)
 
     # --- recorder end-to-end (through _noteCheckpointActivity) ---
 

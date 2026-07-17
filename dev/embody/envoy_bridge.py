@@ -688,6 +688,13 @@ def find_all_td_pids():
                 if "TouchDesigner" in line:
                     parts = line.strip('"').split('","')
                     if len(parts) >= 2:
+                        # Image name is parts[0]. Skip helper processes
+                        # (TouchDesignerWebRender.exe matches the
+                        # TouchDesigner* filter) -- they are not TD
+                        # instances and must never satisfy liveness or
+                        # discovery.
+                        if "WebRender" in parts[0]:
+                            continue
                         try:
                             pids.append(int(parts[1]))
                         except ValueError:
@@ -729,7 +736,15 @@ def find_all_td_pids():
 
 
 def find_td_pid():
-    """Find the PID of a running TouchDesigner process. Returns int or None."""
+    """Find the PID of a running TouchDesigner process. Returns int or None.
+
+    INSTANCE-BLIND: returns the first TD process on the machine. Use it
+    ONLY where no instance identity exists (legacy flat configs, empty
+    registry). Anywhere an ACTIVE registered instance is in play, a dead
+    registered pid must resolve to None -- adopting a stranger's pid here
+    is what made dead instances read as alive on multi-instance machines
+    (issue #57 follow-up).
+    """
     pids = find_all_td_pids()
     return pids[0] if pids else None
 
@@ -761,6 +776,21 @@ def is_process_alive(pid):
         return False
     except OSError:
         return False
+
+
+def is_td_process_alive(pid):
+    """True iff pid is alive AND is an actual TouchDesigner instance.
+
+    is_process_alive() alone is not enough for REGISTRY pids: the OS
+    recycles PIDs (aggressively on Windows), so a stale registered pid can
+    be alive as some unrelated process -- which made a dead instance read
+    as running and launch_td refuse to relaunch it (issue #57 follow-up).
+    find_all_td_pids() is image-filtered (and excludes bridges/helpers),
+    so membership proves the pid really is TouchDesigner.
+    """
+    if not is_process_alive(pid):
+        return False
+    return pid in find_all_td_pids()
 
 
 def ping_envoy_port(port):
@@ -1135,8 +1165,12 @@ def handle_get_td_status(state):
         connected = state.connected
         config_path = state.config_path
 
-    # Refresh process liveness
-    alive = is_process_alive(td_pid)
+    # Refresh process liveness. The PORT answering is the strongest
+    # identity signal (the instance registered it itself); a verified
+    # registered pid is second. NEVER infer liveness from unrelated TD
+    # processes -- on multi-instance machines that reported dead
+    # instances as alive (issue #57 follow-up).
+    alive = bool(connected) or is_td_process_alive(td_pid)
     if td_pid and not alive:
         with state:
             state.crash_detected = True
@@ -1217,11 +1251,14 @@ def handle_switch_instance(params, state):
     # Switch the bridge's in-memory state
     old_active = active_name
     config_pid = info.get("td_pid")
-    resolved_pid = (config_pid if config_pid and is_process_alive(config_pid)
-                    else find_td_pid())
+    # Registry pid only (image-verified) -- never a blind any-TD fallback,
+    # which could name a DIFFERENT instance's process (issue #57 follow-up).
+    resolved_pid = (config_pid
+                    if config_pid and is_td_process_alive(config_pid)
+                    else None)
     with state:
         old_url = state.url
-        state.url = f"http://localhost:{target_port}/mcp"
+        state.url = f"http://127.0.0.1:{target_port}/mcp"
         state.connected = False  # Force reconnect + initialize handshake
         state.td_pid = resolved_pid
         state.crash_detected = False
@@ -1295,7 +1332,9 @@ def handle_launch_td(params, state):
         # registered under the target's basename with a live PID.
         instance_info = instances.get(target_basename, {})
         existing_pid = instance_info.get("td_pid")
-        if existing_pid and is_process_alive(existing_pid):
+        # Image-verified liveness: a recycled pid that now belongs to some
+        # unrelated process must not block a legitimate relaunch.
+        if existing_pid and is_td_process_alive(existing_pid):
             return {
                 "status": "error",
                 "message": (
@@ -1317,7 +1356,7 @@ def handle_launch_td(params, state):
             git_root = None
         for key, info in instances.items():
             pid = info.get("td_pid", 0)
-            if not pid or not is_process_alive(pid):
+            if not pid or not is_td_process_alive(pid):
                 continue
             their_toe = info.get("toe_path", "")
             if not their_toe:
@@ -1397,13 +1436,28 @@ def handle_restart_td(params, state):
     timeout = params.get("timeout", 120)
     project_path = params.get("project_path")
 
-    # Find and quit the running TD process
-    pid = find_td_pid()
-    if not pid or not is_process_alive(pid):
+    # Quit ONLY the ACTIVE instance's verified process. The old find_td_pid()
+    # here grabbed the first TD on the machine -- with several instances
+    # running, restart_td could quit a DIFFERENT project's TD entirely
+    # (issue #57 follow-up). Identity comes from the registry (written by
+    # the instance itself), falling back to the bridge's own launch-tracked
+    # pid; both are image-verified against pid reuse.
+    with state:
+        cfg_path = state.config_path
+        state_pid = state.td_pid
+    cfg = load_config(cfg_path)
+    _port, reg_pid, active_name = _resolve_from_registry(cfg, None)
+    pid = reg_pid if reg_pid and is_td_process_alive(reg_pid) else None
+    if pid is None and state_pid and is_td_process_alive(state_pid):
+        pid = state_pid
+    if not pid:
         return {
             "status": "error",
             "message": (
-                "TouchDesigner is not running. Use launch_td to start it."
+                f'The active instance'
+                f'{f" ({active_name})" if active_name else ""} is not '
+                "running (no verified TouchDesigner process for it -- other "
+                "TD instances are ignored). Use launch_td to start it."
             ),
         }
 
@@ -1479,7 +1533,14 @@ def handle_bridge_tool(name, params, state):
 # ---------------------------------------------------------------------------
 
 def augment_tools_list(response):
-    """Append bridge meta-tools to a tools/list response from TD."""
+    """Append bridge meta-tools to a tools/list response from TD.
+
+    Idempotent: a response that already carries the bridge tools (a cached
+    tools/list re-served within the cache window, or a double augmentation
+    on a refresh path) must not accumulate duplicates. This guard existed
+    in the disk-fallback copy but was missing from this template -- the
+    shipped bridge duplicated meta-tools until 2026-07-16.
+    """
     if (response
             and "result" in response
             and "tools" in response["result"]):
@@ -2002,7 +2063,7 @@ def reconcile(state, on_tools_change, *, heartbeat):
         if mtime != old_mtime:
             new_config = load_config(config_path)
             port, pid, active_name = _resolve_from_registry(new_config, None)
-            candidate = f"http://localhost:{port}/mcp" if port else None
+            candidate = f"http://127.0.0.1:{port}/mcp" if port else None
             with state:
                 state.config = new_config
                 state.config_mtime = mtime
@@ -2158,15 +2219,21 @@ def _resolve_from_registry(config, fallback_port):
         active = instances[active_name]
         port = active.get("port", fallback_port)
         config_pid = active.get("td_pid")
-        if config_pid and is_process_alive(config_pid):
+        if config_pid and is_td_process_alive(config_pid):
             return port, config_pid, active_name
-        return port, find_td_pid(), active_name
+        # The active instance's registered process is gone. Do NOT adopt
+        # some other TD's pid (find_td_pid) -- on multi-instance machines
+        # that reported a DEAD instance as alive and blocked launch_td
+        # (issue #57 follow-up). No pid means "not running"; the port
+        # probe / reconciler recovers identity once it is actually back.
+        return port, None, active_name
 
-    # Old-format config or empty registry -- use fallback
+    # Old-format config or empty registry -- no instance identity exists,
+    # so a blind any-TD guess is the best available seed here.
     if "port" in config and "instances" not in config:
         port = config.get("port", fallback_port)
         config_pid = config.get("td_pid")
-        if config_pid and is_process_alive(config_pid):
+        if config_pid and is_td_process_alive(config_pid):
             return port, config_pid, None
         return port, find_td_pid(), None
 
@@ -2203,7 +2270,12 @@ def main():
 
     config = load_config(config_path)
     port, td_pid, active_name = _resolve_from_registry(config, cli_port)
-    url = f"http://localhost:{port}/mcp"
+    # Target 127.0.0.1 explicitly, never "localhost": Envoy binds IPv4-only,
+    # Windows resolves localhost to ::1 first, and urllib tries addresses
+    # SEQUENTIALLY -- on hosts whose firewall delays or drops loopback SYNs
+    # (issue #57), every forward then burns seconds (or the full request
+    # timeout) on a doomed ::1 attempt before falling back to IPv4.
+    url = f"http://127.0.0.1:{port}/mcp"
 
     # Seed config_mtime so the reconciler only reacts to actual drift,
     # not the initial load we already performed here.
@@ -2232,7 +2304,7 @@ def main():
         log(f"Starting (instance: {active_name}, port: {port}) "
             f"[PID {my_pid}, parent {ppid}]")
     else:
-        log(f"Starting (target: localhost:{port}) "
+        log(f"Starting (target: 127.0.0.1:{port}) "
             f"[PID {my_pid}, parent {ppid}]")
     if config_path:
         log(f"Config: {config_path}")
@@ -2356,7 +2428,14 @@ def main():
                         state.last_connected_time = time.time()
                         state.crash_detected = False
                         if not state.td_pid:
-                            state.td_pid = find_td_pid()
+                            # Connected via the instance's registered PORT --
+                            # recover the pid from the registry (written by
+                            # the TD instance itself), never from a blind
+                            # any-TD scan that could name a different
+                            # instance's process (issue #57 follow-up).
+                            _cfg = load_config(state.config_path)
+                            _p, _rpid, _a = _resolve_from_registry(_cfg, None)
+                            state.td_pid = _rpid
                     is_connected = True
                     log("Connected to Envoy (during tools/list)")
                     # Fall through to the forwarding path below
@@ -2401,7 +2480,7 @@ def main():
             fresh_config = load_config(fresh_config_path)
             new_port, new_pid, new_active = _resolve_from_registry(
                 fresh_config, cli_port)
-            new_url = f"http://localhost:{new_port}/mcp" if new_port else current_url
+            new_url = f"http://127.0.0.1:{new_port}/mcp" if new_port else current_url
             if new_url != current_url:
                 with state:
                     state.url = new_url

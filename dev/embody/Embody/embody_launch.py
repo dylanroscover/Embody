@@ -204,11 +204,14 @@ def build_terminal_script(ext, cwd, cli, abs_cli, install=None) -> str:
     terminal's own login-shell PATH (with a visible install guard if truly
     absent). install: the how-to-install hint shown in that guard.
     """
-    q = str(cwd).replace("'", "'\\''")        # single-quote-escape the dir
+    # Forward slashes always (project convention): str(Path) flips to
+    # backslashes on a Windows host, which is nonsense inside a zsh script.
+    q = str(cwd).replace('\\', '/').replace("'", "'\\''")
     lines = ['#!/bin/zsh -l',
              f"cd '{q}' || {{ echo \"launch dir missing\"; exec \"${{SHELL:-/bin/zsh}}\" -il; }}"]
     if abs_cli:
-        lines.append(f'exec {shlex.quote(abs_cli)}')
+        abs_posix = str(abs_cli).replace('\\', '/')
+        lines.append(f'exec {shlex.quote(abs_posix)}')
     else:
         # Not found by fast probe -- let the login shell resolve it. If truly
         # absent, print install guidance and keep the window open.
@@ -226,12 +229,15 @@ def build_terminal_script(ext, cwd, cli, abs_cli, install=None) -> str:
 def build_terminal_script_win(ext, cwd, cli, abs_cli, install=None) -> str:
     """Windows twin of _buildTerminalScript: the .bat run via cmd /K.
     Pure (no I/O) so the correctness-critical content is unit-testable."""
-    d = str(cwd).replace('"', '')
+    # Forward slashes always (project convention): cmd.exe accepts them in
+    # double-quoted cd /d and program paths, and str(Path) on Windows would
+    # otherwise flip separators per-host.
+    d = str(cwd).replace('\\', '/').replace('"', '')
     lines = ['@echo off',
              f'cd /d "{d}"',
              'if errorlevel 1 echo launch dir missing.']
     if abs_cli:
-        lines.append(f'"{str(abs_cli).replace(chr(34), "")}"')
+        lines.append(f'"{str(abs_cli).replace(chr(92), "/").replace(chr(34), "")}"')
     else:
         hint = ''.join(c for c in (install or 'see the tool website')
                        if re.match(r"[A-Za-z0-9 ._:/@()+=,'-]", c))

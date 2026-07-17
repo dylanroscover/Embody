@@ -64,6 +64,27 @@ touched recently.
 - Re-read a file before editing whenever a peer's `recent_scopes` mentions
   it: your cached copy may be stale.
 
+## Worktrees are scoped territory too
+
+Isolated-worktree work (`../<repo>-wt-<task>`, see
+`rules/worktree-td-safety.md`) is doubly invisible: the edits are raw file
+edits AND they happen outside the repo Envoy watches. Peers cannot see any
+of it until the diff lands. So coordinate by intent, not by touch records:
+
+- **On starting a worktree task**: claim `project:worktree-<task>` (e.g.
+  `project:worktree-watchdog`) with a note naming the files/subsystem the
+  diff will land on. This is how peers learn a worktree task is in flight.
+- **Before landing the diff**: claim `file:<repo-relative-path>` for each
+  externalized file the diff touches (or the narrowest shared parent
+  scope). If a peer holds one, reconcile first -- landing over a peer's
+  in-flight edit is the worktree version of a blind overwrite.
+- **Two sessions must never share one worktree** -- one writer per
+  checkout, always. A second session starts its own
+  `../<repo>-wt-<other-task>`.
+- Access is pre-authorized: Envoy's generated settings allow Read/Edit in
+  sibling `<repo>-wt-*` folders, so worktree work never needs permission
+  prompts (keep the `-wt-` naming for this to apply).
+
 ## Division of labor
 
 The cheapest coordination is spatial: agree (via the user) on separate COMP

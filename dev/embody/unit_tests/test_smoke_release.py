@@ -101,8 +101,20 @@ class TestSmokeRelease(EmbodyTestCase):
     # =========================================================================
 
     def test_status_enabled(self):
-        """Embody status is Enabled after init completes."""
-        self.assertEqual(self.embody.par.Status.eval(), 'Enabled')
+        """Embody status is Enabled after init completes.
+
+        Under the MCP run_tests path, EnvoyExt._run_tests holds the live
+        Status at 'Testing' for the whole run and keeps the real value in
+        COMP storage -- reading 'Enabled' live is impossible there (it was a
+        deterministic failure on every MCP-invoked run). Assert against what
+        will be restored; a genuinely stuck 'Testing' (nothing saved) still
+        fails loud.
+        """
+        status = self.embody.par.Status.eval()
+        if status == 'Testing':
+            status = self.embody.fetch('_test_saved_status', 'Testing',
+                                       search=False)
+        self.assertEqual(status, 'Enabled')
 
     def test_embody_extension_loaded(self):
         """EmbodyExt is accessible on the Embody COMP."""

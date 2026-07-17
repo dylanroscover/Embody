@@ -64,10 +64,10 @@ Since v5.0.264, Envoy generates MCP and AI client config files (`.mcp.json`, `CL
 If Claude Code can't use MCP transport, it may try to reach Envoy via curl. Verify the server is reachable:
 
 ```bash
-curl http://localhost:9870/mcp
+curl http://127.0.0.1:9870/mcp
 ```
 
-You should get a response (even if it's an error about missing JSON body). If you get "connection refused," the server isn't running or is on a different port.
+You should get a response (even if it's an error about missing JSON body). If you get "connection refused," the server isn't running or is on a different port. Always use `127.0.0.1`, not `localhost` -- Envoy binds IPv4-only, and on some Windows hosts the firewall silently delays or drops connections to the unused IPv6 `localhost` address (issue #57).
 
 ## MCP Disconnects Mid-Session
 

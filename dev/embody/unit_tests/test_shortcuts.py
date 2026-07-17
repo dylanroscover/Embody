@@ -33,9 +33,21 @@ class TestShortcuts(EmbodyTestCase):
         m = self.sc
         self._saved = {p: str(self.embody.par[p].eval()) for p in m.SHORTCUT_PARS}
         self._saved_tagger = str(self.embody.par.Shortcuttagger.eval())
+        # Pin the parexec suppression gate OPEN: the test_parexec_* tests
+        # call onValueChange directly, and its guard reads live shared state
+        # (_restoring_settings on the ext, the _init_complete store) that
+        # other suites legitimately toggle mid-run -- the polluter behind
+        # these tests failing ONLY in full runs while passing 48/48 in
+        # isolation (2026-07-16). Snapshot both and restore in tearDown.
+        ext = self.embody.ext.Embody
+        self._prev_restoring = getattr(ext, '_restoring_settings', False)
+        self._prev_init_complete = self.embody.fetch(
+            '_init_complete', None, search=False)
         # A setUp failure skips tearDown (TestRunnerExt), so any mutation
         # after the snapshot must restore on its own if it blows up.
         try:
+            ext._restoring_settings = False
+            self.embody.store('_init_complete', True)
             self._clearRecording()
             # Deterministic starting state for every test.
             m.resetDefaults(self.embody)
@@ -48,6 +60,18 @@ class TestShortcuts(EmbodyTestCase):
             self.embody.par[name].val = val
         self.embody.par.Shortcuttagger = self._saved_tagger
         self._clearRecording()
+        # Restore the parexec gate exactly as found (never cache the ext
+        # reference -- resolve live; a reinit may have replaced it).
+        ext = self.embody.ext.Embody
+        ext._restoring_settings = getattr(self, '_prev_restoring', False)
+        prev_init = getattr(self, '_prev_init_complete', True)
+        if prev_init is None:
+            try:
+                self.embody.unstore('_init_complete')
+            except Exception:
+                pass
+        else:
+            self.embody.store('_init_complete', prev_init)
 
     # -- Normalization ---------------------------------------------------
 

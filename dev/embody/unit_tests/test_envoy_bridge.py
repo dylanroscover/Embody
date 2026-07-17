@@ -1220,7 +1220,13 @@ class TestBridgeConfig(EmbodyTestCase):
     def test_resolve_toe_path_relative(self):
         config = {'toe_path': 'dev/test.toe'}
         result = bridge.resolve_toe_path(config, '/repo/.embody/envoy.json')
-        self.assertEqual(result, '/repo/dev/test.toe')
+        # Build the expectation with the same os.path machinery so the
+        # assertion is platform-portable: on Windows, abspath('/repo/...')
+        # prepends the current drive and flips separators, so a hardcoded
+        # POSIX string can never match there.
+        git_root = os.path.dirname(os.path.dirname(
+            os.path.abspath('/repo/.embody/envoy.json')))
+        self.assertEqual(result, os.path.join(git_root, 'dev/test.toe'))
 
     def test_resolve_toe_path_missing(self):
         result = bridge.resolve_toe_path({}, '/some/config.json')
@@ -1677,17 +1683,38 @@ class TestBridgeMetaTools(EmbodyTestCase):
     # --- restart_td ---
 
     def test_restart_td_not_running(self):
-        """Error when TD is not running."""
-        with patch.object(bridge, 'find_td_pid', return_value=None):
+        """Error when the ACTIVE instance is not running."""
+        with patch.object(bridge, 'load_config', return_value={}), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'is_td_process_alive', return_value=False):
             state = self._make_state()
             result = bridge.handle_restart_td({}, state)
         self.assertEqual(result['status'], 'error')
         self.assertIn('not running', result['message'])
 
+    def test_restart_td_ignores_other_instances(self):
+        """A dead ACTIVE instance must refuse even while OTHER TD processes
+        run -- the old find_td_pid() path would have quit one of them."""
+        registry = {'active': 'proj', 'instances': {
+            'proj': {'port': 9870, 'td_pid': 111, 'toe_path': 'p.toe'}}}
+        quit_calls = []
+        with patch.object(bridge, 'load_config', return_value=registry), \
+             patch.object(bridge, 'is_td_process_alive', return_value=False), \
+             patch.object(bridge, 'find_td_pid', return_value=999), \
+             patch.object(bridge, 'quit_td',
+                          side_effect=lambda p: quit_calls.append(p)):
+            state = self._make_state()
+            result = bridge.handle_restart_td({}, state)
+        self.assertEqual(result['status'], 'error')
+        self.assertEqual(quit_calls, [],
+                         'must never quit an unrelated TD process')
+
     def test_restart_td_quit_fails(self):
         """Error when TD cannot be terminated."""
-        with patch.object(bridge, 'find_td_pid', return_value=12345), \
-             patch.object(bridge, 'is_process_alive', return_value=True), \
+        registry = {'active': 'proj', 'instances': {
+            'proj': {'port': 9870, 'td_pid': 12345, 'toe_path': 'p.toe'}}}
+        with patch.object(bridge, 'load_config', return_value=registry), \
+             patch.object(bridge, 'is_td_process_alive', return_value=True), \
              patch.object(bridge, 'quit_td',
                           return_value=(False, 'Could not terminate')):
             state = self._make_state(td_pid=12345)
@@ -1697,8 +1724,10 @@ class TestBridgeMetaTools(EmbodyTestCase):
 
     def test_restart_td_success(self):
         """Full restart: quit then launch, Envoy reachable."""
-        with patch.object(bridge, 'find_td_pid', return_value=12345), \
-             patch.object(bridge, 'is_process_alive', return_value=True), \
+        registry = {'active': 'proj', 'instances': {
+            'proj': {'port': 9870, 'td_pid': 12345, 'toe_path': 't.toe'}}}
+        with patch.object(bridge, 'load_config', return_value=registry), \
+             patch.object(bridge, 'is_td_process_alive', return_value=True), \
              patch.object(bridge, 'quit_td',
                           return_value=(True, 'Exited gracefully')), \
              patch.object(bridge, 'launch_td',
@@ -1718,8 +1747,10 @@ class TestBridgeMetaTools(EmbodyTestCase):
 
     def test_restart_td_clears_state(self):
         """Restart clears connection state before relaunch."""
-        with patch.object(bridge, 'find_td_pid', return_value=12345), \
-             patch.object(bridge, 'is_process_alive', return_value=True), \
+        registry = {'active': 'proj', 'instances': {
+            'proj': {'port': 9870, 'td_pid': 12345, 'toe_path': 't.toe'}}}
+        with patch.object(bridge, 'load_config', return_value=registry), \
+             patch.object(bridge, 'is_td_process_alive', return_value=True), \
              patch.object(bridge, 'quit_td',
                           return_value=(True, 'Exited')), \
              patch.object(bridge, 'launch_td',
@@ -1746,11 +1777,60 @@ class TestBridgeMetaTools(EmbodyTestCase):
 
     def test_handle_bridge_tool_restart_dispatch(self):
         """restart_td is dispatched through handle_bridge_tool."""
-        with patch.object(bridge, 'find_td_pid', return_value=None):
+        with patch.object(bridge, 'load_config', return_value={}), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'is_td_process_alive', return_value=False):
             state = self._make_state()
             content = bridge.handle_bridge_tool('restart_td', {}, state)
         parsed = json.loads(content[0]['text'])
         self.assertEqual(parsed['status'], 'error')  # Not running
+
+    # --- instance-aware pid semantics (issue #57 follow-up) ---
+
+    def test_is_td_process_alive_rejects_recycled_pid(self):
+        """A live pid that is NOT a TouchDesigner image must read as dead."""
+        with patch.object(bridge, 'is_process_alive', return_value=True), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[42, 43]):
+            self.assertFalse(bridge.is_td_process_alive(999))
+            self.assertTrue(bridge.is_td_process_alive(42))
+        with patch.object(bridge, 'is_process_alive', return_value=False):
+            self.assertFalse(bridge.is_td_process_alive(42))
+
+    def test_resolve_from_registry_dead_active_pid_returns_none(self):
+        """A dead ACTIVE-instance pid resolves to None -- never adopt some
+        other TD process (the multi-instance false-alive bug)."""
+        registry = {'active': 'proj', 'instances': {
+            'proj': {'port': 9876, 'td_pid': 111}}}
+        with patch.object(bridge, 'is_td_process_alive', return_value=False), \
+             patch.object(bridge, 'find_td_pid', return_value=999):
+            port, pid, active = bridge._resolve_from_registry(registry, 9870)
+        self.assertEqual(port, 9876)
+        self.assertIsNone(pid, 'must not adopt an unrelated TD pid')
+        self.assertEqual(active, 'proj')
+
+    def test_status_alive_when_connected_without_pid(self):
+        """A reachable port proves the instance is alive even when no pid is
+        known (registered pid dead, port re-answered after a revive)."""
+        state = self._make_state(connected=True, td_pid=None)
+        with patch.object(bridge, 'load_config', return_value={}):
+            result = bridge.handle_get_td_status(state)
+        self.assertTrue(result['td_process_alive'])
+        self.assertFalse(result['crash_detected'])
+
+    def test_find_all_td_pids_excludes_webrender_windows(self):
+        """TouchDesignerWebRender helpers match the tasklist TouchDesigner*
+        filter but are not TD instances -- they must be excluded so a
+        recycled/helper pid can never satisfy a liveness check."""
+        if sys.platform != 'win32':
+            self.skipTest('Windows tasklist branch only')
+        fake = MagicMock()
+        fake.stdout = (
+            '"TouchDesigner.exe","111","Console","1","1,000 K"\n'
+            '"TouchDesignerWebRender.exe","222","Console","1","1,000 K"\n')
+        with patch.object(bridge.subprocess, 'run', return_value=fake):
+            pids = bridge.find_all_td_pids()
+        self.assertIn(111, pids)
+        self.assertNotIn(222, pids)
 
     def test_handle_bridge_tool_unknown(self):
         state = self._make_state()
