@@ -2071,8 +2071,8 @@ class EmbodyExt:
 
         - Fresh install: table exists but is empty (just created) -- skip dialog,
           run UpdateHandler quietly, then offer Envoy opt-in.
-        - Update install: table has prior data -- offer a re-scan to validate
-          tracked operators after upgrading Embody.
+        - Update install: table has prior data -- validate tracked operators
+          quietly (no dialog; see _validateTrackedOperators).
         """
         # Restore saved settings from a previous install before any dialogs.
         settings_restored = self._restoreSettings()
@@ -2093,15 +2093,19 @@ class EmbodyExt:
         has_prior_data = table and table.numRows > 1
 
         if has_prior_data:
-            # UPDATE scenario: reconnected to a surviving table with prior entries.
-            # Offer a re-scan so Embody validates/updates all tracked operators.
-            choice = self._messageBox('Embody',
-                f'{table.numRows - 1} externalized operator(s) found.\n\n'
-                'Re-scan to validate tracked operators?\n'
-                '(Recommended after upgrading Embody)',
-                buttons=['Skip', 'Re-scan'])
-            if choice in (1,):  # Re-scan
-                self.Reset()
+            # UPDATE scenario: reconnected to a surviving table with prior
+            # entries. Validate quietly -- the same silent treatment as the
+            # fresh-install branch below. The old Skip/Re-scan dialog wired
+            # 'Re-scan' to Reset(): Disable() synchronously unlinked EVERY
+            # tracked file (bypassing Filecleanup), then Update() re-exported
+            # the whole project in ONE frame -- a minutes-long main-thread
+            # freeze and a crash window with zero files on disk. Validation
+            # never needed that rebuild: UpdateHandler()'s deferred Update()
+            # runs the continuity check over every tracked row, migrates the
+            # table schema, and normalizes paths. A genuine ground-up rebuild
+            # stays available via Disable -> Enable, whose dialog actually
+            # discloses the file deletion.
+            self._validateTrackedOperators()
         else:
             # FRESH INSTALL: table was just created (empty). No dialog needed --
             # just run UpdateHandler quietly; it will find nothing yet.
@@ -2151,6 +2155,30 @@ class EmbodyExt:
                     and not getattr(self, '_pending_envoy_prompt', False)):
                 self.my.par.Envoyenable = False
                 self._pending_envoy_prompt = True
+
+    def _validateTrackedOperators(self) -> None:
+        """Quiet upgrade-path validation of tracked operators.
+
+        Non-destructive by contract: synchronously it deletes no files,
+        clears no table rows, and never touches Status. (The deferred
+        UpdateHandler() may later flip Status Disabled -> Enabled -- that is
+        the normal enable step, not a reset.) Logs the tracked-row count,
+        clears Embody's own
+        externaltox (the freshly dragged-in .tox points it at its drag source
+        -- e.g. a Downloads folder -- and a later project save would overwrite
+        that release file; previously cleared inside Reset(), which no longer
+        runs on this path), then defers UpdateHandler(), whose Update() pass
+        validates every tracked row (continuity check, schema migration, path
+        normalization, stray-tag pickup) and re-exports only genuinely dirty
+        operators.
+        """
+        table = self.Externalizations
+        count = table.numRows - 1 if table else 0
+        self.Log(
+            f'{count} externalized operator(s) found -- '
+            'validating tracked operators', 'INFO')
+        self.my.par.externaltox = ''
+        run(f"op('{self.my}').UpdateHandler()", delayFrames=10)
 
     # ==========================================================================
     # SAFE FILE TRACKING
@@ -3386,6 +3414,9 @@ class EmbodyExt:
             self.Log(f"Portable .tox export failed: {e}", "ERROR")
 
         # Phase 4: Restore all references (always, even on failure).
+        # Safe ONLY because setting externaltox/enableexternaltox does not
+        # trigger a mid-session load on TD 2025 -- live content survives.
+        # If TD ever made a par-set reload, this restore would wipe it.
         for entry in saved_state:
             try:
                 op_ref = entry['op']
@@ -6504,9 +6535,11 @@ class EmbodyExt:
             self.Log(f'TOX file not found: {rel_tox_path}', 'ERROR')
             return
 
-        # Toggle enableexternaltox to force TD to re-read the .tox
-        oper.par.enableexternaltox = False
+        # enableexternaltoxpulse is the only working reload trigger on TD
+        # 2025: toggling enableexternaltox off->on does NOT re-read the
+        # .tox, and reloadtoxpulse does not exist.
         oper.par.enableexternaltox = True
+        oper.par.enableexternaltoxpulse.pulse()
         self.Log(f'Reloaded {oper.path} from disk ({rel_tox_path})', 'SUCCESS')
 
     def HandleEmbed(self, oper: OP) -> None:
@@ -8096,6 +8129,7 @@ class EmbodyExt:
         tdn_tag = self.my.par.Tdntag.val
         embody_path = self.my.path
         reconciled = 0
+        failed = 0
 
         for i in range(1, table.numRows):
             path = self._cellVal(i, 'path')
@@ -8122,61 +8156,87 @@ class EmbodyExt:
             if not tag:
                 continue
 
-            # Check if already reconciled (idempotency)
-            tag_present = tag in oper.tags
-            if strategy == 'tox':
-                if tag_present and oper.par.externaltox.eval():
-                    continue
-            elif strategy == 'tdn':
-                if tag_present:
-                    continue
-            else:  # DAT
-                if tag_present and oper.par.file.eval():
-                    continue
+            # Per-row guard: one bad row (wrong family for its strategy,
+            # missing par, unreadable file) must not abort the whole pass.
+            try:
+                # Check if already reconciled (idempotency)
+                tag_present = tag in oper.tags
+                if strategy == 'tox':
+                    if tag_present and oper.par.externaltox.eval():
+                        continue
+                elif strategy == 'tdn':
+                    if tag_present:
+                        continue
+                else:  # DAT
+                    if tag_present and oper.par.file.eval():
+                        continue
 
-            # --- Apply metadata ---
-            if strategy not in ('tox', 'tdn'):
-                # DAT reconciliation
-                oper.tags.add(tag)
-                self._setDATLanguageForTag(oper, tag)
-                oper.par.file.readOnly = False
-                oper.par.file = rel_file_path
-                oper.par.syncfile = True
-                oper.par.file.readOnly = True
+                # --- Apply metadata ---
+                # Par writes come FIRST in each branch: a wrongly-typed row
+                # (e.g. a DAT sitting in a tox row) then fails before the
+                # tag mutation, so broken rows don't accumulate stray tags.
+                if strategy not in ('tox', 'tdn'):
+                    # DAT reconciliation
+                    oper.par.file.readOnly = False
+                    oper.par.file = rel_file_path
+                    oper.par.syncfile = True
+                    oper.par.file.readOnly = True
+                    oper.tags.add(tag)
+                    self._setDATLanguageForTag(oper, tag)
 
-            elif strategy == 'tox':
-                # TOX COMP reconciliation
-                oper.tags.add(tag)
-                oper.par.externaltox.readOnly = False
-                oper.par.externaltox = rel_file_path
-                oper.par.externaltox.readOnly = True
-                oper.par.enableexternaltox = True
-                oper.par.reloadtoxpulse.pulse()
-                self._restorePositionFromTable(oper, path)
+                elif strategy == 'tox':
+                    # TOX COMP reconciliation. enableexternaltoxpulse is
+                    # the load trigger -- reloadtoxpulse does not exist on
+                    # TD 2025 COMPs. A missing file must fail the row
+                    # loud: pulsing against it is a silent no-op (no
+                    # exception, no scriptError), which would count the
+                    # row reconciled while nothing reloaded.
+                    if not self.buildAbsolutePath(rel_file_path).is_file():
+                        raise FileNotFoundError(
+                            f'.tox missing on disk: {rel_file_path}')
+                    # The tag goes on AFTER the pulse: the reload replaces
+                    # the COMP from disk, and a tag added before it does
+                    # not survive (same reasoning as RestoreTOXComps'
+                    # post-load re-tag).
+                    oper.par.externaltox.readOnly = False
+                    oper.par.externaltox = rel_file_path
+                    oper.par.externaltox.readOnly = True
+                    oper.par.enableexternaltox = True
+                    oper.par.enableexternaltoxpulse.pulse()
+                    oper.tags.add(tag)
+                    self._restorePositionFromTable(oper, path)
 
-            elif strategy == 'tdn':
-                # TDN COMP reconciliation
-                oper.tags.add(tag)
-                self._restorePositionFromTable(oper, path)
+                elif strategy == 'tdn':
+                    # TDN COMP reconciliation
+                    oper.tags.add(tag)
+                    self._restorePositionFromTable(oper, path)
 
-            # Apply color: prefer table value, fall back to tag color
-            color_applied = False
-            if node_color:
-                try:
-                    r, g, b = [float(c) for c in node_color.split(',')]
-                    oper.color = (r, g, b)
-                    color_applied = True
-                except (ValueError, TypeError):
-                    pass
-            if not color_applied:
-                color = self._getTagColor(oper, tag)
-                if color:
-                    oper.color = color
+                # Apply color: prefer table value, fall back to tag color
+                color_applied = False
+                if node_color:
+                    try:
+                        r, g, b = [float(c) for c in node_color.split(',')]
+                        oper.color = (r, g, b)
+                        color_applied = True
+                    except (ValueError, TypeError):
+                        pass
+                if not color_applied:
+                    color = self._getTagColor(oper, tag)
+                    if color:
+                        oper.color = color
 
-            reconciled += 1
-            self.Log(f"Reconciled '{path}' ({strategy})", "INFO")
+                reconciled += 1
+                self.Log(f"Reconciled '{path}' ({strategy})", "INFO")
 
-        if reconciled:
+            except Exception as e:
+                failed += 1
+                self.Log(f"Failed to reconcile '{path}' ({strategy}): {e}",
+                         "ERROR")
+
+        if failed:
+            self.Log(f"Reconciled {reconciled} operator(s); {failed} row(s) "
+                     f"failed", "WARNING")
+        elif reconciled:
             self.Log(f"Reconciled metadata on {reconciled} operator(s)", "SUCCESS")
         else:
             self.Log("All operator metadata consistent", "DEBUG")
@@ -8252,19 +8312,49 @@ class EmbodyExt:
                 errors += 1
                 continue
 
-            # Set externaltox to trigger TD auto-load from .tox
+            # Configure and load the .tox. Setting externaltox +
+            # enableexternaltox alone does NOT load mid-session on TD 2025
+            # (auto-load only happens at .toe open) --
+            # enableexternaltoxpulse is the explicit, synchronous trigger.
             try:
                 new_comp.par.externaltox = self.normalizePath(rel_tox_path)
                 new_comp.par.externaltox.readOnly = True
                 new_comp.par.enableexternaltox = True
+                new_comp.par.enableexternaltoxpulse.pulse()
 
                 # Handle timing issue (same workaround as
-                # _setupCompForExternalization)
-                if ("Cannot load external tox from path"
-                        in new_comp.scriptErrors()):
+                # _setupCompForExternalization). Everything else about
+                # this row -- tag, color, position, the success/failure
+                # verdict -- must WAIT for the deferred verify: the load
+                # has not landed yet, and a tag applied now would be
+                # wiped when it does.
+                timing_error = ("Cannot load external tox from path"
+                                in new_comp.scriptErrors())
+                if timing_error:
                     new_comp.allowCooking = False
                     run(lambda p=new_comp.path: self._safeAllowCooking(p, True),
                         delayFrames=1)
+                    run(lambda p=new_comp.path, r=rel_tox_path:
+                        self._verifyTOXRestoreLoaded(p, r), delayFrames=3)
+                    self.Log(f'Restore of {comp_path} deferred one frame '
+                             f'(cook-timing) -- verifying shortly', 'INFO')
+                    continue
+
+                # The pulse loads synchronously and externalTimeStamp is
+                # the success signal: it stays 0 when the .tox did not
+                # load (a valid-but-empty .tox still stamps it, and a
+                # failed load posts NO script error at all). Destroy the
+                # dead shell and fail loud: a leftover shell blocks the
+                # next startup restore (the op exists, so it gets skipped)
+                # and a later Save() would export an empty .tox over the
+                # good file.
+                if new_comp.externalTimeStamp == 0:
+                    self.Log(f'Restore of {comp_path} produced an empty '
+                             f'COMP -- .tox did not load: {rel_tox_path}',
+                             'ERROR')
+                    new_comp.destroy()
+                    errors += 1
+                    continue
 
                 # Re-apply Embody tag and color (may not survive .tox load)
                 tox_tag = self.my.par.Toxtag.val
@@ -8284,8 +8374,48 @@ class EmbodyExt:
                 self.Log(f'Failed to configure externaltox for '
                          f'{comp_path}: {e}', 'ERROR')
                 errors += 1
+                # Never leave a dead shell behind: it blocks the next
+                # startup restore and a later Save() would export it
+                # empty over the good .tox.
+                try:
+                    if new_comp.valid and new_comp.externalTimeStamp == 0:
+                        new_comp.destroy()
+                except Exception:
+                    pass
 
         self._logTOXRestorationReport(len(to_restore), restored, errors)
+
+    def _verifyTOXRestoreLoaded(self, comp_path: str,
+                                rel_tox_path: str) -> None:
+        """Deferred completion of a cook-timing-deferred TOX restore.
+
+        externalTimeStamp stays 0 when the .tox never loaded (a failed
+        load posts no script error, so it is the only signal; a
+        valid-but-empty .tox still stamps it). On success this finishes
+        the restore -- the load wipes tags, so metadata must be applied
+        HERE, not before the load. On failure it destroys the dead shell
+        so the next startup can retry and no Save() can export it empty.
+        """
+        oper = op(comp_path)
+        if oper is None or not oper.valid:
+            return
+        if oper.externalTimeStamp != 0:
+            tox_tag = self.my.par.Toxtag.val
+            if tox_tag and tox_tag not in oper.tags:
+                oper.tags.add(tox_tag)
+            oper.color = (self.my.par.Toxtagcolorr.eval(),
+                          self.my.par.Toxtagcolorg.eval(),
+                          self.my.par.Toxtagcolorb.eval())
+            self._restorePositionFromTable(oper, comp_path)
+            self.Log(f'Restored {comp_path} from {rel_tox_path} '
+                     f'(deferred)', 'SUCCESS')
+            return
+        self.Log(f'Restore of {comp_path} produced an empty COMP -- .tox '
+                 f'did not load: {rel_tox_path}', 'ERROR')
+        try:
+            oper.destroy()
+        except Exception:
+            pass
 
     def _getTOXStrategyComps(self) -> list[tuple[str, str, str]]:
         """Get all TOX-strategy COMPs from the externalizations table.

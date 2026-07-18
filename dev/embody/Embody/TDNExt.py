@@ -4629,8 +4629,10 @@ class TDNExt:
 		_createOps tags any COMP it built from a `tox_ref` entry with a
 		`_pending_tox_restore` storage key holding the relative tox path.
 		This pass walks `dest`'s subtree, sets `externaltox` from that
-		storage, calls `_reloadTox` (which toggles `enableexternaltox` to
-		force TD to re-read the .tox), then clears the marker.
+		storage, calls `_reloadTox` (which pulses `enableexternaltoxpulse`
+		-- the only working reload trigger on TD 2025; setting or toggling
+		`enableexternaltox` does NOT re-read the .tox), then clears the
+		marker.
 
 		Without this, `ReconstructTDNComps` (frame 60) with `clear_first=
 		True` would destroy any TOX child that `RestoreTOXComps` (frame 45)

@@ -148,8 +148,10 @@ def _seed_responses():
 
     # Auto-respond to all init dialogs:
     #   - Duplicate instance check: 'Ok' (button 0) - shouldn't fire in fresh project
-    #   - Re-scan prompt: 'Skip' (button 0) - shouldn't fire in fresh install
     #   - Envoy opt-in: 'Enable Envoy' (button 1)
+    # (The old Skip/Re-scan upgrade prompt is gone -- the upgrade path now
+    #  validates quietly via _validateTrackedOperators; 'Embody': 0 remains
+    #  for the duplicate-instance dialog, which shares that title.)
     responses = {
         'Embody': 0,
         'Embody - AI Coding Assistant Integration': 1,
