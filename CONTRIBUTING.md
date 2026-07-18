@@ -41,7 +41,7 @@ If you are unsure which zone a file is in: if it sits under `dev/embody/` or
 
 ## Requirements
 
-- **TouchDesigner 2025.32820 or later** (Windows / macOS). Pre-2025 builds
+- **TouchDesigner 2025.33070 or later** (Windows / macOS). Pre-2025 builds
   are not supported and not a goal.
 - **Python**: TouchDesigner's bundled Python. There is no `pyproject.toml`
   or pip package -- Embody ships as a `.tox`, not a Python distribution.

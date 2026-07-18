@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 631
-generator: Embody/6.0.133
-td_build: 099.2025.32820
-source_file: Embody-6.134.toe
-exported_at: '2026-07-18T01:34:02Z'
+build: 644
+generator: Embody/6.0.135
+td_build: 099.2025.33070
+source_file: Embody-6.135.toe
+exported_at: '2026-07-18T11:28:00Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -307,7 +307,7 @@ operators:
       label: Auto-Save Status
       readOnly: true
       help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-      value: Saved 22:58:24 UTC
+      value: Saved 11:27:57 UTC
     - name: Tdnstriponsave
       style: Toggle
       label: Strip on Save
@@ -731,13 +731,13 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.133
+      value: 6.0.135
     - name: Touchbuild
       style: Str
       label: Touch Build
       readOnly: true
       help: TouchDesigner build number this version was developed on (read-only).
-      value: '2025.32820'
+      value: '2025.33070'
     - name: Author
       style: Str
       readOnly: true
@@ -748,7 +748,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 816
+      value: 824
     - name: Github
       style: Pulse
       label: GitHub
@@ -759,7 +759,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-18 01:34:02 UTC
+      value: 2026-07-18 11:27:56 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -779,9 +779,10 @@ operators:
     git_status:
       /embody/externalizations: ' M'
       /embody/unit_tests/test_sandbox: ' M'
+      /embody/Embody/EmbodyExt: ' M'
       /embody/Embody: ' M'
       /embody: ' M'
-    _watchdog_gen: 907
+    _watchdog_gen: 911
     _suite_proof_progress:
       todo:
       - test_ancestor_rename
@@ -923,9 +924,9 @@ operators:
           tot: 33
           fail: 1
       pending_after: absent
-    _clip_watch_gen: 672
-    _shortcut_rec_gen: 209
-    _suppress_dialogs: true
+    _clip_watch_gen: 676
+    _shortcut_rec_gen: 223
+    _init_complete: true
   tdn_ref: embody/Embody.tdn
 - name: base_tdn
   type: baseCOMP

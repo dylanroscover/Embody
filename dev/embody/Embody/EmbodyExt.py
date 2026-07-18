@@ -2071,8 +2071,8 @@ class EmbodyExt:
 
         - Fresh install: table exists but is empty (just created) -- skip dialog,
           run UpdateHandler quietly, then offer Envoy opt-in.
-        - Update install: table has prior data -- offer a re-scan to validate
-          tracked operators after upgrading Embody.
+        - Update install: table has prior data -- validate tracked operators
+          quietly (no dialog; see _validateTrackedOperators).
         """
         # Restore saved settings from a previous install before any dialogs.
         settings_restored = self._restoreSettings()
@@ -2093,15 +2093,19 @@ class EmbodyExt:
         has_prior_data = table and table.numRows > 1
 
         if has_prior_data:
-            # UPDATE scenario: reconnected to a surviving table with prior entries.
-            # Offer a re-scan so Embody validates/updates all tracked operators.
-            choice = self._messageBox('Embody',
-                f'{table.numRows - 1} externalized operator(s) found.\n\n'
-                'Re-scan to validate tracked operators?\n'
-                '(Recommended after upgrading Embody)',
-                buttons=['Skip', 'Re-scan'])
-            if choice in (1,):  # Re-scan
-                self.Reset()
+            # UPDATE scenario: reconnected to a surviving table with prior
+            # entries. Validate quietly -- the same silent treatment as the
+            # fresh-install branch below. The old Skip/Re-scan dialog wired
+            # 'Re-scan' to Reset(): Disable() synchronously unlinked EVERY
+            # tracked file (bypassing Filecleanup), then Update() re-exported
+            # the whole project in ONE frame -- a minutes-long main-thread
+            # freeze and a crash window with zero files on disk. Validation
+            # never needed that rebuild: UpdateHandler()'s deferred Update()
+            # runs the continuity check over every tracked row, migrates the
+            # table schema, and normalizes paths. A genuine ground-up rebuild
+            # stays available via Disable -> Enable, whose dialog actually
+            # discloses the file deletion.
+            self._validateTrackedOperators()
         else:
             # FRESH INSTALL: table was just created (empty). No dialog needed --
             # just run UpdateHandler quietly; it will find nothing yet.
@@ -2151,6 +2155,30 @@ class EmbodyExt:
                     and not getattr(self, '_pending_envoy_prompt', False)):
                 self.my.par.Envoyenable = False
                 self._pending_envoy_prompt = True
+
+    def _validateTrackedOperators(self) -> None:
+        """Quiet upgrade-path validation of tracked operators.
+
+        Non-destructive by contract: synchronously it deletes no files,
+        clears no table rows, and never touches Status. (The deferred
+        UpdateHandler() may later flip Status Disabled -> Enabled -- that is
+        the normal enable step, not a reset.) Logs the tracked-row count,
+        clears Embody's own
+        externaltox (the freshly dragged-in .tox points it at its drag source
+        -- e.g. a Downloads folder -- and a later project save would overwrite
+        that release file; previously cleared inside Reset(), which no longer
+        runs on this path), then defers UpdateHandler(), whose Update() pass
+        validates every tracked row (continuity check, schema migration, path
+        normalization, stray-tag pickup) and re-exports only genuinely dirty
+        operators.
+        """
+        table = self.Externalizations
+        count = table.numRows - 1 if table else 0
+        self.Log(
+            f'{count} externalized operator(s) found -- '
+            'validating tracked operators', 'INFO')
+        self.my.par.externaltox = ''
+        run(f"op('{self.my}').UpdateHandler()", delayFrames=10)
 
     # ==========================================================================
     # SAFE FILE TRACKING

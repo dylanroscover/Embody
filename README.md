@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.134-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.135-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-53-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -42,13 +42,13 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 ## Quick Start
 
-**Requirements:** TouchDesigner **2025.32820 or later** (Windows / macOS). No Python setup needed — Envoy installs its own dependencies on first enable. No special folder structure either: Embody works in any project folder, and if you happen to use git, every change is also a clean diff for free.
+**Requirements:** TouchDesigner **2025.33070 or later** (Windows / macOS). No Python setup needed — Envoy installs its own dependencies on first enable. No special folder structure either: Embody works in any project folder, and if you happen to use git, every change is also a clean diff for free.
 
 ### 1. Install
 
 **Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project. The **[Setup Wizard](https://dylanroscover.github.io/Embody/embody/setup-wizard/)** opens and walks you through the choices that matter — how much autonomy Embody gets, whether to enable the AI assistant (Envoy) and for which tool, permissions, and where config files live. Nothing changes until the final click, and you can re-run it anytime via the **Setup Wizard** pulse on the Embody COMP.
 
-> **Updating Embody:** delete the old Embody COMP and drag the new `.tox` in its place. Your settings and tracked externalizations live on disk, so the new version picks them up automatically — and offers a quick re-scan to validate everything it's tracking.
+> **Updating Embody:** delete the old Embody COMP and drag the new `.tox` in its place. Your settings and tracked externalizations live on disk, so the new version picks them up automatically and quietly validates everything it's tracking — no re-scan, no dialogs, no files rewritten.
 
 ### 2. Tag and Work
 
@@ -172,7 +172,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **92 test suites** (2,092 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **97 test suites** (2,129 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -203,6 +203,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.135**: The upgrade **Skip/Re-scan dialog is gone** — dropping a new `.tox` into an existing project now **validates tracked operators quietly** (schema migration, path normalization, per-row continuity, dirty-only re-export) instead of the old "Re-scan", which deleted every tracked file and re-exported the whole project in one synchronous frame — a minutes-long freeze on large projects with a crash window of zero files on disk. A full rebuild stays available via Disable → Enable, which discloses the deletion. Minimum TD build is now **2025.33070**. New `test_verify_upgrade` regression suite; **2,122 tests passing** (97 suites).
 - **6.0.134**: TD 2025.33070 first-launch **palette-scan freeze** (loading `geoPanel.tox`/`chromaKey.tox` can wedge the new build's frame loop within a frame of `loadTox` returning -- a TD-side race, reproduced with no Embody code and reported upstream) fixed **structurally**: the scan no longer loads components into TD at all -- a background worker runs TD's bundled `toeexpand` per palette `.tox` and reads type + child count from the expansion (**zero frame drops**; the old path blew the 60fps budget on 78 of its first 91 loads); **33070 bootstrap rows ship pre-baked** (267 components -- current installs never scan); a **freeze sentinel** convicts and skips any future wedge-causing component after one relaunch instead of freeze-looping; legacy loadTox scan is fallback-only, hardened with `allowCooking=False` + blocklist. A save-wedge regression in the sentinel's first iteration (teardown cross-extension call during `ExportPortableTox`'s strip-triggered reinit) was caught and fixed pre-ship. **2,117+ tests passing** (19 new).
 - **6.0.131**: Issue [#57](https://github.com/dylanroscover/Embody/issues/57) (Windows MCP transport) -- the STDIO bridge and the HTTP-fallback config target **`127.0.0.1` instead of `localhost`** (Windows resolves `localhost` to `::1` first while Envoy binds IPv4-only; on firewalls that stealth-drop loopback SYNs every MCP call burned ~2s and a full drop became the reported multi-minute `create_op` hang -- measured 2.1s -> 0.07-0.27s per call after the fix); Envoy no longer **restart-storms** when its base port is held by another TD instance (observed 575-attempt loop: generation-stamped restart scheduling, in-flight-start guards, ownership-checked force-close, loud dead-on-arrival diagnostics); bridge **liveness is instance-aware** -- the active instance's image-verified registered PID or its answering port, never "any TouchDesigner process exists" -- and `restart_td` can no longer quit a *different* project's TD on multi-instance machines; `delete_op` purges tracking rows and files for **every** strategy (clone/shared-file guarded); TDN **renames no longer leak the old `.tdn` on Windows** (`Path.replace` overwrite parity); bridge `tools/list` augmentation is idempotent (template/fallback drift healed); launch scripts emit forward-slash paths on every platform. Full Windows suite green for the first time: **2,085 passed / 0 failed** (7 platform skips). Fresh-install smoke-tested from the shipped `.tox`. **92 suites / 2,092 tests**.
 - **6.0.128**: Issue [#60](https://github.com/dylanroscover/Embody/issues/60) (Embody in a default startup file) -- the first-launch **palette catalog scan** no longer un-pauses a timeline the user paused mid-scan (per-chunk snapshot bracket), **checkpoints every 25 components and resumes** on the next launch instead of restarting from zero when TD is closed mid-scan (atomic writes; can't wedge, can't re-enable a Disabled Embody); the **"Dropped .tox Expression Detected"** sweep and Externalize Full Project now honor `tdn_exclude` ancestry-wide, plain Ignore holds for the session, and `Toxdropexpr` persists so "Always" answers survive new untitled projects (Envoy opt-in honors restored config the same way); the **venv probe** runs once per session per venv path and a timeout no longer deletes a healthy venv. New shipped rule: **worktree-td-safety**. **92 suites / 2,090+ tests**.

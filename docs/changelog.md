@@ -1,5 +1,16 @@
 # Changelog
 
+## v6.0.135
+
+Upgrade path made non-destructive and freeze-free: the Skip/Re-scan dialog is gone -- dropping a new Embody `.tox` into an existing project now validates tracked operators quietly instead of deleting and re-exporting every externalized file in one frozen frame.
+
+- **Upgrade freeze fixed at the root**: the old dialog's "Re-scan" button (labeled "Recommended after upgrading Embody") called `Reset()` -- `Disable()` synchronously unlinked EVERY tracked file (bypassing the `Filecleanup` preference), then `Update()` re-externalized the entire project in ONE synchronous main-thread frame: per TOX COMP a full `.tox` serialization, per TDN COMP a full `ExportNetwork` plus a ~700ms whole-project stale-file rglob scan. On real projects that froze TD for minutes -- and force-killing the frozen TD landed in a crash window with zero externalized files on disk (recovery only via git or the `.toe`'s embedded copies; TDN COMPs stripped at last save could be lost outright). `Verify()`'s upgrade branch now calls a new `_validateTrackedOperators()` helper instead: log the tracked-row count, clear Embody's own drag-source `externaltox`, and defer the standard `UpdateHandler()` pass -- schema migration, path normalization, per-row continuity validation, stray-tag pickup, dirty-only re-export. No dialog, no deletion, no freeze.
+- **Skip-path gap closed**: clicking Skip used to leave the table schema migration and path normalization never run (both lived only behind the Re-scan branch). The always-run quiet validation now covers them on every upgrade.
+- **Destructive rebuild is disclosure-only now**: the one-click undisclosed file-deletion path is gone. A genuine ground-up rebuild remains available via Disable -> Enable, whose dialog states that files will be deleted. `Reset()` stays as public API but no longer has production callers.
+- **Minimum TD build floor is now 2025.33070**: this release was saved on the current official build; the automated version-doc sync (README, docs, CONTRIBUTING) raises the support floor accordingly.
+- **Docs**: README and getting-started now describe the quiet validation; the smoke-harness seeding comment updated (the `'Embody': 0` auto-response remains for the duplicate-instance dialog, which shares the title).
+- **Tests**: new `test_verify_upgrade` suite (3 tests) pins the non-destructive contract -- no file deletion, no table clears, no Status flip, plus source-level tombstones that fail if the dialog or a `Reset()`/`Disable()` call ever returns to the upgrade path. Full suite at release: **2,122 passed / 0 failed / 7 platform skips** (97 suites / 2,129 tests).
+
 ## v6.0.134
 
 TD 2025.33070 palette-scan freeze + frame drops, fixed structurally: the palette scan no longer loads components into TD at all -- a background toeexpand worker reads types and child counts from unpacked .tox files with zero main-thread cost -- plus 33070 bootstrap rows, a poison-pill sentinel, and blocklist entries for the two components that wedge 33070. (v6.0.132/133 were consumed by saves during the fix cycle and never shipped.)
