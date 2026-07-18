@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 644
-generator: Embody/6.0.135
+build: 656
+generator: Embody/6.0.136
 td_build: 099.2025.33070
-source_file: Embody-6.135.toe
-exported_at: '2026-07-18T11:28:00Z'
+source_file: Embody-6.136.toe
+exported_at: '2026-07-18T14:13:17Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -109,6 +109,7 @@ operators:
     - name: Refresh
       style: Pulse
       help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
+      value: true
     - name: Performmode
       style: Toggle
       label: Perform Mode
@@ -307,7 +308,7 @@ operators:
       label: Auto-Save Status
       readOnly: true
       help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-      value: Saved 11:27:57 UTC
+      value: Saved 14:13:16 UTC
     - name: Tdnstriponsave
       style: Toggle
       label: Strip on Save
@@ -447,7 +448,7 @@ operators:
       startSection: true
       readOnly: true
       help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-      value: Running on port 9872
+      value: Starting...
     Logs:
     - name: Verbose
       style: Toggle
@@ -731,7 +732,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.135
+      value: 6.0.136
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -748,7 +749,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 824
+      value: 831
     - name: Github
       style: Pulse
       label: GitHub
@@ -759,7 +760,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-18 11:27:56 UTC
+      value: 2026-07-18 14:13:16 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -779,10 +780,11 @@ operators:
     git_status:
       /embody/externalizations: ' M'
       /embody/unit_tests/test_sandbox: ' M'
+      /embody/Embody/TDNExt: ' M'
       /embody/Embody/EmbodyExt: ' M'
       /embody/Embody: ' M'
       /embody: ' M'
-    _watchdog_gen: 911
+    _watchdog_gen: 916
     _suite_proof_progress:
       todo:
       - test_ancestor_rename
@@ -924,8 +926,8 @@ operators:
           tot: 33
           fail: 1
       pending_after: absent
-    _clip_watch_gen: 676
-    _shortcut_rec_gen: 223
+    _clip_watch_gen: 681
+    _shortcut_rec_gen: 237
     _init_complete: true
   tdn_ref: embody/Embody.tdn
 - name: base_tdn
