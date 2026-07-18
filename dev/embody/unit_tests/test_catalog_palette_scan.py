@@ -495,6 +495,10 @@ class TestCatalogPaletteSentinel(EmbodyTestCase):
 			'_op_catalog_pending': getattr(
 				self.cat, '_op_catalog_pending', None),
 			'_scan_in_flight': self.cat._scan_in_flight,
+			'_sentinel_written': self.cat._sentinel_written,
+			'_sentinel_path_cache': self.cat._sentinel_path_cache,
+			'_workspace': self.cat._workspace,
+			'_palette_workspace': self.cat._palette_workspace,
 		}
 		self._tdn_saved = (
 			self.tdn._divergent_loaded,
@@ -503,6 +507,8 @@ class TestCatalogPaletteSentinel(EmbodyTestCase):
 		)
 		self.cat._build_str = 'test.build'
 		self.cat._palette_blocked = set()
+		self.cat._sentinel_written = False
+		self.cat._sentinel_path_cache = None
 
 	def tearDown(self):
 		import os
@@ -562,6 +568,35 @@ class TestCatalogPaletteSentinel(EmbodyTestCase):
 
 	def test_D05_clear_without_sentinel_is_noop(self):
 		self.cat._clearInflightSentinel()  # must not raise
+
+	def test_D10_teardown_clears_only_own_sentinel(self):
+		"""onDestroyTD must be inert unless THIS session wrote a sentinel.
+
+		The teardown clear used to resolve the project root via
+		ext.Embody - which wedged project.save() when ExportPortableTox's
+		file-ref strip reinitialized the extension mid-save - and it
+		deleted sibling instances' live sentinels. With the guard,
+		teardown does nothing unless a legacy scan wrote a sentinel this
+		session, and clearing uses the cached path."""
+		import os
+		self.cat._workspace = None
+		self.cat._palette_workspace = None
+		# Foreign sentinel on disk, nothing written this session:
+		with open(self._sentinel_path, 'w', encoding='utf-8') as f:
+			f.write('{"build": "other", "name": "y"}')
+		self.cat._sentinel_written = False
+		self.cat.onDestroyTD()
+		self.assertTrue(os.path.isfile(self._sentinel_path),
+			'teardown must not delete a sentinel this session did not write')
+		os.unlink(self._sentinel_path)
+		# Own sentinel: written this session -> teardown clears via cache.
+		self.cat._writeInflightSentinel('geoPanel', 'Techniques/geoPanel.tox')
+		self.assertTrue(self.cat._sentinel_written)
+		self.assertEqual(self.cat._sentinel_path_cache, self._sentinel_path)
+		self.cat.onDestroyTD()
+		self.assertFalse(os.path.isfile(self._sentinel_path),
+			'teardown must clear a sentinel this session wrote')
+		self.assertFalse(self.cat._sentinel_written)
 
 	# =================================================================
 	# Blocklist and blocked-path filtering

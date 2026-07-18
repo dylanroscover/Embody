@@ -109,6 +109,11 @@ class CatalogManagerExt:
 		self._tox_scan_stop = None
 		self._tox_scan_total = 0
 		self._tox_scan_fail_count = 0
+		# True only after THIS session wrote an in-flight sentinel (a
+		# legacy loadTox scan ran); gates the teardown clear so a normal
+		# session's onDestroyTD never touches files or other extensions.
+		self._sentinel_written = False
+		self._sentinel_path_cache = None
 		# Timeline / cook state snapshot, re-taken at the START of every
 		# palette chunk and restored right after that chunk's loadTox calls.
 		# Loading some palette .tox files runs their init code, which can
@@ -121,13 +126,22 @@ class CatalogManagerExt:
 	def onDestroyTD(self):
 		"""Clean up workspace if scan was interrupted.
 
-		Also drops the in-flight sentinel: a clean extension teardown
-		(reinit, normal TD close) means the session did NOT wedge, so the
-		most recently loaded palette component must not be blamed. Only a
-		hard kill / frame-loop wedge leaves the sentinel behind.
+		Also drops the in-flight sentinel - but ONLY when this session
+		actually wrote one (i.e. a legacy loadTox scan ran): a clean
+		teardown means the session did not wedge, so the most recently
+		loaded component must not be blamed. The guard matters doubly:
+		(1) teardown fires from ExportPortableTox's file-ref strip DURING
+		project.save() - the sentinel clear used to resolve
+		ext.Embody._findProjectRoot() right there and wedged the save
+		(v6.0.133 release regression, 2026-07-17); with the guard, a
+		normal session's teardown does zero file I/O and zero extension
+		lookups. (2) A session that wrote nothing must not delete a
+		sibling instance's live sentinel (panel finding). A hard kill /
+		frame-loop wedge still leaves the sentinel behind either way.
 		"""
 		self._cleanupWorkspace()
-		self._clearInflightSentinel()
+		if self._sentinel_written:
+			self._clearInflightSentinel()
 
 	def onInitTD(self):
 		pass
@@ -1410,17 +1424,30 @@ class CatalogManagerExt:
 					'name': name,
 					'rel_path': rel_path,
 				}))
+			# Cache for teardown-time clearing: onDestroyTD must never
+			# re-resolve the project root (an ext.Embody call) - that
+			# wedged project.save() when the export's file-ref strip
+			# reinitialized this extension mid-save.
+			self._sentinel_written = True
+			self._sentinel_path_cache = path
 		except Exception:
 			pass
 
 	def _clearInflightSentinel(self):
-		"""Remove the in-flight sentinel if present. Never raises."""
+		"""Remove the in-flight sentinel if present. Never raises.
+
+		Prefers the path cached at write time so teardown-context calls
+		do no extension lookups; falls back to resolving the path for
+		startup-context calls (consume) where no cache exists yet.
+		"""
 		try:
-			os.unlink(self._inflightSentinelPath())
+			path = self._sentinel_path_cache or self._inflightSentinelPath()
+			os.unlink(path)
 		except OSError:
 			pass
 		except Exception:
 			pass
+		self._sentinel_written = False
 
 	def _consumeInflightSentinel(self):
 		"""Read-and-delete a leftover sentinel; return the poisoned stem.
