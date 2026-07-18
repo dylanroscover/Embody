@@ -12,6 +12,15 @@ The entire save call is `project.save()` -- no arguments. TD increments the `.to
 
 Don't pass a path (TD increments from *your* path's build, desyncing by one). Don't pre-set `par.Version`. Don't call `ExportPortableTox` directly.
 
+**If externalized files changed on disk while TD was closed** (e.g. a landed
+worktree diff), verify the affected DATs re-synced into the live network
+BEFORE saving: table DATs load their file only on the post-launch refresh
+sweep, which can run AFTER an early save -- and the portable export captures
+LIVE DAT state, shipping stale content (observed v6.0.133: the exported
+`palette_catalog` was missing all 267 just-landed 33070 rows). Pulse
+`op.Embody.par.Refresh` and spot-check the changed DATs (row counts, code
+markers), then save.
+
 If you've already mis-saved: rename the off-by-one `.toe` on disk to match `par.Version`, then have the user close TD without saving and reopen. Do **not** save again -- the hook will delete the just-correct release `.tox`.
 
 ## 1. Audit All Changes
