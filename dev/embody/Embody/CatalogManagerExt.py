@@ -46,12 +46,14 @@ _PALETTE_SCAN_BLOCKLIST = frozenset({
 	'resources',           # VRWorldExt + findMouse (Windows-only windll)
 	'world',               # VRWorldExt + findMouse (Windows-only windll)
 	'system',              # findMouse (Windows-only ctypes.windll)
-	'geopanel',            # wedges TD 2025.33070's frame loop within one
-	                       # frame of loadTox returning (verified 2026-07-17:
-	                       # same file loads fine on 32820; isolation repro
-	                       # wedges 33070 every time - TD-side regression;
-	                       # ships per-frame panel.interactTouch/interactMouse
-	                       # executors + Leap SDK init)
+	'geopanel',            # can wedge TD 2025.33070's frame loop within 1-2
+	                       # frames of loadTox returning (2026-07-17: 6 of 7
+	                       # runs wedged incl. an Embody-free isolation .toe;
+	                       # one real-project full scan survived, so the
+	                       # trigger is a timing/UI-state race - TD-side, the
+	                       # file is md5-identical to 32820's; ships per-frame
+	                       # panel.interactTouch/interactMouse executors +
+	                       # Leap SDK init)
 	'chromakey',           # same wedge class on 33070: full-palette probe
 	                       # with geopanel excluded wedged right after
 	                       # chromaKey loaded (2026-07-17)
