@@ -141,13 +141,25 @@ class TestCatalogPaletteScanChunkBracket(EmbodyTestCase):
 		self._scratch_catalog = os.path.join(
 			self._tmpdir, 'catalog_scratch.json')
 		self.cat._getCatalogPath = lambda build: self._scratch_catalog
+		# The chunk body now writes the freeze sentinel before every
+		# load - keep it off the REAL .embody path, and off the live
+		# blocked set (the suite's mini tox must never be convicted).
+		self._sentinel_path = os.path.join(
+			self._tmpdir, 'palette_scan_inflight.json')
+		self.cat._inflightSentinelPath = lambda: self._sentinel_path
+		self._saved_blocked = set(self.cat._palette_blocked)
 		self._finalize_calls = []
 
 	def tearDown(self):
 		import os
 		for name in ('_getPaletteDir', '_finalizePaletteScan',
-					 '_getCatalogPath'):
+					 '_getCatalogPath', '_inflightSentinelPath'):
 			self.cat.__dict__.pop(name, None)
+		self.cat._palette_blocked = self._saved_blocked
+		try:
+			os.unlink(self._sentinel_path)
+		except OSError:
+			pass
 		for key, val in self._cat_saved.items():
 			setattr(self.cat, key, val)
 		self.embody.par.Status = self._orig_status
@@ -244,14 +256,21 @@ class TestCatalogScanResume(EmbodyTestCase):
 			'_op_catalog_pending': getattr(self.cat, '_op_catalog_pending', None),
 			'_build_str': self.cat._build_str,
 			'_pending_resume': getattr(self.cat, '_pending_resume', None),
+			'_palette_blocked': set(self.cat._palette_blocked),
 		}
+		# _startPaletteScan consumes the freeze sentinel - keep the REAL
+		# .embody sentinel out of reach so a leftover from another suite
+		# (or a real scan) is neither consumed nor convicted here.
+		self._sentinel_path = os.path.join(
+			self._tmpdir, 'palette_scan_inflight.json')
+		self.cat._inflightSentinelPath = lambda: self._sentinel_path
 		self._ensure_calls = []
 
 	def tearDown(self):
 		import os
 		for name in ('_getCatalogPath', '_ensurePalette',
 					 '_patchCrossBuildDefaults', '_getPaletteDir',
-					 '_finalizePaletteScan'):
+					 '_finalizePaletteScan', '_inflightSentinelPath'):
 			self.cat.__dict__.pop(name, None)
 		for key, val in self._cat_saved.items():
 			setattr(self.cat, key, val)
@@ -443,3 +462,456 @@ class TestCatalogScanResume(EmbodyTestCase):
 		self.assertEqual(str(self.embody.par.Status),
 			'Scanning palette (1/2)',
 			'normal scan status writes must still go through')
+
+
+class TestCatalogPaletteSentinel(EmbodyTestCase):
+	"""In-flight sentinel: palette freeze forensics + poisoned-component skip.
+
+	TD 2025.33070 wedges its frame loop within a frame of geoPanel.tox
+	loading (loadTox RETURNS, then the next frame never comes), so a user's
+	first launch froze at 'Scanning palette (89/251)' and every relaunch
+	resumed straight back into the same wedge. The sentinel is written
+	right before every palette loadTox and removed only on clean outcomes
+	(finalize, graceful abort, extension teardown); a launch that finds one
+	convicts that component and skips it for the build, permanently
+	(persisted under the reserved '_palette_blocked' catalog key).
+	"""
+
+	def setUp(self):
+		super().setUp()
+		import os, tempfile
+		self.cat = self.embody.ext.CatalogManager
+		self.tdn = self.embody.ext.TDN
+		self._tmpdir = tempfile.mkdtemp(prefix='embody_sentinel_test_')
+		self._sentinel_path = os.path.join(
+			self._tmpdir, 'palette_scan_inflight.json')
+		self.cat._inflightSentinelPath = lambda: self._sentinel_path
+		self._orig_status = str(self.embody.par.Status)
+		self._cat_saved = {
+			'_build_str': self.cat._build_str,
+			'_palette_blocked': set(self.cat._palette_blocked),
+			'_palette_results': self.cat._palette_results,
+			'_palette_checkpointed': self.cat._palette_checkpointed,
+			'_op_catalog_pending': getattr(
+				self.cat, '_op_catalog_pending', None),
+			'_scan_in_flight': self.cat._scan_in_flight,
+		}
+		self._tdn_saved = (
+			self.tdn._divergent_loaded,
+			self.tdn._divergent_defaults,
+			self.tdn._palette_catalog,
+		)
+		self.cat._build_str = 'test.build'
+		self.cat._palette_blocked = set()
+
+	def tearDown(self):
+		import os
+		for name in ('_inflightSentinelPath', '_getCatalogPath',
+					 '_getPaletteDir', '_finalizePaletteScan'):
+			self.cat.__dict__.pop(name, None)
+		for key, val in self._cat_saved.items():
+			setattr(self.cat, key, val)
+		(self.tdn._divergent_loaded,
+		 self.tdn._divergent_defaults,
+		 self.tdn._palette_catalog) = self._tdn_saved
+		self.embody.par.Status = self._orig_status
+		for fname in list(os.listdir(self._tmpdir)):
+			try:
+				os.unlink(os.path.join(self._tmpdir, fname))
+			except OSError:
+				pass
+		try:
+			os.rmdir(self._tmpdir)
+		except OSError:
+			pass
+		super().tearDown()
+
+	# =================================================================
+	# Sentinel write / consume round-trip
+	# =================================================================
+
+	def test_D01_sentinel_roundtrip_convicts_and_deletes(self):
+		import os
+		self.cat._writeInflightSentinel('geoPanel', 'Techniques/geoPanel.tox')
+		self.assertTrue(os.path.isfile(self._sentinel_path),
+			'sentinel must exist on disk after the pre-load write')
+		self.assertEqual(self.cat._consumeInflightSentinel(), 'geoPanel',
+			'a build-matched sentinel must convict its component')
+		self.assertFalse(os.path.isfile(self._sentinel_path),
+			'consume must delete the sentinel')
+
+	def test_D02_no_sentinel_returns_none(self):
+		self.assertIsNone(self.cat._consumeInflightSentinel())
+
+	def test_D03_stale_build_sentinel_is_dropped(self):
+		import os
+		self.cat._writeInflightSentinel('geoPanel', 'Techniques/geoPanel.tox')
+		self.cat._build_str = 'other.build'
+		self.assertIsNone(self.cat._consumeInflightSentinel(),
+			'a sentinel from another TD build must not convict anything')
+		self.assertFalse(os.path.isfile(self._sentinel_path),
+			'stale sentinels must still be deleted')
+
+	def test_D04_corrupt_sentinel_is_dropped(self):
+		import os
+		with open(self._sentinel_path, 'w', encoding='utf-8') as f:
+			f.write('{not json')
+		self.assertIsNone(self.cat._consumeInflightSentinel(),
+			'an unreadable sentinel must be ignored, never raise')
+		self.assertFalse(os.path.isfile(self._sentinel_path))
+
+	def test_D05_clear_without_sentinel_is_noop(self):
+		self.cat._clearInflightSentinel()  # must not raise
+
+	# =================================================================
+	# Blocklist and blocked-path filtering
+	# =================================================================
+
+	def test_D06_geopanel_in_static_blocklist(self):
+		blocklist = self.embody.op(
+			'CatalogManagerExt').module._PALETTE_SCAN_BLOCKLIST
+		self.assertIn('geopanel', blocklist,
+			'geoPanel wedges TD 2025.33070 - it must stay blocklisted')
+
+	def test_D07_filter_blocked_paths_splits_by_stem(self):
+		self.cat._palette_blocked = {'compA'}
+		kept, dropped = self.cat._filterBlockedPaths(
+			['x/compA.tox', 'y/compB.tox'])
+		self.assertEqual(kept, ['y/compB.tox'])
+		self.assertEqual(dropped, ['x/compA.tox'])
+		self.cat._palette_blocked = set()
+		kept, dropped = self.cat._filterBlockedPaths(['y/compB.tox'])
+		self.assertEqual((kept, dropped), (['y/compB.tox'], []))
+
+	# =================================================================
+	# Persistence through checkpoint and startup consumption
+	# =================================================================
+
+	def test_D08_checkpoint_carries_blocked_list(self):
+		import json, os
+		catalog_path = os.path.join(self._tmpdir, 'catalog_test.json')
+		self.cat._getCatalogPath = lambda build: catalog_path
+		self.cat._op_catalog_pending = {'noiseTOP': {'foo': 1}}
+		self.cat._palette_results = {}
+		self.cat._palette_checkpointed = 0
+		self.cat._palette_blocked = {'geoPanel'}
+
+		self.cat._checkpointPaletteScan()
+
+		with open(catalog_path, encoding='utf-8') as f:
+			data = json.loads(f.read())
+		self.assertEqual(data.get('_palette_blocked'), ['geoPanel'],
+			'checkpoints must persist convicted components')
+
+	def test_D09_start_palette_scan_consumes_sentinel_and_skips(self):
+		"""A leftover sentinel + everything else checkpointed: the poisoned
+		component is convicted and skipped, the scan finalizes with zero
+		loads, and the sentinel is gone."""
+		import os
+		finalized = []
+		for stem in ('compA', 'compB'):
+			with open(os.path.join(self._tmpdir, stem + '.tox'), 'wb') as f:
+				f.write(b'')
+		self.cat._getPaletteDir = lambda: self._tmpdir
+		self.cat._finalizePaletteScan = lambda: finalized.append(True)
+		self.cat._writeInflightSentinel('compA', 'compA.tox')
+		resume = {'compB': {'type': 'y', 'min_children': 1}}
+
+		self.cat._startPaletteScan({'noiseTOP': {}}, resume_results=resume)
+
+		self.assertIn('compA', self.cat._palette_blocked,
+			'the sentinel-named component must be convicted')
+		self.assertTrue(finalized,
+			'with the poisoned component skipped and the rest resumed, '
+			'the scan must finalize without loading anything')
+		self.assertFalse(os.path.isfile(self._sentinel_path),
+			'startup must consume the sentinel')
+
+
+class TestCatalogToeexpandScan(EmbodyTestCase):
+	"""Background (toeexpand) palette scan: parser, routing, poller drain.
+
+	The primary palette scan expands each .tox with TD's bundled toeexpand
+	on a worker thread and reads the placed type + child count from the
+	expansion - nothing is loaded into TD, so no palette component's init
+	code can drop frames or wedge the frame loop (geoPanel / chromaKey on
+	TD 2025.33070). The legacy loadTox scan remains as fallback only.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		import os, tempfile
+		self.cat = self.embody.ext.CatalogManager
+		self.tdn = self.embody.ext.TDN
+		self._tmpdir = tempfile.mkdtemp(prefix='embody_toex_test_')
+		self._orig_status = str(self.embody.par.Status)
+		self._cat_saved = {
+			'_build_str': self.cat._build_str,
+			'_palette_results': self.cat._palette_results,
+			'_palette_checkpointed': self.cat._palette_checkpointed,
+			'_palette_blocked': set(self.cat._palette_blocked),
+			'_op_catalog_pending': getattr(
+				self.cat, '_op_catalog_pending', None),
+			'_scan_in_flight': self.cat._scan_in_flight,
+			'_tox_scan_queue': self.cat._tox_scan_queue,
+			'_tox_scan_done': self.cat._tox_scan_done,
+			'_tox_scan_stop': self.cat._tox_scan_stop,
+			'_tox_scan_total': self.cat._tox_scan_total,
+			'_tox_scan_fail_count': self.cat._tox_scan_fail_count,
+		}
+		self._tdn_saved = (
+			self.tdn._divergent_loaded,
+			self.tdn._divergent_defaults,
+			self.tdn._palette_catalog,
+		)
+		self.cat._build_str = 'test.build'
+
+	def tearDown(self):
+		import os, shutil
+		for name in ('_startToeexpandScan', '_startPaletteScan',
+					 '_finalizePaletteScan', '_checkpointPaletteScan',
+					 '_loadBootstrapPalette', '_getCatalogPath',
+					 '_inflightSentinelPath'):
+			self.cat.__dict__.pop(name, None)
+		for key, val in self._cat_saved.items():
+			setattr(self.cat, key, val)
+		(self.tdn._divergent_loaded,
+		 self.tdn._divergent_defaults,
+		 self.tdn._palette_catalog) = self._tdn_saved
+		self.embody.par.Status = self._orig_status
+		shutil.rmtree(self._tmpdir, ignore_errors=True)
+		super().tearDown()
+
+	# =================================================================
+	# Pure parsers
+	# =================================================================
+
+	def _writeNodeFile(self, rel, first_line):
+		import os
+		path = os.path.join(self._tmpdir, rel)
+		os.makedirs(os.path.dirname(path), exist_ok=True)
+		with open(path, 'w', encoding='ascii') as f:
+			f.write(first_line + '\n')
+		return path
+
+	def test_E01_optype_from_node_header(self):
+		p = self._writeNodeFile('a.n', 'COMP:base')
+		self.assertEqual(self.cat._opTypeFromNodeFile(p), 'baseCOMP')
+		p = self._writeNodeFile('b.n', 'TOP:noise 12 34')
+		self.assertEqual(self.cat._opTypeFromNodeFile(p), 'noiseTOP')
+		p = self._writeNodeFile('g.n', 'COMP:geo')
+		self.assertEqual(self.cat._opTypeFromNodeFile(p), 'geometryCOMP',
+			'.n header tokens must map through the alias table')
+		p = self._writeNodeFile('i.init', 'type = COMP:container')
+		self.assertEqual(self.cat._opTypeFromNodeFile(p), 'containerCOMP',
+			'old-format .init headers must parse too')
+		p = self._writeNodeFile('c.n', 'garbage header')
+		self.assertIsNone(self.cat._opTypeFromNodeFile(p))
+		self.assertIsNone(self.cat._opTypeFromNodeFile(
+			self._tmpdir + '/missing.n'))
+
+	def test_E02_parse_expanded_tox_type_and_children(self):
+		import os
+		expand = os.path.join(self._tmpdir, 'foo.tox.dir')
+		self._writeNodeFile('foo.tox.dir/foo.n', 'COMP:base')
+		self._writeNodeFile('foo.tox.dir/foo/childA.n', 'TOP:noise')
+		self._writeNodeFile('foo.tox.dir/foo/childB.n', 'COMP:container')
+		self._writeNodeFile('foo.tox.dir/foo/childB/inner.n', 'TOP:level')
+		with open(os.path.join(expand, 'foo', 'notanode.parm'), 'w') as f:
+			f.write('x')
+		self.assertEqual(
+			self.cat._parseExpandedTox(expand, 'foo'), ('baseCOMP', 2),
+			'type from the root .n, children = direct child .n count only')
+
+	def test_E03_parse_expanded_tox_wrapper_fallbacks(self):
+		"""Roots not named like the file mirror the legacy wrapper record
+		(sickCore.tox's root is 'sickComp' -> the loadTox scan recorded
+		the wrapper: baseCOMP with 1 child)."""
+		import os
+		expand = os.path.join(self._tmpdir, 'sickCore.tox.dir')
+		self._writeNodeFile('sickCore.tox.dir/sickComp.n', 'COMP:container')
+		self._writeNodeFile('sickCore.tox.dir/sickComp/a.n', 'TOP:noise')
+		self.assertEqual(
+			self.cat._parseExpandedTox(expand, 'sickCore'), ('baseCOMP', 1))
+		expand2 = os.path.join(self._tmpdir, 'bar.tox.dir')
+		self._writeNodeFile('bar.tox.dir/one.n', 'COMP:base')
+		self._writeNodeFile('bar.tox.dir/two.n', 'COMP:base')
+		self.assertEqual(
+			self.cat._parseExpandedTox(expand2, 'bar'), ('baseCOMP', 2),
+			'multiple top-level nodes record as the wrapper would')
+		self.assertIsNone(self.cat._parseExpandedTox(
+			os.path.join(self._tmpdir, 'missing.dir'), 'x'))
+
+	def test_E03b_parse_old_format_expansion(self):
+		"""Old-format toeexpand output (template.tox): no .n files - the
+		root is <stem>.init and children are <stem>/<child>.init."""
+		import os
+		expand = os.path.join(self._tmpdir, 'template.tox.dir')
+		self._writeNodeFile('template.tox.dir/template.init',
+			'type = COMP:container')
+		for child in ('help', 'icon', 'local', 'template'):
+			self._writeNodeFile(
+				f'template.tox.dir/template/{child}.init', 'x = 1')
+		self._writeNodeFile(
+			'template.tox.dir/template/help.parm', 'noise')
+		self.assertEqual(
+			self.cat._parseExpandedTox(expand, 'template'),
+			('containerCOMP', 4),
+			'old-format roots must parse type + .init child count')
+
+	def test_E04_toeexpand_ships_with_td(self):
+		import os, sys
+		exe = self.cat._toeexpandExe()
+		if sys.platform == 'darwin' and exe is None:
+			# macOS bundle location unverified - the scan degrades to the
+			# legacy fallback there rather than breaking.
+			self.skipTest('toeexpand not found in this macOS bundle')
+		self.assertIsNotNone(exe,
+			'toeexpand must exist in this TD install (background scan '
+			'primary path depends on it)')
+		self.assertTrue(os.path.isfile(exe))
+
+	def test_E05_worker_end_to_end_on_real_palette_tox(self):
+		"""The pure worker + real toeexpand on one real palette file."""
+		import os, queue, threading
+		exe = self.cat._toeexpandExe()
+		palette = self.cat._getPaletteDir()
+		if not exe or not palette:
+			self.skipTest('no toeexpand/palette in this environment')
+		candidates = []
+		for root, _d, files in os.walk(palette):
+			for f in files:
+				if f.endswith('.tox') and os.path.getsize(
+						os.path.join(root, f)) < 50_000:
+					candidates.append(os.path.relpath(
+						os.path.join(root, f), palette))
+			if candidates:
+				break
+		if not candidates:
+			self.skipTest('no small palette .tox available')
+		q = queue.Queue()
+		done = threading.Event()
+		self.cat._toeexpandWorker(
+			exe, palette, candidates[:1], q, done, threading.Event(), 60)
+		self.assertTrue(done.is_set(), 'worker must always signal done')
+		item = q.get_nowait()
+		self.assertEqual(item[0], 'result',
+			f'real palette expansion must parse, got: {item}')
+		self.assertTrue(item[2].endswith('COMP'),
+			'palette components place as COMPs')
+		self.assertIsInstance(item[3], int)
+
+	# =================================================================
+	# Routing and poller drain
+	# =================================================================
+
+	def test_E06_ensure_palette_prefers_background_scan(self):
+		calls = []
+		self.cat._loadBootstrapPalette = lambda build: None
+		self.cat._startToeexpandScan = (
+			lambda op_catalog, resume_results=None:
+				calls.append('toex') or True)
+		self.cat._startPaletteScan = (
+			lambda op_catalog, resume_results=None:
+				calls.append('loadtox'))
+		self.cat._ensurePalette({'noiseTOP': {}})
+		self.assertEqual(calls, ['toex'],
+			'bootstrap miss must route to the background scan first')
+
+	def test_E07_ensure_palette_falls_back_when_unavailable(self):
+		calls = []
+		self.cat._loadBootstrapPalette = lambda build: None
+		self.cat._startToeexpandScan = (
+			lambda op_catalog, resume_results=None:
+				calls.append('toex') and False)
+		self.cat._startPaletteScan = (
+			lambda op_catalog, resume_results=None:
+				calls.append('loadtox'))
+		self.cat._ensurePalette({'noiseTOP': {}})
+		self.assertEqual(calls, ['toex', 'loadtox'],
+			'no toeexpand must fall back to the legacy in-TD scan')
+
+	def test_E08_poller_drains_results_and_finalizes(self):
+		import queue, threading
+		finalized = []
+		self.cat._finalizePaletteScan = lambda: finalized.append(True)
+		self.cat._palette_results = {}
+		self.cat._palette_checkpointed = 0
+		self.cat._tox_scan_total = 2
+		self.cat._tox_scan_fail_count = 0
+		q = queue.Queue()
+		q.put(('result', 'compA', 'baseCOMP', 3))
+		q.put(('fail', 'compB', 'toeexpand rc=1'))
+		self.cat._tox_scan_queue = q
+		done = threading.Event()
+		done.set()
+		self.cat._tox_scan_done = done
+
+		self.cat._pollToeexpandScan()
+
+		self.assertEqual(
+			self.cat._palette_results.get('compA'),
+			{'type': 'baseCOMP', 'min_children': 3})
+		self.assertNotIn('compB', self.cat._palette_results,
+			'failed expansions must not be recorded')
+		self.assertTrue(finalized,
+			'done event + drained queue must finalize the scan')
+
+	def test_E09_poller_fatal_falls_back_with_partial_results(self):
+		import queue, threading
+		fallback = []
+		self.cat._finalizePaletteScan = lambda: self.fail(
+			'fatal must not finalize')
+		self.cat._checkpointPaletteScan = lambda: None
+		self.cat._startPaletteScan = (
+			lambda op_catalog, resume_results=None:
+				fallback.append((op_catalog, dict(resume_results or {}))))
+		self.cat._palette_results = {}
+		self.cat._palette_checkpointed = 0
+		self.cat._op_catalog_pending = {'noiseTOP': {}}
+		self.cat._tox_scan_total = 2
+		self.cat._tox_scan_fail_count = 0
+		q = queue.Queue()
+		q.put(('result', 'compA', 'baseCOMP', 3))
+		q.put(('fatal', '', 'worker exploded'))
+		self.cat._tox_scan_queue = q
+		done = threading.Event()
+		done.set()
+		self.cat._tox_scan_done = done
+
+		self.cat._pollToeexpandScan()
+
+		self.assertLen(fallback, 1,
+			'a fatal worker error must fall back to the legacy scan')
+		op_catalog, resume = fallback[0]
+		self.assertIn('compA', resume,
+			'results gathered before the fatal must carry into the resume')
+
+	def test_E10_poller_all_failures_falls_back_not_finalizes(self):
+		"""Systemic per-item failure (AV blocking toeexpand, etc.) must
+		NOT finalize an empty palette as complete - that would silently
+		disable palette-clone detection for the build forever."""
+		import queue, threading
+		fallback = []
+		self.cat._finalizePaletteScan = lambda: self.fail(
+			'an all-failed scan must not finalize an empty palette')
+		self.cat._startPaletteScan = (
+			lambda op_catalog, resume_results=None:
+				fallback.append(op_catalog))
+		self.cat._palette_results = {}
+		self.cat._palette_checkpointed = 0
+		self.cat._op_catalog_pending = {'noiseTOP': {}}
+		self.cat._tox_scan_total = 2
+		self.cat._tox_scan_fail_count = 0
+		q = queue.Queue()
+		q.put(('fail', 'compA', 'WinError 5'))
+		q.put(('fail', 'compB', 'WinError 5'))
+		self.cat._tox_scan_queue = q
+		done = threading.Event()
+		done.set()
+		self.cat._tox_scan_done = done
+
+		self.cat._pollToeexpandScan()
+
+		self.assertLen(fallback, 1,
+			'zero results + failures must fall back to the in-TD scan')

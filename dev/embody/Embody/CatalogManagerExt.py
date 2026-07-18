@@ -46,6 +46,15 @@ _PALETTE_SCAN_BLOCKLIST = frozenset({
 	'resources',           # VRWorldExt + findMouse (Windows-only windll)
 	'world',               # VRWorldExt + findMouse (Windows-only windll)
 	'system',              # findMouse (Windows-only ctypes.windll)
+	'geopanel',            # wedges TD 2025.33070's frame loop within one
+	                       # frame of loadTox returning (verified 2026-07-17:
+	                       # same file loads fine on 32820; isolation repro
+	                       # wedges 33070 every time - TD-side regression;
+	                       # ships per-frame panel.interactTouch/interactMouse
+	                       # executors + Leap SDK init)
+	'chromakey',           # same wedge class on 33070: full-palette probe
+	                       # with geopanel excluded wedged right after
+	                       # chromaKey loaded (2026-07-17)
 })
 
 # Palette .tox stem PREFIXES (case-insensitive) skipped during the scan.
@@ -83,6 +92,21 @@ class CatalogManagerExt:
 		# (op_catalog, done_results) staged by EnsureCatalogs for the
 		# deferred resume (fired by _resumePaletteScan at ~frame 70).
 		self._pending_resume = None
+		# Component stems poisoned by a previous session: the in-flight
+		# sentinel names the most recently loaded palette .tox; if a
+		# launch finds one on disk, that session was killed or wedged
+		# (TD 2025.33070 wedges its frame loop within a frame of
+		# geoPanel.tox loading) and the component is skipped for good.
+		# Persisted through checkpoints under '_palette_blocked'.
+		self._palette_blocked = set()
+		# Background (toeexpand) palette scan plumbing: the worker thread
+		# fills _tox_scan_queue, _pollToeexpandScan drains it on the main
+		# thread, _tox_scan_done signals completion.
+		self._tox_scan_queue = None
+		self._tox_scan_done = None
+		self._tox_scan_stop = None
+		self._tox_scan_total = 0
+		self._tox_scan_fail_count = 0
 		# Timeline / cook state snapshot, re-taken at the START of every
 		# palette chunk and restored right after that chunk's loadTox calls.
 		# Loading some palette .tox files runs their init code, which can
@@ -93,8 +117,15 @@ class CatalogManagerExt:
 		self._time_snapshot = None
 
 	def onDestroyTD(self):
-		"""Clean up workspace if scan was interrupted."""
+		"""Clean up workspace if scan was interrupted.
+
+		Also drops the in-flight sentinel: a clean extension teardown
+		(reinit, normal TD close) means the session did NOT wedge, so the
+		most recently loaded palette component must not be blamed. Only a
+		hard kill / frame-loop wedge leaves the sentinel behind.
+		"""
 		self._cleanupWorkspace()
+		self._clearInflightSentinel()
 
 	def onInitTD(self):
 		pass
@@ -156,6 +187,10 @@ class CatalogManagerExt:
 				op_catalog = {k: v for k, v in catalog.items()
 							  if not k.startswith('_')}
 				done = catalog.get('_palette', {})
+				# Carry forward components already convicted of freezing
+				# an earlier session (see _palette_blocked in __init__).
+				self._palette_blocked.update(
+					catalog.get('_palette_blocked', []))
 				self._populateTDNExt(op_catalog)
 				self._patchCrossBuildDefaults(op_catalog)
 				self._scan_in_flight = True
@@ -361,11 +396,348 @@ class CatalogManagerExt:
 			self._finalizePaletteScan()
 			return
 
-		# Bootstrap miss - fall back to runtime palette scan.
+		# Bootstrap miss - scan the palette WITHOUT loading anything into
+		# TD: toeexpand (ships in TD's bin folder) unpacks each .tox on a
+		# worker thread and the root type + child count are read from the
+		# expansion. Zero main-thread work per component, zero dropped
+		# frames, and no palette component's init code ever executes -- the
+		# class of freeze where a component wedges the frame loop on load
+		# (geoPanel, chromaKey on TD 2025.33070) cannot occur here.
+		if self._startToeexpandScan(op_catalog, resume_results=resume_results):
+			return
+
+		# Background scan unavailable (no toeexpand binary or no palette
+		# dir) - last resort: the legacy in-TD loadTox scan (blocklist +
+		# freeze-sentinel guarded).
+		self._log(
+			'Background palette scan unavailable - falling back to the '
+			'in-TD scan (may drop frames while loading components)',
+			'WARNING')
 		self._startPaletteScan(op_catalog, resume_results=resume_results)
 
 	# =================================================================
-	# Palette Component Scan
+	# Palette Component Scan - toeexpand (primary, off-main-thread)
+	# =================================================================
+
+	TOEEXPAND_TIMEOUT = 60      # seconds per .tox expansion subprocess
+	TOEEXPAND_POLL_FRAMES = 30  # main-thread drain cadence (~0.5s at 60fps)
+
+	def _toeexpandExe(self):
+		"""Absolute path to TD's bundled toeexpand, or None if absent."""
+		exe = 'toeexpand.exe' if os.name == 'nt' else 'toeexpand'
+		path = os.path.join(app.binFolder, exe)
+		return path if os.path.isfile(path) else None
+
+	def _startToeexpandScan(self, op_catalog, resume_results=None):
+		"""Scan the palette on a worker thread via toeexpand. True if started.
+
+		Everything TD-related (paths, build string, the queue of rel_paths)
+		is resolved HERE on the main thread; the worker runs pure Python
+		(subprocess + file I/O) and communicates back through a
+		queue.Queue drained by a run()-chain poller. Nothing is ever
+		loaded into TD, so no palette component's init code runs.
+		"""
+		import queue
+		import threading
+
+		exe = self._toeexpandExe()
+		palette_dir = self._getPaletteDir()
+		if not exe or not palette_dir:
+			return False
+
+		# Same enumeration + filters as the legacy scan so checkpoints,
+		# blocklist, and poisoned-component records behave identically.
+		rel_paths = []
+		skipped = []
+		for root, _dirs, files in os.walk(palette_dir):
+			for fname in files:
+				if not fname.endswith('.tox'):
+					continue
+				stem = os.path.splitext(fname)[0].lower()
+				if stem in _PALETTE_SCAN_BLOCKLIST or stem.startswith(
+						_PALETTE_SCAN_BLOCKLIST_PREFIXES):
+					skipped.append(stem)
+					continue
+				rel_paths.append(
+					os.path.relpath(os.path.join(root, fname), palette_dir))
+		if skipped:
+			self._log(f'Palette scan skipping blocklisted: {sorted(skipped)}')
+		poisoned = self._consumeInflightSentinel()
+		if poisoned:
+			self._palette_blocked.add(poisoned)
+		rel_paths, dropped = self._filterBlockedPaths(rel_paths)
+		if dropped:
+			self._log(
+				'Palette scan skipping component(s) that froze or were '
+				f'interrupted mid-load in a previous launch: {sorted(dropped)}. '
+				'Embody works normally without them; they are only excluded '
+				'from palette-clone detection.', 'WARNING')
+		if resume_results:
+			rel_paths = [
+				rp for rp in rel_paths
+				if os.path.splitext(os.path.basename(rp))[0]
+				not in resume_results]
+
+		self._palette_results = (
+			dict(resume_results) if resume_results else {})
+		self._palette_checkpointed = len(self._palette_results)
+		self._op_catalog_pending = op_catalog
+
+		if not rel_paths:
+			self._finalizePaletteScan()
+			return True
+
+		# Sweep temp dirs a previous session's shutdown abandoned (the
+		# daemon worker dies without running its finally when TD quits).
+		import shutil
+		import tempfile
+		tmp_root = tempfile.gettempdir()
+		try:
+			for entry in os.listdir(tmp_root):
+				if entry.startswith('embody_palette_'):
+					shutil.rmtree(os.path.join(tmp_root, entry),
+								  ignore_errors=True)
+		except OSError:
+			pass
+
+		self._tox_scan_queue = queue.Queue()
+		self._tox_scan_done = threading.Event()
+		self._tox_scan_stop = threading.Event()
+		self._tox_scan_fail_count = 0
+		self._tox_scan_total = (
+			len(self._palette_results) + len(rel_paths))
+		self._log(
+			f'Palette scan (background): {len(rel_paths)} components via '
+			f'toeexpand - no components are loaded, no frames dropped')
+		done = len(self._palette_results)
+		self._setScanStatus(
+			f'Scanning palette ({done}/{self._tox_scan_total})')
+
+		worker = threading.Thread(
+			target=self._toeexpandWorker,
+			args=(exe, palette_dir, sorted(rel_paths),
+				  self._tox_scan_queue, self._tox_scan_done,
+				  self._tox_scan_stop, self.TOEEXPAND_TIMEOUT),
+			name='EmbodyPaletteScan', daemon=True)
+		worker.start()
+		run('args[0]._pollToeexpandScan()', self,
+			delayFrames=self.TOEEXPAND_POLL_FRAMES)
+		return True
+
+	@staticmethod
+	def _toeexpandWorker(exe, palette_dir, rel_paths, out_queue, done_evt,
+						 stop_evt, timeout):
+		"""Worker thread: expand each .tox, emit (kind, ...) tuples.
+
+		PURE PYTHON ONLY - this runs off the main thread and must never
+		touch TD objects, parameters, or logging. All results and log
+		lines go through out_queue for the main-thread poller. stop_evt
+		lets a dying poller cancel the sweep between items.
+		"""
+		import shutil
+		import subprocess
+		import sys
+		import tempfile
+		try:
+			flags = (subprocess.CREATE_NO_WINDOW
+					 if sys.platform == 'win32' else 0)
+			for rel_path in rel_paths:
+				if stop_evt.is_set():
+					break
+				name = os.path.splitext(os.path.basename(rel_path))[0]
+				tmp = tempfile.mkdtemp(prefix='embody_palette_')
+				try:
+					src = os.path.join(palette_dir, rel_path)
+					local = os.path.join(tmp, name + '.tox')
+					shutil.copy(src, local)
+					# copy preserves a read-only bit, which would make
+					# the rmtree below silently leak the temp dir.
+					os.chmod(local, 0o644)
+					r = subprocess.run(
+						[exe, name + '.tox'], cwd=tmp,
+						stdout=subprocess.DEVNULL,
+						stderr=subprocess.DEVNULL,
+						stdin=subprocess.DEVNULL,
+						timeout=timeout, creationflags=flags)
+					# toeexpand's exit code is unreliable (observed rc=1
+					# on SUCCESS, message on stderr) - judge by output.
+					expand_dir = os.path.join(tmp, name + '.tox.dir')
+					if not os.path.isdir(expand_dir):
+						out_queue.put(
+							('fail', name,
+							 f'toeexpand produced no output '
+							 f'(rc={r.returncode})'))
+						continue
+					parsed = CatalogManagerExt._parseExpandedTox(
+						expand_dir, name)
+					if parsed is None:
+						out_queue.put(('fail', name, 'unparseable expansion'))
+						continue
+					placed_type, child_count = parsed
+					out_queue.put(('result', name, placed_type, child_count))
+				except Exception as e:
+					out_queue.put(('fail', name, str(e)))
+				finally:
+					shutil.rmtree(tmp, ignore_errors=True)
+		except Exception as e:
+			out_queue.put(('fatal', '', str(e)))
+		finally:
+			done_evt.set()
+
+	# .n header tokens that differ from the runtime OPType prefix.
+	# Learned empirically against 260 loadTox-derived rows; identity for
+	# everything else. An unknown future alias degrades to a self-
+	# consistent-but-wrong type string, which only weakens palette-clone
+	# detection for that one component (fail-safe: false negative).
+	_NODE_TYPE_ALIASES = {
+		'geo': 'geometry',
+		'ambient': 'ambientlight',
+		'environment': 'environmentlight',
+	}
+
+	@staticmethod
+	def _parseExpandedTox(expand_dir, stem):
+		"""(placed_type, min_children) from a toeexpand output dir, or None.
+
+		Mirrors the loadTox scan's record semantics (validated against
+		loadTox-derived results for every scannable 33070 component plus
+		prior-build bootstrap rows for the old-format case):
+		- NEW format: exactly one top-level <name>.n; if named like the
+		  file, that node is what TD places -> (its type, count of its
+		  direct child .n nodes);
+		- OLD format (e.g. template.tox): no .n files - the root is
+		  <stem>.init (first line 'type = COMP:container'), children are
+		  <stem>/<child>.init entries;
+		- anything else (name mismatch like sickCore.tox's root
+		  'sickComp', several top nodes): the legacy scan recorded its
+		  wrapper -> ('baseCOMP', number of top-level nodes).
+		"""
+		if not os.path.isdir(expand_dir):
+			return None
+		top_n = [f for f in os.listdir(expand_dir) if f.endswith('.n')]
+		if not top_n:
+			init_path = os.path.join(expand_dir, stem + '.init')
+			if os.path.isfile(init_path):
+				placed_type = CatalogManagerExt._opTypeFromNodeFile(
+					init_path)
+				if placed_type:
+					child_dir = os.path.join(expand_dir, stem)
+					children = (
+						[f for f in os.listdir(child_dir)
+						 if f.endswith('.init')]
+						if os.path.isdir(child_dir) else [])
+					return placed_type, len(children)
+			top_init = [f for f in os.listdir(expand_dir)
+						if f.endswith('.init')]
+			return 'baseCOMP', len(top_init)
+		if len(top_n) != 1 or top_n[0][:-2] != stem:
+			return 'baseCOMP', len(top_n)
+		root_name = top_n[0][:-2]
+		placed_type = CatalogManagerExt._opTypeFromNodeFile(
+			os.path.join(expand_dir, top_n[0]))
+		if not placed_type:
+			return None
+		child_dir = os.path.join(expand_dir, root_name)
+		if os.path.isdir(child_dir):
+			children = [f for f in os.listdir(child_dir)
+						if f.endswith('.n')]
+		else:
+			children = []
+		return placed_type, len(children)
+
+	@staticmethod
+	def _opTypeFromNodeFile(n_path):
+		"""OPType from a toeexpand node file: 'COMP:base' -> 'baseCOMP'.
+
+		Handles both header shapes: new-format .n files open with the
+		bare 'FAMILY:token ...' and old-format .init files with
+		'type = FAMILY:token'.
+		"""
+		import re
+		try:
+			with open(n_path, 'rb') as f:
+				first = f.readline().decode('ascii', 'replace').strip()
+		except OSError:
+			return None
+		m = re.search(r'([A-Z]+):(\w+)', first)
+		if not m:
+			return None
+		family, token = m.group(1), m.group(2)
+		token = CatalogManagerExt._NODE_TYPE_ALIASES.get(token, token)
+		return token + family
+
+	def _pollToeexpandScan(self):
+		"""Main-thread drain of the toeexpand worker queue.
+
+		Reuses the legacy scan's checkpoint/finalize machinery so
+		interrupted background scans resume identically. A fatal worker
+		error falls back to the legacy in-TD scan for the remainder.
+		"""
+		try:
+			q = self._tox_scan_queue
+			fatal = None
+			while not q.empty():
+				item = q.get_nowait()
+				kind = item[0]
+				if kind == 'result':
+					_kind, name, placed_type, child_count = item
+					if name not in self._palette_results:
+						self._palette_results[name] = {
+							'type': placed_type,
+							'min_children': child_count,
+						}
+				elif kind == 'fail':
+					self._tox_scan_fail_count += 1
+					self._log(
+						f'Palette scan (background) skipped {item[1]}: '
+						f'{item[2]}', 'DEBUG')
+				elif kind == 'fatal':
+					fatal = item[2]
+
+			if (len(self._palette_results) - self._palette_checkpointed
+					>= self.PALETTE_CHECKPOINT_EVERY):
+				self._checkpointPaletteScan()
+			done = len(self._palette_results)
+			self._setScanStatus(
+				f'Scanning palette ({done}/{self._tox_scan_total})')
+
+			if fatal is not None:
+				self._log(
+					f'Background palette scan failed ({fatal}) - falling '
+					'back to the in-TD scan for the remainder', 'WARNING')
+				self._checkpointPaletteScan()
+				self._startPaletteScan(
+					self._op_catalog_pending,
+					resume_results=self._palette_results)
+				return
+			if self._tox_scan_done.is_set() and q.empty():
+				if not self._palette_results and self._tox_scan_fail_count:
+					# Every expansion failed (toeexpand blocked by AV /
+					# policy after the isfile check, etc.) - finalizing
+					# would bake an EMPTY palette as complete, silently
+					# and permanently. The in-TD scan can still work.
+					self._log(
+						'Background palette scan produced no results '
+						f'({self._tox_scan_fail_count} failures) - '
+						'falling back to the in-TD scan', 'WARNING')
+					self._startPaletteScan(self._op_catalog_pending)
+					return
+				self._finalizePaletteScan()
+				return
+			run('args[0]._pollToeexpandScan()', self,
+				delayFrames=self.TOEEXPAND_POLL_FRAMES)
+		except Exception as e:
+			self._log(f'Background palette scan aborted: {e}', 'ERROR')
+			try:
+				if self._tox_scan_stop is not None:
+					self._tox_scan_stop.set()
+				self._checkpointPaletteScan()
+			except Exception:
+				pass
+			self._scan_in_flight = False
+
+	# =================================================================
+	# Palette Component Scan - legacy in-TD loadTox (fallback only)
 	# =================================================================
 
 	PALETTE_CHUNK_SIZE = 1  # .tox files per frame - some palette .tox are heavy
@@ -412,6 +784,21 @@ class CatalogManagerExt:
 				rel_paths.append(os.path.relpath(full, palette_dir))
 		if skipped:
 			self._log(f'Palette scan skipping blocklisted: {sorted(skipped)}')
+
+		# A sentinel left on disk names the component whose load preceded
+		# a kill or frame-loop wedge in an earlier session (it is written
+		# right before every loadTox and removed only on clean outcomes).
+		# Convict it: skip it for this build, permanently.
+		poisoned = self._consumeInflightSentinel()
+		if poisoned:
+			self._palette_blocked.add(poisoned)
+		rel_paths, dropped = self._filterBlockedPaths(rel_paths)
+		if dropped:
+			self._log(
+				'Palette scan skipping component(s) that froze or were '
+				f'interrupted mid-load in a previous launch: {sorted(dropped)}. '
+				'Embody works normally without them; they are only excluded '
+				'from palette-clone detection.', 'WARNING')
 
 		# Resume: drop components a prior interrupted scan already
 		# recorded (results are keyed by the .tox stem name).
@@ -482,6 +869,9 @@ class CatalogManagerExt:
 			except Exception:
 				pass
 			self._cleanupWorkspace()
+			# Graceful abort - the session is alive, nothing wedged, so
+			# the last-loaded component must not be convicted next launch.
+			self._clearInflightSentinel()
 			self._scan_in_flight = False
 
 	def _processPaletteChunkInner(self):
@@ -518,6 +908,20 @@ class CatalogManagerExt:
 						existing.destroy()
 
 					wrapper = self._palette_workspace.create(baseCOMP, wrapper_name)
+					# Loaded palette components must never COOK: geoPanel
+					# ships per-frame panel.interactTouch()/interactMouse()
+					# executors that fire the moment the network exists
+					# (and wedge TD 2025.33070's frame loop). The census
+					# below only reads names/types/child counts - none of
+					# that needs cooking.
+					wrapper.allowCooking = False
+					# Forensics marker: if TD is killed or wedges from here
+					# until the NEXT sentinel write (a wedge can land 1-2
+					# frames after loadTox returns - observed with
+					# geoPanel.tox on TD 2025.33070), the next launch reads
+					# this component's name and skips it. Removed only at
+					# scan finalize, graceful abort, or extension teardown.
+					self._writeInflightSentinel(name, rel_path)
 					wrapper.loadTox(tox_path)
 
 					# Determine placed type: if the inner child has the same name
@@ -579,7 +983,13 @@ class CatalogManagerExt:
 			self._finalizePaletteScan()
 			return
 
-		run('args[0]._processPaletteChunk()', self, delayFrames=1)
+		# 3 frames, not 1: the gap keeps the in-flight sentinel naming
+		# THIS component while any deferred wedge it scheduled lands
+		# (observed: geoPanel kills the frame loop 1-2 frames after
+		# loadTox returns). A 1-frame cadence would overwrite the
+		# sentinel with the next - innocent - component first. This path
+		# is fallback-only, so the 3x slower sweep is irrelevant.
+		run('args[0]._processPaletteChunk()', self, delayFrames=3)
 
 	def _checkpointPaletteScan(self):
 		"""Write the combined catalog with partial palette results.
@@ -592,6 +1002,8 @@ class CatalogManagerExt:
 		combined = dict(self._op_catalog_pending or {})
 		combined['_palette'] = self._palette_results
 		combined['_palette_partial'] = True
+		if self._palette_blocked:
+			combined['_palette_blocked'] = sorted(self._palette_blocked)
 		self._writeCatalog(
 			self._getCatalogPath(self._build_str), combined)
 		self._palette_checkpointed = len(self._palette_results)
@@ -620,9 +1032,14 @@ class CatalogManagerExt:
 		# Merge palette results into catalog under reserved _palette key
 		combined = dict(self._op_catalog_pending or {})
 		combined['_palette'] = self._palette_results
+		if self._palette_blocked:
+			combined['_palette_blocked'] = sorted(self._palette_blocked)
 
 		catalog_path = self._getCatalogPath(self._build_str)
 		self._writeCatalog(catalog_path, combined)
+
+		# Clean outcome - nothing wedged; drop the forensics marker.
+		self._clearInflightSentinel()
 
 		# Push palette mapping into TDNExt
 		try:
@@ -963,6 +1380,80 @@ class CatalogManagerExt:
 			return str(self.ownerComp.ext.Embody._findProjectRoot())
 		except Exception:
 			return str(project.folder)
+
+	# --- In-flight sentinel (palette freeze forensics) -----------------
+
+	def _inflightSentinelPath(self):
+		"""Path to .embody/palette_scan_inflight.json."""
+		return os.path.join(
+			self._findProjectRoot(), '.embody', 'palette_scan_inflight.json')
+
+	def _writeInflightSentinel(self, name, rel_path):
+		"""Record the palette component being loaded (freeze forensics).
+
+		Written right before every palette loadTox, overwriting the
+		previous entry, and deleted only on clean outcomes (scan
+		finalize, graceful abort, extension teardown). A sentinel found
+		at scan start therefore names the most recent load of a session
+		that was killed or wedged - including wedges that land a frame
+		or two AFTER loadTox returns (geoPanel.tox on TD 2025.33070).
+		Best-effort: a failure here must never break the scan.
+		"""
+		try:
+			path = self._inflightSentinelPath()
+			os.makedirs(os.path.dirname(path), exist_ok=True)
+			with open(path, 'w', encoding='utf-8') as f:
+				f.write(json.dumps({
+					'build': self._build_str,
+					'name': name,
+					'rel_path': rel_path,
+				}))
+		except Exception:
+			pass
+
+	def _clearInflightSentinel(self):
+		"""Remove the in-flight sentinel if present. Never raises."""
+		try:
+			os.unlink(self._inflightSentinelPath())
+		except OSError:
+			pass
+		except Exception:
+			pass
+
+	def _consumeInflightSentinel(self):
+		"""Read-and-delete a leftover sentinel; return the poisoned stem.
+
+		Returns the component stem only when the sentinel belongs to the
+		current build (stale sentinels from other builds are dropped).
+		Unreadable sentinels are dropped and ignored - attribution is
+		best-effort forensics, never a scan blocker.
+		"""
+		path = self._inflightSentinelPath()
+		if not os.path.isfile(path):
+			return None
+		name = None
+		try:
+			with open(path, 'r', encoding='utf-8') as f:
+				data = json.loads(f.read())
+			if data.get('build') == self._build_str:
+				name = data.get('name') or None
+		except Exception:
+			name = None
+		self._clearInflightSentinel()
+		return name
+
+	def _filterBlockedPaths(self, rel_paths):
+		"""Split rel_paths into (kept, dropped) by _palette_blocked stems."""
+		if not self._palette_blocked:
+			return rel_paths, []
+		kept, dropped = [], []
+		for rp in rel_paths:
+			stem = os.path.splitext(os.path.basename(rp))[0]
+			if stem in self._palette_blocked:
+				dropped.append(rp)
+			else:
+				kept.append(rp)
+		return kept, dropped
 
 	def _readCatalog(self, path):
 		"""Read a catalog JSON file. Returns dict or None."""
