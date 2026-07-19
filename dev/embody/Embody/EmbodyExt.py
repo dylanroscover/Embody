@@ -59,6 +59,7 @@ class EmbodyExt:
         'text_skill_mcp_tools_reference': 'mcp-tools-reference',
         'text_skill_pop_networks':        'pop-networks',
         'text_skill_visual_aesthetics':   'visual-aesthetics',
+        'text_skill_brief':               'brief',
     }
 
     # Parameters persisted to .embody/config.json across upgrades.
@@ -119,19 +120,46 @@ class EmbodyExt:
         'win_shim': 'code',
         'install': 'https://code.visualstudio.com/download  (macOS: brew install --cask visual-studio-code)',
     }
+    # Terminal CLIs carry a per-OS install spec (dict) instead of a single
+    # string: the missing-CLI terminal guard renders it as step-by-step
+    # instructions with THE command to paste on its own line, correct for the
+    # shell the guard runs in (cmd.exe on Windows, zsh on macOS). Keys:
+    #   name    -> display name shown in the guard header
+    #   mac/win -> the one command to copy/paste (official installer, per
+    #              the tool's own docs; the win command must run in cmd.exe)
+    #   mac_alt/win_alt -> labeled alternative -- a PURE pasteable command
+    #   mac_alt_note/win_alt_note -> caveat rendered under the alternative
+    #   note    -> prerequisite line shown under the command (e.g. Node.js)
+    #   docs    -> official install docs URL
+    # A plain-string 'install' is still accepted (legacy single-line hint).
     _AICLIENT_LAUNCH = {
-        'claudecode': {'kind': 'terminal', 'cli': 'claude',
-                       'install': 'curl -fsSL https://claude.ai/install.sh | bash  '
-                                  '(or npm i -g @anthropic-ai/claude-code)  '
-                                  'docs https://code.claude.com/docs/en/setup'},
-        'codex':      {'kind': 'terminal', 'cli': 'codex',
-                       'install': 'npm install -g @openai/codex  '
-                                  '(or brew install --cask codex)  '
-                                  'docs https://github.com/openai/codex'},
-        'gemini':     {'kind': 'terminal', 'cli': 'gemini',
-                       'install': 'npm install -g @google/gemini-cli  '
-                                  '(or brew install gemini-cli)  '
-                                  'docs https://github.com/google-gemini/gemini-cli'},
+        'claudecode': {'kind': 'terminal', 'cli': 'claude', 'install': {
+            'name': 'Claude Code',
+            'mac': 'curl -fsSL https://claude.ai/install.sh | bash',
+            'mac_alt': 'brew install --cask claude-code',
+            'win': 'curl -fsSL https://claude.ai/install.cmd -o install.cmd '
+                   '&& install.cmd && del install.cmd',
+            'win_alt': 'winget install Anthropic.ClaudeCode',
+            'docs': 'https://code.claude.com/docs/en/setup',
+        }},
+        'codex':      {'kind': 'terminal', 'cli': 'codex', 'install': {
+            'name': 'Codex CLI',
+            'mac': 'curl -fsSL https://chatgpt.com/codex/install.sh | sh',
+            'mac_alt': 'brew install --cask codex',
+            'win': 'powershell -ExecutionPolicy ByPass -c '
+                   '"irm https://chatgpt.com/codex/install.ps1 | iex"',
+            'win_alt': 'npm install -g @openai/codex',
+            'win_alt_note': 'needs Node.js -- https://nodejs.org',
+            'docs': 'https://developers.openai.com/codex/cli',
+        }},
+        'gemini':     {'kind': 'terminal', 'cli': 'gemini', 'install': {
+            'name': 'Gemini CLI',
+            'mac': 'npm install -g @google/gemini-cli',
+            'mac_alt': 'brew install gemini-cli',
+            'win': 'npm install -g @google/gemini-cli',
+            'note': 'needs Node.js 20 or newer -- https://nodejs.org',
+            'docs': 'https://www.geminicli.com/docs/get-started/installation',
+        }},
         'copilot':    _VSCODE_LAUNCH,   # Copilot lives inside VS Code
         'vscode':     _VSCODE_LAUNCH,   # VS Code uses the same launcher as Copilot
         'cursor': {

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 22
-generator: Embody/6.0.126
-td_build: 099.2025.32820
-source_file: Embody-6.126.toe
-exported_at: '2026-07-17T01:34:36Z'
+build: 24
+generator: Embody/6.0.137
+td_build: 099.2025.33070
+source_file: Embody-6.138.toe
+exported_at: '2026-07-19T01:20:11Z'
 network_path: /embody/Embody/templates
 options:
   include_dat_content: false
@@ -36,6 +36,14 @@ operators:
     file: embody/Embody/templates/text_agents_md.md
     extension: md
   position: [300, 1200]
+  tags:
+  - md
+- name: text_skill_brief
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_brief.md
+    extension: md
+  position: [3900, -400]
   tags:
   - md
 - name: text_envoy_bridge
@@ -269,7 +277,7 @@ annotations:
   title: Rule Templates
   text: Auto-deployed rules for user projects
   position: [-70, 330]
-  size: [3069, 330]
+  size: [3470, 330]
   color: [0.45, 0.45, 0.45]
   opacity: 0.5
 - name: annotate3
@@ -277,6 +285,6 @@ annotations:
   title: Skill Templates
   text: Auto-deployed skills for Claude Code
   position: [-70, -470]
-  size: [3870, 330]
+  size: [4170, 330]
   color: [0.45, 0.45, 0.45]
   opacity: 0.5

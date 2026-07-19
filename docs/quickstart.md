@@ -58,7 +58,7 @@ Clicked **Not now**, or want to change a choice later? Pulse the **Setup Wizard*
 
 **Keep TouchDesigner open** — your AI assistant talks to the live session.
 
-The easiest way in is the **Launch AI Client** button: on the Embody component's **Envoy** parameter page, set the **AI Client** menu to your assistant, then click **Launch AI Client**. Embody opens the client (an editor as a workspace, or a CLI in a new terminal) already pointed at your project root — and if the client isn't installed yet, it prompts you with instructions to install it first.
+The easiest way in is the **Launch AI Client** button: on the Embody component's **Envoy** parameter page, set the **AI Client** menu to your assistant, then click **Launch AI Client**. Embody opens the client (an editor as a workspace, or a CLI in a new terminal) already pointed at your project root — and if the client isn't installed yet, the terminal walks you through it: the official install command for your OS on its own line, ready to copy/paste.
 
 Prefer to open it yourself? Open your AI assistant in the **same folder as your `.toe`** and start a new chat:
 

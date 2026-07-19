@@ -85,6 +85,7 @@ Templates in `dev/embody/Embody/templates/` must stay in sync with their `.claud
 | `skills/mcp-tools-reference/SKILL.md` | `templates/text_skill_mcp_tools_reference.md` |
 | `skills/pop-networks/SKILL.md` | `templates/text_skill_pop_networks.md` |
 | `skills/visual-aesthetics/SKILL.md` | `templates/text_skill_visual_aesthetics.md` |
+| `skills/brief/SKILL.md` | `templates/text_skill_brief.md` |
 
 This table is the source of truth for what ships; keep it in sync with `_TEMPLATE_MAP_RULES` / `_TEMPLATE_MAP_SKILLS` in `EmbodyExt.py` (the actual shipping map). Template files that exist on disk but are NOT in that map (e.g. `text_rule_commit_push_checklist.md`, `text_rule_github_release.md`, `text_rule_refresh_after_commit.py`) are orphans -- do not add them here.
 

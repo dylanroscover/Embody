@@ -25,6 +25,7 @@ extglob.FullName
 CrashAutoSave*
 .plan.md
 plan-*.md
+briefs/
 dev/_test_pars_temp/
 site/
 Backup/

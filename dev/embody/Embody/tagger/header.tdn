@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 10
-generator: Embody/6.0.25
-td_build: 099.2025.32820
-source_file: Embody-6.25.toe
-exported_at: '2026-06-13T05:52:37Z'
+build: 11
+generator: Embody/6.0.137
+td_build: 099.2025.33070
+source_file: Embody-6.138.toe
+exported_at: '2026-07-19T01:20:11Z'
 network_path: /embody/Embody/tagger/header
 options:
   include_dat_content: false
@@ -41,7 +41,7 @@ operators:
 - name: text1
   type: textCOMP
   parameters:
-    text: Actions
+    text: Externalize
     callbacks: text1_callbacks
     fontcolorr: =parent.Embody.par.Textcolorr
     fontcolorg: =parent.Embody.par.Textcolorg
@@ -84,8 +84,6 @@ operators:
     clone: =op.TDTox.op('defaultCOMPs/button')
     reloadbuiltin: false
     relpath: inherit
-  flags:
-  - viewer
   position: [50, 0]
   size: [160, 134]
   children:

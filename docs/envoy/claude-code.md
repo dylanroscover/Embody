@@ -45,6 +45,12 @@ Skills are loaded only when needed, keeping the context window lean. Claude Code
 | `/td-api-reference` | Before writing TD Python code |
 | `/mcp-tools-reference` | Before the first MCP call in a session |
 | `/visual-aesthetics` | Before building or refining any rendered visual output (generative art, VJ visuals, shaders, scenes, renders) |
+| `/pop-networks` | Before POP networks, particle systems, or GPU point/geometry work |
+| `/movie-export` | Before recording or exporting any movie or image sequence |
+| `/parameter-design` | Before creating or designing custom parameters on a COMP |
+| `/td-recovery` | When Envoy/TD connectivity has not self-healed after ~15s |
+| `/multi-session-etiquette` | The moment a `_peers` advisory or a second AI session appears |
+| `/brief` | User-invoked: `/brief <request>` compiles a conversational ask into a task brief in `briefs/` (skills to load, anchors, success criteria, gates) that the work then executes from |
 
 Each skill contains step-by-step workflows, API details, and common pitfalls specific to that operation.
 

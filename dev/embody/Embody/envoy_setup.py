@@ -1148,6 +1148,8 @@ def configure_gitignore(ext, git_root):
         '!.embody/project.json',
         '.claude/settings.local.json',
         '.claude/projects/',
+        # Task briefs compiled by the /brief skill (working documents)
+        'briefs/',
         '__pycache__/',
         '.DS_Store',
     ]

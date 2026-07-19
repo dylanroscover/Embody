@@ -142,7 +142,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_envoy_watchdog` | 21 | Envoy liveness watchdog (revive on dropped socket / save) |
 | `test_version_sync` | 6 | Version badge / minimum-build statements stay in lock-step with `par.Version` and `app.build` |
 | `test_envoy_thread_comm` | 20 | Worker/main thread queues and throttling |
-| `test_launch_aiclient` | 29 | Launch AI Client launcher (launch table, CLI resolution, `.command`/`.bat` generation, failure dialogs, env sanitization) |
+| `test_launch_aiclient` | 42 | Launch AI Client launcher (launch table with per-OS install specs, CLI resolution, `.command`/`.bat` generation, missing-CLI install guards and their shell escaping, failure dialogs, env sanitization) |
 | `test_envoy_setup_environment` | 18 | MCP import verification (pydantic_core safety) |
 | `test_envoy_registry` | 17 | Instance registry and PID liveness |
 | `test_envoy_lifecycle_hardening` | 4 | Save/reinit lifecycle hardening |

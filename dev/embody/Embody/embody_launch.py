@@ -63,16 +63,18 @@ def launch_ai_client(ext) -> None:
                 ext.Log(f'Launched {label} at {cwd}', 'SUCCESS')
             else:
                 msg = f'Could not open {label}. Is it installed?'
-                if spec.get('install'):
-                    msg += f'\n\nInstall: {spec.get("install")}'
+                hint = install_summary(spec.get('install'))
+                if hint:
+                    msg += f'\n\n{hint}'
                 msg += f'\n\nProject root: {cwd}'
                 ext._messageBox(title, msg, ['OK'])
         elif ext._launchTerminal(cwd, spec['cli'], install=spec.get('install')):
             ext.Log(f'Opened a terminal for {label} at {cwd}', 'INFO')
         else:
             msg = f'Could not open a terminal for {label}. Is it installed?'
-            if spec.get('install'):
-                msg += f'\n\nInstall: {spec.get("install")}'
+            hint = install_summary(spec.get('install'))
+            if hint:
+                msg += f'\n\n{hint}'
             msg += f'\n\nProject root: {cwd}'
             ext._messageBox(title, msg, ['OK'])
     except Exception as e:
@@ -95,6 +97,10 @@ def resolve_cli_abs(ext, cli: str) -> Optional[str]:
             os.path.expandvars(rf'%APPDATA%\npm\{cli}.cmd'),
             os.path.expandvars(rf'%USERPROFILE%\.bun\bin\{cli}.exe'),
             os.path.expandvars(rf'%LOCALAPPDATA%\Programs\{cli}\{cli}.exe'),
+            # Codex's native install.ps1 default (Programs\OpenAI\Codex\bin);
+            # generic over {cli} so the probe stays one table for all tools.
+            os.path.expandvars(
+                rf'%LOCALAPPDATA%\Programs\OpenAI\{cli.capitalize()}\bin\{cli}.exe'),
         ]
     else:
         home = Path.home()
@@ -196,6 +202,115 @@ def launch_editor(ext, cwd, app_name, bundle_id=None, win_exe_candidates=(),
     return False
 
 
+def guard_message_lines(cli, install, is_win) -> list:
+    """Plain-text display lines for the 'CLI is not installed' terminal guard.
+
+    Only for per-OS install dicts (see _AICLIENT_LAUNCH); legacy string hints
+    keep their original single-line rendering in the builders. Values are
+    whitespace-normalized so a stray newline can never break out of an echo
+    line; the OS builders then escape each line for their shell (single
+    quotes for zsh, quote-aware ^-escaping for cmd).
+    """
+    def clean(key):
+        return ' '.join(str(install.get(key, '')).split())
+
+    name = clean('name') or cli
+    cmd = clean('win' if is_win else 'mac')
+    alt = clean('win_alt' if is_win else 'mac_alt')
+    alt_note = clean('win_alt_note' if is_win else 'mac_alt_note')
+    note = clean('note')
+    docs = clean('docs')
+    host = 'PC' if is_win else 'Mac'
+    rule = '-' * 62
+    lines = ['', rule, f' {name} ({cli}) is not installed on this {host}.', '']
+    if cmd:
+        lines += [' 1. Copy the line below, paste it into this window,',
+                  '    then press Enter:',
+                  '',
+                  f'    {cmd}',
+                  '']
+        if note:
+            lines += [f'    ({note})', '']
+        lines += [' 2. When the install finishes, close this window and',
+                  '    press Launch AI Client in TouchDesigner again.', '']
+    else:
+        lines += [f' Install it first -- see {docs or "the tool website"}.', '']
+    if alt:
+        lines.append(f' Alternative:  {alt}')
+        if alt_note:
+            # Own line, aligned under the alt command, so the pasteable
+            # alternative stays a pure command with no annotation glued on.
+            lines.append(f'               ({alt_note})')
+    if docs:
+        lines.append(f' Docs:  {docs}')
+    lines += [rule, '']
+    return lines
+
+
+def _zsh_print(line) -> str:
+    """One zsh statement printing `line` literally. printf '%s\\n', not echo:
+    zsh's echo builtin interprets backslash escapes (\\n, \\c, ...) even
+    inside single quotes and parses leading-dash words as flags; printf with
+    a fixed format has neither behavior. Single-quoting (with '\\'' for
+    embedded quotes) keeps $, backticks, pipes, and double quotes inert."""
+    return "printf '%s\\n' '" + line.replace("'", "'\\''") + "'"
+
+
+def _cmd_echo(line) -> str:
+    """One cmd.exe echo statement printing `line` literally.
+
+    `echo(` instead of `echo `: with a space, a line reading `on`, `off`, or
+    `/?` toggles echo state / prints echo's help instead of the text (leading
+    whitespace does not protect); `echo(text` prints all of it verbatim, and
+    a bare `echo(` prints a blank line. cmd metacharacters (& | < > ^) are
+    ^-escaped only OUTSIDE double quotes -- inside quotes cmd already treats
+    them literally, and a ^ there would print as a caret. % is doubled
+    everywhere (it expands even inside quotes in a batch file). `!` needs no
+    escape because the .bat runs under setlocal DisableDelayedExpansion.
+    """
+    out, in_quotes = [], False
+    for ch in line:
+        if ch == '"':
+            in_quotes = not in_quotes
+            out.append(ch)
+        elif ch == '%':
+            out.append('%%')
+        elif not in_quotes and ch in '&|<>^':
+            out.append('^' + ch)
+        else:
+            out.append(ch)
+    return 'echo(' + ''.join(out)
+
+
+def install_summary(install) -> str:
+    """Install guidance as dialog-ready text. Per-OS dicts render the current
+    OS's copy/paste command on its own line; legacy strings pass through as
+    the old one-line hint. Empty string when there is nothing to show."""
+    if not install:
+        return ''
+    if not isinstance(install, dict):
+        return f'Install: {install}'
+    is_win = sys.platform.startswith('win')
+    cmd = ' '.join(str(install.get('win' if is_win else 'mac', '')).split())
+    alt = ' '.join(str(install.get('win_alt' if is_win else 'mac_alt', '')).split())
+    alt_note = ' '.join(str(install.get(
+        'win_alt_note' if is_win else 'mac_alt_note', '')).split())
+    note = ' '.join(str(install.get('note', '')).split())
+    docs = ' '.join(str(install.get('docs', '')).split())
+    parts = []
+    if cmd:
+        shell = 'a terminal (cmd)' if is_win else 'a terminal'
+        parts.append(f'Install -- paste into {shell}, then press Enter:\n\n{cmd}')
+    if note:
+        parts.append(f'({note})')
+    if alt:
+        parts.append(f'Alternative:  {alt}'
+                     + (f'\n({alt_note})' if alt_note else ''))
+    if docs:
+        parts.append(f'Docs:  {docs}')
+    return '\n\n'.join(parts)
+
+
 def build_terminal_script(ext, cwd, cli, abs_cli, install=None) -> str:
     """Return the macOS .command script text that cd's to cwd and runs <cli>.
 
@@ -214,12 +329,18 @@ def build_terminal_script(ext, cwd, cli, abs_cli, install=None) -> str:
         lines.append(f'exec {shlex.quote(abs_posix)}')
     else:
         # Not found by fast probe -- let the login shell resolve it. If truly
-        # absent, print install guidance and keep the window open.
-        hint = (install or 'see the tool website').replace('"', "'").replace('$', '').replace('`', '')
+        # absent, print install guidance and keep the window open. Per-OS
+        # install dicts render numbered steps with the copy/paste command on
+        # its own line; legacy string hints keep the old one-line form.
         lines.append(f'if ! command -v {cli} >/dev/null 2>&1; then')
-        lines.append(f'  echo "{cli} not found on PATH."')
-        lines.append(f'  echo "Install:  {hint}"')
-        lines.append('  echo "Then close this window and press Launch AI Client again."')
+        if isinstance(install, dict):
+            lines += ['  ' + _zsh_print(x)
+                      for x in guard_message_lines(cli, install, is_win=False)]
+        else:
+            hint = (install or 'see the tool website').replace('"', "'").replace('$', '').replace('`', '')
+            lines.append(f'  echo "{cli} not found on PATH."')
+            lines.append(f'  echo "Install:  {hint}"')
+            lines.append('  echo "Then close this window and press Launch AI Client again."')
         lines.append('  exec "${SHELL:-/bin/zsh}" -i')
         lines.append('fi')
         lines.append(f'exec "${{SHELL:-/bin/zsh}}" -ilc {shlex.quote(cli)}')
@@ -233,26 +354,38 @@ def build_terminal_script_win(ext, cwd, cli, abs_cli, install=None) -> str:
     # double-quoted cd /d and program paths, and str(Path) on Windows would
     # otherwise flip separators per-host.
     d = str(cwd).replace('\\', '/').replace('"', '')
+    # DisableDelayedExpansion: a host with delayed expansion enabled in the
+    # registry would otherwise eat `!` characters in echoed guard text.
     lines = ['@echo off',
+             'setlocal DisableDelayedExpansion',
              f'cd /d "{d}"',
              'if errorlevel 1 echo launch dir missing.']
     if abs_cli:
         lines.append(f'"{str(abs_cli).replace(chr(92), "/").replace(chr(34), "")}"')
     else:
-        hint = ''.join(c for c in (install or 'see the tool website')
-                       if re.match(r"[A-Za-z0-9 ._:/@()+=,'-]", c))
-        hint = ' '.join(hint.split()) or 'see the tool website'
         lines += [
             f'where {cli} >nul 2>nul',
             'if errorlevel 1 goto :missing',
             cli,
             'goto :done',
             ':missing',
-            f'echo {cli} not found on PATH.',
-            f'echo Install:  {hint}',
-            'echo Then close this window and press Launch AI Client again.',
-            ':done',
         ]
+        if isinstance(install, dict):
+            # Per-OS dict: numbered steps, copy/paste command on its own
+            # line, blank lines as `echo.`. Label flow (never parenthesized
+            # blocks) so parentheses in the text stay legal cmd.
+            lines += [_cmd_echo(x)
+                      for x in guard_message_lines(cli, install, is_win=True)]
+        else:
+            hint = ''.join(c for c in (install or 'see the tool website')
+                           if re.match(r"[A-Za-z0-9 ._:/@()+=,'-]", c))
+            hint = ' '.join(hint.split()) or 'see the tool website'
+            lines += [
+                f'echo {cli} not found on PATH.',
+                f'echo Install:  {hint}',
+                'echo Then close this window and press Launch AI Client again.',
+            ]
+        lines += [':done']
     return '\r\n'.join(lines) + '\r\n'
 
 

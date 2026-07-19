@@ -49,6 +49,10 @@ This is a TouchDesigner project using **Embody** for version-controlled external
 - Visual TOP work is output-first: create an Out TOP `out1` and turn its display flag on BEFORE building the chain, then keep the working chain wired into it -- the user watches live in the network backdrop.
 - For visual or rendered output, success is a captured, assessed frame, not a clean network. Use `capture_top` to look at the result and judge it (load the `/visual-aesthetics` skill first); never declare a visual task done on a black or empty frame.
 
+## Task Briefs
+
+`/brief` is user-invoked: when the user runs `/brief <request>`, compile the conversational request into a reviewable task brief in `briefs/` (gitignored) -- the skills to load, discovered anchors, verifiable success criteria, and gates -- then execute the work from that contract (see the `/brief` skill). If a substantive multi-step ask arrives without one, suggest `/brief` to the user; trivial one-shot asks skip it.
+
 ## Envoy MCP Server
 
 The MCP server runs inside TouchDesigner on the configured port (default: 9870). It auto-creates `.mcp.json` in the project root on startup.

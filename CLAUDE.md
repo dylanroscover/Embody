@@ -69,6 +69,7 @@ Embody/
 |       +-- visual-aesthetics/           # Visual craft: composition, camera, lighting, color
 |       +-- build-ui/                    # TD panel UI design system (dev only)
 |       +-- specimen-authoring/          # Specimen gallery authoring (dev only)
+|       +-- brief/                       # /brief -- conversational ask -> task brief contract
 +-- docs/                                  # MkDocs documentation site
 |   +-- embody/                           # Embody feature docs
 |   +-- envoy/                            # Envoy MCP server docs

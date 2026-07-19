@@ -1,8 +1,10 @@
 """
 Test suite: Launchaiclient launcher in EmbodyExt.
 
-Covers the _AICLIENT_LAUNCH table shape, _resolveCliAbs probing, and
-_buildTerminalScript content (the macOS .command). Does NOT spawn real
+Covers the _AICLIENT_LAUNCH table shape (including the per-OS install
+dicts), _resolveCliAbs probing, _buildTerminalScript / Win content (the
+missing-CLI install guards with their copy/paste command rendering and
+shell escaping), and install_summary dialog text. Does NOT spawn real
 terminals or editors -- only pure builders and _launchEditor's no-window
 failure path are exercised live.
 """
@@ -110,6 +112,17 @@ class TestLaunchAIClient(EmbodyTestCase):
 				self.assertTrue(cli and ' ' not in cli and '/' not in cli,
 					f'{token}: cli {cli!r} must be a bareword')
 
+	def test_A09_terminal_installs_are_per_os_dicts(self):
+		"""Terminal CLIs carry per-OS install dicts with the required keys,
+		so the missing-CLI guard can show the right copy/paste command on
+		both platforms plus the official docs URL."""
+		for token in ('claudecode', 'codex', 'gemini'):
+			install = self.embody_ext._AICLIENT_LAUNCH[token]['install']
+			self.assertIsInstance(install, dict, f'{token}: install must be a dict')
+			for key in ('name', 'mac', 'win', 'docs'):
+				self.assertTrue(install.get(key),
+					f'{token}: install spec needs a non-empty {key!r}')
+
 	# ------------------------------------------------------------------
 	# Group B: _resolveCliAbs (pure, no subprocess)
 	# ------------------------------------------------------------------
@@ -156,12 +169,75 @@ class TestLaunchAIClient(EmbodyTestCase):
 		self.assertIn("cd '/tmp/it'\\''s a dir'", body)
 
 	def test_C04_install_hint_echoed_when_absent(self):
-		"""When the CLI is absent, the script echoes the install instructions."""
+		"""A legacy string spec keeps the old one-line install hint."""
 		body = self.embody_ext._buildTerminalScript(
 			self._temp_dir, 'gemini', None,
 			install='npm install -g @google/gemini-cli')
 		self.assertIn('Install:', body)
 		self.assertIn('npm install -g @google/gemini-cli', body)
+
+	def test_C05_install_dict_renders_mac_command_on_own_line(self):
+		"""A per-OS dict renders numbered steps with the macOS command on its
+		own printf line, blank lines around it, alt + docs -- and never the
+		Windows command. printf '%s\\n' (not echo): zsh's echo interprets
+		backslash escapes and leading-dash flags."""
+		install = {'name': 'Claude Code',
+				   'mac': 'curl -fsSL https://claude.ai/install.sh | bash',
+				   'mac_alt': 'brew install --cask claude-code',
+				   'win': 'WIN_ONLY_TOKEN',
+				   'docs': 'https://code.claude.com/docs/en/setup'}
+		body = self.embody_ext._buildTerminalScript(
+			self._temp_dir, 'claude', None, install=install)
+		self.assertIn(
+			"printf '%s\\n' '    curl -fsSL https://claude.ai/install.sh | bash'",
+			body)
+		self.assertIn("printf '%s\\n' ''", body)
+		self.assertNotIn("echo '", body)
+		self.assertIn('Copy the line below', body)
+		self.assertIn('Claude Code (claude) is not installed', body)
+		self.assertIn('brew install --cask claude-code', body)
+		self.assertIn('Docs:', body)
+		self.assertNotIn('WIN_ONLY_TOKEN', body)
+		self.assertIn('command -v claude', body)
+		self.assertIn('exec "${SHELL:-/bin/zsh}" -i', body)
+
+	def test_C06_install_dict_quotes_cannot_escape_printf(self):
+		"""Single quotes in dict values are escaped so text stays inert:
+		stripping the '\\'' escape from every guard printf line must leave
+		exactly four quotes (the format string's pair + the text's pair)."""
+		install = {'name': "Evil'; rm -rf ~; echo 'x",
+				   'mac': 'safe-cmd', 'docs': 'https://example.com'}
+		body = self.embody_ext._buildTerminalScript(
+			self._temp_dir, 'foo', None, install=install)
+		guard_prints = [line.strip() for line in body.split('\n')
+						if line.strip().startswith('printf')]
+		self.assertTrue(guard_prints, 'guard must print through printf')
+		for line in guard_prints:
+			self.assertEqual(line.replace("'\\''", '').count("'"), 4,
+				f'unescaped quote leaks from: {line}')
+
+	def test_C07_install_dict_note_renders_under_command(self):
+		"""A note (e.g. the Node.js prerequisite) renders as its own line."""
+		install = {'name': 'Gemini CLI',
+				   'mac': 'npm install -g @google/gemini-cli',
+				   'note': 'needs Node.js 20 or newer -- https://nodejs.org',
+				   'docs': 'https://example.com'}
+		body = self.embody_ext._buildTerminalScript(
+			self._temp_dir, 'gemini', None, install=install)
+		self.assertIn('(needs Node.js 20 or newer -- https://nodejs.org)', body)
+
+	def test_C08_install_dict_alt_note_renders_on_own_line(self):
+		"""An alt caveat renders parenthesized under the alternative, so the
+		alternative itself stays a pure pasteable command."""
+		install = {'name': 'Codex CLI', 'mac': 'primary-cmd',
+				   'mac_alt': 'npm install -g @openai/codex',
+				   'mac_alt_note': 'needs Node.js -- https://nodejs.org',
+				   'docs': 'https://example.com'}
+		body = self.embody_ext._buildTerminalScript(
+			self._temp_dir, 'codex', None, install=install)
+		self.assertIn(' Alternative:  npm install -g @openai/codex', body)
+		self.assertIn('(needs Node.js -- https://nodejs.org)', body)
+		self.assertNotIn('npm install -g @openai/codex (needs', body)
 
 	# ------------------------------------------------------------------
 	# Group D: _launchEditor graceful failure (no window spawned)
@@ -324,6 +400,72 @@ class TestLaunchAIClient(EmbodyTestCase):
 		body = self.embody_ext._buildTerminalScriptWin(cwd, 'codex', None)
 		self.assertIn('cd /d "C:/Users/O\'Neil/My Project"', body)
 
+	def test_G06_windows_install_dict_escapes_ampersands_outside_quotes(self):
+		"""The cmd-native install command's && chain is ^-escaped in echo so
+		it displays literally instead of executing."""
+		install = {'name': 'Claude Code',
+				   'win': 'curl -fsSL https://claude.ai/install.cmd -o install.cmd '
+						  '&& install.cmd && del install.cmd',
+				   'docs': 'https://code.claude.com/docs/en/setup'}
+		body = self.embody_ext._buildTerminalScriptWin(
+			self._temp_dir, 'claude', None, install)
+		self.assertIn('^&^&', body)
+		for line in body.split('\r\n'):
+			if line.startswith('echo'):
+				self.assertNotIn(' && ', line,
+					f'raw && must never reach an echo line: {line}')
+
+	def test_G07_windows_install_dict_keeps_quoted_pipe_verbatim(self):
+		"""Metacharacters inside double quotes are already literal to cmd --
+		escaping them there would display stray carets."""
+		install = {'name': 'Codex CLI',
+				   'win': 'powershell -ExecutionPolicy ByPass -c '
+						  '"irm https://chatgpt.com/codex/install.ps1 | iex"',
+				   'docs': 'https://developers.openai.com/codex/cli'}
+		body = self.embody_ext._buildTerminalScriptWin(
+			self._temp_dir, 'codex', None, install)
+		self.assertIn('"irm https://chatgpt.com/codex/install.ps1 | iex"', body)
+		self.assertNotIn('^|', body)
+
+	def test_G08_windows_install_dict_echo_paren_form_and_crlf(self):
+		"""Every guard display line uses the `echo(` form (immune to lines
+		reading on/off//?), blanks are a bare `echo(`, flow stays
+		label-based, and the .bat stays CRLF-only."""
+		install = {'name': 'Gemini CLI',
+				   'win': 'npm install -g @google/gemini-cli',
+				   'note': 'needs Node.js 20 or newer',
+				   'docs': 'https://example.com (docs)'}
+		body = self.embody_ext._buildTerminalScriptWin(
+			self._temp_dir, 'gemini', None, install)
+		self.assertIn('echo(\r\n', body)
+		self.assertIn('Gemini CLI (gemini) is not installed', body)
+		self.assertIn('When the install finishes', body)
+		self.assertIn('if errorlevel 1 goto :missing', body)
+		rows = body.split('\r\n')
+		block = rows[rows.index(':missing') + 1:rows.index(':done')]
+		self.assertTrue(block)
+		for row in block:
+			self.assertTrue(row.startswith('echo('),
+				f'guard display line must use echo( form: {row!r}')
+		self.assertFalse('\n' in body.replace('\r\n', ''),
+			'Windows .bat must not contain lone LF characters')
+
+	def test_G10_windows_script_disables_delayed_expansion(self):
+		"""setlocal DisableDelayedExpansion follows @echo off, so a host with
+		delayed expansion enabled cannot eat `!` in displayed text."""
+		body = self.embody_ext._buildTerminalScriptWin(
+			self._temp_dir, 'gemini', None)
+		self.assertEqual(body.split('\r\n')[1], 'setlocal DisableDelayedExpansion')
+
+	def test_G09_windows_install_dict_doubles_percent(self):
+		"""% expands even inside quotes in a batch file, so it is doubled."""
+		install = {'name': 'X', 'win': 'set PATH=%PATH%;C:/tools',
+				   'docs': 'https://example.com'}
+		body = self.embody_ext._buildTerminalScriptWin(
+			self._temp_dir, 'foo', None, install)
+		self.assertIn('%%PATH%%', body)
+		self.assertNotIn('echo set PATH=%PATH%', body)
+
 	# ------------------------------------------------------------------
 	# Group H: LaunchAIClient dialog failure paths
 	# ------------------------------------------------------------------
@@ -402,3 +544,47 @@ class TestLaunchAIClient(EmbodyTestCase):
 		finally:
 			self._set_aiclient_for_test(prev_client)
 			self._restore_responses(saved)
+
+	# ------------------------------------------------------------------
+	# Group I: install_summary (dialog text for install specs)
+	# ------------------------------------------------------------------
+
+	def _launch_module(self):
+		return op.Embody.op('embody_launch').module
+
+	def test_I01_summary_string_passthrough_and_empty(self):
+		"""Legacy strings keep the one-line 'Install: ...' form; empty specs
+		produce no text (the dialog then omits the hint entirely)."""
+		m = self._launch_module()
+		self.assertEqual(m.install_summary('npm install -g x'),
+						 'Install: npm install -g x')
+		self.assertEqual(m.install_summary(None), '')
+		self.assertEqual(m.install_summary(''), '')
+
+	def test_I02_summary_dict_picks_current_os_command(self):
+		"""Per-OS dicts render this OS's copy/paste command on its own line
+		and never the other OS's."""
+		m = self._launch_module()
+		install = {'name': 'Claude Code',
+				   'mac': 'MAC_CMD_TOKEN', 'win': 'WIN_CMD_TOKEN',
+				   'mac_alt': 'MAC_ALT_TOKEN', 'win_alt': 'WIN_ALT_TOKEN',
+				   'docs': 'https://code.claude.com/docs/en/setup'}
+		text = m.install_summary(install)
+		is_win = sys.platform.startswith('win')
+		expected = 'WIN_CMD_TOKEN' if is_win else 'MAC_CMD_TOKEN'
+		other = 'MAC_CMD_TOKEN' if is_win else 'WIN_CMD_TOKEN'
+		self.assertIn(f'\n\n{expected}', text)
+		self.assertNotIn(other, text)
+		self.assertIn('Docs:', text)
+
+	def test_I03_summary_alt_note_renders_separately(self):
+		"""The alt caveat renders on its own line in dialog text too."""
+		m = self._launch_module()
+		key = 'win_alt_note' if sys.platform.startswith('win') else 'mac_alt_note'
+		alt_key = 'win_alt' if sys.platform.startswith('win') else 'mac_alt'
+		install = {'name': 'X', 'mac': 'm', 'win': 'w',
+				   alt_key: 'npm install -g @openai/codex',
+				   key: 'needs Node.js', 'docs': 'https://example.com'}
+		text = m.install_summary(install)
+		self.assertIn('Alternative:  npm install -g @openai/codex\n(needs Node.js)',
+					  text)

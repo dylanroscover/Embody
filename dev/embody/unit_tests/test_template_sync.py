@@ -258,3 +258,29 @@ class TestTemplateSync(EmbodyTestCase):
                 any(GENERATED_MARKER in line for line in source_head),
                 '{} missing generated marker near top'.format(source_rel),
             )
+
+    # ==================================================================
+    # F. Map entries resolve to live template DATs
+    # ==================================================================
+
+    def test_F01_map_entries_resolve_to_live_dats(self):
+        """Every mapped template should exist as a non-empty DAT in TD.
+
+        Deployment reads templates_comp.op(dat_name) and silently skips
+        missing DATs (embody_git.write_claude_code_config), so a map
+        entry whose DAT was never created in the network ships as a
+        silently absent rule/skill while every disk-only check above
+        stays green.
+        """
+        templates_comp = self.embody_ext.my.op('templates')
+        self.assertIsNotNone(templates_comp, 'templates COMP not found')
+        maps = dict(self.embody_ext._TEMPLATE_MAP_RULES)
+        maps.update(self.embody_ext._TEMPLATE_MAP_SKILLS)
+        for dat_name in maps:
+            dat = templates_comp.op(dat_name)
+            self.assertIsNotNone(
+                dat,
+                'Mapped template DAT missing in TD: {}'.format(dat_name))
+            self.assertTrue(
+                dat.text,
+                'Mapped template DAT is empty: {}'.format(dat_name))
