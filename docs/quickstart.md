@@ -79,6 +79,9 @@ Now make it react to audio, slow it down, and add a bloom on the final output.
 
 You're not getting a screenshot or a code snippet to paste. You're getting the **actual network**, in front of you, ready to play with.
 
+!!! tip "Big build? Start with a brief"
+    For substantive builds, type `/brief` followed by your request (or a bare `/brief` after describing it in chat). Claude compiles your ask into a reviewable plan — the skills it will load, where it will build, verifiable success criteria, and safety gates — and gets your approval before creating a single operator. See [Task Briefs](envoy/claude-code.md#task-briefs-brief).
+
 !!! info "How long does a build take?"
     Small things — a parameter change, a fix, a question about your network — can land in seconds. A complete network is a real build: the AI reads your project, plans, creates, wires, and verifies its work, which typically takes **5-20 minutes** of autonomous effort, depending on your model and compute. You don't have to watch it, and you don't have to run just one: Envoy [coordinates multiple AI sessions](envoy/multi-session.md) on the same project, each scoped to its own part of the network. Less like waiting on a genie, more like directing a team.
 

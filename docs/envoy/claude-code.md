@@ -54,6 +54,29 @@ Skills are loaded only when needed, keeping the context window lean. Claude Code
 
 Each skill contains step-by-step workflows, API details, and common pitfalls specific to that operation.
 
+## Task Briefs (`/brief`)
+
+For substantive, multi-step asks, Claude Code can compile your conversational request into a **task brief** before building — a short markdown contract that states, up front, everything a good build needs:
+
+- **Skills to load** — which of the skills above must be loaded before which tool call
+- **Anchors** — where the work happens, discovered from your live project (real container paths, never guesses)
+- **Success criteria** — only verifiable statements: a captured and assessed output frame, clean `get_op_errors`, fps within tolerance of the pre-build baseline
+- **Gates** — a performance baseline before building, multi-session claims, and flagged destructive steps that wait for your confirmation
+
+Two ways to invoke it:
+
+```text
+/brief make the gallery wall react to the music
+```
+
+Everything after `/brief` is the request — as vague and conversational as you like; turning it into a precise contract is the skill's job. Or type a bare `/brief` after describing what you want in chat, and it formalizes the conversation's current ask.
+
+The compiled brief lands in `briefs/<date>-<slug>.md` at your project root (gitignored — Embody manages the entry). Claude presents a summary for your approval, then executes **from the brief**: skills loaded at the stated moments, gates honored, every success criterion checked before "done." Because the brief is a file rather than chat history, it outlives the session — a fresh session or a sub-agent can pick it up and execute it without ever having seen the conversation.
+
+Trivial asks skip the ritual: a one-parameter change or a quick question doesn't need a brief, and the skill says so rather than taxing small requests. When a build goes wrong despite a brief, the miss is recorded in the brief's **Deviations** section and fed back into the skill — briefs get better the more you use them.
+
+`/brief` is user-invoked only: Claude won't run it on its own, though it may suggest it when a big ask arrives without one.
+
 ## STDIO Bridge
 
 Claude Code connects to Envoy through a STDIO bridge script (`.embody/envoy-bridge.py`) that translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. The bridge provides four meta-tools that work even when TouchDesigner is not running:
