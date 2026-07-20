@@ -77,9 +77,6 @@ You can run multiple TouchDesigner instances with Envoy enabled in the same git 
 
 To switch between instances from Claude Code, use the `switch_instance` bridge meta-tool. See [Claude Code Integration](claude-code.md#working-with-multiple-instances) for usage details and [Architecture](architecture.md#multiple-instances) for how it works.
 
-!!! tip
-    Running two instances of the **same `.toe` file** works out of the box — Envoy auto-suffixes the registry key (`MyProject`, `MyProject-2`, etc.).
-
 ## Claude Code Integration
 
 When Envoy starts, it generates a full Claude Code configuration in your project root:

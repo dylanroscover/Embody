@@ -100,12 +100,6 @@ Reopening the conversation re-initializes the MCP connection. The message histor
 2. **Switch to the correct one**: Call `switch_instance` with the instance name (`.toe` filename without the extension).
 3. **Stale entries**: If an instance shows as "reachable" but you've already closed it, the registry entry is stale. Restarting Envoy in the running instance will clean it up.
 
-### Same-file instance naming
-
-**Symptoms:** You opened the same `.toe` file in two TD instances and want predictable names for `switch_instance`.
-
-Envoy auto-suffixes duplicate keys (`MyProject`, `MyProject-2`, etc.), so both instances are addressable.
-
 ### Port exhaustion
 
 **Symptoms:** Envoy fails to start with a message about no available ports.
