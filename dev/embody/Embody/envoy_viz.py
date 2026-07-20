@@ -142,6 +142,36 @@ _VIZ_MUTATING_OPS = frozenset({
     'rename_op', 'set_op_flags',
 })
 
+# Issue #57 activation gates. On TD 2025.32460 a first-of-session create_op
+# wedged TD's main thread permanently (Windows AppHang 1002; dump: an
+# orphaned / self-owned critical section inside TD's editor internals, GIL
+# held) -- reproducible with viz ON, 7/7 clean with viz OFF. The common factor
+# was viz performing EDITOR work (bot template creation, annotateCOMP copyOPs,
+# selection writes, pane.owner navigation) in the SAME RefreshHook frame that
+# mutated the network, on the first activation after dormancy. Two gates
+# decouple those moments; both are cheap frame arithmetic:
+#   - settle gate: after ANY mutating op, hold ALL editor-adjacent viz work
+#     for _VIZ_MUTATION_SETTLE_FRAMES. The mutation frame completes, the GIL
+#     is released between frames, and the worker delivers the MCP response
+#     BEFORE any viz editor write can run.
+#   - cold hold: the FIRST hop after viz dormancy does the colour ping only;
+#     the bot build / camera work starts after _VIZ_COLD_HOLD_FRAMES, once
+#     the editor has finished rendering (and auto-framing) the new op.
+_VIZ_MUTATION_SETTLE_FRAMES = 2   # frames a mutation must settle before viz editor work
+_VIZ_COLD_HOLD_FRAMES = 30        # ~0.5s @60fps of pulse-only on a cold activation
+
+
+def vizSettled(mutation_frame, frame_now) -> bool:
+    """True once at least _VIZ_MUTATION_SETTLE_FRAMES have passed since the
+    last mutating op. Pure -- unit-tested outside a live viz session."""
+    return (frame_now - mutation_frame) >= _VIZ_MUTATION_SETTLE_FRAMES
+
+
+def coldHoldElapsed(cold_since, frame_now) -> bool:
+    """True once a cold activation's pulse-only hold has expired. `cold_since`
+    is -1 until the first cold-tracked frame stamps it. Pure -- unit-tested."""
+    return cold_since >= 0 and (frame_now - cold_since) >= _VIZ_COLD_HOLD_FRAMES
+
 
 def noteVizActivity(ext, operation: str, params: dict, result) -> None:
     """Enqueue the op Envoy just acted on as a follow hop and stamp the activity
@@ -153,6 +183,10 @@ def noteVizActivity(ext, operation: str, params: dict, result) -> None:
     try:
         if operation not in _VIZ_MUTATING_OPS:
             return
+        # Issue #57 settle gate: stamp the mutation frame FIRST, even if the
+        # target fails to resolve below -- the network still mutated this
+        # frame, so viz editor work must hold off either way.
+        ext._viz_mutation_frame = absTime.frame
         target = ext._resolveActiveOp(operation, params, result)
         if not target:
             return
@@ -202,6 +236,13 @@ def vizTick(ext) -> None:
             ext._viz_target_op = None
             return
         pulseTick(ext, now)
+        # Issue #57 settle gate: within the settle window of a mutating op,
+        # do NOTHING editor-adjacent -- no hop pump, no bot template build,
+        # no copyOPs spawn/assembly, no selection writes, no pane navigation.
+        # The pulse fade above is an op-colour write (same class as the build
+        # op itself) and stays live so pulses never stall mid-fade.
+        if not vizSettled(ext._viz_mutation_frame, absTime.frame):
+            return
         vizPumpQueue(ext, now)
         if ext._viz_target_op:
             trackActive(ext, now, follow, show_bot)
@@ -254,6 +295,18 @@ def trackActive(ext, now: float, follow: bool, show_bot: bool) -> None:
     net = target.parent()
     if net is None:
         return
+    # Issue #57 cold hold: the first hop after viz dormancy pings the node
+    # colour ONLY. Bot template creation, copyOPs assembly, selection writes
+    # and pane navigation begin once the hold elapses -- after the editor has
+    # finished rendering (and auto-framing) the freshly-created op, decoupled
+    # from the mutation moment that wedged TD 2025.32460 (issue #57).
+    if not ext._viz_session_warm:
+        if ext._viz_cold_since < 0:
+            ext._viz_cold_since = absTime.frame
+        pulseStart(ext, target, now)
+        if not coldHoldElapsed(ext._viz_cold_since, absTime.frame):
+            return
+        ext._viz_session_warm = True
     # --- the character (Embotenable) ---
     if show_bot:
         pulseStart(ext, target, now)    # ping the node colour
@@ -1021,6 +1074,10 @@ def vizCleanup(ext) -> None:
     ext._viz_target_queue = []
     ext._viz_hop_until = 0.0
     ext._viz_follow_net = None   # re-establish zoom next time we follow somewhere
+    # Issue #57: retiring makes the NEXT activation cold again -- its first hop
+    # pulses only, and the bot/camera machinery re-engages after the hold.
+    ext._viz_session_warm = False
+    ext._viz_cold_since = -1
 
 
 def viewTuple(ext, pane) -> tuple:

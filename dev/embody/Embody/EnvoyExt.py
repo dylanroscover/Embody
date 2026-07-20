@@ -2472,6 +2472,13 @@ class EnvoyExt:
         self._viz_bot_build_queue: list = []          # template part names still to copy this assembly
         self._viz_assemble_next_frame: int = 0        # earliest absTime.frame the next spread part may copy
         self._viz_bot_pending_cleanup: set = set()    # nets whose left-behind bot to tear down off-screen
+        # Issue #57 activation gates (see envoy_viz: vizSettled/coldHoldElapsed).
+        # A create_op on TD 2025.32460 wedged the main thread (orphaned/self-owned
+        # CS inside TD's editor internals) when viz editor work ran in the same
+        # frame as the mutation; these gates decouple the two.
+        self._viz_mutation_frame: int = -10 ** 6      # absTime.frame of the last mutating op (settle gate)
+        self._viz_session_warm: bool = False          # False until a cold activation's hold has elapsed
+        self._viz_cold_since: int = -1                # absTime.frame the cold hold began; -1 = not started
         self._crash_trace_enabled: bool = False       # diagnostic: flush a breadcrumb per viz annotation-graph op
         self._crash_trace_f = None                    # open handle to the breadcrumb file
 
