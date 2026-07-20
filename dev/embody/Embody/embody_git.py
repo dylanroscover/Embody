@@ -759,12 +759,18 @@ def map_changed_to_ops(changed, project_prefix, rows):
     return out
 
 
+def row_is_unsaved(dirty_val) -> bool:
+    """Whether a manager row has unsaved in-TD changes (`dirty` or `Par`).
+    Single source of truth for the manager's "dirty" filter keyword (used
+    by inject_parents)."""
+    return str(dirty_val) in ('True', 'true', '1', 'Par')
+
+
 def row_has_changes(dirty_val, uncommitted) -> bool:
     """Whether a manager row has pending changes on EITHER axis: unsaved
     (`dirty`/`Par`) or git-uncommitted. Single source of truth for the
     manager's "changed" filter keyword (used by inject_parents)."""
-    is_unsaved = str(dirty_val) in ('True', 'true', '1', 'Par')
-    return is_unsaved or bool(uncommitted)
+    return row_is_unsaved(dirty_val) or bool(uncommitted)
 
 
 def update_git_status(ext) -> None:

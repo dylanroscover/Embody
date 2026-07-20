@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 682
-generator: Embody/6.0.138
+build: 671
+generator: Embody/6.0.140
 td_build: 099.2025.33070
-source_file: Embody-6.138.toe
-exported_at: '2026-07-19T01:31:42Z'
+source_file: Embody-6.141.toe
+exported_at: '2026-07-20T12:30:03Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -281,6 +281,17 @@ operators:
       - Ask
       - Quiet
       help: Controls whether a warning dialog is shown when a TDN file exceeds 5 MB. Set automatically when dismissed.
+    - name: Tdnlockedwarn
+      style: Menu
+      label: Locked Content Warning
+      default: ask
+      menuNames:
+      - ask
+      - quiet
+      menuLabels:
+      - Ask
+      - Quiet
+      help: Controls whether a dialog is shown when a TDN export contains locked TOPs, CHOPs, or SOPs whose frozen data will not survive the round-trip. Batch sweeps show one combined dialog. Set automatically when dismissed with Don't show again.
     - name: Embeddatsintdns
       style: Toggle
       label: Embed DATs (default)
@@ -308,7 +319,7 @@ operators:
       label: Auto-Save Status
       readOnly: true
       help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-      value: Saved 01:31:34 UTC
+      value: Saved 12:28:46 UTC
     - name: Tdnstriponsave
       style: Toggle
       label: Strip on Save
@@ -448,7 +459,7 @@ operators:
       startSection: true
       readOnly: true
       help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-      value: Running on port 9870
+      value: Running on port 9872
     Logs:
     - name: Verbose
       style: Toggle
@@ -694,7 +705,7 @@ operators:
       - Always Keep Files
       - Always Delete Files
       help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-      value: delete
+      value: keep
     - name: Toxdropexpr
       style: Menu
       label: Dropped .tox Expression
@@ -709,7 +720,6 @@ operators:
       - Always Clean
       - Always Ignore
       help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
-      value: ignore
     - name: Tdndatsafety
       style: Menu
       label: Content Safety
@@ -733,7 +743,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.138
+      value: 6.0.140
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -750,7 +760,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 846
+      value: 840
     - name: Github
       style: Pulse
       label: GitHub
@@ -761,7 +771,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-19 01:31:42 UTC
+      value: 2026-07-20 12:30:02 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -776,25 +786,8 @@ operators:
     claudius_running: false
     _tdn_restore_failures:
     - /embody/base1
-    expand_order: []
     _start_in_progress: true
-    git_status:
-      /embody/externalizations: ' M'
-      /embody/unit_tests/test_sandbox: ' M'
-      /embody/unit_tests/test_claude_config: ' M'
-      /embody/Embody/templates/text_claude: ' M'
-      /embody/Embody/templates: ' M'
-      /embody/Embody/tagger/header/text1: ' M'
-      /embody/Embody/tagger/header: ' M'
-      /embody/Embody/tagger: ' M'
-      /embody/Embody/EmbodyExt: ' M'
-      /embody/Embody: ' M'
-      /embody: ' M'
-      /embody/unit_tests/test_launch_aiclient: ' M'
-      /embody/Embody/envoy_setup: ' M'
-      /embody/Embody/embody_launch: ' M'
-      /embody/Embody/templates/text_skill_brief: ??
-    _watchdog_gen: 922
+    _watchdog_gen: 938
     _suite_proof_progress:
       todo:
       - test_ancestor_rename
@@ -936,9 +929,9 @@ operators:
           tot: 33
           fail: 1
       pending_after: absent
-    _clip_watch_gen: 687
-    _shortcut_rec_gen: 265
-    _init_complete: true
+    _clip_watch_gen: 703
+    _shortcut_rec_gen: 251
+    _suppress_dialogs: true
   tdn_ref: embody/Embody.tdn
 - name: base_tdn
   type: baseCOMP
@@ -2844,8 +2837,6 @@ operators:
         status: PASS
         message: ''
         duration_ms: 3146.21
-    _test_saved_filecleanup: keep
-    _test_saved_toxdropexpr: ask
   tdn_ref: embody/unit_tests.tdn
 - name: execute_src_ctrl
   type: executeDAT

@@ -383,3 +383,128 @@ class TestTDNHelpers(EmbodyTestCase):
         root.tags.add(self.embody.par.Tdntag.val)
         t = self._lockedTop(root, 'locked_direct')
         self.assertIn(t, self.tdn._findLockedNonDATs(root))
+
+    # --- _warnLockedNonDATs batching + opt-out dialog ---
+
+    def _interceptLockedDialog(self):
+        """Replace _showLockedWarnDialog with a recorder; returns the list
+        of captured messages. Caller MUST restore via the returned undo."""
+        captured = []
+        orig = self.tdn._showLockedWarnDialog
+        self.tdn._showLockedWarnDialog = lambda msg: captured.append(msg)
+        return captured, lambda: setattr(
+            self.tdn, '_showLockedWarnDialog', orig)
+
+    def _resetLockedWarnState(self):
+        self.tdn._locked_warn_batch = None
+        self.tdn._locked_warn_quiet = False
+
+    def test_lockedwarn_batch_collects_without_dialog(self):
+        root = self.sandbox.create(baseCOMP, 'lw_batch_collect')
+        self._lockedTop(root, 'locked1')
+        captured, restore = self._interceptLockedDialog()
+        try:
+            self.tdn.BeginLockedWarnBatch()
+            self.tdn._warnLockedNonDATs(root, context='export')
+            self.assertEqual(len(captured), 0)
+            self.assertEqual(len(self.tdn._locked_warn_batch), 1)
+            self.assertEqual(self.tdn._locked_warn_batch[0][0], root.path)
+            self.assertEqual(self.tdn._locked_warn_batch[0][1], 1)
+        finally:
+            restore()
+            self._resetLockedWarnState()
+
+    def test_lockedwarn_flush_shows_one_combined_dialog(self):
+        root_a = self.sandbox.create(baseCOMP, 'lw_flush_a')
+        root_b = self.sandbox.create(baseCOMP, 'lw_flush_b')
+        self._lockedTop(root_a, 'locked_a')
+        self._lockedTop(root_b, 'locked_b')
+        captured, restore = self._interceptLockedDialog()
+        try:
+            self.tdn.BeginLockedWarnBatch()
+            self.tdn._warnLockedNonDATs(root_a, context='export')
+            self.tdn._warnLockedNonDATs(root_b, context='export')
+            self.tdn.FlushLockedWarnBatch()
+            self.assertEqual(len(captured), 1)
+            self.assertIn(root_a.path, captured[0])
+            self.assertIn(root_b.path, captured[0])
+            self.assertIn('2 locked non-DAT operator(s) across 2',
+                          captured[0])
+            # Batch deactivated: a later lone export dialogs directly.
+            self.assertIsNone(self.tdn._locked_warn_batch)
+        finally:
+            restore()
+            self._resetLockedWarnState()
+
+    def test_lockedwarn_flush_empty_no_dialog(self):
+        captured, restore = self._interceptLockedDialog()
+        try:
+            self.tdn.BeginLockedWarnBatch()
+            self.tdn.FlushLockedWarnBatch()
+            self.assertEqual(len(captured), 0)
+            self.assertIsNone(self.tdn._locked_warn_batch)
+        finally:
+            restore()
+            self._resetLockedWarnState()
+
+    def test_lockedwarn_unbatched_export_dialogs_directly(self):
+        root = self.sandbox.create(baseCOMP, 'lw_direct')
+        self._lockedTop(root, 'locked1')
+        captured, restore = self._interceptLockedDialog()
+        try:
+            self.tdn._warnLockedNonDATs(root, context='export')
+            self.assertEqual(len(captured), 1)
+            self.assertIn(root.path, captured[0])
+        finally:
+            restore()
+            self._resetLockedWarnState()
+
+    def test_lockedwarn_quiet_pref_suppresses_dialog_and_batch(self):
+        root = self.sandbox.create(baseCOMP, 'lw_quiet')
+        self._lockedTop(root, 'locked1')
+        captured, restore = self._interceptLockedDialog()
+        try:
+            self.tdn._locked_warn_quiet = True
+            # Unbatched: no dialog.
+            self.tdn._warnLockedNonDATs(root, context='export')
+            self.assertEqual(len(captured), 0)
+            # Batched: nothing collected either.
+            self.tdn.BeginLockedWarnBatch()
+            self.tdn._warnLockedNonDATs(root, context='export')
+            self.assertEqual(self.tdn._locked_warn_batch, [])
+            self.tdn.FlushLockedWarnBatch()
+            self.assertEqual(len(captured), 0)
+        finally:
+            restore()
+            self._resetLockedWarnState()
+
+    def test_lockedwarn_dont_show_again_persists_opt_out(self):
+        # Seed the auto-response: button 1 = "Don't show again".
+        self.embody.store('_smoke_test_responses',
+                          {'Embody -- Locked Content Warning': 1})
+        pref = getattr(self.embody.par, 'Tdnlockedwarn', None)
+        orig_pref = pref.eval() if pref is not None else None
+        try:
+            self.tdn._showLockedWarnDialog('test message')
+            self.assertTrue(self.tdn._locked_warn_quiet)
+            if pref is not None:
+                self.assertEqual(pref.eval(), 'quiet')
+            self.assertFalse(self.tdn._lockedWarnEnabled())
+        finally:
+            self.embody.unstore('_smoke_test_responses')
+            if pref is not None and orig_pref is not None:
+                pref.val = orig_pref
+            self._resetLockedWarnState()
+
+    def test_lockedwarn_import_context_never_batches_or_dialogs(self):
+        root = self.sandbox.create(baseCOMP, 'lw_import')
+        self._lockedTop(root, 'locked1')
+        captured, restore = self._interceptLockedDialog()
+        try:
+            self.tdn.BeginLockedWarnBatch()
+            self.tdn._warnLockedNonDATs(root, context='import')
+            self.assertEqual(len(captured), 0)
+            self.assertEqual(self.tdn._locked_warn_batch, [])
+        finally:
+            restore()
+            self._resetLockedWarnState()

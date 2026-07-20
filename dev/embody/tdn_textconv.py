@@ -148,6 +148,11 @@ def normalize(raw):
 def main(argv):
     if len(argv) < 2:
         return 0
+    # Git runs this with stdout in the console codepage (cp1252 on Windows);
+    # .tdn is UTF-8 and user networks legitimately contain non-ASCII (button
+    # labels, annotations). Reconfigure so unicode never crashes the diff.
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     try:
         with open(argv[1], 'r', encoding='utf-8') as f:
             raw = f.read()

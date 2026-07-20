@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 846
-generator: Embody/6.0.138
+build: 841
+generator: Embody/6.0.141
 td_build: 099.2025.33070
-source_file: Embody-6.138.toe
-exported_at: '2026-07-19T01:31:42Z'
+source_file: Embody-6.141.toe
+exported_at: '2026-07-20T12:32:20Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -243,6 +243,17 @@ custom_pars:
     - Ask
     - Quiet
     help: Controls whether a warning dialog is shown when a TDN file exceeds 5 MB. Set automatically when dismissed.
+  - name: Tdnlockedwarn
+    style: Menu
+    label: Locked Content Warning
+    default: ask
+    menuNames:
+    - ask
+    - quiet
+    menuLabels:
+    - Ask
+    - Quiet
+    help: Controls whether a dialog is shown when a TDN export contains locked TOPs, CHOPs, or SOPs whose frozen data will not survive the round-trip. Batch sweeps show one combined dialog. Set automatically when dismissed with Don't show again.
   - name: Embeddatsintdns
     style: Toggle
     label: Embed DATs (default)
@@ -270,7 +281,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 01:31:34 UTC
+    value: Saved 12:28:46 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -410,7 +421,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-    value: Running on port 9870
+    value: Running on port 9872
   Logs:
   - name: Verbose
     style: Toggle
@@ -656,7 +667,7 @@ custom_pars:
     - Always Keep Files
     - Always Delete Files
     help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-    value: delete
+    value: keep
   - name: Toxdropexpr
     style: Menu
     label: Dropped .tox Expression
@@ -671,7 +682,6 @@ custom_pars:
     - Always Clean
     - Always Ignore
     help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
-    value: ignore
   - name: Tdndatsafety
     style: Menu
     label: Content Safety
@@ -695,7 +705,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.138
+    value: 6.0.141
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -712,7 +722,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 846
+    value: 841
   - name: Github
     style: Pulse
     label: GitHub
@@ -723,7 +733,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-19 01:31:42 UTC
+    value: 2026-07-20 12:32:18 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -770,168 +780,10 @@ storage:
   claudius_running: false
   _tdn_restore_failures:
   - /embody/base1
-  expand_order: []
   _start_in_progress: true
-  git_status:
-    /embody/externalizations: ' M'
-    /embody/unit_tests/test_sandbox: ' M'
-    /embody/unit_tests/test_claude_config: ' M'
-    /embody/Embody/templates/text_claude: ' M'
-    /embody/Embody/templates: ' M'
-    /embody/Embody/tagger/header/text1: ' M'
-    /embody/Embody/tagger/header: ' M'
-    /embody/Embody/tagger: ' M'
-    /embody/Embody/EmbodyExt: ' M'
-    /embody/Embody: ' M'
-    /embody: ' M'
-    /embody/unit_tests/test_launch_aiclient: ' M'
-    /embody/Embody/envoy_setup: ' M'
-    /embody/Embody/embody_launch: ' M'
-    /embody/Embody/templates/text_skill_brief: ??
-  _watchdog_gen: 922
-  _suite_proof_progress:
-    todo:
-    - test_ancestor_rename
-    - test_catalog_bootstrap_palette
-    - test_catalog_palette_scan
-    - test_claude_config
-    - test_clipboard_paste
-    - test_collection_safe_import
-    - test_collection_scanner
-    - test_crud_operators
-    - test_dat_restoration
-    - test_delete_cleanup
-    - test_duplicate_handling
-    - test_envoy_bridge
-    - test_envoy_lifecycle_hardening
-    - test_envoy_registry
-    - test_envoy_setup_environment
-    - test_envoy_thread_comm
-    - test_envoy_watchdog
-    - test_externalization
-    - test_file_management
-    - test_glsl_externalize
-    - test_issue21_safe_cell
-    - test_layout_lint
-    - test_logging
-    - test_mcp_annotations
-    - test_mcp_batch
-    - test_mcp_code_execution
-    - test_mcp_connections
-    - test_mcp_dat_content
-    - test_mcp_diagnostics
-    - test_mcp_extensions
-    - test_mcp_externalization
-    - test_mcp_flags_position
-    - test_mcp_operators
-    - test_mcp_parameters
-    - test_mcp_performance
-    - test_mcp_project_performance
-    - test_mcp_tdn_tools
-    - test_mcp_top_capture
-    - test_operator_queries
-    - test_os_label
-    - test_param_tracker
-    - test_path_utils
-    - test_rename_move_lifecycle
-    - test_server_lifecycle
-    - test_settings_persistence
-    - test_smoke_release
-    - test_specimen_publish
-    - test_strategy_handlers
-    - test_tag_lifecycle
-    - test_tag_management
-    - test_tdn_crash_safety
-    - test_tdn_exclude
-    - test_tdn_export_import
-    - test_tdn_external_connections
-    - test_tdn_file_io
-    - test_tdn_fingerprint
-    - test_tdn_helpers
-    - test_tdn_mode
-    - test_tdn_palette_catalog
-    - test_tdn_reconstruction
-    - test_tdn_safety_guards
-    - test_tdn_sequences
-    - test_tdn_yaml
-    - test_update_sync
-    - test_v6_hardening
-    done: []
-  _suite_proof_result:
-    agg:
-      total: 1576
-      passed: 1573
-      failed: 2
-      errors: 0
-      skipped: 1
-    fails:
-    - $type: tuple
-      $value:
-      - test_envoy_thread_comm
-      - null
-      - FAIL
-    - $type: tuple
-      $value:
-      - test_envoy_thread_comm
-      - null
-      - FAIL
-    n: 65
-  _e2e_result:
-    pre_seed_is_none: true
-    results:
-      test_envoy_setup_environment:
-        pass: 17
-        tot: 17
-        fail: 0
-        err: 0
-      test_envoy_lifecycle_hardening:
-        pass: 4
-        tot: 4
-        fail: 0
-        err: 0
-      test_smoke_release:
-        pass: 33
-        tot: 33
-        fail: 0
-        err: 0
-  _setgate_test:
-    results:
-      test_envoy_setup_environment:
-        pass: 17
-        tot: 17
-      test_envoy_lifecycle_hardening:
-        pass: 4
-        tot: 4
-      test_smoke_release:
-        pass: 33
-        tot: 33
-    onboarding_seed_before: 40
-    onboarding_seed_after: 0
-    onboarding_prompts_fired: 40
-  _noseed_test:
-    seed_cleared: true
-    smoke:
-      pass: 32
-      tot: 33
-    pending_prompt_right_after_run: absent
-  _final_noseed_test:
-    seed_was_clear: true
-    results:
-      test_envoy_setup_environment:
-        pass: 17
-        tot: 17
-        fail: 0
-      test_envoy_lifecycle_hardening:
-        pass: 4
-        tot: 4
-        fail: 0
-      test_smoke_release:
-        pass: 32
-        tot: 33
-        fail: 1
-    pending_after: absent
-  _clip_watch_gen: 687
-  _shortcut_rec_gen: 265
+  _watchdog_gen: 941
+  _clip_watch_gen: 706
+  _shortcut_rec_gen: 251
   _init_complete: true
 operators:
 - name: help
@@ -1184,8 +1036,8 @@ operators:
     file: embody/Embody/EnvoyExt.py
   position: [-700, 700]
   tags:
-  - py
   - TDExtension
+  - py
 - name: mousein1
   type: mouseinCHOP
   parameters:

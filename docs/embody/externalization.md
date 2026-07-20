@@ -160,6 +160,8 @@ The preference is stored in the **Content Safety** parameter (`Tdndatsafety`) an
 
     The save-time warning covers only locked operators the TDN export itself serializes. Locked content inside a **nested externalization boundary** — a child COMP with its own TOX or TDN tag, or an exclude-tagged subtree — is that boundary's own concern and does not trigger the parent's warning: a nested TOX-strategy COMP preserves its locked content in its own `.tox`, which is exactly the recommended remedy.
 
+    During a batch sweep — such as **Externalize Full Project** — the per-COMP findings are collected and shown as **one combined dialog** at the end, listing every affected COMP, instead of one popup per export. The dialog's **Don't show again** button sets the **Locked Content Warning** parameter (`Tdnlockedwarn`) to `quiet`, suppressing future dialogs; the warning is still written to the log on every export. Set it back to `ask` from the Embody COMP's TDN settings to re-enable the dialog.
+
 ### Why TDN
 
 TDN isn't just a different file format — it unlocks workflows that binary `.toe`/`.tox` files can't support.

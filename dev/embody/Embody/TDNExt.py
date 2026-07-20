@@ -190,11 +190,21 @@ SYSTEM_PATHS = ('/local', '/sys', '/perform', '/ui')
 SKIP_STORAGE_KEYS = {
 	'_tdn_stripped_paths', '_git_root',
 	'envoy_running', 'envoy_shutdown_event',
-	'expanded_paths', 'manage_file_path', 'visible_count', 'hover',
+	'expanded_paths', 'expand_order', 'git_status', 'manage_file_path',
+	'visible_count', 'hover',
+	# TDN dirty-detection baselines -- runtime-only, storage-backed so they
+	# survive extension reinit; must never serialize into a .tdn.
+	'_tdn_fingerprints',
 	# Embody-managed recovery/restore markers -- live on the COMP shell in
 	# the .toe, never inside the .tdn (serializing _tdn_rel_path would make
 	# every pasted/imported copy claim the original's file).
 	'_tdn_rel_path', '_pending_tox_restore',
+	# Save-window dialog guard. project.save() stores this True for the
+	# duration of the save, and the TDN strip/export runs INSIDE that window
+	# -- so without this exclusion every save bakes _suppress_dialogs: true
+	# into Embody.tdn, and a TDN restore would then suppress dialogs for the
+	# whole session (observed on the v6.0.140 save, caught pre-commit).
+	'_suppress_dialogs',
 }
 _SYSTEM_PATH_PREFIXES = tuple(p + '/' for p in SYSTEM_PATHS)
 
@@ -321,6 +331,15 @@ class TDNExt:
 		# TD's live default compute-shader text, captured lazily once for
 		# boilerplate omission (see _defaultComputeShaderText).
 		self._default_compute_text: Optional[str] = None
+		# Locked-content warning batching: None = inactive (each export
+		# shows its own dialog); a list = a batch sweep is collecting
+		# findings for ONE combined dialog (see BeginLockedWarnBatch /
+		# FlushLockedWarnBatch). Prevents one-modal-per-COMP popup storms
+		# during full-project externalization.
+		self._locked_warn_batch: Optional[list] = None
+		# Session-scoped "Don't show again" fallback for .toes saved
+		# before the Tdnlockedwarn parameter existed. Reset on reinit.
+		self._locked_warn_quiet: bool = False
 		# Clipboard auto-paste watcher: prompt ONCE when a new _embody_tdn
 		# envelope appears on the OS clipboard. No keyboard shortcut -- TD's
 		# native Cmd/Ctrl+V paste cannot be suppressed, so a paste key always
@@ -6125,6 +6144,18 @@ class TDNExt:
 			self.ownerComp.par.Tdncascadewarn = 'quiet'
 			self._log('Large TDN warning silenced', 'INFO')
 
+	# Shared footer for the locked-content dialogs (single and combined).
+	_LOCKED_WARN_FOOTER = (
+		'TDN preserves the lock flag but cannot store '
+		'frozen pixel, channel, or geometry data. '
+		'After reload these operators will be locked '
+		'but empty.\n\n'
+		'To preserve locked content, either:\n'
+		'  - Unlock the operator(s) (they will re-cook '
+		'from inputs)\n'
+		'  - Switch the affected COMP(s) to TOX strategy '
+		'instead of TDN')
+
 	def _warnLockedNonDATs(self, root_op, context='export'):
 		"""Scan a network for locked non-DAT operators and warn.
 
@@ -6132,47 +6163,120 @@ class TDNExt:
 		in TDN but their frozen content (pixels, channels, geometry) is
 		NOT stored. This warns users so they aren't surprised by data loss.
 
+		The export dialog honors the Tdnlockedwarn preference (ask/quiet,
+		set by the dialog's "Don't show again" button). While a batch
+		sweep is active (BeginLockedWarnBatch), findings are collected
+		and shown as ONE combined dialog at FlushLockedWarnBatch -- a
+		full-project externalization must never pop one modal per COMP.
+		The log WARNING always fires regardless of dialog preference.
+
 		Args:
 			root_op: The COMP to scan (recursively)
-			context: 'export' shows ui.messageBox + log; 'import' logs only
+			context: 'export' shows a dialog + log; 'import' logs only
 		"""
 		locked = self._findLockedNonDATs(root_op)
 		if not locked:
 			return
 
-		# Build summary
-		names = [f'{c.path} ({c.family})' for c in locked[:10]]
-		summary = ', '.join(names)
-		if len(locked) > 10:
-			summary += f', ... and {len(locked) - 10} more'
+		summary = self._lockedSummary(locked)
 
 		if context == 'export':
 			self._log(
 				f'Locked non-DAT operators in {root_op.path}: {summary} '
 				f'-- frozen data will not persist through TDN', 'WARNING')
-			try:
-				ui.messageBox(
-					'Embody -- Locked Content Warning',
-					f'{len(locked)} locked non-DAT operator(s) in '
-					f'{root_op.path}:\n\n{summary}\n\n'
-					f'TDN preserves the lock flag but cannot store '
-					f'frozen pixel, channel, or geometry data. '
-					f'After reload these operators will be locked '
-					f'but empty.\n\n'
-					f'To preserve locked content, either:\n'
-					f'  - Unlock the operator(s) (they will re-cook '
-					f'from inputs)\n'
-					f'  - Switch this COMP to TOX strategy instead '
-					f'of TDN',
-					buttons=['OK'])
-			except Exception:
-				pass  # Non-fatal if dialog fails
+			if not self._lockedWarnEnabled():
+				return
+			if self._locked_warn_batch is not None:
+				# Batch sweep active -- collect for one combined dialog.
+				self._locked_warn_batch.append(
+					(root_op.path, len(locked),
+					 self._lockedSummary(locked, limit=4)))
+				return
+			self._showLockedWarnDialog(
+				f'{len(locked)} locked non-DAT operator(s) in '
+				f'{root_op.path}:\n\n{summary}\n\n'
+				f'{self._LOCKED_WARN_FOOTER}')
 		else:
 			# Import context -- log only, no dialog (reconstruction is automated)
 			self._log(
 				f'Restored lock flag on {len(locked)} non-DAT operator(s) '
 				f'in {root_op.path}: {summary} -- these operators have no '
 				f'frozen data and should be unlocked to re-cook', 'WARNING')
+
+	def _lockedSummary(self, locked, limit=10):
+		"""Comma summary of locked ops, truncated to `limit` entries."""
+		names = [f'{c.path} ({c.family})' for c in locked[:limit]]
+		summary = ', '.join(names)
+		if len(locked) > limit:
+			summary += f', ... and {len(locked) - limit} more'
+		return summary
+
+	def _lockedWarnEnabled(self):
+		"""True when the locked-content dialog should be shown.
+
+		Defensive getattr (unlike other known pars): a .toe saved before
+		the Tdnlockedwarn parameter existed treats the missing par as
+		'ask' -- warn by default, with _locked_warn_quiet as the
+		session-scoped opt-out until the par exists.
+		"""
+		if self._locked_warn_quiet:
+			return False
+		pref = getattr(self.ownerComp.par, 'Tdnlockedwarn', None)
+		return pref is None or pref.eval() == 'ask'
+
+	def BeginLockedWarnBatch(self):
+		"""Collect locked-content warnings instead of showing per-export
+		modals, until FlushLockedWarnBatch shows one combined dialog.
+		Idempotent: re-entering keeps the findings already collected."""
+		if self._locked_warn_batch is None:
+			self._locked_warn_batch = []
+
+	def FlushLockedWarnBatch(self):
+		"""End a warning batch and show ONE combined dialog for every
+		finding collected since BeginLockedWarnBatch. No-op when the
+		batch is empty or inactive. Always deactivates the batch, so a
+		caller can flush from a finally block without leaking state."""
+		batch = getattr(self, '_locked_warn_batch', None)
+		self._locked_warn_batch = None
+		if not batch:
+			return
+		MAX_COMP_ROWS = 12
+		lines = [f'  {path}: {count} ({summary})'
+				 for path, count, summary in batch[:MAX_COMP_ROWS]]
+		if len(batch) > MAX_COMP_ROWS:
+			lines.append(
+				f'  ... and {len(batch) - MAX_COMP_ROWS} more COMP(s)')
+		total = sum(count for _, count, _ in batch)
+		self._showLockedWarnDialog(
+			f'{total} locked non-DAT operator(s) across {len(batch)} '
+			f'exported COMP(s):\n\n' + '\n'.join(lines) + '\n\n'
+			f'{self._LOCKED_WARN_FOOTER}')
+
+	def _showLockedWarnDialog(self, message):
+		"""Locked-content modal with a "Don't show again" opt-out.
+
+		Routed through Embody's _messageBox so headless tests can seed
+		responses and the save-window suppression applies. Opting out
+		persists to the Tdnlockedwarn parameter; if the par is missing
+		(pre-par .toe), falls back to a session-scoped flag."""
+		try:
+			choice = self.ownerComp.ext.Embody._messageBox(
+				'Embody -- Locked Content Warning', message,
+				buttons=['OK', "Don't show again"])
+		except Exception:
+			return  # Non-fatal if dialog fails
+		if choice != 1:
+			return
+		self._locked_warn_quiet = True
+		pref = getattr(self.ownerComp.par, 'Tdnlockedwarn', None)
+		if pref is not None:
+			pref.val = 'quiet'
+			self._log('Locked content warning silenced', 'INFO')
+		else:
+			self._log(
+				'Locked content warning silenced for this session only '
+				'(Tdnlockedwarn parameter missing -- opt-out cannot '
+				'persist)', 'WARNING')
 
 	def _findLockedNonDATs(self, root_op):
 		"""Collect locked TOP/CHOP/SOP ops this export is responsible for.

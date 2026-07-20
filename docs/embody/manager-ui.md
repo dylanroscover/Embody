@@ -26,7 +26,12 @@ The manager shows **two independent status axes** for each externalized operator
 
 ### Filter by changes
 
-Type **`changed`** in the filter box to show only rows with pending changes on *either* axis -- unsaved (red/amber) **or** git-uncommitted (orange).
+Two reserved keywords narrow the list by status instead of by name:
+
+- Type **`changed`** in the filter box to show only rows with pending changes on *either* axis -- unsaved (red/amber) **or** git-uncommitted (orange).
+- Type **`dirty`** to show only rows with unsaved in-TD changes (red/amber) -- ignoring git state.
+
+While any filter is active, matching rows are revealed even if their branch was collapsed; clearing the filter restores your expand/collapse state.
 
 ## Toolbar
 
@@ -45,7 +50,7 @@ The toolbar provides quick access to common operations. All buttons with keyboar
 | Export Project | Export entire project to `.tdn` | ++ctrl+shift+e++ |
 | Envoy | Toggle Envoy MCP server | — |
 | Pars | Open the Embody COMP's parameter dialog | — |
-| Filter | Filter box — type to narrow the list (e.g. `changed`); clear it to show all rows | — |
+| Filter | Filter box — type to narrow the list (keywords: `changed`, `dirty`); clear it to show all rows | — |
 | Close | Close the Manager window | — |
 
 The toolbar is also visible in minimized mode with a compact subset of buttons.

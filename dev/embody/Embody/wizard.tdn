@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 2
-generator: Embody/6.0.100
-td_build: 099.2025.32820
-source_file: Embody-6.101.toe
-exported_at: '2026-07-04T20:26:07Z'
+build: 3
+generator: Embody/6.0.138
+td_build: 099.2025.33070
+source_file: Embody-6.138.toe
+exported_at: '2026-07-20T11:16:09Z'
 network_path: /embody/Embody/wizard
 options:
   include_dat_content: false
@@ -22,7 +22,6 @@ type_defaults:
     parameters:
       resizecomp: =me
       repocomp: =me
-    size: [160, 130]
     color: [0.67, 0.67, 0.67]
   panelexecuteDAT:
     parameters:
@@ -82,7 +81,7 @@ storage:
   step: 0
   sel:
     mode: advanced
-  step_id: permissions
+  step_id: summary
   sel_mode: auto
   sel_assistant: claudecode
   sel_client: ''
@@ -93,8 +92,8 @@ operators:
   type: textCOMP
   parameters:
     text: |-
-      Claude Code asks before each AI tool by default. Pick how much to auto-approve (changeable later on the Envoy parameters).
-      A settings.local.json already exists -- Embody edits only its Envoy entries, keeping the rest.
+      Mode: auto. AI assistant: on (Claude Code).
+      Nothing has changed yet - click Set up Embody to apply.
     type: multiline
     wordwrap: true
     callbacks: hint_callbacks
@@ -128,7 +127,7 @@ operators:
 - name: title
   type: textCOMP
   parameters:
-    text: How should the AI ask permission?
+    text: Ready to set up Embody
     wordwrap: true
     callbacks: title_callbacks
     fontsize: 18
@@ -160,16 +159,18 @@ operators:
     marginl: 24
     marginr: 24
   position: [0, -150]
+  size: [160, 130]
   children:
   - name: fill
     type: containerCOMP
     parameters:
-      w: 339
+      w: 452
       h: 4
       bgcolorr: 0.24
       bgcolorg: 0.52
       bgcolorb: 0.35
       bgalpha: 1
+    size: [160, 130]
 - name: clicks
   type: panelexecuteDAT
   parameters:
@@ -199,6 +200,7 @@ operators:
     marginr: 24
     margint: 4
   position: [250, -700]
+  size: [160, 130]
   children:
   - name: btn_back
     type: buttonCOMP
@@ -288,7 +290,7 @@ operators:
     - name: text
       type: textCOMP
       parameters:
-        text: Next
+        text: Set up Embody
         type: multiline
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
@@ -347,6 +349,7 @@ operators:
     bgcolorb: 0.115
     bgalpha: 1
   position: [0, -300]
+  size: [160, 130]
 - name: divider
   type: containerCOMP
   parameters:
@@ -360,6 +363,7 @@ operators:
     marginl: 24
     marginr: 24
   position: [240, -300]
+  size: [160, 130]
 - name: grp_mode
   type: containerCOMP
   parameters:
@@ -376,6 +380,7 @@ operators:
     marginl: 24
     marginr: 24
   position: [450, -800]
+  size: [160, 130]
   children:
   - name: opt_auto
     type: buttonCOMP
@@ -601,10 +606,11 @@ operators:
     bgcolorb: 0.115
     bgalpha: 1
   position: [0, -450]
+  size: [160, 130]
 - name: steplabel
   type: textCOMP
   parameters:
-    text: Step 3 of 4
+    text: Step 4 of 4
     callbacks: steplabel_callbacks
     fontsize: 11
     fontcolorr: 0.6
@@ -633,6 +639,7 @@ operators:
     bgcolorb: 0.115
     bgalpha: 1
   position: [480, -450]
+  size: [160, 130]
 - name: grp_client
   type: containerCOMP
   parameters:
@@ -646,6 +653,7 @@ operators:
     marginr: 5
     pvscrollbar: 'on'
   position: [935, -800]
+  size: [160, 102]
   children:
   - name: opt_codex
     type: buttonCOMP
@@ -1299,6 +1307,7 @@ operators:
     marginl: 24
     marginr: 24
   position: [675, -800]
+  size: [160, 130]
   children:
   - name: opt_none
     type: buttonCOMP
@@ -1636,6 +1645,7 @@ operators:
     marginl: 24
     marginr: 24
   position: [1195, -800]
+  size: [160, 130]
   children:
   - name: opt_custom
     type: buttonCOMP
@@ -1965,16 +1975,18 @@ operators:
 - name: grp_permissions
   type: containerCOMP
   parameters:
-    h: 205
-    hmode: fill
+    w: 473
+    h: 190
     alignorder: 4
+    display: false
     align: verttb
     spacing: 8
     marginl: 24
-    marginr: 24
+    marginr: 5
     pvscrollbar: auto
     scrolloverlay: ignore
   position: [1455, -800]
+  size: [160, 130]
   children:
   - name: opt_all
     type: buttonCOMP

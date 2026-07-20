@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 29
-generator: Embody/6.0.137
+build: 30
+generator: Embody/6.0.138
 td_build: 099.2025.33070
 source_file: Embody-6.138.toe
-exported_at: '2026-07-19T01:20:11Z'
+exported_at: '2026-07-20T11:16:08Z'
 network_path: /embody/Embody/tagger
 options:
   include_dat_content: false
@@ -191,7 +191,7 @@ operators:
 - name: button1
   type: buttonCOMP
   parameters:
-    label: +  Add tox
+    label: ⇄  Convert to tox
     colorr: 0.2
     colorg: =parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05
     colorb: 0.2
@@ -237,7 +237,7 @@ operators:
 - name: button2
   type: buttonCOMP
   parameters:
-    label: +  Add tdn
+    label: ×  Remove tdn
     colorr: 0.2
     colorg: =parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05
     colorb: 0.2
@@ -288,7 +288,6 @@ operators:
     colorg: 0.2
     colorb: 0.2
     alignorder: 0.5
-    display: false
   position: [25, 100]
   size: [160, 134]
   storage:
@@ -334,7 +333,6 @@ operators:
     colorg: 0.2
     colorb: 0.2
     alignorder: 0.65
-    display: false
   position: [260, 275]
   size: [160, 134]
   storage:
@@ -380,7 +378,6 @@ operators:
     colorg: 0.2
     colorb: 0.2
     alignorder: 0.6
-    display: false
   position: [-280, 275]
   size: [160, 134]
   children:
@@ -589,12 +586,11 @@ operators:
 - name: btn_openfile
   type: buttonCOMP
   parameters:
-    label: ◎  Reveal in Finder
+    label: ◎  Reveal in Explorer
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
     alignorder: 10
-    display: false
   position: [-820, 275]
   size: [160, 134]
   children:
@@ -638,7 +634,6 @@ operators:
     colorg: 0.2
     colorb: 0.2
     alignorder: 1
-    display: false
   position: [-460, 275]
   size: [160, 134]
   children:
@@ -745,7 +740,6 @@ operators:
     colorg: 0.2
     colorb: 0.2
     alignorder: 0.66
-    display: false
   position: [440, 275]
   size: [160, 134]
   children:

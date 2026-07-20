@@ -66,8 +66,9 @@ def onCook(scriptOp):
 	# git-uncommitted map ({op_path: code}), computed on the Embody refresh sweep.
 	git_map = parent.Embody.fetch('git_status', {}) or {}
 
-	# Apply text filter. The reserved keyword "changed" shows only rows with
+	# Apply text filter. Reserved keywords: "changed" shows only rows with
 	# pending changes on either axis -- unsaved (dirty/Par) OR git-uncommitted;
+	# "dirty" shows only rows with unsaved in-TD changes (red/amber);
 	# any other text is a case-insensitive substring match on path + file path.
 	if filter_text:
 		matched_paths = set()
@@ -76,6 +77,11 @@ def onCook(scriptOp):
 				row = data_rows[path]
 				if parent.Embody.ext.Embody._rowHasChanges(
 						row.get('dirty', ''), git_map.get(path)):
+					matched_paths.add(path)
+		elif filter_text == 'dirty':
+			for path in all_paths:
+				row = data_rows[path]
+				if parent.Embody.ext.Embody._rowIsUnsaved(row.get('dirty', '')):
 					matched_paths.add(path)
 		else:
 			for path in all_paths:
@@ -129,6 +135,13 @@ def onCook(scriptOp):
 				roots.add(path)
 		expanded = roots & has_children
 		parent.Embody.store('expanded_paths', expanded)
+
+	if filter_text:
+		# While a filter is active, force every kept branch open so matched
+		# rows are visible even under collapsed parents. Cook-local COPY --
+		# never store()d -- so clearing the filter restores the user's
+		# expand/collapse state.
+		expanded = set(expanded) | has_children
 
 	# LRU tracking for row limit enforcement
 	expand_order = parent.Embody.fetch('expand_order', None)

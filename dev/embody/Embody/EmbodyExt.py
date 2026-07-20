@@ -298,8 +298,9 @@ class EmbodyExt:
         self.param_tracker = ParameterTracker(self.my)
 
         # Network fingerprints for TDN COMPs -- used instead of oper.dirty
-        # (which is always True when externaltox is empty)
-        self._tdn_fingerprints = {}
+        # (which is always True when externaltox is empty). Kept in
+        # ownerComp storage, NOT an instance attribute -- see the
+        # _tdn_fingerprints property (must survive extension reinit).
 
         # NOTE: _setupEnvironment() is NOT called here.
         # It runs inside EnvoyExt.Start(), which is invoked after init() and
@@ -2628,13 +2629,23 @@ class EmbodyExt:
         # Process changes
         additions.sort(key=lambda x: (self.Externalizations.path in x.path, x.path), reverse=True)
 
-        for oper in additions:
-            self.handleAddition(oper)
-        for oper in subtractions:
-            self.handleSubtraction(oper)
+        # Batch locked-content warnings across the whole sweep into ONE
+        # combined dialog. A full-project externalization triggers one TDN
+        # export per newly tagged COMP; without batching, each export with
+        # locked TOP/CHOP/SOPs popped its own modal (field report: endless
+        # popup loop). Flush in finally so a mid-sweep exception can never
+        # leave the batch active and silently swallow later warnings.
+        self.my.ext.TDN.BeginLockedWarnBatch()
+        try:
+            for oper in additions:
+                self.handleAddition(oper)
+            for oper in subtractions:
+                self.handleSubtraction(oper)
 
-        # Handle dirty COMPs (TOX + TDN)
-        dirties = self.dirtyHandler(True)
+            # Handle dirty COMPs (TOX + TDN)
+            dirties = self.dirtyHandler(True)
+        finally:
+            self.my.ext.TDN.FlushLockedWarnBatch()
 
         # Report results
         self._reportResults(dirties, additions, subtractions)
@@ -3588,6 +3599,23 @@ class EmbodyExt:
         """Return the set of all TDN-externalized COMP paths."""
         return {path for path, _ in self._getTDNStrategyComps()}
 
+    @property
+    def _tdn_fingerprints(self) -> dict:
+        """TDN fingerprint baselines, kept in ownerComp storage so they
+        SURVIVE extension reinit. As an instance attribute, every source
+        edit re-initialized the cache and the next sweep's assume-clean
+        seeding re-baselined unsaved changes as clean -- silently wiping
+        real dirty state from the manager (observed 2026-07-20: 13 dirty
+        COMPs vanished after an EmbodyExt.py edit). Mutated in place, never
+        re-store()d (mirrors expanded_paths); excluded from TDN export via
+        SKIP_STORAGE_KEYS; cleared at project open by ReconstructTDNComps
+        so a .toe-persisted copy cannot poison fresh baselines."""
+        cache = self.my.fetch('_tdn_fingerprints', None, search=False)
+        if cache is None:
+            cache = {}
+            self.my.store('_tdn_fingerprints', cache)
+        return cache
+
     def _isTDNDirty(self, comp, tdn_paths: set = None,
                     exclude_tag: str = None) -> bool:
         """Check if a TDN COMP's network has changed since last export.
@@ -3755,6 +3783,11 @@ class EmbodyExt:
     def _mapChangedToOps(changed, project_prefix, rows):
         """Map a git {repo_rel_posix: code} set to {op_path: code} -- see embody_git."""
         return mod.embody_git.map_changed_to_ops(changed, project_prefix, rows)
+
+    @staticmethod
+    def _rowIsUnsaved(dirty_val) -> bool:
+        """Whether a manager row has unsaved in-TD changes -- see embody_git."""
+        return mod.embody_git.row_is_unsaved(dirty_val)
 
     @staticmethod
     def _rowHasChanges(dirty_val, uncommitted) -> bool:
@@ -6987,6 +7020,10 @@ class EmbodyExt:
 
     def ReconstructTDNComps(self) -> None:
         """Reconstruct all TDN-strategy COMPs from .tdn files on project open."""
+        # Fingerprint baselines persisted into the .toe reflect the LAST
+        # SAVE's network; the network is freshly restored now, so drop them
+        # and let the first sweep re-seed against the current live state.
+        self.my.unstore('_tdn_fingerprints')
         mode = self._tdnMode()
         if mode == 'off':
             self.Log('TDN mode=off -- skipping reconstruction', 'INFO')

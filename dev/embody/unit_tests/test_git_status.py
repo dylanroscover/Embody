@@ -1,7 +1,7 @@
 """Pure-logic tests for EmbodyExt's git-uncommitted status helpers
-(_parseGitPorcelain, _mapChangedToOps, _rowHasChanges). These drive the static
-methods directly with fixtures -- no git repo, no sandbox operators --
-referencing the extension inline per the no-ext-caching rule.
+(_parseGitPorcelain, _mapChangedToOps, _rowHasChanges, _rowIsUnsaved). These
+drive the static methods directly with fixtures -- no git repo, no sandbox
+operators -- referencing the extension inline per the no-ext-caching rule.
 """
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
@@ -117,3 +117,19 @@ class TestRowHasChanges(EmbodyTestCase):
 
     def test_both_axes_is_true(self):
         self.assertTrue(op.Embody.ext.Embody._rowHasChanges('True', ' M'))
+
+
+class TestRowIsUnsaved(EmbodyTestCase):
+    """The 'dirty' filter predicate: unsaved in-TD changes only."""
+
+    def test_clean_is_false(self):
+        self.assertFalse(op.Embody.ext.Embody._rowIsUnsaved(''))
+        self.assertFalse(op.Embody.ext.Embody._rowIsUnsaved('False'))
+
+    def test_dirty_is_true(self):
+        self.assertTrue(op.Embody.ext.Embody._rowIsUnsaved('True'))
+        self.assertTrue(op.Embody.ext.Embody._rowIsUnsaved('true'))
+        self.assertTrue(op.Embody.ext.Embody._rowIsUnsaved('1'))
+
+    def test_par_change_is_true(self):
+        self.assertTrue(op.Embody.ext.Embody._rowIsUnsaved('Par'))

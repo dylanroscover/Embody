@@ -227,3 +227,45 @@ class TestTDNDirtyState(EmbodyTestCase):
             self.embody_ext.DirtyCount(), 1,
             'A TDN COMP flagged dirty in the table must be counted even when '
             'live oper.dirty is False')
+
+
+class TestTDNFingerprintPersistence(EmbodyTestCase):
+    """The fingerprint cache must live in ownerComp storage, not on the
+    extension instance. An instance dict is wiped by every extension reinit
+    (any source edit), and the next sweep's assume-clean seeding then adopts
+    unsaved changes as the new baseline -- silently clearing real dirty
+    state from the manager (2026-07-20: 13 dirty COMPs vanished this way).
+    """
+
+    def test_cache_is_storage_backed(self):
+        cache = self.embody_ext._tdn_fingerprints
+        self.assertIs(
+            cache,
+            self.embody.fetch('_tdn_fingerprints', None, search=False),
+            'fingerprint cache must be the ownerComp storage dict itself, '
+            'so it survives extension reinit')
+
+    def test_mutations_land_in_storage(self):
+        key = '/__fp_persistence_probe__'
+        try:
+            self.embody_ext._tdn_fingerprints[key] = ('probe',)
+            stored = self.embody.fetch(
+                '_tdn_fingerprints', None, search=False)
+            self.assertEqual(
+                stored.get(key), ('probe',),
+                'in-place mutations must be visible through storage')
+        finally:
+            self.embody_ext._tdn_fingerprints.pop(key, None)
+
+    def test_runtime_keys_excluded_from_tdn_export(self):
+        # Storage-backed runtime state must never serialize into a .tdn.
+        tdn_mod = self.embody.op('TDNExt').module
+        # _suppress_dialogs: project.save() stores it True for the save
+        # window and the TDN export runs INSIDE that window -- without the
+        # exclusion every save bakes it into Embody.tdn and a later TDN
+        # restore suppresses dialogs for the whole session.
+        for key in ('_tdn_fingerprints', 'expand_order', 'git_status',
+                    '_suppress_dialogs'):
+            self.assertIn(
+                key, tdn_mod.SKIP_STORAGE_KEYS,
+                f'runtime storage key {key!r} must be skipped by TDN export')
