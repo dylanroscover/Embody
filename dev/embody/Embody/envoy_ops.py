@@ -19,7 +19,7 @@ from __future__ import annotations
 
 def create_op(ext, parent_path: str, op_type: str, name: str = None) -> dict:
     """Create an operator"""
-    parent = op(parent_path)
+    parent = ext._resolve_op(parent_path)
     if not parent:
         return {'error': f'Parent not found: {parent_path}'}
 
@@ -60,7 +60,7 @@ def create_op(ext, parent_path: str, op_type: str, name: str = None) -> dict:
 
 def delete_op(ext, op_path: str) -> dict:
     """Delete an operator"""
-    target = op(op_path)
+    target = ext._resolve_op(op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -85,7 +85,7 @@ def set_parameter(ext, op_path: str, par_name: str, value=None,
                   mode: str = None, expr: str = None,
                   bind_expr: str = None) -> dict:
     """Set a parameter value, expression, bind expression, or mode"""
-    target = op(op_path)
+    target = ext._resolve_op(op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -195,8 +195,8 @@ def connect_ops(ext, source_path: str, dest_path: str,
                 source_index: int = 0, dest_index: int = 0,
                 comp: bool = False) -> dict:
     """Connect two operators"""
-    source = op(source_path)
-    dest = op(dest_path)
+    source = ext._resolve_op(source_path)
+    dest = ext._resolve_op(dest_path)
 
     if not source:
         return {'error': f'Source not found: {source_path}'}
@@ -236,7 +236,7 @@ def connect_ops(ext, source_path: str, dest_path: str,
 def disconnect_op(ext, op_path: str, input_index: int = 0,
                   comp: bool = False) -> dict:
     """Disconnect an operator's input"""
-    target = op(op_path)
+    target = ext._resolve_op(op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -259,8 +259,8 @@ def disconnect_op(ext, op_path: str, input_index: int = 0,
 
 def copy_op(ext, source_path: str, dest_parent: str, new_name: str = None) -> dict:
     """Copy an operator"""
-    source = op(source_path)
-    dest = op(dest_parent)
+    source = ext._resolve_op(source_path)
+    dest = ext._resolve_op(dest_parent)
 
     if not source:
         return {'error': f'Source not found: {source_path}'}
@@ -316,7 +316,7 @@ def set_dat_content(ext, op_path: str, text: str = None,
     Note: `clear=True` is redundant when `text` or `rows` is also
     provided -- the assignment already replaces the entire content.
     """
-    target = op(op_path)
+    target = ext._resolve_op(op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
     if target.family != 'DAT':
@@ -399,7 +399,7 @@ def edit_dat_content(ext, op_path: str, old_string: str,
     - Not-found error includes diagnostics so the caller can
       self-correct without a second get_dat_content round-trip.
     """
-    target = op(op_path)
+    target = ext._resolve_op(op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
     if target.family != 'DAT':
@@ -478,7 +478,7 @@ def set_op_flags(ext, op_path: str, bypass: bool = None, lock: bool = None,
                  expose: bool = None, allowCooking: bool = None,
                  selected: bool = None) -> dict:
     """Set flags on an operator"""
-    target = op(op_path)
+    target = ext._resolve_op(op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -511,7 +511,7 @@ def set_op_position(ext, op_path: str, x: int = None, y: int = None,
                     width: int = None, height: int = None,
                     color: list = None, comment: str = None) -> dict:
     """Set operator position and visual properties"""
-    target = op(op_path)
+    target = ext._resolve_op(op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -572,7 +572,7 @@ def create_annotation(ext, parent_path: str, mode: str = "annotate",
                       color: list = None, opacity: float = None,
                       name: str = None) -> dict:
     """Create an annotation in the network editor."""
-    parent = op(parent_path)
+    parent = ext._resolve_op(parent_path)
     if not parent:
         return {'error': f'Parent not found: {parent_path}'}
     if not hasattr(parent, 'create'):
@@ -584,6 +584,16 @@ def create_annotation(ext, parent_path: str, mode: str = "annotate",
 
     try:
         ann = parent.create('annotateCOMP')
+
+        # Match TD UI behavior: UI-drawn annotations are utility=True, and
+        # Embody's TDN import applies the same convention on every annotation
+        # it (re)creates. A NON-utility annotation is an ordinary COMP
+        # subtree -- visible to .children and every default findChildren --
+        # which is exactly what let externalization sweeps tag its internal
+        # widget ops as bogus per-op boundaries (TDN annotation
+        # double-serialization bug). All Envoy op-path tools resolve utility
+        # ops via resolve_op, so nothing is lost by hiding it.
+        ann.utility = True
 
         # Set mode first (affects default sizing/appearance)
         ann.par.Mode = mode
@@ -692,7 +702,7 @@ def set_annotation(ext, op_path: str, text: str = None, title: str = None,
 
 def rename_op(ext, op_path: str, new_name: str) -> dict:
     """Rename an operator"""
-    target = op(op_path)
+    target = ext._resolve_op(op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -712,7 +722,7 @@ def rename_op(ext, op_path: str, new_name: str) -> dict:
 def cook_op(ext, op_path: str, force: bool = True,
             recurse: bool = False) -> dict:
     """Cook an operator"""
-    target = op(op_path)
+    target = ext._resolve_op(op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -729,9 +739,23 @@ def cook_op(ext, op_path: str, force: bool = True,
 
 def externalize_op(ext, op_path: str, tag_type: str = None) -> dict:
     """Tag an operator for Embody externalization and write it to disk"""
-    target = op(op_path)
+    target = ext._resolve_op(op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
+
+    # Annotations are never externalized per-op: the annotateCOMP round-trips
+    # through the parent TDN COMP's semantic annotations: section, and its
+    # internal widget ops are TD-managed stock content. Tagging either one
+    # creates bogus boundaries whose reconstruction guts the widget.
+    if target.family == 'COMP' and target.type == 'annotate':
+        return {'error': f'{op_path} is an annotation. Annotations are '
+                         f'captured semantically in the parent TDN COMP\'s '
+                         f'annotations: section -- edit via set_annotation; '
+                         f'they are not externalizable per-op.'}
+    if op.Embody.ext.Embody._isInsideAnnotate(target):
+        return {'error': f'{op_path} is inside an annotation widget. '
+                         f'Annotate internals are TD-managed stock content '
+                         f'and are never externalized.'}
 
     try:
         # Determine tag based on operator type if not specified
@@ -760,7 +784,7 @@ def externalize_op(ext, op_path: str, tag_type: str = None) -> dict:
 
 def remove_externalization_tag(ext, op_path: str) -> dict:
     """Remove Embody externalization tag and clean up"""
-    target = op(op_path)
+    target = ext._resolve_op(op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -788,7 +812,7 @@ def remove_externalization_tag(ext, op_path: str) -> dict:
 
 def save_externalization(ext, op_path: str) -> dict:
     """Force save an externalized operator"""
-    target = op(op_path)
+    target = ext._resolve_op(op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -830,13 +854,13 @@ def create_extension(ext, parent_path: str, class_name: str,
     # Resolve or create the target COMP
     created_comp = False
     if existing_comp:
-        comp = op(parent_path)
+        comp = ext._resolve_op(parent_path)
         if not comp:
             return {'error': f'Operator not found: {parent_path}'}
         if not comp.isCOMP:
             return {'error': f'{parent_path} is not a COMP'}
     else:
-        parent_op = op(parent_path)
+        parent_op = ext._resolve_op(parent_path)
         if not parent_op:
             return {'error': f'Parent not found: {parent_path}'}
         if not hasattr(parent_op, 'create'):

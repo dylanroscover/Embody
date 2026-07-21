@@ -67,7 +67,7 @@ Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mod
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `create_annotation` | `parent_path`, `mode?`, `text?`, `title?`, `x?`, `y?`, `width?`, `height?`, `color?`, `opacity?`, `name?` | Create an annotation. Modes: `"annotate"` (default, has title bar), `"comment"`, `"networkbox"` |
+| `create_annotation` | `parent_path`, `mode?`, `text?`, `title?`, `x?`, `y?`, `width?`, `height?`, `color?`, `opacity?`, `name?` | Create an annotation. Modes: `"annotate"` (default, has title bar), `"comment"`, `"networkbox"`. Created `utility=True` (matching TD UI-drawn annotations): visible to `get_annotations`, hidden from `query_network`/`find_children` unless `include_utility=True`. Every op-path tool still resolves it by path; delete with `delete_op` (durable), never a raw `.destroy()` |
 | `get_annotations` | `parent_path` | List all annotations in a COMP with their properties and enclosed operators |
 | `set_annotation` | `op_path`, `text?`, `title?`, `color?`, `opacity?`, `width?`, `height?`, `x?`, `y?` | Modify properties of an existing annotation |
 | `get_enclosed_ops` | `op_path` | Get operators enclosed by an annotation, or annotations enclosing an operator |

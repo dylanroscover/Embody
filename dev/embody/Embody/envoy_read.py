@@ -25,7 +25,7 @@ import math
 
 def get_op(ext, op_path: str, include_defaults: bool = False) -> dict:
     """Get operator information"""
-    target = op(op_path)
+    target = resolve_op(ext, op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -95,7 +95,7 @@ def get_op(ext, op_path: str, include_defaults: bool = False) -> dict:
 def query_network(ext, parent_path: str = "/", recursive: bool = False,
                   op_type: str = None, include_utility: bool = False) -> dict:
     """List operators in a network"""
-    parent = op(parent_path)
+    parent = resolve_op(ext, parent_path)
     if not parent:
         return {'error': f'Parent not found: {parent_path}'}
 
@@ -141,7 +141,7 @@ def query_network(ext, parent_path: str = "/", recursive: bool = False,
 
 def get_connections(ext, op_path: str) -> dict:
     """Get all connections for an operator"""
-    target = op(op_path)
+    target = resolve_op(ext, op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -225,7 +225,7 @@ def get_td_info(ext) -> dict:
 
 def get_op_errors(ext, op_path: str, recurse: bool = True) -> dict:
     """Get error and warning messages for an operator and its children"""
-    target = op(op_path)
+    target = resolve_op(ext, op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -288,7 +288,7 @@ def get_op_errors(ext, op_path: str, recurse: bool = True) -> dict:
 def exec_op_method(ext, op_path: str, method: str,
                    args: list = None, kwargs: dict = None) -> dict:
     """Call a method on a TD operator"""
-    target = op(op_path)
+    target = resolve_op(ext, op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -441,7 +441,7 @@ def process_result(ext, result) -> object:
 
 def get_dat_content(ext, op_path: str, format: str = "auto") -> dict:
     """Get DAT content as text or table data"""
-    target = op(op_path)
+    target = resolve_op(ext, op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
     if target.family != 'DAT':
@@ -546,7 +546,7 @@ def capture_top(ext, op_path: str, format: str = 'jpeg',
     """Capture a TOP operator's output as a compressed image."""
     import base64
 
-    target = op(op_path)
+    target = resolve_op(ext, op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
     if target.family != 'TOP':
@@ -791,7 +791,7 @@ def sample_grid_top(ext, target, grid) -> dict:
 
 def get_op_flags(ext, op_path: str) -> dict:
     """Get all flags for an operator"""
-    target = op(op_path)
+    target = resolve_op(ext, op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -816,7 +816,7 @@ def get_op_flags(ext, op_path: str) -> dict:
 
 def get_op_position(ext, op_path: str) -> dict:
     """Get operator position and visual properties"""
-    target = op(op_path)
+    target = resolve_op(ext, op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -838,7 +838,7 @@ def get_op_position(ext, op_path: str) -> dict:
 
 def get_network_layout(ext, comp_path: str, include_annotations: bool = True) -> dict:
     """Get positions of all operators and annotations in a COMP"""
-    parent_op = op(comp_path)
+    parent_op = resolve_op(ext, comp_path)
     if not parent_op:
         return {'error': f'COMP not found: {comp_path}'}
     if not hasattr(parent_op, 'children'):
@@ -915,7 +915,7 @@ def get_network_layout(ext, comp_path: str, include_annotations: bool = True) ->
 
 def get_annotations(ext, parent_path: str) -> dict:
     """List all annotations in a COMP."""
-    parent = op(parent_path)
+    parent = resolve_op(ext, parent_path)
     if not parent:
         return {'error': f'Parent not found: {parent_path}'}
     if not parent.isCOMP:
@@ -965,6 +965,48 @@ def get_annotations(ext, parent_path: str) -> dict:
         return {'error': f'Failed to get annotations: {e}'}
 
 
+def resolve_op(ext, op_path: str):
+    """Resolve an operator path, tolerating utility-flagged hops.
+
+    Bare op() first -- the fast path every normal operator takes. On
+    failure, walk the path segment by segment from the root, retrying
+    each unresolvable hop with findChildren(includeUtility=True,
+    depth=1): utility ops (every UI-created annotation, and MCP-created
+    ones since create_annotation adopted the utility=True convention)
+    are HIDDEN from op()/parent.op()/.children, so a path whose leaf OR
+    intermediate segment is a utility annotateCOMP fails the bare lookup
+    even though the operator exists. This is the single resolver behind
+    every op_path-taking Envoy tool; without it, tools error 'Operator
+    not found' on paths get_annotations has just listed. Returns None
+    when the operator genuinely does not exist. Never raises.
+    """
+    target = op(op_path)
+    if target is not None:
+        return target
+    if not op_path or not isinstance(op_path, str) \
+            or not op_path.startswith('/'):
+        return None
+    try:
+        node = op('/')
+        for seg in op_path.split('/'):
+            if not seg:
+                continue
+            if not node.isCOMP:
+                return None  # a non-COMP hop cannot have children
+            nxt = node.op(seg)
+            if nxt is None:
+                nxt = next(
+                    (c for c in node.findChildren(
+                        depth=1, includeUtility=True)
+                     if c.name == seg), None)
+            if nxt is None:
+                return None
+            node = nxt
+        return node
+    except Exception:
+        return None
+
+
 def resolve_annotation(ext, op_path: str):
     """Resolve an annotation path, including utility-flagged ones.
 
@@ -978,7 +1020,7 @@ def resolve_annotation(ext, op_path: str):
     if target is not None:
         return target
     parent_path, _, name = op_path.rpartition('/')
-    parent = op(parent_path) if parent_path else None
+    parent = resolve_op(ext, parent_path) if parent_path else None
     if not parent or not name:
         return None
     try:
@@ -1033,7 +1075,7 @@ def find_children(ext, op_path: str, name: str = None, type: str = None,
                   text: str = None, comment: str = None,
                   include_utility: bool = False) -> dict:
     """Search for operators using COMP.findChildren"""
-    target = op(op_path)
+    target = resolve_op(ext, op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
     if not target.isCOMP:
@@ -1086,7 +1128,7 @@ def find_children(ext, op_path: str, name: str = None, type: str = None,
 
 def get_op_performance(ext, op_path: str, include_children: bool = False) -> dict:
     """Get performance data for an operator"""
-    target = op(op_path)
+    target = resolve_op(ext, op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
@@ -1221,7 +1263,7 @@ def get_externalizations(ext) -> dict:
 
 def get_externalization_status(ext, op_path: str) -> dict:
     """Get externalization status for an operator"""
-    target = op(op_path)
+    target = resolve_op(ext, op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 

@@ -1,0 +1,32 @@
+format: tdn
+version: '2.0'
+build: 2
+generator: Embody/6.0.141
+td_build: 099.2025.33070
+source_file: Embody-6.141.toe
+exported_at: '2026-07-21T13:50:00Z'
+network_path: /embody/Embody/updater
+options:
+  include_dat_content: false
+  include_storage: true
+type: baseCOMP
+sequences:
+  ext:
+  - object: op('./UpdaterExt').module.UpdaterExt(me)
+    name: UpdaterExt
+    promote: true
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+comment: 'Self-updater (UpdaterExt): GitHub-release self-update'
+operators:
+- name: UpdaterExt
+  type: textDAT
+  parameters:
+    file: embody/Embody/updater/UpdaterExt.py
+    syncfile: true
+    language: python
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py

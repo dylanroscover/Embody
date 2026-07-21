@@ -437,10 +437,15 @@ class TestRunnerExt:
                    'point. See .claude/rules/destructive-tests.md.')
             self._log(msg, 'ERROR')
             return {'error': msg}
-        dirty = getattr(project, 'dirty', None)
-        if dirty is True:
+        # project.dirty does NOT exist on TD 2025 (AttributeError) -- the old
+        # getattr(project, 'dirty', None) always returned None, silently
+        # defeating this save-gate. The real member is project.modified, and
+        # it is NOT a plain bool, so compare by truthiness, never `is True`.
+        dirty = bool(getattr(project, 'modified', False))
+        if dirty:
             msg = ('RunDestructiveTests refused: project has unsaved changes '
-                   '(project.dirty). Save first so there is a recovery point.')
+                   '(project.modified). Save first so there is a recovery '
+                   'point.')
             self._log(msg, 'ERROR')
             return {'error': msg}
 

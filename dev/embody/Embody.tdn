@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 841
-generator: Embody/6.0.141
+build: 866
+generator: Embody/6.0.144
 td_build: 099.2025.33070
-source_file: Embody-6.141.toe
-exported_at: '2026-07-20T12:32:20Z'
+source_file: Embody-6.145.toe
+exported_at: '2026-07-21T19:42:25Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -281,7 +281,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 12:28:46 UTC
+    value: Saved 19:19:22 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -421,7 +421,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-    value: Running on port 9872
+    value: Running on port 9870
   Logs:
   - name: Verbose
     style: Toggle
@@ -695,6 +695,29 @@ custom_pars:
     - Always Externalize
     - Never Ask
     help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
+  - name: Autoupdate
+    style: Menu
+    label: Auto-Update
+    startSection: true
+    default: 'off'
+    menuNames:
+    - 'off'
+    - notify
+    - install
+    menuLabels:
+    - 'Off'
+    - Check and Notify
+    - Check and Install
+    help: 'Startup self-update behavior. Off: never checks (nothing leaves your machine). Check and Notify: checks GitHub once at startup and shows availability in Update Status without installing. Check and Install: installs a verified newer release automatically at startup -- a check that can''t complete is logged quietly, but any failure during the install itself always raises a dialog.'
+  - name: Checkforupdate
+    style: Pulse
+    label: Check for Update
+    help: Check GitHub for a newer Embody release now, and prompt if one is available. Reports up-to-date and network errors in a dialog. Refused in the dev checkout (update via git instead).
+  - name: Updatestatus
+    style: Str
+    label: Update Status
+    readOnly: true
+    help: 'Result of the last update check or install: up to date, a newer version available, download/install progress, or an error summary (read-only).'
   - name: Uninstall
     style: Pulse
     startSection: true
@@ -705,7 +728,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.141
+    value: 6.0.144
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -722,7 +745,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 841
+    value: 866
   - name: Github
     style: Pulse
     label: GitHub
@@ -733,7 +756,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-20 12:32:18 UTC
+    value: 2026-07-21 19:42:25 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -781,10 +804,9 @@ storage:
   _tdn_restore_failures:
   - /embody/base1
   _start_in_progress: true
-  _watchdog_gen: 941
-  _clip_watch_gen: 706
-  _shortcut_rec_gen: 251
-  _init_complete: true
+  _watchdog_gen: 973
+  _clip_watch_gen: 738
+  _shortcut_rec_gen: 293
 operators:
 - name: help
   type: opviewerCOMP
@@ -930,7 +952,7 @@ operators:
     language: input
   flags:
   - display
-  position: [-700, 200]
+  position: [-275, 400]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -971,7 +993,7 @@ operators:
     defaultreadencoding: cp1252
     syncfile: true
     language: input
-  position: [-700, 100]
+  position: [-275, 300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1030,6 +1052,19 @@ operators:
   comp_inputs:
   - manager
   tdn_ref: embody/Embody/toolbar.tdn
+- name: updater
+  type: baseCOMP
+  sequences:
+    ext:
+    - object: op('./UpdaterExt').module.UpdaterExt(me)
+      name: UpdaterExt
+      promote: true
+  position: [500, -550]
+  color: [0.3, 0.5, 0.9]
+  comment: 'Self-updater (UpdaterExt): GitHub-release self-update'
+  tags:
+  - tdn
+  tdn_ref: embody/Embody/updater.tdn
 - name: EnvoyExt
   type: textDAT
   parameters:
@@ -1100,7 +1135,7 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/embody_git.py
-  position: [-275, 700]
+  position: [-700, 100]
   tags:
   - py
 - name: envoy_read
@@ -1129,7 +1164,7 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/embody_admin.py
-  position: [-700, 400]
+  position: [-700, 300]
   tags:
   - py
 - name: envoy_layout
@@ -1177,7 +1212,7 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/embody_launch.py
-  position: [-275, 800]
+  position: [-700, 200]
   tags:
   - py
 - name: window_wizard
@@ -1223,48 +1258,48 @@ operators:
   annotations:
   - name: envoy_bot_arm_l
     mode: networkbox
-    position: [2912, -1069]
+    position: [2279, 291]
     size: [10, 26]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_arm_r
     mode: networkbox
-    position: [2912, -1069]
+    position: [2279, 291]
     size: [10, 26]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_body
     mode: networkbox
-    position: [2912, -1069]
+    position: [2279, 291]
     size: [30, 34]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_eye_l
     mode: networkbox
-    position: [2912, -1069]
+    position: [2279, 291]
     size: [10, 10]
     color: [0.0, 0.0, 0.0]
   - name: envoy_bot_eye_r
     mode: networkbox
-    position: [2912, -1069]
+    position: [2279, 291]
     size: [10, 10]
     color: [0.0, 0.0, 0.0]
   - name: envoy_bot_head
     mode: networkbox
-    position: [2912, -1069]
+    position: [2279, 291]
     size: [34, 26]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_leg_l
     mode: networkbox
-    position: [2912, -1069]
+    position: [2279, 291]
     size: [11, 24]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_leg_r
     mode: networkbox
-    position: [2912, -1069]
+    position: [2279, 291]
     size: [11, 24]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_speech
     mode: annotate
     title: Embot
-    position: [2912, -1069]
+    position: [2279, 291]
     size: [185, 74]
     color: [0.12, 0.12, 0.17]
     backAlpha: 0.95
@@ -1301,7 +1336,7 @@ operators:
   parameters:
     file: embody/Embody/palette_catalog.tsv
     rows: 1054
-  position: [-500, 200]
+  position: [-500, 100]
 - name: timer_callbacks
   type: textDAT
   parameters:
@@ -1322,7 +1357,7 @@ operators:
   parameters:
     file: embody/Embody/divergent_defaults.tsv
     rows: 502
-  position: [-500, 300]
+  position: [-500, 200]
 - name: window_tagging_menu
   type: windowCOMP
   parameters:

@@ -146,5 +146,47 @@ def onProjectPreSave():
     save_path = Path(project.folder).parents[0] / 'release' / f"{comp.name}-v{new_version}.tox"
     comp.ExportPortableTox(save_path=str(save_path))
 
+    # Release manifest for the self-updater (UpdaterExt): version, TD-build
+    # floor, and sha256 of the exported tox. Attached to GitHub releases
+    # alongside the tox (the github-release rule globs release/*), it lets
+    # the updater gate on min_td_build BEFORE downloading (an older build
+    # loading a newer-build tox fails SILENTLY -- loadTox returns None) and
+    # verify download integrity (release assets are mutable post-publish).
+    writeReleaseManifest(comp, save_path, new_version, build)
+
+
+def writeReleaseManifest(comp, tox_path, version, build):
+    """Write release/embody-release.json describing the exported tox."""
+    import hashlib
+    import json
+    from datetime import datetime, timezone
+    try:
+        payload = Path(tox_path).read_bytes()
+        manifest = {
+            'schema': 1,
+            'name': comp.name,
+            'version': version,
+            'tag': f'v{version}',
+            'asset': Path(tox_path).name,
+            'size': len(payload),
+            'sha256': hashlib.sha256(payload).hexdigest(),
+            'td_build': build,
+            'min_td_build': build,
+            'build': int(comp.par.Build.eval()),
+            'date': str(comp.par.Date.eval()),
+            'exported_at': datetime.now(timezone.utc).isoformat(
+                timespec='seconds'),
+        }
+        manifest_path = Path(tox_path).parent / 'embody-release.json'
+        tmp = Path(str(manifest_path) + '.tmp')
+        tmp.write_text(json.dumps(manifest, indent=1) + '\n',
+                       encoding='utf-8')
+        import os
+        os.replace(str(tmp), str(manifest_path))
+    except Exception as e:
+        # A failed manifest must not block the save; the updater refuses
+        # manifest-less releases loudly on its own.
+        debug(f'[execute_src_ctrl] release manifest write failed: {e!r}')
+
 def onProjectPostSave():
     return

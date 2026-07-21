@@ -8,6 +8,11 @@
 - If neither exists, skip this entire procedure silently.
 - List all files in the release directory. These are the assets to attach.
 - If the directory is empty, skip silently.
+- **The self-updater depends on `release/embody-release.json`** (written by
+  the dev save hook alongside the `.tox`). Verify it is present, that its
+  `version`/`asset`/`sha256`/`size` match the `.tox` being released, and
+  attach BOTH files. A release without its manifest is invisible to
+  Embody's auto-updater (users must update manually).
 
 ## 2. Determine Version
 
