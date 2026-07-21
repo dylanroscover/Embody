@@ -168,6 +168,19 @@ def onPulse(par):
 	elif par.name == 'Update':
 		parent.Embody.UpdateHandler()
 
+	elif par.name == 'Checkforupdate':
+		# Self-update check (UpdaterExt on the updater child COMP) --
+		# distinct from 'Update', which re-exports externalizations.
+		# Guarded like execute.py's startup hook: tolerate a partial /
+		# pre-updater install where the par exists but the child does not.
+		updater = parent.Embody.op('updater')
+		if updater:
+			updater.ext.UpdaterExt.CheckForUpdate(interactive=True)
+		else:
+			parent.Embody.Log(
+				'Check for Update: updater component missing '
+				'(reinstall Embody to enable self-update)', 'WARNING')
+
 	elif par.name == 'Refresh':
 		parent.Embody.Refresh()
 

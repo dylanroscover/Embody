@@ -93,9 +93,11 @@ _RECOVERY_HINT_RULES = [
      'the operator path does not resolve',
      "Never guess paths. Call query_network on the parent COMP (or '/') to "
      "list real children, or find_children to search by name, then retry with "
-     "a verified path. The active network is "
+     "a verified path. Annotations are utility ops: pass include_utility=True "
+     "to query_network/find_children or they will not appear (get_annotations "
+     "always sees them). The active network is "
      "execute_python: result = ui.panes.current.owner.path.",
-     ['query_network', 'find_children', 'get_op']),
+     ['query_network', 'find_children', 'get_op', 'get_annotations']),
 
     (re.compile(r'parameter not found|no parameter', re.IGNORECASE),
      'no parameter by that name on the operator',
@@ -1141,6 +1143,12 @@ class EnvoyMCPServer:
                               name: str = None) -> dict:
             """
             Create a Comment, Network Box, or Annotate in the network editor.
+
+            The annotation is created utility=True (matching TD UI-drawn
+            annotations), so it appears in get_annotations but NOT in
+            query_network/find_children unless include_utility=True.
+            All op-path tools (set_annotation, delete_op, set_parameter,
+            ...) still resolve it by path.
 
             Args:
                 parent_path: Path to parent COMP
@@ -4741,7 +4749,7 @@ class EnvoyExt:
                       depth: int = 2, max_results: int = 50,
                       details: bool = False) -> dict:
         """Get a parameter value with full details"""
-        target = op(op_path)
+        target = mod.envoy_read.resolve_op(self, op_path)
         if not target:
             return {'error': f'Operator not found: {op_path}'}
 
@@ -5190,7 +5198,7 @@ class EnvoyExt:
 
     def _layout_children(self, op_path: str) -> dict:
         """Auto-layout children in a COMP"""
-        target = op(op_path)
+        target = mod.envoy_read.resolve_op(self, op_path)
         if not target:
             return {'error': f'Operator not found: {op_path}'}
         if not target.isCOMP:
@@ -5216,6 +5224,10 @@ class EnvoyExt:
     def _get_annotations(self, parent_path: str) -> dict:
         """List all annotations in a COMP -- see envoy_read."""
         return mod.envoy_read.get_annotations(self, parent_path)
+
+    def _resolve_op(self, op_path: str):
+        """Resolve an operator path, tolerating utility-flagged hops (annotations) -- see envoy_read."""
+        return mod.envoy_read.resolve_op(self, op_path)
 
     def _resolve_annotation(self, op_path: str):
         """Resolve an annotation path, including utility-flagged ones -- see envoy_read."""

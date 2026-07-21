@@ -1,0 +1,14 @@
+{
+ "schema": 1,
+ "name": "Embody",
+ "version": "6.0.145",
+ "tag": "v6.0.145",
+ "asset": "Embody-v6.0.145.tox",
+ "size": 712394,
+ "sha256": "02f3883561c2a66871dd2913f34747a49bcfdff8fc9e74fdd3e15b3e95a3ff23",
+ "td_build": "2025.33070",
+ "min_td_build": "2025.33070",
+ "build": 866,
+ "date": "2026-07-21 19:42:25 UTC",
+ "exported_at": "2026-07-21T19:42:27+00:00"
+}

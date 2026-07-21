@@ -92,6 +92,10 @@ class EmbodyExt:
         'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
         'Tdncascade', 'Tdncreateonstart', 'Tdnstriponsave',
         'Toxrestoreonstart', 'Datrestoreonstart', 'Filecleanup',
+        # Self-update consent (Advanced page) -- must persist or the user's
+        # opt-in dies in the very update it triggers (the replacement COMP
+        # restores prefs from config.json).
+        'Autoupdate',
         # Keyboard shortcuts (issue #50)
         'Enablekeyboardshortcuts',
         'Shortcutmanager', 'Shortcutupdateall', 'Shortcutupdatecomp',
@@ -4018,6 +4022,13 @@ class EmbodyExt:
         """
         tdn_tag = self.my.par.Tdntag.val
         for child in parent_comp.findChildren(type=COMP, depth=1):
+            # Annotations never cascade: they are captured semantically by
+            # the parent's annotations: section, and tagging one turns its
+            # TD-managed widget internals into bogus per-op boundaries.
+            # (applyTagToOperator also refuses them -- this skip just keeps
+            # the cascade quiet instead of logging a refusal per annotate.)
+            if child.type == 'annotate':
+                continue
             # Exclude tag wins over cascade auto-tagging: never automatically
             # mark an excluded COMP for TDN. (Explicit user tagging still works.)
             if self.my.ext.TDN._hasExcludeTag(child):
@@ -6033,6 +6044,18 @@ class EmbodyExt:
             return False
 
         if tag not in oper.tags:
+            # Annotations and their internals are never taggable -- same
+            # refusal as applyTagToOperator (the tagger UI routes here, not
+            # through the chokepoint). The REMOVE branch below stays
+            # unguarded so legacy-tagged annotates can always be cleaned up.
+            if (oper.family == 'COMP' and oper.type == 'annotate') \
+                    or self._isInsideAnnotate(oper):
+                self.Log(
+                    f"Refusing to tag '{oper.path}': annotations and their "
+                    f"internals are captured semantically by the parent TDN "
+                    f"COMP's annotations: section, never externalized per-op",
+                    'WARNING')
+                return False
             # Enforce mutual exclusivity: only one tag at a time
             if oper.family == 'COMP':
                 tox_tag = self.my.par.Toxtag.val
@@ -6234,8 +6257,81 @@ class EmbodyExt:
         if ext:
             oper.par.extension = ext
 
+    def _isInsideAnnotate(self, oper: OP) -> bool:
+        """True when any ancestor COMP of oper is an annotateCOMP.
+
+        Annotate widget internals (the annotation/back/body/title/...
+        containers and their color/i/help tables) are TD-managed stock
+        content -- never Embody's to tag, externalize, or track. The
+        annotation itself round-trips exclusively through the parent
+        TDN's semantic `annotations:` section."""
+        try:
+            node = oper.parent() if oper is not None else None
+            while node is not None and node.path != '/':
+                if node.type == 'annotate':
+                    return True
+                node = node.parent()
+        except Exception:
+            pass
+        return False
+
+    def _isAnnotateInteriorPath(self, op_path: str) -> bool:
+        """True when op_path IS an annotateCOMP or lies inside one,
+        resolved against the LIVE network (utility-aware).
+
+        Legacy externalization rows pointing AT an annotation or inside
+        its widget (created before the annotate tagging guards existed)
+        must be inert: reconstructing them guts the widget's stock
+        internals (empty color tables -> float(None) cook errors) and
+        re-exporting them recreates orphan files. Bare op() cannot see a
+        utility annotate hop, so on lookup failure walk the path down
+        with a findChildren(includeUtility=True) fallback and stop at
+        the first annotate segment (leaf included -- both branches must
+        agree regardless of the utility flag). An unresolvable path
+        returns False -- when the live network cannot testify, behave as
+        before."""
+        try:
+            target = op(op_path)
+            if target is not None:
+                return (target.type == 'annotate'
+                        or self._isInsideAnnotate(target))
+            node = op('/')
+            for seg in op_path.split('/'):
+                if not seg:
+                    continue
+                if not node.isCOMP:
+                    return False
+                nxt = node.op(seg)
+                if nxt is None:
+                    nxt = next(
+                        (c for c in node.findChildren(
+                            depth=1, includeUtility=True)
+                         if c.name == seg), None)
+                if nxt is None:
+                    return False
+                if nxt.type == 'annotate':
+                    return True
+                node = nxt
+        except Exception:
+            pass
+        return False
+
     def applyTagToOperator(self, oper: OP, tag: str) -> bool:
-        """Apply a tag to an operator. Enforces mutual exclusivity."""
+        """Apply a tag to an operator. Enforces mutual exclusivity.
+
+        Annotations are refused wholesale: an annotateCOMP round-trips
+        exclusively through the parent TDN's semantic `annotations:`
+        section, and its internals are TD-managed stock widgetry --
+        tagging either creates per-op boundaries whose reconstruction
+        guts the widget and strands orphan files."""
+        if (oper.family == 'COMP' and oper.type == 'annotate') \
+                or self._isInsideAnnotate(oper):
+            self.Log(
+                f"Refusing to tag '{oper.path}': annotations and their "
+                f"internals are captured semantically by the parent TDN "
+                f"COMP's annotations: section, never externalized per-op",
+                'WARNING')
+            return False
         color = self._getTagColor(oper, tag)
         if color is None:
             return False
@@ -6317,7 +6413,10 @@ class EmbodyExt:
             tag = self._autoExternalizeTagFor(oper)
             if not tag:
                 return None
-            self.applyTagToOperator(oper, tag)
+            if not self.applyTagToOperator(oper, tag):
+                # Chokepoint refused (annotate guard / no color for tag) --
+                # report untagged rather than logging a false success.
+                return None
             # COMPs export synchronously inside _handleTDNAddition. A loose DAT's
             # file is written by the addition sweep -- coalesce that into one
             # settle-debounced Update() so a batch of DAT creates costs one sweep.
@@ -6367,10 +6466,14 @@ class EmbodyExt:
             return None
 
         # Skip palette/vendor clones -- the op itself or any COMP ancestor
-        # (a clone's internals are regenerable palette boilerplate).
+        # (a clone's internals are regenerable palette boilerplate) -- and
+        # anything inside an annotateCOMP (widget internals are TD-managed;
+        # isOpProcessable above only catches the annotate ITSELF).
         node = oper if oper.family == 'COMP' else oper.parent()
         while node is not None and node.path != '/':
-            if node.family == 'COMP' and self.my.ext.TDN._isPaletteClone(node):
+            if node.family == 'COMP' and (
+                    node.type == 'annotate'
+                    or self.my.ext.TDN._isPaletteClone(node)):
                 return None
             node = node.parent()
 
@@ -6490,10 +6593,15 @@ class EmbodyExt:
         tox_tag = self.my.par.Toxtag.val
         tdn_tag = self.my.par.Tdntag.val
 
+        # A refused switch (e.g. the annotate guard) keeps the OLD tag --
+        # bail out entirely so ExternalizeImmediate does not re-export the
+        # file under the old strategy that the refusal meant to keep inert.
         if tox_tag in oper.tags:
-            self.applyTagToOperator(oper, tdn_tag)
+            if not self.applyTagToOperator(oper, tdn_tag):
+                return
         elif tdn_tag in oper.tags:
-            self.applyTagToOperator(oper, tox_tag)
+            if not self.applyTagToOperator(oper, tox_tag):
+                return
 
         self.ExternalizeImmediate(oper)
         self.Refresh()
@@ -6869,6 +6977,12 @@ class EmbodyExt:
         """
         return (
             oper.path in paths_to_exclude or
+            # Annotations and their internals never externalize -- captured
+            # semantically by the parent TDN. applyTagToOperator would refuse
+            # each one anyway (with a WARNING per op); skipping here keeps a
+            # project sweep over legacy non-utility annotates quiet.
+            oper.type == 'annotate' or
+            self._isInsideAnnotate(oper) or
             self.isReplicant(oper) or
             self.isInsideClone(oper) or
             self._hasExcludeTagInAncestry(oper) or
@@ -7051,6 +7165,18 @@ class EmbodyExt:
         errors_total = 0
 
         for comp_path, rel_tdn_path in tdn_comps:
+            # Re-check per row: at enumeration time the stripped .toe may
+            # not contain a legacy row's annotate yet, so the enumerator's
+            # filter can miss it (unresolvable -> not filtered). Parents
+            # import first (depth sort), so by this row's turn the annotate
+            # is live and testifiable -- skip instead of clear_first-gutting
+            # the freshly recreated widget.
+            if self._isAnnotateInteriorPath(comp_path):
+                self.Log(
+                    f'Skipping reconstruction of annotation-interior row '
+                    f'{comp_path} (legacy artifact -- clean up via delete_op '
+                    f'on the annotation or the manager)', 'WARNING')
+                continue
             abs_path = self.buildAbsolutePath(rel_tdn_path)
             if not abs_path.is_file():
                 self.Log(f'TDN file not found: {rel_tdn_path}', 'WARNING')
@@ -7177,6 +7303,14 @@ class EmbodyExt:
         missing.sort(key=lambda m: m[0].count('/'))
         recovered = 0
         for comp_path, abs_path in missing:
+            # Same per-row re-check as ReconstructTDNComps: a parent import
+            # earlier in this pass may have just recreated the annotate this
+            # legacy row points into -- never import into its widget.
+            if self._isAnnotateInteriorPath(comp_path):
+                self.Log(
+                    f'Auto-save recovery: skipping annotation-interior row '
+                    f'{comp_path} (legacy artifact)', 'WARNING')
+                continue
             try:
                 tdn_doc = self.my.ext.TDN.tdn_load(
                     abs_path.read_text(encoding='utf-8'))
@@ -7573,6 +7707,33 @@ class EmbodyExt:
                 comp = op(comp_path)
                 if comp is not None and self.my.ext.TDN._hasExcludeTag(comp):
                     continue
+                # Legacy rows AT an annotation or inside its widget are
+                # inert: the annotate tagging guards refuse to create them
+                # now, but rows from older builds must neither reconstruct
+                # (guts the widget's stock internals) nor re-export
+                # (recreates orphan files). Reuse the comp resolved above;
+                # fall back to the utility-aware path walk only when the op
+                # is not live. Warn once per path per session.
+                if comp is not None:
+                    is_annotate_row = (comp.type == 'annotate'
+                                       or self._isInsideAnnotate(comp))
+                else:
+                    is_annotate_row = self._isAnnotateInteriorPath(comp_path)
+                if is_annotate_row:
+                    warned = getattr(self, '_annotate_interior_warned', None)
+                    if warned is None:
+                        warned = set()
+                        self._annotate_interior_warned = warned
+                    if comp_path not in warned:
+                        warned.add(comp_path)
+                        self.Log(
+                            f"Skipping TDN row for an annotation (or an op "
+                            f"inside its widget): {comp_path} -- legacy "
+                            f"artifact from before the annotate guards; "
+                            f"delete_op the annotation (or remove the row "
+                            f"via the manager) to clean it up",
+                            'WARNING')
+                    continue
                 result.append((
                     comp_path,
                     self._cellVal(i, 'rel_file_path'),
@@ -7655,11 +7816,16 @@ class EmbodyExt:
                 while parent_op and parent_op.path != comp_path:
                     # Skip DATs inside a deeper TDN COMP (its own settings
                     # cover them), inside an excluded COMP (app-managed,
-                    # invisible to TDN), or inside a palette clone -- a clone's
+                    # invisible to TDN), inside ANY annotateCOMP (widget
+                    # internals are TD-managed stock content -- flagging the
+                    # color/i/help tables of a code-created annotation as
+                    # "at risk" is what externalized them as bogus per-DAT
+                    # files), or inside a palette clone -- a clone's
                     # internal DATs are regenerable palette boilerplate (e.g. an
                     # annotateCOMP's button help tables), never user content, so
                     # they must never trip the content-safety warning.
                     if (parent_op.path in tdn_paths
+                            or parent_op.type == 'annotate'
                             or self.my.ext.TDN._hasExcludeTag(parent_op)
                             or self.my.ext.TDN._isPaletteClone(parent_op)):
                         inside_nested = True
@@ -7771,7 +7937,10 @@ class EmbodyExt:
                     inside_nested = False
                     parent_op = target.parent()
                     while parent_op and parent_op.path != comp_path:
+                        # Mirror of _findAtRiskDATs' walk: annotate widget
+                        # internals are TD-managed, never user storage.
                         if (parent_op.path in tdn_paths
+                                or parent_op.type == 'annotate'
                                 or self.my.ext.TDN._hasExcludeTag(parent_op)
                                 or self.my.ext.TDN._isPaletteClone(parent_op)):
                             inside_nested = True

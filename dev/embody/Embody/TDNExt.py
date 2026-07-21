@@ -1725,6 +1725,24 @@ class TDNExt:
 			ui.status = f'TDN Import: {msg}'
 			return {'error': msg}
 
+		# Self-destruction guard: clearing the Embody COMP, an ancestor of it,
+		# or the root would delete the running TDNExt importer (a child of the
+		# Embody COMP) mid-import, stranding the operation with a half-gutted
+		# network and no code left to finish or roll back. None of these are
+		# ever legitimate reconstruction targets (see _getTDNStrategyComps,
+		# which excludes the whole Embody subtree). Descendants are allowed --
+		# they do not contain the importer. Only clear_first is destructive.
+		if clear_first:
+			embody_path = self.ownerComp.path
+			dest_prefix = dest.path.rstrip('/') + '/'
+			if embody_path == dest.path or embody_path.startswith(dest_prefix):
+				msg = (f'Refusing clear_first import into {target_path}: it '
+					   f'contains the Embody COMP and its TDN importer -- '
+					   f'clearing it would destroy the running importer. '
+					   f'Import into a specific child COMP instead.')
+				ui.status = f'TDN Import: {msg}'
+				return {'error': msg}
+
 		# Accept full .tdn document or just the operators array
 		if isinstance(tdn, dict) and 'operators' in tdn:
 			# Version compatibility checks
@@ -4488,9 +4506,19 @@ class TDNExt:
 
 				# Reuse existing annotateCOMP if one with this name already
 				# exists (e.g., palette clone from the operators array).
+				# Utility-aware: every annotation is utility=True now (UI,
+				# create_annotation, and this importer all set it), and bare
+				# parent.op() cannot see utility ops -- without the fallback
+				# an additive (clear_first=False) import would DUPLICATE
+				# every existing annotation instead of updating it.
 				ann = None
 				if name:
 					existing = parent.op(name)
+					if existing is None:
+						existing = next(
+							(c for c in parent.findChildren(
+								depth=1, includeUtility=True)
+							 if c.name == name), None)
 					if existing and existing.type == 'annotate':
 						ann = existing
 

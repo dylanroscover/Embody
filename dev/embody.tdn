@@ -1,20 +1,14 @@
 format: tdn
 version: '2.0'
-build: 671
-generator: Embody/6.0.140
+build: 712
+generator: Embody/6.0.145
 td_build: 099.2025.33070
-source_file: Embody-6.141.toe
-exported_at: '2026-07-20T12:30:03Z'
+source_file: Embody-6.145.toe
+exported_at: '2026-07-21T19:44:54Z'
 network_path: /embody
 options:
   include_dat_content: false
   include_storage: true
-type_defaults:
-  baseCOMP:
-    size: [160, 130]
-    color: [0.3, 0.5, 0.9]
-    tags:
-    - tdn
 type: containerCOMP
 parameters:
   w: 960
@@ -319,7 +313,7 @@ operators:
       label: Auto-Save Status
       readOnly: true
       help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-      value: Saved 12:28:46 UTC
+      value: Saved 19:44:53 UTC
     - name: Tdnstriponsave
       style: Toggle
       label: Strip on Save
@@ -459,7 +453,7 @@ operators:
       startSection: true
       readOnly: true
       help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-      value: Running on port 9872
+      value: Running on port 9870
     Logs:
     - name: Verbose
       style: Toggle
@@ -733,6 +727,29 @@ operators:
       - Always Externalize
       - Never Ask
       help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
+    - name: Autoupdate
+      style: Menu
+      label: Auto-Update
+      startSection: true
+      default: 'off'
+      menuNames:
+      - 'off'
+      - notify
+      - install
+      menuLabels:
+      - 'Off'
+      - Check and Notify
+      - Check and Install
+      help: 'Startup self-update behavior. Off: never checks (nothing leaves your machine). Check and Notify: checks GitHub once at startup and shows availability in Update Status without installing. Check and Install: installs a verified newer release automatically at startup -- a check that can''t complete is logged quietly, but any failure during the install itself always raises a dialog.'
+    - name: Checkforupdate
+      style: Pulse
+      label: Check for Update
+      help: Check GitHub for a newer Embody release now, and prompt if one is available. Reports up-to-date and network errors in a dialog. Refused in the dev checkout (update via git instead).
+    - name: Updatestatus
+      style: Str
+      label: Update Status
+      readOnly: true
+      help: 'Result of the last update check or install: up to date, a newer version available, download/install progress, or an error summary (read-only).'
     - name: Uninstall
       style: Pulse
       startSection: true
@@ -743,7 +760,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.140
+      value: 6.0.145
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -760,7 +777,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 840
+      value: 866
     - name: Github
       style: Pulse
       label: GitHub
@@ -771,7 +788,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-20 12:30:02 UTC
+      value: 2026-07-21 19:42:25 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -787,164 +804,11 @@ operators:
     _tdn_restore_failures:
     - /embody/base1
     _start_in_progress: true
-    _watchdog_gen: 938
-    _suite_proof_progress:
-      todo:
-      - test_ancestor_rename
-      - test_catalog_bootstrap_palette
-      - test_catalog_palette_scan
-      - test_claude_config
-      - test_clipboard_paste
-      - test_collection_safe_import
-      - test_collection_scanner
-      - test_crud_operators
-      - test_dat_restoration
-      - test_delete_cleanup
-      - test_duplicate_handling
-      - test_envoy_bridge
-      - test_envoy_lifecycle_hardening
-      - test_envoy_registry
-      - test_envoy_setup_environment
-      - test_envoy_thread_comm
-      - test_envoy_watchdog
-      - test_externalization
-      - test_file_management
-      - test_glsl_externalize
-      - test_issue21_safe_cell
-      - test_layout_lint
-      - test_logging
-      - test_mcp_annotations
-      - test_mcp_batch
-      - test_mcp_code_execution
-      - test_mcp_connections
-      - test_mcp_dat_content
-      - test_mcp_diagnostics
-      - test_mcp_extensions
-      - test_mcp_externalization
-      - test_mcp_flags_position
-      - test_mcp_operators
-      - test_mcp_parameters
-      - test_mcp_performance
-      - test_mcp_project_performance
-      - test_mcp_tdn_tools
-      - test_mcp_top_capture
-      - test_operator_queries
-      - test_os_label
-      - test_param_tracker
-      - test_path_utils
-      - test_rename_move_lifecycle
-      - test_server_lifecycle
-      - test_settings_persistence
-      - test_smoke_release
-      - test_specimen_publish
-      - test_strategy_handlers
-      - test_tag_lifecycle
-      - test_tag_management
-      - test_tdn_crash_safety
-      - test_tdn_exclude
-      - test_tdn_export_import
-      - test_tdn_external_connections
-      - test_tdn_file_io
-      - test_tdn_fingerprint
-      - test_tdn_helpers
-      - test_tdn_mode
-      - test_tdn_palette_catalog
-      - test_tdn_reconstruction
-      - test_tdn_safety_guards
-      - test_tdn_sequences
-      - test_tdn_yaml
-      - test_update_sync
-      - test_v6_hardening
-      done: []
-    _suite_proof_result:
-      agg:
-        total: 1576
-        passed: 1573
-        failed: 2
-        errors: 0
-        skipped: 1
-      fails:
-      - $type: tuple
-        $value:
-        - test_envoy_thread_comm
-        - null
-        - FAIL
-      - $type: tuple
-        $value:
-        - test_envoy_thread_comm
-        - null
-        - FAIL
-      n: 65
-    _e2e_result:
-      pre_seed_is_none: true
-      results:
-        test_envoy_setup_environment:
-          pass: 17
-          tot: 17
-          fail: 0
-          err: 0
-        test_envoy_lifecycle_hardening:
-          pass: 4
-          tot: 4
-          fail: 0
-          err: 0
-        test_smoke_release:
-          pass: 33
-          tot: 33
-          fail: 0
-          err: 0
-    _setgate_test:
-      results:
-        test_envoy_setup_environment:
-          pass: 17
-          tot: 17
-        test_envoy_lifecycle_hardening:
-          pass: 4
-          tot: 4
-        test_smoke_release:
-          pass: 33
-          tot: 33
-      onboarding_seed_before: 40
-      onboarding_seed_after: 0
-      onboarding_prompts_fired: 40
-    _noseed_test:
-      seed_cleared: true
-      smoke:
-        pass: 32
-        tot: 33
-      pending_prompt_right_after_run: absent
-    _final_noseed_test:
-      seed_was_clear: true
-      results:
-        test_envoy_setup_environment:
-          pass: 17
-          tot: 17
-          fail: 0
-        test_envoy_lifecycle_hardening:
-          pass: 4
-          tot: 4
-          fail: 0
-        test_smoke_release:
-          pass: 32
-          tot: 33
-          fail: 1
-      pending_after: absent
-    _clip_watch_gen: 703
-    _shortcut_rec_gen: 251
-    _suppress_dialogs: true
+    _watchdog_gen: 975
+    _clip_watch_gen: 740
+    _shortcut_rec_gen: 293
+    _init_complete: true
   tdn_ref: embody/Embody.tdn
-- name: base_tdn
-  type: baseCOMP
-  position: [700, -325]
-  tdn_ref: embody/base_tdn.tdn
-- name: tdn_tests
-  type: baseCOMP
-  flags:
-  - viewer
-  position: [500, -325]
-  storage:
-    embed_dats_in_tdn: true
-  tdn_ref: embody/tdn_tests.tdn
 - name: unit_tests
   type: baseCOMP
   parameters:
@@ -956,7 +820,11 @@ operators:
       promote: true
     - {}
     - {}
-  position: [-600, -300]
+  position: [400, 102]
+  size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   storage:
     test_results:
       total: 341
@@ -2857,7 +2725,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 265
+    rows: 266
     cols: 11
   flags:
   - viewer
@@ -2900,7 +2768,7 @@ annotations:
   mode: annotate
   title: Unit Tests
   text: Embody's test suites for verifying externalization, path resolution, and MCP tool behavior.
-  position: [-700, -352]
+  position: [300, 50]
   size: [329, 322]
   color: [0.18, 0.22, 0.28]
   opacity: 0.9

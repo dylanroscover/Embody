@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 44
-generator: Embody/6.0.121
-td_build: 099.2025.32820
-source_file: Embody-6.122.toe
-exported_at: '2026-07-13T11:13:31Z'
+build: 45
+generator: Embody/6.0.142
+td_build: 099.2025.33070
+source_file: Embody-6.142.toe
+exported_at: '2026-07-21T13:55:12Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -1942,6 +1942,11 @@ operators:
   tags:
   - tdn
   tdn_ref: embody/unit_tests/test_sandbox.tdn
+- name: test_updater
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_updater.py
+  position: [0, -3800]
 - name: TestRunnerExt
   type: textDAT
   parameters:

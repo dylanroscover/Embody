@@ -25,6 +25,10 @@ def init():
 	parent.Embody.par.Envoyenable = False
 	parent.Embody.par.Envoystatus = 'Disabled'
 	parent.Embody.par.Performmode = False
+	# Updatestatus is a transient read-out; a release .tox bakes in whatever
+	# the dev session last set (e.g. the dev-checkout refusal). Clear it so a
+	# fresh install starts blank instead of showing a stale status line.
+	parent.Embody.par.Updatestatus = ''
 	# Clear any save-time dialog suppression that baked into the .toe/.tox.
 	# _suppress_dialogs is a save-window-only flag; a fresh open must start with
 	# dialogs enabled so genuine first-run onboarding can prompt.
@@ -65,6 +69,14 @@ def onStart():
 	# Pin current TD build into .embody/project.json so the Envoy bridge can
 	# pick a matching install on fresh clones (committed; survives git clone).
 	run(f"op('{parent.Embody}').ext.Embody._writeProjectJson()", delayFrames=80)
+	# Self-update startup sweep (UpdaterExt): crash-sentinel recovery first,
+	# then the Autoupdate-gated check. After every restore phase (frame 90)
+	# with margin -- the check itself is a background worker and never blocks
+	# startup. Guarded so pre-updater toes (no 'updater' child) skip quietly.
+	run(
+		f"op('{parent.Embody}').op('updater').ext.UpdaterExt.StartupCheck() "
+		f"if op('{parent.Embody}').op('updater') else None",
+		delayFrames=150)
 	return
 
 def onCreate():

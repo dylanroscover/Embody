@@ -128,6 +128,59 @@ class TestTDNAnnotationExport(EmbodyTestCase):
         self.assertEqual(recreated.par.Mode.eval(), 'annotate')
 
     # ------------------------------------------------------------------
+    # A (durability). A destroyed annotation leaves no resurrection fuel
+    # ------------------------------------------------------------------
+
+    def test_destroyed_annotation_dropped_from_next_export(self):
+        """_exportAnnotations reads LIVE state only: after the annotation is
+        destroyed, the next export must drop its annotations: entry -- a
+        stale entry is exactly what resurrected live-deleted annotations on
+        the next parent reimport (2026-07-21 report, Bug 3)."""
+        parent, note = self._build_with_annotation('anno_durability')
+        doc1 = self._export(parent)
+        self.assertIn('annotate1',
+                      [a.get('name') for a in doc1.get('annotations', [])])
+        note.destroy()
+        doc2 = self._export(parent)
+        self.assertNotIn('annotate1',
+                         [a.get('name') for a in doc2.get('annotations', [])])
+
+    def test_reimport_after_destroy_does_not_resurrect(self):
+        """Round-trip the post-destroy export: importing it clear_first must
+        not recreate the destroyed annotation."""
+        parent, note = self._build_with_annotation('anno_no_resurrect')
+        self._export(parent)
+        note.destroy()
+        doc = self._export(parent)
+        result = self.tdn_ext.ImportNetwork(parent.path, doc, clear_first=True)
+        self.assertTrue(result.get('success'),
+                        f'import failed: {result.get("error")}')
+        anns = parent.findChildren(type=annotateCOMP, includeUtility=True)
+        self.assertEqual(len(anns), 0,
+                         'destroyed annotation must stay gone after reimport')
+
+    # ------------------------------------------------------------------
+    # A (additive reimport). Utility annotations are reused, not duplicated
+    # ------------------------------------------------------------------
+
+    def test_additive_import_reuses_utility_annotation(self):
+        """clear_first=False import must UPDATE an existing (utility=True)
+        annotation by name, not create a duplicate -- bare parent.op()
+        cannot see utility ops, so the reuse lookup must be utility-aware."""
+        parent, note = self._build_with_annotation('anno_additive')
+        note.utility = True  # every annotation is utility now
+        doc = self._export(parent)
+        result = self.tdn_ext.ImportNetwork(parent.path, doc,
+                                            clear_first=False)
+        self.assertTrue(result.get('success'),
+                        f'import failed: {result.get("error")}')
+        anns = parent.findChildren(type=annotateCOMP, includeUtility=True)
+        self.assertEqual(
+            len(anns), 1,
+            'additive reimport must reuse the existing utility annotation, '
+            'got {} annotations'.format(len(anns)))
+
+    # ------------------------------------------------------------------
     # B. build: omitted when there is no build number
     # ------------------------------------------------------------------
 

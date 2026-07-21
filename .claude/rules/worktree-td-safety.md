@@ -9,9 +9,23 @@ running session.
 
 ## The rule
 
-Any multi-step implementation work on externalized files happens in an
-**isolated git worktree** (`git worktree add ../<repo>-wt-<task> HEAD`),
-never in the tree a running TD session is loading from.
+Match the isolation to the risk, and check for other writers first -- do not
+overweight this into a blanket "always worktree". The real hazard is two
+concurrent writers on the same checkout, or a broken intermediate state
+hot-reloading into a live session -- not live editing itself.
+
+- **Default (you are the sole writer, small-to-moderate change): edit the
+  live tree directly.** TD's hot-sync is built for this -- it is the normal
+  Embody dev workflow. First confirm you are the only writer (`get_sessions`
+  shows no other active, non-stale session touching the same files, and the
+  user is not mid-save). Then land each file and verify (`get_op_errors`,
+  exercise the change) before the next.
+- **Use an isolated git worktree** (`git worktree add ../<repo>-wt-<task>
+  HEAD`) when landing live is genuinely risky: another writer is active on the
+  same checkout, the change spans many extensions at once (a half-applied
+  multi-extension state would hot-reload into the session), or you must pass
+  through known-broken intermediate states while iterating. Build and iterate
+  there, then land the finished diff into the main tree (see below).
 
 ## Access is pre-authorized -- keep the naming convention
 
@@ -41,14 +55,18 @@ through claims -- see the Worktrees section of /multi-session-etiquette.
    cannot see worktree files. Implementation and iteration there never
    touch the live session.
 
-2. **Landing the diff into the main tree: TD should not be running.** Every
-   file save into the externalization folder hot-reloads that DAT and can
-   reinit extensions. A multi-file port into a running TD produces a
-   mid-port inconsistent state (one extension reloaded, its peers not yet)
-   and can kill the Envoy server mid-operation. Land the whole diff as ONE
-   operation with TD closed -- or, if TD genuinely must stay up, confirm
-   with the user first, land file-by-file accepting one reinit per file,
-   and never while the user is mid-session with unsaved work.
+2. **Landing / editing in the live main tree: safe when you are the sole
+   writer and verify as you go.** Each file save hot-reloads that DAT and can
+   reinit its extension -- fine on its own (one reload, self-heals). The
+   hazards are (a) another writer active on the same checkout, or (b) a large
+   multi-file port whose intermediate state is broken (one extension
+   reloaded, its peers not yet) reloading mid-port and possibly killing the
+   Envoy server. So the normal path is: confirm you are the sole writer
+   (`get_sessions`), land file-by-file, and check `get_op_errors` after each
+   reinit. Close TD for the port ONLY when the change is large/risky enough
+   that a broken intermediate would matter, or a second writer cannot be
+   excluded. Never land into a checkout another writer is touching, and be
+   cautious while the user has unsaved work.
 
 3. **After landing: start TD and verify.** Launch TD, let Embody's startup
    restore phases complete, then verify for real: `get_op_errors` with

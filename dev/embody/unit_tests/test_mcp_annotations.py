@@ -58,7 +58,9 @@ class TestMCPAnnotations(EmbodyTestCase):
             text='Hello annotation'
         )
         self.assertTrue(result.get('success'))
-        ann = op(result['path'])
+        # Annotations are utility=True from birth -- bare op() cannot see
+        # them; resolve through the utility-aware resolver.
+        ann = self.envoy._resolve_annotation(result['path'])
         self.assertEqual(ann.par.Bodytext.eval(), 'Hello annotation')
 
     def test_create_annotation_with_title(self):
@@ -68,7 +70,7 @@ class TestMCPAnnotations(EmbodyTestCase):
             title='My Title'
         )
         self.assertTrue(result.get('success'))
-        ann = op(result['path'])
+        ann = self.envoy._resolve_annotation(result['path'])
         self.assertEqual(ann.par.Titletext.eval(), 'My Title')
 
     def test_create_annotation_with_position(self):
@@ -107,7 +109,7 @@ class TestMCPAnnotations(EmbodyTestCase):
             color=[0.8, 0.2, 0.1]
         )
         self.assertTrue(result.get('success'))
-        ann = op(result['path'])
+        ann = self.envoy._resolve_annotation(result['path'])
         self.assertAlmostEqual(ann.par.Backcolorr.eval(), 0.8, delta=0.01)
 
     # =========================================================================
@@ -274,3 +276,117 @@ class TestMCPAnnotations(EmbodyTestCase):
                          '_get_enclosed_ops failed on utility-flagged '
                          'annotation: {}'.format(result.get('error')))
         self.assertTrue(result.get('is_annotation'))
+
+    # =========================================================================
+    # utility=True from birth + universal op-path resolution
+    #
+    # create_annotation adopts the TD-UI convention (utility=True), and every
+    # op-path tool resolves utility ops via resolve_op. Regression source: the
+    # TDN annotation double-serialization report (2026-07-21) -- delete_op
+    # returned "Operator not found" on a path get_annotations had just listed,
+    # pushing agents to raw .destroy() (which is not deletion-durable).
+    # =========================================================================
+
+    def test_create_annotation_sets_utility(self):
+        """MCP-created annotations must be utility=True from birth."""
+        result = self.envoy._create_annotation(
+            parent_path=self.workspace.path, title='born utility')
+        self.assertTrue(result.get('success'))
+        ann = self.envoy._resolve_annotation(result['path'])
+        self.assertIsNotNone(ann)
+        self.assertTrue(ann.utility)
+        # And therefore hidden from bare op(), like every UI annotation.
+        self.assertIsNone(op(result['path']))
+
+    def test_delete_op_deletes_utility_annotation(self):
+        """delete_op must resolve and destroy a utility annotation."""
+        result = self.envoy._create_annotation(
+            parent_path=self.workspace.path, title='doomed')
+        path = result['path']
+        del_result = self.envoy._delete_op(path)
+        self.assertTrue(del_result.get('success'),
+                        'delete_op failed: {}'.format(del_result.get('error')))
+        anns = self.workspace.findChildren(
+            type=annotateCOMP, includeUtility=True)
+        self.assertNotIn('doomed',
+                         [a.par.Titletext.eval() for a in anns])
+
+    def test_get_op_resolves_utility_annotation(self):
+        result = self.envoy._create_annotation(
+            parent_path=self.workspace.path, title='readable')
+        info = self.envoy._get_op(result['path'])
+        self.assertFalse('error' in info,
+                         'get_op failed: {}'.format(info.get('error')))
+        self.assertEqual(info.get('type'), 'annotateCOMP')
+
+    def test_set_parameter_resolves_utility_annotation(self):
+        result = self.envoy._create_annotation(
+            parent_path=self.workspace.path)
+        set_result = self.envoy._set_parameter(
+            result['path'], 'Opacity', value='0.5')
+        self.assertTrue(set_result.get('success'),
+                        'set_parameter failed: {}'.format(
+                            set_result.get('error')))
+        ann = self.envoy._resolve_annotation(result['path'])
+        self.assertAlmostEqual(ann.par.Opacity.eval(), 0.5, delta=0.01)
+
+    def test_set_op_position_resolves_utility_annotation(self):
+        result = self.envoy._create_annotation(
+            parent_path=self.workspace.path, x=0, y=0)
+        pos_result = self.envoy._set_op_position(result['path'], x=600, y=-600)
+        self.assertFalse('error' in pos_result,
+                         'set_op_position failed: {}'.format(
+                             pos_result.get('error')))
+        ann = self.envoy._resolve_annotation(result['path'])
+        self.assertEqual(ann.nodeX, 600)
+
+    def test_externalize_op_refuses_annotation(self):
+        """Annotations round-trip semantically; externalize_op must refuse."""
+        result = self.envoy._create_annotation(
+            parent_path=self.workspace.path, title='never a boundary')
+        ext_result = self.envoy._externalize_op(result['path'])
+        self.assertIn('error', ext_result)
+        self.assertIn('annotation', ext_result['error'].lower())
+
+    def test_get_parameter_resolves_utility_annotation(self):
+        """get_parameter must resolve the same paths set_parameter does."""
+        result = self.envoy._create_annotation(
+            parent_path=self.workspace.path, title='param read')
+        pr = self.envoy._get_parameter(result['path'], par_name='Titletext')
+        self.assertFalse('error' in pr,
+                         'get_parameter failed: {}'.format(pr.get('error')))
+        self.assertEqual(pr.get('value'), 'param read')
+
+    def test_query_network_resolves_utility_annotation_parent(self):
+        """query_network pointed AT a utility annotation (to inspect its
+        interior) must resolve it as the parent."""
+        result = self.envoy._create_annotation(
+            parent_path=self.workspace.path)
+        qn = self.envoy._query_network(parent_path=result['path'])
+        self.assertFalse('error' in qn,
+                         'query_network failed: {}'.format(qn.get('error')))
+
+    def test_get_annotations_resolves_utility_annotation_parent(self):
+        """get_annotations on a utility annotation's own path (nested
+        annotation discovery) must not error 'Parent not found'."""
+        result = self.envoy._create_annotation(
+            parent_path=self.workspace.path)
+        ga = self.envoy._get_annotations(parent_path=result['path'])
+        self.assertFalse('error' in ga,
+                         'get_annotations failed: {}'.format(ga.get('error')))
+
+    def test_resolve_op_reaches_annotation_interior(self):
+        """resolve_op must resolve ops behind a utility annotate hop (the
+        widget's own internals, or ops created inside it)."""
+        result = self.envoy._create_annotation(
+            parent_path=self.workspace.path)
+        ann = self.envoy._resolve_annotation(result['path'])
+        inner = ann.create(textDAT)
+        inner.text = 'interior probe'
+        resolved = self.envoy._resolve_op(inner.path)
+        self.assertIsNotNone(resolved)
+        self.assertEqual(resolved.path, inner.path)
+        dc = self.envoy._get_dat_content(inner.path)
+        self.assertFalse('error' in dc,
+                         'get_dat_content failed on interior path: '
+                         '{}'.format(dc.get('error')))

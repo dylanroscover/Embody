@@ -47,10 +47,41 @@ To create an annotation that encloses a group of operators:
 - `get_enclosed_ops` — get operators enclosed by an annotation, or annotations enclosing an operator
 - `set_annotation` — modify text, title, color, opacity, position, or size
 
+## Deleting Annotations
+
+**Delete via `delete_op`, never via raw `.destroy()` in `execute_python`.**
+`delete_op` resolves utility annotations, purges any tracking, and arms an
+auto-save checkpoint that re-exports the parent TDN COMP's `.tdn` without
+the annotation -- the deletion is durable. A raw `.destroy()` leaves the
+stale `annotations:` entry in the parent's `.tdn` on disk, and the next
+reimport of that COMP (import_network, manager Reload, or cold open)
+resurrects the annotation with its pre-delete text.
+
 ## `annotateCOMP` Quirks
 
-- `utility` property: `True` from TD UI, `False` from code. Set `ann.utility = True` to match TD behavior.
-- **`utility=True` hides the op from `op()`, `parent.op()`, AND `.children`** -- only `findChildren(includeUtility=True)` sees it. Any code resolving an annotation by path must use that fallback (Envoy's `set_annotation`/`get_enclosed_ops` do this internally). A probe that iterates `.children` will falsely report annotations as missing.
+- **`utility` is `True` for every annotation** -- TD UI-drawn ones are born
+  that way, `create_annotation` sets it, and TDN import applies it on every
+  annotation it recreates. (A bare Python `parent.create('annotateCOMP')`
+  is `utility=False` -- set `ann.utility = True` immediately to match; a
+  non-utility annotation is an ordinary COMP subtree that enumeration
+  sweeps will walk into.)
+- **`utility=True` hides the op from `op()`, `parent.op()`, AND
+  `.children`** -- only `findChildren(includeUtility=True)` sees it, and a
+  deep `findChildren` does not even DESCEND into a utility annotate's
+  subtree unless `includeUtility=True` is passed (verified live, TD
+  2025.33070). Paths THROUGH a utility annotate to its interior ops still
+  resolve via `op()`.
+- **Every Envoy op-path tool resolves utility annotations** (`delete_op`,
+  `set_parameter`, `set_op_position`, `get_op`, ... -- they share one
+  utility-aware resolver). For DISCOVERY, use `get_annotations` (always
+  sees them) or pass `include_utility=True` to
+  `query_network`/`find_children` -- with the default `False`, annotations
+  are invisible in those listings.
+- **Annotations are never externalized per-op** -- they round-trip through
+  the parent TDN COMP's semantic `annotations:` section. `externalize_op`
+  refuses them, and tagging sweeps skip them and their internals (the
+  widget internals are TD-managed stock content cloned from TDAnnotate).
 - `.type` returns `'annotate'` (not `'annotateCOMP'`)
 - `findChildren(type=annotateCOMP)` requires the class object, not the string
-- Cannot be reliably renamed after creation
+- Cannot be reliably renamed after creation (TD also ignores a name passed
+  at create time -- rename right after creating instead)
