@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 868
-generator: Embody/6.0.147
+build: 869
+generator: Embody/6.0.148
 td_build: 099.2025.33070
-source_file: Embody-6.148.toe
-exported_at: '2026-07-22T03:47:29Z'
+source_file: Embody-6.149.toe
+exported_at: '2026-07-22T03:56:51Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -695,30 +695,6 @@ custom_pars:
     - Always Externalize
     - Never Ask
     help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
-  - name: Autoupdate
-    style: Menu
-    label: Auto-Update
-    startSection: true
-    default: 'off'
-    menuNames:
-    - 'off'
-    - notify
-    - install
-    menuLabels:
-    - 'Off'
-    - Check and Notify
-    - Check and Install
-    help: 'Startup self-update behavior. Off: never checks (nothing leaves your machine). Check and Notify: checks GitHub once at startup and shows availability in Update Status without installing. Check and Install: installs a verified newer release automatically at startup -- a check that can''t complete is logged quietly, but any failure during the install itself always raises a dialog.'
-  - name: Checkforupdate
-    style: Pulse
-    label: Check for Update
-    help: Checks GitHub for a newer Embody release now. Prompts with the version pair and a release-notes link if one is available (install / not now); reports up-to-date and network errors in a dialog. Refused in the dev checkout (update via git instead).
-  - name: Updatestatus
-    style: Str
-    label: Update Status
-    default: Disabled
-    readOnly: true
-    help: 'Result of the last update check or install: Disabled while Auto-Update is Off (the fresh-install resting state), up to date, a newer version available, download/install progress, or an error summary (read-only).'
   - name: Uninstall
     style: Pulse
     startSection: true
@@ -729,7 +705,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.147
+    value: 6.0.148
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -746,7 +722,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 868
+    value: 869
   - name: Github
     style: Pulse
     label: GitHub
@@ -757,10 +733,34 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-22 03:47:29 UTC
+    value: 2026-07-22 03:56:51 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
+  - name: Autoupdate
+    style: Menu
+    label: Auto-Update
+    startSection: true
+    default: 'off'
+    menuNames:
+    - 'off'
+    - notify
+    - install
+    menuLabels:
+    - 'Off'
+    - Check and Notify
+    - Check and Install
+    help: 'Startup self-update behavior. Off: never checks (nothing leaves your machine). Check and Notify: checks GitHub once at startup and shows availability in Update Status without installing. Check and Install: installs a verified newer release automatically at startup -- a check that can''t complete is logged quietly, but any failure during the install itself always raises a dialog. Persisted setting -- survives the update it triggers. See the Auto-Update docs page.'
+  - name: Checkforupdate
+    style: Pulse
+    label: Check for Update
+    help: Checks GitHub for a newer Embody release now. Prompts with the version pair and a release-notes link if one is available (install / not now); reports up-to-date and network errors in a dialog. Refused in the dev checkout (update via git instead).
+  - name: Updatestatus
+    style: Str
+    label: Update Status
+    default: Disabled
+    readOnly: true
+    help: 'Result of the last update check or install: Disabled while Auto-Update is Off (the fresh-install resting state), up to date, a newer version available, download/install progress, or an error summary (read-only).'
 parameters:
   w: ~op('./manager').par.w
   h: ~op('./manager').par.h
@@ -805,8 +805,8 @@ storage:
   _tdn_restore_failures:
   - /embody/base1
   _start_in_progress: true
-  _watchdog_gen: 980
-  _clip_watch_gen: 745
+  _watchdog_gen: 982
+  _clip_watch_gen: 747
   _shortcut_rec_gen: 293
 operators:
 - name: help
@@ -900,7 +900,7 @@ operators:
 - name: timer1
   type: timerCHOP
   parameters:
-    active: never
+    active: always
     deferpars: true
     length: 30
     lengthunits: frames

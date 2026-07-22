@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.0.149
+
+Update controls live with the version info.
+
+- **Auto-Update moved to the About page**: `Autoupdate`, `Checkforupdate`, and `Updatestatus` now sit under the version/build info on About (behind a section break), where update controls belong -- Advanced returns to its focused table/cleanup/safety shape. Values, persistence, and the live status behavior are unchanged; the Parameter Reference regroups accordingly.
+
 ## v6.0.148
 
 The parameter dialog shows only Embody's pages.
