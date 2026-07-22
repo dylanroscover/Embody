@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.148
+
+The parameter dialog shows only Embody's pages.
+
+- **Custom-pages-only parameter dialog** (the POPX pattern): `showCustomOnly` is now set on the Embody COMP, so its parameter dialog shows the 9 Embody pages (Embody, Tags, TDN, Envoy, Logs, UI, Shortcuts, Advanced, About) instead of those plus TD's built-in Layout/Panel/Look/Children/Drag-Drop/Extensions/Common. The built-in pages stay fully functional and reachable -- the flag is a dialog filter, toggled back trivially. Applied in `EmbodyExt.__init__`, so existing installs converge on it after the update without re-authoring. New `test_component_presentation` suite.
+- **Parameter Reference is truth-synced**: the Auto-Update parameter descriptions now live in the component's parameter help (the generated `docs/embody/parameters.md` regenerates from `Embody.tdn`, so hand-edits there were doomed to revert); `Update Status` carries `Disabled` as its authored default, matching the enforced resting state.
+- Test suite: 101 suites, 2,225 tests.
+
 ## v6.0.147
 
 The update prompt is a decision, not a reading assignment.

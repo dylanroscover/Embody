@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 713
-generator: Embody/6.0.146
+build: 714
+generator: Embody/6.0.147
 td_build: 099.2025.33070
-source_file: Embody-6.147.toe
-exported_at: '2026-07-22T03:43:09Z'
+source_file: Embody-6.148.toe
+exported_at: '2026-07-22T03:47:30Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -744,13 +744,13 @@ operators:
     - name: Checkforupdate
       style: Pulse
       label: Check for Update
-      help: Check GitHub for a newer Embody release now, and prompt if one is available. Reports up-to-date and network errors in a dialog. Refused in the dev checkout (update via git instead).
+      help: Checks GitHub for a newer Embody release now. Prompts with the version pair and a release-notes link if one is available (install / not now); reports up-to-date and network errors in a dialog. Refused in the dev checkout (update via git instead).
     - name: Updatestatus
       style: Str
       label: Update Status
+      default: Disabled
       readOnly: true
-      help: 'Result of the last update check or install: up to date, a newer version available, download/install progress, or an error summary (read-only).'
-      value: Disabled
+      help: 'Result of the last update check or install: Disabled while Auto-Update is Off (the fresh-install resting state), up to date, a newer version available, download/install progress, or an error summary (read-only).'
     - name: Uninstall
       style: Pulse
       startSection: true
@@ -761,7 +761,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.146
+      value: 6.0.147
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -778,7 +778,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 867
+      value: 868
     - name: Github
       style: Pulse
       label: GitHub
@@ -789,7 +789,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-22 03:43:08 UTC
+      value: 2026-07-22 03:47:29 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -805,8 +805,8 @@ operators:
     _tdn_restore_failures:
     - /embody/base1
     _start_in_progress: true
-    _watchdog_gen: 977
-    _clip_watch_gen: 742
+    _watchdog_gen: 980
+    _clip_watch_gen: 745
     _shortcut_rec_gen: 293
   tdn_ref: embody/Embody.tdn
 - name: unit_tests

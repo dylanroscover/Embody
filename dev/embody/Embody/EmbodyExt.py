@@ -213,6 +213,14 @@ class EmbodyExt:
     def __init__(self, ownerComp: COMP) -> None:
         self.my = ownerComp
 
+        # Show only Embody's custom pages in the parameter dialog (the POPX
+        # pattern: per-shipped-component, authored-state flag). The built-in
+        # Layout/Panel/Look/Children/... pages stay fully functional and
+        # reachable -- showCustomOnly is just a dialog filter, toggled back
+        # trivially. Set in __init__ (not baked authored state alone) so
+        # every deployed copy converges on it after any extension init.
+        self.my.showCustomOnly = True
+
         # Suppress TD ThreadManager's benign "fallback strategy" warning that
         # fires on every standalone EnqueueTask call (used by Envoy and TDN).
         import logging

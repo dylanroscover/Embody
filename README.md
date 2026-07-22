@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.147-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.148-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-53-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -172,7 +172,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **100 test suites** (2,223 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **101 test suites** (2,225 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -203,6 +203,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.148**: **Custom-pages-only parameter dialog** (the POPX pattern) — `showCustomOnly` on the Embody COMP shows the 9 Embody pages instead of those plus TD's built-in Layout/Panel/Look/... pages (still functional, just filtered); applied in `EmbodyExt.__init__` so existing installs converge after updating. Parameter Reference truth-synced to the component's par help (`Update Status` default is `Disabled`). **2,225 tests** (101 suites).
 - **6.0.147**: **Update-available dialog trimmed** — version pair, a release-notes link, Install / Not Now; the embedded 600-char notes body is gone (a yes/no prompt is a decision, not a reading assignment). Renders from the installed updater, so it applies to checks made on v6.0.147+. **2,223 tests** (100 suites).
 - **6.0.146**: **`Update Status` is never blank** — it rests at `Disabled` whenever Auto-Update is Off: on a fresh install (v6.0.145 shipped an empty field, which read as broken), on every project open (replacing stale results from sessions that had checks on), and the moment the preference is flipped. Fresh-install `.tox` smoke is now a mandatory release step — the miss that shipped the empty field. **2,223 tests** (100 suites).
 - **6.0.145**: **Annotations are never externalized per-op** (external report: all four issues verified, then fixed) — code-created annotations could be swept into bogus per-op TDN/source boundaries whose reconstruction gutted the widget's TD-managed internals (`float(None)` cook errors) and stranded orphan files; tagging now refuses annotates and their interiors at every layer, legacy rows are inert with cold-open re-checks, and `create_annotation` creates **`utility=True`** (TD-UI parity — live-verified that sweeps cannot see utility subtrees). **Every op-path Envoy tool resolves utility annotations** via a shared resolver (~34 tools; `delete_op` no longer says "Operator not found" on a path `get_annotations` just listed), and **annotation deletion is durable** (purge + checkpoint drop the semantic entry; no more resurrection — delete via `delete_op`, never raw `.destroy()`). **Self-update ships**: manifest-gated (`embody-release.json`: sha256/size/`min_td_build`), background download + verify, backup + rollback, settings preserved — `Autoupdate` defaults to Off. Destructive-test save-gate fixed (`project.modified`; `project.dirty` doesn't exist on TD 2025). Adversarial 5-lens review + cold-open restart smoke. **2,220 tests** (100 suites).
