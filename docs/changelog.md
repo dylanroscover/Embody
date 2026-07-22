@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.0.147
+
+The update prompt is a decision, not a reading assignment.
+
+- **Update-available dialog trimmed**: just the version pair (`Update available: v6.0.148 (installed: v6.0.147)`), a link to the release notes on GitHub, and Install / Not Now. Previously the dialog embedded up to 600 characters of the release-notes body (project intro, changelog bullets) -- overwhelming for a yes/no choice. The dialog is rendered by the *installed* updater, so this appears from the first check made on v6.0.147+.
+
 ## v6.0.146
 
 Update Status always tells the truth -- caught by a fresh-install smoke of the shipped v6.0.145 `.tox`.

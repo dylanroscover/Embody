@@ -12,7 +12,8 @@ externalizations.
 ## Quick start
 
 - **Check now**: pulse **Check for Update** (Advanced page). If a newer
-  release exists you'll see its release notes and can install with one click.
+  release exists you'll see the version pair and a link to its release
+  notes, and can install with one click.
 - **Automatic**: set **Auto-Update** (Advanced page) to `Check and Notify`
   or `Check and Install`. It defaults to `Off` — nothing is checked and
   nothing leaves your machine until you opt in.
