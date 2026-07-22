@@ -889,6 +889,11 @@ class UpdaterExt:
         if p is not None:
             mode = str(p.eval())
         if mode == 'off':
+            # Truthful resting state, never a blank: an empty read-only
+            # status field looks broken on a fresh install, and 'Disabled'
+            # also replaces a stale result left by a session that had
+            # checks enabled.
+            self._status('Disabled')
             return
         if self.isDevCheckout():
             return  # silent -- dev tree updates via git

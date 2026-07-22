@@ -26,9 +26,15 @@ def init():
 	parent.Embody.par.Envoystatus = 'Disabled'
 	parent.Embody.par.Performmode = False
 	# Updatestatus is a transient read-out; a release .tox bakes in whatever
-	# the dev session last set (e.g. the dev-checkout refusal). Clear it so a
-	# fresh install starts blank instead of showing a stale status line.
-	parent.Embody.par.Updatestatus = ''
+	# the dev session last set (e.g. the dev-checkout refusal). Reset it to
+	# the truthful Auto-Update-off resting state -- 'Disabled', never a blank
+	# (an empty read-only field on a fresh install reads as broken). Through
+	# the readOnly dance: direct assignment to a locked par is not reliable.
+	p = parent.Embody.par.Updatestatus
+	was_ro = p.readOnly
+	p.readOnly = False
+	p.val = 'Disabled'
+	p.readOnly = was_ro
 	# Clear any save-time dialog suppression that baked into the .toe/.tox.
 	# _suppress_dialogs is a save-window-only flag; a fresh open must start with
 	# dialogs enabled so genuine first-run onboarding can prompt.

@@ -148,6 +148,19 @@ def onValueChange(par, prev):
 					ui.status = f'Embody: {w}'
 					parent.Embody.Log(f'Shortcut warning ({par.label}): {w}', 'WARNING')
 
+	if par.name == 'Autoupdate':
+		# Keep the read-only Update Status truthful the moment consent
+		# changes: Off shows 'Disabled'; leaving Off clears the stale
+		# 'Disabled' so the next check (startup, or a Check for Update
+		# pulse) writes the real state. Guarded like the other updater
+		# hooks -- a partial/pre-updater install skips quietly.
+		updater = parent.Embody.op('updater')
+		if updater:
+			if str(par.eval()) == 'off':
+				updater.ext.UpdaterExt._status('Disabled')
+			else:
+				updater.ext.UpdaterExt._status('')
+
 	if par.name in parent.Embody.ext.Embody._PERSISTED_PARAMS:
 		# Skip persistence while the test runner is flipping params for a
 		# run (it suppresses Toxdropexpr/Filecleanup and restores them

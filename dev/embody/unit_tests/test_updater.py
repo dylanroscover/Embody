@@ -225,3 +225,69 @@ class TestUpdaterSentinel(EmbodyTestCase):
         finally:
             import shutil
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+class TestUpdaterStatusLine(EmbodyTestCase):
+    """Update Status resting-state contract: 'Disabled' while Auto-Update is
+    Off -- never a blank field (an empty read-only par on a fresh install
+    reads as broken; shipped that way once in v6.0.145)."""
+
+    @staticmethod
+    def _fakes(mode, status='stale v9.9.9 available'):
+        class FakePar:
+            def __init__(self, val):
+                self.val = val
+                self.readOnly = True
+
+            def eval(self):
+                return self.val
+
+        class FakePars:
+            pass
+
+        pars = FakePars()
+        pars.Autoupdate = FakePar(mode)
+        pars.Updatestatus = FakePar(status)
+
+        class FakeEmbody:
+            par = pars
+
+        return FakeEmbody(), pars
+
+    def _harness(self, mode, status='stale v9.9.9 available',
+                 dev_checkout=True):
+        U = _updater_cls()
+        embody, pars = self._fakes(mode, status)
+
+        class Harness(U):
+            _embody = embody  # shadow the property with a plain attribute
+
+            def _readSentinel(self):
+                return None
+
+            def isDevCheckout(self):
+                return dev_checkout
+
+        inst = Harness.__new__(Harness)
+        inst._busy = False
+        inst._pending = None
+        return inst, pars
+
+    def test_startupcheck_off_sets_disabled(self):
+        """Off mode must write 'Disabled', replacing any stale status."""
+        inst, pars = self._harness('off')
+        inst.StartupCheck()
+        self.assertEqual(pars.Updatestatus.val, 'Disabled')
+
+    def test_startupcheck_off_restores_readonly(self):
+        """The readOnly dance must leave the par locked again."""
+        inst, pars = self._harness('off')
+        inst.StartupCheck()
+        self.assertTrue(pars.Updatestatus.readOnly)
+
+    def test_startupcheck_enabled_does_not_write_disabled(self):
+        """A non-off mode must never stamp 'Disabled' (dev checkout returns
+        silently before any check on this path)."""
+        inst, pars = self._harness('notify', status='')
+        inst.StartupCheck()
+        self.assertEqual(pars.Updatestatus.val, '')

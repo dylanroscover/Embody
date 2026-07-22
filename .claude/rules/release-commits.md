@@ -93,7 +93,18 @@ Templates should be UTF-8 with LF line endings and no BOM. Each template carries
 
 Dev-only rules and skills (e.g. `.claude/rules/commit-push-checklist.md`, `.claude/rules/github-release.md`, `.claude/rules/release-commits.md`, `.claude/rules/skill-prerequisites.md`, `.claude/skills/add-mcp-tool/`, `.claude/skills/run-tests/`) live under `.claude/` for Embody developers only and are NOT shipped to user projects -- they have no template counterpart. The root `CLAUDE.md` and `dev/embody/Embody/templates/text_claude.md` serve different audiences and are maintained independently.
 
-## 5. Stage and Commit
+## 5. Fresh-Install Smoke (before the release is announced)
+
+Cold-open smoke of the DEV project is not enough: a fresh install runs a
+different path (the shipped `.tox` dropped into a virgin project -- `init()`
+lifecycle, baked par values, no dev checkout, no externalized files). After
+exporting the release `.tox`, drag it into a NEW empty project (or a scratch
+`.toe`) and verify: no errors, the Advanced-page status/read-only pars show
+their intended fresh-install values (e.g. `Updatestatus` = `Disabled`, never
+blank), Envoy opt-in prompts behave, and the manager opens. The v6.0.145
+empty-Update-Status miss shipped precisely because this step was skipped.
+
+## 6. Stage and Commit
 
 - Stage all changed, added, and deleted files explicitly (avoid `git add -A`).
 - Include new `.toe` and `.tox` files; include deletions of old versioned `.toe`/`.tox` files.

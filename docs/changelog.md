@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.146
+
+Update Status always tells the truth -- caught by a fresh-install smoke of the shipped v6.0.145 `.tox`.
+
+- **`Update Status` is never blank**: the read-only status line now rests at `Disabled` whenever Auto-Update is Off -- on a fresh install (v6.0.145 shipped an empty field, which reads as broken), on every project open (also replacing a stale "vX available" left by a session that had checks enabled), and the moment the preference is flipped Off. Leaving Off clears it so the next check (startup, or a Check for Update pulse) writes the real state. The fresh-install initializer writes through the read-only dance -- direct assignment to a locked parameter is not reliable.
+- **Release procedure hardened**: a fresh-install smoke of the shipped `.tox` in a virgin project is now a mandatory release step -- a cold open of the dev project exercises a different path than a first install, which is exactly how the empty field slipped through.
+- Test suite: 100 suites, 2,223 tests (3 new Update Status resting-state tests).
+
 ## v6.0.145
 
 Annotation integrity across the whole TDN pipeline (external bug report: double-serialized annotate subtrees, gutted widget internals on cold open, resurrecting deletions, unresolvable annotation paths), plus in-place self-update. (v6.0.142-144 were consumed by saves during the dev cycle and never shipped.)
