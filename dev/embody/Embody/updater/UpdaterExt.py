@@ -437,12 +437,15 @@ class UpdaterExt:
             self._startDownload(interactive=False, apply_after=True)
             return
         if interactive:
-            notes = self._pending['notes'].strip()
-            summary = (notes[:600] + '...') if len(notes) > 600 else notes
+            # Keep this a DECISION, not a reading assignment: version pair +
+            # a link. Release-notes bodies (project intro, changelog bullets)
+            # overwhelmed the dialog; anyone who wants them has the URL.
             choice = self._dialog(
                 'Embody Update',
                 f'Update available: {tag} (installed: '
-                f'v{".".join(map(str, local))}).\n\n{summary}\n\n'
+                f'v{".".join(map(str, local))}).\n\n'
+                f'Release notes: https://github.com/{self.GITHUB_OWNER}/'
+                f'{self.GITHUB_REPO}/releases/tag/{tag}\n\n'
                 'Download and install now?',
                 ['Install', 'Not Now'])
             if choice == 0:  # affirmative only; -1/1/None => do nothing

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 866
-generator: Embody/6.0.144
+build: 867
+generator: Embody/6.0.146
 td_build: 099.2025.33070
-source_file: Embody-6.145.toe
-exported_at: '2026-07-21T19:42:25Z'
+source_file: Embody-6.147.toe
+exported_at: '2026-07-22T03:43:09Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -718,6 +718,7 @@ custom_pars:
     label: Update Status
     readOnly: true
     help: 'Result of the last update check or install: up to date, a newer version available, download/install progress, or an error summary (read-only).'
+    value: Disabled
   - name: Uninstall
     style: Pulse
     startSection: true
@@ -728,7 +729,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.144
+    value: 6.0.146
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -745,7 +746,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 866
+    value: 867
   - name: Github
     style: Pulse
     label: GitHub
@@ -756,7 +757,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-21 19:42:25 UTC
+    value: 2026-07-22 03:43:08 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -804,8 +805,8 @@ storage:
   _tdn_restore_failures:
   - /embody/base1
   _start_in_progress: true
-  _watchdog_gen: 973
-  _clip_watch_gen: 738
+  _watchdog_gen: 977
+  _clip_watch_gen: 742
   _shortcut_rec_gen: 293
 operators:
 - name: help
