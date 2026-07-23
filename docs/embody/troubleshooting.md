@@ -1,8 +1,8 @@
 # Troubleshooting
 
-## Debug Mode
+## Verbose (Debug) Logging
 
-For verbose path logging and troubleshooting, enable debug mode by setting `debug_mode = True` in the EmbodyExt extension. This will log detailed path information to the textport.
+For verbose path logging and troubleshooting, turn on the **Verbose** parameter on the Embody COMP (or from code, `op.Embody.par.Verbose = True`). This unblocks all `DEBUG`-level messages — including detailed externalization path resolution — which are otherwise suppressed. With Verbose on they flow to the log FIFO, to the log file (in your Log Folder, `logs` by default), and to the textport when **Print** is enabled.
 
 ## Common Issues
 

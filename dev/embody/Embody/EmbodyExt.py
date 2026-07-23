@@ -274,7 +274,6 @@ class EmbodyExt:
 
         # Logging configuration
         self.header = 'Embody >'
-        self.debug_mode = False  # Set to True for verbose path logging
         self._log_buffer = deque(maxlen=200)
         self._log_counter = 0
         self._fifo = self.my.op('fifo1')
@@ -948,12 +947,12 @@ class EmbodyExt:
         abs_folder_path = Path(project.folder) / rel_directory if rel_directory else Path(project.folder)
         save_file_path = Path(project.folder) / rel_file_path
         
-        if self.debug_mode:
-            self.Log(f"getOpPaths for {opToExternalize.path}:", "INFO")
-            self.Log(f"  rel_directory: {rel_directory}", "INFO")
-            self.Log(f"  rel_file_path: {rel_file_path}", "INFO")
-            self.Log(f"  abs_folder_path: {abs_folder_path}", "INFO")
-            self.Log(f"  save_file_path: {save_file_path}", "INFO")
+        if self.my.par.Verbose:
+            self.Debug(f"getOpPaths for {opToExternalize.path}:")
+            self.Debug(f"  rel_directory: {rel_directory}")
+            self.Debug(f"  rel_file_path: {rel_file_path}")
+            self.Debug(f"  abs_folder_path: {abs_folder_path}")
+            self.Debug(f"  save_file_path: {save_file_path}")
         
         return abs_folder_path, save_file_path, rel_directory, rel_file_path
 
