@@ -46,7 +46,21 @@ For any MCP client pointed at a running session, the minimal manual form is:
   "mcpServers": {
     "envoy": {
       "type": "http",
-      "url": "http://localhost:9870/mcp"
+      "url": "http://127.0.0.1:9870/mcp"
+    }
+  }
+}
+
+OpenCode users: OpenCode never reads `.mcp.json` - it uses `opencode.json`
+(auto-generated when Embody's `Aiclient` parameter is set to `opencode`).
+Minimal manual form:
+
+{
+  "mcp": {
+    "envoy": {
+      "type": "remote",
+      "url": "http://127.0.0.1:9870/mcp",
+      "enabled": true
     }
   }
 }

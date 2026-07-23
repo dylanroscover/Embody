@@ -613,11 +613,26 @@ class UpdaterExt:
         backup = self._posix(self._updatesDir(create=True)
                             / f'backup-v{old_version}.tox')
         try:
-            embody.ext.Embody.ExportPortableTox(target=embody,
-                                                save_path=backup)
+            # run_hooks=False: this backup is update machinery, not an
+            # authored release. Embody-self exports always run in LIVE
+            # hook mode (never copy-staged), so hook DATs authored in the
+            # DEV project ship inside the released Embody tox -- and
+            # would execute here, inside an end user's project, or abort
+            # the backup. Suppress them.
+            ok = embody.ext.Embody.ExportPortableTox(target=embody,
+                                                     save_path=backup,
+                                                     run_hooks=False)
         except Exception as e:
             self._busy = False
             self._fail(f'Backup export failed -- update aborted: {e!r}')
+            return
+        if not ok:
+            # ExportPortableTox reports failures via its return value
+            # (export errors are exception-contained) -- without this
+            # gate a STALE backup from a prior attempt could pass the
+            # isfile/size checks below and become the rollback artifact.
+            self._busy = False
+            self._fail('Backup export reported failure -- update aborted.')
             return
         if (not os.path.isfile(backup)
                 or os.path.getsize(backup) < self.MIN_BACKUP_BYTES):

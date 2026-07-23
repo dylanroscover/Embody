@@ -143,8 +143,35 @@ def onProjectPreSave():
     comp.par.Networkpath = ''
 
     # save out self-contained portable .tox (strips external file references)
+    # NOTE: release hooks fire here if pre_release/post_release Text DATs
+    # ever exist directly under the Embody COMP -- this export runs on
+    # EVERY project.save via onProjectPreSave.
     save_path = Path(project.folder).parents[0] / 'release' / f"{comp.name}-v{new_version}.tox"
-    comp.ExportPortableTox(save_path=str(save_path))
+    ok = comp.ExportPortableTox(save_path=str(save_path))
+    if not ok:
+        # Three False cases: pre_release abort or save failure (no tox on
+        # disk), or a post_release failure AFTER a successful save (tox
+        # exists). Either way the manifest is NOT written, and the prior
+        # version's manifest -- now pointing at the tox unlinked above --
+        # is removed so nothing stale ships.
+        if save_path.is_file():
+            comp.Log(
+                f"Release export for v{new_version} reported failure "
+                f"AFTER writing the tox (post_release hook failure?) -- "
+                f"manifest NOT written. Verify release/ before pushing.",
+                "ERROR")
+        else:
+            comp.Log(
+                f"Release export FAILED for v{new_version} (pre_release "
+                f"hook abort or save failure) -- release/ has no tox for "
+                f"this version and the manifest was NOT written. Fix and "
+                f"re-save.", "ERROR")
+        try:
+            (Path(project.folder).parents[0] / 'release'
+             / 'embody-release.json').unlink()
+        except Exception:
+            pass
+        return
 
     # Release manifest for the self-updater (UpdaterExt): version, TD-build
     # floor, and sha256 of the exported tox. Attached to GitHub releases

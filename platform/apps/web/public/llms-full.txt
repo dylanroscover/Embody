@@ -14,7 +14,7 @@ Sections below, in order:
   1. Quickstart
   2. Envoy - Setup
   3. Envoy - Claude Code Integration
-  4. Envoy - Tools Reference (the 52 MCP tools + 4 bridge meta-tools)
+  4. Envoy - Tools Reference (the 53 MCP tools + 4 bridge meta-tools)
   5. TDN - Specification
   6. TDN - Import & Export
   7. AI Instructions (AGENTS.md - critical rules for operating in a TD project)
@@ -68,7 +68,7 @@ As soon as Embody finishes initializing, it asks whether you want to set up **En
 That single click does everything for you:
 
 - Installs the MCP server's Python dependencies (~30 MB - TouchDesigner goes unresponsive for a few seconds while this runs)
-- Starts a local server on `localhost:9870`
+- Starts a local server on `127.0.0.1:9870`
 - Writes the AI config files into your project root - `CLAUDE.md`, `AGENTS.md`, `.mcp.json`, and a `.claude/` folder of rules and skills - so your assistant knows how to talk to TouchDesigner
 
 Clicked **Skip**, or want to turn Envoy off later? Toggle the **Envoy Enable** parameter on the Embody component anytime.
@@ -152,7 +152,7 @@ Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, et
 ## Enabling Envoy
 
 1. **Enable Envoy**: Toggle the **Envoy Enable** parameter on the Embody COMP
-2. **Server starts**: Envoy runs on `localhost:9870` (configurable via **Envoy Port**)
+2. **Server starts**: Envoy runs on `127.0.0.1:9870` (configurable via **Envoy Port**)
 3. **Auto-configuration**: Envoy creates `.mcp.json` and AI client config files in your git repo root (if available) or project folder. If your project is in a git repo, Envoy also generates `.gitignore` and `.gitattributes` entries.
 4. **Connect your MCP client**: Start a new Claude Code session (or restart your IDE) - it picks up the `.mcp.json` automatically
 
@@ -178,7 +178,7 @@ If you prefer manual control, create `.mcp.json` in your project directory. You 
   "mcpServers": {
     "envoy": {
       "type": "http",
-      "url": "http://localhost:9870/mcp"
+      "url": "http://127.0.0.1:9870/mcp"
     }
   }
 }
@@ -391,7 +391,7 @@ You can extend the generated configuration:
 
 # Tools Reference
 
-Envoy exposes 52 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 53 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 ## Operator Management
 

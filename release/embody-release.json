@@ -1,14 +1,14 @@
 {
  "schema": 1,
  "name": "Embody",
- "version": "6.0.149",
- "tag": "v6.0.149",
- "asset": "Embody-v6.0.149.tox",
- "size": 712354,
- "sha256": "878adc860fc06c0a5757d23c4fc52947b2715c682969c6ac75a1b68e788d14e9",
+ "version": "6.0.152",
+ "tag": "v6.0.152",
+ "asset": "Embody-v6.0.152.tox",
+ "size": 729962,
+ "sha256": "f6acef721da213d16150d42553e6b1de2b3396e1f28d13e6c6ca396b29d17e9e",
  "td_build": "2025.33070",
  "min_td_build": "2025.33070",
- "build": 869,
- "date": "2026-07-22 03:56:51 UTC",
- "exported_at": "2026-07-22T03:56:53+00:00"
+ "build": 880,
+ "date": "2026-07-23 18:56:51 UTC",
+ "exported_at": "2026-07-23T18:56:53+00:00"
 }

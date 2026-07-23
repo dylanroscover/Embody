@@ -10,6 +10,17 @@ When the user asks to prepare a release commit (e.g., "prep a commit for v217"),
 
 The entire save call is `project.save()` -- no arguments. TD increments the `.toe` filename's trailing build, the `onProjectPreSave` hook in `dev/embody/execute_src_ctrl.py` bumps `par.Version`, deletes the prior release `.tox`, and exports the new one. Filename and `par.Version` stay in lock-step.
 
+The release export honors `pre_release`/`post_release` hook DATs placed
+directly under the Embody COMP (none exist today; they fire on EVERY
+`project.save`, always in LIVE mode -- the Embody comp is never
+copy-staged, so such hooks would mutate the live comp). On any export failure the manifest is NOT written and
+the prior version's stale manifest is removed: a pre_release abort or
+save failure leaves NO release `.tox` for the new version, while a
+post_release failure leaves the fresh `.tox` WITHOUT a manifest -- check
+the log and `release/` before pushing. The self-updater's rollback
+backup export passes `run_hooks=False`, so shipped hooks never fire in
+user projects during updates.
+
 Don't pass a path (TD increments from *your* path's build, desyncing by one). Don't pre-set `par.Version`. Don't call `ExportPortableTox` directly.
 
 **If externalized files changed on disk while TD was closed** (e.g. a landed

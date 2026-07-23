@@ -132,6 +132,12 @@ def compute_uninstall_plan(ext, target_dir=None):
                 _add_strip(p, 'json_key', 'mcpServers.envoy',
                            'remove Embody server; delete file only if none remain')
             continue
+        if p.name == 'opencode.json':
+            if p.exists():
+                _add_strip(p, 'json_key', 'mcp.envoy',
+                           'remove Embody server + instructions entry; '
+                           'delete file only if nothing else remains')
+            continue
         if not p.exists():
             plan['missing'].append(stored); continue
         if p.name == 'settings.local.json':
@@ -180,6 +186,16 @@ def compute_uninstall_plan(ext, target_dir=None):
                     mcp.read_text(encoding='utf-8')).get('mcpServers', {}):
                 _add_strip(mcp, 'json_key', 'mcpServers.envoy',
                            'remove Embody server; delete file only if none remain')
+        except Exception:
+            pass
+    oc = root / 'opencode.json'
+    if oc.is_file() and str(oc.resolve()) not in seen:
+        try:
+            if 'envoy' in json.loads(
+                    oc.read_text(encoding='utf-8')).get('mcp', {}):
+                _add_strip(oc, 'json_key', 'mcp.envoy',
+                           'remove Embody server + instructions entry; '
+                           'delete file only if nothing else remains')
         except Exception:
             pass
     for gname, marker in (('.gitignore', '# Embody / Envoy'),
@@ -313,24 +329,49 @@ def strip_marked_block(ext, text, marker):
 
 
 def strip_mcp_envoy(ext, path):
-    """Remove only the 'envoy' server from a .mcp.json. Delete the file only
-    if that leaves no servers AND no other top-level keys -- the user's other
-    servers/keys are always preserved."""
+    """Remove only Embody's entries from a .mcp.json OR opencode.json.
+
+    Shape-aware: .mcp.json keeps servers under 'mcpServers'; opencode.json
+    keeps them under 'mcp' and additionally carries Embody's generated
+    '.claude/rules/*.md' instructions entry (see envoy_setup.
+    write_opencode_config). Never writes one shape's keys into the other's
+    file. Delete the file only if stripping leaves nothing but boilerplate
+    ('$schema') -- the user's servers/keys are always preserved."""
     try:
         cfg = json.loads(path.read_text(encoding='utf-8'))
     except (json.JSONDecodeError, OSError):
         return
-    servers = cfg.get('mcpServers', {})
+    is_opencode = path.name == 'opencode.json' or (
+        'mcp' in cfg and 'mcpServers' not in cfg)
+    key = 'mcp' if is_opencode else 'mcpServers'
+    servers = cfg.get(key, {})
     servers.pop('envoy', None)
-    other_keys = [k for k in cfg if k != 'mcpServers']
+    if is_opencode:
+        # Remove Embody's generated instructions entry (only ours -- the
+        # exact glob write_opencode_config appends).
+        instr = cfg.get('instructions')
+        if isinstance(instr, list):
+            keep = [e for e in instr if e != '.claude/rules/*.md']
+            if keep:
+                cfg['instructions'] = keep
+            else:
+                cfg.pop('instructions', None)
+        # A fresh Embody-created file also carried our permission block;
+        # remove it only when nothing else meaningful remains (a user may
+        # have edited it -- then the file survives below and keeps it).
     if servers:
-        cfg['mcpServers'] = servers
+        cfg[key] = servers
         path.write_text(json.dumps(cfg, indent=2) + '\n', encoding='utf-8')
-    elif other_keys:
-        cfg['mcpServers'] = {}
+        return
+    cfg.pop(key, None)
+    leftover = [k for k in cfg if k not in ('$schema',)]
+    if is_opencode and leftover == ['permission']:
+        # Only Embody's fresh-file permission block remains -> ours.
+        leftover = []
+    if leftover:
         path.write_text(json.dumps(cfg, indent=2) + '\n', encoding='utf-8')
     else:
-        path.unlink()  # the file held only Embody's server -> remove it
+        path.unlink()  # the file held only Embody's config -> remove it
 
 
 def execute_uninstall_plan(ext, plan, include_review=False):

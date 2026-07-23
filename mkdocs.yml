@@ -90,6 +90,7 @@ nav:
     - envoy/index.md
     - Setup: envoy/setup.md
     - Claude Code Integration: envoy/claude-code.md
+    - Local Models & Open Clients: envoy/local-models.md
     - Tools Reference: envoy/tools-reference.md
     - Multi-Session: envoy/multi-session.md
     - Architecture: envoy/architecture.md

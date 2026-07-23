@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 45
-generator: Embody/6.0.142
+build: 54
+generator: Embody/6.0.151
 td_build: 099.2025.33070
-source_file: Embody-6.142.toe
-exported_at: '2026-07-21T13:55:12Z'
+source_file: Embody-6.152.toe
+exported_at: '2026-07-23T18:56:51Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -1917,7 +1917,7 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 49
+    rows: 4
     cols: 5
   flags:
   - viewer
@@ -2033,6 +2033,11 @@ operators:
   flags:
   - viewer
   position: [400, -800]
+- name: test_release_hooks
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_release_hooks.py
+  position: [200, -1000]
 - name: test_tag_lifecycle
   type: textDAT
   parameters:
@@ -2149,6 +2154,11 @@ operators:
   flags:
   - viewer
   position: [800, -1800]
+- name: test_opencode_config
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_opencode_config.py
+  position: [400, -1000]
 - name: test_tdn_diff_engine
   type: textDAT
   parameters:

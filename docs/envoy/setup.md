@@ -5,7 +5,7 @@
 You'll need:
 
 - **TouchDesigner 2025.32280** or later
-- An MCP-compatible client such as [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Cursor](https://www.cursor.com/), [Windsurf](https://windsurf.com/), or GitHub Copilot via VS Code
+- An MCP-compatible client such as [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCode](https://opencode.ai/), [Codex](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Cursor](https://www.cursor.com/), [Windsurf](https://windsurf.com/), or GitHub Copilot via VS Code
 
 Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, etc.) when Envoy is first enabled — no manual Python setup required. This first install (and any later dependency upgrade) runs **in a background thread** so TouchDesigner stays responsive; the Embody COMP shows `Installing deps... (one-time)` while it works and switches to `Running on port …` once MCP is ready. After that, every startup takes the fast path and skips the install entirely. Envoy validates the virtual environment on each startup and falls back to the system Python if the venv is broken (see [Broken Virtual Environment](troubleshooting.md#broken-virtual-environment)).
 
@@ -60,6 +60,8 @@ If you prefer manual control, create `.mcp.json` in your project directory. You 
 ```
 
 The STDIO bridge provides meta-tools (`get_td_status`, `launch_td`, `restart_td`, `switch_instance`) that work even when TouchDesigner is not running. See [Claude Code Integration](claude-code.md#stdio-bridge) for details.
+
+**OpenCode** never reads `.mcp.json` — it uses `opencode.json` in the project root, which Embody generates automatically when the **AI Client** parameter is set to `opencode`. See [Local Models & Open Clients](local-models.md) for the full setup, including local-model recommendations.
 
 ## Changing the Port
 

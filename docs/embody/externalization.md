@@ -227,7 +227,7 @@ Export any COMP as a **self-contained `.tox`** with all external file references
 
 ### How it works
 
-`ExportPortableTox()` temporarily strips all relative `file`/`syncfile` references from DATs, `externaltox`/`enableexternaltox` references from COMPs, and all Embody tags from every operator, saves the `.tox`, then restores everything. The strip/save/restore cycle is synchronous, so no timing issues arise.
+`ExportPortableTox()` temporarily strips all relative `file`/`syncfile` references from DATs, `externaltox`/`enableexternaltox` references from COMPs, and all Embody tags from every operator, saves the `.tox`, then restores everything. The strip/save/restore cycle is synchronous, so no timing issues arise. Author-supplied `pre_release`/`post_release` hook DATs automate the export — by default the pre-hook runs on a staged throwaway copy, so the live component is never touched — see [Script hooks](#script-hooks).
 
 ### Usage
 
@@ -243,10 +243,50 @@ Export any COMP as a **self-contained `.tox`** with all external file references
 op.Embody.ExportPortableTox(target=some_comp, save_path='/path/to/output.tox')
 ```
 
-Both `target` and `save_path` are optional — when omitted, `target` defaults to the Embody COMP itself and `save_path` defaults to `release/{name}-v{version}.tox`.
+Both `target` and `save_path` are optional — when omitted, `target` defaults to the Embody COMP itself and `save_path` defaults to `release/{name}-v{version}.tox`. Two more optional arguments control the script hooks below: `run_hooks` (default `True`) and `hook_mode` (`'copy'` by default, `'live'` for in-place semantics).
 
 !!! warning "Absolute paths"
     Non-system absolute paths (not starting with `/sys/`) in `file` or `externaltox` parameters are logged as warnings but **not** stripped, since they may be intentional. Check the log output after exporting to ensure portability.
+
+### Script hooks
+
+Component authors can run their own code around the export — the same authoring workflow popularized by [Private Investigator](https://github.com/AlphaMoonbaseBerlin/TD_Private_Investigator)'s `pre_release` DAT:
+
+- **`pre_release`** — a **Text DAT** named `pre_release` that is a **direct child** of the exported COMP. It runs on a **staged copy** of your component (in TD's cooking-disabled `/sys/quiet` area, exactly PI's model), so it shapes the artifact — reset parameters, set defaults, delete scratch/test operators — without ever touching your live component. If the script **errors for any reason** — a deliberate `raise`, a failed `assert`, or a plain bug — the export **aborts**: nothing is written, `post_release` does not run, and the staged copy is **kept** (renamed `<name>_release_failed` under `/sys/quiet`) so you can inspect exactly what your hook did. Inspect it in the same session — `/sys` is not saved with your project, so kept copies vanish on TD restart. A buggy hook can therefore never silently ship a half-prepared component; the deliberate form is just an early guard:
+
+    ```python
+    # pre_release: refuse to release in a bad state
+    if parent().par.Demomode.eval():
+        raise Exception('Demo mode still on -- not releasing')
+    ```
+- **`post_release`** — a **Text DAT** named `post_release` (also a direct child). It runs on your **live original** after the export — upload the `.tox`, notify, tag a release. Once `pre_release` completes, `post_release` is guaranteed to run, even when the save itself failed.
+
+Inside a hook, `me` is the hook DAT and `parent()` is the COMP it runs in — the staged copy for `pre_release`, your live component for `post_release`. `args[0]` is the resolved save path; `post_release` additionally receives `args[1]` — `True` when the `.tox` was saved successfully.
+
+!!! note "Hook code never ships"
+    Both hook DATs are deleted from the staged copy before the save, so the exported `.tox` contains no release machinery — recipients get your component, not your pipeline or its credentials. (Still, keep secrets out of DATs as a rule.)
+
+Details worth knowing:
+
+- Hooks run **synchronously on the main thread** — keep them fast. Defer uploads and other slow I/O: a multi-MB upload inside a hook freezes TD for its duration, and blows the 30-second MCP timeout when an agent drives the export.
+- Only **direct children** count, and only **Text DATs**: a Table DAT (or anything else) named `pre_release` is warned about and ignored, and a hook buried inside an embedded third-party COMP never fires for your export.
+- Destroying operators in `pre_release` is safe — it happens on the throwaway copy. Your live component is never mutated by the export, and file-sync is disabled on the staged copy, so editing a synced DAT there never writes through to your source files.
+- **Extensions are not initialized on the staged copy** (cooking is off in `/sys/quiet`), and parameter callbacks don't fire there. Shape the artifact with direct parameter, DAT, and operator edits; if your release prep genuinely needs extension logic, use `hook_mode='live'`.
+- A `pre_release` may itself call `ExportPortableTox` on a sub-component of the staged copy; nested exports run plain (no hooks, no second copy).
+- A failing `post_release` makes the call return `False` even though the `.tox` was already written — check the log to distinguish this from a failed save. The Manager UI shows a message box when an export returns `False`.
+- The save path is resolved **before** hooks run; both hooks always see the final path.
+- Staging costs one copy of the component (memory + a main-thread pause proportional to its size). For very large components — or when you *want* hook mutations to persist on your live comp — pass `hook_mode='live'`: hooks then run in place around the strip/save/restore cycle (**set** in `pre_release`, **reset** in `post_release`) and hook DATs ship inside the artifact, dormant. `run_hooks=False` skips hooks entirely and ships them as-is (Embody's self-updater uses this for its rollback backup). Exports whose target is — or contains — the live Embody COMP are never copy-staged: the Embody COMP itself always uses live semantics, and hooks on a container that holds it are skipped with a warning in copy mode. In the unlikely case that `/sys/quiet` is missing, the export falls back to live mode with a warning.
+
+### Release All
+
+`op.Embody.ReleaseAll()` — or the **Release All** pulse on the Embody page — exports every **releasable** component as its own portable `.tox` in one pass. Releasable means two things at once: the component is **externalized by Embody** (tracked — it's yours) *and* it **carries a release hook** (`pre_release` or `post_release` as a direct child). No other tagging, list, or setting is consulted.
+
+Both conditions matter: hooks alone would be too eager, because third-party components arrive with their *authors'* hook DATs baked in (PI-style tools ship them inside their artifacts) — a hooks-only sweep would execute foreign release machinery. Tracked-and-hooked means "mine, and declared releasable."
+
+- Each target runs the normal single-component export — its own copy staging, its own hooks, full artifact hygiene. A failing component is logged and skipped; the batch never halts.
+- `root` scopes the scan (`None` = whole project, excluding TD system networks and Embody itself); `out_dir` overrides the default `release/` folder. Files save as `{name}.tox`; duplicate names get a numeric suffix with a warning.
+- Nested releasable components release independently — their own `.tox` in addition to shipping inside any ancestor's artifact.
+- Don't call it from inside a release hook (nested exports run with hooks suppressed); export an untracked component explicitly with `ExportPortableTox` when needed.
 
 ## Palette Handling During TDN Export
 

@@ -1,4 +1,4 @@
-﻿---
+---
 name: externalize-operator
 description: "MUST READ before calling externalize_op or save_externalization. Required workflow steps."
 ---
@@ -35,6 +35,8 @@ Export any COMP as a self-contained `.tox` with all Embody metadata stripped:
 - **Via UI**: Manager UI > Actions popup > "Export portable tox"
 
 The exported `.tox` works in any TD project with no missing file errors.
+
+**Release hooks**: a TEXT DAT named `pre_release` that is a DIRECT child of the target runs on a STAGED COPY in `/sys/quiet` — the live comp is never touched, file-sync is disabled on the copy (no write-through to source files), extensions are NOT initialized there and par callbacks don't fire (shape via direct par/DAT/op edits, or use `hook_mode='live'` for extension logic). A raise aborts the export and keeps the copy as `<name>_release_failed` for same-session inspection (`/sys` is not saved; `post_release` skipped). A direct-child Text DAT named `post_release` runs on the ORIGINAL after the save whenever `pre_release` completed — even when the save failed. Both hook DATs are deleted from the copy, so hook code never ships in the artifact. `args[0]` = resolved save path; `post_release` also gets `args[1]` = success. Hooks run synchronously on the main thread — keep them fast, defer uploads. Nested exports from inside a hook run plain (no hooks, no second copy). `hook_mode='live'` restores in-place semantics (mutations persist, hooks ship dormant in the tox); `run_hooks=False` skips hooks and ships them as-is (the self-updater's backup uses it). Exports whose target is — or contains — the live Embody COMP are never copy-staged (Embody-self runs live-mode; hooks on a container holding Embody are skipped with a warning in copy mode). `op.Embody.ReleaseAll(root=None, out_dir=None)` (or the Release All pulse) batch-exports every component that is BOTH Embody-tracked AND hook-bearing — tracked-and-hooked is the opt-in (third-party comps ship with their authors' hook DATs and are never batch-released); per-component failures log and continue.
 
 ## Checking Status
 

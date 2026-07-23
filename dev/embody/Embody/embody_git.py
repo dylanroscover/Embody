@@ -64,6 +64,8 @@ def extract_ai_config(ext):
         write_agents_md(ext, target_dir)
         if client == 'claudecode':
             write_claude_code_config(ext, target_dir)
+        elif client == 'opencode':
+            write_opencode_files(ext, target_dir)
         elif client == 'cursor':
             write_cursor_rules(ext, target_dir)
         elif client == 'copilot':
@@ -120,6 +122,15 @@ def write_claude_code_config(ext, target_dir):
     write_claude_md(ext, target_dir)
 
     # 2. .claude/rules/ and .claude/skills/ from template DATs
+    write_claude_rules_and_skills(ext, target_dir)
+
+
+def write_claude_rules_and_skills(ext, target_dir):
+    """Write .claude/rules/*.md + .claude/skills/*/SKILL.md from template
+    DATs. Shared by the Claude Code and OpenCode clients: OpenCode's
+    Claude-compat layer discovers .claude/skills/ natively, and the
+    generated opencode.json loads .claude/rules/ via an instructions
+    glob -- one copy on disk serves both clients, no drift."""
     templates_comp = ext.my.op('templates')
     if not templates_comp:
         ext.Log('Templates COMP not found -- skipping .claude/ generation', 'DEBUG')
@@ -140,11 +151,31 @@ def write_claude_code_config(ext, target_dir):
         template_dat = templates_comp.op(dat_name)
         if not template_dat or not template_dat.text:
             continue
+        # Frontmatter KEPT: skills need name/description -- both Claude
+        # Code and OpenCode validate it (OpenCode also requires the name
+        # to match the directory slug).
         if write_template(ext, target_dir, f'.claude/skills/{slug}/SKILL.md', template_dat.text):
             written += 1
 
     if written > 0:
         ext.Log(f'Generated {written} .claude/ files at {target_dir}', 'SUCCESS')
+
+
+def write_opencode_files(ext, target_dir):
+    """Write OpenCode client config: shared .claude/ rules + skills, plus
+    the Envoy entry in opencode.json.
+
+    No CLAUDE.md is written for this client: OpenCode reads CLAUDE.md
+    only as a fallback when AGENTS.md is absent, and AGENTS.md is always
+    written -- the full rule set reaches OpenCode through the
+    instructions glob (.claude/rules/*.md) in opencode.json instead.
+    """
+    write_claude_rules_and_skills(ext, target_dir)
+    try:
+        mod.envoy_setup.ensure_opencode_config(
+            op.Embody.ext.Envoy, target_dir)
+    except Exception as e:
+        ext.Log(f'Could not write opencode.json: {e}', 'WARNING')
 
 
 def strip_frontmatter(ext, content):
@@ -541,6 +572,9 @@ def client_files_missing(ext, target_dir, client):
         'claudecode': lambda d: (
             not (d / 'CLAUDE.md').exists() and not (d / 'ENVOY.md').exists()
         ) or not (d / '.claude' / 'rules').exists(),
+        'opencode':   lambda d: (
+            not (d / 'opencode.json').exists()
+            or not (d / '.claude' / 'rules').exists()),
         'cursor':     lambda d: not (d / '.cursor' / 'rules').exists(),
         'copilot':    lambda d: not (d / '.github' / 'copilot-instructions.md').exists(),
         'windsurf':   lambda d: not (d / '.windsurf' / 'rules').exists(),

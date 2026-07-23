@@ -47,8 +47,12 @@ class TestSetupWizard(EmbodyTestCase):
         # DIRECTLY (these bypass the parexec guard).
         self._extract_calls = []
         self._stop_calls = []
+        self._git_calls = []
         self._ext._extractAIConfig = lambda *a, **k: self._extract_calls.append(1)
         self._envoy.Stop = lambda *a, **k: self._stop_calls.append(1)
+        # The git step's worker would run a REAL `git init` at project.folder --
+        # record instead (the worker itself is tested against a temp dir below).
+        self._ext._applyWizardGitInit = lambda *a, **k: self._git_calls.append(1)
 
         # _enableEnvoyResolved sets _consent_bulk (cleared in production by
         # _continueStart + a timer, neither of which fires in a sync test) -- so
@@ -61,6 +65,7 @@ class TestSetupWizard(EmbodyTestCase):
 
     def tearDown(self):
         for obj, name in ((self._ext, '_extractAIConfig'),
+                          (self._ext, '_applyWizardGitInit'),
                           (self._envoy, 'Stop')):
             obj.__dict__.pop(name, None)
         self._ext._consent_bulk = self._prev_bulk
@@ -193,6 +198,76 @@ class TestSetupWizard(EmbodyTestCase):
         self.assertTrue(bool(self._emb.par.Envoyenable.eval()))
         self.assertEqual(self._extract_calls, [1],
                          'AI config is written once under the consent')
+
+    # ----- git step (the wizard-owned git decision) ------------------------
+
+    def test_gitinit_runs_the_init_worker(self):
+        self._ext._applyWizardSetup(mode='auto', assistant='claudecode',
+                                    git='gitinit')
+        self.assertEqual(self._git_calls, [1],
+                         "git='gitinit' must initialize a repo exactly once")
+        self.assertTrue(bool(self._emb.par.Envoyenable.eval()),
+                        'the enable path continues after the git action')
+
+    def test_gitskip_and_default_do_not_init(self):
+        self._ext._applyWizardSetup(mode='auto', assistant='claudecode',
+                                    git='gitskip')
+        self._ext._applyWizardSetup(mode='auto', assistant='claudecode')
+        self.assertEqual(self._git_calls, [],
+                         "'gitskip' and an omitted git token must never init")
+
+    def test_bogus_git_token_never_inits(self):
+        self._ext._applyWizardSetup(mode='auto', assistant='claudecode',
+                                    git='bogus-token')
+        self.assertEqual(self._git_calls, [],
+                         'an unrecognized git token must never init a repo')
+
+    def test_none_assistant_still_honors_gitinit(self):
+        # The git decision is about the PROJECT, not the AI: externalization-
+        # only users still get their choice (the action runs before the
+        # assistant early-return).
+        self._ext._applyWizardSetup(mode='auto', assistant='none',
+                                    git='gitinit')
+        self.assertEqual(self._git_calls, [1],
+                         "assistant='none' must still honor the git choice")
+        self.assertFalse(bool(self._emb.par.Envoyenable.eval()),
+                         "and Envoy must stay off for assistant='none'")
+
+    def test_init_git_repo_worker_in_temp_dir(self):
+        # The real worker (envoy_setup.init_git_repo) against a throwaway
+        # dir: creates .git, verifies, and writes .gitignore/.gitattributes.
+        # Isolation: the worker's _write callbacks record uninstall-manifest
+        # entries against the LIVE project root and route through
+        # _guardFileWrite (Advanced mode would decline under test
+        # suppression) -- stub the recorder and force bulk consent so the
+        # test neither pollutes the live manifest nor depends on the
+        # project's Embodymode value.
+        import tempfile
+        import shutil
+        from unittest.mock import patch
+        from pathlib import Path
+        tmp = Path(tempfile.mkdtemp(prefix='wizard_git_'))
+        try:
+            setup_mod = op.Embody.op('envoy_setup').module
+            emb_ext = op.Embody.ext.Embody
+            with patch.object(emb_ext, '_manifestRecordAppendedFile'), \
+                 patch.object(type(emb_ext), '_consent_bulk', True):
+                res = setup_mod.init_git_repo(self._envoy, tmp)
+            self.assertEqual(res, tmp,
+                             'init must return the target dir on success')
+            self.assertTrue((tmp / '.git').exists(), 'git init must have run')
+            self.assertTrue((tmp / '.gitignore').is_file(),
+                            'git config files belong with git init (issue #8)')
+            self.assertTrue((tmp / '.gitattributes').is_file())
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_init_git_repo_worker_failure_returns_none(self):
+        from pathlib import Path
+        setup_mod = op.Embody.op('envoy_setup').module
+        bogus = Path(r'\\?\definitely-not-a-host\no\such\dir')
+        self.assertIsNone(setup_mod.init_git_repo(self._envoy, bogus),
+                          'a failed init must return None, never raise')
 
     # ----- _openSetupWizard suppression -----------------------------------
 

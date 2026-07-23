@@ -59,5 +59,5 @@ The toolbar is also visible in minimized mode with a compact subset of buttons.
 
 - **Click** to navigate to any operator in the network editor
 - **Open file location** in your system file browser
-- **Export portable tox** to save a self-contained `.tox` with no external dependencies
+- **Export portable tox** to save a self-contained `.tox` with no external dependencies — honors `pre_release`/`post_release` hook DATs in the exported COMP (see [Script hooks](externalization.md#script-hooks))
 - **Filter/search** through externalized operators

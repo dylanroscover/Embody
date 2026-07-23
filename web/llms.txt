@@ -29,7 +29,22 @@ Embody auto-generates this config for you when the user enables Envoy. The minim
   "mcpServers": {
     "envoy": {
       "type": "http",
-      "url": "http://localhost:9870/mcp"
+      "url": "http://127.0.0.1:9870/mcp"
+    }
+  }
+}
+```
+
+OpenCode (opencode.ai) never reads `.mcp.json` - it uses `opencode.json`, auto-generated when the Embody `Aiclient` parameter is set to `opencode` (a stdio-bridge form that also works while TouchDesigner is closed). Minimal manual form against a running session:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "envoy": {
+      "type": "remote",
+      "url": "http://127.0.0.1:9870/mcp",
+      "enabled": true
     }
   }
 }
@@ -38,10 +53,11 @@ Embody auto-generates this config for you when the user enables Envoy. The minim
 ## Envoy (MCP server)
 
 - [Envoy setup](https://dylanroscover.github.io/Embody/envoy/setup/): enable Envoy, install deps, start the local server.
-- [Tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/): full catalog of the 52 MCP tools plus 4 bridge meta-tools (`get_td_status`, `launch_td`, `restart_td`, `switch_instance`).
-- [Claude Code integration](https://dylanroscover.github.io/Embody/envoy/claude-code/): Claude Code is recommended and auto-configured; Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot via VS Code, or any MCP-compatible client also work.
+- [Tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/): full catalog of the 53 MCP tools plus 4 bridge meta-tools (`get_td_status`, `launch_td`, `restart_td`, `switch_instance`).
+- [Claude Code integration](https://dylanroscover.github.io/Embody/envoy/claude-code/): Claude Code and OpenCode are auto-configured; Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot via VS Code, or any MCP-compatible client also work.
+- [Local models & open clients](https://dylanroscover.github.io/Embody/envoy/local-models/): drive Envoy from OpenCode with local models (LM Studio, Ollama, llama.cpp) - model picks by hardware tier, serving guardrails, and a lean tool profile for small context windows.
 
-The server is local-only - it binds to `127.0.0.1` (never the network), default port 9870, MCP endpoint at `http://localhost:9870/mcp`.
+The server is local-only - it binds to `127.0.0.1` (never the network), default port 9870, MCP endpoint at `http://127.0.0.1:9870/mcp`.
 
 ## TDN format
 

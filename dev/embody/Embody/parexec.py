@@ -90,6 +90,11 @@ def onValueChange(par, prev):
 		if list_comp:
 			list_comp.reset()
 
+	elif par.name == 'Showbuiltinpars':
+		# Dialog page filter (issue #77): on = built-in TD pages visible,
+		# off = Embody pages only. Pure visibility -- no state touched.
+		parent.Embody.showCustomOnly = not bool(par.eval())
+
 	elif par.name == 'Tdnmode':
 		parent.Embody.ext.Embody._onTdnModeChanged(str(par.eval()))
 
@@ -180,6 +185,11 @@ def onPulse(par):
 
 	elif par.name == 'Update':
 		parent.Embody.UpdateHandler()
+
+	elif par.name == 'Releaseall':
+		# Batch portable export (issue #74 follow-up): every component
+		# carrying release hooks ships as its own .tox.
+		parent.Embody.ReleaseAll()
 
 	elif par.name == 'Checkforupdate':
 		# Self-update check (UpdaterExt on the updater child COMP) --

@@ -271,6 +271,8 @@ def configure_mcp_client(ext, port, target_dir=None):
                 and existing.get('command') == python_cmd
                 and existing.get('args') == expected_args):
             ext._log('MCP .mcp.json already configured (STDIO bridge)', 'DEBUG')
+            maybe_write_opencode_config(
+                ext, target_dir, port, [python_cmd] + expected_args)
             deploy_settings_local(ext, target_dir / '.claude')
             mirror_ai_config_to_worktrees(ext, target_dir)
             return
@@ -294,6 +296,10 @@ def configure_mcp_client(ext, port, target_dir=None):
             'MCP config', f'{verb} .mcp.json in {target_dir}',
             [str(mcp_file)], _write)
 
+        # --- OpenCode client config (only when that client is in play) ---
+        maybe_write_opencode_config(
+            ext, target_dir, port, [python_cmd] + expected_args)
+
         # --- Deploy settings.local.json (auto-allow read-only MCP tools) ---
         deploy_settings_local(ext, target_dir / '.claude')
 
@@ -305,8 +311,8 @@ def configure_mcp_client(ext, port, target_dir=None):
 
 
 def mirror_ai_config_to_worktrees(ext, root):
-    """Copy the gitignored AI config (.mcp.json, .claude/settings.local.json)
-    into sibling '<repo>-wt-*' git worktrees. Both files are gitignored by
+    """Copy the gitignored AI config (.mcp.json, opencode.json,
+    .claude/settings.local.json) into sibling '<repo>-wt-*' git worktrees. Both files are gitignored by
     design, so a fresh worktree checkout lacks them -- an AI session rooted
     IN a worktree then has no Envoy MCP server config and no tool
     permissions, and prompts on every call. Runs on every Envoy config
@@ -321,6 +327,7 @@ def mirror_ai_config_to_worktrees(ext, root):
         root = Path(root)
         prefix = root.name + '-wt-'
         pairs = [(root / '.mcp.json', ('.mcp.json',)),
+                 (root / 'opencode.json', ('opencode.json',)),
                  (root / '.claude' / 'settings.local.json',
                   ('.claude', 'settings.local.json'))]
         mirrored = 0
@@ -374,6 +381,215 @@ def configure_mcp_client_http(ext, target_dir, port):
     mcp_file.write_text(
         json.dumps(config, indent=2) + '\n', encoding='utf-8')
     ext._log(f'Wrote MCP config to {mcp_file} (HTTP fallback)')
+    maybe_write_opencode_config(ext, target_dir, port, None)
+
+
+# ==========================================================================
+# OpenCode client config (opencode.json)
+# ==========================================================================
+
+def maybe_write_opencode_config(ext, target_dir, port, command):
+    """Write opencode.json when the OpenCode client is in play.
+
+    Runs on every Envoy config deploy (like .mcp.json). Writes when the
+    Aiclient parameter selects OpenCode, OR when an opencode.json with an
+    Envoy entry already exists -- so a previously-configured file keeps
+    tracking port/bridge changes even after the user switches Aiclient
+    (dual-client setups).
+    """
+    from pathlib import Path
+    try:
+        selected = False
+        try:
+            selected = (op.Embody.par.Aiclient.eval() == 'opencode')
+        except Exception:
+            pass
+        cfg_file = Path(target_dir) / 'opencode.json'
+        existing_entry = False
+        if not selected and cfg_file.exists():
+            try:
+                cfg = json.loads(cfg_file.read_text(encoding='utf-8'))
+                existing_entry = (isinstance(cfg, dict)
+                                  and 'envoy' in (cfg.get('mcp') or {}))
+            except (json.JSONDecodeError, OSError):
+                existing_entry = False
+        if selected or existing_entry:
+            write_opencode_config(ext, target_dir, port, command)
+    except Exception as e:
+        ext._log(f'Could not configure OpenCode client: {e}', 'WARNING')
+
+
+def write_opencode_config(ext, target_dir, port, command=None):
+    """Merge the Envoy MCP entry into opencode.json (OpenCode client).
+
+    OpenCode (opencode.ai) does NOT read .mcp.json -- it needs its own
+    config file. The entry spawns the SAME stdio bridge as .mcp.json, so
+    OpenCode sessions get the bridge's resilience layer (meta-tools and a
+    cached tool list while TD is down, reconnection, instance-registry
+    identity checks) instead of a bare URL that dies with TD or silently
+    hits a foreign instance holding the port.
+
+    Managed footprint: the mcp.envoy key (always), the instructions key
+    (only when absent -- an existing user list gets the rules glob
+    appended but stays user-owned; the leftover glob after an Uninstall
+    matches nothing and is harmless), and a permission posture block
+    (only on fresh file creation, never merged into an existing file).
+
+    Args:
+        command: full bridge argv (python + args). None -> direct-HTTP
+            remote entry, mirroring configure_mcp_client_http.
+    """
+    from pathlib import Path
+    target_dir = Path(target_dir)
+    cfg_file = target_dir / 'opencode.json'
+
+    if command:
+        entry = {
+            'type': 'local',
+            'command': [str(c) for c in command],
+            'enabled': True,
+            # Attribute OpenCode sessions distinctly in get_sessions.
+            'environment': {'EMBODY_SESSION_LABEL': 'opencode'},
+            # OpenCode's tool-fetch timeout defaults to 5000 ms -- too
+            # tight for a cold bridge spawn; match the MCP op timeout.
+            'timeout': 30000,
+        }
+    else:
+        entry = {
+            'type': 'remote',
+            # 127.0.0.1, never localhost -- see configure_mcp_client_http.
+            'url': f'http://127.0.0.1:{port}/mcp',
+            'enabled': True,
+            'timeout': 30000,
+        }
+
+    config = {}
+    created = not cfg_file.exists()
+    if not created:
+        try:
+            config = json.loads(cfg_file.read_text(encoding='utf-8'))
+            if not isinstance(config, dict):
+                config = {}
+        except (json.JSONDecodeError, OSError) as e:
+            # OpenCode also accepts JSONC; a comment-bearing file fails
+            # json.loads. Never risk clobbering hand-authored config.
+            ext._log(f'Could not parse existing opencode.json ({e}) -- '
+                     f'leaving it untouched.', 'WARNING')
+            return
+
+    servers = config.get('mcp') or {}
+    rules_glob = '.claude/rules/*.md'
+    instructions = config.get('instructions')
+
+    if (servers.get('envoy') == entry
+            and isinstance(instructions, list)
+            and rules_glob in instructions):
+        ext._log('OpenCode opencode.json already configured', 'DEBUG')
+        return
+
+    # Record footprint BEFORE writing (mirrors the .mcp.json flow): if we
+    # created the file, Uninstall may delete it; if we merged into a
+    # pre-existing one, Uninstall removes only our keys.
+    try:
+        Embody = op.Embody.ext.Embody
+        if created:
+            Embody._manifestRecordCreatedFile(str(target_dir), cfg_file)
+        else:
+            Embody._manifestRecordAppendedFile(
+                str(target_dir), cfg_file, 'mcp.envoy', kind='json_key')
+            if instructions is None:
+                Embody._manifestRecordAppendedFile(
+                    str(target_dir), cfg_file, 'instructions',
+                    kind='json_key')
+    except Exception:
+        pass
+
+    if created:
+        config['$schema'] = 'https://opencode.ai/config.json'
+    servers['envoy'] = entry
+    config['mcp'] = servers
+
+    if instructions is None:
+        # Ours wholesale: OpenCode reads AGENTS.md natively and discovers
+        # .claude/skills/ via its Claude-compat layer, but .claude/rules/
+        # only load through this glob.
+        config['instructions'] = [rules_glob]
+    elif isinstance(instructions, list) and rules_glob not in instructions:
+        instructions.append(rules_glob)
+
+    if created:
+        perm = opencode_permission_block(ext, tool_permissions_posture(ext))
+        if perm:
+            config['permission'] = perm
+
+    def _write():
+        cfg_file.write_text(
+            json.dumps(config, indent=2) + '\n', encoding='utf-8')
+        kind = 'STDIO bridge' if command else 'HTTP fallback'
+        ext._log(f'Wrote OpenCode config to {cfg_file} '
+                 f'({kind} -> port {port})')
+
+    verb = 'add the Envoy MCP server entry to' if not created else 'create'
+    op.Embody.ext.Embody._guardFileWrite(
+        'OpenCode config', f'{verb} opencode.json in {target_dir}',
+        [str(cfg_file)], _write)
+
+
+def opencode_permission_block(ext, posture):
+    """OpenCode 'permission' map for a fresh opencode.json.
+
+    OpenCode ALLOWS tools by default (the inverse of Claude Code's
+    prompting), so 'all' needs no block at all. Patterns match tool names
+    (MCP tools register as '<server>_<tool>'); last matching rule wins,
+    so the catch-all 'ask' comes first and specific allows follow.
+    """
+    if posture == 'some':
+        block = {'envoy_*': 'ask'}
+        for t in sorted(ext.READ_ONLY_TOOLS):
+            block[f'envoy_{t}'] = 'allow'
+        return block
+    if posture == 'prompt':
+        return {'envoy_*': 'ask'}
+    return None  # 'all' / 'leave': OpenCode's default already allows.
+
+
+def ensure_opencode_config(ext, target_dir):
+    """(Re)write opencode.json outside an Envoy start -- e.g. when the
+    Aiclient parameter switches to OpenCode while Envoy is already up.
+
+    Reuses the bridge command from the .mcp.json Envoy entry (the two
+    configs must agree on the bridge) and the port from the instance
+    registry; falls back to a direct-HTTP entry when no stdio bridge
+    entry exists yet.
+    """
+    from pathlib import Path
+    target_dir = Path(target_dir)
+
+    command = None
+    try:
+        mcp_cfg = json.loads(
+            (target_dir / '.mcp.json').read_text(encoding='utf-8'))
+        envoy = (mcp_cfg.get('mcpServers') or {}).get('envoy') or {}
+        if envoy.get('type') == 'stdio' and envoy.get('command'):
+            command = [envoy['command']] + list(envoy.get('args') or [])
+    except (OSError, json.JSONDecodeError, TypeError):
+        command = None
+
+    port = None
+    try:
+        reg = json.loads((target_dir / '.embody' / 'envoy.json')
+                         .read_text(encoding='utf-8'))
+        inst = (reg.get('instances') or {}).get(reg.get('active')) or {}
+        port = inst.get('port')
+    except (OSError, json.JSONDecodeError, TypeError):
+        port = None
+    if not port:
+        try:
+            port = int(op.Embody.par.Envoyport.eval())
+        except Exception:
+            port = 9870
+
+    write_opencode_config(ext, target_dir, port, command)
 
 
 def registry_path(ext):
@@ -641,12 +857,72 @@ def find_git_root(ext):
     return 'no-git'
 
 
+def init_git_repo(ext, target_dir):
+    """git init at target_dir, verify it took (retry once), then write
+    .gitignore / .gitattributes. Returns target_dir on success, None on
+    failure. Callers decide how loudly to fail: the interactive modal path
+    (check_or_init_git_repo) pops a dialog, the setup wizard's git step
+    logs and continues without git (its flow is modal-free by design)."""
+    import os, subprocess
+    from pathlib import Path
+    target_dir = Path(target_dir)
+    try:
+        # Strip git env vars that TD's embedded Python may set -- these can
+        # cause git init to produce a broken repository.
+        clean_env = {
+            k: v for k, v in os.environ.items()
+            if k not in (
+                'GIT_DIR', 'GIT_WORK_TREE',
+                'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES',
+            )
+        }
+        # stdin=DEVNULL: without it, subprocess.run inside TD on Windows
+        # raises [WinError 50] (DuplicateHandle on TD's non-duplicatable GUI
+        # stdin handle) -- the same trap the venv probe guards against.
+        # CREATE_NO_WINDOW keeps the git console from flashing over TD's GUI.
+        _flags = (subprocess.CREATE_NO_WINDOW
+                  if sys.platform == 'win32' else 0)
+        git_kwargs = dict(
+            capture_output=True, text=True,
+            cwd=str(target_dir), env=clean_env,
+            stdin=subprocess.DEVNULL, creationflags=_flags,
+        )
+        subprocess.run(['git', 'init'], check=True, **git_kwargs)
+        ext._log(f'Initialized git repo in {target_dir}', 'SUCCESS')
+
+        # Verify the init produced a working repository
+        verify = subprocess.run(
+            ['git', 'rev-parse', '--is-inside-work-tree'],
+            **git_kwargs)
+        if verify.returncode != 0:
+            ext._log('Git verify failed after init -- retrying', 'WARNING')
+            subprocess.run(['git', 'init'], check=True, **git_kwargs)
+            verify = subprocess.run(
+                ['git', 'rev-parse', '--is-inside-work-tree'],
+                **git_kwargs)
+            if verify.returncode != 0:
+                raise RuntimeError(
+                    f'git rev-parse failed after retry: '
+                    f'{verify.stderr.strip()}')
+            ext._log('Git repo verified after retry', 'SUCCESS')
+
+        # Git config files belong with git init (issue #8).
+        configure_gitignore(ext, target_dir)
+        configure_gitattributes(ext, target_dir)
+
+        return target_dir
+    except Exception as e:
+        ext._log(f'Failed to initialize git repo: {e}', 'ERROR')
+        return None
+
+
 def check_or_init_git_repo(ext):
     """Check for a git repo. If missing, prompt user to initialize one.
     Only call from user-initiated flows (_enableEnvoy, InitGit) -- never
-    from automatic startup paths. Returns Path, 'no-git', or None (cancelled)."""
+    from automatic startup paths. Returns Path, 'no-git', or None (cancelled).
+    The setup wizard never reaches this: its git step acts directly via
+    init_git_repo (see EmbodyExt._applyWizardSetup)."""
     from pathlib import Path
-    import os, subprocess
 
     project_dir = Path(project.folder).resolve()
     try:
@@ -719,56 +995,20 @@ def check_or_init_git_repo(ext):
             project_dir = chosen  # use chosen folder for init below
 
         if choice in (1, 2):  # Initialize Git Here, or Browse -> confirmed init
-            try:
-                # Strip git env vars that TD's embedded Python may set --
-                # these can cause git init to produce a broken repository.
-                clean_env = {
-                    k: v for k, v in os.environ.items()
-                    if k not in (
-                        'GIT_DIR', 'GIT_WORK_TREE',
-                        'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES',
-                    )
-                }
-                git_kwargs = dict(
-                    capture_output=True, text=True,
-                    cwd=str(project_dir), env=clean_env,
-                )
-                subprocess.run(['git', 'init'], check=True, **git_kwargs)
-                ext._log(f'Initialized git repo in {project_dir}', 'SUCCESS')
-
-                # Verify the init produced a working repository
-                verify = subprocess.run(
-                    ['git', 'rev-parse', '--is-inside-work-tree'],
-                    **git_kwargs)
-                if verify.returncode != 0:
-                    ext._log('Git verify failed after init -- retrying', 'WARNING')
-                    subprocess.run(['git', 'init'], check=True, **git_kwargs)
-                    verify = subprocess.run(
-                        ['git', 'rev-parse', '--is-inside-work-tree'],
-                        **git_kwargs)
-                    if verify.returncode != 0:
-                        raise RuntimeError(
-                            f'git rev-parse failed after retry: '
-                            f'{verify.stderr.strip()}')
-                    ext._log('Git repo verified after retry', 'SUCCESS')
-
-                # Git config files belong with git init (issue #8).
-                configure_gitignore(ext, project_dir)
-                configure_gitattributes(ext, project_dir)
-
-                return project_dir
-            except Exception as e:
-                ext._log(f'Failed to initialize git repo: {e}', 'ERROR')
-                op.Embody.ext.Embody._messageBox(
-                    'Envoy -- Git Initialization Failed',
-                    f'Could not initialize a git repository:\n\n  {e}\n\n'
-                    'Envoy will start without git. MCP and AI client\n'
-                    'config will be generated in the project folder.\n'
-                    '.gitignore and .gitattributes will be skipped.\n\n'
-                    'To add git later: run "git init" manually, then\n'
-                    'call op.Embody.InitGit() from the textport.',
-                    buttons=['OK'])
-                # Fall through to start-without-git
+            initialized = init_git_repo(ext, project_dir)
+            if initialized is not None:
+                return initialized
+            op.Embody.ext.Embody._messageBox(
+                'Envoy -- Git Initialization Failed',
+                'Could not initialize a git repository (see the Embody\n'
+                'log for details).\n\n'
+                'Envoy will start without git. MCP and AI client\n'
+                'config will be generated in the project folder.\n'
+                '.gitignore and .gitattributes will be skipped.\n\n'
+                'To add git later: run "git init" manually, then\n'
+                'call op.Embody.InitGit() from the textport.',
+                buttons=['OK'])
+            # Fall through to start-without-git
 
         # choice == 3 or git init failed -- start without git
         ext._log('Starting Envoy without git repo -- auto-config skipped.', 'WARNING')
@@ -1143,6 +1383,8 @@ def configure_gitignore(ext, git_root):
         # Embody / Envoy
         '.venv/',
         '.mcp.json',
+        # OpenCode client config (embeds absolute venv/bridge paths)
+        'opencode.json',
         # Ignore .embody/ runtime files but keep committed project.json
         '.embody/*',
         '!.embody/project.json',

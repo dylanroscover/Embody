@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 715
-generator: Embody/6.0.148
+build: 728
+generator: Embody/6.0.151
 td_build: 099.2025.33070
-source_file: Embody-6.149.toe
-exported_at: '2026-07-22T03:56:51Z'
+source_file: Embody-6.152.toe
+exported_at: '2026-07-23T18:56:52Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -100,6 +100,10 @@ operators:
       style: Pulse
       label: Enable / Update
       help: 'Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table.'
+    - name: Releaseall
+      style: Pulse
+      label: Release All
+      help: Export every releasable component as its own portable .tox into the release folder, in one pass. A component is releasable when it is BOTH externalized by Embody (tracked -- it is yours) AND carries a release hook (a pre_release or post_release Text DAT as a direct child). Third-party components that ship with their authors' hook DATs are never batch-released -- export those explicitly if needed. Failures are logged and skipped without halting the batch.
     - name: Refresh
       style: Pulse
       help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
@@ -313,7 +317,7 @@ operators:
       label: Auto-Save Status
       readOnly: true
       help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-      value: Saved 19:19:22 UTC
+      value: Saved 18:32:38 UTC
     - name: Tdnstriponsave
       style: Toggle
       label: Strip on Save
@@ -354,6 +358,7 @@ operators:
       default: '0'
       menuNames:
       - claudecode
+      - opencode
       - codex
       - gemini
       - vscode
@@ -363,6 +368,7 @@ operators:
       - none
       menuLabels:
       - Claude Code
+      - OpenCode
       - Codex
       - Gemini
       - VS Code
@@ -370,7 +376,7 @@ operators:
       - Windsurf
       - GitHub Copilot
       - None
-      help: Selects the AI client used with Envoy. Determines which MCP configuration file format is generated (e.g. .mcp.json for Claude Code).
+      help: Selects the AI client used with Envoy. Determines which MCP configuration file format is generated (e.g. .mcp.json for Claude Code, opencode.json for OpenCode).
       value: claudecode
     - name: Launchaiclient
       style: Pulse
@@ -446,14 +452,14 @@ operators:
       - Prompt for some tools (read-only auto-approved)
       - Prompt for all tools
       - Leave settings file alone
-      help: Whether Embody pre-approves Envoy MCP tool calls in .claude/settings.local.json so Claude Code isn't prompted on every tool use. all = pre-approve all Envoy tools (no prompts). some = pre-approve read-only/query tools only; tools that create/edit/delete/execute still prompt. prompt = pre-approve nothing; every tool prompts. leave = never create or modify settings.local.json. Except for 'leave', Embody also whitelists the OS temp directory so captured TOP images can be read without a prompt. The setup wizard sets this; you can change it here anytime.
+      help: Whether Embody pre-approves Envoy MCP tool calls in .claude/settings.local.json so Claude Code isn't prompted on every tool use. all = pre-approve all Envoy tools (no prompts). some = pre-approve read-only/query tools only; tools that create/edit/delete/execute still prompt. prompt = pre-approve nothing; every tool prompts. leave = never create or modify settings.local.json. Except for 'leave', Embody also whitelists the OS temp directory so captured TOP images can be read without a prompt. The setup wizard sets this; you can change it here anytime. When AI Client is OpenCode, the same posture seeds the 'permission' block of a freshly created opencode.json (existing files are merged, never overwritten).
     - name: Envoystatus
       style: Str
       label: Envoy Status
       startSection: true
       readOnly: true
       help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-      value: Running on port 9870
+      value: Running on port 9873
     Logs:
     - name: Verbose
       style: Toggle
@@ -727,6 +733,11 @@ operators:
       - Always Externalize
       - Never Ask
       help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
+    - name: Showbuiltinpars
+      style: Toggle
+      label: Show Built-in Pars
+      startSection: true
+      help: Show TouchDesigner's built-in parameter pages (Layout, Panel, Look, Children, Drag/Drop, Extensions, Common) alongside Embody's pages in this dialog. Off (default) filters the dialog to Embody's pages only. The built-in pages remain fully functional either way -- this only controls dialog visibility, e.g. turn it on to reach the Common page's Global OP Shortcut.
     - name: Uninstall
       style: Pulse
       startSection: true
@@ -737,7 +748,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.148
+      value: 6.0.151
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -754,7 +765,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 869
+      value: 880
     - name: Github
       style: Pulse
       label: GitHub
@@ -765,7 +776,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-22 03:56:51 UTC
+      value: 2026-07-23 18:56:51 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -805,9 +816,10 @@ operators:
     _tdn_restore_failures:
     - /embody/base1
     _start_in_progress: true
-    _watchdog_gen: 982
-    _clip_watch_gen: 747
+    _watchdog_gen: 1022
+    _clip_watch_gen: 787
     _shortcut_rec_gen: 293
+    _release_hook_active: false
   tdn_ref: embody/Embody.tdn
 - name: unit_tests
   type: baseCOMP
@@ -2725,7 +2737,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 266
+    rows: 268
     cols: 11
   flags:
   - viewer

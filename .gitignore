@@ -73,3 +73,6 @@ dev/_promo*
 .embody/*
 !.embody/project.json
 dev/embody/ext-diet-baseline/
+
+# Embody / Envoy (auto-managed)
+opencode.json

@@ -11,7 +11,7 @@ The **setup wizard** is Embody's onboarding surface. It opens the first time you
 
 ## The steps
 
-The wizard adapts to your answers — three to five screens plus a summary, with a progress bar showing where you are.
+The wizard adapts to your answers — three to six screens plus a summary, with a progress bar showing where you are.
 
 ### 1. Mode — how Embody manages your project
 
@@ -29,14 +29,14 @@ Sets the **Mode** (`Embodymode`) parameter. The choice also governs how Embody h
 | Option | Meaning |
 |---|---|
 | **Claude Code** (recommended) | Generates `.mcp.json` plus `.claude/` rules, skills, and slash commands — the fully auto-configured path. |
-| **Other AI tool** | Cursor, Windsurf, Codex, Gemini, VS Code, or GitHub Copilot. |
+| **Other AI tool** | OpenCode, Cursor, Windsurf, Codex, Gemini, VS Code, or GitHub Copilot. |
 | **None — externalization only** | No `.venv`, no server, no config files. Embody still keeps your project diff-friendly. |
 
 Envoy is easy to remove later — see [Removing Embody](getting-started.md#removing-embody).
 
 ### 3. Pick your AI tool *(only when "Other AI tool" is selected)*
 
-Choose which client Embody generates config for: **Codex** (`AGENTS.md`), **Cursor** (`.cursor/`), **Gemini** (`GEMINI.md`), **VS Code** (MCP config), **GitHub Copilot** (`.github/`), or **Windsurf** (`.windsurf/`). Sets the **AI Client** (`Aiclient`) parameter. `AGENTS.md` is always written regardless of the client.
+Choose which client Embody generates config for: **OpenCode** (`opencode.json` plus shared `.claude/` rules and skills — see [Local Models & Open Clients](../envoy/local-models.md)), **Codex** (`AGENTS.md`), **Cursor** (`.cursor/`), **Gemini** (`GEMINI.md`), **VS Code** (MCP config), **GitHub Copilot** (`.github/`), or **Windsurf** (`.windsurf/`). Sets the **AI Client** (`Aiclient`) parameter. `AGENTS.md` is always written regardless of the client.
 
 ### 4. Permissions — how the AI asks *(Claude Code only)*
 
@@ -53,7 +53,18 @@ By default, Claude Code prompts before every MCP tool call. This step chooses ho
 
 Sets the **Tool Permissions** (`Toolpermissions`) parameter, which you can change anytime without re-running the wizard. If a `settings.local.json` already exists, Embody edits only its Envoy entries and keeps everything else you've set — the wizard tells you so on this screen. See [MCP Tool Permissions](../envoy/setup.md#mcp-tool-permissions) for the full details.
 
-### 5. Footprint review *(Advanced mode only)*
+### 5. Git — make this project a repository? *(only when no repo was found)*
+
+If the wizard finds no git repository above your project folder, it asks — this is your decision, not something Embody does silently:
+
+| Option | Meaning |
+|---|---|
+| **Initialize Git** (recommended) | Creates a repo at the project root when you finish the wizard, then adds Embody's `.gitignore` / `.gitattributes` entries. Externalized files diff, branch, and restore best under version control. |
+| **Skip for now** | No repo is created and no git files are touched. Everything else still works; add git anytime later with `op.Embody.InitGit()`. |
+
+If a repo already exists, this screen never appears — and when an assistant is enabled, Embody adds its entries to your existing `.gitignore` / `.gitattributes` as part of setup. With "None — externalization only" and an existing repo, nothing is written automatically; run `op.Embody.InitGit()` to add Embody's git entries. The step is shown for **every** assistant choice, including "None": version control is the point of externalizing.
+
+### 6. Footprint review *(Advanced mode only)*
 
 In Advanced mode (with an assistant selected), the wizard discloses everything it is about to add before you confirm:
 
@@ -72,9 +83,9 @@ Everything is recorded and reversible via [Uninstall](getting-started.md#the-uni
 
 Sets the **AI Project Root** (`Aiprojectroot`) parameter. In Auto mode this screen is skipped and the git-root default is used — you can change it later; see [Configuration — AI Project Root](configuration.md#envoy).
 
-### 6. Summary
+### 7. Summary
 
-A recap of your mode and assistant, with the reminder that nothing has changed yet. **Set up Embody** applies it all.
+A recap of your mode, assistant, and (when asked) git choice, with the reminder that nothing has changed yet. **Set up Embody** applies it all.
 
 ## What "Set up Embody" does
 
@@ -83,7 +94,7 @@ One pass, no further dialogs — the wizard's disclosure and your confirmation a
 1. **Persists your choices** to the corresponding parameters (Mode, AI Client, Tool Permissions, AI Project Root).
 2. **If you chose None**: Envoy stays off and you're set up for externalization only. Turn the assistant on anytime via **Envoy Enable** or by re-running the wizard.
 3. **Otherwise, enables Envoy**: AI config files are generated, the MCP server starts on the configured port, and the Python dependencies install in a background thread — TouchDesigner stays responsive. See [Envoy Setup](../envoy/setup.md).
-4. **Git is handled silently.** If the project is in a git repo, Envoy adds its `.gitignore` / `.gitattributes` entries. If not, the config files are still generated with no git edits — run `op.Embody.InitGit()` later if you add a repo. The wizard never blocks setup on a missing repo.
+4. **Applies your git choice.** If you chose **Initialize Git**, the repo is created first (with Embody's `.gitignore` / `.gitattributes` entries), so config lands inside it. If you chose **Skip for now** — or a repo already existed — config files are generated either way; a failed or skipped init never blocks setup, and `op.Embody.InitGit()` adds git integration later.
 5. **On a re-run** with Envoy already running, the config is regenerated and the server restarts so a new port, root, or client actually takes effect.
 
 ## Changing your mind later
@@ -96,6 +107,7 @@ Every wizard choice maps to a parameter you can change directly, no wizard requi
 | AI assistant on/off | **Envoy Enable** (`Envoyenable`) | Envoy |
 | AI tool | **AI Client** (`Aiclient`) | Envoy |
 | Permissions | **Tool Permissions** (`Toolpermissions`) | Envoy |
+| Git | `op.Embody.InitGit()` (no parameter — a one-time action) | — |
 | Config location | **AI Project Root** (`Aiprojectroot`) | Envoy |
 
 See the [Parameter Reference](parameters.md) for all of them. To remove what setup added, use [Uninstall](getting-started.md#removing-embody).

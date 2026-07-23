@@ -146,6 +146,15 @@ class EmbodyExt:
             'win_alt': 'winget install Anthropic.ClaudeCode',
             'docs': 'https://code.claude.com/docs/en/setup',
         }},
+        'opencode':   {'kind': 'terminal', 'cli': 'opencode', 'install': {
+            'name': 'OpenCode',
+            'mac': 'curl -fsSL https://opencode.ai/install | bash',
+            'mac_alt': 'brew install anomalyco/tap/opencode',
+            'win': 'choco install opencode',
+            'win_alt': 'npm install -g opencode-ai',
+            'win_alt_note': 'needs Node.js -- https://nodejs.org',
+            'docs': 'https://opencode.ai/docs/',
+        }},
         'codex':      {'kind': 'terminal', 'cli': 'codex', 'install': {
             'name': 'Codex CLI',
             'mac': 'curl -fsSL https://chatgpt.com/codex/install.sh | sh',
@@ -213,13 +222,15 @@ class EmbodyExt:
     def __init__(self, ownerComp: COMP) -> None:
         self.my = ownerComp
 
-        # Show only Embody's custom pages in the parameter dialog (the POPX
-        # pattern: per-shipped-component, authored-state flag). The built-in
-        # Layout/Panel/Look/Children/... pages stay fully functional and
-        # reachable -- showCustomOnly is just a dialog filter, toggled back
-        # trivially. Set in __init__ (not baked authored state alone) so
-        # every deployed copy converges on it after any extension init.
-        self.my.showCustomOnly = True
+        # Parameter-dialog page filter (the POPX pattern). Default shows
+        # only Embody's custom pages; the Advanced-page 'Show Built-in
+        # Pars' toggle (issue #77) unhides TD's Layout/Panel/Look/... pages
+        # for users who need them (e.g. the Common page's Global OP
+        # Shortcut). The built-in pages stay fully functional either way --
+        # showCustomOnly is just a dialog filter. Applied in __init__ (not
+        # baked authored state alone) so every deployed copy converges on
+        # the user's chosen value after any extension init.
+        self.my.showCustomOnly = not bool(self.my.par.Showbuiltinpars.eval())
 
         # Suppress TD ThreadManager's benign "fallback strategy" warning that
         # fires on every standalone EnqueueTask call (used by Envoy and TDN).
@@ -248,6 +259,18 @@ class EmbodyExt:
         # extension reinit / project reload. 'Always Ignore' persists via
         # the Toxdropexpr parameter instead.
         self._toxdrop_ignored_session = set()
+
+        # Release-hook re-entrancy latch lives in COMP storage, NOT an
+        # instance attribute: ExportPortableTox's own strip phase can
+        # reinit this extension mid-export when the Embody COMP is the
+        # target, and storage keeps the latch SHARED between the stale
+        # instance still running the export and the fresh instance a
+        # nested hook call resolves. Cleared here so a crash mid-hook (or
+        # a True value baked into a saved .toe) can never leave hooks
+        # silently disabled. Trade-off: a reinit fired DURING a hook run
+        # also clears an active latch -- accepted; it requires the hook
+        # itself to touch extension sources.
+        self.my.store('_release_hook_active', False)
 
         # Logging configuration
         self.header = 'Embody >'
@@ -536,19 +559,31 @@ class EmbodyExt:
             # [WinError 50] without it -- subprocess.py's stdin=None path
             # calls DuplicateHandle on TD's stdin handle, which is not
             # duplicatable for a GUI process. DEVNULL routes through NUL.
+            # UV_LINK_MODE=copy: uv defaults to HARDLINKING packages from
+            # its global cache into the venv. If ANY venv on the machine
+            # ever hardlinked a cache entry from inside a cloud-synced
+            # folder (Dropbox/OneDrive use the Windows cloud-files
+            # filter), that cache inode is poisoned and every NEW
+            # hardlink to it fails with os error 396 ("cloud operation
+            # ... incompatible hardlinks") -- fresh installs then die
+            # with "Python environment not ready" (caught by the
+            # v6.0.151 fresh-install smoke). Copy mode trades a few MB
+            # of one-time disk for immunity to that entire class.
+            uv_env = dict(os.environ, UV_LINK_MODE='copy')
+
             if not os.path.isdir(venv_dir):
                 log('Creating virtual environment...')
                 subprocess.run(
                     [uv, 'venv', venv_dir, '--python', python_exe],
                     check=True, capture_output=True, text=True,
-                    stdin=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL, env=uv_env,
                 )
 
             log('Installing dependencies...')
             subprocess.run(
                 [uv, 'pip', 'install'] + deps + ['--python', venv_python],
                 check=True, capture_output=True, text=True,
-                stdin=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL, env=uv_env,
             )
             log('Python environment ready', 'SUCCESS')
             return True
@@ -1120,7 +1155,7 @@ class EmbodyExt:
 
     def _applyWizardSetup(self, mode='auto', assistant='claudecode',
                           client='', root='gitroot', custom_root='',
-                          permissions='all'):
+                          permissions='all', git=''):
         """Apply the setup-wizard selections and enable (or skip) Envoy.
 
         The single backend entry point the wizard's finish() calls. Because the
@@ -1142,6 +1177,13 @@ class EmbodyExt:
                        (the deferred Start()'s _deploySettingsLocal reads the
                        Toolpermissions param this sets). Only meaningful for the
                        Claude Code client; ignored when Envoy is not enabled.
+          git:         '' | 'gitinit' | 'gitskip' -- the wizard's git step
+                       (shown only when no repo was found at wizard start).
+                       'gitinit' initializes a repo at the project folder
+                       BEFORE the enable path resolves the git root, so
+                       config lands in the fresh repo; 'gitskip' / '' change
+                       nothing (the enable path stays modal-free and simply
+                       proceeds without git, as before).
         """
         # Whitelist the assistant token: an unrecognized value (a typo, a
         # mis-cased 'None') must be a safe no-op, never fall through to ENABLING
@@ -1158,6 +1200,14 @@ class EmbodyExt:
         if permissions not in ('all', 'some', 'prompt', 'leave'):
             permissions = 'all'
 
+        # Whitelist the git token; anything unrecognized means "do nothing"
+        # (the safe reading of a garbled choice is skip, never git init).
+        git = (git or '').strip().lower()
+        if git not in ('', 'gitinit', 'gitskip'):
+            self.Log(f'Setup wizard: unrecognized git choice "{git}" -- '
+                     f'skipping git setup.', 'WARNING')
+            git = ''
+
         # 1. Posture.
         if mode in ('auto', 'advanced'):
             self.my.par.Embodymode = mode
@@ -1172,6 +1222,13 @@ class EmbodyExt:
             self.my.par.Aiprojectrootcustom = custom_root
         if root in ('gitroot', 'projectfolder', 'custom'):
             self.my.par.Aiprojectroot = root
+
+        # 2.5 Git decision (the wizard's git step). BEFORE the assistant
+        #     early-return so externalization-only users get their choice
+        #     too, and BEFORE enable so _findGitRootSync / Start() see the
+        #     fresh repo and land config inside it.
+        if git == 'gitinit':
+            self._applyWizardGitInit()
 
         # 3. AI client / assistant.
         if assistant == 'none':
@@ -1198,6 +1255,32 @@ class EmbodyExt:
 
         # 5. Enable (first run) or restart-to-apply (re-run), modal-free.
         self._enableEnvoyResolved()
+
+    def _applyWizardGitInit(self):
+        """Initialize a git repo at the project folder (wizard git step).
+
+        Modal-free like the rest of the wizard's apply path: on failure it
+        logs and setup continues without git -- exactly the state the user
+        would have been in anyway, recoverable via op.Embody.InitGit().
+
+        Runs under _consent_bulk: the wizard's git step IS the consent
+        (the user explicitly chose 'Initialize Git' after reading what it
+        does), so the .gitignore/.gitattributes writes inside
+        init_git_repo must not re-prompt in Advanced mode -- this step
+        runs BEFORE _enableEnvoyResolved sets the batch-wide consent."""
+        from pathlib import Path
+        self._consent_bulk = True
+        try:
+            initialized = mod.envoy_setup.init_git_repo(
+                self.my.ext.Envoy, Path(project.folder).resolve())
+            if initialized is None:
+                self.Log('Git init failed -- continuing without git. Run '
+                         'op.Embody.InitGit() to retry later.', 'WARNING')
+        except Exception as e:
+            self.Log(f'Git init failed: {e} -- continuing without git.',
+                     'WARNING')
+        finally:
+            self._consent_bulk = False
 
     def _enableEnvoyResolved(self):
         """Modal-free Envoy enable/refresh, used by the setup wizard.
@@ -1780,6 +1863,7 @@ class EmbodyExt:
     # in the Advanced-mode confirm.
     _AI_CONFIG_FILES = {
         'claudecode': ['CLAUDE.md (or ENVOY.md)', '.claude/rules/', '.claude/skills/'],
+        'opencode':   ['opencode.json', '.claude/rules/', '.claude/skills/'],
         'cursor':     ['.cursor/rules/'],
         'copilot':    ['.github/copilot-instructions.md'],
         'windsurf':   ['.windsurf/rules/'],
@@ -3335,25 +3419,73 @@ class EmbodyExt:
                      'DEBUG')
 
     def ExportPortableTox(self, target: 'OP' = None,
-                          save_path: Optional[str] = None) -> bool:
+                          save_path: Optional[str] = None,
+                          run_hooks: bool = True,
+                          hook_mode: str = 'copy') -> bool:
         """Export a self-contained .tox with all external file references
         and Embody tags stripped.
 
-        Temporarily strips file, syncfile, and externaltox parameters plus
-        all Embody tags from all descendants of the target COMP, saves the
-        .tox, then restores everything. The resulting .tox has no external
-        file dependencies and no Embody metadata.
+        Strips file, syncfile, and externaltox parameters plus all Embody
+        tags from the target and its descendants, saves the .tox, then
+        restores everything. The resulting .tox has no external file
+        dependencies and no Embody metadata.
 
         Warns (but does not strip) about non-system absolute paths that won't
         be portable to other machines.
+
+        Release hooks (issue #74): Text DATs named 'pre_release' and
+        'post_release' that are DIRECT children of the target automate
+        the export.
+
+        Default mode ('copy', PI-style): the target is copied into the
+        cooking-disabled /sys/quiet staging area; pre_release runs ON THE
+        COPY (me = the copy's hook DAT, parent() = the staged copy), so
+        it shapes the artifact -- reset pars, delete scratch ops --
+        without ever touching the live component; both hook DATs are
+        then deleted from the copy, so hook code NEVER ships inside the
+        .tox; after the save, post_release runs on the ORIGINAL (upload,
+        notify -- parent() = the live comp). Hooks receive the resolved
+        save path as args[0]; post_release also receives the success
+        flag as args[1]. A pre_release raise aborts the export and KEEPS
+        the staged copy (renamed *_release_failed under /sys/quiet) for
+        inspection; post_release then does not run. Once pre_release
+        completes, post_release is guaranteed to run -- even when the
+        save failed.
+
+        The staged copy is neutralized before hooks run: Embody tags
+        removed, file-sync disabled (no write-through to source files).
+        Extensions do NOT initialize on the copy and par callbacks do
+        not fire there (cooking off) -- prep needing extension logic
+        must use hook_mode='live'.
+
+        hook_mode='live' restores in-place semantics: hooks run on the
+        live target around the strip/save/restore cycle, their mutations
+        persist (set in pre, reset in post), and hook DATs ship inside
+        the artifact (dormant). Exports whose target IS the Embody COMP
+        always use live semantics -- a live Embody comp must never be
+        copied (a second Envoy would initialize) -- and hooks on a
+        container that CONTAINS the Embody COMP are skipped with a
+        warning in copy mode. run_hooks=False skips hooks entirely AND
+        ships any hook DATs as-is (machinery flag; the self-updater's
+        backup uses it). An unknown hook_mode aborts with an ERROR and
+        returns False.
 
         Args:
             target: The COMP to export. Defaults to the Embody COMP itself.
             save_path: Absolute path for the output .tox. If None, uses the
                        default release path (release/{name}-v{version}.tox).
+            run_hooks: Run pre_release/post_release hook DATs if present.
+                       Suppressed automatically for nested exports made
+                       from inside a hook.
+            hook_mode: 'copy' (default) stages a throwaway copy for
+                       pre_release and strips hook DATs from the
+                       artifact; 'live' runs hooks on the live target
+                       (mutations persist).
 
         Returns:
-            True if the .tox was saved successfully, False otherwise.
+            True if the .tox was saved successfully (and no hook failed),
+            False otherwise. When post_release fails after a successful
+            save, the .tox DOES exist on disk but False is returned.
         """
         if target is None:
             target = self.my
@@ -3363,96 +3495,171 @@ class EmbodyExt:
                 Path(project.folder).parents[0] / 'release'
                 / f"{target.name}-v{version}.tox"
             )
+        if hook_mode not in ('copy', 'live'):
+            self.Log(
+                f"Unknown hook_mode '{hook_mode}' -- export aborted "
+                f"(use 'copy' or 'live')", "ERROR")
+            return False
 
-        # Phase 1: Collect file references and externalization params to strip.
-        # Include the target itself -- its externaltox/enableexternaltox would
-        # be baked into the .tox and confuse recipients.
-        saved_state = []
+        # The latch is COMP storage so the stale exporting instance and any
+        # fresh instance created by a mid-export extension reinit read the
+        # SAME latch (stripping our own source DATs can trigger a reinit).
+        latch_active = bool(
+            self.my.fetch('_release_hook_active', False, search=False))
 
-        for op_ref in [target] + target.findChildren():
-            if op_ref.family == 'DAT' and hasattr(op_ref.par, 'file'):
-                file_val = op_ref.par.file.eval()
-                sync_val = op_ref.par.syncfile.eval()
-                if not file_val and not sync_val:
-                    continue
-                if file_val and (file_val.startswith('/') or (len(file_val) > 1 and file_val[1] == ':')):
-                    # Absolute path -- warn if not a TD system path
-                    if not file_val.startswith('/sys/'):
-                        self.Log(
-                            f"Absolute path won't be portable: "
-                            f"{op_ref.path} -> {file_val}", "WARNING")
-                else:
-                    saved_state.append({
-                        'op': op_ref,
-                        'family': 'DAT',
-                        'file': file_val,
-                        'file_readonly': op_ref.par.file.readOnly,
-                        'syncfile': sync_val,
-                    })
+        # Never copy-stage the live Embody COMP -- neither itself nor any
+        # ancestor container whose copy would drag a live Envoy into
+        # /sys/quiet (second-Envoy init, port grab, registry pollution).
+        target_prefix = (target.path if target.path.endswith('/')
+                         else target.path + '/')
+        stages_live_embody = (target == self.my
+                              or self.my.path.startswith(target_prefix))
 
-            elif op_ref.family == 'COMP' and hasattr(op_ref.par, 'externaltox'):
-                tox_val = op_ref.par.externaltox.eval()
-                enable_val = op_ref.par.enableexternaltox.eval()
-                if not tox_val and not enable_val:
-                    continue
-                if tox_val and (tox_val.startswith('/') or (len(tox_val) > 1 and tox_val[1] == ':')):
-                    if not tox_val.startswith('/sys/'):
-                        self.Log(
-                            f"Absolute path won't be portable: "
-                            f"{op_ref.path} -> {tox_val}", "WARNING")
-                else:
-                    saved_state.append({
-                        'op': op_ref,
-                        'family': 'COMP',
-                        'externaltox': tox_val,
-                        'externaltox_readonly': op_ref.par.externaltox.readOnly,
-                        'enableexternaltox': enable_val,
-                    })
-
-        # Phase 1b: Collect Embody tags to strip from all descendants
-        # (including the target itself). Recipients don't need Embody
-        # metadata -- it would cause confusion if they have Embody installed.
-        embody_tags = set(self.getTags())
-        saved_tags = []  # list of (op_ref, set_of_removed_tags)
-
-        # Check target itself, then all descendants
-        for op_ref in [target] + target.findChildren():
-            found = set(op_ref.tags) & embody_tags
-            if found:
-                saved_tags.append((op_ref, found))
-
-        self.Log(
-            f"Exporting portable .tox: stripping {len(saved_state)} "
-            f"file reference(s) and {len(saved_tags)} tagged operator(s) "
-            f"from {target.path}", "INFO")
-
-        # Phase 2: Strip all collected relative references.
-        for entry in saved_state:
-            try:
-                op_ref = entry['op']
-                if entry['family'] == 'DAT':
-                    op_ref.par.file.readOnly = False
-                    op_ref.par.file = ''
-                    op_ref.par.syncfile = False
-                elif entry['family'] == 'COMP':
-                    op_ref.par.externaltox.readOnly = False
-                    op_ref.par.externaltox = ''
-                    op_ref.par.enableexternaltox = False
-            except Exception as e:
-                self.Log(f"Failed to strip {entry['op'].path}: {e}", "WARNING")
-
-        # Strip Embody tags.
-        for op_ref, tags_to_remove in saved_tags:
-            try:
-                for tag in tags_to_remove:
-                    op_ref.tags.remove(tag)
-            except Exception as e:
+        # Copy-mode engagement: hooks wanted, at least one VALID hook
+        # present, staging cannot capture the live Embody COMP, and we
+        # are not already inside a hook. Embody-self exports never probe
+        # here (the live path below owns them) -- probing twice would
+        # double-warn about imposter DATs on every project.save.
+        if (run_hooks and hook_mode == 'copy' and not latch_active
+                and target != self.my):
+            has_pre = self._findReleaseHook(target, 'pre_release') is not None
+            has_post = self._findReleaseHook(target, 'post_release') is not None
+            if has_pre or has_post:
+                if not stages_live_embody:
+                    return self._exportPortableViaCopy(
+                        target, str(save_path), has_pre, has_post)
+                # Ancestor of the live Embody COMP: copy staging is
+                # forbidden, and running the hooks live would betray
+                # copy-mode expectations -- skip them, loudly.
                 self.Log(
-                    f"Failed to strip tags from {op_ref.path}: {e}", "WARNING")
+                    f"Release hooks on {target.path} SKIPPED: the "
+                    f"target contains the live Embody COMP and cannot "
+                    f"be copy-staged. Pass hook_mode='live' to run "
+                    f"hooks in place.", "WARNING")
 
-        # Phase 3: Save the .tox.
+        # Live path. Hooks run here only in explicit 'live' mode or when
+        # the target IS the Embody COMP (self-release machinery path).
+        # Phase 0: Author's pre_release hook. Runs BEFORE collection so the
+        # export captures the post-hook state; save_path is already
+        # resolved -- hooks always see the final path. A failure aborts: a
+        # half-prepared component must not ship.
+        hooks_enabled = (run_hooks and not latch_active
+                         and (hook_mode == 'live' or target == self.my))
+        if hooks_enabled:
+            hook_found, hook_ok = self._runReleaseHook(
+                target, 'pre_release', (str(save_path),))
+            if not hook_ok:
+                self.Log(
+                    f"Portable .tox export aborted: pre_release hook "
+                    f"failed on {target.path}", "ERROR")
+                return False
+
+        # Phases 1-3 are exception-contained: any unexpected raise (a DAT
+        # family with a 'file' par but no 'syncfile' like File In, a hook
+        # that destroyed the target, ...) degrades to success=False so the
+        # restore below and the post_release hook ALWAYS get their turn.
+        saved_state = []
+        saved_tags = []  # list of (op_ref, set_of_removed_tags, path)
         success = False
         try:
+            # Phase 1: Collect file references and externalization params to
+            # strip. Include the target itself -- its externaltox/
+            # enableexternaltox would be baked into the .tox and confuse
+            # recipients.
+            for op_ref in [target] + target.findChildren():
+                if op_ref.family == 'DAT' and hasattr(op_ref.par, 'file'):
+                    file_val = op_ref.par.file.eval()
+                    # Not every DAT with 'file' has 'syncfile' (File In
+                    # DAT doesn't) -- collect defensively.
+                    sync_par = getattr(op_ref.par, 'syncfile', None)
+                    sync_val = (bool(sync_par.eval())
+                                if sync_par is not None else False)
+                    if not file_val and not sync_val:
+                        continue
+                    if file_val and (file_val.startswith('/') or (len(file_val) > 1 and file_val[1] == ':')):
+                        # Absolute path -- warn if not a TD system path
+                        if not file_val.startswith('/sys/'):
+                            self.Log(
+                                f"Absolute path won't be portable: "
+                                f"{op_ref.path} -> {file_val}", "WARNING")
+                    else:
+                        saved_state.append({
+                            'op': op_ref,
+                            'path': op_ref.path,
+                            'family': 'DAT',
+                            'file': file_val,
+                            'file_readonly': op_ref.par.file.readOnly,
+                            'syncfile': sync_val,
+                            'has_syncfile': sync_par is not None,
+                        })
+
+                elif op_ref.family == 'COMP' and hasattr(op_ref.par, 'externaltox'):
+                    tox_val = op_ref.par.externaltox.eval()
+                    enable_val = op_ref.par.enableexternaltox.eval()
+                    if not tox_val and not enable_val:
+                        continue
+                    if tox_val and (tox_val.startswith('/') or (len(tox_val) > 1 and tox_val[1] == ':')):
+                        if not tox_val.startswith('/sys/'):
+                            self.Log(
+                                f"Absolute path won't be portable: "
+                                f"{op_ref.path} -> {tox_val}", "WARNING")
+                    else:
+                        saved_state.append({
+                            'op': op_ref,
+                            'path': op_ref.path,
+                            'family': 'COMP',
+                            'externaltox': tox_val,
+                            'externaltox_readonly': op_ref.par.externaltox.readOnly,
+                            'enableexternaltox': enable_val,
+                        })
+
+            # Phase 1b: Collect Embody tags to strip from all descendants
+            # (including the target itself). Recipients don't need Embody
+            # metadata -- it would cause confusion if they have Embody
+            # installed.
+            embody_tags = set(self.getTags())
+
+            # Check target itself, then all descendants. Paths captured at
+            # collection time so exception handlers never have to format a
+            # possibly-destroyed op.
+            for op_ref in [target] + target.findChildren():
+                found = set(op_ref.tags) & embody_tags
+                if found:
+                    saved_tags.append((op_ref, found, op_ref.path))
+
+            self.Log(
+                f"Exporting portable .tox: stripping {len(saved_state)} "
+                f"file reference(s) and {len(saved_tags)} tagged operator(s) "
+                f"from {target.path}", "INFO")
+
+            # Phase 2: Strip all collected relative references.
+            for entry in saved_state:
+                try:
+                    op_ref = entry['op']
+                    if entry['family'] == 'DAT':
+                        op_ref.par.file.readOnly = False
+                        op_ref.par.file = ''
+                        if entry['has_syncfile']:
+                            op_ref.par.syncfile = False
+                    elif entry['family'] == 'COMP':
+                        op_ref.par.externaltox.readOnly = False
+                        op_ref.par.externaltox = ''
+                        op_ref.par.enableexternaltox = False
+                except Exception as e:
+                    self.Log(
+                        f"Failed to strip {entry['path']}: {e}", "WARNING")
+
+            # Strip Embody tags.
+            for op_ref, tags_to_remove, op_path in saved_tags:
+                try:
+                    for tag in tags_to_remove:
+                        op_ref.tags.remove(tag)
+                except Exception as e:
+                    self.Log(
+                        f"Failed to strip tags from {op_path}: {e}",
+                        "WARNING")
+
+            # Phase 3: Save the .tox.
             target.save(str(save_path))
             try:
                 rel_path = Path(save_path).relative_to(
@@ -3464,7 +3671,9 @@ class EmbodyExt:
         except Exception as e:
             self.Log(f"Portable .tox export failed: {e}", "ERROR")
 
-        # Phase 4: Restore all references (always, even on failure).
+        # Phase 4: Restore all references (always -- after a failed save or
+        # a mid-flight error too; re-setting a value that was never stripped
+        # is a harmless no-op).
         # Safe ONLY because setting externaltox/enableexternaltox does not
         # trigger a mid-session load on TD 2025 -- live content survives.
         # If TD ever made a par-set reload, this restore would wipe it.
@@ -3474,24 +3683,408 @@ class EmbodyExt:
                 if entry['family'] == 'DAT':
                     op_ref.par.file = entry['file']
                     op_ref.par.file.readOnly = entry['file_readonly']
-                    op_ref.par.syncfile = entry['syncfile']
+                    if entry['has_syncfile']:
+                        op_ref.par.syncfile = entry['syncfile']
                 elif entry['family'] == 'COMP':
                     op_ref.par.externaltox = entry['externaltox']
                     op_ref.par.externaltox.readOnly = entry['externaltox_readonly']
                     op_ref.par.enableexternaltox = entry['enableexternaltox']
             except Exception as e:
                 self.Log(
-                    f"Failed to restore {entry['op'].path}: {e}", "WARNING")
+                    f"Failed to restore {entry['path']}: {e}", "WARNING")
 
         # Restore Embody tags (always, even on save failure).
-        for op_ref, tags_to_restore in saved_tags:
+        for op_ref, tags_to_restore, op_path in saved_tags:
             try:
                 for tag in tags_to_restore:
                     op_ref.tags.add(tag)
             except Exception as e:
                 self.Log(
-                    f"Failed to restore tags on {op_ref.path}: {e}", "WARNING")
+                    f"Failed to restore tags on {op_path}: {e}", "WARNING")
 
+        # Phase 5: Author's post_release hook -- the reset half of the
+        # set/reset contract. Runs whenever pre_release did not abort,
+        # EVEN IF the save failed, so a reset can always rely on
+        # executing. Receives (save_path, success) as run args.
+        if hooks_enabled:
+            hook_found, hook_ok = self._runReleaseHook(
+                target, 'post_release', (str(save_path), success))
+            if hook_found and not hook_ok:
+                if success:
+                    self.Log(
+                        f"post_release hook failed AFTER a successful "
+                        f"export -- the .tox exists at {save_path}",
+                        "ERROR")
+                success = False
+
+        return success
+
+    def _runReleaseHook(self, target: 'OP', hook_name: str,
+                        run_args: tuple) -> tuple:
+        """Run a release hook DAT if the target has one.
+
+        Looks for a TEXT DAT named `hook_name` as a DIRECT child of
+        `target` only -- nested hooks are deliberately ignored so a
+        third-party component embedded inside the target can never
+        inject a hook into someone else's export, and non-text DATs
+        (tables, selects) that merely share the name are never executed.
+        The DAT executes synchronously via DAT.run() with `run_args`
+        exposed to the script as the `args` tuple; inside the script,
+        `me` is the hook DAT and parent() is the COMP the hook belongs
+        to -- the staged copy for a copy-mode pre_release, the live
+        target otherwise.
+
+        The '_release_hook_active' COMP-storage latch is held while the
+        hook executes, so a nested ExportPortableTox call made from
+        inside a hook runs with hooks suppressed (no infinite recursion;
+        exporting a sub-component from a pre_release script is a
+        supported pattern). Storage -- not an instance attribute --
+        because the export's own strip phase can reinit this extension
+        mid-call when the Embody COMP is the target, and a nested hook
+        call resolving the FRESH instance must read the same latch the
+        stale exporting instance set. (A reinit fired while a hook is
+        actually running clears the latch -- __init__ hygiene wins over
+        that exotic window.)
+
+        Returns:
+            (found, ok): found is True when a hook DAT exists; ok is
+            False only when the hook ran and raised.
+        """
+        if not target.valid:
+            self.Log(
+                f"{hook_name} skipped -- hook owner no longer exists "
+                f"(destroyed by an earlier hook?)", "WARNING")
+            return (False, True)
+        hook = self._findReleaseHook(target, hook_name)
+        if hook is None:
+            return (False, True)
+        # Capture the path NOW: if the hook destroys itself while running,
+        # formatting hook.path inside the except handler would raise a
+        # secondary tdError that escapes to the caller.
+        hook_path = hook.path
+        self.Log(f"Running {hook_name} hook: {hook_path}", "INFO")
+        self.my.store('_release_hook_active', True)
+        try:
+            hook.run(*run_args)
+            return (True, True)
+        except Exception as e:
+            self.Log(
+                f"{hook_name} hook raised: {hook_path}: {e}", "ERROR")
+            return (True, False)
+        finally:
+            self.my.store('_release_hook_active', False)
+
+    def ReleaseAll(self, root: 'OP' = None,
+                   out_dir: Optional[str] = None) -> dict:
+        """Export every releasable COMP as its own portable .tox.
+
+        A component opts in by being BOTH Embody-tracked (it carries an
+        externalization tag -- it is yours) AND carrying a valid release
+        hook -- a Text DAT named 'pre_release' or 'post_release' as a
+        DIRECT child (the exact convention ExportPortableTox executes).
+        The tracked requirement exists because third-party components
+        arrive with their authors' hook DATs baked in (PI-style tools
+        ship them; found in the wild: AlphaMoonbase's tweener) -- a
+        hooks-only scan would execute foreign release machinery. Export
+        an untracked component explicitly via ExportPortableTox instead.
+        Each target goes through the normal single-component export
+        (copy staging, its own hooks, artifact hygiene included).
+
+        Nested hook-bearing components release independently -- each gets
+        its own standalone .tox in addition to shipping as content inside
+        any ancestor's artifact. Do not call from inside a release hook:
+        the re-entrancy latch would suppress every target's hooks.
+
+        Args:
+            root: Scan scope. None scans the whole project, excluding TD
+                  system networks (/sys, /local) and the Embody COMP
+                  itself; pass a COMP to scan only it and its descendants.
+            out_dir: Directory for the .tox files (created if missing).
+                     Defaults to the 'release' folder beside the project
+                     folder. Each component saves as {out_dir}/{name}.tox;
+                     duplicate names get a numeric suffix and a WARNING.
+
+        Returns:
+            {'targets': [comp paths], 'released': [tox paths],
+             'failed': [comp paths]}. A per-component failure is logged
+            loudly and does not halt the batch.
+        """
+        if out_dir is None:
+            out_dir = str(Path(project.folder).parents[0] / 'release')
+        os.makedirs(out_dir, exist_ok=True)
+
+        targets = self._findReleaseTargets(root)
+
+        result = {'targets': [c.path for c in targets],
+                  'released': [], 'failed': []}
+        if not targets:
+            self.Log(
+                'ReleaseAll: no tracked components carry release hooks -- '
+                'nothing to export. Externalize a component and add a '
+                'pre_release/post_release Text DAT to opt it in.',
+                'WARNING')
+            return result
+
+        self.Log(f'ReleaseAll: exporting {len(targets)} component(s) to '
+                 f'{out_dir}', 'INFO')
+        used_names = {}
+        for c in targets:
+            target_path = c.path
+            n = used_names.get(c.name, 0)
+            used_names[c.name] = n + 1
+            fname = f'{c.name}.tox' if n == 0 else f'{c.name}_{n + 1}.tox'
+            if n:
+                self.Log(
+                    f'ReleaseAll: duplicate component name "{c.name}" -- '
+                    f'saving {target_path} as {fname}', 'WARNING')
+            save_path = str(Path(out_dir) / fname)
+            try:
+                ok = self.ExportPortableTox(target=c, save_path=save_path)
+            except Exception as e:
+                ok = False
+                self.Log(f'ReleaseAll: unexpected error exporting '
+                         f'{target_path}: {e}', 'ERROR')
+            if ok:
+                result['released'].append(save_path)
+            else:
+                result['failed'].append(target_path)
+
+        level = 'SUCCESS' if not result['failed'] else 'WARNING'
+        failed_note = (f" ({', '.join(result['failed'])})"
+                       if result['failed'] else '')
+        self.Log(
+            f"ReleaseAll complete: {len(result['released'])} released, "
+            f"{len(result['failed'])} failed{failed_note}", level)
+        return result
+
+    def _findReleaseTargets(self, root: 'OP' = None) -> list:
+        """Discovery half of ReleaseAll: tracked AND hook-bearing COMPs.
+
+        Pure scan -- no exports, no hook execution -- so tests can pin
+        the targeting rules without touching live components. root=None
+        scans the whole project minus TD system networks (/sys, /local
+        -- staged copies in /sys/quiet carry hook DATs and must never be
+        re-released) and the Embody COMP itself. The tag check runs
+        FIRST so untracked comps never even get the imposter-hook
+        warning from _findReleaseHook.
+        """
+        if root is None:
+            def _excluded(c):
+                p = c.path
+                return (p.startswith('/sys/') or p.startswith('/local/')
+                        or p == self.my.path
+                        or p.startswith(self.my.path + '/'))
+            candidates = [c for c in op('/').findChildren(type=COMP)
+                          if not _excluded(c)]
+        else:
+            candidates = [root] + root.findChildren(type=COMP)
+
+        embody_tags = set(self.getTags())
+        targets = [
+            c for c in candidates
+            if (set(c.tags) & embody_tags)
+            and (self._findReleaseHook(c, 'pre_release') is not None
+                 or self._findReleaseHook(c, 'post_release') is not None)]
+        targets.sort(key=lambda c: c.path)
+        return targets
+
+    def _findReleaseHook(self, target: 'OP', hook_name: str):
+        """Return the valid release hook for `target`, or None.
+
+        A valid hook is a TEXT DAT named `hook_name` that is a DIRECT
+        child of `target`. Non-text DATs (tables, selects) and COMPs
+        that merely share the name are warned about and never executed
+        -- DAT.run() on a table would execute its cells as Python.
+        """
+        if not target.valid:
+            return None
+        hook = target.op(hook_name)
+        if hook is None:
+            return None
+        if not hook.isDAT or hook.type != 'text':
+            self.Log(
+                f"{hook_name} on {target.path} is not a Text DAT -- "
+                f"ignored", "WARNING")
+            return None
+        return hook
+
+    def _exportPortableViaCopy(self, target: 'OP', save_path: str,
+                               has_pre: bool, has_post: bool) -> bool:
+        """Portable export with PI-style copy staging (default hook mode).
+
+        The target is copied into the cooking-disabled /sys/quiet staging
+        area; the copy is immediately neutralized -- Embody tags removed
+        AND file-sync bindings disabled (syncfile/enableexternaltox off),
+        so a hook edit can never write through to real source files and
+        no sweep can mistake staged ops for tracked ones; pre_release
+        runs ON THE COPY; the captured hook DATs are destroyed from the
+        copy (rename-proof); the copy is exported through the normal
+        strip/save pipeline (run_hooks=False) and destroyed. post_release
+        then runs on the ORIGINAL with (save_path, success) whenever
+        pre_release completed -- including when it completed but
+        destroyed the staged copy (success False). The live target is
+        never mutated by any of this.
+
+        A pre_release RAISE keeps the staged copy under /sys/quiet
+        (renamed <name>_release_failed) so the author can inspect exactly
+        what the hook did -- in the same session; /sys is not saved with
+        the project. post_release does not run after a raise.
+        """
+        quiet = op('/sys/quiet')
+        if quiet is None:
+            self.Log(
+                "/sys/quiet staging area not found -- falling back to "
+                "live hook mode for this export", "WARNING")
+            return self.ExportPortableTox(
+                target=target, save_path=save_path, run_hooks=True,
+                hook_mode='live')
+
+        try:
+            candidate = quiet.copy(target)
+        except Exception as e:
+            self.Log(
+                f"Release staging copy failed: {e} -- export aborted "
+                f"(live component untouched)", "ERROR")
+            return False
+        cand_path = candidate.path
+
+        success = False
+        keep_candidate = False
+        candidate_gone = False
+        try:
+            # Neutralize: the copy carries the original's Embody tags AND
+            # live file bindings -- file/syncfile paths resolve against
+            # the project folder regardless of op location, so the staged
+            # copy's synced DATs point at the REAL source files. Kill
+            # both BEFORE any hook runs: a hook edit must never write
+            # through to a live source file, no tag-driven sweep may
+            # mistake staged ops for tracked ones, and a kept-failed
+            # candidate must be inert. Artifact content is unaffected --
+            # the export core strips the same bindings anyway.
+            neutralize_failed = False
+            try:
+                embody_tags = set(self.getTags())
+                candidate_ops = [candidate] + candidate.findChildren()
+            except Exception as e:
+                self.Log(
+                    f"Failed to enumerate staged copy: {e}", "ERROR")
+                neutralize_failed = True
+                candidate_ops = []
+            for op_ref in candidate_ops:
+                try:
+                    for tag in set(op_ref.tags) & embody_tags:
+                        op_ref.tags.remove(tag)
+                    if op_ref.family == 'DAT':
+                        sync_par = getattr(op_ref.par, 'syncfile', None)
+                        if sync_par is not None and sync_par.eval():
+                            op_ref.par.syncfile = False
+                    elif (op_ref.family == 'COMP'
+                          and hasattr(op_ref.par, 'enableexternaltox')
+                          and op_ref.par.enableexternaltox.eval()):
+                        op_ref.par.enableexternaltox = False
+                except Exception as e:
+                    neutralize_failed = True
+                    self.Log(
+                        f"Failed to neutralize staged op: {e}", "WARNING")
+            if neutralize_failed:
+                # Never run hooks on a partially-neutralized copy: one
+                # still-synced DAT could write through to a real source
+                # file. Fail loud; the finally block destroys the copy.
+                self.Log(
+                    "Portable .tox export aborted: staged copy could not "
+                    "be fully neutralized.", "ERROR")
+                return False
+
+            # Capture the copy's hook DATs NOW -- a pre hook that renames
+            # itself must not let hook code escape into the artifact.
+            cand_hooks = []
+            for hook_name in ('pre_release', 'post_release'):
+                hook = candidate.op(hook_name)
+                if hook is not None and hook.isDAT and hook.type == 'text':
+                    cand_hooks.append(hook)
+
+            # pre_release runs on the COPY -- me is the copy's hook DAT,
+            # parent() is the staged candidate.
+            if has_pre:
+                hook_found, hook_ok = self._runReleaseHook(
+                    candidate, 'pre_release', (str(save_path),))
+                if not hook_ok:
+                    if candidate.valid:
+                        keep_candidate = True
+                        try:
+                            candidate.name = target.name + '_release_failed'
+                            cand_path = candidate.path
+                        except Exception:
+                            pass
+                        # Fully inert while parked: blank global OP
+                        # shortcuts on the kept tree so it can never
+                        # contend with the live original for op.X.
+                        try:
+                            for o in ([candidate]
+                                      + candidate.findChildren(type=COMP)):
+                                if o.par.opshortcut.eval():
+                                    o.par.opshortcut = ''
+                        except Exception:
+                            pass
+                        self.Log(
+                            f"Portable .tox export aborted: pre_release "
+                            f"hook failed. The staged copy was kept for "
+                            f"inspection at {cand_path} -- inspect it in "
+                            f"this session (staging is not saved with the "
+                            f"project) and delete it when done.", "ERROR")
+                    else:
+                        self.Log(
+                            "Portable .tox export aborted: pre_release "
+                            "hook failed and destroyed the staged copy.",
+                            "ERROR")
+                    return False
+                if not candidate.valid:
+                    # Pre COMPLETED (no raise) but destroyed the staged
+                    # copy -- nothing to export, yet the post_release
+                    # guarantee ('runs once pre completes') still holds:
+                    # fall through with success False.
+                    candidate_gone = True
+                    self.Log(
+                        "Portable .tox export failed: pre_release "
+                        "destroyed the staged copy -- nothing to export.",
+                        "ERROR")
+
+            if not candidate_gone:
+                # Hook code never ships: destroy the captured hook DATs
+                # (rename-proof) AND any hook-named text DAT the pre hook
+                # itself created on the copy after capture.
+                for hook in cand_hooks:
+                    if hook.valid:
+                        hook.destroy()
+                for hook_name in ('pre_release', 'post_release'):
+                    hook = candidate.op(hook_name)
+                    if (hook is not None and hook.isDAT
+                            and hook.type == 'text'):
+                        hook.destroy()
+
+                # Export the candidate through the normal pipeline.
+                success = self.ExportPortableTox(
+                    target=candidate, save_path=save_path, run_hooks=False)
+        finally:
+            if not keep_candidate and candidate.valid:
+                try:
+                    candidate.destroy()
+                except Exception as e:
+                    self.Log(
+                        f"Failed to destroy staged copy {cand_path}: {e}",
+                        "WARNING")
+
+        # post_release runs on the ORIGINAL -- even when the save failed.
+        if has_post:
+            hook_found, hook_ok = self._runReleaseHook(
+                target, 'post_release', (str(save_path), success))
+            if hook_found and not hook_ok:
+                if success:
+                    self.Log(
+                        f"post_release hook failed AFTER a successful "
+                        f"export -- the .tox exists at {save_path}",
+                        "ERROR")
+                success = False
         return success
 
     @staticmethod
@@ -6782,8 +7375,16 @@ class EmbodyExt:
             title='Export portable tox')
         if path is None:
             return
-        self.ExportPortableTox(target=oper, save_path=str(path))
+        ok = self.ExportPortableTox(target=oper, save_path=str(path))
         self.Refresh()
+        if not ok:
+            ui.messageBox(
+                'Export portable tox',
+                'Portable export failed -- check the Embody log.\n\n'
+                'Possible causes: a pre_release hook abort (no .tox\n'
+                'written), a save failure, or a post_release hook\n'
+                'failure (the .tox may still exist on disk).',
+                buttons=['OK'])
 
     def HandleStrategyRemove(self, oper: OP) -> None:
         """Remove externalization from a COMP or DAT with confirmation dialog."""

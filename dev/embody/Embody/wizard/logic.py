@@ -1,11 +1,12 @@
 SURF=(0.16,0.17,0.165)
 BACK_ON=(0.19,0.20,0.195); NEXT_ON=(0.24,0.52,0.35); NEXT_OFF=(0.135,0.15,0.14)
 TXT=(0.92,0.92,0.92); TXT_DIM=(0.34,0.35,0.34); NEXT_TXT=(0.97,0.99,0.97)
-GROUPS=['grp_mode','grp_assistant','grp_client','grp_permissions','grp_footprint']
+GROUPS=['grp_mode','grp_assistant','grp_client','grp_permissions','grp_git','grp_footprint']
 DEFS={
  'mode':{'g':'grp_mode','sel':'sel_mode','title':'How should Embody manage your project?','hint':'Choose one, then Next.'},
  'assistant':{'g':'grp_assistant','sel':'sel_assistant','title':'Turn on the AI assistant (Envoy)?','hint':'It lets AI tools work in your network. Easy to remove later.'},
  'client':{'g':'grp_client','sel':'sel_client','title':'Pick your AI coding tool','hint':'Embody will generate its config.'},
+ 'git':{'g':'grp_git','sel':'sel_git','title':'Make this project a Git repository?','hint':'Externalized files diff and restore best under version control.'},
  'footprint':{'g':'grp_footprint','sel':'sel_root','title':'Review what Embody will add','hint':'Embody will add a Python env (.venv) + MCP server, config files (.mcp.json, .embody, AI rules), .gitignore/.gitattributes entries + a .tdn diff driver, and the Embot assistant in your network. Everything is recorded and reversible via Uninstall.'},
  'permissions':{'g':'grp_permissions','sel':'sel_permissions','title':'How should the AI ask permission?','hint':'Claude Code asks before each AI tool by default. Pick how much to auto-approve (changeable later on the Envoy parameters).'},
  'summary':{'g':None,'sel':None,'title':'Ready to set up Embody','hint':''},
@@ -26,6 +27,10 @@ def spine():
 	s=['mode','assistant']
 	if a=='other': s.append('client')
 	if a=='claudecode': s.append('permissions')
+	# Git decision only when no repo was found at wizard start -- and for
+	# EVERY assistant choice incl. 'none' (externalization is git's whole
+	# point; the decision is about the project, not the AI).
+	if w.fetch('git_missing',False): s.append('git')
 	if m=='advanced' and a not in (None,'none'): s.append('footprint')
 	s.append('summary'); return s
 def _grp(step): return _w().op(DEFS.get(step,{}).get('g') or '')
@@ -40,9 +45,12 @@ def _nav(k):
 		if c.family=='COMP' and k in c.name: return c
 def _recap():
 	w=_w(); m=w.fetch('sel_mode','auto'); a=w.fetch('sel_assistant','claudecode')
-	if a=='none': return 'Mode: %s. AI assistant: off (externalization only).\nNothing has changed yet - click Set up Embody to apply.'%m
+	g=''
+	if w.fetch('git_missing',False):
+		g={'gitinit':' Git: initialize here.','gitskip':' Git: skipped for now.'}.get(w.fetch('sel_git',''),'')
+	if a=='none': return 'Mode: %s. AI assistant: off (externalization only).%s\nNothing has changed yet - click Set up Embody to apply.'%(m,g)
 	c=w.fetch('sel_client','') if a=='other' else ('Claude Code' if a=='claudecode' else a)
-	return 'Mode: %s. AI assistant: on (%s).\nNothing has changed yet - click Set up Embody to apply.'%(m, c or 'your tool')
+	return 'Mode: %s. AI assistant: on (%s).%s\nNothing has changed yet - click Set up Embody to apply.'%(m, c or 'your tool', g)
 def _permHint():
 	base=DEFS['permissions']['hint']
 	try:
@@ -100,6 +108,7 @@ def finish():
 	m=w.fetch('sel_mode','auto'); a=w.fetch('sel_assistant','claudecode')
 	c=w.fetch('sel_client',''); r=w.fetch('sel_root','gitroot')
 	pm=w.fetch('sel_permissions','all')
+	g=w.fetch('sel_git','') if w.fetch('git_missing',False) else ''
 	cr=''
 	if r=='custom':
 		try: cr=ui.chooseFolder(title='Choose the folder for Embody config') or ''
@@ -107,7 +116,7 @@ def finish():
 	_close()
 	# Defer so the window closes cleanly before setup runs. Tokens come from the
 	# wizard's fixed option set, so repr-interpolation is safe.
-	run('op.Embody.ext.Embody._applyWizardSetup(mode=%r, assistant=%r, client=%r, root=%r, custom_root=%r, permissions=%r)'%(m,a,c,r,cr,pm), delayFrames=2)
+	run('op.Embody.ext.Embody._applyWizardSetup(mode=%r, assistant=%r, client=%r, root=%r, custom_root=%r, permissions=%r, git=%r)'%(m,a,c,r,cr,pm,g), delayFrames=2)
 def start():
 	w=_w(); w.store('step_id','mode')
 	for gid in GROUPS:
@@ -123,5 +132,12 @@ def start():
 	if ab: ab.par.value0=1
 	pb=w.op('grp_permissions/opt_all')
 	if pb: pb.par.value0=1
-	w.store('sel_assistant','claudecode'); w.store('sel_client',''); w.store('sel_root','gitroot'); w.store('sel_permissions','all')
+	# Git step gate: same probe the enable path uses (_findGitRootSync), so
+	# the wizard and Start() can never disagree about "no repo".
+	try: missing=(op.Embody.ext.Embody._findGitRootSync()=='no-git')
+	except Exception: missing=False
+	w.store('git_missing',missing)
+	gb=w.op('grp_git/opt_gitinit')
+	if gb: gb.par.value0=1
+	w.store('sel_assistant','claudecode'); w.store('sel_client',''); w.store('sel_root','gitroot'); w.store('sel_permissions','all'); w.store('sel_git','gitinit')
 	render()

@@ -63,7 +63,7 @@ Manual configuration if needed:
   "mcpServers": {
     "envoy": {
       "type": "http",
-      "url": "http://localhost:9870/mcp"
+      "url": "http://127.0.0.1:9870/mcp"
     }
   }
 }
