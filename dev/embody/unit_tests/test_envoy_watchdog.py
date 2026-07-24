@@ -30,7 +30,10 @@ Coverage:
     revive.
   - _probeAlive against a real stdlib socket listener: open -> True, closed ->
     False, None port -> True.
-  - _findAvailablePort fast path + force-free branch with monkeypatched helpers.
+  - _findAvailablePort fast path + force-free branch with monkeypatched helpers;
+    bind-probe vs zombie-held ports (bound but dead -- connects refused, bind
+    blocked) and the recent-bind-failure blacklist (record on pre-bind death,
+    skip while fresh, expire after TTL, clear on confirmed bind).
   - 'Preparing Python environment...' (the fast-path import gate) is
     TRANSITIONAL: no dead-socket revive mid-warmup; a wedged gate still
     self-heals via the ~24s startup-grace restart.
@@ -39,6 +42,8 @@ Coverage:
 """
 
 import socket
+import sys
+import threading
 import time
 
 try:
@@ -554,15 +559,22 @@ class TestProbeAlive(EnvoyWatchdogBase):
 class TestFindAvailablePort(EnvoyWatchdogBase):
     """_findAvailablePort fast path + force-free branch (helpers monkeypatched).
 
-    The real method defines _port_in_use / _port_registered_by_other as nested
-    closures, so they cannot be patched directly. Instead we drive the public
-    inputs: a truly-free ephemeral port for the fast path, and a busy port plus
-    a recorded _forceCloseOldServer for the force-free branch.
+    The real method defines _port_bindable / _port_registered_by_other /
+    _recent_bind_failure as nested closures, so they cannot be patched
+    directly. Instead we drive the public inputs: a truly-free ephemeral port
+    for the fast path, a busy port plus a recorded _forceCloseOldServer for
+    the force-free branch, a bound-but-dead socket for the zombie case, and
+    seeded sys._envoy_bad_bind_ports entries for the blacklist.
     """
 
     def setUp(self):
         super().setUp()
         self._held = []
+        # The blacklist is process-global (survives reinit) -- snapshot it so
+        # seeded test entries never leak into the live session.
+        _sentinel = object()
+        self._saved_bad_ports = getattr(sys, '_envoy_bad_bind_ports', _sentinel)
+        self._bad_ports_sentinel = _sentinel
 
     def tearDown(self):
         for s in self._held:
@@ -571,6 +583,13 @@ class TestFindAvailablePort(EnvoyWatchdogBase):
             except Exception:
                 pass
         self._held = []
+        if self._saved_bad_ports is self._bad_ports_sentinel:
+            try:
+                del sys._envoy_bad_bind_ports
+            except AttributeError:
+                pass
+        else:
+            sys._envoy_bad_bind_ports = self._saved_bad_ports
         super().tearDown()
 
     def _free_port(self):
@@ -646,6 +665,142 @@ class TestFindAvailablePort(EnvoyWatchdogBase):
         self.assertEqual(
             result, busy,
             'After force-close frees the base port, it must be reused (no drift)')
+
+    def _zombie_port(self):
+        """Bind WITHOUT listen and keep held: the dead-listener signature.
+
+        Connects to such a port are REFUSED (the old connect probe reported
+        it free) while bind still fails with EADDRINUSE/WinError 10048 --
+        exactly how the 2026-07-23 windowless zombie TD poisoned port 9872.
+        """
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(('127.0.0.1', 0))
+        self._held.append(s)
+        return s.getsockname()[1]
+
+    def test_zombie_bound_port_never_returned(self):
+        # The scanner must not hand back a port that cannot be bound, even
+        # though nothing accepts connections on it (connect probe blind spot).
+        zombie = self._zombie_port()
+        self._patch(self.envoy, '_forceCloseOldServer', lambda: False)
+
+        result = self.envoy._findAvailablePort(zombie, range_size=10)
+
+        self.assertIsNotNone(
+            result, 'A free port must exist above the zombie-held base')
+        self.assertNotEqual(
+            result, zombie,
+            'A bound-but-dead (zombie) port must never be selected: its '
+            'connects are refused but a real bind on it fails')
+
+    def test_recent_bind_failure_blacklist_skips_port(self):
+        # A port whose last uvicorn bind failed within the TTL is skipped even
+        # though it probes free right now (probe/bind race defense).
+        free = self._free_port()
+        self._patch(self.envoy, '_forceCloseOldServer', lambda: False)
+        sys._envoy_bad_bind_ports = {free: time.time()}
+
+        result = self.envoy._findAvailablePort(free, range_size=10)
+
+        self.assertNotEqual(
+            result, free,
+            'A port with a fresh bind-failure record must be skipped')
+
+    def test_expired_bind_failure_entry_ignored_and_pruned(self):
+        free = self._free_port()
+        stale = time.time() - self.envoy._BIND_FAIL_TTL_SECONDS - 1
+        sys._envoy_bad_bind_ports = {free: stale}
+
+        result = self.envoy._findAvailablePort(free, range_size=10)
+
+        self.assertEqual(
+            result, free,
+            'An expired bind-failure record must not block the port')
+        self.assertNotIn(
+            free, sys._envoy_bad_bind_ports,
+            'An expired bind-failure record must be pruned on lookup')
+
+
+class TestBindFailureBlacklistLifecycle(EnvoyWatchdogBase):
+    """The record/clear sides of the bind-failure blacklist.
+
+    _onServerError records the runtime port when the worker died WITHOUT ever
+    confirming a bind; _pollStartup drops the entry once a real bind is
+    confirmed (a stale late error from an older generation must not poison a
+    healthy port for the TTL).
+    """
+
+    _FAKE_PORT = 55555  # never bound by these tests -- pure bookkeeping
+
+    def setUp(self):
+        super().setUp()
+        _sentinel = object()
+        self._saved_bad_ports = getattr(sys, '_envoy_bad_bind_ports', _sentinel)
+        self._bad_ports_sentinel = _sentinel
+        self._saved_task = getattr(self.envoy, 'current_task', None)
+        self._saved_last_start = getattr(self.envoy, '_last_start_time', 0.0)
+        # _onServerError escalates into _scheduleRestart (backoff counters,
+        # status churn, queued run()) -- record instead of executing.
+        self._restarts = []
+        self._patch(self.envoy, '_scheduleRestart',
+                    lambda reason: self._restarts.append(reason))
+
+    def tearDown(self):
+        self.envoy.current_task = self._saved_task
+        self.envoy._last_start_time = self._saved_last_start
+        if self._saved_bad_ports is self._bad_ports_sentinel:
+            try:
+                del sys._envoy_bad_bind_ports
+            except AttributeError:
+                pass
+        else:
+            sys._envoy_bad_bind_ports = self._saved_bad_ports
+        super().tearDown()
+
+    def test_prebind_death_records_port(self):
+        sys._envoy_bad_bind_ports = {}
+        never_bound = threading.Event()  # NOT set -> worker never bound
+        self._patch(self.envoy, '_startup_event', never_bound)
+        self._patch(self.envoy, '_runtime_port', self._FAKE_PORT)
+
+        self.envoy._onServerError('bind exploded (test)')
+
+        self.assertIn(
+            self._FAKE_PORT, sys._envoy_bad_bind_ports,
+            'A worker death before the bind confirmation must blacklist '
+            'its port so the restart scans past it')
+        self.assertAlmostEqual(
+            sys._envoy_bad_bind_ports[self._FAKE_PORT], time.time(), delta=5,
+            msg='The blacklist entry must carry a fresh timestamp')
+
+    def test_postbind_death_does_not_record_port(self):
+        sys._envoy_bad_bind_ports = {}
+        bound = threading.Event()
+        bound.set()  # worker HAD confirmed a bind -> port itself is fine
+        self._patch(self.envoy, '_startup_event', bound)
+        self._patch(self.envoy, '_runtime_port', self._FAKE_PORT)
+
+        self.envoy._onServerError('died after serving (test)')
+
+        self.assertNotIn(
+            self._FAKE_PORT, sys._envoy_bad_bind_ports,
+            'A death AFTER a confirmed bind is not a port problem -- the '
+            'port must stay eligible for the restart')
+
+    def test_confirmed_bind_clears_blacklist_entry(self):
+        sys._envoy_bad_bind_ports = {self._FAKE_PORT: time.time()}
+        bound = threading.Event()
+        bound.set()
+        self._patch(self.envoy, '_startup_event', bound)
+        self._patch(self.envoy, '_runtime_port', self._FAKE_PORT)
+        self._patch(self.envoy, '_starting', True)
+
+        self.envoy._pollStartup(self.envoy._server_gen)
+
+        self.assertNotIn(
+            self._FAKE_PORT, sys._envoy_bad_bind_ports,
+            'A confirmed bind proves the port healthy -- a stale blacklist '
+            'entry for it (late error from an older generation) must clear')
 
 
 class TestRunTestsStatusRestore(EmbodyTestCase):
