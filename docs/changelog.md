@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.0.153
+
+The Envoy port scanner survives a zombie TouchDesigner holding a port.
+
+- **Zombie-held ports no longer wedge Envoy startup**: `_findAvailablePort` now probes each candidate port with a real `bind()` instead of a TCP `connect()`. A leftover / windowless TouchDesigner process can hold a port bound and LISTENING while its accept loop is dead -- connects to it are refused (so the old connect probe reported the port "free"), yet uvicorn's own `bind()` then fails with `WinError 10048`, and the retry loop re-elected the same poisoned port for the full 30-minute restart window. Observed 2026-07-23: a second `.toe` in the same repo crash-looped its Envoy because a windowless dev instance from hours earlier still camped port 9872. The bind probe performs the exact operation uvicorn will, so a dead listener can no longer fool it -- and it drops the 1s connect-timeout the old probe paid on every busy port.
+- **Bind-failure blacklist (defense-in-depth)**: a port whose server worker dies before confirming a bind is recorded in `sys._envoy_bad_bind_ports` for 10 minutes and skipped by the scanner, so a probe/bind race (another process grabbing the port between the probe and the bind) advances to the next port instead of looping on the same one. A confirmed bind clears the entry, so a stale late error from an older server generation cannot poison a now-healthy port.
+- Tests: 6 new (`test_envoy_watchdog`) -- a bound-but-dead zombie port is rejected in favor of the next free port, and the blacklist records on a pre-bind death, skips while fresh, expires after its TTL, and clears on a confirmed bind.
+- Test suite: 103 suites, 2,327 tests.
+
 ## v6.0.152
 
 Release hooks for portable exports, OpenCode as a first-class AI client, a setup-wizard git step, and a loopback-address sweep.

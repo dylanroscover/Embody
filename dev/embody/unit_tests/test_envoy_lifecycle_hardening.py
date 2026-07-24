@@ -77,6 +77,16 @@ class EnvoyLifecycleContractBase(EmbodyTestCase):
             'shutdown_event': self.envoy.shutdown_event,
             'sys_queues': dict(getattr(sys, '_envoy_queues', {})),
             'sys_shutdown': dict(getattr(sys, '_envoy_shutdown_events', {})),
+            # _continueStart overwrites these; the bind-failure contract also
+            # routes through _onServerError, which records the mocked port in
+            # the process-global bind-failure blacklist. Restore all of it so
+            # the LIVE server's identity (its real runtime port) and the real
+            # blacklist are left exactly as found.
+            'runtime_port': self.envoy._runtime_port,
+            'startup_event': self.envoy._startup_event,
+            'startup_deadline': self.envoy._startup_deadline,
+            'last_start_time': self.envoy._last_start_time,
+            'sys_bad_ports': dict(getattr(sys, '_envoy_bad_bind_ports', {})),
         }
 
         # Baseline for the mocked contracts: simulate a clean, not-yet-running
@@ -117,6 +127,11 @@ class EnvoyLifecycleContractBase(EmbodyTestCase):
         self.envoy.shutdown_event = st['shutdown_event']
         sys._envoy_queues = st['sys_queues']
         sys._envoy_shutdown_events = st['sys_shutdown']
+        self.envoy._runtime_port = st['runtime_port']
+        self.envoy._startup_event = st['startup_event']
+        self.envoy._startup_deadline = st['startup_deadline']
+        self.envoy._last_start_time = st['last_start_time']
+        sys._envoy_bad_bind_ports = st['sys_bad_ports']
 
         self.envoy._starting = self._saved_starting
         if self._saved_running is None:

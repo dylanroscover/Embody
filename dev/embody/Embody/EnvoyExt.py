@@ -2403,6 +2403,13 @@ class EnvoyExt:
         self._RESTART_BACKOFF_MAX: float = 60.0       # cap the gap at 1 min
         self._RESTART_RESET_SECONDS: float = 120.0    # stable this long -> fresh storm
         self._restart_window_start: float = 0.0       # time.time() of a storm's 1st failure
+        # Ports that recently FAILED a real uvicorn bind live in
+        # sys._envoy_bad_bind_ports ({port: time.time()}) for this long, and
+        # _findAvailablePort skips them. Defense-in-depth behind the bind
+        # probe: covers a probe/bind race (another process grabs the port in
+        # between), so a restart storm advances to the next port instead of
+        # re-picking the same poisoned one every attempt (2026-07-23 loop).
+        self._BIND_FAIL_TTL_SECONDS: float = 600.0
         # H1 startup-readiness state: 'Running' is declared only after the
         # worker confirms a real bind (via _pollStartup).  _starting guards the
         # window so duplicate Start() calls are suppressed before envoy_running.
@@ -2740,11 +2747,22 @@ class EnvoyExt:
     def _findAvailablePort(self, base_port: int, range_size: int = 10) -> 'int | None':
         """Find an available port in [base_port, base_port + range_size).
 
-        Checks BOTH the socket state AND the envoy.json registry so that
-        two TD instances starting near-simultaneously don't race on the same
-        port.  A port is considered taken if:
-          - A TCP connect succeeds (something is listening), OR
-          - Another instance is registered on it with a live PID.
+        Checks a test-BIND, the envoy.json registry, and the recent
+        bind-failure blacklist so that two TD instances starting
+        near-simultaneously don't race on the same port.  A port is
+        considered taken if:
+          - We cannot bind it (some socket already holds it), OR
+          - Another instance is registered on it with a live PID, OR
+          - A server worker recently died failing to bind it.
+
+        The probe is a real bind(), NOT a connect(): a zombie TD process can
+        hold a port bound/LISTENING while its accept loop is dead, so
+        connects to it are REFUSED (the old connect probe reported "free")
+        yet uvicorn's bind still fails with WinError 10048 -- and the retry
+        loop re-picked the same poisoned port forever (observed 2026-07-23:
+        a windowless leftover TD instance camped port 9872). Binding probes
+        the exact operation uvicorn will perform, so a dead listener cannot
+        fool it -- and it is faster (no 1s connect timeout per busy port).
 
         Tries the base port first (fast path for single-instance).  If busy,
         attempts to force-close a stale server from the same TD process, then
@@ -2756,10 +2774,28 @@ class EnvoyExt:
         import socket
         import os as _os
 
-        def _port_in_use(port: int) -> bool:
+        def _port_bindable(port: int) -> bool:
+            # Mirror uvicorn's bind exactly (plain bind, no SO_REUSEADDR) so
+            # the answer predicts the real startup outcome -- including
+            # zombie-held and TIME_WAIT-blocked ports.
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1)
-                return s.connect_ex(('127.0.0.1', port)) == 0
+                try:
+                    s.bind(('127.0.0.1', port))
+                    return True
+                except OSError:
+                    return False
+
+        def _recent_bind_failure(port: int) -> bool:
+            bad = getattr(sys, '_envoy_bad_bind_ports', None)
+            if not bad:
+                return False
+            ts = bad.get(port)
+            if ts is None:
+                return False
+            if time.time() - ts < self._BIND_FAIL_TTL_SECONDS:
+                return True
+            bad.pop(port, None)  # expired -- eligible again
+            return False
 
         def _port_registered_by_other(port: int) -> bool:
             """Check if another live instance claims this port in envoy.json."""
@@ -2783,7 +2819,9 @@ class EnvoyExt:
             return False
 
         def _port_taken(port: int) -> bool:
-            return _port_in_use(port) or _port_registered_by_other(port)
+            return (_recent_bind_failure(port)
+                    or not _port_bindable(port)
+                    or _port_registered_by_other(port))
 
         # Fast path: preferred port is free AND not claimed by another instance
         if not _port_taken(base_port):
@@ -3303,6 +3341,12 @@ class EnvoyExt:
         if ev is not None and ev.is_set():
             # Confirmed bound + serving.
             self._starting = False
+            # A real bind proves the port is healthy -- drop any blacklist
+            # entry a stale late-arriving error callback may have left for it
+            # (that callback can't tell an old generation's port from ours).
+            bad = getattr(sys, '_envoy_bad_bind_ports', None)
+            if bad:
+                bad.pop(self._runtime_port, None)
             self.ownerComp.store('envoy_running', True)
             self.ownerComp.par.Envoystatus = f'Running on port {self._runtime_port}'
             self._last_start_time = time.time()
@@ -4098,6 +4142,18 @@ class EnvoyExt:
         self.ownerComp.store('envoy_running', False)
         self.current_task = None
         self._starting = False
+        # Worker died without ever confirming a bind -> blacklist its port so
+        # the restart scans PAST it instead of re-picking the same poisoned
+        # port every attempt. Non-bind pre-startup failures land here too;
+        # blacklisting their port is harmless (entry expires after
+        # _BIND_FAIL_TTL_SECONDS, and a confirmed bind clears it).
+        bound = (self._startup_event is not None
+                 and self._startup_event.is_set())
+        port = getattr(self, '_runtime_port', None)
+        if not bound and port:
+            bad = getattr(sys, '_envoy_bad_bind_ports', {})
+            bad[port] = time.time()
+            sys._envoy_bad_bind_ports = bad
         if self.ownerComp.par.Envoyenable.eval() and not self.ownerComp.ext.Embody._performMode:
             self._scheduleRestart(f'Server error: {error}')
 

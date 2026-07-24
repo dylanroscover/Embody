@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.152-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.153-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-53-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -172,7 +172,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **103 test suites** (2,321 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **103 test suites** (2,327 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -203,6 +203,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.153**: **Envoy port scanner survives a zombie TD holding a port** — `_findAvailablePort` now probes candidates with a real `bind()` instead of a TCP `connect()`. A windowless leftover TouchDesigner can hold a port bound + LISTENING with a dead accept loop, so connects are refused (old probe read it "free") while uvicorn's `bind()` still fails with `WinError 10048` — and the retry loop re-elected the same poisoned port for the full 30-min window (observed: a second `.toe` in one repo crash-looped on a port an hours-old dev instance still camped). The bind probe does exactly what uvicorn does, so a dead listener can't fool it (and it drops the 1s connect-timeout per busy port). Plus a 10-minute **bind-failure blacklist** so a probe/bind race advances to the next port instead of looping; a confirmed bind clears it. **2,327 tests** (103 suites).
 - **6.0.152**: **Release hooks for Export Portable Tox** (issue #74) — `pre_release` runs on a throwaway staged copy (PI's model: shape the artifact, live comp untouched, hook code never ships), `post_release` runs on the original after the save with the path + success flag; failed pre-hooks keep the staged copy for inspection. **OpenCode is a first-class AI client** — generated `opencode.json` spawns the same STDIO bridge, loads the generated rules, and uninstalls cleanly; new **Local Models & Open Clients** docs page. **Setup wizard asks about git** (initialize or skip — no more silent handling) and lists OpenCode. **`ReleaseAll()`** batch-exports every tracked, hook-bearing component; **Show Built-in Pars** toggle (Advanced) unhides TD's parameter pages. `localhost` → `127.0.0.1` across all shipped/machine surfaces. **2,321 tests** (103 suites).
 - **6.0.149**: **Auto-Update controls moved to the About page** — `Autoupdate`/`Checkforupdate`/`Updatestatus` now sit with the version info (section break below Date), returning Advanced to its focused shape. Behavior unchanged. **2,225 tests** (101 suites).
 - **6.0.148**: **Custom-pages-only parameter dialog** (the POPX pattern) — `showCustomOnly` on the Embody COMP shows the 9 Embody pages instead of those plus TD's built-in Layout/Panel/Look/... pages (still functional, just filtered); applied in `EmbodyExt.__init__` so existing installs converge after updating. Parameter Reference truth-synced to the component's par help (`Update Status` default is `Disabled`). **2,225 tests** (101 suites).
