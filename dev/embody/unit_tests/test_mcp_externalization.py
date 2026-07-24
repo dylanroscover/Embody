@@ -82,6 +82,67 @@ class TestMCPExternalization(EmbodyTestCase):
             op_path='/nonexistent')
         self.assertDictHasKey(result, 'error')
 
+    # --- TDN strategy round-trip (ghost-row regression, 2026-07-24) ---
+
+    def _deleteExportedFile(self, rel_path):
+        """Best-effort disk cleanup for a file the test exported."""
+        if not rel_path:
+            return
+        try:
+            fp = self.embody_ext.buildAbsolutePath(
+                self.embody_ext.normalizePath(rel_path)).resolve()
+            if fp.is_file():
+                fp.unlink()
+        except Exception:
+            pass
+
+    def test_externalize_op_tdn_reports_tdn_file(self):
+        """REGRESSION: tag_type='tdn' must report the .tdn file.
+
+        The old handler read par.externaltox for every COMP, reporting a
+        bogus .tox filename for TDN-strategy externalizations.
+        """
+        comp = self.sandbox.create(baseCOMP, 'tdn_file_report')
+        result = self.envoy._externalize_op(op_path=comp.path, tag_type='tdn')
+        self.assertTrue(result.get('success'),
+            f"externalize failed: {result.get('error')}")
+        reported = str(result.get('file', ''))
+        self.assertTrue(reported.endswith('.tdn'),
+            f"tdn externalization must report a .tdn file, got {reported!r}")
+        self.envoy._remove_externalization_tag(op_path=comp.path)
+        self._deleteExportedFile(reported)
+
+    def test_remove_externalization_tag_tdn_prunes_row(self):
+        """REGRESSION: TDN untag must remove the table row + breadcrumb.
+
+        The Update sweep deliberately excludes TDN comps from subtraction
+        detection (their lifecycle belongs to RemoveTDNEntry), so the old
+        raw tag-strip + Update() path left a ghost row that Refresh kept
+        resurrecting (found live 2026-07-24).
+        """
+        comp = self.sandbox.create(baseCOMP, 'tdn_ghost_row')
+        ext_result = self.envoy._externalize_op(
+            op_path=comp.path, tag_type='tdn')
+        self.assertTrue(ext_result.get('success'),
+            f"externalize failed: {ext_result.get('error')}")
+        tdn_tag = self.embody.par.Tdntag.eval()
+        self.assertIn(tdn_tag, comp.tags, 'Precondition: comp tagged tdn')
+
+        result = self.envoy._remove_externalization_tag(op_path=comp.path)
+        self.assertTrue(result.get('success'),
+            f"untag failed: {result.get('error')}")
+        self.assertIn(tdn_tag, result.get('removed_tags', []))
+
+        self.assertNotIn(tdn_tag, comp.tags,
+            'TDN untag must strip the tag')
+        rows = [self.embody_ext.Externalizations[i, 'path'].val
+                for i in range(1, self.embody_ext.Externalizations.numRows)]
+        self.assertNotIn(comp.path, rows,
+            'TDN untag must delete the tracking row (ghost-row regression)')
+        self.assertIsNone(comp.fetch('_tdn_rel_path', None, search=False),
+            'TDN untag must clear the _tdn_rel_path breadcrumb')
+        self._deleteExportedFile(ext_result.get('file'))
+
     # --- DAT auto-detection ---
 
     def test_tag_textdat_defaults_to_py(self):

@@ -771,7 +771,17 @@ def externalize_op(ext, op_path: str, tag_type: str = None) -> dict:
         op.Embody.ext.Embody.applyTagToOperator(target, tag_type)
         op.Embody.Update()
 
-        file_path = target.par.file.eval() if target.family == 'DAT' else target.par.externaltox.eval()
+        # Report the file actually written for the strategy: TDN comps track
+        # their .tdn in the externalizations table (externaltox would report
+        # a stale/wrong .tox -- the tox par plays no role in TDN strategy).
+        if target.family == 'DAT':
+            file_path = target.par.file.eval()
+        elif tag_type == op.Embody.par.Tdntag.eval():
+            file_path = (op.Embody.ext.Embody._getStrategyFilePath(
+                target.path, 'tdn')
+                or target.fetch('_tdn_rel_path', '', search=False))
+        else:
+            file_path = target.par.externaltox.eval()
         return {
             'success': True,
             'path': op_path,
@@ -782,29 +792,47 @@ def externalize_op(ext, op_path: str, tag_type: str = None) -> dict:
         return {'error': f'Failed to tag: {e}'}
 
 
-def remove_externalization_tag(ext, op_path: str) -> dict:
-    """Remove Embody externalization tag and clean up"""
+def remove_externalization_tag(ext, op_path: str,
+                               delete_file: bool = False) -> dict:
+    """Remove Embody externalization tracking and clean up.
+
+    Routes through Embody's own removal handlers rather than stripping
+    tags raw: the Update sweep deliberately EXCLUDES TDN comps from
+    subtraction detection (their lifecycle belongs to RemoveTDNEntry),
+    so a raw tag-strip + Update left the table row and the
+    _tdn_rel_path breadcrumb behind -- a ghost row that Refresh kept
+    resurrecting.
+    """
     target = ext._resolve_op(op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
     try:
-        # Get all tags and remove them
-        tags = op.Embody.ext.Embody.getTags()
-        removed = []
-        for tag in tags:
-            if target.tags and tag in target.tags:
-                target.tags.remove(tag)
-                removed.append(tag)
+        embody = op.Embody.ext.Embody
+        removed = [tag for tag in embody.getTags()
+                   if target.tags and tag in target.tags]
+        is_tdn = (op.Embody.par.Tdntag.eval() in removed
+                  or bool(embody._getStrategyFilePath(target.path, 'tdn')))
 
-        # Run Update to process the subtraction
-        if removed:
-            op.Embody.Update()
+        if is_tdn:
+            # Strips tags, drops the row + _tdn_rel_path breadcrumb,
+            # resets color (issue #48).
+            embody.RemoveTDNEntry(target.path, delete_file=delete_file)
+        elif removed:
+            rel_fp = embody.getExternalPath(target)
+            embody.RemoveListerRow(target.path, rel_fp,
+                                   delete_file=delete_file)
+        # No tags and no TDN row: nothing tracked -- report success with
+        # an empty removal list (previous behavior, kept for callers that
+        # untag defensively).
 
         return {
             'success': True,
             'path': op_path,
-            'removed_tags': removed
+            'removed_tags': removed,
+            # Deletion is best-effort: RemoveListerRow's safety checks
+            # (clones, files still referenced elsewhere) can keep the file.
+            'file_delete_requested': bool(delete_file and (is_tdn or removed))
         }
     except Exception as e:
         return {'error': f'Failed to remove tag: {e}'}

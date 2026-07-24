@@ -112,7 +112,7 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one batch_operat
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (one step) |
-| `remove_externalization_tag` | `op_path` | Remove externalization tag |
+| `remove_externalization_tag` | `op_path`, `delete_file?` | Remove externalization tracking (tag + row + TDN breadcrumb); `delete_file=True` also deletes the file (best-effort) |
 | `get_externalizations` | _(none)_ | List all externalized operators |
 | `save_externalization` | `op_path` | Force re-export an already-externalized operator |
 | `get_externalization_status` | `op_path` | Get dirty state, build, timestamp, path |

@@ -7712,16 +7712,25 @@ class EmbodyExt:
         
         return False
 
-    def RemoveTDNEntry(self, op_path: str) -> None:
+    def RemoveTDNEntry(self, op_path: str, delete_file: bool = True) -> None:
         """Remove a TDN strategy entry and delete the .tdn file from disk.
 
-        Also strips the operator's externalization tags, resets its color,
-        and drops its parameter-tracker entry (mirroring RemoveListerRow).
+        Also strips the operator's externalization tags, clears the
+        `_tdn_rel_path` recovery breadcrumb, resets its color, and drops
+        its parameter-tracker entry (mirroring RemoveListerRow).
         Leaving the tdn tag in place turns removal into resurrection: the
         Update sweep that runs on every save re-externalizes any
         tagged-but-untracked COMP, restoring the row and .tdn file the user
-        just deleted (issue #48). Tolerates a missing operator -- Full
-        Project entries track paths (e.g. '/') that carry no tag.
+        just deleted (issue #48). The breadcrumb must go for the same
+        reason: ReconcileMetadata and RecoverOrphanShells treat it as
+        tracking truth and would resurrect the row from it. Tolerates a
+        missing operator -- Full Project entries track paths (e.g. '/')
+        that carry no tag.
+
+        Args:
+            delete_file: When False, keep the .tdn on disk (the MCP
+                remove_externalization_tag path defaults to this; the
+                lister X button keeps the default True).
         """
         try:
             oper = op(op_path)
@@ -7729,11 +7738,12 @@ class EmbodyExt:
                 for tag in self.getTags():
                     if tag in oper.tags:
                         oper.tags.remove(tag)
+                oper.unstore('_tdn_rel_path')
                 self.resetOpColor(oper)
                 self.param_tracker.removeComp(op_path)
         except Exception as e:
             self.Log(f"Error handling operator '{op_path}'", "ERROR", str(e))
-        self._removeTDNStrategy(op_path)
+        self._removeTDNStrategy(op_path, delete_file=delete_file)
         self.lister.reset()
 
     # ==========================================================================

@@ -1,5 +1,16 @@
 # Changelog
 
+## v6.0.154
+
+A progress dialog for large TDN exports, plus two externalization-untag fixes.
+
+- **Chunked TDN exports show a progress dialog**: `ExportNetworkAsync` (the path behind the toolbar export button, the export keyboard shortcut, and whole-project TDN export) now opens a small centered progress window for large exports -- title, a live `<comp> -- N / total operators (pct)` status line, a progress bar, and a **Cancel** button. It auto-opens once an export covers >= 500 operators (`show_progress=None`, the default; existing callers get it for free) and stays out of the way below that. Cancel is consumed on the next batch boundary: no file is written and the worker unwinds cleanly. The export already ran batched across frames (200 ops/frame, now tunable via `batch_size`), so TouchDesigner stays responsive throughout -- verified live against a 10,260-operator network (held 60fps) and a 3,060-operator content-heavy network that serialized to a 3 MB `.tdn`. A synchronous export of the same 10k network blocks the main thread ~1.5s; the chunked path spreads it with zero freeze.
+- **No post-completion frame-drop burst**: the async export's success hook stacked OS-window teardown, export tracking, and the manager-list force-cook/reset onto a single frame, cascading dropped frames for a beat after a large export finished. The list rebuild is now deferred off the completion frame so those costs no longer land together.
+- **TDN untag no longer leaves a ghost row**: `remove_externalization_tag` on a TDN-strategy COMP now routes through Embody's own `RemoveTDNEntry` / `RemoveListerRow` handlers instead of a raw tag-strip + `Update()`. The `Update` subtraction sweep deliberately excludes TDN COMPs (their lifecycle belongs to `RemoveTDNEntry`), so the old path left the externalizations-table row -- and the `_tdn_rel_path` recovery breadcrumb -- behind, a ghost the refresh sweep kept resurrecting. `RemoveTDNEntry` now also clears that breadcrumb, and the MCP tool gained a `delete_file` flag (default False -- agents untag non-destructively; the lister X button still deletes).
+- **`externalize_op` reports the right filename for TDN**: tagging a COMP with `tag_type='tdn'` now returns the actual `.tdn` path (from the tracking table) instead of a stale `.tox` name read off `par.externaltox`.
+- Tests: new `test_tdn_export_progress` suite (6) covering the cancel request/consume path, the dialog guards, and the auto-show threshold; plus TDN-untag ghost-row + `.tdn`-filename regressions in `test_mcp_externalization` (+2) and breadcrumb/keep-file regressions in `test_strategy_handlers` (+2).
+- Test suite: 104 suites, 2,337 tests.
+
 ## v6.0.153
 
 The Envoy port scanner survives a zombie TouchDesigner holding a port.

@@ -110,7 +110,7 @@ Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mod
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (auto-detects type if omitted) |
-| `remove_externalization_tag` | `op_path` | Remove externalization tag |
+| `remove_externalization_tag` | `op_path`, `delete_file?` | Remove externalization tracking (tag + row + TDN breadcrumb); `delete_file=True` also deletes the file (best-effort) |
 | `get_externalizations` | _(none)_ | List all externalized operators with status |
 | `save_externalization` | `op_path` | Force save an externalized operator to disk |
 | `get_externalization_status` | `op_path` | Get dirty state, build number, timestamp, file path |

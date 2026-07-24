@@ -203,6 +203,32 @@ class TestRemoveTDNEntry(EmbodyTestCase):
         """
         self.embody_ext.RemoveTDNEntry('/nonexistent_issue48_probe')
 
+    def test_remove_tdn_entry_clears_breadcrumb(self):
+        """REGRESSION (2026-07-24): must unstore the _tdn_rel_path breadcrumb.
+
+        A leftover breadcrumb lets ReconcileMetadata / RecoverOrphanShells
+        resurrect the externalization the user just removed.
+        """
+        comp, _ = self._externalizedTDN('x_breadcrumb')
+        comp.store('_tdn_rel_path', 'embody/fake_breadcrumb.tdn')
+        self.embody_ext.RemoveTDNEntry(comp.path)
+        self.assertIsNone(comp.fetch('_tdn_rel_path', None, search=False),
+            'RemoveTDNEntry must clear the _tdn_rel_path breadcrumb')
+
+    def test_remove_tdn_entry_keep_file(self):
+        """delete_file=False removes tracking but skips file deletion.
+
+        This is the MCP remove_externalization_tag default: agents untag
+        non-destructively; only the lister X button deletes by default.
+        """
+        comp, tdn_tag = self._externalizedTDN('x_keep_file')
+        self.embody_ext.RemoveTDNEntry(comp.path, delete_file=False)
+        self.assertNotIn(tdn_tag, comp.tags)
+        rows = [self.embody_ext.Externalizations[i, 'path'].val
+                for i in range(1, self.embody_ext.Externalizations.numRows)]
+        self.assertNotIn(comp.path, rows,
+            'delete_file=False must still remove the tracking row')
+
 
 class TestHandleStrategySwitch(EmbodyTestCase):
 

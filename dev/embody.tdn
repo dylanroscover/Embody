@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 728
-generator: Embody/6.0.151
+build: 747
+generator: Embody/6.0.153
 td_build: 099.2025.33070
-source_file: Embody-6.152.toe
-exported_at: '2026-07-23T18:56:52Z'
+source_file: Embody-6.154.toe
+exported_at: '2026-07-24T20:42:05Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -317,7 +317,7 @@ operators:
       label: Auto-Save Status
       readOnly: true
       help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-      value: Saved 18:32:38 UTC
+      value: Saved 20:38:57 UTC
     - name: Tdnstriponsave
       style: Toggle
       label: Strip on Save
@@ -459,7 +459,7 @@ operators:
       startSection: true
       readOnly: true
       help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-      value: Running on port 9873
+      value: Running on port 9872
     Logs:
     - name: Verbose
       style: Toggle
@@ -748,7 +748,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.151
+      value: 6.0.153
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -765,7 +765,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 880
+      value: 891
     - name: Github
       style: Pulse
       label: GitHub
@@ -776,7 +776,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-23 18:56:51 UTC
+      value: 2026-07-24 20:42:04 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -816,9 +816,9 @@ operators:
     _tdn_restore_failures:
     - /embody/base1
     _start_in_progress: true
-    _watchdog_gen: 1022
-    _clip_watch_gen: 787
-    _shortcut_rec_gen: 293
+    _watchdog_gen: 1037
+    _clip_watch_gen: 802
+    _shortcut_rec_gen: 321
     _release_hook_active: false
   tdn_ref: embody/Embody.tdn
 - name: unit_tests

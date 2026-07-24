@@ -1203,10 +1203,17 @@ class TDNExt:
 		finally:
 			self._cleanupScanWorkspace()
 
+	# Ops-count threshold above which the progress dialog auto-opens
+	# (show_progress=None). Below it, exports finish in a blink and a
+	# dialog would just flash.
+	EXPORT_PROGRESS_THRESHOLD = 500
+
 	def ExportNetworkAsync(self, root_path: str = '/', include_dat_content: Optional[bool] = None,
 						   output_file: Optional[str] = None, max_depth: Optional[int] = None,
 						   embed_all: bool = False,
-						   include_storage: Optional[bool] = None) -> None:
+						   include_storage: Optional[bool] = None,
+						   batch_size: int = 200,
+						   show_progress: Optional[bool] = None) -> None:
 		"""
 		Non-blocking export using Thread Manager. Processes operators in
 		batches across frames so TouchDesigner stays responsive.
@@ -1221,6 +1228,11 @@ class TDNExt:
 			max_depth: Maximum recursion depth (None = unlimited)
 			embed_all: If True, recurse into TDN-tagged COMPs instead of
 				skipping their children. Produces a self-contained export.
+			batch_size: Operators serialized per frame (min 10). Lower
+				values spread the work thinner for smoother UI at the cost
+				of wall-clock time.
+			show_progress: Open the progress dialog. None = auto (opens
+				when the export covers >= EXPORT_PROGRESS_THRESHOLD ops).
 		"""
 		# Reject if export already running
 		if (self._export_state is not None
@@ -1299,7 +1311,8 @@ class TDNExt:
 		self._export_state = {
 			'paths': op_paths,
 			'index': 0,
-			'batch_size': 200,
+			'batch_size': max(10, int(batch_size)),
+			'cancel': False,
 			'results': {},
 			'options': {
 				'include_dat_content': include_dat_content,
@@ -1468,6 +1481,79 @@ class TDNExt:
 			f'Exporting {len(op_paths)} operators from {root_path}...',
 			'INFO')
 
+		if show_progress or (show_progress is None
+				and len(op_paths) >= TDNExt.EXPORT_PROGRESS_THRESHOLD):
+			self._openExportProgress(state)
+
+	# ------------------------------------------------------------------
+	# Export progress dialog (chunked-export feedback)
+	# ------------------------------------------------------------------
+
+	def _exportProgressComp(self):
+		"""The progress dialog COMP, or None when not built yet."""
+		return self.ownerComp.op('tdn_export_progress')
+
+	def _openExportProgress(self, state) -> None:
+		"""Open the progress dialog for a running chunked export.
+
+		Guarded: a missing/broken dialog must never break the export.
+		"""
+		try:
+			dlg = self._exportProgressComp()
+			if not dlg:
+				return
+			self._updateExportProgress(state)
+			win = dlg.op('win')
+			if win and not win.isOpen:
+				win.par.winopen.pulse()
+		except Exception as e:
+			self._log(f'Progress dialog open failed: {e}', 'WARNING')
+
+	def _updateExportProgress(self, state) -> None:
+		"""Push current progress into the dialog. Cheap; called per batch."""
+		try:
+			dlg = self._exportProgressComp()
+			if not dlg:
+				return
+			total = max(1, len(state['paths']))
+			done = min(state['index'], total)
+			frac = done / total
+			comp_name = state['root_path'].rsplit('/', 1)[-1] or '/'
+			status = dlg.op('dialog/status')
+			if status:
+				status.par.text = (
+					f'{comp_name} -- {done:,} / {total:,} operators '
+					f'({frac:.0%})')
+			fill = dlg.op('dialog/bar_bg/bar_fill')
+			if fill:
+				bar_w = dlg.op('dialog/bar_bg').par.w.eval()
+				fill.par.w = max(0, int(bar_w * frac))
+		except Exception as e:
+			self._log(f'Progress dialog update failed: {e}', 'WARNING')
+
+	def _closeExportProgress(self) -> None:
+		"""Close the progress dialog (end of export, error, or cancel)."""
+		try:
+			dlg = self._exportProgressComp()
+			if not dlg:
+				return
+			win = dlg.op('win')
+			if win and win.isOpen:
+				win.par.winclose.pulse()
+		except Exception as e:
+			self._log(f'Progress dialog close failed: {e}', 'WARNING')
+
+	def CancelExport(self) -> None:
+		"""Request cancellation of a running chunked export.
+
+		Consumed by _onExportRefresh on the next batch boundary: no file
+		is written, the worker unwinds via its error path, and the dialog
+		closes. Safe to call when nothing is running.
+		"""
+		state = self._export_state
+		if state and not state.get('done'):
+			state['cancel'] = True
+
 	def ExportProjectTDNInteractive(self):
 		"""Export project TDN with a dialog if TDN-tagged COMPs exist.
 
@@ -1510,6 +1596,16 @@ class TDNExt:
 		if state is None or state['done']:
 			return
 
+		# Cancellation lands on a batch boundary: no file is written (the
+		# worker sees the error and raises into _onExportError, which
+		# cleans up), and processing stops immediately.
+		if state.get('cancel'):
+			state['error'] = 'Export cancelled by user'
+			state['done'] = True
+			self._closeExportProgress()
+			state['done_event'].set()
+			return
+
 		try:
 			paths = state['paths']
 			idx = state['index']
@@ -1527,6 +1623,7 @@ class TDNExt:
 					self._log(f'Error exporting {paths[i]}: {e}', 'WARNING')
 
 			state['index'] = batch_end
+			self._updateExportProgress(state)
 
 			if batch_end >= len(paths):
 				# Collect annotations on main thread before signaling worker
@@ -1590,6 +1687,7 @@ class TDNExt:
 	def _onExportSuccess(self):
 		"""SuccessHook: Log completion (main thread)."""
 		self._cleanupScanWorkspace()
+		self._closeExportProgress()
 		state = self._export_state
 		if state and state.get('result'):
 			result = state['result']
@@ -1609,7 +1707,13 @@ class TDNExt:
 					'INFO')
 
 		self._export_state = None
-		self._refreshList()
+		# Defer the manager-list rebuild off the completion frame. The
+		# SuccessHook already carries window teardown (_closeExportProgress)
+		# + export tracking; force-cooking the lister on the SAME frame
+		# stacked into a visible post-completion frame-drop burst on large
+		# exports (observed 2026-07-24). A couple idle frames let the window
+		# close settle first, then the list refresh lands on its own frame.
+		run("args[0]._refreshList()", self, delayFrames=2)
 
 		# Chain next re-export if queue active
 		if getattr(self, '_reexport_queue', None):
@@ -1618,10 +1722,11 @@ class TDNExt:
 	def _onExportError(self, e):
 		"""ExceptHook: Log error (main thread)."""
 		self._cleanupScanWorkspace()
+		self._closeExportProgress()
 		self._log(f'Export failed: {e}', 'ERROR')
 		self._export_state = None
 		self._reexport_queue = None
-		self._refreshList()
+		run("args[0]._refreshList()", self, delayFrames=2)
 
 	def _refreshList(self):
 		"""Recook the list data source and reset the list COMP."""

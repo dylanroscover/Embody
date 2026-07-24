@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 880
-generator: Embody/6.0.151
+build: 891
+generator: Embody/6.0.153
 td_build: 099.2025.33070
-source_file: Embody-6.152.toe
-exported_at: '2026-07-23T18:56:51Z'
+source_file: Embody-6.154.toe
+exported_at: '2026-07-24T20:42:04Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -14,15 +14,14 @@ type_defaults:
     parameters:
       resizecomp: =me
       repocomp: =me
-    color: [0.3, 0.5, 0.9]
-    tags:
-    - tdn
   textDAT:
     parameters:
-      syncfile: true
       language: python
-    size: [130, 90]
-    color: [0.9, 0.3, 0.4]
+  parameterexecuteDAT:
+    parameters:
+      fromop: =parent()
+      op: ..
+      defaultreadencoding: cp1252
   baseCOMP:
     size: [160, 130]
   tableDAT:
@@ -32,6 +31,14 @@ type_defaults:
     color: [0.9, 0.3, 0.4]
     tags:
     - tsv
+  textCOMP:
+    parameters:
+      resizecomp: =me
+      repocomp: =me
+      bgalpha: 1
+  panelexecuteDAT:
+    parameters:
+      fromop: =parent()
 type: containerCOMP
 custom_pars:
   Embody:
@@ -285,7 +292,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 18:32:38 UTC
+    value: Saved 20:38:57 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -427,7 +434,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-    value: Running on port 9873
+    value: Running on port 9872
   Logs:
   - name: Verbose
     style: Toggle
@@ -716,7 +723,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.151
+    value: 6.0.153
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -733,7 +740,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 880
+    value: 891
   - name: Github
     style: Pulse
     label: GitHub
@@ -744,7 +751,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-23 18:56:51 UTC
+    value: 2026-07-24 20:42:04 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -816,9 +823,9 @@ storage:
   _tdn_restore_failures:
   - /embody/base1
   _start_in_progress: true
-  _watchdog_gen: 1022
-  _clip_watch_gen: 787
-  _shortcut_rec_gen: 293
+  _watchdog_gen: 1037
+  _clip_watch_gen: 802
+  _shortcut_rec_gen: 321
   _release_hook_active: false
 operators:
 - name: help
@@ -862,6 +869,9 @@ operators:
     reloadbuiltin: false
   position: [300, 75]
   size: [160, 86]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   comp_inputs:
   - manager
   tdn_ref: embody/Embody/list.tdn
@@ -887,7 +897,10 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/TDNExt.py
+    syncfile: true
   position: [-700, 600]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: tagger
@@ -908,6 +921,9 @@ operators:
     reloadbuiltin: false
   position: [900, 225]
   size: [108, 155]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   tdn_ref: embody/Embody/tagger.tdn
 - name: timer1
   type: timerCHOP
@@ -940,6 +956,9 @@ operators:
     spacing: 10
   position: [1200, 225]
   size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   storage:
     step: 0
     sel:
@@ -997,15 +1016,15 @@ operators:
     reloadbuiltin: false
   position: [500, 475]
   size: [160, 92]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   tdn_ref: embody/Embody/manager.tdn
 - name: parexec
   type: parameterexecuteDAT
   parameters:
-    fromop: =parent()
-    op: ..
     pars: '*'
     file: embody/Embody/parexec.py
-    defaultreadencoding: cp1252
     syncfile: true
     language: input
   position: [-275, 300]
@@ -1049,6 +1068,9 @@ operators:
       promote: true
   position: [300, 200]
   size: [160, 76]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   storage:
     _tip_trace:
       btn: close
@@ -1084,10 +1106,13 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/EnvoyExt.py
+    syncfile: true
   position: [-700, 700]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
-  - py
   - TDExtension
+  - py
 - name: mousein1
   type: mouseinCHOP
   parameters:
@@ -1102,29 +1127,41 @@ operators:
   parameters:
     file: embody/Embody/EmbodyExt.py
     defaultreadencoding: cp1252
+    syncfile: true
     extension: py
   position: [-700, 800]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: envoy_ops
   type: textDAT
   parameters:
     file: embody/Embody/envoy_ops.py
+    syncfile: true
   position: [-500, 400]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: envoy_viz
   type: textDAT
   parameters:
     file: embody/Embody/envoy_viz.py
+    syncfile: true
   position: [-500, 600]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: shortcuts
   type: textDAT
   parameters:
     file: embody/Embody/shortcuts.py
+    syncfile: true
   position: [-500, -375]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: templates
@@ -1150,21 +1187,30 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/embody_git.py
+    syncfile: true
   position: [-700, 100]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: envoy_read
   type: textDAT
   parameters:
     file: embody/Embody/envoy_read.py
+    syncfile: true
   position: [-500, 800]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: envoy_setup
   type: textDAT
   parameters:
     file: embody/Embody/envoy_setup.py
+    syncfile: true
   position: [-500, 700]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: keyboardin1
@@ -1179,14 +1225,20 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/embody_admin.py
+    syncfile: true
   position: [-700, 300]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: envoy_layout
   type: textDAT
   parameters:
     file: embody/Embody/envoy_layout.py
+    syncfile: true
   position: [-500, 500]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: windowHeader
@@ -1220,6 +1272,9 @@ operators:
       value: /embody/Embody/window_manager
   position: [300, 300]
   size: [160, 76]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   comp_inputs:
   - manager
   tdn_ref: embody/Embody/windowHeader.tdn
@@ -1227,7 +1282,10 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/embody_launch.py
+    syncfile: true
   position: [-700, 200]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: window_wizard
@@ -1273,48 +1331,48 @@ operators:
   annotations:
   - name: envoy_bot_arm_l
     mode: networkbox
-    position: [1437, 251]
+    position: [2112, -269]
     size: [10, 26]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_arm_r
     mode: networkbox
-    position: [1437, 251]
+    position: [2112, -269]
     size: [10, 26]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_body
     mode: networkbox
-    position: [1437, 251]
+    position: [2112, -269]
     size: [30, 34]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_eye_l
     mode: networkbox
-    position: [1437, 251]
+    position: [2112, -269]
     size: [10, 10]
     color: [0.0, 0.0, 0.0]
   - name: envoy_bot_eye_r
     mode: networkbox
-    position: [1437, 251]
+    position: [2112, -269]
     size: [10, 10]
     color: [0.0, 0.0, 0.0]
   - name: envoy_bot_head
     mode: networkbox
-    position: [1437, 251]
+    position: [2112, -269]
     size: [34, 26]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_leg_l
     mode: networkbox
-    position: [1437, 251]
+    position: [2112, -269]
     size: [11, 24]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_leg_r
     mode: networkbox
-    position: [1437, 251]
+    position: [2112, -269]
     size: [11, 24]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_speech
     mode: annotate
     title: Embot
-    position: [1437, 251]
+    position: [2112, -269]
     size: [185, 74]
     color: [0.12, 0.12, 0.17]
     backAlpha: 0.95
@@ -1342,7 +1400,10 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/fifo1_callbacks.py
+    syncfile: true
   position: [-275, 100]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
   dock: fifo1
@@ -1356,7 +1417,10 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/timer_callbacks.py
+    syncfile: true
   position: [-700, -375]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
   dock: timer1
@@ -1364,7 +1428,10 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/CatalogManagerExt.py
+    syncfile: true
   position: [-700, 500]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: divergent_defaults
@@ -1373,6 +1440,223 @@ operators:
     file: embody/Embody/divergent_defaults.tsv
     rows: 502
   position: [-500, 200]
+- name: tdn_export_progress
+  type: baseCOMP
+  position: [1000, 475]
+  color: [0.67, 0.67, 0.67]
+  comment: Chunked TDN export progress dialog
+  children:
+  - name: win
+    type: windowCOMP
+    parameters:
+      winop: dialog
+      title: Embody - TDN Export
+      justifyh: center
+      justifyv: center
+      winw: 440
+      winh: 160
+    position: [200, 0]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  - name: dialog
+    type: containerCOMP
+    parameters:
+      w: 440
+      h: 160
+      bgcolorr: 0.11
+      bgcolorg: 0.12
+      bgcolorb: 0.115
+      bgalpha: 1
+    position: [200, 200]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    children:
+    - name: title
+      type: textCOMP
+      parameters:
+        text: Exporting TDN
+        callbacks: title_callbacks
+        fontcolorr: 0.92
+        fontcolorg: 0.92
+        fontcolorb: 0.92
+        alignx: left
+        x: 24
+        y: 108
+        w: 392
+        h: 28
+        bgcolorr: 0.11
+        bgcolorg: 0.12
+        bgcolorb: 0.115
+      position: [200, 0]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: bar_bg
+      type: containerCOMP
+      parameters:
+        x: 24
+        y: 64
+        w: 392
+        h: 8
+        bgcolorr: 0.16
+        bgcolorg: 0.17
+        bgcolorb: 0.165
+        bgalpha: 1
+      position: [200, -400]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      children:
+      - name: bar_fill
+        type: containerCOMP
+        parameters:
+          w: 156
+          h: 8
+          bgcolorr: 0.24
+          bgcolorg: 0.52
+          bgcolorb: 0.35
+          bgalpha: 1
+        position: [200, 0]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+    - name: status
+      type: textCOMP
+      parameters:
+        text: sandbox_test_tdn_export_progress -- 400 / 1,000 operators (40%)
+        callbacks: status_callbacks
+        fontsize: 12
+        fontcolorr: 0.6
+        fontcolorg: 0.61
+        fontcolorb: 0.6
+        alignx: left
+        x: 24
+        y: 88
+        w: 392
+        h: 18
+        bgcolorr: 0.11
+        bgcolorg: 0.12
+        bgcolorb: 0.115
+      position: [200, -200]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: cancel_btn
+      type: buttonCOMP
+      parameters:
+        buttontype: momentary
+        x: 320
+        y: 16
+        w: 96
+        h: 32
+        resizecomp: =me
+        repocomp: =me
+        bgcolorr: 0.16
+        bgcolorg: 0.17
+        bgcolorb: 0.165
+        clone: =op.TDTox.op('defaultCOMPs/button')
+      position: [200, -600]
+      size: [160, 134]
+      children:
+      - name: out1
+        type: outCHOP
+        parameters:
+          label: =me.name
+          autoexportroot: =parent()
+        flags:
+        - viewer
+        position: [275, 175]
+        size: [130, 90]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        parameters:
+          parameters: value0
+          custom: false
+          builtin: true
+          renameto: v1
+          autoexportroot: =parent()
+        flags:
+        - viewer
+        position: [65, 175]
+        size: [130, 90]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Cancel
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 12
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.92
+          fontcolorg: 0.92
+          fontcolorb: 0.92
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+          hmode: fill
+          vmode: fill
+          clickthrough: true
+          bgcolorr: 0.16
+          bgcolorg: 0.17
+          bgcolorb: 0.165
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          leftborder: bordera
+          rightborder: bordera
+          bottomborder: bordera
+          topborder: bordera
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+    - name: title_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [200, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: title
+    - name: status_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [200, -360]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: status
+  - name: panelexec_cancel
+    type: panelexecuteDAT
+    parameters:
+      panels: dialog/cancel_btn
+    position: [200, -200]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
 - name: window_tagging_menu
   type: windowCOMP
   parameters:
@@ -1410,7 +1694,10 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/keyboardin_callbacks.py
+    syncfile: true
   position: [-300, -375]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
   dock: keyboardin1

@@ -1379,17 +1379,25 @@ class EnvoyMCPServer:
             })
 
         @self.mcp.tool()
-        def remove_externalization_tag(op_path: str) -> dict:
+        def remove_externalization_tag(op_path: str,
+                                       delete_file: bool = False) -> dict:
             """
-            Remove Embody externalization tag from an operator.
+            Remove Embody externalization tracking from an operator
+            (tag, table row, and TDN breadcrumb).
 
             Args:
                 op_path: Path to the operator
+                delete_file: Also delete the externalized file on disk
+                    (best-effort; safety checks may keep it). Default False
+                    keeps the file.
 
             Returns:
-                Dict with success status
+                Dict with success status and removed_tags
             """
-            return self._execute_in_td('remove_externalization_tag', {'op_path': op_path})
+            return self._execute_in_td('remove_externalization_tag', {
+                'op_path': op_path,
+                'delete_file': delete_file
+            })
 
         @self.mcp.tool()
         def get_externalizations() -> dict:
