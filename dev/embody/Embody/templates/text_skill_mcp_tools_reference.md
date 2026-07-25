@@ -94,9 +94,10 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one batch_operat
 | `get_td_class_details` | `class_name` | Get methods, properties, docs for a TD class |
 | `get_module_help` | `module_name` | Python help text for a module |
 | `get_docs` | `query`, `section?`, `source?`, `max_chars?` | Look up official TD docs; offline mirror preferred, docs.derivative.ca fallback; normal responses return `title`, `source`, `sections_available`, `content`; ambiguous offline lookups return `matches` instead of a page |
-| `get_sessions` | _(none)_ | List AI client sessions connected to this Envoy (sid, label, pid, idle, last tool, `recent_scopes` = op paths/files recently modified, `claims` = scopes held, stale flag) plus `you` = caller's own sid. Check at session start and before large or destructive operations so concurrent sessions don't clobber each other |
-| `claim_scope` | `scope`, `note?`, `ttl?` | Cooperative WRITE lease on an op-path prefix, `file:<repo-relative>` path, or `project:<name>` scope. Peers' overlapping claims are refused while yours is live; their destructive ops on it are gated. Auto-renews on your own writes; expires on TTL or session silence |
+| `get_sessions` | _(none)_ | List AI client sessions connected to this Envoy (sid, label, pid, idle, last tool, `recent_scopes` = op paths/files recently modified, `claims` = scopes held, stale flag) plus `you` = caller's own sid. Check at session start and before large or destructive operations so concurrent sessions don't clobber each other. Response may include `worktrees`: in-flight durable worktree tasks, visible even after their session ended |
+| `claim_scope` | `scope`, `note?`, `ttl?` | Cooperative WRITE lease on an op-path prefix, `file:<repo-relative>` path, or `project:<name>` scope. Peers' overlapping claims are refused while yours is live; their destructive ops on it are gated. Auto-renews on your own writes; expires on TTL or session silence. `project:worktree-*` claims are DURABLE: they survive session death and Envoy restarts, expiring when the worktree directory is removed (7-day backstop) |
 | `release_scope` | `scope` | Release a lease you hold (polite; expiry also handles it) |
+| `preflight_landing` | `worktree_path` | Landing safety check for a worktree diff -- intersects the files it would land with main-tree dirt, peer `file:` claims/touches, and unsaved live TDN state (tsv `dirty` column). Run BEFORE porting any worktree diff; verdict `conflicts` means reconcile first |
 
 ## MCP Prompts
 
@@ -169,7 +170,7 @@ These run locally on the STDIO bridge — they work even when TD is not running.
 | `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness. Includes instance registry and live bridge `sessions` (from heartbeat files -- works even with TD down) |
 | `launch_td` | `timeout?` | Launch TD with the project's `.toe` file, wait for Envoy (default: 120s) |
 | `restart_td` | `timeout?` | Gracefully quit TD and relaunch, wait for Envoy (default: 120s) |
-| `switch_instance` | `instance?` | List all registered TD instances (omit `instance`) or switch the bridge to a different running instance (provide toe basename without `.toe`). See `/multi-instance` skill for workflow |
+| `switch_instance` | `instance?`, `all_sessions?` | List all registered TD instances (omit `instance`) or re-pin THIS session's bridge to a different running instance (provide toe basename without `.toe`); peers are untouched unless `all_sessions=true` (writes the registry default and bumps `active_epoch`, moving every session). See `/multi-instance` skill for workflow |
 
 ## Batch Operations
 

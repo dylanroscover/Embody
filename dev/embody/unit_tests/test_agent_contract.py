@@ -68,6 +68,7 @@ EXPECTED_ENVOY_TOOLS = [
     'get_td_info',
     'import_network',
     'layout_children',
+    'preflight_landing',
     'query_network',
     'read_tdn',
     'release_scope',

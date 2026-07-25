@@ -122,10 +122,12 @@ BRIDGE_TOOLS = [
     {
         "name": "switch_instance",
         "description": (
-            "Switch the active TouchDesigner instance or list all registered "
-            "instances. Omit the instance parameter to list available "
-            "instances with their status. Provide an instance name (toe "
-            "basename) to switch the bridge to that instance."
+            "Switch THIS session's TouchDesigner instance or list all "
+            "registered instances. Omit the instance parameter to list "
+            "available instances with their status. Provide an instance "
+            "name (toe basename) to re-pin this session's bridge to that "
+            "instance -- other sessions' routing is untouched unless "
+            "all_sessions=true."
         ),
         "inputSchema": {
             "type": "object",
@@ -135,6 +137,15 @@ BRIDGE_TOOLS = [
                     "description": (
                         "Instance name to switch to (toe basename without "
                         ".toe extension). Omit to list all instances."
+                    ),
+                },
+                "all_sessions": {
+                    "type": "boolean",
+                    "description": (
+                        "Also move every OTHER session's bridge to this "
+                        "instance (writes the registry default and bumps "
+                        "active_epoch). Default false: only this session "
+                        "switches."
                     ),
                 },
             },
@@ -167,7 +178,8 @@ class BridgeState:
     """
 
     def __init__(self, *, url, td_pid=None, config=None,
-                 config_path=None, active_name=None):
+                 config_path=None, active_name=None,
+                 pinned_instance=None, seen_epoch=0):
         self._lock = threading.RLock()
         # Connection state
         self.connected = False
@@ -181,6 +193,16 @@ class BridgeState:
         self.config_path = config_path
         self.config_mtime = 0
         self.active_name = active_name
+        # Per-bridge instance pin: THIS session routes to this instance
+        # name, resolved against the registry each tick (so a pinned
+        # instance's port change after a TD restart still self-heals).
+        # The registry's global 'active' is only the default seed for
+        # bridges without a pin -- registry churn (a new instance
+        # registering, a peer's all-sessions switch of old-format
+        # registries) cannot re-target a pinned bridge unless
+        # active_epoch increases (an explicit all-sessions command).
+        self.pinned_instance = pinned_instance
+        self.seen_epoch = seen_epoch
         # Launch tracking
         self.launch_timestamps = []
         # Tool list cache (populated by main-thread forwards and reconciler)
@@ -877,13 +899,19 @@ def _heartbeat_path(config_path, pid=None):
     return os.path.join(tempfile.gettempdir(), filename)
 
 
+# Written by the reconciler / switch handler so the heartbeat can carry the
+# bridge's current pin without taking the state lock here (best-effort field).
+_HEARTBEAT_PIN = {"name": None}
+
+
 def _touch_heartbeat(config_path):
     """Write PID + timestamp to our heartbeat file.  Best-effort, never raises."""
     try:
         path = _heartbeat_path(config_path)
         atomic_write_json(path, {"pid": os.getpid(), "time": time.time(),
                                  "sid": SESSION_ID,
-                                 "label": SESSION_LABEL or f"pid{_MY_PID}"})
+                                 "label": SESSION_LABEL or f"pid{_MY_PID}",
+                                 "pin": _HEARTBEAT_PIN.get("name")})
     except Exception:
         pass
 
@@ -1200,6 +1228,7 @@ def handle_get_td_status(state):
         "td_executable": config.get("td_executable", ""),
         "restart_attempts_remaining": max(0, remaining),
         "active_instance": active_name,
+        "pinned_instance": _HEARTBEAT_PIN.get("name"),
         "instances": instance_status,
     }
     sessions = _list_live_sessions(config_path)
@@ -1211,19 +1240,22 @@ def handle_get_td_status(state):
 
 
 def handle_switch_instance(params, state):
-    """Handle the switch_instance meta-tool."""
+    """Handle the switch_instance meta-tool (session-local by default)."""
     with state:
         config_path = state.config_path
+        my_pin = state.pinned_instance
     config = load_config(config_path)
     instance_status, active_name, _unreg = get_instance_status(config)
 
     target = params.get("instance")
+    all_sessions = bool(params.get("all_sessions"))
 
     # List mode: no target specified
     if not target:
         return {
             "status": "list",
             "active_instance": active_name,
+            "pinned_instance": my_pin,
             "instances": instance_status,
         }
 
@@ -1264,20 +1296,35 @@ def handle_switch_instance(params, state):
         state.crash_detected = False
         state.config = config
         state.active_name = target
+        # Session-local re-pin: THIS bridge follows the target from now
+        # on; peers' routing is untouched (their pins hold).
+        state.pinned_instance = target
+        _HEARTBEAT_PIN["name"] = target
         # Invalidate cache -- new backend must be re-verified
         state.cached_tools = None
         state.cached_tools_hash = None
-    # Update active in registry.  Re-read from disk to minimize race
-    # window with other bridges doing the same switch simultaneously.
-    if config_path:
+    if all_sessions and config_path:
+        # Explicit whole-user switch: write the registry default AND bump
+        # active_epoch -- pinned bridges treat an epoch increase as a
+        # command that overrides their pin (ordinary 'active' churn does
+        # not). Re-read from disk to minimize race window with other
+        # bridges writing simultaneously.
         try:
             fresh = load_config(config_path) or {}
             fresh["active"] = target
+            try:
+                fresh["active_epoch"] = int(fresh.get("active_epoch") or 0) + 1
+            except (TypeError, ValueError):
+                fresh["active_epoch"] = 1
             atomic_write_json(config_path, fresh)
+            with state:
+                state.seen_epoch = fresh["active_epoch"]
         except Exception as e:
             log(f"Warning: could not update envoy.json: {e}")
 
-    log(f"Switched from '{old_active}' to '{target}' (port {target_port})")
+    scope = "ALL sessions" if all_sessions else "this session only"
+    log(f"Switched from '{old_active}' to '{target}' "
+        f"(port {target_port}, {scope})")
 
     # Give the client immediate feedback that the tool list may have
     # changed -- the reconciler will re-verify on the next tick and clean
@@ -1292,9 +1339,12 @@ def handle_switch_instance(params, state):
 
     return {
         "status": "success",
-        "message": f'Switched to instance "{target}" on port {target_port}.',
+        "message": (f'Switched to instance "{target}" on port {target_port} '
+                    + ("for ALL sessions." if all_sessions
+                       else "for this session only (peers unaffected).")),
         "instance": target,
         "port": target_port,
+        "all_sessions": all_sessions,
         "toe_path": info.get("toe_path", ""),
     }
 
@@ -2062,15 +2112,49 @@ def reconcile(state, on_tools_change, *, heartbeat):
             mtime = old_mtime
         if mtime != old_mtime:
             new_config = load_config(config_path)
-            port, pid, active_name = _resolve_from_registry(new_config, None)
+            with state:
+                pin = state.pinned_instance
+                seen_epoch = state.seen_epoch
+            # An increased active_epoch is an explicit all-sessions switch
+            # command (switch_instance all_sessions=True) -- it overrides
+            # this bridge's pin. Ordinary registry churn (a new instance
+            # registering, port updates) never does.
+            try:
+                epoch = int(new_config.get("active_epoch") or 0)
+            except (TypeError, ValueError):
+                epoch = 0
+            if epoch > seen_epoch:
+                commanded = new_config.get("active")
+                if commanded:
+                    log(f"active_epoch {seen_epoch} -> {epoch}: adopting "
+                        f"all-sessions switch to '{commanded}'")
+                    pin = commanded
+            port, pid, resolved_name = _resolve_from_registry(
+                new_config, None, pin=pin)
+            if pin and resolved_name != pin:
+                # Pinned instance vanished from the registry: follow the
+                # default LOUDLY but keep the pin -- if the instance
+                # re-registers (TD restart, same toe name) we re-attach.
+                log(f"WARNING: pinned instance '{pin}' is not in the "
+                    f"registry; following default "
+                    f"'{resolved_name}' until it returns")
             candidate = f"http://127.0.0.1:{port}/mcp" if port else None
             with state:
                 state.config = new_config
                 state.config_mtime = mtime
+                state.seen_epoch = max(seen_epoch, epoch)
+                if pin:
+                    state.pinned_instance = pin
+                elif resolved_name:
+                    # First successful resolution: adopt it as this
+                    # bridge's pin so later registry 'active' churn
+                    # cannot silently re-target this session.
+                    state.pinned_instance = resolved_name
                 if pid:
                     state.td_pid = pid
-                if active_name != state.active_name:
-                    state.active_name = active_name
+                if resolved_name != state.active_name:
+                    state.active_name = resolved_name
+                _HEARTBEAT_PIN["name"] = state.pinned_instance
             if candidate and candidate != old_url:
                 new_url = candidate
 
@@ -2209,24 +2293,37 @@ def start_reconciler(state, on_tools_change):
 # Main
 # ---------------------------------------------------------------------------
 
-def _resolve_from_registry(config, fallback_port):
+def _resolve_from_registry(config, fallback_port, pin=None):
     """Resolve port and PID from the instance registry.
-    Returns (port, td_pid, active_name)."""
-    instances = config.get("instances", {})
-    active_name = config.get("active")
+    Returns (port, td_pid, resolved_name).
 
-    if active_name and active_name in instances:
-        active = instances[active_name]
-        port = active.get("port", fallback_port)
-        config_pid = active.get("td_pid")
+    When ``pin`` names a registered instance, resolve THAT instance and
+    ignore the registry's global ``active`` default -- per-bridge pinning:
+    each session routes independently, and ``active`` only seeds bridges
+    that have no pin yet. A pin naming a NO-LONGER-registered instance
+    falls through to the default (the caller logs that loudly and keeps
+    the pin, so the bridge re-attaches if the instance re-registers)."""
+    instances = config.get("instances", {})
+    resolved_name = None
+    if pin and pin in instances:
+        resolved_name = pin
+    else:
+        active_name = config.get("active")
+        if active_name and active_name in instances:
+            resolved_name = active_name
+
+    if resolved_name:
+        info = instances[resolved_name]
+        port = info.get("port", fallback_port)
+        config_pid = info.get("td_pid")
         if config_pid and is_td_process_alive(config_pid):
-            return port, config_pid, active_name
-        # The active instance's registered process is gone. Do NOT adopt
+            return port, config_pid, resolved_name
+        # The instance's registered process is gone. Do NOT adopt
         # some other TD's pid (find_td_pid) -- on multi-instance machines
         # that reported a DEAD instance as alive and blocked launch_td
         # (issue #57 follow-up). No pid means "not running"; the port
         # probe / reconciler recovers identity once it is actually back.
-        return port, None, active_name
+        return port, None, resolved_name
 
     # Old-format config or empty registry -- no instance identity exists,
     # so a blind any-TD guess is the best available seed here.
@@ -2269,7 +2366,21 @@ def main():
     _init_file_logging(config_path)
 
     config = load_config(config_path)
-    port, td_pid, active_name = _resolve_from_registry(config, cli_port)
+    # Optional per-session pin from the environment (e.g. a test harness or
+    # a session that must target one specific instance from birth).
+    env_pin = os.environ.get("EMBODY_PIN_INSTANCE") or None
+    port, td_pid, active_name = _resolve_from_registry(
+        config, cli_port, pin=env_pin)
+    # Adopt the resolved instance as this bridge's pin (env pin wins even
+    # if not yet registered -- we re-attach when it registers). Seed the
+    # epoch from the current registry so a pre-existing all-sessions
+    # switch is not re-adopted as a fresh command on the first tick.
+    initial_pin = env_pin or active_name
+    try:
+        initial_epoch = int(config.get("active_epoch") or 0)
+    except (TypeError, ValueError):
+        initial_epoch = 0
+    _HEARTBEAT_PIN["name"] = initial_pin
     # Target 127.0.0.1 explicitly, never "localhost": Envoy binds IPv4-only,
     # Windows resolves localhost to ::1 first, and urllib tries addresses
     # SEQUENTIALLY -- on hosts whose firewall delays or drops loopback SYNs
@@ -2294,6 +2405,8 @@ def main():
         config=config,
         config_path=config_path,
         active_name=active_name,
+        pinned_instance=initial_pin,
+        seen_epoch=initial_epoch,
     )
     with state:
         state.config_mtime = initial_mtime
@@ -2478,8 +2591,10 @@ def main():
             with state:
                 fresh_config_path = state.config_path
             fresh_config = load_config(fresh_config_path)
+            with state:
+                fwd_pin = state.pinned_instance
             new_port, new_pid, new_active = _resolve_from_registry(
-                fresh_config, cli_port)
+                fresh_config, cli_port, pin=fwd_pin)
             new_url = f"http://127.0.0.1:{new_port}/mcp" if new_port else current_url
             if new_url != current_url:
                 with state:

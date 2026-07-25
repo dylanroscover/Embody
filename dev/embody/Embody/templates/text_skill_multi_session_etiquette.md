@@ -73,11 +73,18 @@ of it until the diff lands. So coordinate by intent, not by touch records:
 
 - **On starting a worktree task**: claim `project:worktree-<task>` (e.g.
   `project:worktree-watchdog`) with a note naming the files/subsystem the
-  diff will land on. This is how peers learn a worktree task is in flight.
+  diff will land on. This is how peers learn a worktree task is in flight. Worktree
+  claims are DURABLE -- they survive session death and Envoy restarts,
+  expiring only when the worktree directory is removed (7-day
+  backstop); `get_sessions` lists them under `worktrees`.
 - **Before landing the diff**: claim `file:<repo-relative-path>` for each
   externalized file the diff touches (or the narrowest shared parent
   scope). If a peer holds one, reconcile first -- landing over a peer's
   in-flight edit is the worktree version of a blind overwrite.
+  Run `preflight_landing(worktree_path)` FIRST -- it intersects the
+  landing's files with main-tree dirt, peer file territory, and
+  unsaved live TDN state in one call; a `conflicts` verdict means
+  reconcile before any file moves.
 - **Two sessions must never share one worktree** -- one writer per
   checkout, always. A second session starts its own
   `../<repo>-wt-<other-task>`.

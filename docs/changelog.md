@@ -1,5 +1,20 @@
 # Changelog
 
+## v6.0.157
+
+Multi-everything bridge routing: per-session instance pinning ends registry hijacks, worktree tasks become durable and visible, and landings get an automated preflight.
+
+- **Per-session instance pinning**: each session's STDIO bridge now pins to a TouchDesigner instance by NAME and re-resolves its port from the registry every tick -- a pinned instance restarting on a new port still self-heals, but registry churn can no longer re-target a session. The registry's `active` field is demoted to the default seed for newly-spawned bridges. `EMBODY_PIN_INSTANCE` env var pins a session from birth. Any N toes x M sessions mapping is now supported.
+- **`switch_instance` is session-local**: switching re-pins only the calling session's bridge; peers are untouched. The old move-every-window behavior is available explicitly via the new `all_sessions=true` parameter, which writes the registry default and bumps a new `active_epoch` counter -- pinned bridges treat an epoch increase (and only that) as a command overriding their pin.
+- **Registration is adopt-if-vacant**: a freshly-starting Envoy instance takes the registry default slot only when it is empty or names a dead instance. This structurally fixes the 2026-07-25 incident where a fresh instance's registration yanked every live session's bridge to it (once to a dead port). Verified live in this release's smoke: a second instance registered while five sessions worked -- zero bridges moved.
+- **Durable worktree claims**: `project:worktree-*` claims persist to `.embody/worktree-claims.json`, survive session death AND Envoy restarts, and expire when the worktree directory is removed (7-day backstop). Any session may release one at landing time. `get_sessions` gains a `worktrees` list, so in-flight worktree tasks stay visible after the session that started them is gone.
+- **New `preflight_landing` tool** (worker-side, zero TD access): before porting a worktree diff, it intersects the landing's files with main-tree dirt (the classic blind-overwrite failure), peer `file:` claims/touches, and unsaved live TDN state (tsv `dirty` column), returning a `clear`/`conflicts` verdict with a reconcile hint. Dogfooded on its own landing (14/14 files correctly flagged against a known-truth scenario). MCP tool count: 53.
+- **Worktree config mirroring hardened**: the `-wt-` config mirror now yields to worktree-native TD sandboxes (a worktree running its own instance keeps its own registry/config -- a workflow per-session pinning makes trustworthy), and re-mirrors on every registry refresh so worktrees created mid-session get config without an Envoy restart.
+- **Undo-block guard self-heals**: a begin/end pair severed mid-dispatch (extension reinit, crash) used to latch the re-entrancy guard and silently disable undo blocks for the whole session; a stale latch older than 60s is now reclaimed loudly.
+- **Test-procedure fix**: the `/run-tests` command and skill now route through the `run_tests` MCP tool (deferred runner) -- `RunTestsSync()` inside `execute_python` ran the whole suite inside that dispatch's undo block, failing the undo-guard tests and making the run one giant Ctrl+Z step.
+- Tests: 20 new (`TestBridgeInstancePinning` x11, `TestRegistryAdoptIfVacant` x3, `TestWorktreeCoordination` x6) covering pin resolution, epoch adoption, session-local vs all-sessions switching, registration adopt-if-vacant, durable-claim lifecycle, and landing-conflict computation.
+- Test suite: 104 suites, 2,357 tests.
+
 ## v6.0.156
 
 AI-guidance context overhaul: the heaviest always-loaded rules become slim invariants with their full recipes moving into the on-demand skills that load at point of use; Envoy tools carry their own prerequisites and schema-enforced enums; a five-reviewer line-level conflict audit across all rules and skills.

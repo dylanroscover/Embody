@@ -335,6 +335,13 @@ def mirror_ai_config_to_worktrees(ext, root):
             if not (sib.is_dir() and sib.name.startswith(prefix)
                     and (sib / '.git').exists()):
                 continue
+            if (sib / '.embody' / 'envoy.json').exists():
+                # Worktree-native TD sandbox: a TD instance opened the
+                # worktree's OWN .toe and generated its own registry +
+                # config there. Mirroring the main repo's config would
+                # clobber it and point the sandbox's sessions at the
+                # wrong instance. Leave native sandboxes alone.
+                continue
             for src, rel in pairs:
                 if not src.is_file():
                     continue
@@ -1264,16 +1271,29 @@ def write_envoy_config(ext, embody_dir, port):
         'td_pid': my_pid,
     }
 
-    # Check if already up-to-date (no stale prune happened either)
+    # Check if already up-to-date (no stale prune happened either).
+    # 'active' merely has to be VALID (name a registered instance) --
+    # it does not have to be us; see adopt-if-vacant below.
     if (not stale_keys
             and instances.get(key) == new_entry
-            and existing.get('active') == key):
+            and existing.get('active') in instances):
         ext._log('envoy.json already up to date', 'DEBUG')
         return
 
     instances[key] = new_entry
     existing['instances'] = instances
-    existing['active'] = key
+    # Adopt-if-vacant: 'active' is only the DEFAULT seed for bridges that
+    # have no per-session pin. Claiming it on every registration used to
+    # yank every live session's bridge to the newest instance the moment
+    # it registered (2026-07-25 smoke-run incident: all five sessions
+    # dragged, once to a port whose server never came up). Take it only
+    # when it is unset or names an instance no longer registered (the
+    # dead-PID GC above already pruned those rows). An explicit
+    # whole-user move goes through switch_instance(all_sessions=True),
+    # which also bumps active_epoch.
+    current_active = existing.get('active')
+    if not current_active or current_active not in instances:
+        existing['active'] = key
     existing['td_executable'] = td_executable
 
     ext._atomicWriteJSON(config_path, existing)
@@ -1317,6 +1337,14 @@ def refresh_registry(ext):
         write_envoy_config(ext, config_path.parent, port)
     except Exception as e:
         ext._log(f'RefreshRegistry failed: {e}', 'WARNING')
+
+    # Re-mirror AI config into sibling worktrees on every registry refresh
+    # (project save): a worktree created after Envoy started otherwise has
+    # no .mcp.json/settings until the next Envoy restart.
+    try:
+        mirror_ai_config_to_worktrees(ext, config_path.parent.parent)
+    except Exception:
+        pass
 
 
 def remove_from_registry(ext, git_root=None):

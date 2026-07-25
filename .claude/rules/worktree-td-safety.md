@@ -81,7 +81,9 @@ A running TD WRITES to the main tree: every save re-exports externalized
 files. Before porting a worktree diff, run `git status` / `git diff` in the
 MAIN tree. If the main tree has uncommitted changes to files the diff also
 touches, STOP and reconcile (rebase the worktree changes on top, or save +
-commit in TD first) -- never overwrite main-tree edits blindly.
+commit in TD first) -- never overwrite main-tree edits blindly. The `preflight_landing` MCP
+tool automates this check -- landing-vs-main-dirty, peer-territory, and
+unsaved-live-TDN collisions in one call; run it before every landing.
 
 ## Exceptions and cleanup
 

@@ -220,6 +220,86 @@ def _scopes_for_operation(operation: str, params: dict, result=None) -> list:
     return deduped[:8]
 
 
+# --- Worktree coordination helpers (Phase 2, 2026-07-25) -------------------
+# Module-level and TD-free so unit tests can exercise them directly.
+
+WORKTREE_SCOPE_PREFIX = 'project:worktree-'
+DURABLE_CLAIM_MAX_AGE_S = 7 * 86400
+
+
+def durable_claim_alive(claim: dict, now: float,
+                        max_age_s: float = DURABLE_CLAIM_MAX_AGE_S) -> bool:
+    """A durable worktree claim lives while its worktree DIRECTORY exists
+    and it is younger than the max-age backstop. Session silence and TTL
+    do not apply -- the claim marks an in-flight worktree task, which
+    outlives the AI session that started it."""
+    path = claim.get('path')
+    if not path or not os.path.isdir(path):
+        return False
+    try:
+        return (now - float(claim.get('ts', 0))) <= max_age_s
+    except (TypeError, ValueError):
+        return False
+
+
+def compute_landing_conflicts(landing_files, main_dirty, peer_files,
+                              tdn_unsaved) -> dict:
+    """Intersect a worktree landing's file list with the three hazard sets.
+    Pure function; all args are iterables of repo-relative POSIX paths."""
+    landing = set(landing_files)
+    return {
+        'main_dirty': sorted(landing & set(main_dirty)),
+        'peers': sorted(landing & set(peer_files)),
+        'tdn_unsaved': sorted(landing & set(tdn_unsaved)),
+    }
+
+
+def read_tsv_dirty_paths(repo_root: str) -> set:
+    """Repo-relative paths of externalized files whose live TDN/DAT state
+    is UNSAVED (dirty column truthy in externalizations.tsv). Pure file
+    read -- safe on the worker thread. Returns an empty set when the
+    table cannot be found or parsed."""
+    dirty = set()
+    try:
+        root = os.path.normpath(repo_root)
+        candidates = []
+        for base, dirs, files in os.walk(root):
+            rel_depth = os.path.relpath(base, root).count(os.sep)
+            if rel_depth >= 3:
+                dirs[:] = []
+                continue
+            dirs[:] = [d for d in dirs
+                       if d not in ('.git', 'node_modules', '.venv',
+                                    'Backup', '__pycache__')]
+            if 'externalizations.tsv' in files:
+                candidates.append(os.path.join(base, 'externalizations.tsv'))
+        for tsv in candidates:
+            # rel_file_path values are relative to the tsv's parent's
+            # parent (the project folder): embody/X.py under dev/ ->
+            # repo-relative dev/embody/X.py.
+            base_rel = os.path.relpath(
+                os.path.dirname(os.path.dirname(tsv)), root).replace('\\', '/')
+            prefix = '' if base_rel == '.' else base_rel + '/'
+            with open(tsv, 'r', encoding='utf-8') as f:
+                header = f.readline().rstrip('\n').split('\t')
+                try:
+                    i_rel = header.index('rel_file_path')
+                    i_dirty = header.index('dirty')
+                except ValueError:
+                    continue
+                for line in f:
+                    cols = line.rstrip('\n').split('\t')
+                    if len(cols) <= max(i_rel, i_dirty):
+                        continue
+                    if cols[i_dirty].strip() in ('True', 'true', '1'):
+                        rel = cols[i_rel].strip().replace('\\', '/')
+                        if rel:
+                            dirty.add(prefix + rel)
+    except Exception:
+        return dirty
+    return dirty
+
+
 class EnvoyMCPServer:
     """
     MCP Server that runs in a worker thread.
@@ -276,6 +356,10 @@ class EnvoyMCPServer:
         existing_claims = getattr(sys, '_envoy_claims', None)
         self._claims: dict = existing_claims if isinstance(existing_claims, dict) else {}
         sys._envoy_claims = self._claims
+        # Durable worktree claims persist across sessions AND Envoy restarts
+        # (.embody/worktree-claims.json): an in-flight worktree task's marker
+        # must outlive the AI session that started it.
+        self._loadDurableWorktreeClaims()
 
         self._docs_state = {'resolved': False, 'root': None, 'index': None, 'cache': {}}
 
@@ -374,13 +458,34 @@ class EnvoyMCPServer:
             if held:
                 e['claims'] = held
         sessions.sort(key=lambda e: e.get('last_seen', 0), reverse=True)
-        return {'sessions': sessions, 'count': len(sessions)}
+        snapshot = {'sessions': sessions, 'count': len(sessions)}
+        # In-flight worktree tasks (durable claims): visible to every
+        # session even after the starting session is gone.
+        with self._sessions_lock:
+            worktrees = [
+                {'scope': s, 'path': c.get('path', ''),
+                 'label': c.get('label', ''), 'note': c.get('note', ''),
+                 'age_h': round((now - c['ts']) / 3600.0, 1),
+                 'holder_sid': c['sid']}
+                for s, c in self._claims.items() if c.get('durable')]
+        if worktrees:
+            snapshot['worktrees'] = worktrees
+        return snapshot
 
     def _prune_claims_locked(self, now):
         """Drop expired claims and claims whose holder went silent for 10
         minutes. Caller holds _sessions_lock."""
+        durable_changed = False
         for held_scope in list(self._claims):
             claim = self._claims[held_scope]
+            if claim.get('durable'):
+                # Durable worktree claims ignore TTL and holder silence --
+                # they expire when the worktree DIRECTORY disappears or on
+                # the max-age backstop (durable_claim_alive).
+                if not durable_claim_alive(claim, now):
+                    del self._claims[held_scope]
+                    durable_changed = True
+                continue
             holder = self._sessions.get(claim['sid'])
             holder_seen = holder.get('last_seen', 0) if holder else 0
             # '_anon' holders (headerless clients) are never in the
@@ -390,6 +495,8 @@ class EnvoyMCPServer:
                              and now - holder_seen > 600)
             if now > claim['ts'] + claim['ttl'] or holder_silent:
                 del self._claims[held_scope]
+        if durable_changed:
+            self._persistDurableClaimsLocked()
 
     def _claim_scope(self, sid, label, scope, note, ttl):
         """Grant/refuse a cooperative write lease. Worker-side pure Python."""
@@ -425,14 +532,102 @@ class EnvoyMCPServer:
             self._claims[scope] = {'sid': me, 'label': label or me,
                                    'note': (note or '')[:200],
                                    'ts': now, 'ttl': ttl}
+            durable = scope.startswith(WORKTREE_SCOPE_PREFIX)
+            if durable:
+                # Worktree claims are DURABLE: they mark an in-flight
+                # worktree task and survive session death and Envoy
+                # restarts. Expiry = worktree dir gone or 7-day backstop.
+                self._claims[scope]['durable'] = True
+                self._claims[scope]['path'] = (
+                    self._worktreePathForScope(scope) or '')
+                self._persistDurableClaimsLocked()
             if len(self._claims) > 64:
                 oldest_first = sorted(self._claims.items(),
                                       key=lambda kv: kv[1]['ts'])
                 for stale_scope, _claim in oldest_first[:len(self._claims) - 64]:
                     del self._claims[stale_scope]
+        if durable:
+            return {'granted': True, 'scope': scope, 'durable': True,
+                    'renewal': 'durable worktree claim: survives session '
+                               'silence and Envoy restarts; expires when the '
+                               'worktree directory is removed or after 7 '
+                               'days; release_scope when the diff lands'}
         return {'granted': True, 'scope': scope, 'ttl': ttl,
                 'renewal': 'your own tool calls touching this scope renew '
                            'the lease; it expires on TTL or session silence'}
+
+    def _durableClaimsPath(self):
+        """Path of .embody/worktree-claims.json, or None before the main
+        thread has cached the repo root. Worker-side pure Python."""
+        root = getattr(sys, '_envoy_repo_root', None)
+        if not root:
+            return None
+        return os.path.join(root, '.embody', 'worktree-claims.json')
+
+    def _worktreePathForScope(self, scope):
+        """Derive the expected worktree directory for a
+        project:worktree-<task> scope: sibling '<repo>-wt-<task>'."""
+        root = getattr(sys, '_envoy_repo_root', None)
+        if not root or not scope.startswith(WORKTREE_SCOPE_PREFIX):
+            return None
+        task = scope[len(WORKTREE_SCOPE_PREFIX):]
+        root = os.path.normpath(root)
+        return os.path.join(os.path.dirname(root),
+                            os.path.basename(root) + '-wt-' + task)
+
+    def _persistDurableClaimsLocked(self):
+        """Write durable worktree claims to disk (atomic, best-effort).
+        Caller holds _sessions_lock. Worker-side pure Python."""
+        path = self._durableClaimsPath()
+        if not path:
+            return
+        try:
+            data = {}
+            for s, c in self._claims.items():
+                if c.get('durable'):
+                    data[s] = {'sid': c.get('sid', '_anon'),
+                               'label': c.get('label', ''),
+                               'note': c.get('note', ''),
+                               'ts': c.get('ts', 0),
+                               'path': c.get('path', '')}
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = path + '.%d.tmp' % os.getpid()
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=1)
+            os.replace(tmp, path)
+        except Exception:
+            pass
+
+    def _loadDurableWorktreeClaims(self):
+        """Load persisted durable claims at server start, dropping entries
+        whose worktree is gone or that exceed the max-age backstop."""
+        path = self._durableClaimsPath()
+        if not path or not os.path.isfile(path):
+            return
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception:
+            return
+        if not isinstance(data, dict):
+            return
+        now = time.time()
+        with self._sessions_lock:
+            for scope, entry in data.items():
+                if (not isinstance(entry, dict)
+                        or not scope.startswith(WORKTREE_SCOPE_PREFIX)
+                        or scope in self._claims):
+                    continue
+                claim = {'sid': entry.get('sid', '_anon'),
+                         'label': entry.get('label', ''),
+                         'note': entry.get('note', ''),
+                         'ts': float(entry.get('ts', now) or now),
+                         'ttl': DURABLE_CLAIM_MAX_AGE_S,
+                         'durable': True,
+                         'path': (entry.get('path')
+                                  or self._worktreePathForScope(scope) or '')}
+                if durable_claim_alive(claim, now):
+                    self._claims[scope] = claim
 
     def _release_scope(self, sid, scope):
         """Release a lease held by this session. Worker-side pure Python."""
@@ -444,12 +639,100 @@ class EnvoyMCPServer:
             claim = self._claims.get(scope)
             if claim is None:
                 return {'released': False, 'reason': 'no claim on that scope'}
-            if claim['sid'] != me:
+            if claim['sid'] != me and not claim.get('durable'):
                 return {'released': False,
                         'reason': 'held by another session',
                         'holder': claim.get('label') or claim['sid']}
+            # Durable worktree claims may be released by ANY session (the
+            # landing session is often not the session that started the
+            # task) -- the worktree dir check backstops mistakes.
+            was_durable = bool(claim.get('durable'))
             del self._claims[scope]
+            if was_durable:
+                self._persistDurableClaimsLocked()
         return {'released': True, 'scope': scope}
+
+    def _preflight_landing(self, worktree_path, caller_sid=None) -> dict:
+        """Worker-side landing preflight: pure Python + git subprocess,
+        ZERO TD-object access (mcp-safety). Git calls are bounded (15s)."""
+        import subprocess
+
+        root = getattr(sys, '_envoy_repo_root', None)
+        if not root:
+            return {'error': 'repo root not resolved yet -- Envoy is still '
+                             'starting; retry in a few seconds'}
+        root = os.path.normpath(root)
+        wt = (worktree_path or '').strip()
+        if not wt:
+            return {'error': 'worktree_path is required'}
+        if not os.path.isabs(wt):
+            wt = os.path.normpath(os.path.join(root, wt))
+        if not os.path.isdir(wt) or not os.path.exists(
+                os.path.join(wt, '.git')):
+            return {'error': 'not a git worktree/checkout: %s' % wt}
+
+        def _git_lines(cwd, *args):
+            r = subprocess.run(['git', '-C', cwd] + list(args),
+                               capture_output=True, text=True, timeout=15)
+            if r.returncode != 0:
+                raise RuntimeError(
+                    (r.stderr or r.stdout).strip()[:300] or 'git failed')
+            return [ln for ln in r.stdout.splitlines() if ln.strip()]
+
+        def _porcelain_paths(lines):
+            paths = set()
+            for ln in lines:
+                p = ln[3:].strip()
+                if ' -> ' in p:  # rename: "R  old -> new" -- take both
+                    old, new = p.split(' -> ', 1)
+                    paths.add(old.strip().strip('"'))
+                    p = new
+                paths.add(p.strip().strip('"'))
+            return {p.replace('\\', '/') for p in paths if p}
+
+        try:
+            landing = sorted(
+                _porcelain_paths(_git_lines(wt, 'status', '--porcelain'))
+                | {p.strip().replace('\\', '/')
+                   for p in _git_lines(wt, 'diff', '--name-only', 'HEAD')})
+            main_dirty = _porcelain_paths(
+                _git_lines(root, 'status', '--porcelain'))
+        except Exception as e:
+            return {'error': 'git preflight failed: %s' % e}
+
+        tdn_unsaved = read_tsv_dirty_paths(root)
+
+        # Peer file territory: file: claims + recent file: write touches
+        # from OTHER sessions.
+        peer_files = set()
+        with self._sessions_lock:
+            for s, c in self._claims.items():
+                if s.startswith('file:') and c.get('sid') != caller_sid:
+                    peer_files.add(s[5:].replace('\\', '/'))
+            for scope, ring in self._touches.items():
+                if not scope.startswith('file:'):
+                    continue
+                for t in ring:
+                    if t.get('sid') != caller_sid:
+                        peer_files.add(scope[5:].replace('\\', '/'))
+                        break
+
+        collisions = compute_landing_conflicts(
+            landing, main_dirty, peer_files, tdn_unsaved)
+        has_conflicts = any(collisions.values())
+        result = {
+            'worktree': wt,
+            'landing_files': landing,
+            'collisions': collisions,
+            'verdict': 'conflicts' if has_conflicts else 'clear',
+        }
+        if has_conflicts:
+            result['hint'] = (
+                'Reconcile before landing: rebase the worktree on the '
+                'main tree for main_dirty collisions, coordinate with the '
+                'listed peers, and save the project (or re-export) for '
+                'tdn_unsaved collisions. Never overwrite blind.')
+        return result
 
     def _execute_in_td(self, operation: str, params: dict,
                        timeout: float = 30.0) -> dict:
@@ -1811,6 +2094,32 @@ class EnvoyMCPServer:
             return self._release_scope(sid, scope)
 
         @self.mcp.tool()
+        def preflight_landing(worktree_path: str) -> dict:
+            """
+            Check whether a worktree's diff can land safely in the main tree.
+
+            Read-only and TD-free (answered on the worker thread). Reports
+            three collision classes BEFORE any file moves: landing files
+            also dirty in the MAIN tree (a running TD re-exports
+            externalized files -- blind overwrite is the classic landing
+            failure), landing files claimed or recently written by PEER
+            sessions, and landing files whose live TDN/DAT state is
+            UNSAVED (dirty in externalizations.tsv). Run it before porting
+            any worktree diff; a 'conflicts' verdict means reconcile first.
+
+            Args:
+                worktree_path: The worktree directory -- absolute, or
+                    relative to the repo root (e.g. "../Embody-wt-task")
+
+            Returns:
+                Dict with worktree, landing_files, collisions {main_dirty,
+                peers, tdn_unsaved}, verdict 'clear'|'conflicts', or
+                {'error': ...}
+            """
+            sid, _label = _SESSION_CTX.get()
+            return self._preflight_landing(worktree_path, caller_sid=sid)
+
+        @self.mcp.tool()
         def run_tests(suite_name: str = None, test_name: str = None,
                       override: bool = False) -> dict:
             """
@@ -2496,6 +2805,7 @@ class EnvoyExt:
         self._import_gate_result: Optional[tuple] = None
         self._import_gate_running: bool = False
         self._undo_active: bool = False  # re-entrancy guard: batch sub-ops must not nest undo blocks
+        self._undo_active_since: float = 0.0  # for the latched-guard self-heal
 
         # --- Live build visualization (smooth follow of the active op) ---
         # The network editor glides to centre on the op Envoy just touched.
@@ -3365,6 +3675,13 @@ class EnvoyExt:
             except Exception:
                 # Defensive fallback for older deployments
                 target_dir = git_root if git_root != 'no-git' else None
+            # Cache the repo root for WORKER-side features (durable worktree
+            # claims, preflight_landing) -- workers must never touch TD
+            # objects, so resolve it here on the main thread once.
+            try:
+                sys._envoy_repo_root = str(target_dir) if target_dir else None
+            except Exception:
+                sys._envoy_repo_root = None
             self._configureMCPClient(port, target_dir=target_dir)
             try:
                 Embody._upgradeEnvoy()
@@ -4396,11 +4713,31 @@ class EnvoyExt:
         return {'error': f'Unknown operation: {operation}'}
 
     def _beginUndoBlock(self, operation: str) -> bool:
-        if operation not in self._UNDOABLE_OPS or self._undo_active:
+        if operation not in self._UNDOABLE_OPS:
             return False
+        if self._undo_active:
+            # Self-heal a LATCHED guard: if a begin/end pair is severed
+            # (an extension reinit or exception between begin and the
+            # finally), the flag would otherwise stay True forever and
+            # silently disable undo blocks for the whole session
+            # (observed 2026-07-25 after landing an EnvoyExt edit while
+            # operations were dispatching). A genuinely-nested caller
+            # (batch sub-op) hits the young-flag path and is refused as
+            # before; a stale flag older than 60s is reclaimed loudly.
+            if time.time() - self._undo_active_since < 60:
+                return False
+            self._log('Undo-block guard latched >60s -- self-healing (a '
+                      'begin/end pair was severed, likely by a reinit)',
+                      'WARNING')
+            try:
+                ui.undo.endBlock()
+            except Exception:
+                pass
+            self._undo_active = False
         try:
             ui.undo.startBlock(f'Envoy {operation}')
             self._undo_active = True
+            self._undo_active_since = time.time()
             return True
         except Exception as e:
             self._log(f'Could not start undo block for {operation}: {e}', 'WARNING')
