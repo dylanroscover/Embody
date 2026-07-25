@@ -37,51 +37,7 @@ When in doubt: write the one-line docstring *first*. If the name isn't already i
 
 ## Operator Referencing
 
-How you reference an operator matters. A wrong choice works today and breaks tomorrow -- when the component is renamed, instanced, or moved. The goal is always to pick the **narrowest, most portable reference** that correctly resolves from where the code runs.
-
-**Absolute paths are always wrong -- in code, expressions, AND parameter values.** `op('/embody/Embody/...')` or `op('/project1/...')` hardcodes the entire network hierarchy. The moment anything is renamed, relocated, or instanced, it breaks. If you see a `/` at the start of an operator path anywhere -- an `op()` call, a parameter expression, or a `set_parameter` value -- it's a bug.
-
-### Relative Paths -- for operators near you
-
-Use relative paths when the target operator is in the same network or a nearby one. These are the simplest and most portable references because they describe relationships, not locations.
-
-- `op('sibling_name')` -- another operator in the same network (same parent COMP).
-- `op('./child_name')` -- an operator inside `me` (only valid from a COMP).
-- `op('../sibling_of_parent')` -- an operator in the parent's network (go up one level, then find by name).
-
-Relative paths break down when you need to reach across distant parts of the network. That's where shortcuts come in.
-
-### Parent Shortcuts (`parent.CompName`) -- for reaching your owner
-
-A Parent Shortcut is set on a COMP's Common page via the `parentshortcut` parameter. Once configured, any operator that is a descendant of that COMP (child, grandchild, etc.) can reference it as `parent.CompName`. TD resolves this by walking up the parent chain from the caller until it finds a COMP whose Parent Shortcut matches.
-
-This is the right choice when code running **inside** a component needs to reach the component itself -- typically to call extension methods or navigate relative to the component root.
-
-- `parent.Embody.Update()` -- call a promoted extension method.
-- `parent.Embody.ext.Embody.helperMethod()` -- reach a non-promoted method.
-- `parent.Embody.op('subpath/op_name')` -- navigate from the component root to find an internal operator.
-
-Key properties:
-- **Reusable across instances**: Multiple COMPs can use the same Parent Shortcut name. Each descendant resolves to its own nearest matching ancestor -- so the same code works identically across every instance of a component.
-- **Only resolves from inside**: Code that is not a descendant of the COMP will not find it via `parent.CompName`. This is a feature, not a limitation -- it keeps references scoped to where they belong.
-- **Not the same as `parent()`**: `parent()` always returns the immediate parent COMP. `parent.CompName` searches upward by name and can skip multiple levels.
-
-### Global OP Shortcuts (`op.CompName`) -- for project-wide access
-
-A Global OP Shortcut is set on a COMP's Common page via the `opshortcut` parameter. It registers the COMP so that `op.CompName` resolves to it from **anywhere** in the project.
-
-This is the right choice for singleton services that many unrelated parts of the project need to reach -- logging, test runners, shared managers.
-
-- `op.Embody.Log('message')` -- call Embody's logging from anywhere.
-- `op.unit_tests.RunTests()` -- kick off the test runner from any script.
-
-Key properties:
-- **Globally unique**: Only one COMP can hold a given Global OP Shortcut name at a time. Assigning a name already in use removes it from the previous holder.
-- **Use sparingly**: If `parent.CompName` works, prefer it. Global shortcuts create invisible coupling -- any code anywhere can depend on the name existing, making renames and refactors risky.
-
-### Choosing the right reference
-
-Think about **where the calling code lives** relative to the target:
+**Absolute paths are always wrong -- in code, expressions, AND parameter values.** `op('/embody/Embody/...')` or `op('/project1/...')` hardcodes the entire network hierarchy; the moment anything is renamed, relocated, or instanced, it breaks. If you see a `/` at the start of an operator path anywhere -- an `op()` call, a parameter expression, or a `set_parameter` value -- it's a bug. Always pick the **narrowest, most portable reference** that resolves from where the code runs:
 
 | Relationship | Pattern | Why |
 |---|---|---|
@@ -90,6 +46,8 @@ Think about **where the calling code lives** relative to the target:
 | Up one level | `op('../name')` | Reaches parent's siblings. |
 | Anywhere inside a component | `parent.CompName` | Scoped to descendants. Supports instancing. |
 | Anywhere in the project | `op.CompName` | Global singleton access. Use only when parent shortcut can't work. |
+
+Prefer `parent.CompName` over `op.CompName` when both would work -- global shortcuts create invisible coupling. Full pattern reference (shortcut resolution rules, key properties, instancing behavior): `/td-api-reference` (Operator Referencing Patterns).
 
 **Always verify references resolve correctly.** After writing an expression or script that uses `op()`, `parent.X`, or `op.X`, confirm the target exists and the path resolves from the calling context. A reference that returns `None` silently (or worse, finds the wrong operator) is a latent bug.
 
@@ -108,11 +66,7 @@ Think about **where the calling code lives** relative to the target:
 
 **Ironclad rule (a read is treated exactly like a write).** From any thread but the main thread, NEVER touch a main-thread-owned TD object: `op()`/`opex()`, a `Par`/`ParGroup` (read OR write, including `.eval()`/`.val` on a live parameter), DAT/CHOP/SOP/TOP content, `storage` (`fetch`/`store`), `tdu.Dependency` (setting `.val` recooks on the main thread), or `debug()`/`print()` (they route to the Textport / a DAT). **Never call `run()`/`td.run()` from a worker** - it raises `tdError`; this is exactly what froze TD in the field. A worker may use ONLY: pure Python (`math`, `json`, `requests`), `tdu` math/value utilities (`tdu.clamp`/`remap`/`Vector`/`Matrix` - they do not reference TD data), parameter VALUES evaluated on the main thread and passed in, `queue.Queue`, `threading.Event`/`Lock`, `td.isMainThread()` as a guard, and the Thread Manager's `InfoQueue`/`Get/Set*Safe`/`SafeLogger`. Resolve every op path and value on the main thread BEFORE spawning the worker; the worker returns plain data for a main-thread callback to apply.
 
-- Rungs 0-1: prototype synchronously only for short one-shots; fast TD-only, no-I/O work may run inline.
-- Rung 2: fetch data with native TD I/O operators such as Web Client DAT, WebSocket DAT, Web Server DAT, OSC, File In, or Folder DAT.
-- Rung 3: chunk long TD-touching work on the main thread with `run(delayFrames=N)`.
-- Rung 4: send blocking pure-Python work to Thread Manager workers with zero TD access.
-- Rung 5: run long-lived servers/loops as ThreadManager `standalone=True` tasks or zero-TD-access threads with a main-thread queue drain.
+Rungs (full ladder + code patterns in /td-api-reference): 0-1 inline for short TD-only no-I/O one-shots; 2 native TD I/O operators (Web Client DAT, WebSocket, Web Server, OSC, File In/Folder DAT) for any fetch; 3 chunk long TD-touching work with `run(delayFrames=N)`; 4 Thread Manager workers for blocking pure-Python with zero TD access; 5 long-lived servers/loops as `standalone=True` tasks or zero-TD-access threads with a main-thread queue drain.
 
 any background/long-running/blocking/HTTP work -> MUST load /td-api-reference (Background and Long-Running Work) FIRST.
 
@@ -120,10 +74,8 @@ any background/long-running/blocking/HTTP work -> MUST load /td-api-reference (B
 
 - **Pull-based**: Operators only cook when downstream demands output. Parameter changes make nodes dirty but don't trigger immediate cooks.
 - **Always-cook operators**: Output nodes and Render TOPs cook every frame regardless.
-- **Time-dependent ops cook only when demanded.** An op that references time (an `absTime` parameter expression, a Feedback TOP, anything clock-driven) is *flagged* to cook every frame -- but it still only cooks when something pulls its output: a viewer, a Render/Out TOP, a displayed COMP, or a force-cook. With nothing demanding it, a correctly-built animated network sits frozen on its last cooked frame. This is the #1 cause of "my network isn't animating" -- the chain is right but undemanded. View the terminal op (or drive it) to run it in a sandbox; cook N frames before baking a thumbnail.
-- **`cook(force=True)` does NOT advance a feedback loop within a frame.** A Feedback TOP captures its target on frame boundaries, so force-cooking the chain repeatedly inside one synchronous Python loop returns the *same* state each time (`totalCooks` may not even increment). Evolution needs real frames to pass with the chain demanded -- drive it with `run(..., delayFrames=1)` or an Execute DAT `onFrameStart`, never a `for` loop.
-- **A Movie File In reload lands only across a real frame advance -- and even then not same-pass downstream.** Changing `par.file` / pulsing `reloadpulse` then `cook(force=True)` in the SAME frame can silently serve the PREVIOUS texture (no error, no warning, right resolution); a pull-based reader that nothing demands never cooks at all. Worse, when the reload DOES apply mid-pass, ops DOWNSTREAM in that same forced-cook pass can still consume the pre-reload texture -- *even with the whole chain force-cooked in dependency order* -- so the reader's own `numpyArray()` shows fresh content while the chain output lags by one frame. Verify content at the POINT OF CAPTURE (the writer's input TOP), not at the source, and let each reload settle across a real frame advance. See performance.md -> Movie Export ("Async file readers").
-- **Animate cheaply: static source + cheap downstream.** A heavy generator (high-octave fBm, large feedback sim) cannot re-render every frame at high resolution. Make it *static* (remove every time reference so it cooks once and caches) and put the motion in a cheap downstream op -- animate the *sampling* (drift/rotate/warp the read coordinates), not the source. Verify with `cookedThisFrame`: the source reads `False`, the animated op `True`.
+- **Time-dependent ops cook only when demanded.** An op that references time is *flagged* to cook every frame -- but it still only cooks when something pulls its output (a viewer, a Render/Out TOP, a displayed COMP, or a force-cook). With nothing demanding it, a correctly-built animated network sits frozen on its last cooked frame. This is the #1 cause of "my network isn't animating."
+- **Deep gotchas -- MUST read /td-api-reference (Cook Model Gotchas) before force-cooking, evolving feedback loops, reloading Movie File In content, or animating heavy generators**: `cook(force=True)` does not advance feedback within a frame; a Movie File In reload lands only across a real frame advance (and downstream can still serve the pre-reload texture same-pass); animate the *sampling*, not the source.
 
 ## Storage and Dependencies
 
@@ -145,22 +97,7 @@ any background/long-running/blocking/HTTP work -> MUST load /td-api-reference (B
 
 ## Render Coordinate System
 
-TouchDesigner's render and texture coordinate system places **(0, 0) at the bottom-left, with Y increasing upward.** This is the opposite of numpy, PIL, screen pixels, and web conventions where (0, 0) is top-left and Y increases downward.
-
-| Context | Origin | Y direction |
-|---|---|---|
-| `TOP.sample(x, y)` | Bottom-left | Up |
-| GLSL `gl_FragCoord` | Bottom-left | Up |
-| UV coordinates (0-1) | Bottom-left | Up |
-| Crop/Transform TOP params | Bottom-left | Up |
-| `scriptTOP` pixel writing | Bottom-left | Up |
-| `TOP.numpyArray()` return | **Top-left** | **Down** |
-| PIL / OpenCV images | **Top-left** | **Down** |
-| Panel/widget screen coords | **Top-left** | **Down** |
-
-- **`TOP.numpyArray()`** returns rows **top-to-bottom** (row 0 = top of image), but TD texture coordinates have y=0 at the **bottom**. Use `np.flipud(arr)` when converting between the two systems.
-- **`TOP.sample(x, y)`**: `y=0` samples the **bottom** edge, not the top.
-- **GLSL shaders**: `gl_FragCoord.y = 0` is the bottom edge of the render.
+TouchDesigner's render and texture coordinate system places **(0, 0) at the bottom-left, with Y increasing upward** -- `TOP.sample()`, GLSL `gl_FragCoord`, UVs, and Crop/Transform params all follow it. The exceptions are **top-left, Y-down**: `TOP.numpyArray()` rows (row 0 = top of image -- use `np.flipud(arr)` to convert), PIL/OpenCV images, and panel/widget screen coords. Full per-context table and pixel-access patterns: `/td-api-reference` (TOP Pixel Access).
 
 ## Pre-Installed Packages
 

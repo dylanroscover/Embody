@@ -36,7 +36,9 @@ unlinks). Recovery required rebuilding the specimen `.tdn` from the live COMPs.
 3. **Only via the save-gated batch.** They run ONLY through
    `RunDestructiveTests(confirm_saved=True)`, which:
    - is opt-in (`confirm_saved` must be True),
-   - refuses if `project.dirty` (a saved `.toe` must exist as a recovery point),
+   - refuses if `project.modified` is truthy (a saved `.toe` must exist as a
+     recovery point; `project.dirty` does NOT exist on TD 2025 -- and
+     `project.modified` is not a plain bool, so test truthiness, never `is True`),
    - runs the destructive suites in isolation,
    - logs a reminder that the live network is now mutated and the saved `.toe`
      must be reopened to restore it.

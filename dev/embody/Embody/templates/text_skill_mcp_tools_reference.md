@@ -154,6 +154,12 @@ For visual work, success is verified by capturing and judging the output TOP, no
 
 **Auto-attached recovery hints**: when a tool returns an `error`, a `recovery_hints` list may ride along -- each entry is `{cause, action, next_tools}` keyed off the error message (path-not-found, wrong family, empty capture, thread conflict, timeout, ...). It tells you the likely cause and which tool to call next, so recover by following it rather than retrying the same failing call verbatim.
 
+## Testing
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `run_tests` | `suite_name?`, `test_name?`, `override?` | Run Embody unit-test suites (all, one suite, or one test; 300s timeout). Destructive and agent tiers are excluded -- they run only via their dedicated entry points. Gated by the multi-session destructive-op gate; `override` bypasses it (say so when you do) |
+
 ## Bridge Meta-Tools
 
 These run locally on the STDIO bridge — they work even when TD is not running.

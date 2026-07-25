@@ -8,7 +8,8 @@ Skills are prerequisites, not optional reference. **Load the relevant skill BEFO
 
 | Before calling | Load skill |
 |---|---|
-| `create_op` | `/create-operator` |
+| `create_op`, `copy_op`, `set_op_position`, or creating/moving ops via `execute_python` | `/create-operator` |
+| Any heavy build (render chains, feedback, instancing, GLSL, high-res TOPs) | `/td-api-reference` (Heavy-Build Safety) |
 | `create_annotation` or `set_annotation` | `/manage-annotations` |
 | `create_extension` | `/create-extension` |
 | `externalize_op` or `save_externalization` | `/externalize-operator` |
@@ -21,7 +22,9 @@ Skills are prerequisites, not optional reference. **Load the relevant skill BEFO
 | Diagnosing operator errors | `/debug-operator` |
 | Building or refining any visual / rendered output (generative art, VJ visuals, shaders, scenes, renders, anything shown on screen) | `/visual-aesthetics` |
 | Creating or editing POP operators, particle systems, GPU point/geometry work, glslPOP compute, or converting SOP chains to POPs | `/pop-networks` |
-| Building or styling a TD panel UI (dialog, wizard, HUD, control panel, buttons/text) | `/build-ui` (design system) + `rules/td-ui.md` (mechanics) |
+| Building or styling a TD panel UI (dialog, wizard, HUD, control panel, buttons/text) | `/build-ui` (design system + mechanics reference) |
+| Preparing a release commit or a GitHub release | `/release` |
+| Running or modifying agent-tier tests (`RunAgentTests`) | `/agent-tests` |
 | `switch_instance` or multi-instance workflows | `/multi-instance` |
 | Building or persisting a Specimen (gallery TDN networks) | `/specimen-authoring` |
 | First MCP call in a new session | `/mcp-tools-reference` |

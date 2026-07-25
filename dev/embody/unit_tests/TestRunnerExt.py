@@ -420,8 +420,9 @@ class TestRunnerExt:
         entry point is hard-gated:
 
           1. It is opt-in -- caller must pass confirm_saved=True.
-          2. It refuses if the project has unsaved changes (project.dirty), so a
-             saved .toe always exists as a recovery point.
+          2. It refuses if the project has unsaved changes (project.modified --
+             project.dirty does not exist on TD 2025), so a saved .toe always
+             exists as a recovery point.
 
         After the run the live network is intentionally mutated -- reopen the
         saved .toe to restore it. See .claude/rules/destructive-tests.md.
@@ -486,7 +487,7 @@ class TestRunnerExt:
 
         Fire-and-forget: returns ``{'started': True, ...}`` immediately; poll
         GetResults() (or watch the results DAT / log) for completion. See
-        .claude/rules/agent-tests.md.
+        .claude/skills/agent-tests/SKILL.md.
         """
         if self._running:
             self._log('Tests already running', 'WARNING')
@@ -1131,7 +1132,7 @@ class TestRunnerExt:
         - ``tier='agent'``: ONLY suites tagged ``AGENT = True`` (usually via
           AgentTestCase) -- they spawn external AI-client subprocesses, take
           minutes, and consume subscription usage; they run only via
-          RunAgentTests. See .claude/rules/agent-tests.md.
+          RunAgentTests. See .claude/skills/agent-tests/SKILL.md.
 
         A suite tagged BOTH ways never surfaces anywhere (unsupported
         combination -- fail safe by exclusion). This filter is the guard that

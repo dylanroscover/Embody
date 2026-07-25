@@ -2,9 +2,14 @@
 description: "Procedure for preparing version release commits -- changelog, README, templates, versioning"
 ---
 
+---
+name: release
+description: MUST READ before preparing a release commit or GitHub release -- project.save() versioning, changelog, README, template sync verification, fresh-install smoke, and the post-push GitHub release procedure (references/github-release.md).
+---
+
 # Release Commit Procedure
 
-When the user asks to prepare a release commit (e.g., "prep a commit for v217"), follow these steps in order.
+When the user asks to prepare a release commit (e.g., "prep a commit for v217"), follow these steps in order. After a successful push, follow `references/github-release.md` for the GitHub release.
 
 ## 0. Save the Project
 
@@ -102,7 +107,7 @@ This table is the source of truth for what ships; keep it in sync with `_TEMPLAT
 
 Templates should be UTF-8 with LF line endings and no BOM. Each template carries an Embody/Envoy generated-by HTML comment, and otherwise must match its `.claude/` counterpart in content -- diff them (normalizing any legacy BOM + line endings) and fix any drift.
 
-Dev-only rules and skills (e.g. `.claude/rules/commit-push-checklist.md`, `.claude/rules/github-release.md`, `.claude/rules/release-commits.md`, `.claude/rules/skill-prerequisites.md`, `.claude/skills/add-mcp-tool/`, `.claude/skills/run-tests/`) live under `.claude/` for Embody developers only and are NOT shipped to user projects -- they have no template counterpart. The root `CLAUDE.md` and `dev/embody/Embody/templates/text_claude.md` serve different audiences and are maintained independently.
+Dev-only rules and skills (e.g. `.claude/rules/commit-push-checklist.md`, `.claude/rules/skill-prerequisites.md`, `.claude/skills/release/` (this skill, incl. `references/github-release.md`), `.claude/skills/agent-tests/`, `.claude/skills/add-mcp-tool/`, `.claude/skills/run-tests/`) live under `.claude/` for Embody developers only and are NOT shipped to user projects -- they have no template counterpart. The root `CLAUDE.md` and `dev/embody/Embody/templates/text_claude.md` serve different audiences and are maintained independently.
 
 ## 5. Fresh-Install Smoke (before the release is announced)
 

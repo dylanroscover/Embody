@@ -36,6 +36,7 @@ def onStart():
 
     # Clean up artifacts from previous runs - keep only the .toe and .py
     keep = {'.toe', '.py'}
+    failed = []
     for entry in os.listdir(project.folder):
         if any(entry.endswith(ext) for ext in keep):
             continue
@@ -45,9 +46,17 @@ def onStart():
                 shutil.rmtree(path)
             else:
                 os.remove(path)
-        except Exception:
-            pass
-    _log('Cleaned test directory')
+        except Exception as e:
+            # Fail LOUD: a leftover .venv that cannot be deleted (file locks
+            # from a zombie process) corrupts the Envoy bootstrap later --
+            # observed 2026-07-25: locked pydantic_core .pyd -> venv corrupt
+            # -> Envoy start aborted. Surface it at the START of the run.
+            failed.append(f'{entry}: {e}')
+    if failed:
+        _log(f'WARNING: cleanup could NOT remove {len(failed)} entries '
+             f'(locked?): {"; ".join(failed)} -- Envoy venv bootstrap may fail')
+    else:
+        _log('Cleaned test directory')
 
     # Find the latest release .tox
     tox_path = _find_latest_release_tox(repo_root)
@@ -174,7 +183,7 @@ def _write_ready_flag():
             embody = op(embody_path)
             status = embody.par.Status.eval() if embody else 'NOT_FOUND'
             envoy = embody.par.Envoyenable.eval() if embody else False
-            errors = str(embody.scriptErrors) if embody else 'N/A'
+            errors = str(embody.scriptErrors()) if embody else 'N/A'
             f.write(f'status={status}\n')
             f.write(f'envoy_enabled={envoy}\n')
             f.write(f'script_errors={errors}\n')

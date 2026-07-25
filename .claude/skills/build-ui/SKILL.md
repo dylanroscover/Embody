@@ -1,7 +1,7 @@
 # Build UI — visual design system for TouchDesigner panels
 
 Load BEFORE building or restyling any TD panel UI (dialogs, wizards, HUDs,
-control surfaces). This is the design layer; `rules/td-ui.md` is the mechanics
+control surfaces). This is the design layer; `td-ui-mechanics.md` (in this skill directory) is the mechanics
 (which COMP to use, single-window, etc.). A panel is not done until a captured
 frame / live window proves it reads cleanly.
 
@@ -92,7 +92,7 @@ size + color, not five random sizes.
   apart, `btn-h` tall; primary = `accent`, secondary = `surface`.
 - **Button:** Button COMP (`surface` or `accent` bg) + a **Text COMP child**
   caption (size 12, centered, `text`/`accent-text`). Height `btn-h`. Never a bare
-  Button (shows "Button") and never a Text TOP (see `rules/td-ui.md`).
+  Button (shows "Button") and never a Text TOP (see `td-ui-mechanics.md`).
 - **One decision per screen (wizards):** a short title, one question, 2–3 clear
   options; the recommended one is the accent button. Don't crowd a screen.
 

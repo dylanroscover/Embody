@@ -32,7 +32,7 @@ import time
 from html import unescape
 from queue import Queue, Empty
 from threading import Lock, Event, Thread
-from typing import Optional, Any, Callable
+from typing import Optional, Any, Callable, Literal
 
 ENVOY_VERSION = "1.4.0"
 
@@ -527,6 +527,10 @@ class EnvoyMCPServer:
             """
             Create a new operator in TouchDesigner.
 
+            Prerequisite: load the /create-operator skill before first use in
+            a session -- group placement, wiring direction, and the mandatory
+            verify pass live there.
+
             Auto-positions the new op clear of siblings, and snaps any docked
             companions it spawns (callback/shader/info DATs) into a tight row
             hugging the host's bottom edge (docks_placed in the result).
@@ -580,7 +584,9 @@ class EnvoyMCPServer:
 
         @self.mcp.tool()
         def set_parameter(op_path: str, par_name: str, value: str = None,
-                         mode: str = None, expr: str = None,
+                         mode: Optional[Literal['constant', 'expression',
+                                                'export', 'bind']] = None,
+                         expr: str = None,
                          bind_expr: str = None) -> dict:
             """
             Set a parameter value, expression, bind expression, or mode on an operator.
@@ -612,7 +618,9 @@ class EnvoyMCPServer:
 
         @self.mcp.tool()
         def get_parameter(op_path: str, par_name: str = None,
-                         search: str = None, search_in: str = 'any',
+                         search: str = None,
+                         search_in: Literal['name', 'value',
+                                            'expr', 'any'] = 'any',
                          depth: int = 2, max_results: int = 50,
                          details: bool = False) -> dict:
             """
@@ -717,6 +725,9 @@ class EnvoyMCPServer:
             """
             Copy an operator to a new location.
 
+            Prerequisite: load the /create-operator skill before first use in
+            a session (same placement + verify workflow as create_op).
+
             Auto-positions the copy clear of siblings and re-hugs its docked
             companions below it (docks_placed in the result).
 
@@ -752,6 +763,10 @@ class EnvoyMCPServer:
             """
             Execute arbitrary Python code in TouchDesigner.
             Use with caution - code runs on main thread with full TD access.
+
+            Prerequisite: load the /td-api-reference skill before writing TD
+            Python. Ops created here bypass auto-layout: position them per the
+            network-layout rule or a LAYOUT WARNING rides back in _logs.
 
             Args:
                 code: Python code to execute
@@ -858,7 +873,8 @@ class EnvoyMCPServer:
             })
 
         @self.mcp.tool()
-        def get_docs(query: str, section: str = None, source: str = 'auto',
+        def get_docs(query: str, section: str = None,
+                     source: Literal['auto', 'offline', 'web'] = 'auto',
                      max_chars: int = 20000) -> dict:
             """Look up official TouchDesigner documentation (docs.derivative.ca).
 
@@ -927,7 +943,9 @@ class EnvoyMCPServer:
         # === DAT Content Tools ===
 
         @self.mcp.tool()
-        def get_dat_content(op_path: str, format: str = "auto") -> dict:
+        def get_dat_content(op_path: str,
+                            format: Literal["auto", "text",
+                                            "table"] = "auto") -> dict:
             """
             Get the content of a DAT operator (text or table data).
 
@@ -950,6 +968,9 @@ class EnvoyMCPServer:
                            confirm_wipe: bool = False) -> dict:
             """
             Replace a DAT's entire text or table content.
+
+            Prerequisite when writing TD Python into the DAT: load the
+            /td-api-reference skill first.
 
             Refuses no-content calls and any wipe unless confirm_wipe=True.
 
@@ -977,6 +998,9 @@ class EnvoyMCPServer:
                              confirm_wipe: bool = False) -> dict:
             """
             Replace text in a DAT without sending the whole DAT.
+
+            Prerequisite when writing TD Python into the DAT: load the
+            /td-api-reference skill first.
 
             Text DATs only. old_string must appear exactly once unless
             replace_all=True. Refuses wipes without confirm_wipe=True.
@@ -1135,7 +1159,9 @@ class EnvoyMCPServer:
         # === Annotation Tools ===
 
         @self.mcp.tool()
-        def create_annotation(parent_path: str, mode: str = "annotate",
+        def create_annotation(parent_path: str,
+                              mode: Literal["annotate", "comment",
+                                            "networkbox"] = "annotate",
                               text: str = "", title: str = "",
                               x: int = None, y: int = None,
                               width: int = None, height: int = None,
@@ -1143,6 +1169,10 @@ class EnvoyMCPServer:
                               name: str = None) -> dict:
             """
             Create a Comment, Network Box, or Annotate in the network editor.
+
+            Prerequisite: load the /manage-annotations skill first --
+            coordinate math (nodeX/nodeY is the bottom-left corner) and
+            sizing rules live there.
 
             The annotation is created utility=True (matching TD UI-drawn
             annotations), so it appears in get_annotations but NOT in
@@ -1202,6 +1232,10 @@ class EnvoyMCPServer:
                            x: int = None, y: int = None) -> dict:
             """
             Modify properties of an existing annotation.
+
+            Prerequisite: load the /manage-annotations skill first --
+            coordinate math (nodeX/nodeY is the bottom-left corner) and
+            sizing rules live there.
 
             Args:
                 op_path: Path to the annotation operator
@@ -1365,6 +1399,9 @@ class EnvoyMCPServer:
             """
             Tag an operator for Embody externalization and write it to disk.
 
+            Prerequisite: load the /externalize-operator skill before first
+            use in a session -- the required workflow steps live there.
+
             Args:
                 op_path: Path to the operator
                 tag_type: Tag type - "tox" for COMPs, "py"/"txt"/"tsv"/"json" etc for DATs
@@ -1414,6 +1451,9 @@ class EnvoyMCPServer:
             """
             Force save an externalized operator.
 
+            Prerequisite: load the /externalize-operator skill before first
+            use in a session.
+
             Args:
                 op_path: Path to the externalized operator
 
@@ -1445,6 +1485,9 @@ class EnvoyMCPServer:
                              existing_comp: bool = False) -> dict:
             """
             Create or attach a TouchDesigner extension COMP and code DAT.
+
+            Prerequisite: load the /create-extension skill before first use --
+            required parameters, lifecycle methods, and wiring steps.
 
             Args:
                 parent_path: Parent COMP path, or target COMP when existing_comp=True
@@ -1579,7 +1622,9 @@ class EnvoyMCPServer:
         # === TOP Capture ===
 
         @self.mcp.tool()
-        def capture_top(op_path: str, format: str = "jpeg", quality: float = 0.8,
+        def capture_top(op_path: str,
+                        format: Literal["jpeg", "png"] = "jpeg",
+                        quality: float = 0.8,
                         max_resolution: int = 640, inline: bool = False,
                         sample_grid: int = 0) -> list:
             """
@@ -1672,7 +1717,9 @@ class EnvoyMCPServer:
         # === Logging ===
 
         @self.mcp.tool()
-        def get_logs(level: str = None, count: int = 50, since_id: int = None,
+        def get_logs(level: Optional[Literal['DEBUG', 'INFO', 'WARNING',
+                                             'ERROR', 'SUCCESS']] = None,
+                     count: int = 50, since_id: int = None,
                      source: str = None) -> dict:
             """
             Get recent log entries from Embody's ring buffer.
@@ -1718,7 +1765,9 @@ class EnvoyMCPServer:
                 advisory list automatically when your request overlaps
                 territory another session touched recently; an entry with
                 conflict=true means a peer WROTE there within the last
-                minute -- stop and coordinate before proceeding.
+                minute -- stop and coordinate before proceeding. The moment
+                peers or a _peers advisory appear, load the
+                /multi-session-etiquette skill for the full protocol.
             """
             # Answered on the worker thread from pure-Python state -- no
             # TD access, so no main-thread round-trip (mcp-safety).
@@ -1766,6 +1815,9 @@ class EnvoyMCPServer:
                       override: bool = False) -> dict:
             """
             Run Embody test suites and return results.
+
+            Prerequisite: load the project's /run-tests skill (when present)
+            and save the project before a full run.
 
             Args:
                 suite_name: Run only this suite (e.g., "test_path_utils"). Omit to run all.
@@ -5122,7 +5174,7 @@ class EnvoyExt:
     def _rollbackNewOps(self, pre_paths) -> int:
         """A failed execute_python must not leave a half-built network: destroy
         ops the script created before the exception (documented contract in
-        rules/td-ui.md). Parameter changes to PRE-EXISTING ops are NOT rolled
+        skills/build-ui/td-ui-mechanics.md). Parameter changes to PRE-EXISTING ops are NOT rolled
         back -- only creations. Best-effort; returns count destroyed."""
         count = 0
         if pre_paths is None:

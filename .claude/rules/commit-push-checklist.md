@@ -1,6 +1,6 @@
 # Commit and Push Checklist
 
-This rule applies to EVERY commit, not just releases. For version-specific release steps (changelog, README badge, template sync), see `release-commits.md`.
+This rule applies to EVERY commit, not just releases. For version-specific release steps (changelog, README badge, template sync), load the `/release` skill.
 
 ## Before Every Commit
 
@@ -8,7 +8,7 @@ This rule applies to EVERY commit, not just releases. For version-specific relea
 
 - Run `git diff --stat` and `git diff --name-status` (or `git diff --cached` if already staged) to see every file touched.
 - **Read the diffs**, not just the filenames. Understand what each change does and why. Never commit changes you haven't reviewed.
-- Confirm no unintended files are staged (secrets, `.env`, build artifacts, `externalizations.tsv`).
+- Confirm no unintended files are staged (secrets, `.env`, build artifacts). `externalizations.tsv` is machine-written by Embody: commit its changes, never hand-edit it.
 
 ### 2. Documentation Audit
 
@@ -19,7 +19,7 @@ For each changed file, ask: does this change affect user-facing behavior or deve
 | New feature or tool | Add or update relevant page in `docs/` |
 | Changed behavior | Update the doc that describes the old behavior |
 | New or changed parameter | Update parameter docs and help text |
-| Rule or skill change in `.claude/` | Check for template counterpart (see `release-commits.md` step 4) |
+| Rule or skill change in `.claude/` | Check for template counterpart (see the `/release` skill, step 4) |
 | Non-obvious bug fix | Consider adding to gotchas or troubleshooting |
 
 If no docs need updating, that's fine — but the evaluation must happen.
@@ -38,11 +38,11 @@ CLAUDE.md critical rule #10: "Always update unit tests when modifying project co
 - Stage files explicitly by name — avoid `git add -A` or `git add .`.
 - Write a message that describes **why**, not just what. The diff shows "what."
 - Non-release commits: imperative mood, concise summary.
-- Release commits: follow the format in `release-commits.md` (`Embody vX.Y.Z: <themes>`).
+- Release commits: follow the format in the `/release` skill (`Embody vX.Y.Z: <themes>`).
 
 ### 5. Release Detection
 
-If the commit includes version-significant changes (new features, bug fixes, behavior changes in core extensions), remind the user that a release commit may be warranted and point to `release-commits.md`. Do not silently skip version prep.
+If the commit includes version-significant changes (new features, bug fixes, behavior changes in core extensions), remind the user that a release commit may be warranted and point to the `/release` skill. Do not silently skip version prep.
 
 ## Before Pushing
 
