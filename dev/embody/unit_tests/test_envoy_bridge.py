@@ -2567,3 +2567,327 @@ class TestBridgeStdoutSerialization(EmbodyTestCase):
             f'{bad_lines[:5]}')
 
 
+
+
+# =====================================================================
+# Per-bridge instance pinning (2026-07-25 redesign)
+# =====================================================================
+
+class TestBridgeInstancePinning(EmbodyTestCase):
+    """A bridge follows its own pinned instance, not the global 'active'.
+
+    Regression tests for the 2026-07-25 incident: a freshly-registering
+    instance flipped the registry 'active' and yanked every live
+    session's bridge to it (once to a dead port). With pinning, only an
+    explicit all-sessions switch (active_epoch bump) may re-target a
+    pinned bridge.
+    """
+
+    REG = {
+        'active': 'A',
+        'instances': {
+            'A': {'toe_path': 'dev/A.toe', 'port': 9870, 'td_pid': 111},
+            'B': {'toe_path': 'dev/B.toe', 'port': 9871, 'td_pid': 222},
+        },
+    }
+
+    def _write_registry(self, data):
+        import json as _json
+        import tempfile
+        fd, path = tempfile.mkstemp(suffix='.json', prefix='envoy_pin_')
+        os.close(fd)
+        with open(path, 'w', encoding='utf-8') as f:
+            _json.dump(data, f)
+        self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
+        return path
+
+    # -- _resolve_from_registry ---------------------------------------
+
+    def test_pin_beats_active(self):
+        with patch.object(bridge, 'is_td_process_alive', return_value=True):
+            port, pid, name = bridge._resolve_from_registry(
+                dict(self.REG), None, pin='B')
+        self.assertEqual(name, 'B')
+        self.assertEqual(port, 9871)
+        self.assertEqual(pid, 222)
+
+    def test_no_pin_follows_active(self):
+        with patch.object(bridge, 'is_td_process_alive', return_value=True):
+            port, pid, name = bridge._resolve_from_registry(
+                dict(self.REG), None)
+        self.assertEqual(name, 'A')
+        self.assertEqual(port, 9870)
+
+    def test_vanished_pin_falls_back_to_active(self):
+        with patch.object(bridge, 'is_td_process_alive', return_value=True):
+            port, pid, name = bridge._resolve_from_registry(
+                dict(self.REG), None, pin='GONE')
+        self.assertEqual(name, 'A')
+
+    # -- reconcile Phase 1 --------------------------------------------
+
+    def _reconcile_once(self, state):
+        with patch.object(bridge, 'ping_backend_mcp', return_value=False), \
+             patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'is_process_alive', return_value=True), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]):
+            bridge.reconcile(state, None, heartbeat=False)
+
+    def test_active_flip_does_not_move_pinned_bridge(self):
+        """Registry churn (a new instance claiming active) must not
+        re-target a bridge pinned elsewhere."""
+        reg = dict(self.REG)
+        reg['active'] = 'B'  # someone flipped the default
+        path = self._write_registry(reg)
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', config=dict(self.REG),
+            config_path=path, active_name='A',
+            pinned_instance='A', seen_epoch=0)
+        self._reconcile_once(state)
+        self.assertEqual(state.pinned_instance, 'A')
+        self.assertIn('9870', state.url)  # still on A
+
+    def test_epoch_bump_moves_pinned_bridge(self):
+        """An explicit all-sessions switch (active + active_epoch) IS a
+        command and overrides the pin."""
+        reg = dict(self.REG)
+        reg['active'] = 'B'
+        reg['active_epoch'] = 5
+        path = self._write_registry(reg)
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', config=dict(self.REG),
+            config_path=path, active_name='A',
+            pinned_instance='A', seen_epoch=4)
+        self._reconcile_once(state)
+        self.assertEqual(state.pinned_instance, 'B')
+        self.assertIn('9871', state.url)
+        self.assertEqual(state.seen_epoch, 5)
+
+    def test_stale_epoch_is_not_a_command(self):
+        """An epoch already seen (e.g. seeded at startup) is history,
+        not a fresh command."""
+        reg = dict(self.REG)
+        reg['active'] = 'B'
+        reg['active_epoch'] = 5
+        path = self._write_registry(reg)
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', config=dict(self.REG),
+            config_path=path, active_name='A',
+            pinned_instance='A', seen_epoch=5)
+        self._reconcile_once(state)
+        self.assertEqual(state.pinned_instance, 'A')
+        self.assertIn('9870', state.url)
+
+    def test_unpinned_bridge_adopts_first_resolution_as_pin(self):
+        path = self._write_registry(dict(self.REG))
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', config=dict(self.REG),
+            config_path=path, active_name=None,
+            pinned_instance=None, seen_epoch=0)
+        self._reconcile_once(state)
+        self.assertEqual(state.pinned_instance, 'A')
+
+    def test_pinned_instance_port_change_self_heals(self):
+        """The pinned instance restarted on a new port: the bridge must
+        follow it by NAME (the survivability 'active' used to provide,
+        now per-instance)."""
+        reg = dict(self.REG)
+        reg['instances'] = dict(reg['instances'])
+        reg['instances']['A'] = {'toe_path': 'dev/A.toe',
+                                 'port': 9999, 'td_pid': 111}
+        path = self._write_registry(reg)
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', config=dict(self.REG),
+            config_path=path, active_name='A',
+            pinned_instance='A', seen_epoch=0)
+        self._reconcile_once(state)
+        self.assertIn('9999', state.url)
+        self.assertEqual(state.pinned_instance, 'A')
+
+    # -- switch_instance ----------------------------------------------
+
+    def _switch(self, params, registry):
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', config=dict(registry),
+            config_path='/fake/envoy.json', active_name='A',
+            pinned_instance='A', seen_epoch=0)
+        writes = []
+        with patch.object(bridge, 'load_config', return_value=dict(registry)), \
+             patch.object(bridge, 'ping_envoy_port', return_value=True), \
+             patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'is_process_alive', return_value=True), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'atomic_write_json',
+                          side_effect=lambda p, d: writes.append((p, d))), \
+             patch.object(bridge, 'notify_stdout', lambda *a, **k: None):
+            result = bridge.handle_switch_instance(params, state)
+        return result, state, writes
+
+    def test_switch_default_is_session_local(self):
+        result, state, writes = self._switch({'instance': 'B'}, self.REG)
+        self.assertEqual(result.get('status'), 'success')
+        self.assertFalse(result.get('all_sessions'))
+        self.assertEqual(state.pinned_instance, 'B')
+        self.assertIn('9871', state.url)
+        # The registry must NOT be rewritten -- peers unaffected.
+        self.assertEqual(writes, [])
+
+    def test_switch_all_sessions_writes_active_and_epoch(self):
+        result, state, writes = self._switch(
+            {'instance': 'B', 'all_sessions': True}, self.REG)
+        self.assertEqual(result.get('status'), 'success')
+        self.assertTrue(result.get('all_sessions'))
+        self.assertEqual(len(writes), 1)
+        _path, written = writes[0]
+        self.assertEqual(written.get('active'), 'B')
+        self.assertEqual(written.get('active_epoch'), 1)
+        self.assertEqual(state.seen_epoch, 1)
+
+    def test_switch_list_mode_reports_pin(self):
+        result, _state, writes = self._switch({}, self.REG)
+        self.assertEqual(result.get('status'), 'list')
+        self.assertEqual(result.get('pinned_instance'), 'A')
+        self.assertEqual(writes, [])
+
+
+class TestRegistryAdoptIfVacant(EmbodyTestCase):
+    """envoy_setup.write_envoy_config must not steal 'active' from a
+    live instance (the 2026-07-25 smoke-run hijack)."""
+
+    def _stub_ext(self, alive_pids):
+        ext = MagicMock()
+        # instance_key() consults Envoyinstancename -- return '' so the
+        # key derives from the toe basename instead of a MagicMock (which
+        # would become a non-serializable registry key).
+        ext.ownerComp.par.Envoyinstancename.eval.return_value = ''
+        ext._isPidAlive = lambda pid: pid in alive_pids
+        ext._atomicWriteJSON = lambda path, data: path.write_text(
+            json.dumps(data), encoding='utf-8')
+        ext._log = lambda *a, **k: None
+        return ext
+
+    def _run(self, existing_registry, alive_pids, port=9871):
+        import shutil
+        import tempfile
+        from pathlib import Path
+        setup_mod = op.Embody.op('envoy_setup').module
+        root = Path(tempfile.mkdtemp(prefix='adopt_vacant_'))
+        embody_dir = root / '.embody'
+        embody_dir.mkdir()
+        cfg = embody_dir / 'envoy.json'
+        if existing_registry is not None:
+            cfg.write_text(json.dumps(existing_registry), encoding='utf-8')
+        ext = self._stub_ext(alive_pids)
+        setup_mod.write_envoy_config(ext, embody_dir, port)
+        self.addCleanup(lambda: shutil.rmtree(root, True))
+        return json.loads(cfg.read_text(encoding='utf-8'))
+
+    def test_registration_does_not_steal_active_from_live_instance(self):
+        me = os.getpid()
+        reg = {'active': 'other', 'instances': {
+            'other': {'toe_path': 'dev/other.toe', 'port': 9870,
+                      'td_pid': 424242}}}
+        out = self._run(reg, alive_pids={424242, me})
+        self.assertEqual(out['active'], 'other')
+        self.assertIn('other', out['instances'])
+        # ...and we still registered ourselves alongside.
+        self.assertEqual(len(out['instances']), 2)
+
+    def test_registration_adopts_vacant_active(self):
+        out = self._run({'active': '', 'instances': {}},
+                        alive_pids={os.getpid()})
+        self.assertTrue(out['active'])
+        self.assertIn(out['active'], out['instances'])
+
+    def test_registration_adopts_active_of_dead_instance(self):
+        me = os.getpid()
+        reg = {'active': 'dead', 'instances': {
+            'dead': {'toe_path': 'dev/dead.toe', 'port': 9870,
+                     'td_pid': 999999999}}}
+        out = self._run(reg, alive_pids={me})
+        self.assertNotEqual(out['active'], 'dead')
+        self.assertNotIn('dead', out['instances'])  # GC pruned
+        self.assertIn(out['active'], out['instances'])
+
+
+# =====================================================================
+# Worktree coordination (Phase 2, 2026-07-25)
+# =====================================================================
+
+class TestWorktreeCoordination(EmbodyTestCase):
+    """Durable worktree claims + landing-preflight logic (module-level,
+    TD-free helpers in EnvoyExt)."""
+
+    def _mod(self):
+        return op.Embody.op('EnvoyExt').module
+
+    # -- durable_claim_alive ------------------------------------------
+
+    def test_durable_claim_lives_while_worktree_exists(self):
+        import tempfile, time as _t
+        mod = self._mod()
+        wt = tempfile.mkdtemp(prefix='wt_alive_')
+        self.addCleanup(lambda: __import__('shutil').rmtree(wt, True))
+        claim = {'path': wt, 'ts': _t.time() - 3600}
+        self.assertTrue(mod.durable_claim_alive(claim, _t.time()))
+
+    def test_durable_claim_dies_when_worktree_gone(self):
+        import time as _t
+        mod = self._mod()
+        claim = {'path': r'C:\nonexistent\wt_gone_xyz', 'ts': _t.time()}
+        self.assertFalse(mod.durable_claim_alive(claim, _t.time()))
+
+    def test_durable_claim_dies_past_max_age(self):
+        import tempfile, time as _t
+        mod = self._mod()
+        wt = tempfile.mkdtemp(prefix='wt_old_')
+        self.addCleanup(lambda: __import__('shutil').rmtree(wt, True))
+        now = _t.time()
+        claim = {'path': wt, 'ts': now - (8 * 86400)}
+        self.assertFalse(mod.durable_claim_alive(claim, now))
+
+    # -- compute_landing_conflicts ------------------------------------
+
+    def test_landing_conflicts_intersections(self):
+        mod = self._mod()
+        out = mod.compute_landing_conflicts(
+            landing_files=['a.py', 'b.py', 'c.tdn', 'd.md'],
+            main_dirty=['b.py', 'zz.txt'],
+            peer_files=['c.tdn'],
+            tdn_unsaved=['c.tdn', 'other.tdn'])
+        self.assertEqual(out['main_dirty'], ['b.py'])
+        self.assertEqual(out['peers'], ['c.tdn'])
+        self.assertEqual(out['tdn_unsaved'], ['c.tdn'])
+
+    def test_landing_conflicts_clear(self):
+        mod = self._mod()
+        out = mod.compute_landing_conflicts(
+            ['a.py'], ['b.py'], ['c.py'], ['d.py'])
+        self.assertEqual(out, {'main_dirty': [], 'peers': [],
+                               'tdn_unsaved': []})
+
+    # -- read_tsv_dirty_paths -----------------------------------------
+
+    def test_read_tsv_dirty_paths(self):
+        import tempfile
+        from pathlib import Path
+        mod = self._mod()
+        root = Path(tempfile.mkdtemp(prefix='tsv_dirty_'))
+        self.addCleanup(lambda: __import__('shutil').rmtree(root, True))
+        tsv_dir = root / 'dev' / 'embody'
+        tsv_dir.mkdir(parents=True)
+        (tsv_dir / 'externalizations.tsv').write_text(
+            'path\ttype\tstrategy\trel_file_path\ttimestamp\tdirty\tbuild\n'
+            '/a\ttext\tpy\tembody/a.py\t2026\tTrue\t1\n'
+            '/b\ttext\tpy\tembody/b.py\t2026\t\t1\n'
+            '/c\tbase\ttdn\tembody/c.tdn\t2026\tTrue\t1\n',
+            encoding='utf-8')
+        out = mod.read_tsv_dirty_paths(str(root))
+        self.assertEqual(out, {'dev/embody/a.py', 'dev/embody/c.tdn'})
+
+    def test_read_tsv_dirty_paths_missing_table(self):
+        import tempfile
+        mod = self._mod()
+        root = tempfile.mkdtemp(prefix='tsv_none_')
+        self.addCleanup(lambda: __import__('shutil').rmtree(root, True))
+        self.assertEqual(mod.read_tsv_dirty_paths(root), set())

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 891
-generator: Embody/6.0.153
+build: 911
+generator: Embody/6.0.156
 td_build: 099.2025.33070
-source_file: Embody-6.154.toe
-exported_at: '2026-07-24T20:42:04Z'
+source_file: Embody-6.157.toe
+exported_at: '2026-07-25T11:29:32Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -292,7 +292,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 20:38:57 UTC
+    value: Saved 11:28:12 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -723,7 +723,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.153
+    value: 6.0.156
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -740,7 +740,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 891
+    value: 911
   - name: Github
     style: Pulse
     label: GitHub
@@ -751,7 +751,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-24 20:42:04 UTC
+    value: 2026-07-25 11:29:32 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -823,9 +823,9 @@ storage:
   _tdn_restore_failures:
   - /embody/base1
   _start_in_progress: true
-  _watchdog_gen: 1037
-  _clip_watch_gen: 802
-  _shortcut_rec_gen: 321
+  _watchdog_gen: 1075
+  _clip_watch_gen: 840
+  _shortcut_rec_gen: 363
   _release_hook_active: false
 operators:
 - name: help

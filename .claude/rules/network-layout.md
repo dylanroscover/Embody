@@ -1,94 +1,28 @@
 # Network Layout Conventions
 
-## Placement Procedure (follow every time)
+**These invariants govern EVERY operator you create or move -- through `create_op`/`copy_op`/`set_op_position` OR `execute_python` (`comp.create()`, `.copy()`, `.copyOPs()`).** The full recipe (spacing formulas, dock slot patterns, panel-widget stacking, complexity thresholds, anti-patterns) lives in the `/create-operator` skill -- **MUST load it before creating or moving any operator, whichever creation path you use.** `execute_python` is the silent trap: TD's bare `.create()` drops each new op at **(0, 0)**, stacked on the last, and nothing auto-positions it.
 
-**No exemptions — this governs EVERY operator you create or move, whether through the `create_op` / `create_annotation` MCP tools OR through `execute_python` (`comp.create(...)`, `.copy()`, `.copyOPs()`).** `execute_python` creation is the silent trap: it bypasses the `/create-operator` skill and every gate below, and TD's bare `.create()` drops each new op at **(0, 0)**, stacked on the last. If you create or move operators inside an `execute_python` call, you are on the hook for applying this procedure by hand — above all the **Verify** step, which is the backstop that catches a (0, 0) pileup before it ships. Convenience batching in `execute_python` does not buy you out of layout.
+## The invariants (always, every model, every path)
 
-**Envoy enforces this at the tool layer.** Every `execute_python` is linted: if it leaves newly-created ops at **(0, 0)**, overlapping a sibling, or with docked DATs scattered far from their host (>350 units), a `LAYOUT WARNING` rides back on the response (in `_logs`). Scattered docks of ops created by that call are **auto-hugged** below their host before the lint runs (a warning still reports the fix — re-read positions if you had planned around them). Treat any remaining warning as a **hard stop** — run `get_network_layout` and reposition before continuing; do not end the turn with it unaddressed. (`create_op` / `copy_op` auto-position the new op AND hug its docked companions; `set_op_position` carries a host's docks along — so this gap is `execute_python` / `comp.create()` / `.copy()` only.) This is the single canonical statement of the trap — everything below just references it.
+- **200-unit grid; spacing is `size + gap`, BOTH axes, never a fixed step.** Compute every offset from the ACTUAL `nodeWidth`/`nodeHeight` returned by `get_network_layout` (operators range 100-300+ units), then snap UP to the next 200 multiple. The grid is the snap target, not the step size.
+- **Signal flows left to right; wires must flow forward (positive X).** Every source's right edge (`nodeX + nodeWidth`) sits left of its destination's `nodeX` -- a backward "S" wire means the downstream op is misplaced.
+- **Every docked op hugs its host** -- a tight row ~30 units below (never a full grid step away). `create_op`/`copy_op`/`set_op_position` do this automatically; after any `execute_python` build, place and verify docks yourself.
+- **Nothing left at (0, 0); no overlaps; related ops sit near each other** (a MAT beside its Geometry COMP, a camera/light near their Render TOP, any referenced op visible without scrolling).
+- **Every operator sits inside exactly one annotation; annotations never overlap** (>= 400 units between edges) and expand when you add ops. **MUST load `/manage-annotations` before `create_annotation` or `set_annotation`** -- `nodeX`/`nodeY` is the bottom-left corner.
+- **Y increases upward.** New rows/parallel chains go downward, >= 400 units apart (more when tiles are tall).
 
-1. **Read first**: `get_network_layout` + `get_annotations` on the parent COMP. Understand existing positions, groups, and flow before touching anything.
-2. **Flag problems**: If the existing layout is messy (overlapping ops, orphaned ops outside annotations, broken grid alignment), tell the user before adding to it. Do not silently work around a bad layout.
-3. **Identify the target group**: Determine which annotation group the new operator belongs to. If none fits, you will create a new one.
-4. **Compute position**: Use actual `nodeWidth`/`nodeHeight` from `get_network_layout`. New operators extend the group to the **right**: `rightmost_nodeX + rightmost_nodeWidth + 200` (snapped to 200-unit grid). If adding a parallel chain, go **down** (lowest Y in the group − 400). Never assume a fixed operator width — operators range from 100 to 300+ units wide.
-5. **Batch-compute all positions** before placing anything. Never place one operator, then figure out where the next one goes.
-6. **Place, connect, then update the annotation** to enclose the new operators. Use `set_annotation` to expand width/height if needed.
-7. **Verify (mandatory gate)**: After placing, call `get_network_layout` again. Confirm: no overlaps (use actual `nodeWidth` -- COMPs are wider than TOPs); **nothing left at (0, 0)**; **every docked op hugs its host**; **every wire flows forward** (each source's `nodeX + nodeWidth` is left of its destination's `nodeX` -- no backward "S" wires); no ops outside annotations; grid alignment intact. **No turn that creates or moves operators may end without this check, and it must run DURING iterative building too -- not just at the very end.** That is exactly when docked DATs scatter and sources end up stacked under their destinations. It is the single backstop, no matter which path (MCP tool or `execute_python`) created the ops.
+## Read first, verify last (mandatory gates)
 
-## Grid and Spacing
+1. **Before placing anything**: `get_network_layout` + `get_annotations` on the parent. Batch-compute ALL positions from actual dimensions before creating. Flag a messy existing layout to the user instead of silently working around it.
+2. **After placing -- no turn that creates or moves operators may end without this check, and it runs DURING iterative building too**: `get_network_layout` again; confirm no overlaps, nothing at (0, 0), every `dockedTo` entry hugs its named host, every wire flows forward, no ops outside annotations, grid intact.
 
-- **Spacing is `size + gap`, BOTH axes, ALWAYS -- never a fixed step.** This is the #1 overlap bug: stepping by a constant (e.g. `nodeY - 100`, `nodeX + 300`) while the tiles are bigger than the step (a 134-tall node stepped by 100 overlaps by 34). The step MUST be computed from the ACTUAL node extent on that axis plus a gap, then snapped up to the grid:
-  - **Horizontal**: `next_x = prev_nodeX + prev_nodeWidth + gap` (gap >= 200), rounded up to the next 200 multiple.
-  - **Vertical**: `next_y = prev_nodeY - (prev_nodeHeight + gap)`, rounded so the step clears the tile. For a stack of same-size tiles: `step = ceil((maxNodeHeight + gap) / 200) * 200` and place tile `i` at `y = -i * step`. A 134-tall stack -> `step = 200` (66 gap); a 260-tall stack -> `step = 400`. Bigger nodes => bigger spacing, mechanically.
-- **200-unit grid**: All positions snap to multiples of 200. No arbitrary coordinates. The grid is the SNAP target, not the step size -- when a node is taller/wider than 200, the step is 400/600/... (the next multiple that clears `size + gap`), NEVER a flat 200.
-- **400 units vertical** between parallel chains or annotation groups (this is a MINIMUM; widen it too when the chains' tiles are tall).
-- **Y-axis increases upward**. New rows go downward (decreasing Y). Primary chain at top, secondary chains below.
-- **Always use actual dimensions**: `get_network_layout` returns `nodeWidth` and `nodeHeight` for every operator. Compute EVERY offset from these, never from an assumed tile size. COMPs (~160+ wide) and panel widgets (often 130-160 wide x 130+ tall) are much bigger than a bare TOP (~120 sq) -- a step that clears one overlaps the other.
-- **Panel-COMP widgets stack too.** Buttons/fields/containers inside an `align`-driven panel (a Container/Button laid out `verttb`/`horizlr`) render by their `align` + `order` pars, so their `nodeX`/`nodeY` are cosmetic to the UI -- BUT they still get their own network tiles, and a `verttb` container full of 134-tall buttons stepped by 100 overlaps in the editor exactly like data-flow ops do. Apply the same `size + gap` stepping to panel-widget tiles (stack them by their panel `order`) so the network stays readable; it never affects the rendered panel. This is the one layout class the `LAYOUT WARNING` lint does NOT police (it targets wired data-flow ops), so it is on you to tidy.
+## Tool-layer enforcement
 
-## Signal Flow
+Every `execute_python` is linted: ops left at (0, 0), overlapping a sibling, or with docked DATs scattered far from their host (>350 units) ride a `LAYOUT WARNING` back on the response (in `_logs`); badly scattered docks of ops created by that call are auto-hugged first (re-read positions if you had planned around them). **Treat any remaining warning as a hard stop** -- run `get_network_layout` and reposition before continuing. `create_op`/`copy_op` auto-position and hug docks; `set_op_position` carries a host's docks along. Panel-widget tiles are the one class the lint does NOT police -- stack them yourself (see `/create-operator`).
 
-- **Left to right**: Inputs on the left, outputs on the right. New additions go on the far right of their group.
-- **Wires must flow forward (positive X) -- never a backward "S" wire.** Every operator must have a higher `nodeX` than each operator feeding it; vertical offset (Y) can go either way. The classic mistake: placing a source at the **same** `nodeX` as its destination (directly above or below it) -- the source's output then sits right of the dest's input, so the wire loops back into an "S". Place each source far enough left that its **right edge** (`nodeX + nodeWidth`) is left of the destination's `nodeX`. Remember COMPs (camera / light / geo) are ~160 wide, not 130. If a wire bends backward, the downstream op is misplaced -- move it right, or move the source left.
-- **Branches split vertically**: Branches fan out downward, each continuing left-to-right. Minimize edge crossings.
-- **Same row = same stage** in a processing chain (same X). **Same column = same function** across parallel chains (same Y).
+## Anti-patterns (the short list)
 
-## Related Operators Stay Close
-
-Operators that reference each other belong **near each other**, even when no wire or dock connects them -- the reference is a relationship the wires don't draw, and proximity makes it visible.
-
-- A **MAT** sits beside the **Geometry COMP** it shades (a row below, or directly alongside) -- never stranded across the network.
-- A **camera** and **light(s)** sit near the **Render TOP** they feed.
-- A **CHOP** or **DAT** that drives another op's parameters by reference sits near that op.
-- Any COMP named in an `op()` call, a parameter expression, or a material / OP-reference slot sits near the op that references it, when practical.
-
-Rule of thumb: if op A names op B in a parameter, expression, or material slot, a reader should see both without scrolling. Don't park a referenced op in a far corner just because it isn't wired into the chain.
-
-## Docked Callback DATs
-
-**ABSOLUTE RULE -- every docked op hugs its host, every time, no exceptions.** Some operators auto-spawn companion ops **docked** to them (anything in `op.docked`) -- callback DATs, info DATs, shader DATs, keys. After you create ANY op with docked ops, you MUST place EVERY one of its docked ops **directly below the host**; if directly-below is occupied, place it **directly to the host's right**. Never leave a docked op where TD dropped it.
-
-Hosts and what they dock: execute/callback DATs (`chopExecuteDAT`, `datExecuteDAT`, `panelExecuteDAT`, `parameterExecuteDAT`, `executeDAT`); input DATs (`keyboardinDAT`, `mouseinDAT`, `oscinDAT`/`oscoutDAT`); and **GLSL ops** (`glslTOP` / `glslmultiTOP` / `glslMAT`), which dock a **pixel DAT, a compute DAT, AND an info DAT** (the `multi` variants also dock a vertex DAT). TD drops all of these at arbitrary, scattered coordinates -- and `execute_python` / `.create()` scatters them WORSE than `create_op`, so this rule applies in full to both creation paths. **If another op already sits in the slot a docked op needs, move that other op out of the way** -- docked ops take priority and are never threaded around obstacles.
-
-**Layout formula** -- given host op bottom-left (`sx`,`sy`), size (`sw`,`sh`), and `N` docks (use the max `dw`,`dh` across docks for uniform spacing). Docked ops **HUG the host** -- they are the one deliberate exception to 200-grid spacing; place them tight, never a full grid step away:
-
-- Row Y: `row_y = sy - dh - 30` -- a tight ~30-unit gap directly below the host's bottom edge. Do NOT drop a full grid step (200) below; that produces the "stranded op with a long diagonal wire" look, not a docked companion hugging its host.
-- Slot step: `step = dw + 20` -- tight, so the docks form one compact cluster directly under the host, not a spread-out row that reaches into a neighbor's column.
-- Center the row under the host: dock `i` sits at `nodeX = (sx + sw/2) + (i - (N-1)/2) * step - dw/2`, filling `[L, C, R, ...]` per the table below.
-- If `N` tight docks would still reach a neighbor's column, stack the overflow into a second tight row (`row_y - dh - 30`) rather than widening.
-
-| N | Pattern |
-|---|---|
-| 1 | `[C]` |
-| 2 | `[C, R]` |
-| 3 | `[L, C, R]` |
-| 4 | `[L, C, R, R2]` |
-| 5 | `[L2, L, C, R, R2]` |
-
-**Tool-layer enforcement**: `create_op` and `copy_op` place the new op's docks per this formula automatically (`docks_placed` in the result), and `set_op_position` carries a host's docks along when you move it (`docks_moved`) -- so through the MCP tools, docks stay hugged without extra calls. Position the host FIRST if you also intend to place a dock explicitly (a later host move re-hugs its docks). `get_network_layout` marks each docked op with `dockedTo` (its host's name) so the Verify step can check hugging mechanically.
-
-**Procedure (for `execute_python` / `.create()` builds)**: After creating ANY op in a script, query `op.docked` (`[d.path for d in op('PATH').docked]`), reposition EVERY docked op per the formula using `set_op_position` (or by setting `nodeX`/`nodeY` directly), then `get_network_layout` to confirm the docked row landed directly under the host with no overlap. If a slot collides with any other op (dock or not), **move that other op** to a clear region and recompute -- never thread docks around obstacles, never overlap, never leave one stranded. TDN export captures whatever is live, so this is the only way docked positions stay clean across saves. A `glslTOP` built inside `execute_python` is the classic trap: its pixel / compute / info DATs land scattered across the network -- Envoy auto-hugs the badly scattered ones after the call (with a `LAYOUT WARNING`), but the create-operator skill's Verify step must still confirm every `dockedTo` entry hugs its host.
-
-## Annotations
-
-- **Every operator must be inside exactly one annotation.** No orphans. If a new op doesn't belong to an existing group, create a new annotation for it.
-- **Annotations must never overlap each other.** Maintain at least 400 units between annotation edges.
-- **Expand annotations when adding operators.** Recalculate the bounding box with padding after every addition.
-- **Title names the function, not the implementation.** "Audio Mixing" not "CHOP chain 2". A reader should understand the network from annotation titles alone.
-
-**STOP — you MUST invoke `/manage-annotations` before calling `create_annotation` or `set_annotation`.** It contains required coordinate math. Key point: `nodeX`/`nodeY` is the **bottom-left corner**.
-
-## Complexity Thresholds
-
-- **4–5 annotation groups** in one network: consider breaking into baseCOMPs (or containerCOMPs for UI).
-- **15–20 operators** in one group: consider encapsulating into a COMP.
-- When encapsulating, the COMP replaces the group in the parent network. Move the annotation title to the COMP's name or label.
-
-## Anti-Patterns
-
-- **Leaving `execute_python`-created ops at (0, 0) / overlapping** — the most common layout failure (see the Placement Procedure note: `create_op` auto-positions, `execute_python` does not). Envoy now emits a `LAYOUT WARNING` for it, but position + Verify regardless of the warning.
-- Placing "near" a related op by picking a mathematically close but visually wrong position — filling a gap in the middle of a finished row instead of extending rightward.
-- **Using fixed offsets like `nodeX + 300` without accounting for `nodeWidth`** — this is the #1 cause of overlapping operators when ops are wider than ~100 units.
-- Using TD's `COMP.layout()` — it produces overlapping, unreadable results.
-- Creating operators without updating the enclosing annotation.
-- Calling `set_op_position` without verifying the target coordinates are clear — `set_op_position` has no overlap detection.
-- **Leaving docked callback/info DATs at their auto-spawn position.** TD drops them at arbitrary coordinates. `create_op`/`copy_op`/`set_op_position` hug them automatically; after an `execute_python` build, reposition them per "Docked Callback DATs" and verify every `dockedTo` entry.
+- Leaving `execute_python`-created ops at (0, 0) or overlapping -- the #1 layout failure.
+- Fixed offsets like `nodeX + 300` without `nodeWidth` -- the #1 overlap bug.
+- TD's `COMP.layout()` -- produces overlapping, unreadable results.
+- Creating operators without updating the enclosing annotation, or calling `set_op_position` into an unverified slot.

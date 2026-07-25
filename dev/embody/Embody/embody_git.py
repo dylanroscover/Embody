@@ -37,7 +37,7 @@ facade (_findProjectRoot, _guardFileWrite, createExternalizationsTable, the
 Envoy sub-config methods, InitEnvoy) and to facade class attributes
 (_TEMPLATE_MAP_RULES/_SKILLS, _AI_CONFIG_FILES, _HASH_MANIFEST, _INSTALL_MANIFEST,
 _EMBODY_MARKER, _consent_bulk, _startup_config_pass) also go through ext.* -- the
-constants stay class attrs on EmbodyExt (the release-commits.md sync contract and
+constants stay class attrs on EmbodyExt (the /release skill's sync contract and
 the unit tests both read them off the ext).
 """
 

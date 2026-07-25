@@ -136,9 +136,10 @@ Concurrent AI sessions (multiple Claude Code windows, other MCP clients) working
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `get_sessions` | — | List connected AI sessions: label (`repo@branch`), idle time, `recent_scopes` it modified, `claims` it holds, plus `you` (the caller's own session id) |
+| `get_sessions` | — | List connected AI sessions: label (`repo@branch`), idle time, `recent_scopes` it modified, `claims` it holds, plus `you` (the caller's own session id). May include `worktrees`: in-flight durable worktree tasks, visible even after their session ended |
 | `claim_scope` | `scope`, `note?`, `ttl?` | Cooperative write lease on an op-path prefix, a `file:` path, or a `project:` scope. Peers' overlapping claims are refused while yours is live; their destructive operations on it are gated. Auto-renews on your own writes; expires on TTL or session silence |
 | `release_scope` | `scope` | Release a lease you hold. Polite — expiry also handles it |
+| `preflight_landing` | `worktree_path` | Landing safety check for a git-worktree diff: intersects the files it would land with main-tree dirt, peer `file:` claims/touches, and unsaved live TDN state. Run before porting any worktree diff; a `conflicts` verdict means reconcile first |
 
 !!! info "Auto-piggybacked peer advisories"
     A `_peers` field rides on any response whose request touches territory another session modified in the last ~10 minutes — one entry per peer: `{label, scope, tool, age_s, conflict}`. `conflict: true` means a peer *wrote* an overlapping scope within the last minute and your operation is also a write — stop and coordinate.
@@ -168,7 +169,7 @@ These tools run locally on the STDIO bridge script, not inside TouchDesigner. Th
 | `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness, restart attempts remaining |
 | `launch_td` | `timeout?`, `project_path?` | Launch TD with the project's `.toe` file. Waits for Envoy to become reachable (default: 120s). Pass `project_path` (absolute, or relative to the git root) to open a different `.toe` |
 | `restart_td` | `timeout?`, `project_path?` | Gracefully quit TD and relaunch. Waits for exit before relaunching (default: 120s). Pass `project_path` to relaunch with a different `.toe`. Targets only the active instance's verified process — other running TouchDesigner instances are never touched |
-| `switch_instance` | `instance?` | List all registered TD instances (omit `instance`) or switch to a different running instance. See [Multiple Instances](architecture.md#multiple-instances) |
+| `switch_instance` | `instance?`, `all_sessions?` | List all registered TD instances (omit `instance`) or re-pin **this session's** bridge to a different running instance; other sessions are untouched unless `all_sessions=true`. See [Multiple Instances](architecture.md#multiple-instances) |
 
 !!! info "Bridge architecture"
     Claude Code connects to Envoy via a STDIO bridge script (`.embody/envoy-bridge.py`). The bridge translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. It handles MCP protocol handshake locally when TD is down, so these meta-tools are always available. See [Architecture](architecture.md) for details.

@@ -15,9 +15,10 @@ Claude Code  <-->  STDIO Bridge  <-->  Envoy (TD instance A, port 9870)
                         +---switch--->  Envoy (TD instance B, port 9871)
 ```
 
-- **One bridge process** per git root (spawned by Claude Code's MCP client)
-- **One active connection** at a time — the bridge talks to whichever instance is marked `active`
-- **Switching is instant** — `switch_instance` redirects the bridge's HTTP target in-memory
+- **One bridge process per SESSION** (spawned by each AI client's MCP client)
+- **Per-session pinning** — each bridge pins to an instance NAME and re-resolves its port from the registry every tick, so a pinned instance restarting on a new port still self-heals. The registry `active` field only seeds NEW bridges without a pin.
+- **Switching is instant and session-local** — `switch_instance` re-pins THIS session's bridge in-memory; peers are untouched unless you pass `all_sessions=True` (writes the registry default and bumps `active_epoch`, which moves every session)
+- **Registration never re-routes running sessions** — a new instance takes the `active` default slot only when it is vacant or names a dead instance
 
 ## Instance Registry (`.embody/envoy.json`)
 
@@ -44,7 +45,7 @@ Each Envoy instance registers itself in `.embody/envoy.json` at the git root on 
 
 | Field | Purpose |
 |-------|---------|
-| `active` | Instance the bridge currently targets |
+| `active` | Default instance for NEWLY-spawned bridges (each bridge then pins per-session; only an `active_epoch` bump re-targets pinned bridges) |
 | `td_executable` | Path to TD app (used by `launch_td`) |
 | `instances.<name>.toe_path` | Relative path to the `.toe` file |
 | `instances.<name>.port` | Envoy HTTP port for this instance |

@@ -19,10 +19,19 @@ op.unit_tests.RunTestsSync()                      # Synchronous (blocks TD)
 results = op.unit_tests.GetResults()              # Get results dict
 ```
 
-**Via MCP:**
+**Via MCP -- use the `run_tests` tool, NOT RunTestsSync inside execute_python:**
 ```python
-execute_python(code="op.unit_tests.RunTestsSync(); result = op.unit_tests.GetResults()")
+run_tests()                          # all suites (deferred runner)
+run_tests(suite_name='test_path_utils')
 ```
+
+`RunTestsSync()` inside `execute_python` runs the whole suite INSIDE that
+dispatch's undo block: the undo-guard tests fail (a block is already open)
+and the entire run becomes one giant Ctrl+Z step. If `run_tests` dies
+mid-run with a server-restart error (the Envoy watchdog suites restart the
+very server it waits on), the run continues -- poll
+`execute_python(code="result = op.unit_tests.GetResults()")` until the
+totals stop moving.
 
 ## Writing New Tests
 

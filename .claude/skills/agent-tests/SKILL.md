@@ -1,3 +1,8 @@
+---
+name: agent-tests
+description: MUST READ before calling RunAgentTests or touching agent-tier test infrastructure -- these tests spawn real AI clients (Claude Code, Codex) and SPEND SUBSCRIPTION USAGE; never run casually. Tier model, async runner rationale, auth/isolation rules.
+---
+
 # Agent-Tier Tests (AI-client connectivity)
 
 The AGENT tier verifies that real AI clients -- Claude Code, Codex, and a

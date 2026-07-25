@@ -37,65 +37,12 @@
 
 ## Project Structure
 
-```
-Embody/
-+-- CLAUDE.md                              # This file -- slim north star
-+-- .claude/
-|   +-- commands/                         # User-invocable slash commands
-|   |   +-- run-tests.md                 # /run-tests -- run test suite via MCP
-|   |   +-- status.md                    # /status -- project health check
-|   |   +-- explore-network.md           # /explore-network -- discover TD network
-|   +-- rules/                            # Always-loaded conventions
-|   |   +-- network-layout.md            # Grid, spacing, annotation coords
-|   |   +-- td-python.md                 # TD Python gotchas and rules
-|   |   +-- mcp-safety.md               # Thread boundary, localhost, timeouts
-|   |   +-- skill-prerequisites.md       # Which skills to load before MCP calls
-|   |   +-- embody-code-conventions.md   # Path-scoped to dev/embody/**
-|   +-- skills/                           # On-demand workflows and reference
-|       +-- create-operator/             # Operator creation workflow
-|       +-- debug-operator/              # Error diagnosis workflow
-|       +-- externalize-operator/        # Externalization workflow
-|       +-- create-extension/            # Extension creation guide
-|       +-- manage-annotations/          # Annotation coordinate math
-|       +-- add-mcp-tool/               # Adding MCP tools (dev only)
-|       +-- run-tests/                   # Test suite runner (dev only)
-|       +-- td-api-reference/            # Full TD Python API reference
-|       +-- movie-export/                # Movie/image-sequence export workflow
-|       +-- parameter-design/            # Custom parameter design conventions
-|       +-- td-recovery/                 # Envoy/TD connectivity recovery
-|       +-- multi-session-etiquette/     # Multi-session coordination protocol
-|       +-- mcp-tools-reference/         # Complete MCP tool catalog
-|       +-- multi-instance/              # Multi-instance bridge workflow
-|       +-- visual-aesthetics/           # Visual craft: composition, camera, lighting, color
-|       +-- build-ui/                    # TD panel UI design system (dev only)
-|       +-- specimen-authoring/          # Specimen gallery authoring (dev only)
-|       +-- brief/                       # /brief -- conversational ask -> task brief contract
-+-- docs/                                  # MkDocs documentation site
-|   +-- embody/                           # Embody feature docs
-|   +-- envoy/                            # Envoy MCP server docs
-|   +-- tdn/                              # TDN format docs
-|   |   +-- specification.md             # TDN format specification
-|   +-- td-development/                   # TD coding best practices
-|   +-- tdn.schema.json                   # JSON Schema for .tdn validation
-|   +-- testing.md                        # Test framework docs
-|   +-- changelog.md                      # Version history
-+-- dev/
-|   +-- Embody-5.toe                      # Active development project
-|   +-- .venv/                            # Python virtual environment (auto-created)
-|   +-- Backup/                           # Versioned .toe backups
-|   +-- embody/
-|       +-- externalizations.tsv          # Tracking table (managed by Embody)
-|       +-- Embody/                       # Main extension source
-|           +-- EmbodyExt.py              # Core externalization engine
-|           +-- EnvoyExt.py               # MCP server extension
-|           +-- TDNExt.py                 # TDN network format export/import
-|           +-- text_claude.md            # Template for user-project CLAUDE.md
-|           +-- execute.py                # Project lifecycle callbacks
-|           +-- parexec.py                # Parameter change callbacks
-|           +-- templates/                # Templates for generated rules/skills
-+-- release/
-    +-- Embody-v*.tox                     # Latest release build
-```
+Discoverable with `ls`; the non-obvious locations:
+
+- `dev/embody/externalizations.tsv` -- externalization tracking table (managed by Embody, never edit)
+- `dev/embody/Embody/` -- main extension source (`EmbodyExt.py`, `EnvoyExt.py`, `TDNExt.py`); `templates/` holds the generated-rule/skill templates shipped to user projects; `text_claude.md` is the user-project CLAUDE.md template
+- `dev/Embody-5.toe` -- active development project; `dev/Backup/` -- versioned `.toe` backups
+- `release/` -- latest release `.tox` + self-updater manifest
 
 ## Architecture
 
@@ -118,7 +65,7 @@ Dual-thread design: worker thread runs MCP server (no TD imports), main thread e
 
 ### TDN Network Format
 
-JSON-based format for representing TD networks as diffable text. Non-default parameters only, expression shorthand (`=` prefix), type defaults, parameter templates. Full spec: `docs/tdn/specification.md`
+YAML-based on-disk format (v2.0; legacy JSON imports still read) for representing TD networks as diffable text. Non-default parameters only, expression shorthand (`=` prefix), type defaults, parameter templates. Full spec: `docs/tdn/specification.md`
 
 ## Extension Referencing
 
@@ -140,11 +87,6 @@ op.Embody.ext.Envoy.Start()
 ## Key References
 
 - **TD Wiki**: https://docs.derivative.ca/Main_Page
-- **TD Python API**: MUST load `/td-api-reference` before writing TD Python code
-- **Movie Export**: MUST load `/movie-export` before recording, exporting, or batch-encoding any movie or image sequence
-- **Parameter Design**: MUST load `/parameter-design` before creating or designing custom parameters on any COMP
-- **TD Recovery**: MUST load `/td-recovery` before manual connectivity recovery after ~15s of self-heal waiting
-- **Multi-Session Etiquette**: MUST load `/multi-session-etiquette` when a `_peers` advisory appears or a second session is active
-- **MCP Tools**: MUST load `/mcp-tools-reference` before first MCP tool call in session
+- **Skill prerequisites**: `rules/skill-prerequisites.md` (always loaded) is the authoritative load-this-skill-first table
 - **Tests**: Use the `/run-tests` skill for running and writing tests
 - **TDN Spec**: See `docs/tdn/specification.md` for the full format specification

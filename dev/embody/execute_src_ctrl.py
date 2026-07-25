@@ -175,7 +175,7 @@ def onProjectPreSave():
 
     # Release manifest for the self-updater (UpdaterExt): version, TD-build
     # floor, and sha256 of the exported tox. Attached to GitHub releases
-    # alongside the tox (the github-release rule globs release/*), it lets
+    # alongside the tox (the /release skill's github-release procedure globs release/*), it lets
     # the updater gate on min_td_build BEFORE downloading (an older build
     # loading a newer-build tox fails SILENTLY -- loadTox returns None) and
     # verify download integrity (release assets are mutable post-publish).

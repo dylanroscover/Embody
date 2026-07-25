@@ -14,7 +14,7 @@ bill SUBSCRIPTION usage: OPENAI_API_KEY / CODEX_API_KEY are stripped from the
 child env.
 
 Codex specifics handled here (see the research notes in
-.claude/rules/agent-tests.md):
+.claude/skills/agent-tests/SKILL.md):
 - stdin is DEVNULL (codex exec hangs probing a silent stdin pipe on Windows).
 - Exit codes are NOT documented as task success - the verdict comes from the
   --output-last-message file plus live TD state.

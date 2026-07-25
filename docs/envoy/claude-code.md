@@ -24,11 +24,11 @@ Rules are loaded into every Claude Code conversation automatically. They provide
 
 | Rule | What it covers |
 |------|----------------|
-| `network-layout.md` | Grid spacing (200-unit grid), signal flow direction, annotation placement, operator positioning |
+| `network-layout.md` | Always-loaded layout invariants (200-unit grid, size+gap spacing, forward wire flow, docked-op hugging, annotation coverage); the full positioning recipe lives in `/create-operator` |
 | `td-python.md` | Parameter access (`.eval()` vs `.val`), operator path portability, threading, cook model |
 | `mcp-safety.md` | Thread boundary (never access TD from background thread), localhost binding, 30s timeout |
 | `parameters.md` | Custom parameter design: value access, required help text, section breaks, ordering, pages, naming, and styles |
-| `performance.md` | Performance gating protocol, stop conditions, crash/freeze avoidance, and safe-default resolution/feedback/GLSL caps |
+| `performance.md` | Performance gating protocol, stop conditions, and a safe-caps summary; the full crash-cause and safe-default-caps tables live in `/td-api-reference` (Heavy-Build Safety) |
 | `td-connectivity.md` | Session-start connectivity checks, the bridge reconciler and Envoy liveness watchdog, and manual recovery steps |
 
 ## Skills (On-Demand)
@@ -37,12 +37,12 @@ Skills are loaded only when needed, keeping the context window lean. Claude Code
 
 | Skill | Trigger |
 |-------|---------|
-| `/create-operator` | Before creating operators via `create_op` |
+| `/create-operator` | Before creating or moving any operator (`create_op`, `copy_op`, `set_op_position`, or `execute_python` builds); carries the canonical positioning recipe |
 | `/create-extension` | Before creating TD extensions via `create_extension` |
 | `/debug-operator` | When diagnosing operator errors |
 | `/externalize-operator` | Before tagging or saving externalizations |
 | `/manage-annotations` | Before creating or modifying annotations |
-| `/td-api-reference` | Before writing TD Python code |
+| `/td-api-reference` | Before writing TD Python code, and before any heavy build (its Heavy-Build Safety section holds the crash-cause and safe-caps tables) |
 | `/mcp-tools-reference` | Before the first MCP call in a session |
 | `/visual-aesthetics` | Before building or refining any rendered visual output (generative art, VJ visuals, shaders, scenes, renders) |
 | `/pop-networks` | Before POP networks, particle systems, or GPU point/geometry work |

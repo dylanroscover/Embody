@@ -214,7 +214,7 @@ Prerequisites and behavior:
   restart -- a mismatch right after editing `EnvoyExt.py` means "restart
   Envoy" first.)
 
-See `.claude/rules/agent-tests.md` for the full conventions.
+See `.claude/skills/agent-tests/SKILL.md` for the full conventions.
 
 ## Test Framework Features
 

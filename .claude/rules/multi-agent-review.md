@@ -1,6 +1,6 @@
 # Multi-Agent Review (Embody dev only)
 
-For Embody/Envoy development only. Like `commit-push-checklist.md`, `release-commits.md`, and `github-release.md`, this rule has **no shipped template counterpart** -- it is not copied into user projects.
+For Embody/Envoy development only. Like `commit-push-checklist.md` and the dev-only `/release` skill, this rule has **no shipped template counterpart** -- it is not copied into user projects.
 
 ## The rule
 
