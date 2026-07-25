@@ -58,6 +58,10 @@ Every gated tool accepts `override=True` for the cases where the refusal is wron
 
 Envoy only observes MCP traffic. When an AI session edits an externalized file directly with its own file tools (outside MCP), no touch is recorded. The generated `multi-session` rule closes this gap by convention: agents check `get_sessions` and claim the `file:` scope before editing externalized files, and re-read files a peer recently touched.
 
+## Worktree tasks
+
+Work done in a sibling git worktree is invisible to Envoy twice over — raw file edits, outside the watched repo. Durable `project:worktree-*` claims close that gap: they persist across session death and Envoy restarts, appear in `get_sessions` under `worktrees`, and the `preflight_landing` tool checks a worktree diff against main-tree dirt, peer territory, and unsaved TDN state before it lands. See [Git Worktrees](worktrees.md) for the full workflow.
+
 ## For agent authors
 
 Projects configured by Embody receive a `multi-session` rule alongside the other generated rules. It encodes the etiquette: check presence at session start, treat `conflict: true` and `MULTI-SESSION GATE` as hard stops, claim narrow scopes before big work, never override silently, and divide work spatially (separate COMP subtrees) when running sessions in parallel.
