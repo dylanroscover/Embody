@@ -546,9 +546,12 @@ class TestRunnerExt:
         entry point is hard-gated:
 
           1. It is opt-in -- caller must pass confirm_saved=True.
-          2. It refuses if the project has unsaved changes (project.modified --
-             project.dirty does not exist on TD 2025), so a saved .toe always
-             exists as a recovery point.
+          2. It refuses unless a saved .toe exists on disk at
+             project.folder / project.name -- the recovery point you reopen
+             afterward -- and logs that file's age so the caller can judge
+             whether it is recent enough. Deliberately NOT a
+             project.modified / project.dirty check: see the comment on the
+             check itself, and .claude/rules/destructive-tests.md rule 3.
 
         After the run the live network is intentionally mutated -- reopen the
         saved .toe to restore it. See .claude/rules/destructive-tests.md.

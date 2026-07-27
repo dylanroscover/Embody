@@ -41,7 +41,7 @@ Discoverable with `ls`; the non-obvious locations:
 
 - `dev/embody/externalizations.tsv` -- externalization tracking table (managed by Embody, never edit)
 - `dev/embody/Embody/` -- main extension source (`EmbodyExt.py`, `EnvoyExt.py`, `TDNExt.py`); `templates/` holds the generated-rule/skill templates shipped to user projects; `text_claude.md` is the user-project CLAUDE.md template
-- `dev/Embody-5.toe` -- active development project; `dev/Backup/` -- versioned `.toe` backups
+- `dev/Embody-6.toe` -- active development project (versioned siblings `dev/Embody-6.NNN.toe`); `dev/Backup/` -- versioned `.toe` backups
 - `release/` -- latest release `.tox` + self-updater manifest
 
 ## Architecture
