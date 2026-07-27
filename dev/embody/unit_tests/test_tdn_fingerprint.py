@@ -265,7 +265,40 @@ class TestTDNFingerprintPersistence(EmbodyTestCase):
         # exclusion every save bakes it into Embody.tdn and a later TDN
         # restore suppresses dialogs for the whole session.
         for key in ('_tdn_fingerprints', 'expand_order', 'git_status',
-                    '_suppress_dialogs'):
+                    '_suppress_dialogs',
+                    # Self-rescheduling-loop generation counters: pure churn,
+                    # rewrote three lines of embody.tdn on EVERY export.
+                    '_watchdog_gen', '_clip_watch_gen', '_shortcut_rec_gen',
+                    # Live server flag; counterpart of envoy_running.
+                    'claudius_running',
+                    # Test-runner bookkeeping. _smoke_test_responses is the
+                    # dangerous one -- serialized into a shipped .tdn it would
+                    # restore seeded auto-answers and silently answer REAL
+                    # modals (the Uninstall confirm included) on load.
+                    '_test_saved_status', '_smoke_test_responses'):
             self.assertIn(
                 key, tdn_mod.SKIP_STORAGE_KEYS,
                 f'runtime storage key {key!r} must be skipped by TDN export')
+
+    def test_no_live_embody_storage_key_escapes_the_skip_list(self):
+        """CLASS-level guard: nothing in Embody's live storage may serialize.
+
+        Every key the Embody COMP keeps in storage is runtime or UI state --
+        none of it belongs in a committed .tdn. Enumerating the skip list by
+        hand has failed repeatedly: three separate keys leaked into exports
+        and were only caught by eyeballing a diff (2026-07-27 --
+        _watchdog_gen/_clip_watch_gen/_shortcut_rec_gen, then
+        claudius_running, then _test_saved_status/_smoke_test_responses).
+
+        This asserts the INVARIANT instead of a list, so the next key added
+        to Embody storage fails here until someone decides deliberately
+        whether it may reach disk.
+        """
+        tdn_mod = self.embody.op('TDNExt').module
+        live = set(self.embody.storage.keys())
+        escaping = sorted(live - set(tdn_mod.SKIP_STORAGE_KEYS))
+        self.assertEqual(
+            escaping, [],
+            'these live Embody storage keys would serialize into a .tdn: '
+            f'{escaping} -- add each to SKIP_STORAGE_KEYS, or justify why it '
+            'belongs on disk')

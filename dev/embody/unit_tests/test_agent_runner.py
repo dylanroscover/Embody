@@ -255,3 +255,56 @@ class TestAgentRunnerMachinery(EmbodyTestCase):
         self.assertEqual(self.embody.par.Filecleanup.eval(), 'delete')
         self.assertEqual(
             comp.fetch(self.runner._FC_KEY, None, search=False), saved)
+
+    def test_D04_run_active_flag_survives_extension_reinit(self):
+        """The run-active guard must survive a mid-run extension reinit.
+
+        Every test DAT and extension source here is syncfile'd, so editing
+        one mid-run hot-reloads it and REBUILDS TestRunnerExt. While
+        _running was plain instance state, that reset it to False even
+        though the (reinit-hardened) deferred tick chain kept running --
+        which silently switched off EmbodyExt._testRunnerActive() and let a
+        REAL ui.messageBox escape to the user. On 2026-07-27 that surfaced
+        an "Embody -- Uninstall" modal mid-run; clicking it flipped
+        Envoyenable off and stopped the live Envoy server.
+
+        Driven against a THROWAWAY COMP, never op.unit_tests: this suite
+        runs inside a live run, and touching the real key would disarm the
+        guard for the very run executing this test.
+        """
+        cls = type(self.runner)
+        probe = self.sandbox.create(baseCOMP, 'run_active_probe')
+        a = cls(probe)
+        self.assertFalse(a._running, 'a fresh COMP must start inactive')
+
+        a._running = True
+        self.assertTrue(a._running)
+        # A reinit builds a NEW instance from the same COMP -- the regression.
+        b = cls(probe)
+        self.assertTrue(
+            b._running,
+            'run-active state must survive an extension reinit, or the '
+            'dialog-suppression guard silently turns off mid-run')
+
+        # An abandoned/crashed run must NOT mute dialogs forever.
+        probe.store(cls._RUN_ACTIVE_KEY, time.time() - (cls._RUN_ACTIVE_TTL_S + 60))
+        self.assertFalse(b._running, 'a stale run-active stamp must expire')
+
+        # A future-dated stamp (clock change) is stale, not eternally active.
+        probe.store(cls._RUN_ACTIVE_KEY, time.time() + 86400)
+        self.assertFalse(b._running, 'a future stamp must not read active')
+
+        # Clearing leaves no storage residue to serialize into a .tdn.
+        b._running = True
+        b._running = False
+        self.assertFalse(b._running)
+        self.assertIsNone(probe.fetch(cls._RUN_ACTIVE_KEY, None, search=False))
+
+    def test_D05_run_active_key_never_serializes(self):
+        """The run-active key is excluded from TDN storage export.
+
+        It is wall-clock state; baking it into a committed .tdn would both
+        churn the diff and restore a bogus 'a run is active' flag on load.
+        """
+        skip = op.Embody.op('TDNExt').module.SKIP_STORAGE_KEYS
+        self.assertIn(type(self.runner)._RUN_ACTIVE_KEY, skip)

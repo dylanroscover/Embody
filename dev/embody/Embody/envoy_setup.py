@@ -1122,13 +1122,46 @@ def is_pid_alive(pid):
     if sys.platform == 'win32':
         try:
             import ctypes
-            kernel32 = ctypes.windll.kernel32
+            from ctypes import wintypes
+            # A PRIVATE kernel32 instance on purpose: ``ctypes.windll.kernel32``
+            # is cached process-wide and shared with TouchDesigner itself, so
+            # setting restype/argtypes on it would mutate prototypes other
+            # code depends on.
+            kernel32 = ctypes.WinDLL('kernel32')
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.OpenProcess.argtypes = [
+                wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel32.WaitForSingleObject.restype = wintypes.DWORD
+            kernel32.WaitForSingleObject.argtypes = [
+                wintypes.HANDLE, wintypes.DWORD]
+            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
             SYNCHRONIZE = 0x00100000
+            WAIT_OBJECT_0 = 0x00000000
             handle = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
-            if handle:
+            if not handle:
+                return False
+            try:
+                # OpenProcess SUCCEEDING IS NOT LIVENESS.  A terminated
+                # process whose handle is still held open by anything else
+                # keeps its process object -- and therefore its PID --
+                # allocated, so OpenProcess keeps succeeding and that pid
+                # reads ALIVE forever.  Measured 2026-07-27: dev TD pid
+                # 60844 had exited (absent from Get-Process, port closed)
+                # yet OpenProcess still succeeded, so write_envoy_config
+                # never pruned its registry row and instance_key never
+                # reclaimed the basename -- every relaunch of the same .toe
+                # minted a fresh Embody-6.159-2, -3, ... and left the
+                # bridge's pin chasing a dead instance.
+                #
+                # A process object is SIGNALED exactly when the process
+                # exits, so a zero-timeout wait separates the two cases.
+                # Anything other than WAIT_OBJECT_0 (including WAIT_FAILED)
+                # is treated as ALIVE: declining to prune something we
+                # could not verify is the safe direction.
+                return kernel32.WaitForSingleObject(handle, 0) != WAIT_OBJECT_0
+            finally:
                 kernel32.CloseHandle(handle)
-                return True
-            return False
         except Exception:
             return False
     # POSIX: signal 0 is a real no-op liveness check.  Catch

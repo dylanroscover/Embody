@@ -781,13 +781,41 @@ def is_process_alive(pid):
         # which only requires the right to wait on the object.
         try:
             import ctypes
-            kernel32 = ctypes.windll.kernel32
+            from ctypes import wintypes
+            # PRIVATE kernel32 instance: ctypes.windll.kernel32 is cached
+            # process-wide, so setting restype/argtypes on it would mutate
+            # prototypes any other code in this process relies on.
+            kernel32 = ctypes.WinDLL("kernel32")
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.OpenProcess.argtypes = [
+                wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel32.WaitForSingleObject.restype = wintypes.DWORD
+            kernel32.WaitForSingleObject.argtypes = [
+                wintypes.HANDLE, wintypes.DWORD]
+            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
             SYNCHRONIZE = 0x00100000
+            WAIT_OBJECT_0 = 0x00000000
             handle = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
-            if handle:
+            if not handle:
+                return False
+            try:
+                # OpenProcess SUCCEEDING IS NOT LIVENESS.  A terminated
+                # process whose handle is still held open by anything else
+                # keeps its process object -- and its PID -- allocated, so
+                # OpenProcess keeps succeeding and that pid reads ALIVE
+                # forever (measured 2026-07-27 on a dead TD pid).  Here that
+                # stranded heartbeat files for exited sessions, which then
+                # linger as phantom peers in get_sessions/_peers advisories.
+                #
+                # A process object is SIGNALED exactly when the process
+                # exits, so a zero-timeout wait separates the two cases.
+                # Anything but WAIT_OBJECT_0 (including WAIT_FAILED) counts
+                # as ALIVE -- not reaping what we could not verify is the
+                # safe direction.
+                return kernel32.WaitForSingleObject(handle, 0) != WAIT_OBJECT_0
+            finally:
                 kernel32.CloseHandle(handle)
-                return True
-            return False
         except Exception:
             return False
     # Unix: signal 0 is a no-op liveness check

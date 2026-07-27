@@ -12,6 +12,26 @@ enabled) inside the smoke test template project. When the template .toe opens:
   6. Envoy starts -> bridge reconnects -> MCP tools become available
   7. Verification checks run via MCP from the orchestrator
 
+HOW TO RUN IT (isolated -- the only safe way):
+
+    Copy the template OUT of the repo first, then launch it there:
+
+        mkdir %TEMP%\embody_smoke
+        copy dev\release_testing\smoke_template.toe %TEMP%\embody_smoke\
+        copy dev\release_testing\smoke_bootstrap.py %TEMP%\embody_smoke\
+        set EMBODY_SMOKE_REPO=C:\path\to\Embody
+        TouchDesigner.exe %TEMP%\embody_smoke\smoke_template.toe
+
+    Running the template IN PLACE (from dev/release_testing/) puts the smoke
+    instance's git root at the Embody repo, so Embody deploys its AI config
+    into the repo -- overwriting the dev session's .mcp.json and repointing
+    its bridge at the smoke instance's port. Retargeting Aiprojectroot is NOT
+    the fix: changing the AI-config root migrates it and CLEANS the old root,
+    which deleted 20 Embody-generated files from the repo on 2026-07-27
+    (.mcp.json, .embody/envoy.json, AGENTS.md, ENVOY.md, all .claude/skills/).
+    Isolation has to come from the working directory. In-place runs still
+    work and are warned about, but they are not a virgin install.
+
 Bootstrap timing (relative to onStart at frame 0):
   - Frame 1:  _load_release_tox() - creates Embody COMP, triggers onCreate
   - Frame 3:  _seed_responses() - before Verify() dialog at frame ~31
@@ -29,9 +49,15 @@ Bootstrap timing (relative to onStart at frame 0):
 def onStart():
     """Project opened - kick off the smoke test bootstrap sequence."""
     import os, shutil
-    # Discover repo root: template .toe lives in dev/release_testing/
-    # so repo root is two levels up from project.folder
-    repo_root = os.path.normpath(os.path.join(project.folder, '..', '..'))
+    # Repo root: EMBODY_SMOKE_REPO when the template was copied elsewhere to
+    # run isolated (the recommended path -- see the module docstring),
+    # otherwise two levels up, which holds only when running in place from
+    # dev/release_testing/.
+    repo_root = os.environ.get('EMBODY_SMOKE_REPO')
+    if repo_root and os.path.isdir(repo_root):
+        repo_root = os.path.normpath(repo_root)
+    else:
+        repo_root = os.path.normpath(os.path.join(project.folder, '..', '..'))
     me.store('repo_root', repo_root)
 
     # Clean up artifacts from previous runs - keep only the .toe and .py
@@ -169,27 +195,141 @@ def _seed_responses():
     embody.store('_smoke_test_responses', responses)
     _log(f'Seeded {len(responses)} auto-responses on {embody.path}')
 
+    # DO NOT touch Aiprojectroot here. Flipping it to 'projectfolder' looks
+    # like isolation but is DESTRUCTIVE when the template runs from inside
+    # the Embody repo: changing the AI-config root MIGRATES the config, and
+    # the migration CLEANS the old root. On 2026-07-27 that deleted 20
+    # Embody-generated files from the repo root -- .mcp.json,
+    # .embody/envoy.json, AGENTS.md, ENVOY.md and all 14 .claude/skills/
+    # (all recoverable from git, but .mcp.json/envoy.json had to be
+    # regenerated with InitEnvoy).
+    #
+    # Real isolation comes from WHERE the template runs, not from a
+    # parameter -- see the module docstring: copy the template to a temp
+    # directory and launch it there, so its git root is the temp dir and the
+    # repo is never a candidate for either clobbering or cleanup.
+    _check_running_inside_repo()
 
-def _write_ready_flag():
-    """Write a ready flag file so the orchestrator knows init is done."""
+
+def _check_running_inside_repo():
+    """Warn LOUDLY when the smoke project sits inside the Embody repo.
+
+    A fresh-install smoke is supposed to model a virgin project. Run from
+    inside the repo, the smoke instance's git root IS the repo, so Embody
+    deploys its AI config there -- overwriting the dev session's .mcp.json
+    and repointing its bridge at the smoke instance's port (observed
+    2026-07-26). The fix is to run from a copy OUTSIDE the repo (see the
+    module docstring), not to retarget Aiprojectroot, which deletes the
+    repo's generated files instead (2026-07-27).
+    """
     import os
     repo_root = me.fetch('repo_root', None, search=False)
     if not repo_root:
         return
+    here = os.path.normpath(project.folder)
+    if os.path.normpath(here).lower().startswith(
+            os.path.normpath(repo_root).lower()):
+        _log('WARNING: smoke project runs INSIDE the Embody repo (%s). Its '
+             'AI config deploys to the repo root and will overwrite the dev '
+             'session\'s .mcp.json. Copy the template to a temp dir and set '
+             'EMBODY_SMOKE_REPO to run a truly isolated smoke.' % here)
+
+
+def _envoy_settled(embody):
+    """(settled, status) for the Envoy server.
+
+    Envoy's first-run venv bootstrap takes ~20s+, far longer than the frame
+    budget the ready flag used to fire on, so a flag written at frame ~120
+    caught Envoy mid-install and reported the OPT-IN parameter
+    (Envoyenable=True) as if it were server health. It read green while the
+    server had actually aborted (observed 2026-07-26: locked .venv ->
+    'Envoy start aborted -- dependency install failed'). Wait for a TERMINAL
+    state instead of a frame count.
+    """
+    try:
+        status = str(embody.par.Envoystatus.eval())
+    except Exception as e:
+        return True, f'UNREADABLE ({e})'
+    lowered = status.lower()
+    pending = ('starting', 'installing', 'warming', 'restarting', 'reviving')
+    if any(tok in lowered for tok in pending):
+        return False, status
+    return True, status
+
+
+def _write_ready_flag(attempt=0):
+    """Write the ready flag once Envoy reaches a terminal state.
+
+    Re-schedules itself while Envoy is still coming up, up to a deadline.
+    Writes a VERDICT so the orchestrator cannot mistake "opted in" for
+    "running" -- the flag is the release gate's evidence, and a flag that
+    reads green while Envoy failed is worse than no flag.
+    """
+    import os
+    repo_root = me.fetch('repo_root', None, search=False)
+    if not repo_root:
+        return
+    embody_path = me.fetch('embody_path', '/Embody')
+    embody = op(embody_path)
+
+    MAX_ATTEMPTS = 40          # ~40 * 60 frames ~= 40s at 60fps
+    if embody is not None:
+        settled, envoy_status = _envoy_settled(embody)
+        if not settled and attempt < MAX_ATTEMPTS:
+            run("args[0](args[1])", _write_ready_flag, attempt + 1,
+                delayFrames=60)
+            return
+    else:
+        envoy_status = 'NO_EMBODY'
+
     flag_path = os.path.join(repo_root, 'dev', 'release_testing', 'ready.flag')
     try:
+        def _par(name, default='NOT_FOUND'):
+            try:
+                return str(getattr(embody.par, name).eval())
+            except Exception:
+                return default
+
+        status = _par('Status') if embody else 'NOT_FOUND'
+        version = _par('Version') if embody else 'NOT_FOUND'
+        enabled = _par('Envoyenable') if embody else 'False'
+        errors = str(embody.scriptErrors()) if embody else 'N/A'
+        # The fresh-install readouts the release procedure actually checks:
+        # a release .tox bakes in whatever the dev session last set, and a
+        # BLANK Updatestatus on a fresh install is the v6.0.145 regression.
+        upd = _par('Updatestatus') if embody else 'NOT_FOUND'
+        autosave = _par('Autosavestatus') if embody else 'NOT_FOUND'
+        filecleanup = _par('Filecleanup') if embody else 'NOT_FOUND'
+
+        problems = []
+        if embody is None:
+            problems.append('Embody COMP not found')
+        if status != 'Enabled':
+            problems.append(f'Status={status!r} (want Enabled)')
+        if 'running' not in envoy_status.lower():
+            problems.append(f'Envoy not running: {envoy_status!r}')
+        if errors and errors not in ('', 'N/A'):
+            problems.append(f'script errors: {errors[:120]}')
+        if not upd or upd == 'NOT_FOUND':
+            problems.append('Updatestatus is BLANK (v6.0.145 regression)')
+        verdict = 'PASS' if not problems else 'FAIL'
+
         with open(flag_path, 'w') as f:
-            embody_path = me.fetch('embody_path', '/Embody')
-            embody = op(embody_path)
-            status = embody.par.Status.eval() if embody else 'NOT_FOUND'
-            envoy = embody.par.Envoyenable.eval() if embody else False
-            errors = str(embody.scriptErrors()) if embody else 'N/A'
+            f.write(f'verdict={verdict}\n')
+            f.write(f'problems={"; ".join(problems) if problems else "none"}\n')
+            f.write(f'version={version}\n')
             f.write(f'status={status}\n')
-            f.write(f'envoy_enabled={envoy}\n')
+            f.write(f'envoy_enabled={enabled}\n')
+            f.write(f'envoy_status={envoy_status}\n')
+            f.write(f'updatestatus={upd}\n')
+            f.write(f'autosavestatus={autosave}\n')
+            f.write(f'filecleanup={filecleanup}\n')
             f.write(f'script_errors={errors}\n')
             f.write(f'embody_path={embody_path}\n')
-            f.write(f'dev_toe={os.path.normpath(os.path.join(repo_root, "dev", "Embody-5.toe"))}\n')
-        _log(f'Ready flag written to {flag_path}')
+            f.write(f'settled_after_attempts={attempt}\n')
+        _log(f'Ready flag written ({verdict}) to {flag_path}')
+        if problems:
+            _log(f'SMOKE FAIL: {"; ".join(problems)}')
     except Exception as e:
         _log(f'ERROR writing ready flag: {e}')
 

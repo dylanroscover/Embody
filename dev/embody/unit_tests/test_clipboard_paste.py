@@ -268,8 +268,14 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
         self.assertTrue(res.get('ok'), msg=repr(res))
         self.assertEqual(res['name'], 'copy_src')
         self.assertGreaterEqual(res['op_count'], 2)
-        # The clipboard now holds a valid envelope.
+        # The clipboard now holds a valid envelope -- unless another process
+        # grabbed the clipboard between the copy above and this read, which
+        # is an environment problem rather than a copy failure.
         m = _tdn_module()
+        self.requireClipboardHolds(
+            lambda raw: m.unwrap_clipboard(raw) is not None,
+            what='the envelope just copied',
+            reseed=lambda: self.tdn_ext.CopyNetworkToClipboard(host))
         env = m.unwrap_clipboard(ui.clipboard)
         self.assertIsNotNone(env)
         self.assertEqual(env['source'], 'embody')
@@ -284,18 +290,39 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
         self.assertFalse(res.get('ok'))
         self.assertEqual(res.get('reason'), 'not_a_comp')
 
+    def _copy_verified(self, host):
+        """CopyNetworkToClipboard, confirming the envelope actually landed.
+
+        The OS clipboard is machine-wide and contended (see seedClipboard);
+        a copy can report ok while another process wins the clipboard, so
+        every test that copies-then-depends-on-the-clipboard funnels
+        through here. Checks the RAW envelope marker, never
+        ClipboardHasNetwork/unwrap -- those are product code under test in
+        this very suite.
+        """
+        res = self.tdn_ext.CopyNetworkToClipboard(host)
+        marker = _tdn_module().EMBODY_TDN_MARKER
+        self.requireClipboardHolds(
+            lambda raw: marker in raw,
+            what='the envelope just copied',
+            reseed=lambda: self.tdn_ext.CopyNetworkToClipboard(host))
+        return res
+
     def test_clipboard_has_network_true_after_copy(self):
         host = self._build_small_network('has_net_src')
-        self.tdn_ext.CopyNetworkToClipboard(host)
+        self._copy_verified(host)
         self.assertTrue(self.tdn_ext.ClipboardHasNetwork())
 
     def test_clipboard_has_network_false_for_garbage(self):
-        ui.clipboard = 'not an envelope at all'
+        # Must be seeded verifiably: if the write silently failed the
+        # clipboard would still hold a PREVIOUS envelope and this would
+        # fail as though ClipboardHasNetwork were broken.
+        self.seedClipboard('not an envelope at all')
         self.assertFalse(self.tdn_ext.ClipboardHasNetwork())
 
     def test_paste_into_target_reconstructs_children_and_connection(self):
         host = self._build_small_network('rt_src')
-        self.tdn_ext.CopyNetworkToClipboard(host)
+        self._copy_verified(host)
         target = self.sandbox.create(baseCOMP, 'rt_target')
         res = self.tdn_ext.PasteNetworkFromClipboard(target)
         self.assertTrue(res.get('ok'), msg=repr(res))
@@ -315,7 +342,7 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
 
     def test_paste_as_new_comp_names_from_basename(self):
         host = self._build_small_network('newcomp_src')
-        self.tdn_ext.CopyNetworkToClipboard(host)
+        self._copy_verified(host)
         # PasteNetworkAsNewComp creates a COMP at the CURRENT network. Point the
         # current pane at the sandbox so the new COMP lands (and is auto-cleaned)
         # there, then assert it is named from the network_path basename.
@@ -345,7 +372,7 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
 
     def test_paste_into_non_comp_returns_not_a_comp(self):
         host = self._build_small_network('badtarget_src')
-        self.tdn_ext.CopyNetworkToClipboard(host)
+        self._copy_verified(host)
         res = self.tdn_ext.PasteNetworkFromClipboard('/nonexistent/path/xyz')
         self.assertFalse(res.get('ok'))
         self.assertEqual(res.get('reason'), 'not_a_comp')
@@ -383,18 +410,11 @@ class TestClipboardPasteRouting(EmbodyTestCase):
         and gives no hint of the real cause (observed 2026-07-26; the same
         suite passes 42/42 in isolation).
 
-        Retry briefly, then fail with the ACTUAL reason. A narrow race
-        remains between returning here and the read under test -- if that
-        ever fires, the assertion message below is the thing to trust.
+        The shared helper retries with backoff (contention routinely
+        outlasts a tight loop) and reports a loud SKIP rather than a false
+        failure when the OS will not hand over the clipboard at all.
         """
-        for _ in range(5):
-            ui.clipboard = text
-            if ui.clipboard == text:
-                return
-        self.fail(
-            'the system clipboard could not be set reliably -- another '
-            'process on this machine is overwriting it. This is an '
-            'environment problem, not a paste-routing failure.')
+        self.seedClipboard(text, what='the paste-source clipboard')
 
     def _safe_import(self):
         coll = self.embody.op('Collection')
@@ -585,7 +605,7 @@ class TestClipboardCopySelectedAndIntegrity(EmbodyTestCase):
         env['tdn']['operators'].append({'name': 'injected', 'type': 'nullTOP'})
         # sha256 no longer matches the (now-mutated) inner tdn.
         self.assertFalse(self.m.verify_envelope_integrity(env))
-        ui.clipboard = self.m.to_clipboard_str(env)
+        self.seedClipboard(self.m.to_clipboard_str(env))
         plan = self.tdn_ext._planPasteFromClipboard()
         self.assertTrue(plan.get('ok'), msg=repr(plan))
         self.assertEqual(plan['mode'], 'direct')

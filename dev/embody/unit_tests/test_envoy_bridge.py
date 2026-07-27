@@ -1389,30 +1389,74 @@ class TestBridgeProcessManagement(EmbodyTestCase):
         # PID 99999999 almost certainly doesn't exist
         self.assertFalse(bridge.is_process_alive(99999999))
 
+    def _win32_ctypes(self, open_result, wait_result=0x00000102):
+        """Mock ctypes for the win32 branch. Default wait = WAIT_TIMEOUT.
+
+        The branch builds a PRIVATE kernel32 via ctypes.WinDLL('kernel32')
+        rather than the process-wide ctypes.windll.kernel32 cache, so that
+        setting restype/argtypes cannot mutate prototypes TouchDesigner (or
+        anything else in-process) relies on. Mock WinDLL accordingly.
+        """
+        mock_kernel32 = MagicMock()
+        mock_kernel32.OpenProcess.return_value = open_result
+        mock_kernel32.WaitForSingleObject.return_value = wait_result
+        mock_ctypes = MagicMock()
+        mock_ctypes.WinDLL.return_value = mock_kernel32
+        return mock_kernel32, mock_ctypes
+
     @patch('envoy_bridge.sys')
     def test_is_process_alive_win32_uses_openprocess(self, mock_sys):
         """On Windows, uses OpenProcess(SYNCHRONIZE) instead of os.kill."""
         mock_sys.platform = "win32"
-        mock_kernel32 = MagicMock()
-        mock_kernel32.OpenProcess.return_value = 42  # non-zero = valid handle
-        mock_ctypes = MagicMock()
-        mock_ctypes.windll.kernel32 = mock_kernel32
+        k, mock_ctypes = self._win32_ctypes(42)  # non-zero = valid handle
         with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
             self.assertTrue(bridge.is_process_alive(1234))
-        mock_kernel32.OpenProcess.assert_called_once_with(0x00100000, False, 1234)
-        mock_kernel32.CloseHandle.assert_called_once_with(42)
+        k.OpenProcess.assert_called_once_with(0x00100000, False, 1234)
+        k.CloseHandle.assert_called_once_with(42)
+        # Never ctypes.windll -- that cache is shared process-wide.
+        mock_ctypes.WinDLL.assert_called_once_with("kernel32")
 
     @patch('envoy_bridge.sys')
     def test_is_process_alive_win32_dead_process(self, mock_sys):
         """On Windows, returns False when OpenProcess returns 0 (dead PID)."""
         mock_sys.platform = "win32"
-        mock_kernel32 = MagicMock()
-        mock_kernel32.OpenProcess.return_value = 0  # zero = failed / no process
-        mock_ctypes = MagicMock()
-        mock_ctypes.windll.kernel32 = mock_kernel32
+        k, mock_ctypes = self._win32_ctypes(0)  # zero = failed / no process
         with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
             self.assertFalse(bridge.is_process_alive(9999))
-        mock_kernel32.CloseHandle.assert_not_called()
+        k.CloseHandle.assert_not_called()
+        k.WaitForSingleObject.assert_not_called()
+
+    @patch('envoy_bridge.sys')
+    def test_is_process_alive_win32_zombie_handle_is_dead(self, mock_sys):
+        """Exited-but-handle-still-open must read DEAD, not alive.
+
+        A Windows process object (and its PID) stays allocated while ANY
+        handle to it is open, so OpenProcess keeps succeeding after the
+        process exits. OpenProcess alone therefore reports such a PID
+        alive forever -- which stranded heartbeat files for exited
+        sessions here, leaving them as phantom peers. WAIT_OBJECT_0 means
+        the object is signaled, which happens exactly on exit.
+        """
+        mock_sys.platform = "win32"
+        k, mock_ctypes = self._win32_ctypes(42, wait_result=0x00000000)
+        with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
+            self.assertFalse(bridge.is_process_alive(1234))
+        k.CloseHandle.assert_called_once_with(42)  # and no handle leak
+
+    @patch('envoy_bridge.sys')
+    def test_is_process_alive_win32_wait_failed_counts_as_alive(self, mock_sys):
+        """WAIT_FAILED is inconclusive -- err toward ALIVE.
+
+        Callers use this to prune registry rows and reap heartbeats;
+        deleting state for a process we could not verify is the dangerous
+        direction, so anything that is not an explicit WAIT_OBJECT_0
+        keeps the process considered alive.
+        """
+        mock_sys.platform = "win32"
+        k, mock_ctypes = self._win32_ctypes(42, wait_result=0xFFFFFFFF)
+        with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
+            self.assertTrue(bridge.is_process_alive(1234))
+        k.CloseHandle.assert_called_once_with(42)
 
     # --- find_all_td_pids: pgrep filtering on macOS/Linux ---
 

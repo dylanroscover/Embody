@@ -329,3 +329,70 @@ class TestIsPidAliveSafety(EmbodyTestCase):
         # 0x7FFFFFFE is just below INT32_MAX -- well outside the live PID
         # range on any sane OS, and not a special-cased ID.
         self.assertFalse(self.envoy._isPidAlive(0x7FFFFFFE))
+
+    def test_exited_process_with_open_handle_is_dead(self):
+        """A "zombie" -- exited, but its handle still held open -- is DEAD.
+
+        THE regression this whole check exists for. On Windows a process
+        object (and its PID) stays allocated as long as ANY handle to it
+        remains open, so OpenProcess keeps succeeding long after the
+        process exited. An OpenProcess-only liveness check therefore
+        reports such a PID alive forever.
+
+        Measured 2026-07-27: dev TD pid 60844 had exited -- gone from
+        Get-Process, its Envoy port closed -- yet _isPidAlive said True.
+        write_envoy_config never pruned its registry row and instance_key
+        never reclaimed the basename, so each relaunch of the same .toe
+        minted Embody-6.159-2, -3, ... and left the bridge pinned to a
+        dead instance.
+
+        This test builds a real zombie rather than mocking one: without
+        the WaitForSingleObject check it FAILS (reports alive), which is
+        the only thing that makes it worth having.
+        """
+        import subprocess
+        import sys
+        if sys.platform != 'win32':
+            self.skipTest('zombie-handle semantics are Windows-specific')
+
+        import ctypes
+        from ctypes import wintypes
+        k = ctypes.WinDLL('kernel32')
+        k.OpenProcess.restype = wintypes.HANDLE
+        k.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL,
+                                  wintypes.DWORD]
+        k.CloseHandle.argtypes = [wintypes.HANDLE]
+        SYNCHRONIZE = 0x00100000
+        CREATE_NO_WINDOW = 0x08000000
+
+        # A child that stays up long enough for us to grab a handle.
+        proc = subprocess.Popen(
+            ['cmd', '/c', 'ping -n 4 127.0.0.1 > NUL'],
+            creationflags=CREATE_NO_WINDOW,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
+        pid = proc.pid
+        handle = None
+        try:
+            self.assertTrue(self.envoy._isPidAlive(pid),
+                            'a just-spawned child must read ALIVE')
+            # Our OWN handle, independent of Popen's -- this is what keeps
+            # the process object (and the PID) alive after it exits.
+            handle = k.OpenProcess(SYNCHRONIZE, False, pid)
+            if not handle:
+                self.skipTest('could not open a handle on the child; '
+                              'cannot construct a zombie on this box')
+            proc.terminate()
+            proc.wait(timeout=10)
+            # The process is now genuinely gone, but our open handle keeps
+            # its PID allocated -- OpenProcess still succeeds here.
+            self.assertFalse(
+                self.envoy._isPidAlive(pid),
+                'an exited process whose handle is still open must read '
+                'DEAD -- OpenProcess succeeding is not liveness')
+        finally:
+            if handle:
+                k.CloseHandle(handle)
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=10)

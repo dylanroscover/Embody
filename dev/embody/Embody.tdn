@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 971
+build: 981
 generator: Embody/6.0.159
 td_build: 099.2025.33070
-source_file: Embody-6.159.toe
-exported_at: '2026-07-26T17:05:07Z'
+source_file: Embody-6.160.toe
+exported_at: '2026-07-27T08:56:23Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -292,7 +292,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 17:01:31 UTC
+    value: Saved 08:23:39 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -740,7 +740,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 971
+    value: 981
   - name: Github
     style: Pulse
     label: GitHub
@@ -751,7 +751,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-26 17:05:05 UTC
+    value: 2026-07-27 08:56:23 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -818,11 +818,6 @@ flags:
 color: [0.3, 0.5, 0.9]
 tags:
 - tdn
-storage:
-  claudius_running: false
-  _watchdog_gen: 1119
-  _clip_watch_gen: 884
-  _shortcut_rec_gen: 503
 operators:
 - name: help
   type: opviewerCOMP

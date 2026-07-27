@@ -81,6 +81,62 @@ class EmbodyTestCase(TestCase):
             raise AssertionError(
                 msg or f'Expected length {expected_len}, got {actual}')
 
+    # --- shared OS-clipboard helpers -------------------------------------
+    # The Windows clipboard is a single machine-wide resource guarded by
+    # OpenClipboard(): while ANY process holds it open, every other write
+    # silently fails and ui.clipboard still reads back the old value. On a
+    # dev box running several TouchDesigner instances (plus Windows
+    # clipboard history) that contention is routine, and it made the
+    # clipboard suites fail intermittently in full runs while passing in
+    # isolation -- as a bare "0 != 1" or "unexpectedly None" that pointed
+    # at the watcher instead of the environment (chased twice, 2026-07-26
+    # and 2026-07-27). Contention outlasts a tight retry loop, so back off
+    # between attempts, and when the OS simply will not cooperate report a
+    # loud SKIP rather than a false failure -- the same convention
+    # requireCli() uses for a missing CLI.
+
+    CLIPBOARD_ATTEMPTS = 10
+    CLIPBOARD_BACKOFF_S = 0.02      # <= ~200ms total, main-thread safe
+
+    def seedClipboard(self, text, what='the system clipboard'):
+        """Write `text` to the OS clipboard, verifying the write stuck.
+
+        Skips (never fails) when the clipboard is held by another process.
+        """
+        import time
+        for attempt in range(self.CLIPBOARD_ATTEMPTS):
+            ui.clipboard = text
+            if ui.clipboard == text:
+                return
+            time.sleep(self.CLIPBOARD_BACKOFF_S)
+        self.skipTest(
+            '%s could not be seeded after %d attempts -- another process on '
+            'this machine holds the clipboard open. Environment problem, not '
+            'a product failure.' % (what, self.CLIPBOARD_ATTEMPTS))
+
+    def requireClipboardHolds(self, predicate, what='a TDN envelope',
+                              reseed=None):
+        """Assert the clipboard satisfies `predicate`, retrying on contention.
+
+        `reseed` (optional) is re-invoked between attempts to redo the write
+        under test -- use it when the value is produced by product code
+        (e.g. CopyNetworkToClipboard) rather than a literal string.
+        """
+        import time
+        for attempt in range(self.CLIPBOARD_ATTEMPTS):
+            try:
+                if predicate(ui.clipboard or ''):
+                    return
+            except Exception:
+                pass
+            if reseed is not None:
+                reseed()
+            time.sleep(self.CLIPBOARD_BACKOFF_S)
+        self.skipTest(
+            'the clipboard never held %s after %d attempts -- another process '
+            'on this machine keeps overwriting it. Environment problem, not a '
+            'product failure.' % (what, self.CLIPBOARD_ATTEMPTS))
+
 
 # =============================================================================
 # AGENT-TIER TEST CASE
@@ -263,11 +319,81 @@ class TestRunnerExt:
     _TX_KEY = '_test_saved_toxdropexpr'
     _AX_KEY = '_test_saved_autoexternalize'
 
+    # Run-active state lives in COMP STORAGE, not on this instance -- see the
+    # _running property below for why. Stamped with wall-clock time so an
+    # abandoned run expires instead of muting dialogs forever.
+    _RUN_ACTIVE_KEY = '_test_run_active'
+    _RUN_ACTIVE_TTL_S = 90.0
+
+    @property
+    def _running(self):
+        """True while a run is in flight. SURVIVES extension reinit.
+
+        This was instance state (`self._running = False` in __init__) until
+        2026-07-27, which made it silently false at the worst moment: every
+        test DAT and extension source in this project is syncfile'd, so
+        editing ANY of them mid-run hot-reloads the DAT and rebuilds this
+        extension -- resetting the flag while the deferred tick chain (which
+        IS reinit-hardened, via its generation token) kept running tests.
+
+        Two guards failed as a result. EmbodyExt._testRunnerActive() read
+        False, so _messageBox stopped suppressing modals and a REAL
+        ui.messageBox escaped to the user mid-run -- an "Embody -- Uninstall"
+        confirm, which once clicked flipped Envoyenable off and stopped the
+        live Envoy server. And the "Tests already running" re-entrancy check
+        read False, letting a second run start on top of the first.
+
+        Storage survives reinit; the timestamp keeps a crashed or abandoned
+        run from suppressing every dialog forever.
+        """
+        import time
+        try:
+            stamp = self.ownerComp.fetch(self._RUN_ACTIVE_KEY, None,
+                                         search=False)
+        except Exception:
+            return False
+        if stamp is None:
+            return False
+        try:
+            age = time.time() - float(stamp)
+        except (TypeError, ValueError):
+            return False
+        # Negative age = a stamp from the future (clock change); treat as stale.
+        return 0 <= age < self._RUN_ACTIVE_TTL_S
+
+    @_running.setter
+    def _running(self, value):
+        import time
+        try:
+            if value:
+                self.ownerComp.store(self._RUN_ACTIVE_KEY, time.time())
+            else:
+                self.ownerComp.unstore(self._RUN_ACTIVE_KEY)
+        except Exception:
+            pass
+
+    def _touchRunActive(self):
+        """Re-stamp an in-flight run so a long one cannot age past the TTL.
+
+        Called per test method, which covers both the synchronous and the
+        deferred runners. Never STARTS a run -- only refreshes one already
+        marked active, so it cannot resurrect a finished run.
+        """
+        import time
+        try:
+            if self.ownerComp.fetch(self._RUN_ACTIVE_KEY, None,
+                                    search=False) is not None:
+                self.ownerComp.store(self._RUN_ACTIVE_KEY, time.time())
+        except Exception:
+            pass
+
     def __init__(self, ownerComp):
         self.ownerComp = ownerComp
         self.results_dat = self.ownerComp.op('results')
         self.sandbox_comp = self.ownerComp.op('test_sandbox')
-        self._running = False
+        # Deliberately NOT resetting _running here: a reinit mid-run must not
+        # clear the guard (that is the whole point of backing it with
+        # storage). A genuinely stale flag expires via _RUN_ACTIVE_TTL_S.
         self._results = []
         self._deferred_queue = []
         self._deferred_test_filter = None
@@ -1321,6 +1447,10 @@ class TestRunnerExt:
 
     def _runTest(self, instance, suite_name, method_name):
         """Run a single test method with setUp/tearDown."""
+        # Keep the run-active stamp fresh. A full run takes minutes, far
+        # longer than _RUN_ACTIVE_TTL_S, so without this the dialog-suppression
+        # guard would expire partway through and start letting real modals out.
+        self._touchRunActive()
         # setUp
         if hasattr(instance, 'setUp'):
             try:

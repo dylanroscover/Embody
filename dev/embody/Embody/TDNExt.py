@@ -189,7 +189,10 @@ SYSTEM_PATHS = ('/local', '/sys', '/perform', '/ui')
 # Storage keys to skip during TDN export (runtime/transient state)
 SKIP_STORAGE_KEYS = {
 	'_tdn_stripped_paths', '_git_root',
-	'envoy_running', 'envoy_shutdown_event',
+	# Live server flags -- 'claudius_running' is the exact counterpart of
+	# 'envoy_running' and was simply missed; both describe a server running
+	# in THIS session and are meaningless (actively misleading) on disk.
+	'envoy_running', 'envoy_shutdown_event', 'claudius_running',
 	'expanded_paths', 'expand_order', 'git_status', 'manage_file_path',
 	'visible_count', 'hover',
 	# TDN dirty-detection baselines -- runtime-only, storage-backed so they
@@ -215,7 +218,25 @@ SKIP_STORAGE_KEYS = {
 	# (the runner stores them for the duration of a run and restores after),
 	# so they reached committed .tdn files.
 	'_test_saved_filecleanup', '_test_saved_toxdropexpr',
+	'_test_saved_status',
+	# Seeded auto-answers for headless dialogs. The WORST of this family to
+	# serialize: restoring it in a user's project would silently auto-answer
+	# real modals (including the Uninstall confirm) on load. Caught in a
+	# mid-run export on 2026-07-27, alongside _test_saved_status.
+	'_smoke_test_responses',
 	'test_results', 'cp_summary',
+	# Run-active stamp for the test runner (op.unit_tests). Storage-backed so
+	# the dialog-suppression guard survives a mid-run extension reinit; it is
+	# wall-clock state that must never reach disk.
+	'_test_run_active',
+	# Self-rescheduling-loop generation counters. Each is bumped on every
+	# extension reinit purely so a previous instance's pending run() tick
+	# retires itself -- they carry no meaning on disk, and because they
+	# change constantly they rewrote three lines of embody.tdn and
+	# Embody.tdn on EVERY export (measured 2026-07-27: _clip_watch_gen
+	# 884 -> 917 and _shortcut_rec_gen 503 -> 517 across one test run),
+	# producing pure diff churn in committed specimens.
+	'_watchdog_gen', '_clip_watch_gen', '_shortcut_rec_gen',
 	# Transient UI/interaction state -- classified as runtime by
 	# EmbodyExt._STORAGE_SKIP_KEYS but previously absent here, so it
 	# serialized anyway (a held button could bake `pressed: true` and the
