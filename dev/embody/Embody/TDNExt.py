@@ -205,6 +205,22 @@ SKIP_STORAGE_KEYS = {
 	# into Embody.tdn, and a TDN restore would then suppress dialogs for the
 	# whole session (observed on the v6.0.140 save, caught pre-commit).
 	'_suppress_dialogs',
+	# Per-session lifecycle flags. init() clears these on open so a release
+	# .tox never ships mid-lifecycle state; serializing them defeats that
+	# and, because the IMPORT side restores every key unconditionally, a
+	# single leaked value then ratchets back on every export forever.
+	'_init_complete', '_start_in_progress', '_release_hook_active',
+	'_tdn_restore_failures',
+	# Test-runner bookkeeping. A TDN export landing mid-run captured these
+	# (the runner stores them for the duration of a run and restores after),
+	# so they reached committed .tdn files.
+	'_test_saved_filecleanup', '_test_saved_toxdropexpr',
+	'test_results', 'cp_summary',
+	# Transient UI/interaction state -- classified as runtime by
+	# EmbodyExt._STORAGE_SKIP_KEYS but previously absent here, so it
+	# serialized anyway (a held button could bake `pressed: true` and the
+	# next reconstruct would restore a permanently-depressed control).
+	'pressed', '_tip_trace',
 }
 _SYSTEM_PATH_PREFIXES = tuple(p + '/' for p in SYSTEM_PATHS)
 
@@ -1532,7 +1548,16 @@ class TDNExt:
 			self._log(f'Progress dialog update failed: {e}', 'WARNING')
 
 	def _closeExportProgress(self) -> None:
-		"""Close the progress dialog (end of export, error, or cancel)."""
+		"""Close the progress dialog and RESET its transient state.
+
+		The status text and bar width are ordinary parameters on COMPs
+		inside Embody, so whatever the last export left there is captured
+		by Embody's own .tdn export and committed. A test-run label
+		('sandbox_test_tdn_export_progress -- 400 / 1,000 operators (40%)')
+		reached the repository this way and survived several releases.
+		Resetting to the parameter defaults means the dialog contributes
+		NOTHING to the exported document (TDN omits default values).
+		"""
 		try:
 			dlg = self._exportProgressComp()
 			if not dlg:
@@ -1540,6 +1565,12 @@ class TDNExt:
 			win = dlg.op('win')
 			if win and win.isOpen:
 				win.par.winclose.pulse()
+			status = dlg.op('dialog/status')
+			if status:
+				status.par.text = status.par.text.default
+			fill = dlg.op('dialog/bar_bg/bar_fill')
+			if fill:
+				fill.par.w = fill.par.w.default
 		except Exception as e:
 			self._log(f'Progress dialog close failed: {e}', 'WARNING')
 
@@ -2151,8 +2182,20 @@ class TDNExt:
 				# Built-in parameter sequences (v1.3+)
 				tdn_sequences = tdn.get('sequences', {})
 				for seq_name, blocks in tdn_sequences.items():
+					seq = self._getSequenceByName(dest, seq_name)
+					if seq is None:
+						self._log(f'Sequence "{seq_name}" not found on '
+						          f'{dest.path}', 'WARNING')
+						continue
+					if not blocks:
+						# See _expandSequences: never clamp an empty list
+						# up to the minimum, it would destroy live blocks.
+						self._log(
+							f'Sequence "{seq_name}" on {dest.path} has an '
+							f'empty block list in the TDN -- leaving the live '
+							f'blocks untouched', 'WARNING')
+						continue
 					try:
-						seq = self._getSequenceByName(dest, seq_name)
 						seq.numBlocks = len(blocks)
 						for i, block_data in enumerate(blocks):
 							if not block_data:
@@ -2219,6 +2262,14 @@ class TDNExt:
 				# Storage (v1.1+)
 				tdn_storage = tdn.get('storage', {})
 				for key, value in tdn_storage.items():
+					# Same filter as the EXPORT side. Without it a runtime
+					# key that reached a .tdn before it was skip-listed gets
+					# restored into live storage and re-emitted on the next
+					# export -- a one-way ratchet that kept contamination
+					# alive forever, even after the code that wrote it was
+					# deleted. Skipping on BOTH sides lets a stale key die.
+					if key in SKIP_STORAGE_KEYS:
+						continue
 					try:
 						deserialized = self._deserializeStorageValue(value)
 						dest.store(key, deserialized)
@@ -2859,8 +2910,27 @@ class TDNExt:
 	def _exportBuiltinSequences(self, target):
 		"""Export built-in parameter sequences with non-default block data.
 
-		Discovers all sequences on the operator via par.isSequence headers,
-		then exports each sequence's blocks as an array of base-name dicts.
+		Discovers sequences by ITERATING `target.seq` -- the same path the
+		importer uses (`_getSequenceByName`). Discovering them via
+		`target.pars()` + `p.isSequence` instead silently MISSES sequences
+		on an operator that has not cooked yet.
+
+		Measured 2026-07-25 on TD 099.2025.33070, fresh linePOP:
+		    target.pars() + isSequence -> ['attr']   (misses 'pt' entirely)
+		    iterate target.seq         -> attr(1), pt(2)
+		After a cook, both paths agree. TDNExt already documents this
+		accessor as unreliable on POPs and hardened the LOOKUP path for it
+		(see _getSequenceByName); the DISCOVERY path had the same flaw and
+		dropped a populated sequence from the .tdn (Moonshine v6.0.157).
+
+		ORDERING CONTRACT -- load-bearing, do not reorder: enumerating
+		target.seq MATERIALIZES the block parameters. Only after that do
+		'pt', 'pt0posx', ... appear in target.pars() at all. Since
+		_exportSequenceBlocks still groups block pars from target.pars(),
+		the list(target.seq) below must run BEFORE it, or the sequence is
+		discovered with no values to fill it.
+		test_tdn_roundtrip_invariant.test_exporter_finds_sequences_on_an_untouched_uncooked_pop
+		guards this by calling the exporter as the first touch on a fresh POP.
 
 		Returns dict of {seq_name: [block_data, ...]} or empty dict.
 		Only includes sequences where numBlocks differs from default OR
@@ -2869,16 +2939,22 @@ class TDNExt:
 		sequences = {}
 		seen = set()
 
-		for p in target.pars():
-			if not p.isSequence:
-				continue
-			seq = p.sequence
+		try:
+			all_seqs = list(target.seq)
+		except Exception as e:
+			self._log(f'Could not enumerate sequences on {target.path}: {e}',
+			          'WARNING')
+			return sequences
+
+		for seq in all_seqs:
 			if seq is None or seq.name in seen:
 				continue
 			seen.add(seq.name)
 
 			seq_data = self._exportSequenceBlocks(target, seq)
-			if seq_data is not None:
+			# Truthiness, not `is not None`: an empty list is unimportable
+			# (TD refuses numBlocks=0), so it must never reach the file.
+			if seq_data:
 				sequences[seq.name] = seq_data
 
 		return sequences
@@ -2924,6 +3000,19 @@ class TDNExt:
 						has_any_nondefault = True
 
 			blocks.append(block_data)
+
+		if not blocks:
+			# An empty read is never exportable: TD refuses numBlocks=0 on
+			# any sequence with a 1-block minimum, so `name: []` would be a
+			# document our own reader rejects (and diff_tdn would then
+			# report the COMP permanently changed). Omit it and say so --
+			# a silent omission here would be indistinguishable from a
+			# sequence legitimately sitting at defaults.
+			self._log(
+				f'Sequence "{seq.name}" on {target.path} read back zero '
+				f'blocks -- omitting it rather than writing an unimportable '
+				f'empty list', 'WARNING')
+			return None
 
 		default_count = self._getDefaultSequenceBlockCount(target, seq)
 
@@ -4027,8 +4116,16 @@ class TDNExt:
 		# custom sequence so its template is fully formed before
 		# Phase 2.5 sets numBlocks and block values.
 		for seq_name, count in seq_template_counts.items():
+			# Same unhandled-None as the two numBlocks setters: the helper
+			# returns None rather than raising, so a missing sequence used
+			# to misreport as "Failed to set blockSize".
+			seq = self._getSequenceByName(target, seq_name)
+			if seq is None:
+				self._log(
+					f'Sequence "{seq_name}" not found on {target.path} -- '
+					f'cannot set blockSize={count}', 'WARNING')
+				continue
 			try:
-				seq = self._getSequenceByName(target, seq_name)
 				seq.blockSize = count
 			except Exception as e:
 				self._log(
@@ -4053,12 +4150,27 @@ class TDNExt:
 
 			if sequences and target:
 				for seq_name, blocks in sequences.items():
-					try:
-						seq = self._getSequenceByName(target, seq_name)
-					except Exception:
+					# _getSequenceByName RETURNS None, it never raises, so
+					# the old try/except here could not fire -- a missing
+					# sequence fell through and misreported as "Failed to
+					# set numBlocks" from the AttributeError below.
+					seq = self._getSequenceByName(target, seq_name)
+					if seq is None:
 						self._log(
 							f'Sequence "{seq_name}" not found on '
 							f'{target.path}', 'WARNING')
+						continue
+
+					if not blocks:
+						# Do NOT clamp to the minimum. A legacy .tdn holding
+						# `name: []` (written by a pre-fix exporter) would
+						# then SET numBlocks=1 and destroy a live
+						# multi-block sequence -- worse than the warning it
+						# replaces. Leave the live blocks alone.
+						self._log(
+							f'Sequence "{seq_name}" on {target.path} has an '
+							f'empty block list in the TDN -- leaving the live '
+							f'blocks untouched', 'WARNING')
 						continue
 
 					try:
@@ -4488,6 +4600,12 @@ class TDNExt:
 			storage = op_def.get('storage', {})
 			if storage:
 				for key, value in storage.items():
+					# Mirror the export filter -- see the root-storage
+					# restore above. Runtime keys must not survive a
+					# round-trip, or a single leaked value ratchets back
+					# into every subsequent export.
+					if key in SKIP_STORAGE_KEYS:
+						continue
 					try:
 						deserialized = self._deserializeStorageValue(value)
 						target.store(key, deserialized)
@@ -4499,6 +4617,8 @@ class TDNExt:
 			startup_storage = op_def.get('startup_storage', {})
 			if startup_storage:
 				for key, value in startup_storage.items():
+					if key in SKIP_STORAGE_KEYS:
+						continue
 					try:
 						deserialized = self._deserializeStorageValue(value)
 						target.storeStartupValue(key, deserialized)

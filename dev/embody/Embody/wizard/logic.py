@@ -100,7 +100,42 @@ def click(name):
 			if c.family=='COMP' and hasattr(c.par,'value0'): c.par.value0 = 1 if c.name==name else 0
 	if d.get('sel'): w.store(d['sel'], name.replace('opt_',''))
 	render()
+def _resetUI():
+	"""Restore the wizard's transient UI pars to their defaults.
+
+	render() writes the step label, progress fill, title, hint and both
+	button captions/colours straight onto COMPs INSIDE Embody. Those are
+	ordinary parameters, so whatever the last wizard run left there is
+	captured by Embody's own .tdn export, committed, and shipped in the
+	release .tox -- the same leak the TDN export-progress dialog had.
+	Resetting to par defaults means the wizard contributes nothing to the
+	exported document. Best-effort: never block closing the window.
+	"""
+	def _def(o,*names):
+		if not o: return
+		for n in names:
+			p=getattr(o.par,n,None)
+			if p is not None:
+				try: p.val=p.default
+				except Exception: pass
+	try:
+		w=_w()
+		if not w: return
+		_def(w.op('steplabel'),'text')
+		_def(w.op('track/fill'),'w')
+		_def(w.op('title'),'text')
+		_def(w.op('hint'),'text','h')
+		for k in ('back','next'):
+			b=_nav(k)
+			if b:
+				_def(b,'bgcolorr','bgcolorg','bgcolorb')
+				_def(b.op('text'),'text','fontcolorr','fontcolorg',
+					 'fontcolorb','textcolorr','textcolorg','textcolorb')
+		for gid in GROUPS:
+			_def(w.op(gid),'display')
+	except Exception: pass
 def _close():
+	_resetUI()
 	try: op.Embody.op('window_wizard').par.winclose.pulse()
 	except Exception: pass
 def finish():

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 33
-generator: Embody/6.0.138
+build: 35
+generator: Embody/6.0.159
 td_build: 099.2025.33070
-source_file: Embody-6.139.toe
-exported_at: '2026-07-20T11:50:56Z'
+source_file: Embody-6.159.toe
+exported_at: '2026-07-27T00:41:04Z'
 network_path: /embody/Embody/toolbar
 options:
   include_dat_content: false
@@ -65,21 +65,6 @@ sequences:
 color: [0.3, 0.5, 0.9]
 tags:
 - tdn
-storage:
-  _tip_trace:
-    btn: close
-    text: Clear filter
-    text_width: 60.3
-    tip_w: 80
-    container_x: 726
-    container_w: 270
-    btn_x: 244
-    btn_w: 26
-    tip_x: 914
-    toolbar_w: 996
-    btn_center: 983
-    tip_center: 954
-    offset: -29
 operators:
 - name: tooltip
   type: containerCOMP

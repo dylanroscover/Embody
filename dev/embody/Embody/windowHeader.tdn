@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 13
-generator: Embody/6.0.25
-td_build: 099.2025.32820
-source_file: Embody-6.25.toe
-exported_at: '2026-06-13T05:52:34Z'
+build: 14
+generator: Embody/6.0.159
+td_build: 099.2025.33070
+source_file: Embody-6.159.toe
+exported_at: '2026-07-27T00:41:00Z'
 network_path: /embody/Embody/windowHeader
 options:
   include_dat_content: false
@@ -84,8 +84,6 @@ operators:
     bgcolorb: =1.0
     bgalpha: =0.1 if me.fetch('hover', False) else 0
   position: [600, 0]
-  storage:
-    pressed: false
   tdn_ref: embody/Embody/windowHeader/button_max.tdn
 - name: button_min
   type: textCOMP
@@ -102,8 +100,6 @@ operators:
     bgcolorb: =1.0
     bgalpha: =0.1 if me.fetch('hover', False) else 0
   position: [300, 0]
-  storage:
-    pressed: false
   tdn_ref: embody/Embody/windowHeader/button_min.tdn
 - name: panelexec1
   type: panelexecuteDAT
@@ -136,8 +132,6 @@ operators:
     bgcolorb: =1.0
     bgalpha: =0.1 if me.fetch('hover', False) else 0
   position: [900, 0]
-  storage:
-    pressed: false
   tdn_ref: embody/Embody/windowHeader/button_close.tdn
 - name: WindowHeaderExt
   type: textDAT

@@ -438,17 +438,45 @@ class TestRunnerExt:
                    'point. See .claude/rules/destructive-tests.md.')
             self._log(msg, 'ERROR')
             return {'error': msg}
-        # project.dirty does NOT exist on TD 2025 (AttributeError) -- the old
-        # getattr(project, 'dirty', None) always returned None, silently
-        # defeating this save-gate. The real member is project.modified, and
-        # it is NOT a plain bool, so compare by truthiness, never `is True`.
-        dirty = bool(getattr(project, 'modified', False))
-        if dirty:
-            msg = ('RunDestructiveTests refused: project has unsaved changes '
-                   '(project.modified). Save first so there is a recovery '
-                   'point.')
+        # The gate's real requirement is "a saved .toe exists on disk to
+        # reopen afterward". project.modified is NOT a usable proxy for that:
+        # Embody's own post-save housekeeping (Refresh sweep, TDN re-export,
+        # externalizations-table writes) re-dirties the project within
+        # SECONDS, so this refused even immediately after project.save() --
+        # measured 2026-07-26, True in 6/6 samples ~2 min after a successful
+        # save. The destructive tier was therefore unrunnable, which is why
+        # the Disable/Enable lifecycle these suites exist to protect had
+        # never actually been exercised.
+        #
+        # (History: before that, `project.dirty` was used -- it does not
+        # exist on TD 2025, so getattr(...) returned None and the gate was
+        # silently OFF. Both proxies failed in opposite directions.)
+        #
+        # Check the invariant directly instead, and report the recovery
+        # point loudly so the caller can judge whether it is recent enough
+        # to accept losing everything since. confirm_saved=True above keeps
+        # this a deliberate two-step action.
+        try:
+            toe_path = os.path.join(project.folder, project.name)
+            saved_ok = os.path.isfile(toe_path)
+            age_min = ((time.time() - os.path.getmtime(toe_path)) / 60.0
+                       if saved_ok else None)
+        except Exception as e:
+            msg = (f'RunDestructiveTests refused: cannot verify a saved .toe '
+                   f'recovery point ({type(e).__name__}: {e}).')
             self._log(msg, 'ERROR')
             return {'error': msg}
+        if not saved_ok:
+            msg = ('RunDestructiveTests refused: no saved .toe on disk at '
+                   f'{toe_path} -- there would be no recovery point. Save '
+                   'the project first.')
+            self._log(msg, 'ERROR')
+            return {'error': msg}
+        self._log(
+            f'DESTRUCTIVE RUN: these suites mutate the WHOLE live project. '
+            f'Recovery point is "{project.name}" (saved {age_min:.1f} min '
+            f'ago) -- reopen it afterward to restore the live network. '
+            f'Anything changed since that save will be lost.', 'WARNING')
 
         self._running = True
         self._suppressFileCleanupDialog()

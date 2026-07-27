@@ -35,6 +35,15 @@ def init():
 	p.readOnly = False
 	p.val = 'Disabled'
 	p.readOnly = was_ro
+	# Autosavestatus is the same class of transient read-out and was missing
+	# from this scrub, so a release .tox shipped whatever the dev session's
+	# last checkpoint left there (e.g. 'Saved 09:04:54 UTC' -- a timestamp
+	# from another machine, on a fresh install).
+	p = parent.Embody.par.Autosavestatus
+	was_ro = p.readOnly
+	p.readOnly = False
+	p.val = 'Idle'
+	p.readOnly = was_ro
 	# Clear any save-time dialog suppression that baked into the .toe/.tox.
 	# _suppress_dialogs is a save-window-only flag; a fresh open must start with
 	# dialogs enabled so genuine first-run onboarding can prompt.

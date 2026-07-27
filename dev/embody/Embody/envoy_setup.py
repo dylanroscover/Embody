@@ -1456,22 +1456,118 @@ def configure_gitignore(ext, git_root):
                 existing_content += '\n'
             ext._log(f'Migrated .gitignore: removed stale entries {found_stale}')
 
+        HEADER = '# Embody / Envoy (auto-managed)'
+        MARKER = '# Embody / Envoy'
+
+        # Consolidate duplicate managed headers left by older builds (this
+        # repo accumulated three). ONLY a block whose every line is a known
+        # MANAGED_ENTRY is merged away -- a block holding anything the user
+        # wrote is left exactly where it is, header and all, because
+        # Uninstall's strip_marked_block reclaims whole blocks and merging
+        # user content into one would widen what an uninstall deletes.
+        def _blocks(lines):
+            out = []
+            for i, ln in enumerate(lines):
+                if not ln.strip().startswith(MARKER):
+                    continue
+                end = i + 1
+                while end < len(lines) and lines[end].strip():
+                    end += 1
+                out.append((i, end))
+            return out
+
+        managed_set = set(MANAGED_ENTRIES)
+        found_blocks = _blocks(existing_lines)
+        merged = 0
+        if len(found_blocks) > 1:
+            keep_start = found_blocks[0][0]
+            drop = []
+            moved = []
+            for start, end in found_blocks[1:]:
+                body = [ln.strip() for ln in existing_lines[start + 1:end]]
+                if body and all(b in managed_set for b in body):
+                    moved.extend(existing_lines[start + 1:end])
+                    drop.append((start, end))
+            if drop:
+                rebuilt = []
+                dropped = {i for s, e in drop for i in range(s, e)}
+                for idx, ln in enumerate(existing_lines):
+                    if idx in dropped:
+                        continue
+                    rebuilt.append(ln)
+                    if idx == found_blocks[0][1] - 1:
+                        rebuilt.extend(moved)
+                existing_lines = rebuilt
+                merged = len(drop)
+                ext._log(f'Consolidated {merged} duplicate Embody block(s) '
+                         f'in .gitignore')
+
         existing_stripped = {line.strip() for line in existing_lines}
         missing = [e for e in MANAGED_ENTRIES if e not in existing_stripped]
 
-        if not missing:
+        if not missing and not found_stale and not merged:
             ext._log('.gitignore already configured', 'DEBUG')
             return
 
-        block = '\n# Embody / Envoy (auto-managed)\n'
-        block += '\n'.join(missing) + '\n'
+        # Append INSIDE the existing managed block instead of writing a
+        # fresh header at EOF. The old code wrote the header
+        # unconditionally, so every release that added a MANAGED_ENTRY
+        # produced another identical header block (this repo accumulated
+        # three). Keeping the entries under one header also keeps
+        # Uninstall's strip_marked_block able to reclaim them -- entries
+        # orphaned from a header would survive an uninstall.
+        # FIRST managed header, which is the block consolidation merges
+        # into. (The old reverse search picked the LAST one, so entries
+        # landed in whichever stray duplicate happened to be lowest.)
+        header_idx = next(
+            (i for i, ln in enumerate(existing_lines)
+             if ln.strip().startswith(MARKER)), None)
 
-        if existing_content and not existing_content.endswith('\n'):
-            block = '\n' + block
+        if missing:
+            if header_idx is None:
+                new_lines = list(existing_lines)
+                if new_lines and new_lines[-1].strip():
+                    new_lines.append('')
+                new_lines.append(HEADER)
+                new_lines.extend(missing)
+            else:
+                # End of that block = the last consecutive non-blank line.
+                end = header_idx + 1
+                while end < len(existing_lines) and existing_lines[end].strip():
+                    end += 1
+                new_lines = (existing_lines[:end] + list(missing)
+                             + existing_lines[end:])
+
+            # git is LAST-match-wins, so '!.embody/project.json' must sit
+            # BELOW '.embody/*' or the committed td_build pin silently
+            # stops being tracked. Insertion order alone does not
+            # guarantee that: the ignore may already exist further down
+            # the file (or below a blank line that ended our block scan),
+            # in which case the negation we just added lands above it.
+            # Enforce the invariant on the final content instead.
+            neg, ign = '!.embody/project.json', '.embody/*'
+            stripped_new = [ln.strip() for ln in new_lines]
+            if neg in stripped_new and ign in stripped_new:
+                if stripped_new.index(neg) < stripped_new.index(ign):
+                    new_lines.pop(stripped_new.index(neg))
+                    stripped_new = [ln.strip() for ln in new_lines]
+                    new_lines.insert(stripped_new.index(ign) + 1, neg)
+        else:
+            new_lines = list(existing_lines)   # stale-removal / merge only
+
+        new_content = '\n'.join(new_lines)
+        if new_content and not new_content.endswith('\n'):
+            new_content += '\n'
 
         def _write():
-            gitignore.write_text(existing_content + block, encoding='utf-8')
-            ext._log(f'Added {len(missing)} entries to .gitignore: {", ".join(missing)}')
+            gitignore.write_text(new_content, encoding='utf-8')
+            if missing:
+                ext._log(f'Added {len(missing)} entries to .gitignore: {", ".join(missing)}')
+            elif found_stale:
+                ext._log(f'Removed stale .gitignore entries: {", ".join(sorted(found_stale))}')
+            else:
+                ext._log(f'Consolidated {merged} duplicate Embody block(s) '
+                         f'in .gitignore')
             try:  # record the marked block so Uninstall strips only it (never the user's file)
                 Embody = op.Embody.ext.Embody
                 Embody._manifestRecordAppendedFile(
@@ -1480,13 +1576,29 @@ def configure_gitignore(ext, git_root):
                 pass
 
         # Advanced mode: confirm before editing the user's .gitignore. Only
-        # reached when entries are actually missing, so a no-op never prompts.
+        # reached when there is a real change (entries to add, or stale
+        # entries to strip), so a no-op never prompts -- important because
+        # this runs on the startup config pass and a prompt with nothing to
+        # do would fire on every project open.
+        if missing:
+            action = (f'add {len(missing)} '
+                      f'entr{"y" if len(missing) == 1 else "ies"} to '
+                      f'.gitignore in {git_root}')
+            details = list(missing)
+        elif not found_stale:
+            action = (f'consolidate {merged} duplicate Embody block(s) in '
+                      f'.gitignore in {git_root}')
+            details = [f'{merged} redundant "{HEADER}" header(s) merged '
+                       f'into the first; no entries added or removed']
+        else:
+            # Name the effect honestly: this branch DELETES lines from a
+            # git-tracked user file.
+            action = (f'remove {len(found_stale)} obsolete Embody '
+                      f'entr{"y" if len(found_stale) == 1 else "ies"} from '
+                      f'.gitignore in {git_root}')
+            details = sorted(found_stale)
         op.Embody.ext.Embody._guardFileWrite(
-            'Git config',
-            f'add {len(missing)} entr{"y" if len(missing) == 1 else "ies"} to '
-            f'.gitignore in {git_root}',
-            list(missing),
-            _write)
+            'Git config', action, details, _write)
 
     except Exception as e:
         ext._log(f'Could not auto-configure .gitignore: {e}', 'WARNING')
@@ -1530,6 +1642,52 @@ def configure_gitattributes(ext, git_root):
                 gitattr.write_text(existing, encoding='utf-8')
                 ext._log(
                     'Migrated .gitattributes: enabled .tdn semantic diff')
+
+            # Backfill attribute lines added by later releases. Without
+            # this the function returned on ANY existing marker, so a
+            # project installed before a line was added never received it
+            # and kept churning CRLF for those types -- the same
+            # never-runs-after-the-first-install defect as the .gitignore
+            # duplicate-header bug (both found in the v6.0.157 triage).
+            lines = existing.splitlines()
+            present = {ln.strip() for ln in lines}
+            wanted = [ln for ln in MANAGED_BLOCK.splitlines()
+                      if ln.strip() and not ln.strip().startswith('#')]
+            missing_attrs = [ln for ln in wanted if ln not in present]
+            if missing_attrs:
+                hdr = next(
+                    (i for i in range(len(lines) - 1, -1, -1)
+                     if lines[i].strip().startswith('#')
+                     and MARKER in lines[i]), None)
+                if hdr is None:
+                    new_lines = lines + missing_attrs
+                else:
+                    end = hdr + 1
+                    while end < len(lines) and lines[end].strip():
+                        end += 1
+                    new_lines = lines[:end] + missing_attrs + lines[end:]
+                text = '\n'.join(new_lines)
+                if text and not text.endswith('\n'):
+                    text += '\n'
+
+                def _backfill(_text=text, _attrs=list(missing_attrs)):
+                    gitattr.write_text(_text, encoding='utf-8')
+                    ext._log(
+                        f'Backfilled {len(_attrs)} .gitattributes '
+                        f'entr{"y" if len(_attrs) == 1 else "ies"}: '
+                        f'{", ".join(_attrs)}')
+
+                # Route through the Advanced-mode consent guard like every
+                # other write to the user's git-tracked config. Writing
+                # directly would silently re-add lines a user deliberately
+                # removed (e.g. they want CRLF for *.md), on every open.
+                op.Embody.ext.Embody._guardFileWrite(
+                    'Git config',
+                    f'add {len(missing_attrs)} '
+                    f'entr{"y" if len(missing_attrs) == 1 else "ies"} to '
+                    f'.gitattributes in {git_root}',
+                    list(missing_attrs),
+                    _backfill)
             else:
                 ext._log('.gitattributes already configured', 'DEBUG')
             return

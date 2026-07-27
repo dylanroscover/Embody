@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1
-generator: Embody/6.0.25
-td_build: 099.2025.32820
-source_file: Embody-6.25.toe
-exported_at: '2026-06-13T05:52:35Z'
+build: 2
+generator: Embody/6.0.159
+td_build: 099.2025.33070
+source_file: Embody-6.159.toe
+exported_at: '2026-07-27T00:41:48Z'
 network_path: /embody/Embody/toolbar/container_right/pars
 options:
   include_dat_content: false
@@ -32,6 +32,4 @@ parameters:
 color: [0.3, 0.5, 0.9]
 tags:
 - tdn
-storage:
-  pressed: false
 operators: []

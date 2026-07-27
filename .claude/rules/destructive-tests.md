@@ -36,12 +36,25 @@ unlinks). Recovery required rebuilding the specimen `.tdn` from the live COMPs.
 3. **Only via the save-gated batch.** They run ONLY through
    `RunDestructiveTests(confirm_saved=True)`, which:
    - is opt-in (`confirm_saved` must be True),
-   - refuses if `project.modified` is truthy (a saved `.toe` must exist as a
-     recovery point; `project.dirty` does NOT exist on TD 2025 -- and
-     `project.modified` is not a plain bool, so test truthiness, never `is True`),
+   - refuses if there is no saved `.toe` on disk at
+     `project.folder / project.name` -- the recovery point you reopen
+     afterward -- and LOGS that recovery point with its age so you can judge
+     whether it is recent enough to accept losing everything since,
    - runs the destructive suites in isolation,
    - logs a reminder that the live network is now mutated and the saved `.toe`
      must be reopened to restore it.
+
+   **Do not reinstate a `project.modified` / `project.dirty` check here.**
+   Both have failed, in opposite directions: `project.dirty` does not exist
+   on TD 2025, so `getattr(project, 'dirty', None)` returned None and the
+   gate was silently OFF; `project.modified` is the opposite -- Embody's own
+   post-save housekeeping (Refresh sweep, TDN re-export, externalizations
+   table writes) re-dirties the project within SECONDS, so the gate refused
+   even immediately after `project.save()` (measured 2026-07-26: True in 6/6
+   samples ~2 min after a successful save). That made the destructive tier
+   unrunnable -- the Disable/Enable lifecycle these suites exist to protect
+   had never actually been exercised. The file on disk is the recovery
+   point; check for it directly.
 
 4. **ALWAYS save before running them, and reopen after.** `project.save()` first
    (the recovery point), then `RunDestructiveTests(confirm_saved=True)`, then

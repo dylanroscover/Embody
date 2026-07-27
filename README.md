@@ -6,9 +6,9 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.157-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.159-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
-[![MCP Tools](https://img.shields.io/badge/MCP_tools-53-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
+[![MCP Tools](https://img.shields.io/badge/MCP_tools-54-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/dylanroscover/Embody?style=flat-square&labelColor=181e1e&color=6ee668)](https://github.com/dylanroscover/Embody/stargazers)
 [![Downloads](https://img.shields.io/github/downloads/dylanroscover/Embody/total?style=flat-square&labelColor=181e1e&color=6ee668)](https://github.com/dylanroscover/Embody/releases)
@@ -33,7 +33,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 | | What | Why it matters |
 |---|---|---|
-| 🤖 | **Envoy MCP Server** | 53 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
+| 🤖 | **Envoy MCP Server** | 54 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
 | 📄 | **TDN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdn` file. |
 | 📦 | **Automatic Restoration** | Externalized files are written on save, so any COMP can be recovered from disk. By default (Export-on-Save) the `.toe` stays authoritative on open; switch to Roundtrip mode to rebuild TDN-strategy COMPs from `.tdn` on every open. |
 | 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
@@ -172,7 +172,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **104 test suites** (2,357 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **108 test suites** (2,400 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -203,6 +203,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.159**: **Field-report triage** — `remove_externalization_tag` had been a DEAD MCP tool since v6.0.154 (its wrapper always forwarded `delete_file`; the handler took only `op_path`, so every call returned a TypeError) and shipped through two releases green, because no test had ever invoked a registered tool wrapper — now fixed and permanently guarded by a **tool-schema conformance** suite that checks all 54 tools for three directions of wrapper/handler drift. Closed a **silent `.tdn` deletion on every save**: `checkOpsForContinuity` used a bare `op()`, which cannot resolve a utility `annotateCOMP`, so a legacy row at an annotation read as a vanished operator. **TDN sequence export** now discovers via `target.seq` (pars-based discovery misses sequences on an uncooked POP) and can no longer emit an unimportable `name: []`. Plus `.gitignore` duplicate-header consolidation, two silent config migrations that had never run, and a `crash_detected` flag that stuck forever after an external TD relaunch. **2,400 tests** (108 suites).
 - **6.0.157**: **Per-session bridge routing** — each session's bridge pins to a TD instance by name (registry churn can't re-target it; a pinned instance's port change still self-heals), `switch_instance` moves only the calling session (`all_sessions=true` + `active_epoch` for the explicit whole-user move), and registration is adopt-if-vacant — a fresh instance can no longer yank every live session's bridge (verified live: second instance registered, five sessions, zero bridges moved). Worktree tasks get **durable claims** (survive session death + Envoy restarts, visible via `get_sessions.worktrees`) and the new **`preflight_landing`** tool checks a worktree diff against main-tree dirt, peer territory, and unsaved TDN state before landing. Undo-block guard self-heals a severed begin/end pair. **2,357 tests** (104 suites).
 - **6.0.156**: **AI-guidance context overhaul** — the heaviest always-loaded rules become slim invariants with full recipes relocated into the on-demand skills that load at point of use (`/create-operator` gains the canonical positioning recipe and covers all creation/movement; `/td-api-reference` gains referencing patterns, cook-model gotchas, and a Heavy-Build Safety section), cutting resident context ~50%. Envoy tool docstrings now state their skill prerequisites and 7 parameters became schema-enforced `Literal` enums (documented values unchanged). A 5-reviewer line-level conflict audit fixed 11 drifts across rules/skills (glslMAT docks vertex/pixel/info, time-dependent cook-model, absolute-path examples, TDN YAML wording, `project.dirty` -> `project.modified`, ...). Smoke harness fails loud on locked cleanup. **2,337 tests** (104 suites).
 - **6.0.154**: **Large TDN exports get a progress dialog** — `ExportNetworkAsync` (behind the toolbar export button, the export shortcut, and whole-project TDN export) now opens a small centered window for exports of >= 500 operators: title, a live `N / total operators (pct)` status line, a progress bar, and a **Cancel** button (consumed on the next batch boundary — no file written, worker unwinds clean). The work was already batched across frames (now tunable via `batch_size`), so TD stays responsive — verified live at **10,260 operators** (held 60fps) and a 3,060-op content-heavy network that serialized to a 3 MB `.tdn`, where a synchronous export blocks ~1.5s. The completion frame no longer stacks window-teardown + tracking + list-rebuild (post-export drop burst gone). Plus two untag fixes: **TDN untag no longer leaves a ghost row** (`remove_externalization_tag` routes through `RemoveTDNEntry`, clearing the table row + `_tdn_rel_path` breadcrumb the refresh sweep kept resurrecting; new `delete_file` flag, default off), and **`externalize_op` reports the real `.tdn` filename** for `tag_type='tdn'`. **2,337 tests** (104 suites).

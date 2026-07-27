@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 24
-generator: Embody/6.0.138
+build: 25
+generator: Embody/6.0.159
 td_build: 099.2025.33070
-source_file: Embody-6.139.toe
-exported_at: '2026-07-20T11:50:55Z'
+source_file: Embody-6.159.toe
+exported_at: '2026-07-27T00:41:48Z'
 network_path: /embody/Embody/toolbar/container_right
 options:
   include_dat_content: false
@@ -53,8 +53,6 @@ operators:
     bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
     bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
   position: [600, 0]
-  storage:
-    pressed: false
   tdn_ref: embody/Embody/toolbar/container_right/pars.tdn
 - name: close
   type: textCOMP
@@ -69,8 +67,6 @@ operators:
     bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
     bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
     bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
-  storage:
-    pressed: false
   tdn_ref: embody/Embody/toolbar/container_right/close.tdn
 - name: filter
   type: textCOMP

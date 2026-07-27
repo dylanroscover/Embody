@@ -1997,14 +1997,18 @@ def connection_lost_message(state):
     """Generate an actionable error message when the connection to Envoy is lost."""
     with state:
         pid = state.td_pid
-    if pid and not is_process_alive(pid):
+    # Image-verified, like reconcile() and every other TD-pid site: the raw
+    # check false-matches an OS-RECYCLED pid, which would SET crash_detected
+    # here only for the next successful heartbeat to clear it again -- a
+    # flap between "TouchDesigner has crashed" and crash_detected=false.
+    if pid and not is_td_process_alive(pid):
         with state:
             state.crash_detected = True
         return (
             "TouchDesigner has crashed. "
             "Use the launch_td tool to restart it."
         )
-    elif pid and is_process_alive(pid):
+    elif pid and is_td_process_alive(pid):
         return (
             f"TouchDesigner is not responding but the process is still "
             f"running (PID {pid}). It may be frozen or handling a long operation."
@@ -2150,7 +2154,27 @@ def reconcile(state, on_tools_change, *, heartbeat):
                     # bridge's pin so later registry 'active' churn
                     # cannot silently re-target this session.
                     state.pinned_instance = resolved_name
-                if pid:
+                # Adopt a pid ONLY from OUR pinned instance. When the pin is
+                # missing from the registry we deliberately follow the
+                # default's URL (logged above) -- but taking its PID too
+                # would point crash detection at a foreign project's
+                # TouchDesigner. That is the normal post-crash shape, not an
+                # edge case: the registry garbage-collects dead-pid rows on
+                # every write by any peer, so our crashed instance's row
+                # disappears and this branch is exactly where we land.
+                # ...but a RENAME is not a foreign instance. Every release
+                # bumps the .toe filename, so the instance name changes
+                # (Embody-6.157 -> Embody-6.159) and the pin goes stale on
+                # the very next open. If the resolved instance answers on
+                # the port we are already talking to, it IS our instance
+                # under a new name -- adopting its pid is correct, and
+                # refusing would silently degrade crash detection after
+                # every single release. A genuinely foreign instance is on
+                # a different port, so this stays closed to it.
+                same_endpoint = bool(
+                    port and state.url
+                    and state.url.endswith(f':{port}/mcp'))
+                if pid and (not pin or resolved_name == pin or same_endpoint):
                     state.td_pid = pid
                 if resolved_name != state.active_name:
                     state.active_name = resolved_name
@@ -2181,20 +2205,88 @@ def reconcile(state, on_tools_change, *, heartbeat):
         url = state.url
         was_connected = state.connected
         td_pid = state.td_pid
+        cfg_path = state.config_path
+        pinned = state.pinned_instance
 
     is_up = ping_backend_mcp(url) if url else False
-    pid_alive = is_process_alive(td_pid) if td_pid else False
+    # Image-verified, matching every other TD-pid liveness site (1201,
+    # 1289, 1500-1501, 2319): a raw is_process_alive can false-match an
+    # OS-RECYCLED pid and suppress genuine crash detection.
+    pid_alive = is_td_process_alive(td_pid) if td_pid else False
 
     became_connected = (not was_connected) and is_up
     became_disconnected = was_connected and not is_up
+
+    # Envoy answers but the pid we track is gone. Two very different
+    # causes: TD was relaunched outside the bridge (recoverable), or a
+    # FOREIGN instance now holds this port (must NOT be adopted).
+    stale_pid_while_up = bool(is_up and td_pid and not pid_alive)
+
+    # Re-resolve OUR pinned instance only. Passing pin=None here would
+    # fall through to the registry's global 'active' default and bind this
+    # session's tracked pid to a DIFFERENT project's TouchDesigner -- the
+    # documented bridge-mistarget failure, and worse than the bug being
+    # fixed: is_td_process_alive would then read True for a stranger and
+    # genuine crash detection for the pinned TD would be suppressed
+    # forever. The canonical resolve in Phase 1 passes the pin; so does this.
+    recovered_pid = None
+    if stale_pid_while_up:
+        try:
+            _port, _rpid, _rname = _resolve_from_registry(
+                load_config(cfg_path), None, pin=pinned)
+            # `_rname` must be a REAL registry instance. Without it, a
+            # bridge with no pin (empty/old-format registry) falls through
+            # to _resolve_from_registry's find_td_pid() fallback and adopts
+            # an arbitrary TouchDesigner on the machine -- exactly what
+            # that function's own comment refuses to do.
+            if (_rpid and _rpid != td_pid and _rname
+                    and (not pinned or _rname == pinned)):
+                recovered_pid = _rpid
+        except Exception:
+            recovered_pid = None
 
     with state:
         state.connected = is_up
         if is_up:
             state.last_heartbeat_ok = time.time()
             state.last_connected_time = time.time()
-        if not pid_alive and td_pid:
+            if recovered_pid:
+                state.td_pid = recovered_pid
+            # Clear ONLY when the live socket is attributable to OUR
+            # instance -- either the tracked pid is alive, or we just
+            # re-resolved our own pin to a live one. A foreign TD holding
+            # the port must never erase a genuine crash flag.
+            if pid_alive or recovered_pid:
+                # Without this the flag was not merely left over: with
+                # td_pid still naming the dead process, the branch below
+                # RE-ASSERTED it every heartbeat tick, so get_td_status
+                # reported a crash forever after a TD relaunch made
+                # outside the bridge (launch_td / restart_td were the only
+                # things that ever cleared it).
+                state.crash_detected = False
+        # UNCHAINED from `is_up` on purpose. Our TD dying IS a crash whether
+        # or not something answers the port -- and something usually does
+        # within one heartbeat, because Envoy's port scanner hands the
+        # just-freed port to the next instance. Written first as an `elif`
+        # here, this branch only ran when the ping FAILED, so that race
+        # meant the crash was never recorded at all: the mirror image of
+        # the stuck-flag bug this release set out to fix. The clear above
+        # already ran for the attributable cases, so this cannot undo it.
+        if td_pid and not pid_alive and not recovered_pid:
             state.crash_detected = True
+
+    # Log on TRANSITIONS only. An unconditional log here would fire every
+    # heartbeat tick for as long as the condition holds -- the same
+    # unbounded-repetition failure this release fixes for annotation
+    # warnings.
+    if recovered_pid:
+        log(f"Tracked TD pid {td_pid} is gone but Envoy answers; "
+            f"re-resolved to pid {recovered_pid} for pinned instance "
+            f"'{pinned}'")
+    elif stale_pid_while_up and became_connected:
+        log(f"Tracked TD pid {td_pid} is not alive yet Envoy answers on "
+            f"{url} -- possible foreign instance holding this port; "
+            f"crash state left untouched")
 
     # --- Proactive TD process discovery ---
     # Detect new TD processes that appeared since the last heartbeat.

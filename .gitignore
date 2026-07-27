@@ -34,6 +34,7 @@ logs/
 **/.embody/*
 !**/.embody/project.json
 .envoy-tools-cache.json
+opencode.json
 
 # Other AI clients' generated configs. This repo's own AI client is Claude Code
 # (.claude/, CLAUDE.md, AGENTS.md are committed -- .claude/ is the source of
@@ -73,6 +74,3 @@ dev/_promo*
 .embody/*
 !.embody/project.json
 dev/embody/ext-diet-baseline/
-
-# Embody / Envoy (auto-managed)
-opencode.json

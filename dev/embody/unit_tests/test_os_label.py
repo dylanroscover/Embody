@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: OS label resolution in EmbodyExt.
 
 TouchDesigner's app.osVersion reports "10" on Windows 11 (both share NT 10.0).

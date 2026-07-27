@@ -106,6 +106,74 @@ class TestVersionSync(EmbodyTestCase):
         self.assertFalse(changed)
         self.assertEqual(new_text, text)
 
+    # ------------------------------------------------------------------
+    # MCP tool count (NOT automated by the save hook -- hence this guard)
+    # ------------------------------------------------------------------
+
+    def _registered_tool_count(self):
+        """Count @self.mcp.tool() wrappers in EnvoyExt.py.
+
+        Static, so it needs no worker-thread access (the FastMCP server
+        object is None on the main thread). Cross-checked against the
+        bridge's on-disk tools cache when this guard was written:
+        58 advertised = 54 TD-side + 4 bridge meta-tools.
+        """
+        import ast
+        src = Path(project.folder) / 'embody' / 'Embody' / 'EnvoyExt.py'
+        tree = ast.parse(src.read_text(encoding='utf-8'))
+        count = 0
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            for dec in getattr(node, 'decorator_list', []):
+                f = dec.func if isinstance(dec, ast.Call) else dec
+                if isinstance(f, ast.Attribute) and f.attr == 'tool':
+                    count += 1
+                    break
+        return count
+
+    def test_mcp_tool_count_claims_match_reality(self):
+        """The user-facing tool count must match the registered tools.
+
+        Unlike the version badge, updateVersionDocs does NOT rewrite this
+        number, and nothing asserted it -- so it silently drifted to 53
+        while 54 tools were registered (found during the v6.0.158 triage).
+        Counts the TD-side tools only; the 4 bridge meta-tools are
+        documented separately under "Bridge Meta-Tools".
+        """
+        actual = self._registered_tool_count()
+        self.assertGreater(actual, 40, 'sanity: tool collector found almost '
+                                       'nothing, so the assert below would '
+                                       'be meaningless')
+        claims = []
+        readme = self._read('README.md')
+        m = re.search(r'badge/MCP_tools-(\d+)-', readme)
+        self.assertIsNotNone(m, 'MCP tools badge missing from README')
+        claims.append(('README badge', int(m.group(1))))
+        # Every published surface that states a present-tense count. The
+        # first version of this guard checked only README + docs/index.md
+        # and therefore missed three live claims on the MkDocs site.
+        for label, text in (
+                ('README.md', readme),
+                ('docs/index.md', self._read('docs', 'index.md')),
+                ('docs/envoy/index.md',
+                 self._read('docs', 'envoy', 'index.md')),
+                ('docs/envoy/tools-reference.md',
+                 self._read('docs', 'envoy', 'tools-reference.md'))):
+            for line in text.splitlines():
+                # Release-history bullets state the count as it was for
+                # THAT version ("~34 tools" in the v6.0.145 entry) and must
+                # never be rewritten -- only present-tense claims count.
+                if line.lstrip().startswith('- **'):
+                    continue
+                for n in re.findall(r'\b(\d+) (?:MCP )?tools\b', line):
+                    claims.append((f'{label} prose', int(n)))
+        wrong = [(where, n) for where, n in claims if n != actual]
+        self.assertEqual(
+            [], wrong,
+            f'{len(wrong)} user-facing tool-count claim(s) disagree with the '
+            f'{actual} registered tools: {wrong}')
+
     def test_badge_regexes_hit_current_readme(self):
         # The anchors/regexes in updateVersionDocs must keep matching the
         # real README -- if the badge markup is ever restyled, this fails

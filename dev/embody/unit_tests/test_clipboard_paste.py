@@ -372,7 +372,29 @@ class TestClipboardPasteRouting(EmbodyTestCase):
         super().tearDown()
 
     def _set_clipboard(self, text):
-        ui.clipboard = text
+        """Write the system clipboard and VERIFY the write stuck.
+
+        `ui.clipboard` is the real OS clipboard, shared with every process
+        on the machine, so anything (another app, clipboard history, a
+        developer's own tooling) can clobber it between this write and the
+        read inside `_planPasteFromClipboard`. That race made this suite
+        fail intermittently in full runs -- surfacing as a bare
+        `{'ok': False, 'reason': 'no_tdn'}` that looks like a routing bug
+        and gives no hint of the real cause (observed 2026-07-26; the same
+        suite passes 42/42 in isolation).
+
+        Retry briefly, then fail with the ACTUAL reason. A narrow race
+        remains between returning here and the read under test -- if that
+        ever fires, the assertion message below is the thing to trust.
+        """
+        for _ in range(5):
+            ui.clipboard = text
+            if ui.clipboard == text:
+                return
+        self.fail(
+            'the system clipboard could not be set reliably -- another '
+            'process on this machine is overwriting it. This is an '
+            'environment problem, not a paste-routing failure.')
 
     def _safe_import(self):
         coll = self.embody.op('Collection')
@@ -398,8 +420,22 @@ class TestClipboardPasteRouting(EmbodyTestCase):
 
     def test_own_envelope_routes_direct(self):
         env = self.m.wrap_tdn(_sample_tdn(), source='embody', slug='widget')
-        self._set_clipboard(self.m.to_clipboard_str(env))
+        wrote = self.m.to_clipboard_str(env)
+        self._set_clipboard(wrote)
         plan = self.tdn_ext._planPasteFromClipboard()
+        if not plan.get('ok'):
+            # DIAGNOSTIC: this failed intermittently in full runs while
+            # passing in isolation. A bare reason='no_tdn' cannot tell a
+            # clipboard clobber from a routing bug, so capture what the
+            # clipboard actually held at read time.
+            now = ui.clipboard or ''
+            self.fail(
+                f'plan={plan!r}\n'
+                f'  wrote len={len(wrote)} head={wrote[:70]!r}\n'
+                f'  clipboard-at-read len={len(now)} head={now[:70]!r}\n'
+                f'  identical={now == wrote}\n'
+                f'  unwrap(now)={self.m.unwrap_clipboard(now) is not None}\n'
+                f'  unwrap(wrote)={self.m.unwrap_clipboard(wrote) is not None}')
         self.assertTrue(plan.get('ok'), msg=repr(plan))
         self.assertEqual(plan['source'], 'embody')
         self.assertEqual(plan['mode'], 'direct')

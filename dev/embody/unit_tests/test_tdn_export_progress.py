@@ -23,6 +23,25 @@ class TestTDNExportProgress(EmbodyTestCase):
         # Never leave a fake export state behind -- it would make the next
         # real ExportNetworkAsync refuse ("export already in progress").
         self.tdn._export_state = None
+        # Reset the dialog's transient UI state. These are ordinary
+        # parameters on COMPs INSIDE Embody, so anything left here is
+        # captured by Embody's own .tdn export and committed:
+        # test_update_progress_guarded writes a sandbox-named label, and
+        # 'sandbox_test_tdn_export_progress -- 400 / 1,000 operators (40%)'
+        # sat in the repository across several releases because of it.
+        # (_closeExportProgress resets these too, but this suite drives
+        # _updateExportProgress directly and never closes.)
+        try:
+            dlg = self.embody.op('tdn_export_progress')
+            if dlg:
+                status = dlg.op('dialog/status')
+                if status:
+                    status.par.text = status.par.text.default
+                fill = dlg.op('dialog/bar_bg/bar_fill')
+                if fill:
+                    fill.par.w = fill.par.w.default
+        except Exception:
+            pass
         super().tearDown()
 
     def _fakeState(self, total=1000, index=400):

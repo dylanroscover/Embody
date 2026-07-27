@@ -53,7 +53,7 @@ OpenCode (opencode.ai) never reads `.mcp.json` - it uses `opencode.json`, auto-g
 ## Envoy (MCP server)
 
 - [Envoy setup](https://dylanroscover.github.io/Embody/envoy/setup/): enable Envoy, install deps, start the local server.
-- [Tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/): full catalog of the 53 MCP tools plus 4 bridge meta-tools (`get_td_status`, `launch_td`, `restart_td`, `switch_instance`).
+- [Tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/): full catalog of the 54 MCP tools plus 4 bridge meta-tools (`get_td_status`, `launch_td`, `restart_td`, `switch_instance`).
 - [Claude Code integration](https://dylanroscover.github.io/Embody/envoy/claude-code/): Claude Code and OpenCode are auto-configured; Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot via VS Code, or any MCP-compatible client also work.
 - [Local models & open clients](https://dylanroscover.github.io/Embody/envoy/local-models/): drive Envoy from OpenCode with local models (LM Studio, Ollama, llama.cpp) - model picks by hardware tier, serving guardrails, and a lean tool profile for small context windows.
 

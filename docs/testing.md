@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **92 test suites** and **2,092 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **108 test suites** and **2,400 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -39,7 +39,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 
 ## Test Coverage
 
-### Core Embody (30 suites, 458 tests)
+### Core Embody (35 suites, 577 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -48,22 +48,22 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_tag_management` | 29 | Tagging operators for externalization |
 | `test_rename_move_lifecycle` | 26 | Rename and move tracking |
 | `test_crud_operators` | 21 | Create, read, update, delete operations |
-| `test_git_status` | 20 | Git status / uncommitted-file detection |
+| `test_git_status` | 23 | Git status / uncommitted-file detection |
 | `test_param_tracker` | 20 | Parameter change tracking |
-| `test_v6_hardening` | 20 | v6 community-paste + strip/restore hardening |
+| `test_v6_hardening` | 22 | v6 community-paste + strip/restore hardening |
 | `test_ancestor_rename` | 19 | Ancestor-rename detection and folder migration |
-| `test_path_utils` | 18 | Path normalization and utilities |
-| `test_autosave` | 18 | Auto-save checkpoint engine (skip_cleanup, idle-settle drain, crash recovery, gates) |
-| `test_tag_lifecycle` | 17 | Tag application and removal |
-| `test_delete_cleanup` | 16 | Deletion and file cleanup |
+| `test_path_utils` | 20 | Path normalization and utilities |
+| `test_autosave` | 19 | Auto-save checkpoint engine (skip_cleanup, idle-settle drain, crash recovery, gates) |
+| `test_tag_lifecycle` | 18 | Tag application and removal |
+| `test_delete_cleanup` | 17 | Deletion and file cleanup |
 | `test_auto_externalize` | 16 | Auto-externalization flow and eligible operator handling |
 | `test_shortcuts` | 48 | Editable keyboard shortcuts: combo normalization, dispatch, TD reserved-list parsing, duplicate blocking, recorder state machine, parexec handlers, persistence whitelist |
-| `test_strategy_handlers` | 15 | TOX/TDN strategy switch, remove, DAT convert |
+| `test_strategy_handlers` | 22 | TOX/TDN strategy switch, remove, DAT convert |
 | `test_issue21_safe_cell` | 14 | Safe table-cell handling |
 | `test_glsl_externalize` | 11 | GLSL shader auto-externalization |
-| `test_setup_wizard` | 10 | Setup Wizard flow and first-run prompts |
-| `test_toxdrop_expr` | 10 | Dropped `.tox` expression cleanup choices |
-| `test_layout_lint` | 10 | `execute_python` layout-warning linting |
+| `test_setup_wizard` | 19 | Setup Wizard flow and first-run prompts |
+| `test_toxdrop_expr` | 15 | Dropped `.tox` expression cleanup choices |
+| `test_layout_lint` | 16 | `execute_python` layout-warning linting |
 | `test_logging` | 10 | Logging system and ring buffer |
 | `test_advanced_guard` | 9 | Advanced-mode and guarded operation behavior |
 | `test_externalization` | 9 | Externalization lifecycle |
@@ -73,17 +73,21 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_update_sync` | 7 | Sync between .toe and externalized files |
 | `test_operator_queries` | 6 | Operator discovery and queries |
 | `test_embody_mode_guard` | 5 | Mode guard behavior around Embody operations |
-| `test_settings_persistence` | 3 | Settings serialization (byte-stable, sorted keys) |
+| `test_settings_persistence` | 4 | Settings serialization (byte-stable, sorted keys) |
+| `test_annotation_guards` | 20 | Annotations and their internals are never tagged, externalized, tracked, or enumerated as per-op boundaries |
+| `test_component_presentation` | 3 | Shipped-component presentation invariants |
+| `test_verify_upgrade` | 3 | Upgrade-path validation (the removed Skip/Re-scan dialog) |
+| `test_annotate_continuity` | 7 | Continuity sweep vs utility `annotateCOMP` rows: bare `op()` cannot resolve a utility annotate, so a legacy row at one read as a vanished operator and had its row + `.tdn` deleted on every save |
 
-### MCP Tools (17 suites, 243 tests)
+### MCP Tools (20 suites, 293 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_envoy_tool_guards` | 29 | Envoy tool safety guards (undo blocks, parameter guards/search, rollback, docs, sample grid) |
+| `test_envoy_tool_guards` | 35 | Envoy tool safety guards (undo blocks, parameter guards/search, rollback, docs, sample grid) |
 | `test_recovery_hints` | 15 | Recovery-hint match table vs. real error strings + the additive `_attachRecoveryHints` decorator |
-| `test_mcp_externalization` | 22 | Embody integration via MCP (tag, save, status) |
+| `test_mcp_externalization` | 24 | Embody integration via MCP (tag, save, status) |
 | `test_mcp_operators` | 20 | Create, delete, copy, rename, query, find |
-| `test_mcp_annotations` | 21 | Creating and managing annotations |
+| `test_mcp_annotations` | 31 | Creating and managing annotations |
 | `test_mcp_dat_content` | 19 | DAT text/table ops + surgical `edit_dat_content` + wipe guards |
 | `test_mcp_diagnostics` | 16 | Error checking, class introspection, module help, log retrieval |
 | `test_mcp_flags_position` | 16 | Operator flags, positioning, and `get_network_layout` |
@@ -96,29 +100,34 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_mcp_code_execution` | 7 | Executing Python in TD |
 | `test_mcp_extensions` | 6 | Extension creation and setup |
 | `test_mcp_performance` | 5 | Per-operator performance monitoring |
+| `test_tool_permissions` | 15 | Tool-permissions posture writer (EnvoyExt) |
+| `test_envoy_viz_gates` | 9 | Issue-57 viz activation gates in `envoy_viz` |
+| `test_envoy_tool_schema` | 8 | Tool-wrapper/handler signature conformance across every registered MCP tool (forwarded-but-unaccepted, required-but-unforwarded, advertised-but-ignored, duplicate dispatch). Static AST analysis -- invokes no tools |
 
-### TDN Format (18 suites, 641 tests)
+### TDN Format (20 suites, 692 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_tdn_reconstruction` | 208 | Reconstruction round-trip fidelity |
 | `test_tdn_file_io` | 92 | TDN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
-| `test_tdn_helpers` | 53 | TDN serialization utility functions |
-| `test_tdn_export_import` | 44 | Network export/import + storage round-trip |
+| `test_tdn_helpers` | 67 | TDN serialization utility functions |
+| `test_tdn_export_import` | 48 | Network export/import + storage round-trip |
 | `test_tdn_crash_safety` | 35 | Atomic writes, backup rotation, validation |
 | `test_tdn_sequences` | 27 | Parameter / operator sequence round-trip |
 | `test_tdn_diff_engine` | 25 | TDN structural diff engine |
-| `test_tdn_palette_catalog` | 23 | Palette-clone detection and handling |
+| `test_tdn_palette_catalog` | 32 | Palette-clone detection and handling |
 | `test_tdn_exclude` | 21 | `tdn_exclude` tag (app-managed subtree invisibility) |
 | `test_tdn_stability_hardening` | 21 | Import validation, DAT editability capture, flag defaults, stale cleanup, orphan shell recovery |
 | `test_tdn_mode` | 15 | Tdnmode gating (off / export / full) |
-| `test_dat_restoration` | 14 | DAT restoration from disk on startup |
+| `test_dat_restoration` | 20 | DAT restoration from disk on startup |
 | `test_tdn_safety_guards` | 14 | At-risk storage / callback-DAT protection |
 | `test_tdn_yaml` | 14 | TDN v2.0 YAML emitter / parser |
 | `test_tdn_diff` | 11 | `diff_tdn` tool (live-vs-disk, project-wide) |
-| `test_tdn_fingerprint` | 11 | Param-aware dirty detection (fingerprint) |
-| `test_tdn_annotation_export` | 7 | Annotation-only `.tdn` export (annotateCOMP not double-captured) |
+| `test_tdn_fingerprint` | 14 | Param-aware dirty detection (fingerprint) |
+| `test_tdn_annotation_export` | 10 | Annotation-only `.tdn` export (annotateCOMP not double-captured) |
 | `test_tdn_external_connections` | 6 | External wire capture/restore across strip |
+| `test_tdn_export_progress` | 6 | Chunked TDN export progress dialog + cancellation (and that it leaves no transient state behind) |
+| `test_tdn_roundtrip_invariant` | 6 | Writer/reader contract: the exporter must never emit a document its own importer rejects (no empty sequence lists, no sequence silently dropped from an uncooked POP) |
 
 ### Community & Collection (6 suites, 123 tests)
 
@@ -131,23 +140,25 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_collection_pure` | 14 | Pure-value-expression preservation (live-if-clean) |
 | `test_clipboard_watch` | 8 | Clipboard watcher poll + gating (incl. outbound-copy suppression) |
 
-### Envoy Server & Bridge (10 suites, 407 tests)
+### Envoy Server & Bridge (13 suites, 519 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_envoy_bridge` | 156 | STDIO bridge: forwarding, reconciler, registry, meta-tools |
+| `test_envoy_bridge` | 193 | STDIO bridge: forwarding, reconciler, registry, meta-tools, and `crash_detected` lifecycle TRANSITIONS (reconnect clears, pid re-resolution honours the session pin, a foreign instance on the port never clears a real crash) |
 | `test_claude_config` | 84 | AI client config generation (Claude/Codex/Gemini/Cursor/Windsurf/GitHub Copilot) |
 | `test_envoy_sessions` | 46 | Multi-session awareness, scope claims, peer advisories, destructive-operation gates |
-| `test_server_lifecycle` | 22 | Envoy MCP server start/stop |
-| `test_envoy_watchdog` | 21 | Envoy liveness watchdog (revive on dropped socket / save) |
-| `test_version_sync` | 6 | Version badge / minimum-build statements stay in lock-step with `par.Version` and `app.build` |
+| `test_server_lifecycle` | 24 | Envoy MCP server start/stop |
+| `test_envoy_watchdog` | 32 | Envoy liveness watchdog (revive on dropped socket / save) |
+| `test_version_sync` | 7 | Version badge / minimum-build statements stay in lock-step with `par.Version` and `app.build` |
 | `test_envoy_thread_comm` | 20 | Worker/main thread queues and throttling |
 | `test_launch_aiclient` | 42 | Launch AI Client launcher (launch table with per-OS install specs, CLI resolution, `.command`/`.bat` generation, missing-CLI install guards and their shell escaping, failure dialogs, env sanitization) |
-| `test_envoy_setup_environment` | 18 | MCP import verification (pydantic_core safety) |
+| `test_envoy_setup_environment` | 20 | MCP import verification (pydantic_core safety) |
 | `test_envoy_registry` | 17 | Instance registry and PID liveness |
+| `test_opencode_config` | 17 | OpenCode client config writer (`envoy_setup.write_opencode_config`) |
+| `test_agent_runner` | 13 | AGENT-tier runner machinery in TestRunnerExt (the runner itself, no LLM) |
 | `test_envoy_lifecycle_hardening` | 4 | Save/reinit lifecycle hardening |
 
-### Install, Uninstall & Release (8 suites, 93 tests)
+### Install, Uninstall & Release (11 suites, 190 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -157,8 +168,11 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_uninstall_preview` | 10 | Uninstall preview plan and protected-file handling |
 | `test_uninstall_handler` | 5 | Uninstall pulse confirm gate (cancel/suppress/confirm/review) |
 | `test_catalog_bootstrap_palette` | 10 | Bootstrap palette table parsing + build coverage |
-| `test_catalog_palette_scan` | 6 | Palette scan time-state snapshot/restore |
-| `test_template_sync` | 5 | Template map, disk, release-table, and orphan allowlist sync |
+| `test_catalog_palette_scan` | 39 | Palette scan time-state snapshot/restore |
+| `test_template_sync` | 6 | Template map, disk, release-table, and orphan allowlist sync |
+| `test_release_hooks` | 34 | `ExportPortableTox` release hooks (issue #74) |
+| `test_updater` | 20 | UpdaterExt self-update logic (no network, no swap) |
+| `test_config_migration` | 9 | Repo-config writers across a VERSION BUMP -- the migration axis a single-run test cannot see (duplicate managed headers, block consolidation that never swallows user content, `.gitattributes` backfill, the order-dependent `.embody/*` / `!.embody/project.json` pair) |
 
 ## Execution Modes
 

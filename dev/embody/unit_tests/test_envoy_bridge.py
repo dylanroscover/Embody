@@ -2035,6 +2035,354 @@ class TestBridgeConnectionLostMessage(EmbodyTestCase):
 
 
 # =====================================================================
+# crash_detected lifecycle -- TRANSITIONS, not just states
+# =====================================================================
+
+class TestBridgeCrashFlagLifecycle(EmbodyTestCase):
+    """The existing crash tests assert two STATES (dead pid -> flag set;
+    restart_td -> flag cleared). The v6.0.157 field report hit a
+    TRANSITION neither covered: the flag was set, then TD was relaunched
+    OUTSIDE the bridge and the reconciler reattached.
+
+    Before the fix that was worse than stale -- with state.td_pid still
+    naming the dead process, reconcile() re-asserted crash_detected on
+    every heartbeat tick, so get_td_status reported a crash forever while
+    TD was alive, reachable and healthy.
+    """
+
+    REGISTRY = {'active': 'proj', 'instances': {
+        'proj': {'port': 9870, 'td_pid': 4242, 'toe_path': 't.toe'}}}
+
+    def _state(self):
+        return bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', td_pid=1234,
+            config_path='/tmp/envoy.json')
+
+    def test_reconnect_clears_a_stale_crash_flag(self):
+        state = self._state()
+        with state:
+            state.crash_detected = True
+            state.connected = False
+        # Old pid dead, the relaunched instance's registered pid alive --
+        # the only shape in which the flag SHOULD clear. (Mocking every
+        # pid dead would mean we cannot attribute the live socket to our
+        # own instance, and the flag deliberately survives that.)
+        with patch.object(bridge, 'ping_backend_mcp', return_value=True), \
+             patch.object(bridge, 'is_td_process_alive',
+                          side_effect=lambda pid: pid == 4242), \
+             patch.object(bridge, 'load_config', return_value=self.REGISTRY), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'fetch_tools_list', return_value=None), \
+             patch.object(bridge, 'save_tools_cache'):
+            bridge.reconcile(state, None, heartbeat=True)
+        with state:
+            self.assertFalse(
+                state.crash_detected,
+                'a successful reconnect must clear the crash flag')
+
+    def test_reconnect_reresolves_the_tracked_pid(self):
+        """The dead pid must be replaced from the registry, or the flag
+        would simply be re-asserted on the next tick."""
+        state = self._state()
+        # The real scenario: the pid we track (1234) is gone, the pid the
+        # relaunched instance registered (4242) is alive.
+        with patch.object(bridge, 'ping_backend_mcp', return_value=True), \
+             patch.object(bridge, 'is_td_process_alive',
+                          side_effect=lambda pid: pid == 4242), \
+             patch.object(bridge, 'load_config', return_value=self.REGISTRY), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'fetch_tools_list', return_value=None), \
+             patch.object(bridge, 'save_tools_cache'):
+            bridge.reconcile(state, None, heartbeat=True)
+        with state:
+            self.assertEqual(
+                4242, state.td_pid,
+                'td_pid must be re-resolved from the registry, not left '
+                'pointing at the dead process')
+
+    TWO_INSTANCE_REGISTRY = {'active': 'projB', 'instances': {
+        'projA': {'port': 9870, 'td_pid': 7001, 'toe_path': 'a.toe'},
+        'projB': {'port': 9871, 'td_pid': 8002, 'toe_path': 'b.toe'}}}
+
+    def test_stale_pid_never_adopts_a_foreign_instance(self):
+        """REGRESSION: re-resolving without the pin bound this session's
+        tracked pid to a DIFFERENT project's TD. is_td_process_alive would
+        then read True for a stranger and suppress genuine crash detection
+        for the pinned instance forever."""
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', td_pid=1234,
+            config_path='/tmp/envoy.json')
+        with state:
+            state.pinned_instance = 'projA'
+        # Our pinned instance (projA, pid 7001) is ALSO dead; the
+        # registry's global default projB (pid 8002) is alive.
+        with patch.object(bridge, 'ping_backend_mcp', return_value=True), \
+             patch.object(bridge, 'is_td_process_alive',
+                          side_effect=lambda pid: pid == 8002), \
+             patch.object(bridge, 'load_config',
+                          return_value=self.TWO_INSTANCE_REGISTRY), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'fetch_tools_list', return_value=None), \
+             patch.object(bridge, 'save_tools_cache'):
+            bridge.reconcile(state, None, heartbeat=True)
+        with state:
+            self.assertNotEqual(
+                8002, state.td_pid,
+                "must never adopt the global 'active' instance's pid while "
+                "pinned to another instance")
+            self.assertEqual(1234, state.td_pid)
+
+    def test_foreign_instance_on_port_does_not_clear_crash_flag(self):
+        """A stranger answering our port must not erase a real crash."""
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', td_pid=1234,
+            config_path='/tmp/envoy.json')
+        with state:
+            state.pinned_instance = 'projA'
+            state.crash_detected = True
+        with patch.object(bridge, 'ping_backend_mcp', return_value=True), \
+             patch.object(bridge, 'is_td_process_alive',
+                          side_effect=lambda pid: pid == 8002), \
+             patch.object(bridge, 'load_config',
+                          return_value=self.TWO_INSTANCE_REGISTRY), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'fetch_tools_list', return_value=None), \
+             patch.object(bridge, 'save_tools_cache'):
+            bridge.reconcile(state, None, heartbeat=True)
+        with state:
+            self.assertTrue(
+                state.crash_detected,
+                'our TD is still dead -- a foreign instance holding the '
+                'port must not clear the flag')
+
+    def test_crash_detected_even_when_something_answers_the_port(self):
+        """Our TD dying IS a crash even if the port still answers.
+
+        Envoy's port scanner hands a just-freed port to the next instance,
+        so a sibling can be answering within one heartbeat. An earlier fix
+        chained this branch to `is_up` as an elif, which meant the crash
+        was never recorded in exactly that race.
+        """
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', td_pid=1234,
+            config_path='/tmp/envoy.json')
+        with state:
+            state.pinned_instance = 'projA'
+            state.crash_detected = False
+        # Ping succeeds (a stranger holds the port); OUR pid is dead and
+        # our pinned instance is not recoverable.
+        with patch.object(bridge, 'ping_backend_mcp', return_value=True), \
+             patch.object(bridge, 'is_td_process_alive',
+                          side_effect=lambda pid: pid == 8002), \
+             patch.object(bridge, 'load_config',
+                          return_value=self.TWO_INSTANCE_REGISTRY), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'fetch_tools_list', return_value=None), \
+             patch.object(bridge, 'save_tools_cache'):
+            bridge.reconcile(state, None, heartbeat=True)
+        with state:
+            self.assertTrue(
+                state.crash_detected,
+                'a dead tracked pid must register as a crash even while '
+                'the port answers')
+
+    def test_pinned_instance_recovery_is_exercised(self):
+        """The pinned-POSITIVE recovery path.
+
+        Both 'reconnect' tests leave pinned_instance unset, so they take
+        the `not pinned` escape hatch and never exercise `_rname == pinned`
+        -- which is the production path, since Phase 1 always adopts a pin.
+        Without this test, removing `pin=pinned` from the resolve call
+        leaves the whole suite green while real recovery regresses.
+        """
+        registry = {'active': 'projB', 'instances': {
+            'projA': {'port': 9870, 'td_pid': 7003, 'toe_path': 'a.toe'},
+            'projB': {'port': 9871, 'td_pid': 8002, 'toe_path': 'b.toe'}}}
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', td_pid=1234,
+            config_path='/tmp/envoy.json')
+        with state:
+            state.pinned_instance = 'projA'
+            state.crash_detected = True
+        # projA (our pin) relaunched as 7003 and is alive; the registry
+        # default names projB. We must follow OUR pin, not the default.
+        with patch.object(bridge, 'ping_backend_mcp', return_value=True), \
+             patch.object(bridge, 'is_td_process_alive',
+                          side_effect=lambda pid: pid in (7003, 8002)), \
+             patch.object(bridge, 'load_config', return_value=registry), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'fetch_tools_list', return_value=None), \
+             patch.object(bridge, 'save_tools_cache'):
+            bridge.reconcile(state, None, heartbeat=True)
+        with state:
+            self.assertEqual(
+                7003, state.td_pid,
+                'must recover OUR pinned instance, not the registry default')
+            self.assertFalse(
+                state.crash_detected,
+                'recovering our own pin clears the crash flag')
+
+    def test_gc_dropped_pin_does_not_adopt_the_default_instance(self):
+        """The REAL post-crash shape, and the one the name guard exists for.
+
+        The registry garbage-collects dead-pid rows on every write by any
+        peer TD, so after our instance crashes its row is GONE. Resolution
+        then falls through to the registry default -- a different, live
+        project. Neither its URL nor its pid may become our crash signal.
+        """
+        registry = {'active': 'projB', 'instances': {
+            'projB': {'port': 9871, 'td_pid': 8002, 'toe_path': 'b.toe'}}}
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', td_pid=1234,
+            config_path='/tmp/envoy.json')
+        with state:
+            state.pinned_instance = 'projA'      # GC'd out of the registry
+            state.crash_detected = False
+        with patch.object(bridge, 'ping_backend_mcp', return_value=True), \
+             patch.object(bridge, 'is_td_process_alive',
+                          side_effect=lambda pid: pid == 8002), \
+             patch.object(bridge, 'load_config', return_value=registry), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'fetch_tools_list', return_value=None), \
+             patch.object(bridge, 'save_tools_cache'):
+            bridge.reconcile(state, None, heartbeat=True)
+        with state:
+            self.assertNotEqual(
+                8002, state.td_pid,
+                "must not adopt the default instance's pid when our pinned "
+                'instance has been GC-ed out of the registry')
+            self.assertTrue(
+                state.crash_detected,
+                'our TD is dead -- a live foreign instance answering the '
+                'port must not mask that')
+
+    def test_phase1_config_reload_does_not_adopt_a_foreign_pid(self):
+        """PHASE 1 (the config-mtime reload) must not adopt a foreign pid.
+
+        Phase 1 only runs when a real config file's mtime differs from
+        state.config_mtime, so it needs a file on disk -- mocking
+        load_config alone never reaches it, which is why the Phase 1 gate
+        was untested when it was written. With our pin GC-ed out of the
+        registry the bridge deliberately follows the default's URL, but
+        taking its PID too would point crash detection at another
+        project's TouchDesigner.
+        """
+        import shutil
+        import tempfile
+        registry = {'active': 'projB', 'instances': {
+            'projB': {'port': 9871, 'td_pid': 8002, 'toe_path': 'b.toe'}}}
+        tmpdir = tempfile.mkdtemp()
+        tmp = os.path.join(tmpdir, 'envoy.json')
+        with open(tmp, 'w', encoding='utf-8') as fh:
+            json.dump(registry, fh)
+        try:
+            state = bridge.BridgeState(
+                url='http://127.0.0.1:9870/mcp', td_pid=1234,
+                config_path=tmp)
+            with state:
+                state.pinned_instance = 'projA'   # GC'd from the registry
+                state.config_mtime = 0            # force the Phase 1 reload
+                state.crash_detected = False
+            with patch.object(bridge, 'ping_backend_mcp', return_value=True), \
+                 patch.object(bridge, 'is_td_process_alive',
+                              side_effect=lambda pid: pid == 8002), \
+                 patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+                 patch.object(bridge, 'fetch_tools_list', return_value=None), \
+                 patch.object(bridge, 'save_tools_cache'):
+                bridge.reconcile(state, None, heartbeat=True)
+            with state:
+                self.assertNotEqual(
+                    8002, state.td_pid,
+                    'Phase 1 must not adopt the default instance pid while '
+                    'pinned elsewhere')
+                self.assertTrue(
+                    state.crash_detected,
+                    'our TD is dead; following a foreign URL must not clear '
+                    'the crash flag')
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_renamed_instance_on_same_port_is_still_ours(self):
+        """A version bump renames the .toe, so the pin goes stale on the
+        next open (Embody-6.157 -> Embody-6.159). If the resolved instance
+        answers on the port we are ALREADY using, it is our instance under
+        a new name -- refusing its pid would degrade crash detection after
+        every release. Observed live during the v6.0.159 smoke run.
+        """
+        import shutil
+        import tempfile
+        registry = {'active': 'Embody-6.159', 'instances': {
+            'Embody-6.159': {'port': 9872, 'td_pid': 60844,
+                             'toe_path': 'dev/Embody-6.159.toe'}}}
+        tmpdir = tempfile.mkdtemp()
+        tmp = os.path.join(tmpdir, 'envoy.json')
+        with open(tmp, 'w', encoding='utf-8') as fh:
+            json.dump(registry, fh)
+        try:
+            state = bridge.BridgeState(
+                url='http://127.0.0.1:9872/mcp', td_pid=None,
+                config_path=tmp)
+            with state:
+                state.pinned_instance = 'Embody-6.157'   # stale after rename
+                state.config_mtime = 0
+            with patch.object(bridge, 'ping_backend_mcp', return_value=True), \
+                 patch.object(bridge, 'is_td_process_alive',
+                              side_effect=lambda pid: pid == 60844), \
+                 patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+                 patch.object(bridge, 'fetch_tools_list', return_value=None), \
+                 patch.object(bridge, 'save_tools_cache'):
+                bridge.reconcile(state, None, heartbeat=True)
+            with state:
+                self.assertEqual(
+                    60844, state.td_pid,
+                    'same port => same instance, just renamed by the '
+                    'release bump; its pid must be adopted')
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_no_pin_never_adopts_an_unidentified_pid(self):
+        """With no pin and no registry, _resolve_from_registry falls back
+        to find_td_pid() -- an arbitrary TD on the machine. That must never
+        become our tracked pid, per that function's own refusal."""
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', td_pid=1234,
+            config_path='/tmp/envoy.json')
+        with state:
+            state.crash_detected = True
+        with patch.object(bridge, 'ping_backend_mcp', return_value=True), \
+             patch.object(bridge, 'is_td_process_alive',
+                          side_effect=lambda pid: pid == 5555), \
+             patch.object(bridge, 'load_config', return_value={}), \
+             patch.object(bridge, 'find_td_pid', return_value=5555), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'fetch_tools_list', return_value=None), \
+             patch.object(bridge, 'save_tools_cache'):
+            bridge.reconcile(state, None, heartbeat=True)
+        with state:
+            self.assertNotEqual(
+                5555, state.td_pid,
+                'a blind find_td_pid() guess must never be adopted')
+            self.assertTrue(
+                state.crash_detected,
+                'and the genuine crash must stand')
+
+    def test_crash_still_detected_when_envoy_is_unreachable(self):
+        """The fix must not suppress genuine crash detection."""
+        state = self._state()
+        with patch.object(bridge, 'ping_backend_mcp', return_value=False), \
+             patch.object(bridge, 'is_td_process_alive', return_value=False), \
+             patch.object(bridge, 'load_config', return_value=self.REGISTRY), \
+             patch.object(bridge, 'find_all_td_pids', return_value=[]), \
+             patch.object(bridge, 'fetch_tools_list', return_value=None), \
+             patch.object(bridge, 'save_tools_cache'):
+            bridge.reconcile(state, None, heartbeat=True)
+        with state:
+            self.assertTrue(
+                state.crash_detected,
+                'pid dead AND Envoy unreachable is a real crash')
+
+
+# =====================================================================
 # Bridge v2 - BridgeState, notify_stdout, reconciler, caching, hashing
 # =====================================================================
 #

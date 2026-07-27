@@ -4909,6 +4909,19 @@ class EmbodyExt:
                 # TDN-strategy COMPs don't set externaltox/file -- just verify the op exists
                 is_tdn = (strategy == 'tdn') if has_strategy else (row_type == 'tdn')
                 if is_tdn:
+                    # A legacy row AT an annotation is an inert pre-guard
+                    # artifact, NOT a vanished operator. Bare op() cannot
+                    # resolve a UTILITY annotateCOMP itself (the utility flag
+                    # hides the node from its parent's lookup -- measured on
+                    # TD 099.2025.33070; interiors DO still resolve), so
+                    # without this check the sweep concluded the COMP was
+                    # deleted and either queued the file-cleanup modal or,
+                    # with Filecleanup='delete', silently unlinked the .tdn
+                    # and dropped the row -- on EVERY Update()/save.
+                    # _isAnnotateInteriorPath has the utility-aware walk that
+                    # answers this correctly; the sweep just never asked.
+                    if self._isAnnotateInteriorPath(old_op_path):
+                        continue
                     if not op(old_op_path):
                         # Try rename detection first -- a TDN-tagged COMP in
                         # the same parent that isn't tracked is likely a rename.
@@ -6798,7 +6811,11 @@ class EmbodyExt:
 
         for i in range(1, table.numRows):
             child_path = self._cellVal(i, 'path')
-            if child_path.startswith(prefix) and not op(child_path):
+            # Utility-aware: a bare op() here reported LIVE children of a
+            # utility annotate as gone, dropping their rows while leaving
+            # their .tdn files on disk as stranded, untracked orphans.
+            if child_path.startswith(prefix) \
+                    and not self.resolveOpIncludingUtility(child_path):
                 rows_to_delete.append(i)
 
         # Delete in reverse order to preserve row indices
@@ -6874,6 +6891,75 @@ class EmbodyExt:
         except Exception:
             pass
         return False
+
+    def resolveOpIncludingUtility(self, op_path: str) -> Optional[OP]:
+        """op() that can also reach UTILITY children (annotateCOMPs).
+
+        Bare op() cannot resolve a utility annotateCOMP itself -- the
+        utility flag hides the node from its parent's lookup and from a
+        plain findChildren (measured on TD 099.2025.33070; paths THROUGH
+        a utility annotate still resolve, only the node itself does not).
+
+        Removal primitives must use this: with bare op() returning None,
+        RemoveListerRow / RemoveTDNEntry dropped the table row but never
+        stripped the operator's tag, colour, or _tdn_rel_path breadcrumb,
+        so the next Refresh sweep resurrected the row -- the silent no-op
+        reported against v6.0.157. Returns None when the path genuinely
+        does not resolve."""
+        # Input guard, matching envoy_read.resolve_op. Without it the walk
+        # below turns '' into ['']  -> every segment skipped -> the PROJECT
+        # ROOT is returned where bare op('') gives None, and a RELATIVE
+        # path is silently re-rooted at '/'. Both feed destructive
+        # primitives that strip tags, clear externaltox, force-cook and
+        # recolour -- doing that to '/' would maul the whole project.
+        if not op_path or not isinstance(op_path, str):
+            return None
+        op_path = op_path.rstrip('/') or '/'
+        if not op_path.startswith('/'):
+            return None
+        if op_path == '/':
+            return op('/')
+        try:
+            target = op(op_path)
+            if target is not None:
+                return target
+            node = op('/')
+            for seg in op_path.split('/'):
+                if not seg:
+                    continue
+                if node is None or not node.isCOMP:
+                    return None
+                nxt = node.op(seg)
+                if nxt is None:
+                    nxt = next(
+                        (c for c in node.findChildren(
+                            depth=1, includeUtility=True)
+                         if c.name == seg), None)
+                node = nxt
+            return node
+        except Exception:
+            return None
+
+    def _annotateRootForPath(self, op_path: str) -> Optional[str]:
+        """Path of the annotateCOMP that op_path IS or lives inside.
+
+        Used to collapse per-row warnings into one line per annotation.
+        Returns None when the path is not annotation-related or the live
+        network cannot testify."""
+        try:
+            target = self.resolveOpIncludingUtility(op_path)
+            if target is None:
+                return None
+            if target.type == 'annotate':
+                return target.path
+            node = target.parent()
+            while node is not None and node.path != '/':
+                if node.type == 'annotate':
+                    return node.path
+                node = node.parent()
+        except Exception:
+            pass
+        return None
 
     def _isAnnotateInteriorPath(self, op_path: str) -> bool:
         """True when op_path IS an annotateCOMP or lies inside one,
@@ -7609,9 +7695,14 @@ class EmbodyExt:
         When delete_file=False, the table row and tags are removed but the file is preserved on disk.
         """
         is_clone = False
-        
+
         try:
-            oper = op(op_path)
+            # Utility-aware: bare op() cannot resolve a utility annotateCOMP,
+            # so a legacy row AT one used to drop the table row while leaving
+            # the tag and colour on the operator -- the next Refresh sweep
+            # then resurrected the row (the "removed nothing" no-op reported
+            # against v6.0.157).
+            oper = self.resolveOpIncludingUtility(op_path)
             if oper:
                 if 'clone' in oper.tags:
                     is_clone = True
@@ -7733,7 +7824,11 @@ class EmbodyExt:
                 lister X button keeps the default True).
         """
         try:
-            oper = op(op_path)
+            # Utility-aware -- see RemoveListerRow. A legacy row AT a utility
+            # annotate resolved to None here, so the tag and the
+            # _tdn_rel_path breadcrumb survived the removal and
+            # ReconcileMetadata / RecoverOrphanShells rebuilt the row.
+            oper = self.resolveOpIncludingUtility(op_path)
             if oper:
                 for tag in self.getTags():
                     if tag in oper.tags:
@@ -7792,8 +7887,9 @@ class EmbodyExt:
             if self._isAnnotateInteriorPath(comp_path):
                 self.Log(
                     f'Skipping reconstruction of annotation-interior row '
-                    f'{comp_path} (legacy artifact -- clean up via delete_op '
-                    f'on the annotation or the manager)', 'WARNING')
+                    f'{comp_path} (inert legacy artifact -- remove the row '
+                    f'in the Embody manager to clear it; the annotation '
+                    f'itself is kept)', 'WARNING')
                 continue
             abs_path = self.buildAbsolutePath(rel_tdn_path)
             if not abs_path.is_file():
@@ -8309,6 +8405,12 @@ class EmbodyExt:
             return []  # Legacy table without strategy column -- no TDN entries
         embody_path = self.my.path  # e.g. /embody/Embody -- skip regardless of location
         result = []
+        # Annotation artifacts are collapsed to ONE warning per annotation
+        # instead of one per row. A pre-guard project carries a row for the
+        # annotate AND for each of its widget internals (16 rows for a
+        # single annotation in the v6.0.157 field report), and this
+        # enumerator runs several times per save.
+        annotate_rows = {}
         for i in range(1, table.numRows):
             if self._cellVal(i, 'strategy') == 'tdn':
                 comp_path = self._cellVal(i, 'path')
@@ -8331,36 +8433,73 @@ class EmbodyExt:
                 # (guts the widget's stock internals) nor re-export
                 # (recreates orphan files). Reuse the comp resolved above;
                 # fall back to the utility-aware path walk only when the op
-                # is not live. Warn once per path per session.
+                # is not live.
                 if comp is not None:
                     is_annotate_row = (comp.type == 'annotate'
                                        or self._isInsideAnnotate(comp))
                 else:
                     is_annotate_row = self._isAnnotateInteriorPath(comp_path)
                 if is_annotate_row:
-                    warned = getattr(self, '_annotate_interior_warned', None)
-                    if warned is None:
-                        warned = set()
-                        self._annotate_interior_warned = warned
-                    if comp_path not in warned:
-                        warned.add(comp_path)
-                        self.Log(
-                            f"Skipping TDN row for an annotation (or an op "
-                            f"inside its widget): {comp_path} -- legacy "
-                            f"artifact from before the annotate guards; "
-                            f"delete_op the annotation (or remove the row "
-                            f"via the manager) to clean it up",
-                            'WARNING')
+                    # Fall back to the row's PARENT, not the row path
+                    # itself: an unresolvable root (the strip/restore
+                    # window makes paths temporarily untestifiable) would
+                    # otherwise give every row its own key and re-fan the
+                    # per-row flood this aggregation exists to stop.
+                    root = (self._annotateRootForPath(comp_path)
+                            or comp_path.rsplit('/', 1)[0] or comp_path)
+                    annotate_rows.setdefault(root, []).append(comp_path)
                     continue
                 result.append((
                     comp_path,
                     self._cellVal(i, 'rel_file_path'),
                 ))
+        self._warnAnnotateArtifacts(annotate_rows)
         # Sort by path depth (fewest segments first) so parents are
         # imported before their children during reconstruction. Each
         # child's own .tdn file then overwrites the parent's snapshot.
         result.sort(key=lambda x: x[0].count('/'))
         return result
+
+    def _warnAnnotateArtifacts(self, annotate_rows: dict) -> None:
+        """Emit ONE warning per annotation holding legacy rows.
+
+        Previously this warned once per ROW per session: a single
+        annotation carries a row for itself plus one per widget internal
+        (16 in the v6.0.157 field report), and the dedup set lives on the
+        extension instance, so an extension reinit re-armed all of them --
+        16 near-identical lines per save, drowning the log.
+
+        Deduped on the annotation path ALONE, never on the row count: the
+        count legitimately oscillates across a save (the strip/restore
+        window leaves some paths temporarily unresolvable), and a
+        count-keyed dedup would re-arm on every oscillation.
+        """
+        if not annotate_rows:
+            return
+        # Instance attribute, deliberately NOT COMP storage. Storage IS
+        # persisted into the .tdn/.toe export, so keeping the set there
+        # (a) baked whatever paths happened to be warned -- including
+        # test-sandbox paths -- into a committed file, and (b) silenced
+        # the warning FOREVER across sessions, defeating its purpose.
+        # An extension reinit therefore re-arms this, which is acceptable:
+        # the per-annotation aggregation above already turns what was 16
+        # lines per sweep into one.
+        warned = getattr(self, '_annotate_interior_warned', None)
+        if warned is None:
+            warned = set()
+            self._annotate_interior_warned = warned
+        for root, paths in sorted(annotate_rows.items()):
+            if root in warned:
+                continue
+            warned.add(root)
+            self.Log(
+                f"Skipping {len(paths)} legacy externalization row(s) for "
+                f"annotation '{root}' -- inert artifacts from before the "
+                f"annotate guards. To clear them, remove those rows in the "
+                f"Embody manager; this keeps the annotation itself. "
+                f"(Deleting the annotation also clears them, but destroys "
+                f"the documentation it holds.)",
+                'WARNING')
 
     # ------------------------------------------------------------------
     # DAT Content Safety
@@ -8487,25 +8626,38 @@ class EmbodyExt:
     # Storage keys preserved even when Embedstorageintdns is off
     # (mirrors TDNExt logic that exports these as control metadata).
     _STORAGE_CONTROL_KEYS = {'embed_dats_in_tdn', 'embed_storage_in_tdn'}
-    # Storage keys never surfaced as at-risk -- superset of
-    # TDNExt.SKIP_STORAGE_KEYS covering additional Embody runtime state
-    # (mode migration flags, pane restore, init completion, etc.) that
-    # TDNExt also does not serialize meaningfully. Only user-owned keys
-    # should reach _findAtRiskStorage.
-    _STORAGE_SKIP_KEYS = {
-        '_tdn_stripped_paths', '_git_root',
-        'envoy_running', 'envoy_shutdown_event',
-        'expanded_paths', 'expand_order',
-        'manage_file_path', 'visible_count', 'hover',
+    # Embody-only runtime keys, ON TOP OF TDNExt.SKIP_STORAGE_KEYS. These
+    # are never surfaced as at-risk storage but are not part of the
+    # serialization contract, so they live here rather than in TDNExt.
+    #
+    # This used to be a second hand-maintained literal documented as a
+    # "superset of TDNExt.SKIP_STORAGE_KEYS". It was not: the two drifted
+    # in BOTH directions (this one omitted git_status, _tdn_fingerprints
+    # and _suppress_dialogs; TDNExt's omitted eleven keys Embody itself
+    # classifies as runtime, so those serialized into committed .tdn
+    # files). _storageSkipKeys() now derives the union at call time, so
+    # adding a key to TDNExt is enough and the pair cannot drift again.
+    _STORAGE_SKIP_EXTRA = {
         '_tdn_external_wires', '_tdn_pane_restore',
-        '_tdn_palette_handling',
-        '_init_complete', '_smoke_test_responses',
-        '_tdn_restore_failures',
+        '_tdn_palette_handling', '_smoke_test_responses',
         '_tdn_mode_migration_shown', '_tdn_migration_scheduled',
         '_tdn_migration_prev_enable',
-        '_tdn_rel_path', '_pending_tox_restore',
-        'pressed',
     }
+
+    def _storageSkipKeys(self) -> set:
+        """Runtime storage keys never surfaced as at-risk.
+
+        Single source of truth is TDNExt.SKIP_STORAGE_KEYS (what never
+        serializes); this adds Embody-only runtime keys. Falls back to the
+        extras alone if TDNExt cannot be reached, which only makes the
+        at-risk prompt noisier -- never less safe.
+        """
+        base = set()
+        try:
+            base = set(self.my.op('TDNExt').module.SKIP_STORAGE_KEYS)
+        except Exception:
+            pass
+        return base | self._STORAGE_SKIP_EXTRA
 
     def _findAtRiskStorage(self) -> list:
         """Find operators inside TDN COMPs whose comp.storage entries will
@@ -8574,10 +8726,11 @@ class EmbodyExt:
                 if not storage:
                     continue
 
+                skip_keys = self._storageSkipKeys()
                 risky_keys = [
                     k for k in storage.keys()
                     if k not in self._STORAGE_CONTROL_KEYS
-                    and k not in self._STORAGE_SKIP_KEYS
+                    and k not in skip_keys
                 ]
                 if risky_keys:
                     at_risk.append((target.path, sorted(risky_keys)))
@@ -9634,7 +9787,16 @@ class EmbodyExt:
             win.par.winclose.pulse()
 
     def resetOpColor(self, oper: OP) -> None:
-        """Reset operator to default color."""
+        """Reset operator to Embody's default node color.
+
+        Annotations are exempt. Making the removal primitives utility-aware
+        newly exposed annotateCOMPs to this call (bare op() used to return
+        None, so it never ran), and an annotate's stock colour is not
+        Embody's grey -- restyling it would contradict the cleanup remedy's
+        own promise that the annotation itself is kept untouched."""
+        if oper is not None and oper.family == 'COMP' \
+                and oper.type == 'annotate':
+            return
         oper.color = (0.55, 0.55, 0.55)
 
     def getProjectFolder(self) -> str:

@@ -807,12 +807,40 @@ def remove_externalization_tag(ext, op_path: str,
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
+    def _tracked_rows(embody_ext, path):
+        """Registry rows tracking `path` or a descendant, by identity.
+
+        Identity, not a numRows delta: this project supports concurrent AI
+        sessions, and a peer's unrelated table write between two count
+        snapshots would silently corrupt a delta.
+
+        Never raises: this is called AFTER the removal has already run, so
+        an exception here would turn a SUCCESSFUL destructive operation
+        into an {'error': ...} response and invite the caller to retry
+        completed work. Cells are read through _cellVal (issue #21's
+        safe accessor), not raw `.val`.
+        """
+        try:
+            table = embody_ext.Externalizations
+            if not table or table.numRows < 2:
+                return []
+            prefix = path + '/'
+            out = []
+            for i in range(1, table.numRows):
+                p = embody_ext._cellVal(i, 'path')
+                if p == path or p.startswith(prefix):
+                    out.append(p)
+            return out
+        except Exception:
+            return []
+
     try:
         embody = op.Embody.ext.Embody
         removed = [tag for tag in embody.getTags()
                    if target.tags and tag in target.tags]
         is_tdn = (op.Embody.par.Tdntag.eval() in removed
                   or bool(embody._getStrategyFilePath(target.path, 'tdn')))
+        rows_before = _tracked_rows(embody, target.path)
 
         if is_tdn:
             # Strips tags, drops the row + _tdn_rel_path breadcrumb,
@@ -826,10 +854,42 @@ def remove_externalization_tag(ext, op_path: str,
         # an empty removal list (previous behavior, kept for callers that
         # untag defensively).
 
+        rows_after = _tracked_rows(embody, target.path)
+        # Multiset difference, NOT `p not in rows_after`. Duplicate-path
+        # rows are a supported state; a membership test would see the path
+        # still present and drop BOTH occurrences, reporting removed_rows
+        # as [] after genuinely dropping a row -- exactly the "did anything
+        # happen?" ambiguity these keys exist to remove.
+        remaining = list(rows_after)
+        removed_rows = []
+        for p in rows_before:
+            if p in remaining:
+                remaining.remove(p)
+            else:
+                removed_rows.append(p)
+
+        # removed_tags alone cannot tell "nothing happened" from "the row
+        # went but there was no tag to strip" -- the shape a pre-guard
+        # annotation artifact has. Report the two effects separately.
+        if removed_rows and removed:
+            summary = (f'removed {len(removed_rows)} registry row(s) and '
+                       f'{len(removed)} tag(s)')
+        elif removed_rows:
+            summary = (f'removed {len(removed_rows)} registry row(s); the '
+                       f'operator carried no externalization tag')
+        elif removed:
+            summary = (f'removed {len(removed)} tag(s); no registry row was '
+                       f'tracking this operator')
+        else:
+            summary = 'nothing was tracked for this operator -- no change'
+
         return {
             'success': True,
             'path': op_path,
             'removed_tags': removed,
+            'removed_rows': removed_rows,
+            'removed_anything': bool(removed or removed_rows),
+            'summary': summary,
             # Deletion is best-effort: RemoveListerRow's safety checks
             # (clones, files still referenced elsewhere) can keep the file.
             'file_delete_requested': bool(delete_file and (is_tdn or removed))

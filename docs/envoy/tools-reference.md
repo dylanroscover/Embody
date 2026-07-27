@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 53 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 54 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 Every mutating TD-authoring tool call is wrapped in a TouchDesigner undo block. Press Ctrl+Z in TD to revert an agent change; a `batch_operations` call is one undo step for the whole batch.
 
@@ -110,7 +110,7 @@ Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mod
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (auto-detects type if omitted) |
-| `remove_externalization_tag` | `op_path`, `delete_file?` | Remove externalization tracking (tag + row + TDN breadcrumb); `delete_file=True` also deletes the file (best-effort) |
+| `remove_externalization_tag` | `op_path`, `delete_file?` | Remove externalization tracking (tag + row + TDN breadcrumb); `delete_file=True` also deletes the file (best-effort). Returns `removed_tags`, `removed_rows`, `removed_anything`, `summary` -- an operator can have a tracked row but NO tag, so check `removed_anything`, not `removed_tags`, to confirm cleanup |
 | `get_externalizations` | _(none)_ | List all externalized operators with status |
 | `save_externalization` | `op_path` | Force save an externalized operator to disk |
 | `get_externalization_status` | `op_path` | Get dirty state, build number, timestamp, file path |

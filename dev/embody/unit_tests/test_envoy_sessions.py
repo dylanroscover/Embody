@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: multi-session awareness (Phase 1).
 
 Covers:

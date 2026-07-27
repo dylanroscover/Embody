@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 16
-generator: Embody/6.0.25
-td_build: 099.2025.32820
-source_file: Embody-6.25.toe
-exported_at: '2026-06-13T05:52:37Z'
+build: 17
+generator: Embody/6.0.159
+td_build: 099.2025.33070
+source_file: Embody-6.159.toe
+exported_at: '2026-07-27T00:41:49Z'
 network_path: /embody/Embody/toolbar/container_left
 options:
   include_dat_content: false
@@ -120,8 +120,6 @@ operators:
     bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
     bgalpha: 1
   position: [200, 0]
-  storage:
-    pressed: false
   tdn_ref: embody/Embody/toolbar/container_left/refresh.tdn
 - name: save_comp
   type: textCOMP
@@ -138,8 +136,6 @@ operators:
     bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
     bgalpha: 1
   position: [1400, 0]
-  storage:
-    pressed: false
   tdn_ref: embody/Embody/toolbar/container_left/save_comp.tdn
 - name: export_tdn
   type: textCOMP
@@ -172,8 +168,6 @@ operators:
     bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
     bgalpha: 1
   position: [400, -200]
-  storage:
-    pressed: false
   tdn_ref: embody/Embody/toolbar/container_left/import_tdn.tdn
 - name: initialize
   type: textCOMP
@@ -190,8 +184,6 @@ operators:
     bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
     bgalpha: 1
   position: [600, 0]
-  storage:
-    pressed: false
   tdn_ref: embody/Embody/toolbar/container_left/initialize.tdn
 - name: spacer_tdn
   type: containerCOMP
@@ -231,8 +223,6 @@ operators:
     bgcolorb: =(0.15 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)
     bgalpha: 1
   position: [800, 0]
-  storage:
-    pressed: false
   tdn_ref: embody/Embody/toolbar/container_left/envoy_toggle.tdn
 - name: spacer_envoy
   type: containerCOMP

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 911
-generator: Embody/6.0.156
+build: 971
+generator: Embody/6.0.159
 td_build: 099.2025.33070
-source_file: Embody-6.157.toe
-exported_at: '2026-07-25T11:29:32Z'
+source_file: Embody-6.159.toe
+exported_at: '2026-07-26T17:05:07Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -292,7 +292,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 11:28:12 UTC
+    value: Saved 17:01:31 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -723,7 +723,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.156
+    value: 6.0.159
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -740,7 +740,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 911
+    value: 971
   - name: Github
     style: Pulse
     label: GitHub
@@ -751,7 +751,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-25 11:29:32 UTC
+    value: 2026-07-26 17:05:05 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -820,13 +820,9 @@ tags:
 - tdn
 storage:
   claudius_running: false
-  _tdn_restore_failures:
-  - /embody/base1
-  _start_in_progress: true
-  _watchdog_gen: 1075
-  _clip_watch_gen: 840
-  _shortcut_rec_gen: 363
-  _release_hook_active: false
+  _watchdog_gen: 1119
+  _clip_watch_gen: 884
+  _shortcut_rec_gen: 503
 operators:
 - name: help
   type: opviewerCOMP
@@ -1071,21 +1067,6 @@ operators:
   color: [0.3, 0.5, 0.9]
   tags:
   - tdn
-  storage:
-    _tip_trace:
-      btn: close
-      text: Clear filter
-      text_width: 60.3
-      tip_w: 80
-      container_x: 726
-      container_w: 270
-      btn_x: 244
-      btn_w: 26
-      tip_x: 914
-      toolbar_w: 996
-      btn_center: 983
-      tip_center: 954
-      offset: -29
   comp_inputs:
   - manager
   tdn_ref: embody/Embody/toolbar.tdn
@@ -1508,7 +1489,6 @@ operators:
       - name: bar_fill
         type: containerCOMP
         parameters:
-          w: 156
           h: 8
           bgcolorr: 0.24
           bgcolorg: 0.52
@@ -1520,7 +1500,6 @@ operators:
     - name: status
       type: textCOMP
       parameters:
-        text: sandbox_test_tdn_export_progress -- 400 / 1,000 operators (40%)
         callbacks: status_callbacks
         fontsize: 12
         fontcolorr: 0.6

@@ -1712,7 +1712,12 @@ class EnvoyMCPServer:
                     keeps the file.
 
             Returns:
-                Dict with success status and removed_tags
+                Dict with success, removed_tags (operator tags stripped),
+                removed_rows (registry rows dropped, including descendants),
+                removed_anything, and a human-readable summary. An operator
+                can have a tracked row but no tag (a pre-guard annotation
+                artifact), so removed_tags alone cannot confirm cleanup --
+                check removed_anything or removed_rows.
             """
             return self._execute_in_td('remove_externalization_tag', {
                 'op_path': op_path,
@@ -5729,9 +5734,20 @@ class EnvoyExt:
         """Tag an operator for Embody externalization and write it to disk -- see envoy_ops."""
         return mod.envoy_ops.externalize_op(self, op_path, tag_type)
 
-    def _remove_externalization_tag(self, op_path: str) -> dict:
-        """Remove Embody externalization tag and clean up -- see envoy_ops."""
-        return mod.envoy_ops.remove_externalization_tag(self, op_path)
+    def _remove_externalization_tag(self, op_path: str,
+                                    delete_file: bool = False) -> dict:
+        """Remove Embody externalization tag and clean up -- see envoy_ops.
+
+        `delete_file` MUST stay in this signature: the registered tool
+        wrapper puts it in the params dict unconditionally (not only when a
+        caller passes it) and dispatch is `handler(**params)`, so dropping
+        it here made EVERY call to this tool fail with a TypeError from
+        v6.0.154 until this fix -- the tool was dead, not merely degraded.
+        test_envoy_tool_schema.py now asserts this class of drift for every
+        registered tool.
+        """
+        return mod.envoy_ops.remove_externalization_tag(
+            self, op_path, delete_file)
 
     def _get_externalizations(self) -> dict:
         """Get all externalized operators -- see envoy_read."""

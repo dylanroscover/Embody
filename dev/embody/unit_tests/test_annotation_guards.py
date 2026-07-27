@@ -244,6 +244,31 @@ class TestAnnotationGuards(EmbodyTestCase):
         self.assertTrue(self.embody_ext.TagSetter(ann, tdn_tag))
         self.assertNotIn(tdn_tag, ann.tags)
 
+    def test_warning_dedup_never_lands_in_persisted_storage(self):
+        """The per-annotation warning dedup must NOT live in COMP storage.
+
+        Storage is serialized into the `.tdn`/`.toe` export, so keeping the
+        warned-set there (a) baked whatever paths were warned -- including
+        test-sandbox paths -- into a committed file, and (b) suppressed the
+        warning permanently across every future session, defeating its
+        purpose. Caught when a release save wrote a sandbox path into
+        Embody.tdn (2026-07-26). It belongs on the extension instance,
+        where a reinit re-arms it.
+        """
+        ann = self._annotate()
+        table = self.embody_ext.Externalizations
+        table.appendRow([
+            ann.path, ann.OPType, 'tdn',
+            'embody/unit_tests/dedup_storage_probe.tdn', 'test', 'False',
+            '', ''])
+        self.embody_ext._getTDNStrategyComps()   # emits the warning
+
+        self.assertNotIn(
+            '_annotate_interior_warned', self.embody.storage,
+            'the dedup set must never be stored on the COMP -- storage is '
+            'exported into the .tdn and would leak sandbox paths into a '
+            'committed file and silence the warning forever')
+
     def test_getTDNStrategyComps_keeps_normal_rows(self):
         """Positive control: an ordinary sandbox COMP row still enumerates."""
         comp = self.workspace.create(baseCOMP, 'normal_row_comp')

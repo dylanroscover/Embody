@@ -286,9 +286,28 @@ class TestCustomParameters(EmbodyTestCase):
     def test_disable_z04_verify_complete(self):
         """Final verification: all operators, files, TDN/py counts are intact.
 
-        Runs one frame after z03 so that deferred Updates (TDN exports, DAT
-        additions) have fully settled before asserting file existence and counts.
+        SELF-CONTAINED by design. This used to assert on state left behind by
+        z03, relying on "runs one frame after z03 so deferred Updates have
+        settled". That dependency does not hold: RunDestructiveTests drives
+        `_runSuite` synchronously, z03's tearDown toggles `parexec` and the
+        base teardown runs in between, and deferred Update/delete work from
+        the preceding Disable calls is still in flight. The observed result
+        was a false failure -- table rows present and all their files present,
+        but zero rows ending in `.tdn` (2026-07-26, the first run after the
+        destructive tier's save-gate was repaired and these suites could
+        execute at all).
+
+        Re-externalizing here is idempotent and makes every assertion below
+        describe THIS test's own action, so the result no longer depends on
+        runner scheduling or on what a sibling test left behind.
         """
+        parexec = self.embody.op('parexec')
+        parexec.par.active = False
+        try:
+            self._externalize_project_silent(use_tdn=True)
+        finally:
+            parexec.par.active = True
+
         table = self.embody_ext.Externalizations
         ext_folder = self.embody_ext.getProjectFolder()
 
@@ -311,12 +330,35 @@ class TestCustomParameters(EmbodyTestCase):
             elif rel_path.endswith('.py'):
                 py_count += 1
 
+        # A bare "0 not greater than 0" cannot distinguish an EMPTY table
+        # (where the two checks above pass VACUOUSLY) from a populated one
+        # carrying no .tdn rows. Carry the shape of the table into every
+        # message so a failure is self-explaining.
+        ext_counts = {}
+        strategies = {}
+        for i in range(1, table.numRows):
+            rp = table[i, 'rel_file_path'].val
+            suffix = ('.' + rp.rsplit('.', 1)[-1]) if '.' in rp else '(none)'
+            ext_counts[suffix] = ext_counts.get(suffix, 0) + 1
+            st = table[i, 'strategy'].val
+            strategies[st] = strategies.get(st, 0) + 1
+        shape = (f'rows={table.numRows - 1} by_extension={ext_counts} '
+                 f'by_strategy={strategies}')
+
         self.assertEqual(len(missing_ops), 0,
-                         f'All operators should exist: missing {missing_ops[:5]}')
+                         f'All operators should exist: missing '
+                         f'{missing_ops[:5]} -- {shape}')
         self.assertEqual(len(missing_files), 0,
-                         f'All files should exist: missing {missing_files[:5]}')
-        self.assertGreater(tdn_count, 0, 'Should have at least one TDN file')
-        self.assertGreater(py_count, 0, 'Should have at least one .py file')
+                         f'All files should exist: missing '
+                         f'{missing_files[:5]} -- {shape}')
+        self.assertGreater(table.numRows - 1, 0,
+                           f'Externalizations table must not be empty -- the '
+                           f'two checks above pass vacuously when it is. '
+                           f'{shape}')
+        self.assertGreater(tdn_count, 0,
+                           f'Should have at least one TDN file -- {shape}')
+        self.assertGreater(py_count, 0,
+                           f'Should have at least one .py file -- {shape}')
 
         # Verify Embody is fully operational
         self.assertEqual(self.embody.par.Status.eval(), 'Enabled')
