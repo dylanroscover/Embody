@@ -4,6 +4,8 @@
 
 # Embody
 
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fdylanroscover%2FEmbody.svg)](https://mcptoplist.com/server/glama%2Fdylanroscover%2FEmbody)
+
 **create at the speed of thought.**
 
 [![Version](https://img.shields.io/badge/version-6.0.160-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
