@@ -358,6 +358,31 @@ class TestNewErrorDiff(EmbodyTestCase):
         self.assertEqual(total, 1)
         self.assertEqual(listed[0]['path'], '/ok')
 
+    def test_td_internal_subtrees_are_excluded(self):
+        # Observed live (2026-07-29): a legacy /ui dialog's cook-loop
+        # warning was reported as damage from the caller's write. TD's own
+        # subtrees are never the write's doing.
+        entries = self._entries('/ui/dialogs/dialog_legacy/x', '/sys/y',
+                                '/uid_is_user_content', '/project1/mine')
+        listed, total, paths = _envoy_mod._new_error_entries(
+            set(), entries, 5)
+        self.assertEqual(paths, {'/uid_is_user_content', '/project1/mine'},
+                         'prefix match must be per-segment: /uid... is USER '
+                         'content, /ui/... is not')
+        self.assertEqual(total, 2)
+
+    def test_pseudo_path_continuation_lines_are_excluded(self):
+        # Multi-line TD warning strings surface continuation lines as
+        # entries whose nodePath is not a path at all ('Parameter: From
+        # Range'), and root-attributed lines come in as '/'.
+        entries = [{'nodePath': 'Parameter: From Range', 'message': 'tail'},
+                   {'nodePath': '/', 'message': 'root-attributed tail'},
+                   {'nodePath': '/real/op', 'message': 'm'}]
+        listed, total, paths = _envoy_mod._new_error_entries(
+            set(), entries, 5)
+        self.assertEqual(paths, {'/real/op'})
+        self.assertEqual(total, 1)
+
     def test_none_input_is_empty(self):
         listed, total, paths = _envoy_mod._new_error_entries(set(), None, 3)
         self.assertEqual((listed, total, paths), ([], 0, set()))

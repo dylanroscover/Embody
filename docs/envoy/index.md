@@ -6,7 +6,7 @@
 
 TouchDesigner has no external API. A `.toe` file has no access surface — nothing outside TD can read it, write to it, or interact with what's running inside it. AI assistants hitting this wall have two options: describe what a network *might* look like and hope you can implement it, or stop. Neither is useful when you're mid-session with a half-built network in front of you.
 
-Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 58 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
+Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 60 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
 
 ## Key Design Principles
 
@@ -45,7 +45,7 @@ The bridge handles the MCP protocol handshake locally and keeps bridge meta-tool
 
 ## Capabilities
 
-Envoy exposes **58 MCP tools** across 16 categories, plus 4 bridge meta-tools that run on the local STDIO bridge.
+Envoy exposes **60 MCP tools** across 16 categories, plus 4 bridge meta-tools that run on the local STDIO bridge.
 
 ### Operator Management
 
@@ -154,6 +154,16 @@ Inspect the live TD Python API, check operator errors, and call operator methods
 | `get_module_help` | Python help text for a module (supports dotted names like `td.tdu`) |
 | `get_docs` | Look up official TouchDesigner docs from the offline help mirror or docs.derivative.ca |
 
+| `get_focus` | What the user is looking at: current network, selection, current op — resolves "this operator" without guessing |
+| `get_guidance` | The project's own rules and workflow skills served over MCP — the only way non-Claude-Code clients see them |
+
+### Background Jobs
+
+| Tool | Description |
+|---|---|
+| `get_job_status` | Poll disk-backed background jobs; results survive server restarts |
+| `save_project` | Save the project as a tracked job instead of a severed synchronous call |
+
 ### Embody Integration
 
 Tag operators for externalization, query status, and force-save to disk — the full Embody lifecycle as MCP tools. The AI can externalize a COMP it just finished building and confirm the file landed on disk, without you switching focus.
@@ -196,6 +206,9 @@ Several AI sessions can work on the same project at once without clobbering each
 | `get_sessions` | List connected sessions: labels, activity, recent scopes, claims |
 | `claim_scope` | Cooperative write lease on an op subtree, file, or project scope |
 | `release_scope` | Release a held lease (expiry also handles it) |
+
+| `announce_task` / `update_task` | The shared task ledger: what each session is working on, and what is finished-but-uncommitted |
+| `preflight_landing` | Check a worktree diff against main-tree dirt, peer territory, unsaved TDN state, and overlapping ledger tasks before landing |
 
 ### Logging
 

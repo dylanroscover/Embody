@@ -55,13 +55,14 @@ _WRITE_OPERATIONS = frozenset({
     'set_op_position', 'layout_children', 'externalize_op',
     'remove_externalization_tag', 'save_externalization',
     'create_extension', 'import_network', 'create_annotation',
-    'set_annotation', 'run_tests', 'batch_operations',
+    'set_annotation', 'run_tests', 'batch_operations', 'save_project',
 })
 
 # Coarse scopes for operations whose footprint is not a single op path.
 _SPECIAL_SCOPES = {
     'execute_python': 'project:python',
     'run_tests': 'project:tests',
+    'save_project': 'project:save',
 }
 
 _TOUCH_WINDOW_S = 600     # advisories consider touches this recent
@@ -291,6 +292,9 @@ _EFFECTS_FPS_DROP_MIN = 5.0    # ...and only when the absolute drop is this big
 _EFFECTS_SCAN_BUDGET_S = 0.25
 
 
+_EFFECTS_INTERNAL_ROOTS = ('/ui', '/sys')  # TD's own UI/system subtrees
+
+
 def _new_error_entries(previous_paths, current_entries, cap):
     """Diff a fresh error/warning list against the previous snapshot.
 
@@ -300,6 +304,13 @@ def _new_error_entries(previous_paths, current_entries, cap):
     `cap`. `previous_paths` of None means "no baseline yet" -- nothing is new
     on a session's first write, only the baseline is established.
 
+    Two classes of entry are excluded up front (both observed live on the
+    footer's first field day, 2026-07-29): TD's OWN subtrees (/ui, /sys) --
+    a legacy dialog's cook-loop warning is not something THIS write broke --
+    and pseudo-paths that are really the continuation lines of a multi-line
+    TD warning string ('Parameter: From Range'), which are not op paths at
+    all.
+
     Pure and TD-free so the diff can be unit-tested with synthetic sets.
     """
     current_paths = set()
@@ -308,8 +319,11 @@ def _new_error_entries(previous_paths, current_entries, cap):
         if not isinstance(entry, dict):
             continue
         path = entry.get('nodePath') or ''
-        if not path:
-            continue
+        if not path or not path.startswith('/'):
+            continue  # continuation line of a multi-line warning, not a path
+        if path == '/' or any(path == r or path.startswith(r + '/')
+                              for r in _EFFECTS_INTERNAL_ROOTS):
+            continue  # TD-internal noise, not this write's doing
         current_paths.add(path)
         if previous_paths is not None and path not in previous_paths:
             fresh.append({'path': path,
@@ -429,6 +443,138 @@ def _task_public(task: dict, now: float) -> dict:
         out['stale'] = True
     return {key: value for key, value in out.items()
             if value not in (None, '', [])}
+
+
+# --- Job layer: long operations as disk-backed jobs ------------------------
+#
+# Long operations (a full test run, project.save) outlive the 30s MCP
+# timeout, and a mid-operation server restart severs a synchronous call
+# even though the work completes (observed twice on 2026-07-29: run_tests
+# died with "Server force-restarted/shutting down during test run"; a save
+# returned IncompleteRead). A job returns its handle IMMEDIATELY and parks
+# results on disk (.embody/jobs/<id>.json), so they survive restarts and
+# reinits; get_job_status polls. Records are os/json-only plain data --
+# writable from the main thread (tiny file) and readable from the worker.
+# This registry is the intended shape for future kinds (TDN export, movie
+# export) -- see docs/roadmap.md.
+
+_JOB_RETENTION_S = 24 * 3600.0    # finished records kept this long
+_JOB_STALE_RUNNING_S = 30 * 60.0  # running-with-no-finish flagged after
+_JOB_LIST_CAP = 16
+
+
+def _jobs_dir():
+    root = getattr(sys, '_envoy_repo_root', None)
+    # A non-absolute root is a sentinel ('no-git') or garbage, never a
+    # place to write: joining it would resolve RELATIVE to TD's cwd
+    # (observed live 2026-07-29 -- a suite drove the config path, the
+    # assigner cached 'no-git', and every job/ledger read went dark).
+    if not root or not os.path.isabs(str(root)):
+        return None
+    return os.path.join(str(root), '.embody', 'jobs')
+
+
+def _new_job(kind, params):
+    import uuid
+    return {'id': 'job_' + uuid.uuid4().hex[:8], 'kind': kind,
+            'params': {k: v for k, v in (params or {}).items()
+                       if v is not None},
+            'status': 'running', 'started': time.time()}
+
+
+def _job_path(job_id):
+    d = _jobs_dir()
+    if not d or not re.match(r'^job_[0-9a-f]{8}\Z', str(job_id or '')):
+        return None  # id doubles as the filename -- never trust it raw
+    return os.path.join(d, job_id + '.json')
+
+
+def _write_job(job):
+    """Atomic best-effort job-record write (os/json only).
+
+    The os.replace is retried a few times back-to-back: on Windows a
+    replace fails with a sharing violation while the worker-side
+    get_job_status poll holds the record open for read -- and the write
+    that collides is usually the one that matters (the terminal
+    'done'/'error'). The reader's window is sub-millisecond, so immediate
+    retries clear it without sleeping.
+    """
+    path = _job_path(job.get('id'))
+    if not path:
+        return
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + '.%d.tmp' % os.getpid()
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(job, f, indent=1)
+        for attempt in range(3):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == 2:
+                    raise
+    except Exception:
+        pass
+
+
+def _read_job(job_id):
+    path = _job_path(job_id)
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            record = json.load(f)
+        return record if isinstance(record, dict) else None
+    except Exception:
+        return None
+
+
+def _job_public(job, now):
+    out = dict(job)
+    try:
+        out['age_s'] = round(now - float(job.get('started', now)), 1)
+    except (TypeError, ValueError):
+        out['age_s'] = None
+    if (out.get('status') == 'running' and out['age_s'] is not None
+            and out['age_s'] > _JOB_STALE_RUNNING_S):
+        out['stale'] = True
+        out['hint'] = ('running far longer than expected -- the completion '
+                       'poll may have died in an extension reinit; check '
+                       'the operation itself and dev/logs')
+    return out
+
+
+def _list_jobs(now):
+    """Recent job records, newest first, pruning expired finished ones."""
+    d = _jobs_dir()
+    if not d or not os.path.isdir(d):
+        return []
+    records = []
+    try:
+        names = os.listdir(d)
+    except Exception:
+        return []
+    for name in names:
+        if not name.endswith('.json'):
+            continue
+        record = _read_job(name[:-5])
+        if record is None:
+            continue
+        if record.get('status') in ('done', 'error'):
+            try:
+                finished = float(record.get('finished', 0) or 0)
+            except (TypeError, ValueError):
+                finished = 0.0
+            if (now - finished) > _JOB_RETENTION_S:
+                try:
+                    os.remove(os.path.join(d, name))
+                except Exception:
+                    pass
+                continue
+        records.append(_job_public(record, now))
+    records.sort(key=lambda r: -(r.get('started') or 0))
+    return records[:_JOB_LIST_CAP]
 
 
 def _scope_overlaps(a: str, b: str) -> bool:
@@ -2442,6 +2588,17 @@ class EnvoyMCPServer:
                 tag_type: Tag type - "tox" for COMPs, "py"/"txt"/"tsv"/"json" etc for DATs
                          If None, will auto-detect based on operator type
 
+            Unattended sessions: a TDN operation that meets a TD palette
+            component can raise the Black-Box-vs-Full-Export dialog.
+            Decide programmatically BEFORE the call: set the
+            Tdnpalettehandling parameter on the Embody COMP ('blackbox' |
+            'fullexport' | 'ask'), or per COMP via
+            comp.store('_tdn_palette_handling', 'blackbox').
+
+            File-removal behavior likewise follows the Filecleanup parameter
+            ('ask' | 'keep' | 'delete') -- set it rather than letting a modal
+            wait for a human who is not there.
+
             Returns:
                 Dict with success status and applied tag
             """
@@ -2573,6 +2730,13 @@ class EnvoyMCPServer:
                 embed_all: If True, recurse into TDN-tagged COMPs instead of
                     skipping their children. Produces a self-contained export.
 
+            Unattended sessions: a TDN operation that meets a TD palette
+            component can raise the Black-Box-vs-Full-Export dialog.
+            Decide programmatically BEFORE the call: set the
+            Tdnpalettehandling parameter on the Embody COMP ('blackbox' |
+            'fullexport' | 'ask'), or per COMP via
+            comp.store('_tdn_palette_handling', 'blackbox').
+
             Returns:
                 Dict with the .tdn JSON document and optional file path
             """
@@ -2598,6 +2762,13 @@ class EnvoyMCPServer:
                 override: Bypass the multi-session gate when another live
                     session claimed this COMP or wrote it very recently
                     (applies only with clear_first=True)
+
+            Unattended sessions: a TDN operation that meets a TD palette
+            component can raise the Black-Box-vs-Full-Export dialog.
+            Decide programmatically BEFORE the call: set the
+            Tdnpalettehandling parameter on the Embody COMP ('blackbox' |
+            'fullexport' | 'ask'), or per COMP via
+            comp.store('_tdn_palette_handling', 'blackbox').
 
             Returns:
                 Dict with import results and created operator paths
@@ -2965,22 +3136,42 @@ class EnvoyMCPServer:
 
         @self.mcp.tool()
         def run_tests(suite_name: str = None, test_name: str = None,
-                      override: bool = False) -> dict:
+                      override: bool = False, background: bool = False) -> dict:
             """
             Run Embody test suites and return results.
 
             Prerequisite: load the project's /run-tests skill (when present)
             and save the project before a full run.
 
+            background=True is the RESILIENT mode -- recommended for full
+            runs: the run starts and this call returns a job id
+            IMMEDIATELY; poll get_job_status(job_id) for the summary. The
+            synchronous mode holds this HTTP call open for the whole run,
+            and a server restart mid-run (the Envoy watchdog suites cause
+            one on every full run) severs the transport even though the
+            run finishes.
+
             Args:
                 suite_name: Run only this suite (e.g., "test_path_utils"). Omit to run all.
                 test_name: Run only this test method within the suite.
                 override: Bypass the multi-session gate when another live
                     session holds project:tests or wrote very recently.
+                background: Return {'job_id', 'status': 'running'}
+                    immediately; results park restart-proof on disk.
 
             Returns:
-                Dict with passed/failed/error/skip counts and full results list
+                Synchronous: dict with passed/failed/error/skip counts and
+                the failing tests. background=True: {'job_id', 'status',
+                'hint'}.
             """
+            if background:
+                # Normal round-trip: the main-thread handler only STARTS
+                # the deferred run and returns the job handle; results
+                # land in the disk record, immune to server restarts.
+                return self._execute_in_td('run_tests', {
+                    'suite_name': suite_name, 'test_name': test_name,
+                    'override': override, 'background': True})
+
             # Use a dedicated Event so the worker thread can wait directly
             # for test completion -- bypasses the response_queue which is
             # fragile against server restarts / extension reinit.
@@ -3018,6 +3209,64 @@ class EnvoyMCPServer:
             result = test_holder.get('result', {'error': 'No result'})
             sys._envoy_pending_test = None
             return result
+
+        @self.mcp.tool()
+        def get_job_status(job_id: str = None) -> dict:
+            """
+            Status of background jobs (run_tests background=True,
+            save_project).
+
+            Jobs are disk-backed (.embody/jobs/), so they survive server
+            restarts and extension reinits -- the failure mode that severs
+            a long synchronous call. Poll with the job_id the starting
+            tool returned; omit it to list recent jobs. A finished
+            run_tests job carries the summary (counts + the failing
+            tests); a finished save_project job carries
+            version_before/version_after.
+
+            Args:
+                job_id: The id the starting tool returned (job_...). Omit
+                    to list recent jobs.
+
+            Returns:
+                One job record (status running|done|error, result when
+                done, stale=true when a running record stopped updating),
+                or {'jobs': [...], 'count'} without job_id. The listing is
+                capped at the 16 newest records (older ones remain
+                fetchable by id until the 24h retention). Caveat: a run
+                interrupted hard enough to kill its own tick chain can
+                close as 'done' summarizing only the tests that ran --
+                cross-check dev/logs when a summary looks short.
+            """
+            # Worker-side pure filesystem -- no TD access (mcp-safety).
+            now = time.time()
+            if job_id:
+                record = _read_job(job_id)
+                if record is None:
+                    return {'error': 'no job with id %r' % job_id,
+                            'jobs': _list_jobs(now)}
+                return _job_public(record, now)
+            jobs = _list_jobs(now)
+            return {'jobs': jobs, 'count': len(jobs)}
+
+        @self.mcp.tool()
+        def save_project() -> dict:
+            """
+            Save the TouchDesigner project as a tracked background job.
+
+            project.save() blocks TD's main thread for many seconds (the
+            TDN strip/restore cycle plus the release-tox export) and
+            reinitializes extensions, so a synchronous MCP call is severed
+            even though the save succeeds. This tool returns a job id
+            immediately; the save runs a few frames later. Poll
+            get_job_status(job_id) -- the finished record carries
+            version_before/version_after and the saved .toe name. Expect
+            this session's next call to ride a brief bridge reconnect.
+
+            Returns:
+                {'job_id', 'status': 'running', 'hint'}
+            """
+            return self._execute_in_td('save_project', {})
 
         # --- Batch Operations ---
 
@@ -4929,7 +5178,7 @@ class EnvoyExt:
     # === Thread Manager Callbacks (run on main thread) ===
 
     _GATED_OPERATIONS = ('delete_op', 'import_network', 'run_tests',
-                         'batch_operations')
+                         'batch_operations', 'save_project')
 
     def _destructiveTargets(self, operation, params):
         """(scopes, reason) the destructive gate protects for this
@@ -4949,6 +5198,9 @@ class EnvoyExt:
             return [], ''
         if operation == 'run_tests':
             return ['project:tests'], 'run_tests'
+        if operation == 'save_project':
+            # A save re-exports every externalized file -- project-global.
+            return ['project:save'], 'save_project'
         if operation == 'batch_operations':
             gated = []
             for sub in (params.get('operations') or [])[:32]:
@@ -5649,6 +5901,7 @@ class EnvoyExt:
             'capture_top': self._capture_top,
             # Testing
             'run_tests': self._run_tests,
+            'save_project': self._save_project,
             # Batch
             'batch_operations': self._batch_operations,
         }
@@ -5999,7 +6252,7 @@ class EnvoyExt:
 
     # --- Testing ---
 
-    def _run_tests(self, suite_name=None, test_name=None):
+    def _run_tests(self, suite_name=None, test_name=None, background=False):
         """Run Embody test suites via /embody/unit_tests extension (deferred).
 
         Starts tests with RunTestsDeferredPerTest (one test per frame) to
@@ -6013,6 +6266,12 @@ class EnvoyExt:
         dict, because the sentinel request_id=-1 would be silently dropped
         by check_responses, leaving the worker thread blocked.
         """
+        if background:
+            # Job mode: start the deferred run, park progress in a disk
+            # record, return the handle. No transport Event involved -- a
+            # server restart mid-run cannot sever anything.
+            return self._startTestsJob(suite_name, test_name)
+
         pending = getattr(sys, '_envoy_pending_test', None)
         if pending is None:
             # Worker thread hasn't set up sys._envoy_pending_test yet.
@@ -6079,6 +6338,231 @@ class EnvoyExt:
         pending['holder']['result'] = {'error': message}
         pending['event'].set()
         sys._envoy_pending_test = None
+
+    # --- Background jobs (main-thread side) -------------------------------
+
+    def _startTestsJob(self, suite_name=None, test_name=None) -> dict:
+        """Start a deferred test run tracked by a disk job record instead
+        of a blocked transport. Main thread; mirrors _run_tests' guards."""
+        test_comp = op.unit_tests
+        if not test_comp:
+            return {'error': 'Test framework not found (op.unit_tests)'}
+        if not test_comp.extensionsReady:
+            return {'error': 'Test framework extension not ready'}
+        runner = getattr(test_comp.ext, 'TestRunnerExt', None)
+        if runner is not None and getattr(runner, '_running', False):
+            return {'error': 'A test run is already in progress'}
+        if self._activeSaveJob() is not None:
+            return {'error': 'A save_project job is in flight -- a test run '
+                             'starting inside the save\'s window would race '
+                             'its extension reinit. Retry when the save '
+                             'job finishes.'}
+        job = _new_job('run_tests', {'suite_name': suite_name,
+                                     'test_name': test_name})
+        _write_job(job)
+        if _read_job(job['id']) is None:
+            # No record can exist (repo root unresolved) -- an unpollable
+            # handle would be a lie. The synchronous mode still works.
+            return {'error': 'Job records unavailable (project root not '
+                             'resolved yet) -- use the synchronous '
+                             'run_tests, or retry shortly.'}
+        try:
+            embody = op.Embody
+            prior = embody.par.Status.eval()
+            if prior != 'Testing':
+                embody.store('_test_saved_status', prior)
+            embody.par.Status = 'Testing'
+            # Ownership stamp: the completion poll finalizes ONLY while it
+            # still owns the run. If this run ends and another starts inside
+            # one poll gap, the newer starter overwrites the stamp and the
+            # orphaned poll closes its record as superseded instead of
+            # filing the WRONG run's summary. Storage-backed so it survives
+            # reinit; listed in SKIP_STORAGE_KEYS so it never reaches disk
+            # exports.
+            embody.store('_test_run_owner', job['id'])
+            test_comp.RunTestsDeferredPerTest(
+                suite_name=suite_name, test_name=test_name)
+        except Exception as e:
+            job['status'] = 'error'
+            job['error'] = 'Test run failed to start: %s' % e
+            job['finished'] = time.time()
+            _write_job(job)
+            self._restoreStatusAfterTests()
+            return {'job_id': job['id'], 'status': 'error',
+                    'error': job['error']}
+        self._schedulePollTestJob(job['id'], 0)
+        return {'job_id': job['id'], 'status': 'running',
+                'hint': 'Poll get_job_status(job_id=...) for the summary; '
+                        'results survive server restarts.'}
+
+    def _activeSaveJob(self):
+        """The in-flight save_project record, or None. Main thread; a
+        'running' save older than 2 minutes is treated as dead (a save
+        takes seconds; its record write is retried and reinit-proof)."""
+        now = time.time()
+        for record in _list_jobs(now):
+            if (record.get('kind') == 'save_project'
+                    and record.get('status') == 'running'
+                    and (record.get('age_s') or 0) < 120):
+                return record
+        return None
+
+    def _schedulePollTestJob(self, job_id, attempt):
+        """String-form run() so the poll survives extension reinit (the
+        live instance is resolved at fire time, same as the watchdog)."""
+        run("o = op(%r)\nif o and o.valid: "
+            "o.ext.Envoy._pollTestCompletionJob(%r, %d)"
+            % (self.ownerComp.path, job_id, attempt),
+            fromOP=self.ownerComp, delayFrames=30)
+
+    def _pollTestCompletionJob(self, job_id, attempt=0):
+        """Finish a BACKGROUND test run into its job record -- the
+        transport-free twin of _pollTestCompletion. Bounded; a poll chain
+        that dies anyway leaves a 'running' record that get_job_status
+        flags stale."""
+        # Ownership check FIRST: if a newer run (sync or background) took
+        # the stamp, this poll must not file that run's summary under its
+        # own job -- close as superseded and stand down.
+        try:
+            owner = op.Embody.fetch('_test_run_owner', None, search=False)
+        except Exception:
+            owner = None
+        if owner is not None and owner != job_id:
+            job = _read_job(job_id) or {'id': job_id, 'kind': 'run_tests'}
+            job['status'] = 'error'
+            job['error'] = ('Superseded: another test run started before '
+                            'this one\'s summary was collected. Its own '
+                            'record/results apply; this run\'s did land in '
+                            'the test log under dev/logs.')
+            job['finished'] = time.time()
+            _write_job(job)
+            return
+        test_comp = op.unit_tests
+        runner = (getattr(test_comp.ext, 'TestRunnerExt', None)
+                  if test_comp and test_comp.extensionsReady else None)
+        if runner is None or getattr(runner, '_running', False):
+            if attempt < 1200:   # ~10 min of 30-frame polls at 60fps
+                self._schedulePollTestJob(job_id, attempt + 1)
+                return
+            job = _read_job(job_id) or {'id': job_id, 'kind': 'run_tests'}
+            job['status'] = 'error'
+            job['error'] = 'Test run did not finish within the poll window'
+            job['finished'] = time.time()
+            _write_job(job)
+            if runner is None or not getattr(runner, '_running', False):
+                # Only restore when nothing is actually running -- yanking
+                # Status mid-run re-enables the Update cycle the
+                # suppression exists to hold off.
+                self._restoreStatusAfterTests()
+            return
+        self._restoreStatusAfterTests()
+        summary = runner._getSummary()
+        # Token- and disk-lean: counts plus the non-PASS entries, failures
+        # FIRST so a skip-heavy run can never crowd a real failure out of
+        # the capped list.
+        if isinstance(summary.get('results'), list):
+            non_pass = [r for r in summary['results']
+                        if r.get('status') != 'PASS']
+            non_pass.sort(key=lambda r: 0 if r.get('status')
+                          in ('FAIL', 'ERROR') else 1)
+            summary['results'] = non_pass[:20]
+        job = _read_job(job_id) or {'id': job_id, 'kind': 'run_tests'}
+        job['status'] = 'done'
+        job['finished'] = time.time()
+        job['result'] = summary
+        _write_job(job)
+        try:
+            op.Embody.unstore('_test_run_owner')
+        except Exception:
+            pass
+
+    def _save_project(self) -> dict:
+        """Start a project save as a tracked job (main thread).
+
+        The save itself runs a few frames later so this response reaches
+        the client BEFORE the main thread blocks on the TDN strip/restore
+        and the extension reinit that project.save() triggers. Refuses
+        while a test run is active (a mid-run save bakes the runner's
+        forced Filecleanup='delete' / Status='Testing' into the exported
+        .tdn/.toe -- the exact incident class destructive-tests.md records
+        -- and its strip/restore kills the deferred run). Idempotent
+        against retries: a second call while a save job is in flight
+        returns the EXISTING handle instead of queueing a second
+        multi-second save."""
+        try:
+            if op.Embody.ext.Embody._testRunnerActive():
+                return {'error': 'A test run is active -- saving now would '
+                                 'bake test-forced parameters into the '
+                                 'export and kill the run. Wait for the '
+                                 'run (or its job) to finish.'}
+        except Exception:
+            pass
+        active = self._activeSaveJob()
+        if active is not None:
+            return {'job_id': active['id'], 'status': 'running',
+                    'hint': 'A save is already in flight -- returning its '
+                            'existing job handle (calls are idempotent).'}
+        job = _new_job('save_project', {})
+        try:
+            job['version_before'] = str(op.Embody.par.Version.eval())
+        except Exception:
+            pass
+        _write_job(job)
+        if _read_job(job['id']) is None:
+            return {'error': 'Job records unavailable (project root not '
+                             'resolved yet) -- retry shortly.'}
+        run("o = op(%r)\nif o and o.valid: o.ext.Envoy._runSaveJob(%r)"
+            % (self.ownerComp.path, job['id']),
+            fromOP=self.ownerComp, delayFrames=3)
+        return {'job_id': job['id'], 'status': 'running',
+                'hint': 'project.save() runs in ~3 frames and blocks TD '
+                        'briefly (TDN strip/restore + release export); poll '
+                        'get_job_status(job_id=...). The save restarts the '
+                        'server, so the NEXT call may fail once with a '
+                        'connection error -- just retry it; the bridge '
+                        'reconnects between calls.'}
+
+    def _runSaveJob(self, job_id):
+        """Main-thread body of a save_project job.
+
+        Everything the post-save lines need is bound into LOCALS before
+        project.save(): the save recompiles this module, and an old
+        frame's module globals have been observed to stop resolving after
+        recompilation (see check_responses' Empty handling). Locals --
+        including the module OBJECTS os/json/time, whose own internals
+        live in sys.modules, untouched by a DAT recompile -- survive
+        regardless, and the record path is precomputed so no helper in
+        the old namespace is needed afterwards."""
+        job = _read_job(job_id) or {'id': job_id, 'kind': 'save_project'}
+        path = _job_path(job_id)
+        _os, _json, _time = os, json, time
+        _project, _op = project, op
+        try:
+            _project.save()
+            job['status'] = 'done'
+            try:
+                job['version_after'] = str(_op.Embody.par.Version.eval())
+                job['toe'] = str(_project.name)
+            except Exception:
+                pass
+        except Exception as e:
+            job['status'] = 'error'
+            job['error'] = 'project.save() failed: %s' % e
+        job['finished'] = _time.time()
+        if path:
+            try:
+                tmp = path + '.%d.tmp' % _os.getpid()
+                with open(tmp, 'w', encoding='utf-8') as f:
+                    _json.dump(job, f, indent=1)
+                for attempt in range(3):
+                    try:
+                        _os.replace(tmp, path)
+                        break
+                    except PermissionError:
+                        if attempt == 2:
+                            raise
+            except Exception:
+                pass
 
     def _schedulePollTestCompletion(self):
         """Schedule the test completion poll via run() with a string
@@ -6790,7 +7274,7 @@ class EnvoyExt:
         'get_op_performance', 'get_project_performance', 'get_parameter',
         'get_connections', 'get_annotations', 'get_network_layout',
         'get_dat_content', 'get_docs', 'get_guidance', 'get_module_help',
-        'get_logs', 'get_focus',
+        'get_logs', 'get_focus', 'get_job_status',
         'get_externalizations', 'get_externalization_status', 'get_sessions',
         'query_network', 'find_children', 'get_enclosed_ops',
         'read_tdn', 'diff_tdn', 'capture_top',

@@ -164,7 +164,9 @@ For visual work, success is verified by capturing and judging the output TOP, no
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `run_tests` | `suite_name?`, `test_name?`, `override?` | Run Embody unit-test suites (all, one suite, or one test; 300s timeout). Destructive and agent tiers are excluded -- they run only via their dedicated entry points. Gated by the multi-session destructive-op gate; `override` bypasses it (say so when you do) |
+| `run_tests` | `suite_name?`, `test_name?`, `override?`, `background?` | Run Embody unit-test suites (all, one suite, or one test; 300s timeout). Destructive and agent tiers are excluded -- they run only via their dedicated entry points. Gated by the multi-session destructive-op gate; `override` bypasses it (say so when you do). `background=True` (recommended for full runs) returns a job id immediately -- poll `get_job_status`; the synchronous mode is severed by the watchdog suites' server restart |
+| `get_job_status` | `job_id?` | Status of background jobs (`run_tests background=True`, `save_project`). Disk-backed (`.embody/jobs/`), so results survive server restarts and extension reinits; omit `job_id` to list recent jobs. Finished run_tests jobs carry the summary + failing tests |
+| `save_project` | _(none)_ | Save the project as a tracked job: returns a job id immediately, the save runs a few frames later (a synchronous call is severed by the save's own main-thread block + extension reinit). Finished record carries version_before/version_after |
 
 ## Bridge Meta-Tools
 

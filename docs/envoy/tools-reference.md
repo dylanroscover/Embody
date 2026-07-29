@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 58 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 60 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 Every mutating TD-authoring tool call is wrapped in a TouchDesigner undo block. Press Ctrl+Z in TD to revert an agent change; a `batch_operations` call is one undo step for the whole batch.
 
@@ -156,13 +156,22 @@ Concurrent AI sessions (multiple Claude Code windows, other MCP clients) working
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Get recent log entries from ring buffer. Filter by level, source, or use `since_id` for incremental polling |
-| `run_tests` | `suite_name?`, `test_name?`, `override?` | Run test suites and return results. Gated while a peer session holds `project:tests` |
+| `run_tests` | `suite_name?`, `test_name?`, `override?`, `background?` | Run test suites. `background=True` (recommended for full runs) returns a job id immediately and parks results in `.embody/jobs/` -- poll `get_job_status`; the synchronous mode is severed by the watchdog suites' server restart. Gated while a peer session holds `project:tests` |
 
 !!! info "Auto-piggybacked logs"
     When a tool call generates `WARNING` or `ERROR` entries since the previous call, the response carries a `_logs` field with up to the last 8 of them. `INFO`/`DEBUG`/`SUCCESS` history does not ride along — fetch it on demand with `get_logs`. Warning cursors are tracked per session, so concurrent AI sessions each receive their own copy — one session polling first no longer consumes a warning meant for everyone.
 
 !!! info "Auto-attached recovery hints"
     When a tool returns an `error`, Envoy attaches a `recovery_hints` list — each entry `{cause, action, next_tools}`, matched to the real error string (path-not-found -> `query_network`/`find_children`, parameter-not-found -> `get_op`, wrong family, empty capture -> `get_op_performance`, thread conflict, timeout -> `get_project_performance`). Additive, never clobbers, never raises — follow the hint instead of retrying the same failing call.
+
+## Background Jobs
+
+Long operations that outlive the 30-second operation timeout run as disk-backed jobs: the starting tool returns a `job_...` handle immediately, results park in `.embody/jobs/` (surviving server restarts and extension reinits), and `get_job_status` polls.
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_job_status` | `job_id?` | One job record (status `running`/`done`/`error`, result when done, `stale` when a running record stopped updating), or the 16 newest records without `job_id`. A finished `run_tests` job carries the summary with failures listed first; a finished `save_project` job carries `version_before`/`version_after` |
+| `save_project` | _(none)_ | Save the project as a tracked job. Refused while a test run is active (a mid-run save bakes test-forced parameters into the export); idempotent -- a second call while a save is in flight returns the existing handle. The next call after a save may fail once while the bridge reconnects |
 
 ## Bridge Meta-Tools
 

@@ -171,8 +171,73 @@ def _load_release_tox(tox_path=None):
     # Frame 3: seed auto-responses (before Verify dialog at ~frame 31)
     run("args[0]()", _seed_responses, delayFrames=2)
 
+    # Frame ~50: the Setup Wizard is a PANEL window, not a ui.messageBox, so
+    # seeded responses cannot answer it and a headless smoke stalls on it
+    # (observed 2026-07-29: Envoy stayed Disabled behind the wizard until a
+    # human clicked). Drive the wizard's own backend instead.
+    run("args[0]()", _apply_headless_setup, delayFrames=55)
+
     # Frame 120: write ready flag - after Envoy has started (~frame 65)
     run("args[0]()", _write_ready_flag, delayFrames=119)
+
+
+def _apply_headless_setup(attempt=0):
+    """Close the Setup Wizard (if open) and apply its Auto defaults directly.
+
+    Mirrors a human clicking Auto -> Next -> ... -> Set up Embody: closes
+    the wizard window, then calls the SAME backend entry point the wizard's
+    finish() uses (_applyWizardSetup), with the choices a smoke wants --
+    Auto mode, Claude Code assistant (exercises the Envoy enable + fresh
+    venv bootstrap, the paths this smoke exists to verify), git skipped
+    (temp folder), externalization skipped (the whole-project sweep is not
+    smoke territory). The retry loop only covers the Embody COMP not
+    existing yet; the wizard's own open is frame-scheduled (~onCreate+46),
+    so this runs at +55 and a SECOND close fires at +150 to cover a
+    late-slipping open (the wizard reopening over an already-applied setup
+    is cosmetic, but the second close keeps the run clean). The setup
+    apply itself happens exactly once.
+    """
+    if me.fetch('headless_setup_done', False):
+        return
+    embody_path = me.fetch('embody_path', None, search=False)
+    embody = op(embody_path) if embody_path else None
+    if not embody:
+        if attempt < 10:
+            run("args[0](args[1])", _apply_headless_setup, attempt + 1,
+                delayFrames=30)
+        return
+    me.store('headless_setup_done', True)
+    try:
+        wizard_window = embody.op('window_wizard')
+        if wizard_window is not None:
+            wizard_window.par.winclose.pulse()
+            _log('Closed the Setup Wizard window (headless smoke)')
+    except Exception as e:
+        _log(f'WARNING: could not close wizard window: {e}')
+    try:
+        embody.ext.Embody._applyWizardSetup(
+            mode='auto', assistant='claudecode', client='', root='gitroot',
+            custom_root='', permissions='all', git='gitskip',
+            externalize='skip')
+        _log('Applied headless wizard setup (auto/claudecode/skip-git)')
+    except Exception as e:
+        _log(f'ERROR: headless wizard setup failed: {e}')
+    # Late-open cover: if the wizard's frame-scheduled open slipped past
+    # this apply, close it again once, well after.
+    run("args[0]()", _close_wizard_again, delayFrames=95)
+
+
+def _close_wizard_again():
+    embody_path = me.fetch('embody_path', None, search=False)
+    embody = op(embody_path) if embody_path else None
+    if not embody:
+        return
+    try:
+        wizard_window = embody.op('window_wizard')
+        if wizard_window is not None:
+            wizard_window.par.winclose.pulse()
+    except Exception:
+        pass
 
 
 def _seed_responses():

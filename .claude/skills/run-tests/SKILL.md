@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Test Suite
 
-Embody has 30 test suites covering core externalization, MCP tools, TDN format, and infrastructure.
+Embody has 110+ test suites (2,500+ tests) under `dev/embody/unit_tests/` covering externalization, MCP tools, TDN format, the Envoy server/bridge/jobs, install/upgrade paths, and infrastructure. Destructive and agent tiers are segregated behind their own entry points.
 
 ## Running Tests
 
@@ -21,17 +21,23 @@ results = op.unit_tests.GetResults()              # Get results dict
 
 **Via MCP -- use the `run_tests` tool, NOT RunTestsSync inside execute_python:**
 ```python
-run_tests()                          # all suites (deferred runner)
-run_tests(suite_name='test_path_utils')
+run_tests(background=True)           # all suites -- RECOMMENDED for full runs
+get_job_status(job_id='job_...')     # poll; the finished record carries the summary
+run_tests(suite_name='test_path_utils')   # small targeted runs may stay synchronous
 ```
+
+For a FULL run always pass `background=True`: it returns a job id
+immediately and results park restart-proof in `.embody/jobs/`. The
+synchronous mode holds the HTTP call open for the whole run, and the Envoy
+watchdog suites restart the very server it waits on -- the call is severed
+("Server force-restarted / shutting down during test run") even though the
+run finishes. (Pre-job-layer fallback, still valid: poll
+`execute_python(code="result = op.unit_tests.GetResults()")` until the
+totals stop moving.)
 
 `RunTestsSync()` inside `execute_python` runs the whole suite INSIDE that
 dispatch's undo block: the undo-guard tests fail (a block is already open)
-and the entire run becomes one giant Ctrl+Z step. If `run_tests` dies
-mid-run with a server-restart error (the Envoy watchdog suites restart the
-very server it waits on), the run continues -- poll
-`execute_python(code="result = op.unit_tests.GetResults()")` until the
-totals stop moving.
+and the entire run becomes one giant Ctrl+Z step.
 
 ## Writing New Tests
 
@@ -60,10 +66,7 @@ class TestMyFeature(EmbodyTestCase):
 
 ## Test Coverage
 
-**Core (14):** externalization, CRUD, file management, tags, rename/move, delete, duplicates, sync, paths, params, queries, logging, custom parameters
-**MCP (11):** operators, parameters, DAT content, connections, annotations, extensions, diagnostics, flags/position, code execution, externalization, performance
-**TDN (4):** export/import, helpers, reconstruction, file I/O
-**Infrastructure (1):** server lifecycle
+Count suites with `ls dev/embody/unit_tests/test_*.py` -- the hand-maintained breakdown that used to sit here drifted 4x stale and was removed. Suite docstrings state their scope.
 
 ## After Running Tests
 

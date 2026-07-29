@@ -787,6 +787,10 @@ class TestRunnerExt:
 
         if not self._deferred_per_test_queue:
             self._running = False
+            # Restore parity with the no-suites path above: leaving this
+            # out stuck Filecleanup at 'delete' (the silent-unlink
+            # amplifier) whenever a test_name matched nothing.
+            self._restoreFileCleanupDialog()
             self._reportSummary()
             return
 

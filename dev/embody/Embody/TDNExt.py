@@ -229,6 +229,10 @@ SKIP_STORAGE_KEYS = {
 	# the dialog-suppression guard survives a mid-run extension reinit; it is
 	# wall-clock state that must never reach disk.
 	'_test_run_active',
+	# Which background job (or sync caller) owns the current test run --
+	# lets an orphaned completion poll detect it was superseded instead of
+	# filing the wrong run's summary. Session-transient by definition.
+	'_test_run_owner',
 	# Self-rescheduling-loop generation counters. Each is bumped on every
 	# extension reinit purely so a previous instance's pending run() tick
 	# retires itself -- they carry no meaning on disk, and because they

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 879
-generator: Embody/6.0.165
+build: 893
+generator: Embody/6.0.166
 td_build: 099.2025.33070
-source_file: Embody-6.165.toe
-exported_at: '2026-07-29T11:21:38Z'
+source_file: Embody-6.166.toe
+exported_at: '2026-07-29T13:46:08Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -117,7 +117,7 @@ operators:
       startSection: true
       readOnly: true
       help: Current Embody status (read-only). Shows whether Embody is initialized and running.
-      value: Testing
+      value: Enabled
     Tags:
     - name: Toxtags
       style: Header
@@ -317,7 +317,7 @@ operators:
       label: Auto-Save Status
       readOnly: true
       help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-      value: Saved 11:19:47 UTC
+      value: Saved 13:46:04 UTC
     - name: Tdnstriponsave
       style: Toggle
       label: Strip on Save
@@ -459,7 +459,7 @@ operators:
       startSection: true
       readOnly: true
       help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-      value: Starting...
+      value: Running on port 9872
     Logs:
     - name: Verbose
       style: Toggle
@@ -705,7 +705,7 @@ operators:
       - Always Keep Files
       - Always Delete Files
       help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-      value: delete
+      value: keep
     - name: Toxdropexpr
       style: Menu
       label: Dropped .tox Expression
@@ -720,7 +720,6 @@ operators:
       - Always Clean
       - Always Ignore
       help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
-      value: ignore
     - name: Tdndatsafety
       style: Menu
       label: Content Safety
@@ -749,7 +748,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.165
+      value: 6.0.166
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -766,7 +765,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 1007
+      value: 1019
     - name: Github
       style: Pulse
       label: GitHub
@@ -777,7 +776,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-29 11:21:35 UTC
+      value: 2026-07-29 13:46:02 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -849,7 +848,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 269
+    rows: 268
     cols: 11
   flags:
   - viewer
