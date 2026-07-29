@@ -27,6 +27,7 @@ AgentTestCase = runner_mod.AgentTestCase
 # Source of truth: the @self.mcp.tool() registrations in EnvoyExt.py
 # (_register_tools). Update deliberately when the tool surface changes.
 EXPECTED_ENVOY_TOOLS = [
+    'announce_task',
     'batch_operations',
     'capture_top',
     'claim_scope',
@@ -81,6 +82,7 @@ EXPECTED_ENVOY_TOOLS = [
     'set_op_flags',
     'set_op_position',
     'set_parameter',
+    'update_task',
 ]
 
 # Served bridge-side; present in tools/list even when TD is down.

@@ -58,6 +58,10 @@ Every gated tool accepts `override=True` for the cases where the refusal is wron
 
 Envoy only observes MCP traffic. When an AI session edits an externalized file directly with its own file tools (outside MCP), no touch is recorded. The generated `multi-session` rule closes this gap by convention: agents check `get_sessions` and claim the `file:` scope before editing externalized files, and re-read files a peer recently touched.
 
+## The task ledger: work-state, not just presence
+
+Presence and claims answer "who is here and what are they touching right now" -- but a dirty tree plus recency signals cannot distinguish work that is *in flight* from work that is *finished and waiting for a commit*. The shared task ledger (`.embody/tasks.json`) closes that gap: sessions announce substantive work with `announce_task` (title + the scopes it touches), flip it to `done_uncommitted` the moment it is complete but uncommitted, and record the sha with `update_task` when it lands. Every session sees the active entries on `get_sessions`, and `preflight_landing` reports ledger tasks that overlap a pending landing -- so finished-but-uncommitted work is committed or coordinated, never silently built over. Any session may mark a dead session's stale entry `abandoned`; the ledger records `updated_by` for non-owner writes.
+
 ## Worktree tasks
 
 Work done in a sibling git worktree is invisible to Envoy twice over — raw file edits, outside the watched repo. Durable `project:worktree-*` claims close that gap: they persist across session death and Envoy restarts, appear in `get_sessions` under `worktrees`, and the `preflight_landing` tool checks a worktree diff against main-tree dirt, peer territory, and unsaved TDN state before it lands. See [Git Worktrees](worktrees.md) for the full workflow.

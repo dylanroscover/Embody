@@ -45,6 +45,28 @@ touched recently.
 - If a claim is refused, the response names the holder, their note, and the
   expiry. Coordinate or work elsewhere -- do NOT retry in a loop.
 
+## The task ledger -- state, not just presence
+
+Claims say who is touching what right now; the ledger (`.embody/tasks.json`,
+via `announce_task` / `update_task`) says what state the WORK is in. It
+exists because a dirty tree plus recency signals cannot distinguish
+in-flight work from FINISHED work awaiting a commit -- and misreading that
+costs real coordination time.
+
+- **Starting substantive work** (a feature, fix, refactor -- not single-tool
+  edits): `announce_task` with a short title and the scopes it will touch.
+  Worktree tasks announce IN ADDITION to their durable worktree claim.
+- **Finishing**: flip to `done_uncommitted` the moment the work is complete
+  but sitting uncommitted in the tree. This is the load-bearing state -- it
+  is what stops a peer from reading your finished feature as in-flight work,
+  and `preflight_landing` reports ledger tasks overlapping a landing.
+- **Committing**: `update_task(task_id, commit='<sha>')` -- a sha alone
+  implies the committed transition.
+- **Reading**: `get_sessions` carries every session's active entries; check
+  them at session start and before working in files another task names.
+- **Hygiene**: any session may mark a dead session's stale task `abandoned`
+  (the ledger records `updated_by` for non-owner writes).
+
 ## Destructive operations are gated
 
 - `delete_op`, `import_network` with `clear_first=True`, `run_tests`, and

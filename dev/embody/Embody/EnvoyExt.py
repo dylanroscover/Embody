@@ -345,6 +345,92 @@ def _fps_regression(previous_fps, current_fps) -> dict:
             'drop_pct': int(round((was - now) / was * 100))}
 
 
+# --- Task ledger: shared work-STATE across sessions ------------------------
+#
+# Claims answer "who is touching what RIGHT NOW"; the ledger answers "what is
+# the state of the WORK" -- in progress, finished-but-uncommitted, committed,
+# abandoned. Born 2026-07-29: a session read another session's FINISHED
+# (uncommitted) feature as in-flight and held its own work for nothing,
+# because nothing shared records completion -- claims expire on silence, and
+# each session's todo list is private to its own context.
+#
+# Storage: .embody/tasks.json at the AI project root, written ONLY through
+# announce_task / update_task (worker-side file I/O under _sessions_lock,
+# atomic replace -- the durable-worktree-claims idiom above).
+
+_TASK_STATUSES = ('in_progress', 'done_uncommitted', 'committed', 'abandoned')
+_TASK_ACTIVE_STATUSES = ('in_progress', 'done_uncommitted')
+_TASK_TERMINAL_RETENTION_S = 7 * 24 * 3600.0  # committed/abandoned kept this long
+_TASK_STALE_ABANDON_S = 14 * 24 * 3600.0  # silent in_progress -> abandoned after
+_TASK_STALE_FLAG_S = 24 * 3600.0          # in_progress flagged stale= after
+_TASK_TITLE_MAX = 120
+_TASK_NOTE_MAX = 300
+_TASK_SCOPES_MAX = 8
+_TASK_LIST_CAP = 32
+
+
+def _task_updated(task: dict) -> float:
+    """A task's updated timestamp as a float, 0.0 on any garbage. Pure --
+    the single guard every sort/merge/prune shares, so one malformed entry
+    from a foreign writer can never take down the whole surface."""
+    try:
+        return float(task.get('updated', 0) or 0)
+    except (TypeError, ValueError, AttributeError):
+        return 0.0
+
+
+def _prune_tasks(tasks: dict, now: float) -> dict:
+    """Lifecycle pressure-release. Terminal tasks (committed/abandoned) are
+    dropped after the retention window. done_uncommitted is kept forever --
+    finished work sitting in the tree is the load-bearing state a peer must
+    see, and only a commit or a deliberate transition may clear it. A stale
+    in_progress, though, eventually IS the garbage (a dead session that
+    never reported back): after _TASK_STALE_ABANDON_S it auto-transitions
+    to abandoned (attributed to '_ledger_prune', still visible for the
+    terminal retention window) so the ledger cannot grow without bound.
+    Pure."""
+    kept = {}
+    for tid, task in (tasks or {}).items():
+        if not isinstance(task, dict):
+            continue
+        status = task.get('status')
+        age = now - _task_updated(task)
+        if status in ('committed', 'abandoned'):
+            if age > _TASK_TERMINAL_RETENTION_S:
+                continue
+        elif status == 'in_progress' and age > _TASK_STALE_ABANDON_S:
+            task = dict(task)
+            task['status'] = 'abandoned'
+            task['updated_by'] = '_ledger_prune'
+            task['note'] = ('auto-abandoned: no update for %d days'
+                            % int(_TASK_STALE_ABANDON_S // 86400))
+            task['updated'] = now
+        kept[tid] = task
+    return kept
+
+
+def _task_public(task: dict, now: float) -> dict:
+    """The client-facing shape of one ledger entry. Pure."""
+    out = {key: task.get(key) for key in
+           ('id', 'title', 'status', 'session', 'label', 'note', 'commit',
+            'updated_by')}
+    out['scopes'] = list(task.get('scopes') or [])
+    try:
+        out['age_s'] = round(now - float(task.get('created', now)), 1)
+    except (TypeError, ValueError):
+        out['age_s'] = None
+    updated_age = now - _task_updated(task) if _task_updated(task) else None
+    out['updated_age_s'] = (round(updated_age, 1)
+                            if updated_age is not None else None)
+    if (task.get('status') == 'in_progress' and updated_age is not None
+            and updated_age > _TASK_STALE_FLAG_S):
+        # A day of silence on an in_progress task usually means its session
+        # died -- peers should treat the claim on that territory as soft.
+        out['stale'] = True
+    return {key: value for key, value in out.items()
+            if value not in (None, '', [])}
+
+
 def _scope_overlaps(a: str, b: str) -> bool:
     """True when two scopes denote overlapping territory.
 
@@ -540,6 +626,10 @@ class EnvoyMCPServer:
         # (.embody/worktree-claims.json): an in-flight worktree task's marker
         # must outlive the AI session that started it.
         self._loadDurableWorktreeClaims()
+        # Task ledger: shared work-state (.embody/tasks.json). Loaded lazily
+        # inside each ledger operation -- the path needs sys._envoy_repo_root,
+        # which the main thread may not have resolved yet at construction.
+        self._tasks: dict = {}
 
         self._docs_state = {'resolved': False, 'root': None, 'index': None, 'cache': {}}
         # get_guidance index: the project's own .claude rules/skills, scanned
@@ -834,6 +924,193 @@ class EnvoyMCPServer:
                 if durable_claim_alive(claim, now):
                     self._claims[scope] = claim
 
+    # --- Task ledger (shared work-state) ----------------------------------
+    # Worker-side pure Python + file I/O under _sessions_lock -- ZERO TD
+    # access (mcp-safety). Same persistence idiom as the durable worktree
+    # claims above. Every operation re-reads the file first: a second TD
+    # process (another instance, the fresh-install smoke) may share the
+    # repo root, and disk is the source of truth between processes.
+
+    def _taskLedgerPath(self):
+        """Path of .embody/tasks.json, or None before the main thread has
+        cached the repo root."""
+        root = getattr(sys, '_envoy_repo_root', None)
+        if not root:
+            return None
+        return os.path.join(root, '.embody', 'tasks.json')
+
+    def _loadTasksLocked(self) -> dict:
+        """Freshest ledger: disk merged over memory, then pruned. Caller
+        holds _sessions_lock. Disk wins per task id; tasks that only exist
+        in memory (a persist failed earlier) survive the merge."""
+        path = self._taskLedgerPath()
+        from_disk = {}
+        if path and os.path.isfile(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    raw = json.load(f)
+                if isinstance(raw, dict) and isinstance(raw.get('tasks'), dict):
+                    from_disk = raw['tasks']
+            except Exception:
+                from_disk = {}
+        # Per-id NEWEST-updated wins. A blanket disk-wins here rolled a
+        # process's own fresh transition back whenever another process
+        # persisted an older view of the file (review finding: the exact
+        # done_uncommitted->in_progress reversion this feature exists to
+        # prevent). Ties go to disk -- identical stamps mean the same write
+        # round-tripped.
+        merged = dict(self._tasks)
+        for tid, task in from_disk.items():
+            if not isinstance(task, dict):
+                continue
+            mine = merged.get(tid)
+            if mine is None or _task_updated(task) >= _task_updated(mine):
+                merged[tid] = task
+        self._tasks = _prune_tasks(merged, time.time())
+        return self._tasks
+
+    def _persistTasksLocked(self):
+        """Atomic best-effort write. Caller holds _sessions_lock. A failed
+        write leaves memory serving this process; the next operation
+        retries."""
+        path = self._taskLedgerPath()
+        if not path:
+            return
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = path + '.%d.tmp' % os.getpid()
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump({'schema': 1, 'tasks': self._tasks}, f, indent=1)
+            os.replace(tmp, path)
+        except Exception:
+            pass
+
+    def _announce_task(self, sid, label, title, scopes=None, note='') -> dict:
+        title = (title or '').strip()[:_TASK_TITLE_MAX]
+        if not title:
+            return {'error': 'title is required'}
+        clean_scopes = []
+        for scope in (scopes or [])[:_TASK_SCOPES_MAX]:
+            scope = str(scope).strip()
+            if not scope:
+                continue
+            # Same posture as claim_scope: reject malformed scopes loudly.
+            # An unprefixed file path would silently never match preflight's
+            # file: filter -- exactly where the warning was wanted.
+            if not (scope.startswith('/') or scope.startswith('file:')
+                    or scope.startswith('project:')):
+                return {'error': "scope %r must be an op path ('/...'), "
+                                 "'file:<repo-relative-path>', or "
+                                 "'project:<name>'" % scope}
+            if scope.startswith('file:'):
+                scope = 'file:' + scope[5:].replace('\\', '/')
+            clean_scopes.append(scope)
+        import uuid
+        now = time.time()
+        task = {
+            'id': 'tsk_' + uuid.uuid4().hex[:8],
+            'title': title,
+            'scopes': clean_scopes,
+            'status': 'in_progress',
+            'session': sid or '_anon',
+            'label': label or '',
+            'note': (note or '').strip()[:_TASK_NOTE_MAX],
+            'created': now,
+            'updated': now,
+        }
+        with self._sessions_lock:
+            self._loadTasksLocked()
+            self._tasks[task['id']] = task
+            self._persistTasksLocked()
+            # Render inside the lock: task dicts are mutated in place by
+            # concurrent updates, and references must not escape.
+            return {'announced': True, 'task': _task_public(task, now)}
+
+    def _update_task(self, sid, label, task_id, status=None, note=None,
+                     commit=None) -> dict:
+        task_id = (task_id or '').strip()
+        now = time.time()
+        with self._sessions_lock:
+            self._loadTasksLocked()
+            task = self._tasks.get(task_id)
+            if task is None:
+                active = [_task_public(t, now) for t in self._tasks.values()
+                          if t.get('status') in _TASK_ACTIVE_STATUSES]
+                return {'error': 'no task with id %r' % task_id,
+                        'active_tasks': active[:_TASK_LIST_CAP]}
+            if status is not None:
+                if status not in _TASK_STATUSES:
+                    return {'error': 'status must be one of %s'
+                                     % (_TASK_STATUSES,)}
+                task['status'] = status
+            if note is not None:
+                task['note'] = str(note).strip()[:_TASK_NOTE_MAX]
+            if commit is not None:
+                sha = str(commit).strip()[:64]
+                if sha:
+                    task['commit'] = sha
+                    if status is None and task.get('status') != 'committed':
+                        # Recording a real sha IS the committed transition
+                        # unless the caller said otherwise. An empty commit
+                        # is a no-op, never an implied transition.
+                        task['status'] = 'committed'
+            if sid and sid != task.get('session'):
+                # Peer transition (e.g. marking a dead session's task
+                # abandoned) -- cooperative, but keep the trace.
+                task['updated_by'] = sid
+            elif sid:
+                # The owner's own update clears a stale peer attribution so
+                # updated_by always describes the LATEST write.
+                task.pop('updated_by', None)
+            task['updated'] = now
+            self._persistTasksLocked()
+            return {'updated': True, 'task': _task_public(task, now)}
+
+    def _tasks_snapshot(self, include_terminal=False) -> list:
+        """Public task list, newest-updated first, capped. Worker-side.
+        Filtered, sorted AND rendered inside the lock -- task dicts are
+        mutated in place by concurrent updates, so references must not
+        escape; and the sort key routes through _task_updated so one
+        malformed entry from a foreign writer cannot take the whole
+        surface down."""
+        now = time.time()
+        with self._sessions_lock:
+            self._loadTasksLocked()
+            wanted = [t for t in self._tasks.values()
+                      if include_terminal
+                      or t.get('status') in _TASK_ACTIVE_STATUSES]
+            wanted.sort(key=lambda t: -_task_updated(t))
+            return [_task_public(t, now) for t in wanted[:_TASK_LIST_CAP]]
+
+    def _ledger_tasks_for_files(self, landing_files) -> list:
+        """Active ledger tasks whose file: scopes intersect a set of
+        repo-relative paths (forward slashes). Rendered inside the lock;
+        each hit carries 'overlap' = the matching path. Only file: scopes
+        can be matched worker-side (op paths would need TD to resolve to
+        files) -- callers must document that limit."""
+        landing_set = {str(p).replace('\\', '/') for p in landing_files or ()}
+        if not landing_set:
+            return []
+        now = time.time()
+        hits = []
+        with self._sessions_lock:
+            self._loadTasksLocked()
+            for task in self._tasks.values():
+                if task.get('status') not in _TASK_ACTIVE_STATUSES:
+                    continue
+                overlap = None
+                for scope in (task.get('scopes') or []):
+                    if isinstance(scope, str) and scope.startswith('file:'):
+                        rel = scope[5:].replace('\\', '/')
+                        if rel in landing_set:
+                            overlap = rel
+                            break
+                if overlap:
+                    entry = _task_public(task, now)
+                    entry['overlap'] = overlap
+                    hits.append(entry)
+        return hits
+
     def _release_scope(self, sid, scope):
         """Release a lease held by this session. Worker-side pure Python."""
         me = sid or '_anon'
@@ -937,6 +1214,25 @@ class EnvoyMCPServer:
                 'main tree for main_dirty collisions, coordinate with the '
                 'listed peers, and save the project (or re-export) for '
                 'tdn_unsaved collisions. Never overwrite blind.')
+
+        # Shared-ledger context: ACTIVE tasks whose file: scopes intersect
+        # the landing set. Report-only in this iteration (the verdict stays
+        # git-truth-driven), but a done_uncommitted overlap is exactly the
+        # "finished work sitting in the tree" that must be committed or
+        # coordinated before this landing goes over it.
+        try:
+            ledger_tasks = self._ledger_tasks_for_files(landing)
+            if ledger_tasks:
+                result['ledger_tasks'] = ledger_tasks
+                if any(t.get('status') == 'done_uncommitted'
+                       for t in ledger_tasks):
+                    result['ledger_hint'] = (
+                        'A done_uncommitted ledger task overlaps this '
+                        'landing: finished work is sitting uncommitted on '
+                        'those files. Commit it (or coordinate with its '
+                        'session) BEFORE landing over it.')
+        except Exception:
+            pass
         return result
 
     # --- get_guidance: serve the project's own rules/skills over MCP ------
@@ -2502,10 +2798,15 @@ class EnvoyMCPServer:
                 pid, first_seen, last_seen, idle_s, requests, last_tool,
                 recent_scopes = op paths/files this session recently
                 modified, claims = scopes this session holds via
-                claim_scope, stale = no traffic for >90s), 'count', and 'you'
+                claim_scope, stale = no traffic for >90s), 'count', 'you'
                 (the caller's own sid, or null for clients that connect
-                without a bridge). Sessions silent for over an hour are
-                dropped. Responses to ANY tool also carry a '_peers'
+                without a bridge), and 'tasks' -- the shared task ledger's
+                ACTIVE entries from every session (see announce_task):
+                in_progress, plus done_uncommitted meaning FINISHED work
+                sitting uncommitted in the tree -- never mistake that for
+                in-flight work, and never build over those files without
+                committing or coordinating first. Sessions silent for over
+                an hour are dropped. Responses to ANY tool also carry a '_peers'
                 advisory list automatically when your request overlaps
                 territory another session touched recently; an entry with
                 conflict=true means a peer WROTE there within the last
@@ -2518,6 +2819,13 @@ class EnvoyMCPServer:
             snapshot = self._sessions_snapshot()
             sid, _label = _SESSION_CTX.get()
             snapshot['you'] = sid
+            # The shared task ledger rides along so session start needs no
+            # extra call: in_progress and done_uncommitted entries from
+            # EVERY session (see announce_task / update_task).
+            try:
+                snapshot['tasks'] = self._tasks_snapshot()
+            except Exception:
+                pass
             return snapshot
 
         @self.mcp.tool()
@@ -2555,6 +2863,75 @@ class EnvoyMCPServer:
             return self._release_scope(sid, scope)
 
         @self.mcp.tool()
+        def announce_task(title: str, scopes: list = None,
+                          note: str = "") -> dict:
+            """
+            Announce a unit of work to the shared task ledger.
+
+            The ledger (.embody/tasks.json) is how parallel AI sessions
+            know what is being worked on and -- crucially -- what is
+            FINISHED but not yet committed. Claims (claim_scope) expire
+            the moment a session goes quiet; ledger entries persist, so a
+            session arriving later still sees the state of the work
+            instead of guessing it from dirty files and timestamps.
+
+            Announce at the START of substantive work (a feature, a fix, a
+            refactor -- not single-tool edits), then keep it honest with
+            update_task: done_uncommitted when the work is finished but
+            sitting in the tree, committed (with the sha) once it lands,
+            abandoned if dropped. Active tasks ride back on get_sessions
+            for every session.
+
+            Args:
+                title: Short human-readable name for the work
+                scopes: Op paths, file:<repo-relative> paths, or
+                    project:<name> scopes the work touches (max 8)
+                note: One-line intent or state detail
+
+            Returns:
+                {'announced': True, 'task': {...}} with the new task id
+                (tsk_...)
+            """
+            # Worker-side pure Python + ledger file I/O -- no TD access
+            # (mcp-safety).
+            sid, label = _SESSION_CTX.get()
+            return self._announce_task(sid, label, title, scopes, note)
+
+        @self.mcp.tool()
+        def update_task(task_id: str,
+                        status: Optional[Literal[
+                            'in_progress', 'done_uncommitted',
+                            'committed', 'abandoned']] = None,
+                        note: str = None, commit: str = None) -> dict:
+            """
+            Update a shared-ledger task's status, note, or commit sha.
+
+            Transitions (see announce_task): -> done_uncommitted when the
+            work is complete but uncommitted -- the state peers MUST see
+            before touching the same files; -> committed once it lands
+            (pass commit=<sha>; a sha alone implies the transition);
+            -> abandoned when dropped. Any session may update any task --
+            marking a dead session's stale entry abandoned is cooperative
+            hygiene -- and the ledger records updated_by when the writer
+            is not the owner.
+
+            Args:
+                task_id: The id announce_task returned (tsk_...)
+                status: New lifecycle status
+                note: Replacement one-line note
+                commit: Commit sha once the work landed
+
+            Returns:
+                {'updated': True, 'task': {...}}, or an error listing the
+                active tasks when the id is unknown
+            """
+            # Worker-side pure Python + ledger file I/O -- no TD access
+            # (mcp-safety).
+            sid, label = _SESSION_CTX.get()
+            return self._update_task(sid, label, task_id, status, note,
+                                     commit)
+
+        @self.mcp.tool()
         def preflight_landing(worktree_path: str) -> dict:
             """
             Check whether a worktree's diff can land safely in the main tree.
@@ -2575,7 +2952,13 @@ class EnvoyMCPServer:
             Returns:
                 Dict with worktree, landing_files, collisions {main_dirty,
                 peers, tdn_unsaved}, verdict 'clear'|'conflicts', or
-                {'error': ...}
+                {'error': ...}. May also carry 'ledger_tasks' (active
+                shared-ledger tasks whose file: scopes intersect the
+                landing, each with 'overlap') and 'ledger_hint' when one is
+                done_uncommitted -- commit that work or coordinate before
+                landing over it. Only file:-scoped tasks can be matched
+                here (op-path scopes need TD to resolve), so an absent
+                ledger_tasks does NOT prove no ledger work overlaps.
             """
             sid, _label = _SESSION_CTX.get()
             return self._preflight_landing(worktree_path, caller_sid=sid)

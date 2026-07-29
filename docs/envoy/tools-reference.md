@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 56 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 58 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 Every mutating TD-authoring tool call is wrapped in a TouchDesigner undo block. Press Ctrl+Z in TD to revert an agent change; a `batch_operations` call is one undo step for the whole batch.
 
@@ -141,6 +141,8 @@ Concurrent AI sessions (multiple Claude Code windows, other MCP clients) working
 | `get_sessions` | — | List connected AI sessions: label (`repo@branch`), idle time, `recent_scopes` it modified, `claims` it holds, plus `you` (the caller's own session id). May include `worktrees`: in-flight durable worktree tasks, visible even after their session ended |
 | `claim_scope` | `scope`, `note?`, `ttl?` | Cooperative write lease on an op-path prefix, a `file:` path, or a `project:` scope. Peers' overlapping claims are refused while yours is live; their destructive operations on it are gated. Auto-renews on your own writes; expires on TTL or session silence |
 | `release_scope` | `scope` | Release a lease you hold. Polite — expiry also handles it |
+| `announce_task` | `title`, `scopes?`, `note?` | Announce a unit of work to the shared task ledger so parallel sessions see what is in progress and what is finished-but-uncommitted; active entries ride on `get_sessions` |
+| `update_task` | `task_id`, `status?`, `note?`, `commit?` | Transition a ledger task (`done_uncommitted` / `committed` with sha / `abandoned`); any session may update any task, non-owner writes record `updated_by` |
 | `preflight_landing` | `worktree_path` | Landing safety check for a git-worktree diff: intersects the files it would land with main-tree dirt, peer `file:` claims/touches, and unsaved live TDN state. Run before porting any worktree diff; a `conflicts` verdict means reconcile first |
 
 !!! info "Auto-piggybacked peer advisories"
