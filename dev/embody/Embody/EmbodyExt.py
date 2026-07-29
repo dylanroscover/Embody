@@ -345,8 +345,15 @@ class EmbodyExt:
     # PYTHON ENVIRONMENT SETUP (uv)
     # ==========================================================================
 
-    # Bump MCP_MIN_VERSION when a new release is tested and verified.
-    MCP_MIN_VERSION = '1.26.0'
+    # Bump MCP_MIN_VERSION when a new release is tested and verified. The
+    # dependency pin is always ``mcp>=MCP_MIN_VERSION,<next-major``: SDK 2.0.0
+    # (2026-07-28) removed mcp.server.fastmcp overnight and every fresh
+    # unpinned install broke (issue #81), so a new SDK major is adopted only
+    # by a deliberate port + this constant's bump -- never by the resolver.
+    # Bumping it (or changing any dep below) re-stamps the spec, and
+    # _environmentNeedsInstall then auto-upgrades every existing venv on its
+    # next Start -- users never rebuild a venv by hand.
+    MCP_MIN_VERSION = '2.0.0'
 
     def _venvPaths(self) -> dict:
         """Compute venv / site-packages paths and the dependency list.
@@ -363,11 +370,13 @@ class EmbodyExt:
         # counterpart to diff_tdn). git invokes that driver via THIS venv
         # python, and v6 .tdn files are YAML, so the venv must carry yaml even
         # though the Envoy bridge itself never imports it.
-        deps = [f'mcp>={self.MCP_MIN_VERSION}', 'attrs<25', 'pyyaml']
+        ceiling_major = int(self.MCP_MIN_VERSION.split('.')[0]) + 1
+        deps = [f'mcp>={self.MCP_MIN_VERSION},<{ceiling_major}', 'attrs<25',
+                'pyyaml']
         if sys.platform.startswith('win'):
             site_packages = os.path.join(venv_dir, 'Lib', 'site-packages')
             venv_python = os.path.join(venv_dir, 'Scripts', 'python.exe')
-            deps.append('pywin32>=306')
+            deps.append('pywin32>=311')  # mcp 2.x floor on win32
         else:
             py_ver = f'python{sys.version_info.major}.{sys.version_info.minor}'
             site_packages = os.path.join(venv_dir, 'lib', py_ver, 'site-packages')
@@ -380,17 +389,54 @@ class EmbodyExt:
             'python_exe': python_exe,
             'deps': deps,
             'mcp_min_version': self.MCP_MIN_VERSION,
+            'mcp_ceiling_major': ceiling_major,
+            # What the stamp records / compares. Binary wheels (pydantic_core,
+            # cryptography, pywin32) are ABI-tied to the interpreter, so a TD
+            # upgrade that bumps embedded Python must rebuild the venv.
+            'python_tag': f'{sys.version_info.major}.{sys.version_info.minor}',
+            'stamp_path': os.path.join(venv_dir, 'embody-env.json'),
         }
+
+    @staticmethod
+    def _venvPythonTag(venv_dir) -> 'str | None':
+        """major.minor of the interpreter a venv was built for, from its
+        pyvenv.cfg (uv writes ``version_info = 3.11.15``; stdlib venv writes
+        ``version = 3.11.15``). None when the cfg is missing or unparseable.
+        Pure filesystem -- worker-thread safe.
+        """
+        try:
+            with open(os.path.join(venv_dir, 'pyvenv.cfg'), 'r',
+                      encoding='utf-8') as f:
+                for line in f:
+                    key, _, val = line.partition('=')
+                    if key.strip().lower() in ('version', 'version_info'):
+                        parts = val.strip().split('.')
+                        if len(parts) >= 2:
+                            return f'{int(parts[0])}.{int(parts[1])}'
+        except Exception:
+            pass
+        return None
 
     def _environmentNeedsInstall(self, spec: Optional[dict] = None) -> bool:
         """Cheap, non-blocking check: does the venv need a (slow) install?
 
         Returns True when a venv build / pip install is required -- because the
-        mcp package is absent, below MCP_MIN_VERSION, or paired with an
-        incompatible attrs 25.x. Reads only the filesystem (the installed
-        version is parsed from the ``mcp-X.Y.Z.dist-info`` directory name), so
-        there is no subprocess, no network, and no import. Safe to call on the
-        main thread before every Start() to decide sync-vs-async bootstrap.
+        mcp package is absent, outside ``[MCP_MIN_VERSION, next-major)``,
+        paired with an incompatible attrs 25.x, or because the venv was built
+        for a DIFFERENT dependency spec or Python than this Embody wants (the
+        ``embody-env.json`` stamp _installDependencies writes). The stamp is
+        what carries every existing install forward on upgrade: any release
+        that changes a pin makes older venvs report needs-install once, and
+        the background bootstrap upgrades them in place -- nobody rebuilds a
+        venv by hand (issue #81). Reads only the filesystem (versions come
+        from ``*-X.Y.Z.dist-info`` directory names), so there is no
+        subprocess, no network, and no import. Safe to call on the main
+        thread before every Start() to decide sync-vs-async bootstrap.
+
+        Side effect: a Python-version mismatch sets ``spec['recreate_venv']``
+        so _installDependencies rebuilds the venv (``uv venv --clear``)
+        instead of installing into one whose binary wheels target the old
+        interpreter ABI.
         """
         spec = spec or self._venvPaths()
         site_packages = spec['site_packages']
@@ -401,16 +447,47 @@ class EmbodyExt:
         # treat its absence as "needs install" to upgrade existing venvs.
         if not os.path.isdir(os.path.join(site_packages, 'yaml')):
             return True
+        # The venv's OWN record of the interpreter that built it, checked
+        # before any stamp logic: a TD upgrade that bumps embedded Python
+        # must REBUILD (binary wheels are ABI-tied), including pre-stamp
+        # venvs and combined python+deps upgrades where a deps-first check
+        # would return early and install in place onto the wrong ABI.
+        cfg_tag = self._venvPythonTag(spec.get('venv_dir', ''))
+        if cfg_tag and cfg_tag != spec['python_tag']:
+            spec['recreate_venv'] = True
+            return True
+        # Spec stamp: what this venv was built for. Missing (any pre-stamp
+        # venv) or different (a pin changed, a dep added) -> reinstall.
         try:
-            infos = glob(os.path.join(site_packages, 'mcp-*.dist-info'))
-            if not infos:
-                # mcp present but no metadata -- the old fast path accepted this
-                # and proceeded to the import check, so no install is required.
-                return False
-            ver = os.path.basename(infos[0])[len('mcp-'):-len('.dist-info')]
+            with open(spec['stamp_path'], 'r', encoding='utf-8') as f:
+                stamp = json.load(f)
+        except Exception:
+            stamp = None
+        if not isinstance(stamp, dict):
+            return True
+        if stamp.get('python') != spec['python_tag']:
+            # Secondary to the pyvenv.cfg probe (a cfg-less venv still gets
+            # caught here) -- checked before deps so the rebuild verdict wins
+            # over the in-place-upgrade verdict when both changed.
+            spec['recreate_venv'] = True
+            return True
+        if sorted(stamp.get('deps') or []) != sorted(spec['deps']):
+            return True
+        ver = self._mcpDistVersion(site_packages)
+        if ver is None:
+            # mcp present but no parseable metadata -- the old fast path
+            # accepted this and proceeded to the import check, so no install
+            # is required.
+            return False
+        try:
             installed = tuple(int(x) for x in ver.split('.')[:3])
             minimum = tuple(int(x) for x in spec['mcp_min_version'].split('.'))
             if installed < minimum:
+                return True
+            # At or above the unsupported next major (a hand-installed newer
+            # mcp, or the unpinned-resolver era that pulled 2.0.0 under 1.x
+            # code -- issue #81): reinstall walks it back inside the pin.
+            if installed >= (spec['mcp_ceiling_major'],):
                 return True
         except Exception:
             return False
@@ -443,13 +520,51 @@ class EmbodyExt:
         return True
 
     @staticmethod
-    def _importGateCheck() -> tuple[bool, str]:
+    def _importGateCheck(site_packages: 'str | None' = None) -> tuple[bool, str]:
         """Pure import gate for Envoy's MCP stack.
 
         Safe to call from a background thread: no TD objects, no logging, no
-        parameter access. Returns ``(True, '')`` when ``mcp.server`` imports.
+        parameter access. Returns ``(True, '')`` when ``mcp.server.mcpserver``
+        -- the module EnvoyExt actually serves with -- imports. Gating on the
+        exact module matters: SDK 2.0.0 kept ``mcp.server`` importable while
+        REMOVING ``mcp.server.fastmcp``, so a parent-package gate passed and
+        the server then died in a 30-minute retry storm (issue #81).
+
+        When ``site_packages`` is provided, also refuses the stale-interpreter
+        upgrade state: dependencies upgraded on disk while an older mcp stack
+        is already imported in this process. Importing new-major submodules
+        through cached old parents yields a mixed stack (and re-running
+        pydantic model definitions over a live pydantic_core can abort() the
+        process), so the only safe exit is a TD restart -- say so instead of
+        trying.
         """
-        if 'mcp.server' in sys.modules:
+        needed = 'mcp.server.mcpserver'
+        disk_ver = (EmbodyExt._mcpDistVersion(site_packages)
+                    if site_packages else None)
+        loaded_ver = getattr(sys, '_envoy_mcp_loaded_version', None)
+        stale = (loaded_ver and disk_ver and disk_ver != loaded_ver
+                 and 'mcp' in sys.modules)
+        # A fully-loaded 1.x stack identifies itself by its fastmcp module --
+        # 2.x has none. New-generation code gating over a LIVE 1.x stack
+        # always needs a restart, whatever the disk state (even mid-install,
+        # when disk metadata may be absent): purging a live stack to reimport
+        # is the documented pydantic_core abort() vector. A half-loaded
+        # FAILED import (parent 'mcp' without fastmcp) is NOT this case and
+        # still takes the recovery purge below.
+        legacy_loaded = ('mcp.server.fastmcp' in sys.modules
+                         and needed not in sys.modules)
+        if stale or legacy_loaded:
+            # Kill the process-wide fast-path flag: a refusal must make EVERY
+            # subsequent Start re-run this gate (and re-refuse) rather than
+            # short-circuit into _continueStart and import a mixed stack.
+            sys._envoy_import_gate_ok = False
+            return False, (
+                f'Envoy dependencies were upgraded on disk (installed mcp '
+                f'{disk_ver or "unknown"}, loaded {loaded_ver or "1.x"}) but '
+                f'the old stack is already imported in this session. Save '
+                f'your work and restart TouchDesigner to finish the upgrade.'
+            )
+        if needed in sys.modules:
             sys._envoy_import_gate_ok = True
             return True, ''
         try:
@@ -461,16 +576,49 @@ class EmbodyExt:
             for mod in list(sys.modules):
                 if mod == 'mcp' or mod.startswith('mcp.'):
                     del sys.modules[mod]
-            importlib.import_module('mcp.server')
+            importlib.import_module(needed)
             sys._envoy_import_gate_ok = True
+            if disk_ver:
+                # Remember which dist this interpreter imported so a future
+                # on-disk upgrade is detected as restart-required, not
+                # hot-swapped into a mixed stack.
+                sys._envoy_mcp_loaded_version = disk_ver
             return True, ''
         except BaseException as e:
+            sys._envoy_import_gate_ok = False
             return False, str(e) or e.__class__.__name__
 
     @staticmethod
+    def _mcpDistVersion(site_packages) -> 'str | None':
+        """Newest parseable mcp version among mcp-*.dist-info directories.
+
+        Version-sorted, not filesystem-order: an interrupted uninstall can
+        leave an old dist-info beside the current one, and reading the stale
+        name would wedge needs-install True forever (uv already satisfied)
+        and feed the gate a wrong disk version. None when no parseable
+        metadata exists. Pure filesystem -- worker-thread safe.
+        """
+        try:
+            best = None
+            for p in glob(os.path.join(site_packages, 'mcp-*.dist-info')):
+                v = os.path.basename(p)[len('mcp-'):-len('.dist-info')]
+                try:
+                    key = tuple(int(x) for x in v.split('.')[:3])
+                except Exception:
+                    continue
+                if best is None or key > best[0]:
+                    best = (key, v)
+            return best[1] if best else None
+        except Exception:
+            return None
+
+    @staticmethod
     def _importGateFailureMessage(site_packages, message):
+        if 'restart TouchDesigner' in message:
+            return message  # the restart notice is the complete instruction
         return (
-            f'Dependencies installed but mcp.server failed to import: {message}. '
+            f'Dependencies installed but mcp.server.mcpserver failed to '
+            f'import: {message}. '
             f'Inspect {site_packages} for partial installs and try deleting '
             f'.venv/ to force a clean rebuild.'
         )
@@ -481,10 +629,11 @@ class EmbodyExt:
         Installs uv if not found, creates .venv, installs packages.
         Adds the venv's site-packages to sys.path so TD can import from it.
 
-        Returns True if the environment is ready (mcp.server importable),
-        False if any step failed. Callers (e.g. EnvoyExt.Start) MUST gate on
-        this -- continuing past a False return produces an inscrutable
-        'No module named mcp.server' traceback at server-start time.
+        Returns True if the environment is ready (mcp.server.mcpserver
+        importable), False if any step failed. Callers (e.g. EnvoyExt.Start)
+        MUST gate on this -- continuing past a False return produces an
+        inscrutable 'No module named mcp.server.mcpserver' traceback at
+        server-start time.
 
         Synchronous. The slow install and import gate run on the calling thread,
         so this is only safe when blocking is acceptable. EnvoyExt.Start()
@@ -570,20 +719,31 @@ class EmbodyExt:
             # of one-time disk for immunity to that entire class.
             uv_env = dict(os.environ, UV_LINK_MODE='copy')
 
-            if not os.path.isdir(venv_dir):
-                log('Creating virtual environment...')
+            recreate = bool(spec.get('recreate_venv'))
+            if recreate or not os.path.isdir(venv_dir):
+                log('Rebuilding virtual environment (Python version changed)...'
+                    if recreate else 'Creating virtual environment...')
+                cmd = [uv, 'venv', venv_dir, '--python', python_exe]
+                if recreate:
+                    # uv owns the removal of the stale-ABI venv; Embody never
+                    # recursive-deletes it by hand.
+                    cmd.append('--clear')
                 subprocess.run(
-                    [uv, 'venv', venv_dir, '--python', python_exe],
+                    cmd,
                     check=True, capture_output=True, text=True,
                     stdin=subprocess.DEVNULL, env=uv_env,
                 )
 
-            log('Installing dependencies...')
+            # Name the spec in the log line: when an install resolves the
+            # wrong thing in the field, this line is the evidence (issue #81
+            # was diagnosed from a log that couldn't show what pip saw).
+            log(f'Installing dependencies ({", ".join(deps)})...')
             subprocess.run(
                 [uv, 'pip', 'install'] + deps + ['--python', venv_python],
                 check=True, capture_output=True, text=True,
                 stdin=subprocess.DEVNULL, env=uv_env,
             )
+            self._writeEnvStamp(spec)
             log('Python environment ready', 'SUCCESS')
             return True
 
@@ -594,22 +754,45 @@ class EmbodyExt:
             log(f'Environment setup failed: {e}', 'ERROR')
             return False
 
+    @staticmethod
+    def _writeEnvStamp(spec: dict) -> None:
+        """Record what the venv was built for (dep spec + Python tag).
+
+        WORKER-THREAD SAFE: pure filesystem write on paths precomputed in
+        ``spec``. _environmentNeedsInstall compares this stamp against the
+        current spec, which is what makes every Embody upgrade that changes a
+        pin auto-upgrade every existing venv on its next Start. A torn or
+        missing stamp just reads as needs-install -- self-healing, so no
+        atomic-rename dance is needed.
+        """
+        stamp = {
+            'schema': 1,
+            'deps': sorted(spec['deps']),
+            'python': spec['python_tag'],
+        }
+        try:
+            with open(spec['stamp_path'], 'w', encoding='utf-8') as f:
+                json.dump(stamp, f, indent=2)
+        except Exception:
+            pass  # unstamped venv reinstalls next Start -- never block install
+
     def _verifyMcpImportable(self, site_packages):
-        """Final gate: confirm mcp.server actually imports inside TD's process.
+        """Final gate: confirm mcp.server.mcpserver imports inside TD's process.
 
         A populated site-packages is necessary but not sufficient -- a partial
         install or load-time failure (missing native dep, etc.) would still
         leave the server unable to start. Catching it here yields a useful
         textport message instead of an inscrutable traceback at run time.
 
-        Fast path: if mcp.server is already in sys.modules, a previous Start()
-        in this session already imported it successfully -- return True without
-        touching sys.modules.  Tearing down and re-importing mcp.* on top of an
-        already-loaded pydantic_core (Rust C extension) can panic the
-        validator and abort() the process with no Python traceback -- the
-        "TD just closes on Envoy toggle off/on" crash users hit on 5.0.393+.
+        Fast path: if mcp.server.mcpserver is already in sys.modules, a
+        previous Start() in this session already imported it successfully --
+        return True without touching sys.modules.  Tearing down and
+        re-importing mcp.* on top of an already-loaded pydantic_core (Rust C
+        extension) can panic the validator and abort() the process with no
+        Python traceback -- the "TD just closes on Envoy toggle off/on" crash
+        users hit on 5.0.393+.
         """
-        ok, message = self._importGateCheck()
+        ok, message = self._importGateCheck(site_packages)
         if ok:
             sys._envoy_import_gate_ok = True
             return True
@@ -709,9 +892,18 @@ class EmbodyExt:
         import threading
 
         # Sentinel: None = worker still in flight; '' = done, no update (or the
-        # network failed); a truthy string = the notice to log. Reset before
-        # spawning so a stale value from a prior check can't be read.
+        # network failed); a truthy (level, message) tuple = the notice to log.
+        # Reset before spawning so a stale value from a prior check can't be
+        # read.
         self._mcp_update_notice = None
+
+        ceiling_major = int(self.MCP_MIN_VERSION.split('.')[0]) + 1
+
+        def _parse(ver):
+            try:
+                return tuple(int(x) for x in ver.split('.'))
+            except Exception:
+                return None  # prerelease ('2.0.0a1') or unparseable -- skip
 
         def _check():
             try:
@@ -723,17 +915,41 @@ class EmbodyExt:
                 )
                 with urllib.request.urlopen(req, timeout=5) as resp:
                     data = json.loads(resp.read())
-                latest = data['info']['version']
-                if tuple(int(x) for x in latest.split('.')) > tuple(int(x) for x in installed.split('.')):
+                installed_t = _parse(installed) or ()
+                # Newest stable, NON-YANKED release INSIDE the supported major
+                # -- the only thing worth nagging about. Yanked releases must
+                # not be recommended (a maintainer pinning MCP_MIN_VERSION to
+                # one would make the range unresolvable for fresh installs).
+                # Releases at/after the ceiling are a new SDK major: adopting
+                # one takes a deliberate port (issue #81), so those get a calm
+                # one-line note, not upgrade advice.
+                in_range = []
+                for rel, files in data['releases'].items():
+                    v = _parse(rel)
+                    if not v or v[0] >= ceiling_major:
+                        continue
+                    if not files or all(f.get('yanked') for f in files):
+                        continue
+                    in_range.append(v)
+                latest_in_range = max(in_range) if in_range else None
+                latest_overall = _parse(data['info']['version'])
+                notice = ''
+                if latest_in_range and latest_in_range > installed_t:
+                    ver_str = '.'.join(str(x) for x in latest_in_range)
                     # Plain attribute write -- NOT a TD object. Read + logged on
                     # the main thread by _pollMCPUpdate.
-                    self._mcp_update_notice = (
-                        f'MCP update available: {installed} -> {latest}. '
-                        f'Update EmbodyExt.MCP_MIN_VERSION '
-                        f'and delete dev/.venv to upgrade.'
-                    )
-                else:
-                    self._mcp_update_notice = ''  # up to date -- stop polling
+                    notice = ('WARNING', (
+                        f'MCP update available: {installed} -> {ver_str}. '
+                        f'Bump EmbodyExt.MCP_MIN_VERSION in a release; every '
+                        f'venv then auto-upgrades on its next start.'
+                    ))
+                elif latest_overall and latest_overall[0] >= ceiling_major:
+                    notice = ('INFO', (
+                        f'MCP {data["info"]["version"]} (new major) is out '
+                        f'upstream; Embody pins <{ceiling_major} until a '
+                        f'tested port lands. No action needed.'
+                    ))
+                self._mcp_update_notice = notice  # '' = up to date, stop polling
             except Exception:
                 self._mcp_update_notice = ''  # network unavailable, not critical
 
@@ -771,8 +987,10 @@ class EmbodyExt:
             return
         self._mcp_update_notice = None
         if notice:
+            lvl, msg = (notice if isinstance(notice, tuple)
+                        else ('WARNING', notice))
             try:
-                self.Log(notice, 'WARNING')
+                self.Log(msg, lvl)
             except Exception:
                 pass  # ext reinitialized between spawn and drain -- silent no-op
 
@@ -3436,7 +3654,8 @@ class EmbodyExt:
         'post_release' that are DIRECT children of the target automate
         the export.
 
-        Default mode ('copy', PI-style): the target is copied into the
+        Default mode ('copy', the model used by AlphaMoonbase's Private
+        Investigator release manager): the target is copied into the
         cooking-disabled /sys/quiet staging area; pre_release runs ON THE
         COPY (me = the copy's hook DAT, parent() = the staged copy), so
         it shapes the artifact -- reset pars, delete scratch ops --
@@ -3782,8 +4001,9 @@ class EmbodyExt:
         hook -- a Text DAT named 'pre_release' or 'post_release' as a
         DIRECT child (the exact convention ExportPortableTox executes).
         The tracked requirement exists because third-party components
-        arrive with their authors' hook DATs baked in (PI-style tools
-        ship them; found in the wild: AlphaMoonbase's tweener) -- a
+        arrive with their authors' hook DATs baked in (Private
+        Investigator-style tools ship them; found in the wild:
+        AlphaMoonbase's tweener) -- a
         hooks-only scan would execute foreign release machinery. Export
         an untracked component explicitly via ExportPortableTox instead.
         Each target goes through the normal single-component export
@@ -3909,7 +4129,8 @@ class EmbodyExt:
 
     def _exportPortableViaCopy(self, target: 'OP', save_path: str,
                                has_pre: bool, has_post: bool) -> bool:
-        """Portable export with PI-style copy staging (default hook mode).
+        """Portable export with Private Investigator-style copy staging
+        (the default hook mode).
 
         The target is copied into the cooking-disabled /sys/quiet staging
         area; the copy is immediately neutralized -- Embody tags removed

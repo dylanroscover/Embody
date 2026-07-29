@@ -12,7 +12,7 @@ subscription usage - this tier is pure transport + tool contract.
 
 When adding or removing an Envoy tool, update EXPECTED_ENVOY_TOOLS here
 DELIBERATELY - the inventory check fails on drift in either direction. The
-check runs against the LIVE server; tools register on the FastMCP instance
+check runs against the LIVE server; tools register on the MCPServer instance
 only when Envoy (re)starts, so a mismatch right after editing EnvoyExt.py
 usually means "restart Envoy", not a code bug.
 """

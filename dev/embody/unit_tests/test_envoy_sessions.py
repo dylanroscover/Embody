@@ -44,7 +44,7 @@ _envoy_mod = op.Embody.op('EnvoyExt').module
 
 def _bare_worker():
     """EnvoyMCPServer with only the session-registry state, skipping
-    __init__ (which imports FastMCP and registers all tools)."""
+    __init__ (which imports MCPServer and registers all tools)."""
     W = _envoy_mod.EnvoyMCPServer
     w = W.__new__(W)
     w._sessions = {}

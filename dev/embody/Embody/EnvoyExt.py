@@ -363,17 +363,27 @@ class EnvoyMCPServer:
 
         self._docs_state = {'resolved': False, 'root': None, 'index': None, 'cache': {}}
 
-        # Import mcp only when server is instantiated (in worker thread)
-        from mcp.server.fastmcp import FastMCP, Image
+        # Import mcp only when server is instantiated (in worker thread).
+        # SDK 2.0 renamed FastMCP -> MCPServer (mcp.server.mcpserver); the
+        # tool-decorator API is unchanged and Image kept its data=/format=
+        # signature. Transport settings moved off the constructor onto
+        # streamable_http_app() -- applied in run(). port was always bound
+        # by our own uvicorn.Config, never by the SDK.
+        # BEHAVIOR CHANGE from 1.x: sync tool bodies now run on anyio worker
+        # threads and execute CONCURRENTLY (1.x ran them inline on the event
+        # loop, serialized). _execute_in_td is safe (per-request Event under
+        # self.lock, and the TD main thread drains the queue serially), but
+        # any NEW tool-body state must be request-local or lock-guarded.
+        from mcp.server.mcpserver import MCPServer, Image
         self._Image = Image  # Store for use in tool functions
-        # The MCP SDK auto-enables this for host="127.0.0.1" since about
-        # 1.10, but pin it explicitly so a default change cannot silently
-        # drop the Host/Origin validation that defeats DNS rebinding/CSRF
-        # from a local browser. Idea prompted by TDMCP's 1.1.46 security work.
-        transport_security = None
+        # The MCP SDK auto-enables this for host="127.0.0.1", but pin it
+        # explicitly so a default change cannot silently drop the Host/Origin
+        # validation that defeats DNS rebinding/CSRF from a local browser.
+        # Idea prompted by TDMCP's 1.1.46 security work.
+        self._transport_security = None
         try:
             from mcp.server.transport_security import TransportSecuritySettings
-            transport_security = TransportSecuritySettings(
+            self._transport_security = TransportSecuritySettings(
                 enable_dns_rebinding_protection=True,
                 allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"],
                 allowed_origins=[
@@ -384,15 +394,24 @@ class EnvoyMCPServer:
             )
         except Exception as e:
             print(f'[Envoy][WARNING] Transport security settings unavailable; '
-                  f'continuing without explicit FastMCP transport_security: {e}')
-        mcp_kwargs = {
-            'host': "127.0.0.1",
-            'port': port,
-            'stateless_http': True,
-        }
-        if transport_security is not None:
-            mcp_kwargs['transport_security'] = transport_security
-        self.mcp = FastMCP("Envoy", **mcp_kwargs)
+                  f'continuing without explicit MCPServer transport_security: {e}')
+        # version: 2.0 reports serverInfo.version as "" unless told (1.x
+        # substituted the SDK's own version -- neither is Envoy's).
+        # MCPServer.__init__ calls logging.basicConfig(level=INFO): inside
+        # TouchDesigner that installs a root stderr handler and drops the
+        # root level process-wide, turning EVERY info-level logger in the
+        # process into textport output (verified against 2.0.0: handlers
+        # 0->1, root level 30->20). Snapshot and undo -- Envoy tunes its own
+        # loggers in run().
+        import logging as _logging
+        _root = _logging.getLogger()
+        _pre_handlers = list(_root.handlers)
+        _pre_level = _root.level
+        self.mcp = MCPServer("Envoy", version=ENVOY_VERSION)
+        for _h in list(_root.handlers):
+            if _h not in _pre_handlers:
+                _root.removeHandler(_h)
+        _root.setLevel(_pre_level)
         self._register_tools()
 
     def _touch_session(self, sid: str, label: str = None,
@@ -2527,34 +2546,20 @@ class EnvoyMCPServer:
         logging.getLogger("mcp.server.streamable_http").addFilter(
             _DisconnectCrashFilter()
         )
-
-        # Drop the per-request "Processing request of type X" log lines from
-        # FastMCP's lowlevel server.  The bridge's background reconciler
-        # pings the backend every few seconds, which would otherwise flood
-        # TD's textport with one "Processing request of type PingRequest"
-        # line per ping.  These messages have zero diagnostic value at
-        # runtime -- real errors come through different log paths -- so we
-        # filter them out instead of raising the logger level (which would
-        # also drop legitimate warnings).
-        class _RequestProcessingFilter(logging.Filter):
-            def filter(self, record):
-                try:
-                    msg = record.getMessage()
-                except Exception:
-                    return True
-                if msg.startswith("Processing request of type "):
-                    return False
-                # "Received exception from stream: " with empty or whitespace-
-                # only payload = bridge recycled a connection.  Not actionable.
-                if msg.startswith("Received exception from stream:"):
-                    payload = msg[len("Received exception from stream:"):].strip()
-                    if not payload:
-                        return False
-                return True
-
-        logging.getLogger("mcp.server.lowlevel.server").addFilter(
-            _RequestProcessingFilter()
+        # 2.0's modern-envelope path (protocol 2026-07-28) logs handler
+        # exceptions via mcp.server.runner instead of raising through the
+        # ASGI wrapper -- same filter there, so disconnect noise does not
+        # return when clients adopt the new protocol revision.
+        logging.getLogger("mcp.server.runner").addFilter(
+            _DisconnectCrashFilter()
         )
+
+        # (SDK 1.x needed a filter here dropping the lowlevel server's
+        # per-request "Processing request of type X" / empty "Received
+        # exception from stream:" lines. The 2.0 dispatcher emits neither --
+        # verified against the 2.0.0 wheel -- so that filter is gone. If a
+        # future SDK reintroduces per-request textport spam, filter it on the
+        # emitting logger rather than raising levels, as above.)
 
         # Response checker is pure Python (no TD objects), so a plain thread is fine
         def response_checker():
@@ -2576,8 +2581,23 @@ class EnvoyMCPServer:
 
         Thread(target=response_checker, daemon=True).start()
 
-        # Manage uvicorn directly so we can signal shutdown via shutdown_event
-        starlette_app = self.mcp.streamable_http_app()
+        # Manage uvicorn directly so we can signal shutdown via shutdown_event.
+        # SDK 2.0: stateless_http / transport_security / host live on the app
+        # builder now, not the server constructor.
+        # max_request_body_size: 2.0 introduces a 4 MiB default cap that 1.x
+        # never enforced; an oversized tools/call gets a 413 + connection
+        # reset, which the bridge reads as "Lost connection to Envoy". Big
+        # import_network / set_dat_content payloads (multi-thousand-op
+        # networks) can cross 4 MiB, so raise it well clear. Localhost-only
+        # + Host/Origin-validated, so the cap is sanity, not exposure.
+        app_kwargs = {
+            'stateless_http': True,
+            'host': '127.0.0.1',
+            'max_request_body_size': 64 * 1024 * 1024,
+        }
+        if self._transport_security is not None:
+            app_kwargs['transport_security'] = self._transport_security
+        starlette_app = self.mcp.streamable_http_app(**app_kwargs)
 
         # Wrap the ASGI app to suppress client disconnect noise.
         # During extension reinit or tab close, in-flight connections raise
@@ -3369,7 +3389,9 @@ class EnvoyExt:
 
         def worker():
             try:
-                result = import_gate_check()
+                # site_packages arms the stale-interpreter (restart-required)
+                # detection for upgraded-on-disk dependency stacks.
+                result = import_gate_check(spec['site_packages'])
             except BaseException as e:
                 result = (False, str(e) or e.__class__.__name__)
             # Atomic publish: the main-thread poll reads this single attribute.
@@ -3407,7 +3429,13 @@ class EnvoyExt:
             return
 
         if not ok:
-            self.ownerComp.par.Envoystatus = 'Error: Python environment not ready'
+            # 'Error...' statuses idle the liveness watchdog, so a refusal
+            # (e.g. restart-required after an on-disk upgrade) is calm: each
+            # explicit Start re-runs the gate and re-refuses cheaply.
+            self.ownerComp.par.Envoystatus = (
+                'Error: restart TouchDesigner to finish MCP upgrade'
+                if 'restart TouchDesigner' in message
+                else 'Error: Python environment not ready')
             self._log(
                 op.Embody.ext.Embody._importGateFailureMessage(
                     spec['site_packages'], message),
@@ -3460,7 +3488,11 @@ class EnvoyExt:
             if ok:
                 try:
                     if wire_python_paths(spec):
-                        gate_ok, gate_msg = import_gate_check()
+                        # site_packages arms the stale-interpreter
+                        # (restart-required) detection after an upgrade
+                        # install replaced the packages on disk.
+                        gate_ok, gate_msg = import_gate_check(
+                            spec['site_packages'])
                     else:
                         gate_msg = 'venv site-packages path is missing'
                 except BaseException as e:
@@ -3523,7 +3555,12 @@ class EnvoyExt:
             pass
 
         if not gate_ok:
-            self.ownerComp.par.Envoystatus = 'Error: Python environment not ready'
+            # See _pollImportGate: restart-required refusals get an explicit
+            # status; all 'Error...' statuses idle the liveness watchdog.
+            self.ownerComp.par.Envoystatus = (
+                'Error: restart TouchDesigner to finish MCP upgrade'
+                if 'restart TouchDesigner' in gate_msg
+                else 'Error: Python environment not ready')
             self._log(
                 op.Embody.ext.Embody._importGateFailureMessage(
                     spec['site_packages'], gate_msg),

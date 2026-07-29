@@ -83,7 +83,7 @@ Timeouts kill the whole process TREE (the CLIs spawn the bridge as a child).
 
 - Envoy tool surface changed -> update `EXPECTED_ENVOY_TOOLS` in
   `test_agent_contract.py` in the SAME commit. The inventory check fails on
-  drift in either direction. Remember tools register on the FastMCP instance
+  drift in either direction. Remember tools register on the MCPServer instance
   at Envoy START -- restart Envoy before believing a mismatch.
 - Model pins live at the top of the smoke suites (`CLAUDE_SMOKE_MODEL`,
   `CODEX_SMOKE_MODEL`). The Codex model list rotates with releases; update

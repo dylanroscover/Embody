@@ -20,7 +20,7 @@ Steps for adding a new MCP tool:
 
 3. **Update `EXPECTED_ENVOY_TOOLS`** in `dev/embody/unit_tests/test_agent_contract.py`
    - The Tier-1 agent contract test fails on inventory drift in either direction -- same commit as the tool change
-   - Tools register on the FastMCP instance at Envoy START -- restart Envoy before believing a mismatch
+   - Tools register on the MCPServer instance at Envoy START -- restart Envoy before believing a mismatch
 
 4. **Update the MCP tools reference**
    - Update the `/mcp-tools-reference` skill in `.claude/skills/mcp-tools-reference/SKILL.md`

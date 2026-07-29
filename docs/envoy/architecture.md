@@ -4,7 +4,7 @@
 
 Envoy uses a two-thread architecture to bridge the MCP protocol with TouchDesigner's single-threaded main loop:
 
-- **Worker thread**: Runs the MCP server (FastMCP with Streamable HTTP transport via uvicorn) — no TouchDesigner imports allowed
+- **Worker thread**: Runs the MCP server (MCP SDK 2.x `MCPServer` with Streamable HTTP transport via uvicorn) — no TouchDesigner imports allowed
 - **Main thread**: Executes all TD operations via `EnvoyExt._onRefresh()` callback
 - **Communication**: `threading.Event` + `Queue` for request/response between threads
 - **Thread management**: Uses `op.TDResources.ThreadManager` (TDTask pattern)
@@ -13,7 +13,7 @@ Envoy uses a two-thread architecture to bridge the MCP protocol with TouchDesign
 ┌──────────────┐  STDIO   ┌──────────────┐  HTTP   ┌──────────────┐  Event+Queue  ┌──────────────┐
 │  Claude Code  │ ◄──────► │ STDIO Bridge  │ ──────► │ Worker Thread │ ◄───────────► │  Main Thread  │
 │  (MCP client) │  JSON-RPC │              │  POST   │              │               │              │
-│              │          │ envoy-bridge  │         │ FastMCP      │  MCP Request  │ _onRefresh() │
+│              │          │ envoy-bridge  │         │ MCPServer    │  MCP Request  │ _onRefresh() │
 │              │          │ .py           │         │ (uvicorn)    │  ──────────►  │ Execute TD   │
 │              │          │              │         │              │               │ operations   │
 │              │          │ Meta-tools:  │         │ 127.0.0.1    │  ◄── Result   │              │

@@ -6,6 +6,8 @@ Tests status parameters, port configuration, running flag,
 Does NOT start/stop the actual server (avoids port conflicts).
 """
 
+import sys
+
 runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
@@ -160,6 +162,12 @@ class TestAsyncBootstrap(EmbodyTestCase):
     def test_setup_environment_still_callable(self):
         # The synchronous entry point survives for the venv-recreate recovery
         # path; in the dev project the env is already healthy so it returns True.
+        if 'mcp.server.fastmcp' in sys.modules:
+            self.skipTest(
+                'a 1.x MCP stack is loaded in this session (upgrade landed '
+                'live) -- restart TouchDesigner to finish the SDK 2.0 '
+                'upgrade, then re-run; calling _setupEnvironment now would '
+                'run a real install mid-suite and hit the restart refusal')
         self.assertTrue(self.embody.ext.Embody._setupEnvironment())
 
     def test_mcp_update_marshal_drains_and_logs(self):

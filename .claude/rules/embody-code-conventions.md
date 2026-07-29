@@ -23,7 +23,7 @@ Use `op.Embody.Log(message, level)` from anywhere. Levels: `'DEBUG'`, `'INFO'`, 
 - Use them directly: `self.ownerComp.par.Envoystatus = 'Running'`
 
 ## MCP Tool Development
-- **Error types**: (1) Protocol errors (FastMCP handles automatically), (2) Tool execution errors via `{'error': str(e)}` dicts
+- **Error types**: (1) Protocol errors (the MCP SDK's MCPServer handles automatically), (2) Tool execution errors via `{'error': str(e)}` dicts
 - **Input validation**: Validate all inputs before passing to TD. Check paths, verify operators exist, sanitize strings for `eval()`/`exec()`
 - **Tool signatures are API contracts**: Changing parameter names, type hints, or docstrings in `_register_tools()` changes the public MCP interface
 - **Localhost only**: `127.0.0.1`, never `0.0.0.0`

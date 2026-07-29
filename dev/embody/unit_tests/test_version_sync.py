@@ -113,7 +113,7 @@ class TestVersionSync(EmbodyTestCase):
     def _registered_tool_count(self):
         """Count @self.mcp.tool() wrappers in EnvoyExt.py.
 
-        Static, so it needs no worker-thread access (the FastMCP server
+        Static, so it needs no worker-thread access (the MCPServer
         object is None on the main thread). Cross-checked against the
         bridge's on-disk tools cache when this guard was written:
         58 advertised = 54 TD-side + 4 bridge meta-tools.

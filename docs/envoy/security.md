@@ -4,7 +4,7 @@ Envoy is designed as a **local development tool** — it runs on the loopback in
 
 ## Local-Only by Design
 
-Envoy binds exclusively to `127.0.0.1` (localhost). It does **not** listen on `0.0.0.0` or any external interface, and it validates `Host` and `Origin` headers on every request with explicit FastMCP `TransportSecuritySettings`. This means:
+Envoy binds exclusively to `127.0.0.1` (localhost). It does **not** listen on `0.0.0.0` or any external interface, and it validates `Host` and `Origin` headers on every request with explicit MCP SDK `TransportSecuritySettings`. This means:
 
 - Only processes running on the same machine can connect
 - It is not accessible from the local network or internet
