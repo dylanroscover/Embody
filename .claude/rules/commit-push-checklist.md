@@ -32,6 +32,7 @@ If no docs need updating, that's fine — but the evaluation must happen.
 - Any turn that edits `docs/**` ends by stating the remaining steps to publication, not just "docs fixed."
 - Confirm a deploy rather than assuming it: `gh run list --workflow=docs.yml -L 3` (and `git log origin/main..HEAD --oneline -- docs/ mkdocs.yml` to see doc commits still unmerged). Compare against `origin/main`, never a local `main` pointer that may be stale.
 - `mkdocs build --strict` locally proves the page *builds*; it says nothing about whether it is *published*.
+- When confirming a deployed page with WebFetch, remember it **caches per URL for 15 minutes** — re-fetching a URL you already fetched this session returns the pre-deploy copy and reads exactly like a failed deploy. Verify with a cache-busting query string (`?cb=<change>`), which MkDocs ignores.
 
 ### 3. Test Audit
 
