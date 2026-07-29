@@ -250,9 +250,9 @@ Both `target` and `save_path` are optional — when omitted, `target` defaults t
 
 ### Script hooks
 
-Component authors can run their own code around the export — the same authoring workflow popularized by [Private Investigator](https://github.com/AlphaMoonbaseBerlin/TD_Private_Investigator)'s `pre_release` DAT:
+Component authors can run their own code around the export — the same authoring workflow popularized by the `pre_release` DAT in AlphaMoonbase's [Private Investigator](https://github.com/AlphaMoonbaseBerlin/TD_Private_Investigator), the component release manager many TouchDesigner authors already use:
 
-- **`pre_release`** — a **Text DAT** named `pre_release` that is a **direct child** of the exported COMP. It runs on a **staged copy** of your component (in TD's cooking-disabled `/sys/quiet` area, exactly PI's model), so it shapes the artifact — reset parameters, set defaults, delete scratch/test operators — without ever touching your live component. If the script **errors for any reason** — a deliberate `raise`, a failed `assert`, or a plain bug — the export **aborts**: nothing is written, `post_release` does not run, and the staged copy is **kept** (renamed `<name>_release_failed` under `/sys/quiet`) so you can inspect exactly what your hook did. Inspect it in the same session — `/sys` is not saved with your project, so kept copies vanish on TD restart. A buggy hook can therefore never silently ship a half-prepared component; the deliberate form is just an early guard:
+- **`pre_release`** — a **Text DAT** named `pre_release` that is a **direct child** of the exported COMP. It runs on a **staged copy** of your component (in TD's cooking-disabled `/sys/quiet` area, exactly Private Investigator's model), so it shapes the artifact — reset parameters, set defaults, delete scratch/test operators — without ever touching your live component. If the script **errors for any reason** — a deliberate `raise`, a failed `assert`, or a plain bug — the export **aborts**: nothing is written, `post_release` does not run, and the staged copy is **kept** (renamed `<name>_release_failed` under `/sys/quiet`) so you can inspect exactly what your hook did. Inspect it in the same session — `/sys` is not saved with your project, so kept copies vanish on TD restart. A buggy hook can therefore never silently ship a half-prepared component; the deliberate form is just an early guard:
 
     ```python
     # pre_release: refuse to release in a bad state
@@ -291,7 +291,7 @@ Details worth knowing:
 
 `op.Embody.ReleaseAll()` — or the **Release All** pulse on the Embody page — exports every **releasable** component as its own portable `.tox` in one pass. Releasable means two things at once: the component is **externalized by Embody** (tracked — it's yours) *and* it **carries a release hook** (`pre_release` or `post_release` as a direct child). No other tagging, list, or setting is consulted.
 
-Both conditions matter: hooks alone would be too eager, because third-party components arrive with their *authors'* hook DATs baked in (PI-style tools ship them inside their artifacts) — a hooks-only sweep would execute foreign release machinery. Tracked-and-hooked means "mine, and declared releasable."
+Both conditions matter: hooks alone would be too eager, because third-party components arrive with their *authors'* hook DATs baked in (Private Investigator-style tools ship them inside their artifacts) — a hooks-only sweep would execute foreign release machinery. Tracked-and-hooked means "mine, and declared releasable."
 
 - Each target runs the normal single-component export — its own copy staging, its own hooks, full artifact hygiene. A failing component is logged and skipped; the batch never halts.
 - `root` scopes the scan (`None` = whole project, excluding TD system networks and Embody itself); `out_dir` overrides the default `release/` folder. Files save as `{name}.tox`; duplicate names get a numeric suffix with a warning.
