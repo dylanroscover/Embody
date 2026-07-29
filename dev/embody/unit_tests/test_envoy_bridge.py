@@ -1029,6 +1029,43 @@ class TestBridgeMainLoop(EmbodyTestCase):
         responses = self._run_main([msg], forward_side_effect=forward)
         self.assertLen(responses, 0)
 
+    # --- HTTP-status failures are REQUEST failures, not connection loss ---
+
+    def test_http_error_is_request_failure_not_connection_loss(self):
+        """A 413 (or any HTTP status) means the server RESPONDED. HTTPError
+        subclasses URLError, so before the classification branch an
+        oversized tools/call read as 'Lost connection to Envoy' and dropped
+        the client to fallback tools. The reply must name the status and,
+        for 413, carry the split-the-payload hint."""
+        import urllib.error
+
+        def forward(url, msg, **kw):
+            raise urllib.error.HTTPError(
+                url, 413, 'Payload Too Large', {}, None)
+
+        msg = {'jsonrpc': '2.0', 'id': 7, 'method': 'tools/call'}
+        responses = self._run_main([msg], forward_side_effect=forward)
+        self.assertLen(responses, 1)
+        err = responses[0]['error']['message']
+        self.assertIn('HTTP 413', err)
+        self.assertIn('64 MiB', err, 'the 413 reply must carry the size hint')
+        self.assertNotIn('Lost connection', err)
+
+    def test_http_error_other_codes_have_no_size_hint(self):
+        import urllib.error
+
+        def forward(url, msg, **kw):
+            raise urllib.error.HTTPError(
+                url, 500, 'Internal Server Error', {}, None)
+
+        msg = {'jsonrpc': '2.0', 'id': 8, 'method': 'tools/list'}
+        responses = self._run_main([msg], forward_side_effect=forward)
+        self.assertLen(responses, 1)
+        err = responses[0]['error']['message']
+        self.assertIn('HTTP 500', err)
+        self.assertNotIn('64 MiB', err)
+        self.assertNotIn('Lost connection', err)
+
     # --- Forward returns None ---
 
     def test_forward_returns_none_no_response_sent(self):

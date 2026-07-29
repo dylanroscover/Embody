@@ -74,6 +74,7 @@ nav:
   - Home: index.md
   - Quickstart: quickstart.md
   - Manifesto: manifesto.md
+  - Roadmap: roadmap.md
   - Embody:
     - embody/index.md
     - Getting Started: embody/getting-started.md

@@ -258,6 +258,19 @@ def _envoy_settled(embody):
         status = str(embody.par.Envoystatus.eval())
     except Exception as e:
         return True, f'UNREADABLE ({e})'
+    # Embody's own init (catalog scan, validation sweep) delays the Envoy
+    # opt-in, so Envoystatus reads a terminal-looking 'Disabled' BEFORE the
+    # decision was ever offered. Observed 2026-07-29: the flag settled at
+    # attempt 0 with Status='Scanning defaults (40/688)' and reported a
+    # false FAIL. Embody Status != 'Enabled' means init is still in flight
+    # (or genuinely wedged -- the attempt cap still bounds the wait and the
+    # final flag then records the real state).
+    try:
+        embody_status = str(embody.par.Status.eval())
+    except Exception:
+        embody_status = ''
+    if embody_status and embody_status != 'Enabled':
+        return False, status
     lowered = status.lower()
     pending = ('starting', 'installing', 'warming', 'restarting', 'reviving')
     if any(tok in lowered for tok in pending):

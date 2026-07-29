@@ -2736,6 +2736,29 @@ def main():
             response = forward_to_http(current_url, message)
             with state:
                 state.last_connected_time = time.time()
+        except urllib.error.HTTPError as e:
+            # The server RESPONDED -- it is up. HTTPError subclasses
+            # URLError, so without this branch a 4xx/5xx (e.g. a 413 on an
+            # oversized tools/call body) fell into the connection-lost path,
+            # flipped connected=False, and the client saw a bogus "Lost
+            # connection to Envoy" plus fallback tools until the reconciler
+            # re-pinged. Classify by status code alone -- reading a 413's
+            # error body can itself raise (the server may reset the
+            # connection mid-body).
+            with state:
+                state.last_connected_time = time.time()
+            detail = ''
+            if e.code == 413:
+                detail = (" The request body exceeds Envoy's size limit"
+                          " (64 MiB) -- split the payload, e.g. chunk a"
+                          " large import_network or set_dat_content into"
+                          " parts.")
+            log(f"Envoy rejected the request: HTTP {e.code} {e.reason}")
+            if not is_notification:
+                send_error(
+                    request_id, -32000,
+                    f"Envoy rejected the request: HTTP {e.code} "
+                    f"{e.reason}.{detail}")
         except (urllib.error.URLError, ConnectionError, OSError) as e:
             with state:
                 state.connected = False
