@@ -24,6 +24,15 @@ For each changed file, ask: does this change affect user-facing behavior or deve
 
 If no docs need updating, that's fine — but the evaluation must happen.
 
+#### Docs are not live until they are on `main`
+
+`.github/workflows/docs.yml` builds and deploys the MkDocs site **only** on a push to `main` that touches `docs/**` or `mkdocs.yml`. Editing a page on `dev` changes nothing at `https://dylanroscover.github.io/Embody/` — the full chain is: edit → **commit** → **merge/push to `main`** → workflow run → live.
+
+- **Never hand the user (or an issue reply, or anyone else) a docs URL as if it reflects an edit that has not deployed yet.** Say plainly what state it is in: uncommitted, committed but on `dev`, or deployed.
+- Any turn that edits `docs/**` ends by stating the remaining steps to publication, not just "docs fixed."
+- Confirm a deploy rather than assuming it: `gh run list --workflow=docs.yml -L 3` (and `git log origin/main..HEAD --oneline -- docs/ mkdocs.yml` to see doc commits still unmerged). Compare against `origin/main`, never a local `main` pointer that may be stale.
+- `mkdocs build --strict` locally proves the page *builds*; it says nothing about whether it is *published*.
+
 ### 3. Test Audit
 
 CLAUDE.md critical rule #10: "Always update unit tests when modifying project code."

@@ -129,3 +129,17 @@ empty-Update-Status miss shipped precisely because this step was skipped.
   Embody vX.Y.Z: <comma-separated themes>
   ```
 - Do NOT push unless the user asks.
+
+## 7. Publish the Docs (`main` only)
+
+The changelog entry from step 2 -- and every other `docs/` edit in the release -- is invisible to users until it reaches `main`. `.github/workflows/docs.yml` triggers on a push to `main` touching `docs/**` or `mkdocs.yml`; a commit sitting on `dev` deploys nothing.
+
+When the user asks to push a release:
+
+1. Push `dev`, then merge `dev` -> `main` and push `main` (the same flow the earlier `Merge pull request` commits used).
+2. Verify the deploy actually ran: `gh run list --workflow=docs.yml -L 3`. A queued or failed run means the site still serves the previous version.
+3. Confirm the published page, then report the URL. Until then, describe the state accurately ("committed, not yet deployed") rather than linking as though it were live.
+
+`git log origin/main..HEAD --oneline -- docs/ mkdocs.yml` lists doc commits that have not reached `main` yet -- run it against `origin/main`, since a local `main` branch can be many commits stale and makes the gap look larger than it is.
+
+This step is NOT release-only: the same chain applies to any standalone docs fix. See `.claude/rules/commit-push-checklist.md` (Documentation Audit).
