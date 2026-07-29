@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.168
+
+Embody's own generated files stop showing up as phantom git changes.
+
+- **Generated rules and skills no longer re-dirty themselves on every deploy**: `Path.write_text()` defaults to `newline=None`, which translates every line feed to `os.linesep` -- CRLF on Windows. `write_template` (the deployer behind `.claude/rules/*.md` and `.claude/skills/*/SKILL.md`) used that default, so each deploy rewrote every generated file with CRLF while `.gitattributes` declares `*.md eol=lf`. The result was a permanent row of `M` badges whose `git diff` is EMPTY -- and in a user project without a `.gitattributes`, CRLF committed outright and then churned against collaborators on macOS and Linux. Ten write sites now pin `newline='\n'`: `write_template`, the CLAUDE.md / ENVOY.md writers, both JSON manifests, and the `.gitignore` / `.gitattributes` editors. The nine files already carrying CRLF were normalized once so the noise clears immediately.
+- **`.embody/project.json` too**: it is the one file under `.embody/` that `.gitignore` deliberately un-ignores (lines 35 and 75), so it is committed in every user project -- and its atomic writer had the same `write_text` default. It only rewrites when the TD build changes, which is why the churn is rare enough to have gone unnoticed. Its writer and the sibling settings writer now pin LF as well.
+- **Diagnosis note for the next reader**: a CRLF-vs-LF mismatch reports asymmetrically -- `git status` lists the file as modified while `git diff` shows nothing, because the eol attribute normalizes on compare but the working blob still differs from the index. `git diff` on the path (or `git update-index --refresh`) re-hashes and clears it when the content really is identical, which is why the badges sometimes vanish on their own and look intermittent. Repo-wide, 103 tracked files carry CRLF from ordinary Windows editing; those are inert because nothing rewrites them. Only the files Embody itself regenerates churned, which is why the fix is scoped to Embody's writers rather than a repo-wide normalization.
+
 ## v6.0.166
 
 Multi-agent flow: a shared task ledger so parallel sessions know work-STATE (not just presence), and long operations become restart-proof background jobs.

@@ -1593,7 +1593,7 @@ def configure_gitignore(ext, git_root):
             new_content += '\n'
 
         def _write():
-            gitignore.write_text(new_content, encoding='utf-8')
+            gitignore.write_text(new_content, encoding='utf-8', newline='\n')
             if missing:
                 ext._log(f'Added {len(missing)} entries to .gitignore: {", ".join(missing)}')
             elif found_stale:
@@ -1672,7 +1672,7 @@ def configure_gitattributes(ext, git_root):
                     and '*.tdn text eol=lf' in existing):
                 existing = existing.replace(
                     '*.tdn text eol=lf', '*.tdn text eol=lf diff=tdn')
-                gitattr.write_text(existing, encoding='utf-8')
+                gitattr.write_text(existing, encoding='utf-8', newline='\n')
                 ext._log(
                     'Migrated .gitattributes: enabled .tdn semantic diff')
 
@@ -1704,7 +1704,7 @@ def configure_gitattributes(ext, git_root):
                     text += '\n'
 
                 def _backfill(_text=text, _attrs=list(missing_attrs)):
-                    gitattr.write_text(_text, encoding='utf-8')
+                    gitattr.write_text(_text, encoding='utf-8', newline='\n')
                     ext._log(
                         f'Backfilled {len(_attrs)} .gitattributes '
                         f'entr{"y" if len(_attrs) == 1 else "ies"}: '
@@ -1729,7 +1729,8 @@ def configure_gitattributes(ext, git_root):
             existing += '\n'
 
         def _write():
-            gitattr.write_text(existing + MANAGED_BLOCK, encoding='utf-8')
+            gitattr.write_text(existing + MANAGED_BLOCK, encoding='utf-8',
+                               newline='\n')
             ext._log('Added line-ending normalization to .gitattributes')
             try:  # record the marked block so Uninstall strips only it (never the user's file)
                 Embody = op.Embody.ext.Embody

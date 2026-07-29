@@ -629,7 +629,7 @@ def write_project_json(ext) -> None:
         content = json.dumps(existing, indent=2) + '\n'
         for attempt in range(3):
             try:
-                tmp.write_text(content, encoding='utf-8')
+                tmp.write_text(content, encoding='utf-8', newline='\n')
                 os.replace(str(tmp), str(path))
                 ext.Log(
                     f'Pinned td_build={current_build} in '
@@ -674,7 +674,7 @@ def save_settings(ext) -> None:
         content = json.dumps(data, indent=2, sort_keys=True) + '\n'
         for attempt in range(3):
             try:
-                tmp.write_text(content, encoding='utf-8')
+                tmp.write_text(content, encoding='utf-8', newline='\n')
                 os.replace(str(tmp), str(path))
                 # DEBUG breadcrumb: persistence in UNTITLED projects
                 # depends on where this resolves (issue #60) -- when an
