@@ -259,7 +259,16 @@ Component authors can run their own code around the export — the same authorin
     if parent().par.Demomode.eval():
         raise Exception('Demo mode still on -- not releasing')
     ```
-- **`post_release`** — a **Text DAT** named `post_release` (also a direct child). It runs on your **live original** after the export — upload the `.tox`, notify, tag a release. Once `pre_release` completes, `post_release` is guaranteed to run, even when the save itself failed.
+- **`post_release`** — a **Text DAT** named `post_release` (also a direct child). It runs on your **live original** after the export — upload the `.tox`, notify, tag a release. It receives the outcome of the save as `args[1]`, so anything that should only happen when an artifact actually exists guards on it:
+
+    ```python
+    # post_release: only upload when the .tox was really written
+    if not args[1]:
+        return
+    upload(args[0])
+    ```
+
+    Once `pre_release` completes, `post_release` is **guaranteed to run** — even when the save itself failed. That is deliberate, not an oversight: in `hook_mode='live'` the post-hook is the **reset** half of set/reset, so gating it on success would strand a failed export's component in its stripped release state, and it would make notify-on-failure impossible. Copy mode has no live state to reset, but the contract is identical in both modes — check `args[1]` and return early.
 
 Inside a hook, `me` is the hook DAT and `parent()` is the COMP it runs in — the staged copy for `pre_release`, your live component for `post_release`. `args[0]` is the resolved save path; `post_release` additionally receives `args[1]` — `True` when the `.tox` was saved successfully.
 
@@ -275,6 +284,7 @@ Details worth knowing:
 - A `pre_release` may itself call `ExportPortableTox` on a sub-component of the staged copy; nested exports run plain (no hooks, no second copy).
 - A failing `post_release` makes the call return `False` even though the `.tox` was already written — check the log to distinguish this from a failed save. The Manager UI shows a message box when an export returns `False`.
 - The save path is resolved **before** hooks run; both hooks always see the final path.
+- **Conditional releases are yours to define.** Embody has no notion of an "internal" versus a "public" release — put the switch on your own component and branch on it inside the hook: a `Publish` toggle, or a `Releasechannel` menu for more than two states, read with `parent().par.Publish.eval()`. A parameter also works from the **Manager UI** export, where there is no call for arguments to travel through. For a programmatic export that should run no author code at all, pass `run_hooks=False`.
 - Staging costs one copy of the component (memory + a main-thread pause proportional to its size). For very large components — or when you *want* hook mutations to persist on your live comp — pass `hook_mode='live'`: hooks then run in place around the strip/save/restore cycle (**set** in `pre_release`, **reset** in `post_release`) and hook DATs ship inside the artifact, dormant. `run_hooks=False` skips hooks entirely and ships them as-is (Embody's self-updater uses this for its rollback backup). Exports whose target is — or contains — the live Embody COMP are never copy-staged: the Embody COMP itself always uses live semantics, and hooks on a container that holds it are skipped with a warning in copy mode. In the unlikely case that `/sys/quiet` is missing, the export falls back to live mode with a warning.
 
 ### Release All
