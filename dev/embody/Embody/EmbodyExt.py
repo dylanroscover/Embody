@@ -1372,7 +1372,7 @@ class EmbodyExt:
 
     def _applyWizardSetup(self, mode='auto', assistant='claudecode',
                           client='', root='gitroot', custom_root='',
-                          permissions='all', git=''):
+                          permissions='all', git='', externalize=''):
         """Apply the setup-wizard selections and enable (or skip) Envoy.
 
         The single backend entry point the wizard's finish() calls. Because the
@@ -1401,6 +1401,16 @@ class EmbodyExt:
                        config lands in the fresh repo; 'gitskip' / '' change
                        nothing (the enable path stays modal-free and simply
                        proceeds without git, as before).
+          externalize: '' | 'skip' | 'auto' | 'full' -- the wizard's
+                       externalize step (shown only when the project still
+                       has something to externalize). 'auto' turns on the
+                       Autoexternalize preference ('both') so new DATs/COMPs
+                       externalize as they are created; 'full' does that AND
+                       offers the project-wide externalization
+                       (ExternalizeProject, which keeps its own confirmation
+                       + TOX/TDN choice, and is refused outright when there
+                       is no saved .toe to fall back on); 'skip' / '' change
+                       nothing.
         """
         # Whitelist the assistant token: an unrecognized value (a typo, a
         # mis-cased 'None') must be a safe no-op, never fall through to ENABLING
@@ -1425,6 +1435,16 @@ class EmbodyExt:
                      f'skipping git setup.', 'WARNING')
             git = ''
 
+        # Same reading for the externalize token: this is the one wizard
+        # choice that can rewrite the WHOLE project, so anything unrecognized
+        # means "do nothing", never "externalize everything".
+        externalize = (externalize or '').strip().lower()
+        if externalize not in ('', 'skip', 'auto', 'full'):
+            self.Log(f'Setup wizard: unrecognized externalize choice '
+                     f'"{externalize}" -- skipping externalization setup.',
+                     'WARNING')
+            externalize = ''
+
         # 1. Posture.
         if mode in ('auto', 'advanced'):
             self.my.par.Embodymode = mode
@@ -1446,6 +1466,11 @@ class EmbodyExt:
         #     fresh repo and land config inside it.
         if git == 'gitinit':
             self._applyWizardGitInit()
+
+        # 2.6 Externalization decision. Also BEFORE the assistant early-return:
+        #     externalization is the half of Embody that has nothing to do with
+        #     the AI, so an assistant='none' user must still get their choice.
+        self._applyWizardExternalize(externalize)
 
         # 3. AI client / assistant.
         if assistant == 'none':
@@ -1498,6 +1523,144 @@ class EmbodyExt:
                      'WARNING')
         finally:
             self._consent_bulk = False
+
+    def _applyWizardExternalize(self, externalize=''):
+        """Apply the wizard's externalization choice (its step 2.6).
+
+        Tokens: '' / 'skip' change nothing; 'auto' turns on auto-externalization
+        of NEW ops; 'full' does that AND offers the project-wide sweep. Anything
+        else is treated as skip (the caller already whitelists + logs, this is
+        the belt-and-braces for direct callers).
+
+        SAFETY -- 'full' is the only wizard action that touches the user's whole
+        project: ExternalizeProject() re-tags every compatible COMP/DAT, and a
+        project-wide re-tag is exactly what destroyed 18 specimen .tdn files on
+        2026-07-01 (.claude/rules/destructive-tests.md). So this path
+          - never runs its own silent bulk externalization: it calls
+            ExternalizeProject(), which keeps its own confirmation dialog and
+            TOX / TDN / +Project-TDN choice, and
+          - refuses outright unless a saved .toe exists on disk at
+            project.folder / project.name -- the recovery point the user would
+            reopen if the sweep is not what they wanted. Same invariant, and the
+            same reasoning, as RunDestructiveTests' gate.
+        Never raises: a failure here must not break the rest of setup."""
+        token = (externalize or '').strip().lower()
+        if token not in ('auto', 'full'):
+            return
+
+        # Both choices mean "keep new work externalized from here on".
+        try:
+            self.my.par.Autoexternalize = 'both'
+            self.Log('Auto-externalization ON -- new COMPs and DATs are written '
+                     'to disk as they are created (change it anytime via the '
+                     'Auto-Externalize New Ops parameter).', 'SUCCESS')
+        except Exception as e:
+            self.Log(f'Could not turn on auto-externalization: {e}', 'WARNING')
+
+        if token != 'full':
+            return
+
+        recovery = self._wizardRecoveryPoint()
+        if not recovery:
+            self.Log('Skipping the whole-project externalization: no saved .toe '
+                     'on disk to fall back on, and it re-tags every COMP and DAT '
+                     'in the project. Save the project first, then run '
+                     'Externalize Full Project from the Embody parameters. New '
+                     'work is still externalized automatically.', 'WARNING')
+            return
+        self.Log(f'Whole-project externalization requested -- it re-tags every '
+                 f'compatible COMP and DAT. Recovery point on disk: '
+                 f'"{recovery}". Confirm the format in the dialog.', 'WARNING')
+        self._scheduleProjectExternalization()
+
+    def _wizardRecoveryPoint(self):
+        """The saved .toe a whole-project externalization can be undone by
+        reopening, or None when there is none on disk.
+
+        Checks the invariant directly (a file at project.folder /
+        project.name) rather than project.modified / project.dirty -- both
+        proxies have failed here, in opposite directions; see
+        .claude/rules/destructive-tests.md rule 3. Never raises."""
+        try:
+            toe_path = os.path.join(project.folder, project.name)
+            return toe_path if os.path.isfile(toe_path) else None
+        except Exception:
+            return None
+
+    def _scheduleProjectExternalization(self):
+        """Run ExternalizeProject() a few frames out (wizard externalize step).
+
+        Deferred so its modal opens after the wizard's apply path has fully
+        unwound (window closed, params written, Envoy enable kicked off) --
+        a modal raised mid-apply would stall the rest of setup behind it.
+        Isolated in its own method so tests can stub the schedule."""
+        try:
+            run(f"op('{self.my}').ext.Embody.ExternalizeProject()",
+                delayFrames=30, fromOP=self.my)
+        except Exception as e:
+            self.Log(f'Could not start the whole-project externalization: {e} '
+                     f'-- run Externalize Full Project manually.', 'WARNING')
+
+    # Root COMPs TouchDesigner owns, not user content -- never counted when
+    # judging whether a project externalizes itself. ('local' / 'perform' are
+    # skipped the same way by _cleanupEmptyDirectories.)
+    _BUILTIN_ROOT_COMPS = frozenset({'local', 'perform', 'sys', 'ui'})
+
+    def _projectLooksExternalized(self) -> bool:
+        """Best-effort: does this project already write itself out to disk?
+
+        The wizard's externalize step is an OFFER, not a repair, so it is
+        hidden when every top-level COMP the user owns already externalizes --
+        itself tagged, or holding tracked content somewhere inside. Cheap by
+        design: the tracked paths come from the externalizations table (one
+        pass), and only root's direct children are examined -- no op-tree
+        recursion.
+
+        Conservative in exactly one direction: an empty table, a top-level COMP
+        with nothing tracked under it, a project with no user COMPs at all, or
+        ANY exception returns False, i.e. SHOW the step. A needlessly shown step
+        costs one click; a wrongly hidden one silently denies the feature.
+        Never raises.
+        """
+        try:
+            table = self.Externalizations
+            if table is None or table.numRows < 2:
+                return False        # nothing tracked at all -- always offer
+            embody_root = self.my.path
+            embody_prefix = embody_root + '/'
+            tracked = set()
+            for i in range(1, table.numRows):
+                path = self._cellVal(i, 'path')
+                # Embody's own subtree does not count as the project
+                # externalizing ITSELF -- otherwise merely installing Embody
+                # would make its container look already-externalized.
+                if path and not (path == embody_root
+                                 or path.startswith(embody_prefix)):
+                    tracked.add(path)
+            if not tracked:
+                return False
+            tox_tag = self.my.par.Toxtag.val
+            tdn_tag = self.my.par.Tdntag.val
+            candidates = 0
+            for child in self.root.children:
+                if child.family != 'COMP':
+                    continue
+                if child.name in self._BUILTIN_ROOT_COMPS:
+                    continue
+                if child.path == embody_root:
+                    continue
+                if not self.isOpProcessable(child) or self.isReplicant(child):
+                    continue
+                candidates += 1
+                if tox_tag in child.tags or tdn_tag in child.tags:
+                    continue
+                prefix = child.path + '/'
+                if any(p == child.path or p.startswith(prefix) for p in tracked):
+                    continue
+                return False        # untracked user content -- offer
+            return candidates > 0
+        except Exception:
+            return False
 
     def _enableEnvoyResolved(self):
         """Modal-free Envoy enable/refresh, used by the setup wizard.

@@ -223,6 +223,139 @@ def get_td_info(ext) -> dict:
         return {'error': f'Failed to get TD info: {e}'}
 
 
+_FOCUS_SELECTION_CAP = 24
+
+
+def focus_target(selected, current) -> tuple:
+    """Resolve what "this operator" means: (target_path, source) or
+    (None, None) when it is ambiguous.
+
+    Exactly one selected operator wins; otherwise the current operator.
+    The ROLLOVER op is deliberately not an input here -- it is only
+    wherever the mouse happens to sit and must never be acted on.
+
+    Pure (plain strings in, strings out) so the disambiguation rule is
+    unit-testable without a UI.
+    """
+    paths = list(selected or [])
+    if len(paths) == 1:
+        return paths[0], 'selection'
+    if current:
+        return current, 'current'
+    return None, None
+
+
+def get_focus(ext) -> dict:
+    """What the user is looking at: current pane, selection, rollover.
+
+    Resolves conversational references ("this operator") to real paths.
+    'This' is the SELECTED / current operator -- never the rollover, which
+    is only wherever the mouse happens to sit. Headless / TouchEngine builds
+    have no panes; that returns a clear headless result rather than raising.
+    """
+    try:
+        panes = ui.panes
+        pane_count = len(panes)
+    except Exception as e:
+        return {'error': f'Could not read the UI panes: {e}'}
+
+    if not pane_count:
+        return {
+            'headless': True,
+            'network': None,
+            'paneType': None,
+            'selected': [],
+            'selectedCount': 0,
+            'current': None,
+            'rollover': None,
+            'target': None,
+            'targetSource': None,
+            'note': 'This TouchDesigner instance has no UI panes '
+                    '(headless / TouchEngine), so there is nothing the user '
+                    'is looking at. Ask for an explicit operator path, or '
+                    'discover one with query_network.',
+        }
+
+    try:
+        pane = panes.current
+    except Exception:
+        pane = None
+    if pane is None:
+        try:
+            pane = panes[0]
+        except Exception:
+            pane = None
+
+    owner = None
+    owner_path = None
+    pane_type = None
+    if pane is not None:
+        try:
+            owner = pane.owner
+        except Exception:
+            owner = None
+        try:
+            owner_path = owner.path if owner is not None else None
+        except Exception:
+            owner, owner_path = None, None
+        try:
+            pane_type = str(pane.type)
+        except Exception:
+            pane_type = None
+
+    selected = []
+    current = None
+    if owner is not None:
+        try:
+            for child in owner.selectedChildren:
+                if child is not None and child.valid:
+                    selected.append(child.path)
+        except Exception:
+            selected = []
+        try:
+            child = owner.currentChild
+            if child is not None and child.valid:
+                current = child.path
+        except Exception:
+            current = None
+
+    rollover = None
+    try:
+        hovered = ui.rolloverOp
+        if hovered is not None and hovered.valid:
+            rollover = hovered.path
+    except Exception:
+        rollover = None
+
+    # "This operator" -> exactly one selected op, else the current one.
+    # Rollover NEVER feeds the target; it is incidental mouse position.
+    target, target_source = focus_target(selected, current)
+
+    result = {
+        'network': owner_path,
+        'paneType': pane_type,
+        'selected': selected[:_FOCUS_SELECTION_CAP],
+        'selectedCount': len(selected),
+        'current': current,
+        'rollover': rollover,
+        'target': target,
+        'targetSource': target_source,
+    }
+    if target is not None:
+        result['note'] = ('"this operator" means %s (from the %s). The '
+                          'rollover op, if any, is incidental mouse position '
+                          '-- do not act on it.' % (target, target_source))
+    elif selected:
+        result['note'] = ('%d operators are selected and none is current -- '
+                          'ambiguous. Ask the user which one, or act on all '
+                          'of them deliberately.' % len(selected))
+    else:
+        result['note'] = ('Nothing is selected. The user is in the network '
+                          '%s; ask which operator they mean rather than '
+                          'guessing.' % (owner_path or 'unknown'))
+    return result
+
+
 def get_op_errors(ext, op_path: str, recurse: bool = True) -> dict:
     """Get error and warning messages for an operator and its children"""
     target = resolve_op(ext, op_path)

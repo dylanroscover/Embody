@@ -9,6 +9,8 @@ terminals or editors -- only pure builders and _launchEditor's no-window
 failure path are exercised live.
 """
 
+import re
+import shlex
 import sys
 import tempfile
 import shutil
@@ -588,3 +590,194 @@ class TestLaunchAIClient(EmbodyTestCase):
 		text = m.install_summary(install)
 		self.assertIn('Alternative:  npm install -g @openai/codex\n(needs Node.js)',
 					  text)
+
+	# ------------------------------------------------------------------
+	# Group J: first-run prompt seeding (pure builders + the marker gate)
+	#
+	# The seeded prompt is passed straight through the EmbodyExt stubs'
+	# blind spot -- those stubs forward five positional args and no
+	# seed_prompt -- so these call the module builders directly. They are
+	# pure, so no live TD state is involved.
+	# ------------------------------------------------------------------
+
+	def _mac_exec_line(self, body):
+		"""The final exec line of a macOS .command (the one that runs the CLI)."""
+		execs = [line for line in body.split('\n') if line.startswith('exec ')]
+		self.assertTrue(execs, f'no exec line in script:\n{body}')
+		return execs[-1]
+
+	def test_J01_first_run_prompt_is_plain_ascii_positional_text(self):
+		"""FIRST_RUN_PROMPT must be pure ASCII (repo rule) and usable as a
+		positional argument -- a leading dash would be read as a CLI flag and
+		a newline would spill onto a second script line."""
+		prompt = self._launch_module().FIRST_RUN_PROMPT
+		self.assertTrue(prompt and isinstance(prompt, str))
+		self.assertTrue(prompt.isascii(), 'FIRST_RUN_PROMPT must be pure ASCII')
+		self.assertFalse(prompt.startswith('-'),
+			'a leading dash would be parsed as a CLI flag')
+		self.assertNotIn('\n', prompt)
+		self.assertNotIn('\r', prompt)
+
+	def test_J02_no_seed_leaves_mac_script_byte_identical(self):
+		"""A falsy seed_prompt must change nothing at all (both branches)."""
+		m = self._launch_module()
+		for abs_cli in ('/abs/bin/claude', None):
+			base = m.build_terminal_script(
+				self.embody_ext, self._temp_dir, 'claude', abs_cli)
+			for falsy in (None, ''):
+				self.assertEqual(
+					m.build_terminal_script(self.embody_ext, self._temp_dir,
+											'claude', abs_cli, None, falsy),
+					base, f'seed_prompt={falsy!r} changed the unseeded script')
+
+	def test_J03_no_seed_leaves_windows_script_byte_identical(self):
+		"""Same guarantee for the .bat: no seed -> today's exact bytes."""
+		m = self._launch_module()
+		for abs_cli in ('C:/bin/claude.exe', None):
+			base = m.build_terminal_script_win(
+				self.embody_ext, self._temp_dir, 'claude', abs_cli)
+			for falsy in (None, ''):
+				self.assertEqual(
+					m.build_terminal_script_win(self.embody_ext, self._temp_dir,
+												'claude', abs_cli, None, falsy),
+					base, f'seed_prompt={falsy!r} changed the unseeded .bat')
+
+	def test_J04_mac_abs_path_appends_quoted_prompt(self):
+		"""The abs-path branch execs the CLI with the prompt as one argv entry."""
+		m = self._launch_module()
+		body = m.build_terminal_script(
+			self.embody_ext, self._temp_dir, 'claude', '/abs/bin/claude',
+			None, m.FIRST_RUN_PROMPT)
+		line = self._mac_exec_line(body)
+		self.assertEqual(shlex.split(line),
+						 ['exec', '/abs/bin/claude', m.FIRST_RUN_PROMPT])
+
+	def test_J05_mac_fallback_nests_the_prompt_inside_the_ilc_string(self):
+		"""The -ilc argument is ONE shell command string, so the prompt is
+		quoted twice: unwrapping the -ilc word must yield a command that
+		itself parses to exactly [cli, prompt]. This is the double-quoting
+		regression guard -- a single quoting pass would split the prompt's
+		words into -ilc's positional params ($0, $1, ...) and the CLI would
+		never see them."""
+		m = self._launch_module()
+		body = m.build_terminal_script(
+			self.embody_ext, self._temp_dir, 'gemini', None,
+			None, m.FIRST_RUN_PROMPT)
+		tokens = shlex.split(self._mac_exec_line(body))
+		self.assertEqual(tokens[:3], ['exec', '${SHELL:-/bin/zsh}', '-ilc'])
+		self.assertEqual(len(tokens), 4,
+			f'-ilc must receive exactly one word, got: {tokens}')
+		self.assertEqual(shlex.split(tokens[3]),
+						 ['gemini', m.FIRST_RUN_PROMPT])
+
+	def test_J06_mac_quotes_and_metachars_survive_both_branches(self):
+		"""Apostrophes, double quotes, $, backticks and & in a prompt must
+		round-trip literally -- zsh must never expand or re-split them."""
+		m = self._launch_module()
+		nasty = 'It\'s a "test" & 100% $HOME `whoami`'
+		abs_body = m.build_terminal_script(
+			self.embody_ext, self._temp_dir, 'claude', '/abs/claude', None, nasty)
+		self.assertEqual(shlex.split(self._mac_exec_line(abs_body)),
+						 ['exec', '/abs/claude', nasty])
+		fallback = m.build_terminal_script(
+			self.embody_ext, self._temp_dir, 'claude', None, None, nasty)
+		inner = shlex.split(self._mac_exec_line(fallback))[3]
+		self.assertEqual(shlex.split(inner), ['claude', nasty])
+
+	def test_J07_seeded_scripts_never_use_a_print_flag(self):
+		"""The prompt is POSITIONAL. -p/--print would make claude answer once
+		and exit instead of opening the interactive session the button
+		promises."""
+		m = self._launch_module()
+		bodies = [
+			m.build_terminal_script(self.embody_ext, self._temp_dir, 'claude',
+									abs_cli, None, m.FIRST_RUN_PROMPT)
+			for abs_cli in ('/abs/bin/claude', None)
+		] + [
+			m.build_terminal_script_win(self.embody_ext, self._temp_dir, 'claude',
+										abs_cli, None, m.FIRST_RUN_PROMPT)
+			for abs_cli in ('C:/bin/claude.exe', None)
+		]
+		for body in bodies:
+			for flag in (' -p ', ' --print', ' -p"', " -p'"):
+				self.assertNotIn(flag, body,
+					f'seeded launch must stay interactive, found {flag!r}')
+
+	def test_J08_windows_abs_path_appends_quoted_prompt(self):
+		"""The .bat abs-path branch invokes the exe with a quoted prompt."""
+		m = self._launch_module()
+		body = m.build_terminal_script_win(
+			self.embody_ext, self._temp_dir, 'claude',
+			'C:/Program Files/Claude/claude.exe', None, m.FIRST_RUN_PROMPT)
+		self.assertIn(
+			f'"C:/Program Files/Claude/claude.exe" "{m.FIRST_RUN_PROMPT}"', body)
+
+	def test_J09_windows_fallback_branch_appends_quoted_prompt(self):
+		"""The bare-cli branch keeps its where-guard and label flow, with the
+		prompt quoted onto the invocation line only."""
+		m = self._launch_module()
+		body = m.build_terminal_script_win(
+			self.embody_ext, self._temp_dir, 'codex', None,
+			None, m.FIRST_RUN_PROMPT)
+		rows = body.split('\r\n')
+		self.assertIn('where codex >nul 2>nul', rows)
+		self.assertIn('if errorlevel 1 goto :missing', rows)
+		self.assertIn(f'codex "{m.FIRST_RUN_PROMPT}"', rows)
+		# The guard block below :missing stays untouched by the seeding.
+		self.assertIn(':missing', rows)
+		self.assertIn(':done', rows)
+
+	def test_J10_windows_prompt_quotes_and_percent_cannot_corrupt_the_bat(self):
+		"""A prompt carrying " and % must not break cmd parsing: the argument
+		stays a single balanced double-quoted word, % is doubled (it expands
+		even inside quotes in a batch file), and newlines collapse so the
+		prompt cannot spill onto a second .bat line."""
+		m = self._launch_module()
+		nasty = 'say "hi" to %USERNAME% 100%\nand a second line'
+		for abs_cli, prefix in (('C:/bin/codex.exe', '"C:/bin/codex.exe" '),
+								(None, 'codex ')):
+			body = m.build_terminal_script_win(
+				self.embody_ext, self._temp_dir, 'codex', abs_cli, None, nasty)
+			rows = body.split('\r\n')
+			run = [r for r in rows if r.startswith(prefix)]
+			self.assertEqual(len(run), 1, f'expected one invocation line: {rows}')
+			run = run[0]
+			arg = run[len(prefix):]
+			self.assertTrue(arg.startswith('"') and arg.endswith('"'))
+			self.assertEqual(arg.count('"'), 2,
+				f'embedded quote leaked into the .bat argument: {run!r}')
+			self.assertIn('%%USERNAME%%', arg)
+			self.assertIn('and a second line', arg)
+			# Every % is doubled, so no run of percent signs can be odd --
+			# an odd run means a live expansion that eats the next token.
+			for percents in re.findall(r'%+', arg):
+				self.assertEqual(len(percents) % 2, 0,
+					f'a lone % survived in the .bat argument: {arg!r}')
+			self.assertFalse('\n' in body.replace('\r\n', ''),
+				'Windows .bat must not contain lone LF characters')
+
+	def test_J11_marker_gate_seeds_once_per_project(self):
+		"""First claim returns the prompt and writes the marker; every later
+		claim (any CLI) returns None, so the nudge never repeats."""
+		m = self._launch_module()
+		marker = self._temp_dir / '.embody' / m.FIRST_LAUNCH_MARKER
+		self.assertFalse(marker.exists())
+		first = m.claim_first_launch_prompt(self.embody_ext, self._temp_dir, 'claude')
+		self.assertEqual(first, m.FIRST_RUN_PROMPT)
+		self.assertTrue(marker.exists(), 'the first claim must write the marker')
+		self.assertIsNone(
+			m.claim_first_launch_prompt(self.embody_ext, self._temp_dir, 'claude'))
+		self.assertIsNone(
+			m.claim_first_launch_prompt(self.embody_ext, self._temp_dir, 'codex'))
+
+	def test_J12_marker_io_failure_degrades_to_no_seed(self):
+		"""An unwritable project root must never break the launch: a marker
+		that cannot be created yields None (no seed) instead of raising, and
+		never re-seeds on every future launch."""
+		m = self._launch_module()
+		blocked = self._temp_dir / 'blocked'
+		blocked.mkdir()
+		# A FILE where the .embody directory belongs -> mkdir raises.
+		(blocked / '.embody').write_text('not a directory', encoding='utf-8')
+		self.assertIsNone(
+			m.claim_first_launch_prompt(self.embody_ext, blocked, 'claude'))

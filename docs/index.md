@@ -17,7 +17,7 @@ Embody is three tools working together — *forward velocity*, *lateral velocity
 
     ---
 
-    An embedded [MCP](https://modelcontextprotocol.io/) server with **54 tools** that lets Claude Code, Codex, Gemini, Cursor, Windsurf, and GitHub Copilot via VS Code talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen in your live session. Small changes can land in seconds, depending on your model; a complete network is a 5-20 minute autonomous build you can hand off, parallelize across sessions, and check back on.
+    An embedded [MCP](https://modelcontextprotocol.io/) server with **56 tools** that lets Claude Code, Codex, Gemini, Cursor, Windsurf, and GitHub Copilot via VS Code talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen in your live session. Small changes can land in seconds, depending on your model; a complete network is a 5-20 minute autonomous build you can hand off, parallelize across sessions, and check back on.
 
     [:octicons-arrow-right-24: Setup Envoy](envoy/setup.md)
 
@@ -68,7 +68,7 @@ You describe what you want. The AI works with your live network — operators, c
 | | Feature | Description |
 |---|---------|-------------|
 | :material-sync: | **Automated Externalization** | Tag COMPs and DATs — or opt in to auto-tagging what the AI builds — and Embody keeps the external files in sync, auto-restoring from disk on project open |
-| :material-robot: | **Envoy MCP Server** | 54 tools connect AI assistants to your live TD session |
+| :material-robot: | **Envoy MCP Server** | 56 tools connect AI assistants to your live TD session |
 | :material-account-group: | **Multi-Session Coordination** | Run several AI sessions on one project — scoped claims, peer advisories, and gated destructive operations |
 | :material-file-document: | **TDN Format** | Export/import operator networks as diffable YAML for code review and snapshots |
 | :material-keyboard: | **Keyboard Shortcuts** | Double-tap ++lctrl++ to tag, ++ctrl+shift+u++ to save — and every binding is remappable (type or record) |

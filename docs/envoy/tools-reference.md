@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 54 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 56 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 Every mutating TD-authoring tool call is wrapped in a TouchDesigner undo block. Press Ctrl+Z in TD to revert an agent change; a `batch_operations` call is one undo step for the whole batch.
 
@@ -104,6 +104,8 @@ Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mod
 | `get_td_class_details` | `class_name` | Get methods, properties, and docs for a TD class |
 | `get_module_help` | `module_name` | Get Python help text for a module (supports dotted names like `td.tdu`) |
 | `get_docs` | `query`, `section?`, `source?`, `max_chars?` | Look up official TouchDesigner docs. `source` is `auto` (offline then web), `offline`, or `web`; normal responses carry `title`, `source`, `sections_available`, `content`, and optional `url`/`truncated`; ambiguous offline lookups return `source` + `matches` only |
+| `get_guidance` | `topic?` | Serve this project's checked-in TouchDesigner doctrine (`.claude/rules/*.md` and `.claude/skills/*/SKILL.md`) over MCP, so agents on any client -- Codex, Cursor, opencode -- get the same rules Claude Code loads. Bare call lists topics; `topic` returns that document. Answered worker-side (no TD round-trip) |
+| `get_focus` | _(none)_ | What the user is looking at: current pane network, selected operator(s), current op, and rollover. When the user says "this operator" they mean the SELECTED/current op -- rollover is incidental mouse position and must not be acted on |
 
 ## Embody Integration
 

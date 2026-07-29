@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 11
-generator: Embody/6.0.150
+build: 14
+generator: Embody/6.0.164
 td_build: 099.2025.33070
-source_file: Embody-6.151.toe
-exported_at: '2026-07-23T15:40:50Z'
+source_file: Embody-6.165.toe
+exported_at: '2026-07-29T10:05:53Z'
 network_path: /embody/Embody/wizard
 options:
   include_dat_content: false
@@ -15,6 +15,7 @@ type_defaults:
       clickthrough: true
       resizecomp: =me
       repocomp: =me
+    color: [0.67, 0.67, 0.67]
   textDAT:
     parameters:
       language: python
@@ -41,6 +42,7 @@ type_defaults:
     flags:
     - viewer
     size: [130, 90]
+    color: [0.67, 0.67, 0.67]
   parameterCHOP:
     parameters:
       parameters: value0
@@ -51,6 +53,7 @@ type_defaults:
     flags:
     - viewer
     size: [130, 90]
+    color: [0.67, 0.67, 0.67]
   parameterexecuteDAT:
     parameters:
       fromop: =parent()
@@ -62,6 +65,7 @@ type_defaults:
     flags:
     - viewer
     size: [128, 66]
+    color: [0.67, 0.67, 0.67]
 type: containerCOMP
 parameters:
   w: 500
@@ -89,6 +93,8 @@ storage:
   sel_permissions: all
   git_missing: true
   sel_git: gitskip
+  ext_needed: true
+  sel_externalize: auto
 operators:
 - name: hint
   type: textCOMP
@@ -113,7 +119,6 @@ operators:
     bgcolorb: 0.115
     bgalpha: 1
   size: [160, 130]
-  color: [0.67, 0.67, 0.67]
 - name: logic
   type: textDAT
   parameters:
@@ -145,7 +150,6 @@ operators:
     bgalpha: 1
   position: [480, 0]
   size: [160, 130]
-  color: [0.67, 0.67, 0.67]
 - name: track
   type: containerCOMP
   parameters:
@@ -174,7 +178,7 @@ operators:
 - name: clicks
   type: panelexecuteDAT
   parameters:
-    panels: footer/btn_* grp_mode/opt_* grp_assistant/opt_* grp_client/opt_* grp_permissions/opt_* grp_footprint/opt_* grp_git/opt_*
+    panels: footer/btn_* grp_mode/opt_* grp_assistant/opt_* grp_client/opt_* grp_permissions/opt_* grp_footprint/opt_* grp_git/opt_* grp_externalize/opt_*
     ontooff: true
     file: embody/Embody/wizard/clicks.py
     syncfile: true
@@ -224,6 +228,7 @@ operators:
       parameters:
         text: Not now
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 13
@@ -269,6 +274,15 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: btn_next
     type: buttonCOMP
     parameters:
@@ -292,6 +306,7 @@ operators:
       parameters:
         text: Next
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 13
@@ -337,6 +352,15 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
 - name: spacer
   type: containerCOMP
   parameters:
@@ -421,7 +445,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [200, 200]
@@ -435,6 +458,7 @@ operators:
       parameters:
         text: Initialize Git
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -479,6 +503,7 @@ operators:
       - viewer
       position: [400, 0]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -487,6 +512,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_gitskip
     type: buttonCOMP
     parameters:
@@ -529,7 +562,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [200, 200]
@@ -543,6 +575,7 @@ operators:
       parameters:
         text: Skip for now
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -587,6 +620,7 @@ operators:
       - viewer
       position: [400, 0]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -595,6 +629,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
 - name: grp_mode
   type: containerCOMP
   parameters:
@@ -652,7 +694,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -666,6 +707,7 @@ operators:
       parameters:
         text: Auto
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -710,6 +752,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -718,6 +761,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_advanced
     type: buttonCOMP
     parameters:
@@ -759,7 +810,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -773,6 +823,7 @@ operators:
       parameters:
         text: Advanced
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -817,6 +868,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -825,6 +877,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
 - name: botspacer
   type: containerCOMP
   parameters:
@@ -857,7 +917,6 @@ operators:
     margint: 6
   position: [225, 200]
   size: [160, 130]
-  color: [0.67, 0.67, 0.67]
 - name: topspacer
   type: containerCOMP
   parameters:
@@ -926,7 +985,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -940,6 +998,7 @@ operators:
       parameters:
         text: Codex
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -984,6 +1043,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -992,6 +1052,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_cursor
     type: buttonCOMP
     parameters:
@@ -1031,7 +1099,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -1045,6 +1112,7 @@ operators:
       parameters:
         text: Cursor
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -1089,6 +1157,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -1097,6 +1166,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_gemini
     type: buttonCOMP
     parameters:
@@ -1138,7 +1215,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -1152,6 +1228,7 @@ operators:
       parameters:
         text: Gemini
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -1196,6 +1273,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -1204,6 +1282,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_vscode
     type: buttonCOMP
     parameters:
@@ -1245,7 +1331,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -1259,6 +1344,7 @@ operators:
       parameters:
         text: VS Code
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -1303,6 +1389,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -1311,6 +1398,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_copilot
     type: buttonCOMP
     parameters:
@@ -1352,7 +1447,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -1366,6 +1460,7 @@ operators:
       parameters:
         text: GitHub Copilot
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -1410,6 +1505,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -1418,6 +1514,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_opencode
     type: buttonCOMP
     parameters:
@@ -1459,7 +1563,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -1473,6 +1576,7 @@ operators:
       parameters:
         text: OpenCode
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -1517,6 +1621,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -1525,6 +1630,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_windsurf
     type: buttonCOMP
     parameters:
@@ -1566,7 +1679,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -1580,6 +1692,7 @@ operators:
       parameters:
         text: Windsurf
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -1624,6 +1737,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -1632,6 +1746,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
 - name: grp_assistant
   type: containerCOMP
   parameters:
@@ -1687,7 +1809,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -1701,6 +1822,7 @@ operators:
       parameters:
         text: None - externalization only
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -1746,6 +1868,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -1754,6 +1877,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_other
     type: buttonCOMP
     parameters:
@@ -1796,7 +1927,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -1810,6 +1940,7 @@ operators:
       parameters:
         text: Other AI tool
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -1855,6 +1986,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -1863,6 +1995,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_claudecode
     type: buttonCOMP
     parameters:
@@ -1903,7 +2043,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -1917,6 +2056,7 @@ operators:
       parameters:
         text: Claude Code
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -1962,6 +2102,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -1970,6 +2111,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
 - name: grp_footprint
   type: containerCOMP
   parameters:
@@ -2023,7 +2172,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -2037,6 +2185,7 @@ operators:
       parameters:
         text: Custom folder
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -2081,6 +2230,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -2089,6 +2239,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_gitroot
     type: buttonCOMP
     parameters:
@@ -2129,7 +2287,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -2143,6 +2300,7 @@ operators:
       parameters:
         text: Git root (recommended)
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -2187,6 +2345,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -2195,6 +2354,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_projectfolder
     type: buttonCOMP
     parameters:
@@ -2235,7 +2402,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -2249,6 +2415,7 @@ operators:
       parameters:
         text: Project folder
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -2293,6 +2460,7 @@ operators:
       - viewer
       position: [247, -81]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -2301,6 +2469,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
 - name: hint_callbacks
   type: textDAT
   flags:
@@ -2309,6 +2485,370 @@ operators:
   size: [160, 130]
   color: [0.67, 0.67, 0.67]
   dock: hint
+- name: grp_externalize
+  type: containerCOMP
+  parameters:
+    h: 235
+    hmode: fill
+    alignorder: 4
+    display: false
+    bgcolorr: 0.11
+    bgcolorg: 0.12
+    bgcolorb: 0.115
+    bgalpha: 1
+    align: verttb
+    spacing: 8
+    marginl: 24
+    marginr: 24
+  position: [1715, -1400]
+  size: [160, 130]
+  children:
+  - name: opt_auto
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      alignorder: 1
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -200]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Externalize scripts and COMPs as you create them. Nothing changes today.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 24
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+    - name: out1
+      type: outCHOP
+      position: [200, 200]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [0, 200]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: New work only
+        type: multiline
+        callbacks: text_callbacks
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [200, 0]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [400, 200]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [400, 0]
+      size: [126, 62]
+      color: [0.67, 0.67, 0.67]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
+  - name: opt_full
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Write the whole project to disk now, and keep new work externalized.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 24
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+    - name: out1
+      type: outCHOP
+      position: [200, 200]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [0, 200]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Externalize everything
+        type: multiline
+        callbacks: text_callbacks
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [200, 0]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [400, 200]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [400, 0]
+      size: [126, 62]
+      color: [0.67, 0.67, 0.67]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
+  - name: opt_skip
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      alignorder: 2
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -400]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Leave externalization off. Turn it on later from the Embody parameters.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 24
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+    - name: out1
+      type: outCHOP
+      position: [200, 200]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [0, 200]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Not now
+        type: multiline
+        callbacks: text_callbacks
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [200, 0]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [400, 200]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [400, 0]
+      size: [126, 62]
+      color: [0.67, 0.67, 0.67]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
 - name: grp_permissions
   type: containerCOMP
   parameters:
@@ -2365,7 +2905,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -2379,6 +2918,7 @@ operators:
       parameters:
         text: Don't ask (recommended)
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -2423,6 +2963,7 @@ operators:
       - viewer
       position: [330, -180]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -2431,6 +2972,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_some
     type: buttonCOMP
     parameters:
@@ -2472,7 +3021,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -2486,6 +3034,7 @@ operators:
       parameters:
         text: Ask for some
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -2530,6 +3079,7 @@ operators:
       - viewer
       position: [330, -180]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -2538,6 +3088,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_leave
     type: buttonCOMP
     parameters:
@@ -2579,7 +3137,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -2593,6 +3150,7 @@ operators:
       parameters:
         text: Leave settings alone
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -2637,6 +3195,7 @@ operators:
       - viewer
       position: [330, -180]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -2645,6 +3204,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
   - name: opt_prompt
     type: buttonCOMP
     parameters:
@@ -2686,7 +3253,6 @@ operators:
         hmode: fill
         alignorder: 1
       size: [160, 130]
-      color: [0.67, 0.67, 0.67]
     - name: out1
       type: outCHOP
       position: [275, 175]
@@ -2700,6 +3266,7 @@ operators:
       parameters:
         text: Ask for all
         type: multiline
+        callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 14
@@ -2744,6 +3311,7 @@ operators:
       - viewer
       position: [330, -180]
       size: [126, 62]
+      color: [0.67, 0.67, 0.67]
     - name: desc_callbacks
       type: textDAT
       flags:
@@ -2752,6 +3320,14 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: desc
+    - name: text_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: text
 - name: title_callbacks
   type: textDAT
   flags:

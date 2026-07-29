@@ -7,6 +7,11 @@ new terminal running a CLI (Claude, Codex, Gemini) at the project root, with a
 sanitized environment. EmbodyExt keeps a thin delegating stub for each -- these
 functions carry the real bodies.
 
+The FIRST CLI launch in a project also seeds an opening prompt
+(FIRST_RUN_PROMPT) as a positional argument, so the session opens with the AI
+already looking at the network instead of a blank cursor; a marker file makes
+it a one-time nudge. GUI editors take no prompt and are left untouched.
+
 No module-level TD access; every function takes the ext instance (`ext`) as its
 first argument and reaches TD through it (ext.Log, ext._messageBox, ...) or
 through the TD globals available inside function bodies at call time. The
@@ -29,6 +34,17 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
+
+
+# The opening prompt seeded into a CLI on the FIRST launch per project (see
+# claim_first_launch_prompt). Deliberately a plain ASCII sentence with no
+# leading dash and no shell metacharacters, so every quoting path below is a
+# no-op on it -- the escaping exists for arbitrary text, not for this string.
+FIRST_RUN_PROMPT = 'Show me what you can see in my TouchDesigner project.'
+
+# Marker file inside <project root>/.embody. Its presence is the only record
+# that the opening prompt has already been seeded in this project.
+FIRST_LAUNCH_MARKER = '.ai-first-launch'
 
 
 def launch_ai_client(ext) -> None:
@@ -282,6 +298,35 @@ def _cmd_echo(line) -> str:
     return 'echo(' + ''.join(out)
 
 
+def _cmd_quoted_arg(text) -> str:
+    """A seeded prompt reduced to the BODY of a double-quoted cmd argument.
+
+    The prompt is emitted as `"<body>"` on a command line inside the .bat, so
+    it has to survive cmd's own parsing before the CLI ever sees it:
+
+    - `"` would close the argument early and unbalance the rest of the line,
+      so every double quote becomes a single quote. cmd has no portable
+      in-quotes quote escape, so replacing beats escaping here.
+    - `%` expands even inside double quotes in a batch file (`%FOO%` would
+      vanish; a lone `%` can swallow the next token), so it is doubled --
+      the same discipline _cmd_echo uses, and `%%` is exactly what a batch
+      file writes for one literal percent.
+    - CR / LF / TAB collapse to single spaces so the prompt can never spill
+      onto a second .bat line.
+    - Trailing backslashes are dropped: the CLIs are Node/Ink programs whose
+      argv is split by CommandLineToArgvW rules, where a `\\` immediately
+      before the closing `"` escapes it and swallows the argument boundary.
+
+    Everything else stays verbatim: `& | < > ^` are literal to cmd INSIDE
+    double quotes (exactly why _cmd_echo only escapes them outside), and `!`
+    is inert under the script's setlocal DisableDelayedExpansion. Losing a
+    quote character out of a conversational prompt is harmless; a broken
+    command line would break the launch itself.
+    """
+    body = ' '.join(str(text).split()).replace('"', "'").replace('%', '%%')
+    return body.rstrip('\\')
+
+
 def install_summary(install) -> str:
     """Install guidance as dialog-ready text. Per-OS dicts render the current
     OS's copy/paste command on its own line; legacy strings pass through as
@@ -311,13 +356,18 @@ def install_summary(install) -> str:
     return '\n\n'.join(parts)
 
 
-def build_terminal_script(ext, cwd, cli, abs_cli, install=None) -> str:
+def build_terminal_script(ext, cwd, cli, abs_cli, install=None,
+                          seed_prompt=None) -> str:
     """Return the macOS .command script text that cd's to cwd and runs <cli>.
 
     Pure (no I/O) so the correctness-critical content is unit-testable.
     abs_cli: the CLI's resolved absolute path, or None to defer to the new
     terminal's own login-shell PATH (with a visible install guard if truly
     absent). install: the how-to-install hint shown in that guard.
+    seed_prompt: an opening prompt handed to the CLI as a POSITIONAL argument
+    -- never behind -p/--print, which would make the CLI answer once and exit
+    instead of starting the interactive session the user just asked for.
+    Falsy (the default) produces byte-identical output to the unseeded script.
     """
     # Forward slashes always (project convention): str(Path) flips to
     # backslashes on a Windows host, which is nonsense inside a zsh script.
@@ -326,7 +376,10 @@ def build_terminal_script(ext, cwd, cli, abs_cli, install=None) -> str:
              f"cd '{q}' || {{ echo \"launch dir missing\"; exec \"${{SHELL:-/bin/zsh}}\" -il; }}"]
     if abs_cli:
         abs_posix = str(abs_cli).replace('\\', '/')
-        lines.append(f'exec {shlex.quote(abs_posix)}')
+        run = f'exec {shlex.quote(abs_posix)}'
+        if seed_prompt:
+            run += f' {shlex.quote(str(seed_prompt))}'
+        lines.append(run)
     else:
         # Not found by fast probe -- let the login shell resolve it. If truly
         # absent, print install guidance and keep the window open. Per-OS
@@ -343,13 +396,28 @@ def build_terminal_script(ext, cwd, cli, abs_cli, install=None) -> str:
             lines.append('  echo "Then close this window and press Launch AI Client again."')
         lines.append('  exec "${SHELL:-/bin/zsh}" -i')
         lines.append('fi')
-        lines.append(f'exec "${{SHELL:-/bin/zsh}}" -ilc {shlex.quote(cli)}')
+        # -ilc takes ONE argument: an entire shell command as a single string.
+        # So a seeded prompt is quoted TWICE -- inner shlex.quote so the login
+        # shell splits it back off as one argv entry, then an outer quote of
+        # the whole command so this script hands -ilc a single word. Without
+        # the outer pass the prompt's spaces would become extra -ilc operands
+        # ($0, $1, ...) and never reach the CLI.
+        inner = shlex.quote(cli)
+        if seed_prompt:
+            inner = shlex.quote(f'{inner} {shlex.quote(str(seed_prompt))}')
+        lines.append(f'exec "${{SHELL:-/bin/zsh}}" -ilc {inner}')
     return '\n'.join(lines) + '\n'
 
 
-def build_terminal_script_win(ext, cwd, cli, abs_cli, install=None) -> str:
+def build_terminal_script_win(ext, cwd, cli, abs_cli, install=None,
+                              seed_prompt=None) -> str:
     """Windows twin of _buildTerminalScript: the .bat run via cmd /K.
-    Pure (no I/O) so the correctness-critical content is unit-testable."""
+    Pure (no I/O) so the correctness-critical content is unit-testable.
+
+    seed_prompt: an opening prompt handed to the CLI as a POSITIONAL argument
+    (never -p/--print, which would make it non-interactive), double-quoted and
+    sanitized by _cmd_quoted_arg. Falsy (the default) produces byte-identical
+    output to the unseeded script."""
     # Forward slashes always (project convention): cmd.exe accepts them in
     # double-quoted cd /d and program paths, and str(Path) on Windows would
     # otherwise flip separators per-host.
@@ -361,12 +429,16 @@ def build_terminal_script_win(ext, cwd, cli, abs_cli, install=None) -> str:
              f'cd /d "{d}"',
              'if errorlevel 1 echo launch dir missing.']
     if abs_cli:
-        lines.append(f'"{str(abs_cli).replace(chr(92), "/").replace(chr(34), "")}"')
+        run = f'"{str(abs_cli).replace(chr(92), "/").replace(chr(34), "")}"'
+        if seed_prompt:
+            run += f' "{_cmd_quoted_arg(seed_prompt)}"'
+        lines.append(run)
     else:
+        run = f'{cli} "{_cmd_quoted_arg(seed_prompt)}"' if seed_prompt else cli
         lines += [
             f'where {cli} >nul 2>nul',
             'if errorlevel 1 goto :missing',
-            cli,
+            run,
             'goto :done',
             ':missing',
         ]
@@ -389,6 +461,40 @@ def build_terminal_script_win(ext, cwd, cli, abs_cli, install=None) -> str:
     return '\r\n'.join(lines) + '\r\n'
 
 
+def claim_first_launch_prompt(ext, cwd, cli) -> Optional[str]:
+    """FIRST_RUN_PROMPT on the first CLI launch in this project, else None.
+
+    The record is a marker file at <cwd>/.embody/.ai-first-launch: absent means
+    nobody has been seeded here yet, so the prompt is returned AND the marker
+    written in the same step -- a launch is seeded exactly once per project,
+    not on every press of the button. Claiming it up front (before the window
+    opens) means a launch that then fails forfeits its seed; that is the safe
+    direction, since the alternative re-injects an opening prompt forever.
+
+    Every bit of I/O is swallowed: a read-only or vanished project root must
+    degrade to "no seed", never break the launch this is decorating.
+    """
+    try:
+        marker = Path(cwd) / '.embody' / FIRST_LAUNCH_MARKER
+        if marker.exists():
+            return None
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(
+            'Embody wrote this the first time an AI CLI was launched here.\n'
+            'Delete it to have the opening prompt seeded again.\n',
+            encoding='utf-8')
+    except Exception:
+        # No durable marker means no proof this is a first launch -- stay
+        # silent rather than risk seeding the prompt into every future launch.
+        return None
+    try:
+        ext.Log(f'First AI client launch in this project -- seeding an opening '
+                f'prompt for {cli}.', 'INFO')
+    except Exception:
+        pass
+    return FIRST_RUN_PROMPT
+
+
 def launch_terminal(ext, cwd, cli, install=None) -> bool:
     """Open a new terminal at cwd running <cli>. Returns True if a terminal was
     launched, False on failure or an unsupported OS (so the caller only logs
@@ -404,7 +510,9 @@ def launch_terminal(ext, cwd, cli, install=None) -> bool:
     env = launch_env(ext)   # strip TD's injected vars from the terminal too
     try:
         if sys.platform.startswith('darwin'):
-            body = build_terminal_script(ext, cwd, cli, resolve_cli_abs(ext, cli), install)
+            seed = claim_first_launch_prompt(ext, cwd, cli)
+            body = build_terminal_script(ext, cwd, cli, resolve_cli_abs(ext, cli),
+                                         install, seed_prompt=seed)
             scripts_dir = Path(cwd) / '.embody'
             scripts_dir.mkdir(parents=True, exist_ok=True)
             script = scripts_dir / f'launch_{cli}.command'
@@ -418,7 +526,9 @@ def launch_terminal(ext, cwd, cli, install=None) -> bool:
                 return False
             return True
         if sys.platform.startswith('win'):
-            body = build_terminal_script_win(ext, cwd, cli, resolve_cli_abs(ext, cli), install)
+            seed = claim_first_launch_prompt(ext, cwd, cli)
+            body = build_terminal_script_win(ext, cwd, cli, resolve_cli_abs(ext, cli),
+                                             install, seed_prompt=seed)
             scripts_dir = Path(cwd) / '.embody'
             scripts_dir.mkdir(parents=True, exist_ok=True)
             script = scripts_dir / f'launch_{cli}.bat'

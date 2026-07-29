@@ -1,9 +1,10 @@
 SURF=(0.16,0.17,0.165)
 BACK_ON=(0.19,0.20,0.195); NEXT_ON=(0.24,0.52,0.35); NEXT_OFF=(0.135,0.15,0.14)
 TXT=(0.92,0.92,0.92); TXT_DIM=(0.34,0.35,0.34); NEXT_TXT=(0.97,0.99,0.97)
-GROUPS=['grp_mode','grp_assistant','grp_client','grp_permissions','grp_git','grp_footprint']
+GROUPS=['grp_mode','grp_assistant','grp_client','grp_permissions','grp_git','grp_footprint','grp_externalize']
 DEFS={
  'mode':{'g':'grp_mode','sel':'sel_mode','title':'How should Embody manage your project?','hint':'Choose one, then Next.'},
+ 'externalize':{'g':'grp_externalize','sel':'sel_externalize','title':'Make your project AI-readable?','hint':'Write your network to diffable files git and AI tools can read.'},
  'assistant':{'g':'grp_assistant','sel':'sel_assistant','title':'Turn on the AI assistant (Envoy)?','hint':'It lets AI tools work in your network. Easy to remove later.'},
  'client':{'g':'grp_client','sel':'sel_client','title':'Pick your AI coding tool','hint':'Embody will generate its config.'},
  'git':{'g':'grp_git','sel':'sel_git','title':'Make this project a Git repository?','hint':'Externalized files diff and restore best under version control.'},
@@ -24,7 +25,14 @@ def _tc(o,c):
 			return
 def spine():
 	w=_w(); m=w.fetch('sel_mode',None); a=w.fetch('sel_assistant',None)
-	s=['mode','assistant']
+	s=['mode']
+	# Externalization offer, right after the posture step. Two gates, both
+	# cheap: the option group must EXIST (older wizard panels have no
+	# grp_externalize -- including it then would strand Next, which stays
+	# disabled until a group option is picked), and the project must still
+	# have something to externalize (probed once at start()).
+	if w.op('grp_externalize') and w.fetch('ext_needed',True): s.append('externalize')
+	s.append('assistant')
 	if a=='other': s.append('client')
 	if a=='claudecode': s.append('permissions')
 	# Git decision only when no repo was found at wizard start -- and for
@@ -48,6 +56,10 @@ def _recap():
 	g=''
 	if w.fetch('git_missing',False):
 		g={'gitinit':' Git: initialize here.','gitskip':' Git: skipped for now.'}.get(w.fetch('sel_git',''),'')
+	# The externalize choice is the only one that can rewrite the WHOLE
+	# project, so the summary always states it back before Set up Embody.
+	if 'externalize' in spine():
+		g+={'full':' Externalize: whole project now, plus new work.','auto':' Externalize: new work from here on.','skip':' Externalize: skipped for now.'}.get(w.fetch('sel_externalize',''),'')
 	if a=='none': return 'Mode: %s. AI assistant: off (externalization only).%s\nNothing has changed yet - click Set up Embody to apply.'%(m,g)
 	c=w.fetch('sel_client','') if a=='other' else ('Claude Code' if a=='claudecode' else a)
 	return 'Mode: %s. AI assistant: on (%s).%s\nNothing has changed yet - click Set up Embody to apply.'%(m, c or 'your tool', g)
@@ -144,6 +156,9 @@ def finish():
 	c=w.fetch('sel_client',''); r=w.fetch('sel_root','gitroot')
 	pm=w.fetch('sel_permissions','all')
 	g=w.fetch('sel_git','') if w.fetch('git_missing',False) else ''
+	# Only pass a choice the user was actually shown -- same test spine()
+	# uses, so a hidden step can never mutate the whole project.
+	x=w.fetch('sel_externalize','') if 'externalize' in spine() else ''
 	cr=''
 	if r=='custom':
 		try: cr=ui.chooseFolder(title='Choose the folder for Embody config') or ''
@@ -151,7 +166,7 @@ def finish():
 	_close()
 	# Defer so the window closes cleanly before setup runs. Tokens come from the
 	# wizard's fixed option set, so repr-interpolation is safe.
-	run('op.Embody.ext.Embody._applyWizardSetup(mode=%r, assistant=%r, client=%r, root=%r, custom_root=%r, permissions=%r, git=%r)'%(m,a,c,r,cr,pm,g), delayFrames=2)
+	run('op.Embody.ext.Embody._applyWizardSetup(mode=%r, assistant=%r, client=%r, root=%r, custom_root=%r, permissions=%r, git=%r, externalize=%r)'%(m,a,c,r,cr,pm,g,x), delayFrames=2)
 def start():
 	w=_w(); w.store('step_id','mode')
 	for gid in GROUPS:
@@ -174,5 +189,14 @@ def start():
 	w.store('git_missing',missing)
 	gb=w.op('grp_git/opt_gitinit')
 	if gb: gb.par.value0=1
-	w.store('sel_assistant','claudecode'); w.store('sel_client',''); w.store('sel_root','gitroot'); w.store('sel_permissions','all'); w.store('sel_git','gitinit')
+	# Externalize step gate: probe ONCE here (spine() runs on every render and
+	# must stay cheap + unraisable). Any doubt shows the step -- a needless
+	# click beats silently withholding the offer.
+	try: need=not op.Embody.ext.Embody._projectLooksExternalized()
+	except Exception: need=True
+	w.store('ext_needed',need)
+	# Pre-select the safe, non-destructive option: externalize new work only.
+	xb=w.op('grp_externalize/opt_auto')
+	if xb: xb.par.value0=1
+	w.store('sel_assistant','claudecode'); w.store('sel_client',''); w.store('sel_root','gitroot'); w.store('sel_permissions','all'); w.store('sel_git','gitinit'); w.store('sel_externalize','auto')
 	render()

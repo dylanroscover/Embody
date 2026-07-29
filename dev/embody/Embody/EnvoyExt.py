@@ -165,6 +165,186 @@ def _recovery_hints_for(message: str) -> list:
     return hints
 
 
+# --- Guidance: project doctrine for agents that never see .claude/ --------
+#
+# Embody ships its TouchDesigner doctrine as `.claude/rules/*.md` and
+# `.claude/skills/<slug>/SKILL.md`. Claude Code loads those itself; agents
+# running on Codex, Cursor, opencode and friends get the MCP tool
+# descriptions and nothing else. get_guidance serves the SAME documents over
+# MCP so every client can reach them.
+#
+# Worker-side: pure filesystem work, ZERO TD access (mcp-safety thread
+# boundary). The helpers below are module-level and pure so the unit tests
+# can exercise them without a live server.
+
+_GUIDANCE_MAX_CHARS = 20000       # per-document response cap
+_GUIDANCE_INDEX_TTL_S = 30.0      # re-scan the docs tree at most this often
+_GUIDANCE_SUGGESTIONS = 3         # did-you-mean entries on a miss
+
+
+def _guidance_key(name: str) -> str:
+    """Comparison key for a topic id or query: lowercase, letters and digits
+    only. 'create-operator', 'create_operator', '/create-operator' and
+    'CreateOperator' all collapse to 'createoperator'. Pure."""
+    return re.sub(r'[^a-z0-9]', '', (name or '').lower())
+
+
+def _guidance_description(text: str) -> str:
+    """One-line description of a guidance document.
+
+    Prefers the YAML front-matter `description` field (skills carry one),
+    falls back to the first markdown heading, then the first ordinary line.
+    Returns '' when the document offers none. Pure -- no filesystem, no TD.
+    """
+    lines = (text or '').splitlines()
+    front = False
+    if lines and lines[0].strip() == '---':
+        front = True
+        for line in lines[1:]:
+            stripped = line.strip()
+            if stripped == '---':
+                break
+            if stripped.lower().startswith('description:'):
+                value = stripped.split(':', 1)[1].strip()
+                if (len(value) >= 2 and value[0] == value[-1]
+                        and value[0] in ('"', "'")):
+                    value = value[1:-1]
+                value = value.strip()
+                if value:
+                    return value
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if front:
+            # Skip the front-matter block itself (its closing '---').
+            if index == 0:
+                continue
+            if stripped == '---':
+                front = False
+            continue
+        if not stripped or stripped.startswith('<!--'):
+            continue
+        if stripped.startswith('#'):
+            return stripped.lstrip('#').strip()
+        return stripped
+    return ''
+
+
+def _match_guidance_topic(query: str, topic_ids) -> tuple:
+    """Resolve a requested topic against the available ids.
+
+    Returns (matched_id_or_None, suggestions_list). Matching is
+    case-insensitive and punctuation-insensitive via _guidance_key, then
+    tolerates near-misses: prefix, substring, and finally difflib's closest
+    matches. Pure -- unit-testable with a plain list of ids.
+    """
+    ids = list(topic_ids or [])
+    key = _guidance_key(query)
+    if not key or not ids:
+        return None, ids[:_GUIDANCE_SUGGESTIONS]
+    keyed = [(_guidance_key(i), i) for i in ids]
+    for candidate_key, topic_id in keyed:
+        if candidate_key == key:
+            return topic_id, []
+    starts = [t for k, t in keyed if k.startswith(key) or key.startswith(k)]
+    if len(starts) == 1:
+        return starts[0], []
+    contains = [t for k, t in keyed if key in k or k in key]
+    if len(contains) == 1:
+        return contains[0], []
+    suggestions = []
+    for topic_id in starts + contains:
+        if topic_id not in suggestions:
+            suggestions.append(topic_id)
+    if len(suggestions) < _GUIDANCE_SUGGESTIONS:
+        try:
+            import difflib
+            close = difflib.get_close_matches(
+                key, [k for k, _t in keyed], n=_GUIDANCE_SUGGESTIONS, cutoff=0.6)
+            by_key = dict(keyed)
+            for candidate_key in close:
+                topic_id = by_key.get(candidate_key)
+                if topic_id and topic_id not in suggestions:
+                    suggestions.append(topic_id)
+        except Exception:
+            pass
+    return None, suggestions[:_GUIDANCE_SUGGESTIONS]
+
+
+# --- Write-effect footer: did THIS write break something? -----------------
+#
+# After a mutating tool call, ride a compact '_effects' block back telling the
+# agent whether IT just introduced operator errors or tanked the frame rate,
+# instead of waiting to be asked. Diffed against a PER-SESSION snapshot so
+# only NEW damage is reported; pre-existing errors stay silent.
+#
+# Like _attachRecoveryHints this is an ergonomics layer: it must never be able
+# to break a response, so every entry point is wrapped and degrades to silence.
+
+_EFFECTS_ERROR_CAP = 3        # newly-erroring ops listed
+_EFFECTS_WARNING_CAP = 2      # newly-warning ops listed
+_EFFECTS_FPS_DROP_FRAC = 0.85  # report below this fraction of the last sample
+_EFFECTS_FPS_DROP_MIN = 5.0    # ...and only when the absolute drop is this big
+# The project-wide error scan runs on the MAIN thread once per write. If it
+# ever costs more than this, the footer disables that half for the session
+# rather than taxing every subsequent write (performance.md: never make the
+# user's TD slower to be helpful).
+_EFFECTS_SCAN_BUDGET_S = 0.25
+
+
+def _new_error_entries(previous_paths, current_entries, cap):
+    """Diff a fresh error/warning list against the previous snapshot.
+
+    `previous_paths` is the set of op paths that were already erroring;
+    `current_entries` is get_op_errors-shaped ({'nodePath', 'message'} dicts).
+    Returns (listed, total_new, current_paths) where `listed` is capped at
+    `cap`. `previous_paths` of None means "no baseline yet" -- nothing is new
+    on a session's first write, only the baseline is established.
+
+    Pure and TD-free so the diff can be unit-tested with synthetic sets.
+    """
+    current_paths = set()
+    fresh = []
+    for entry in (current_entries or []):
+        if not isinstance(entry, dict):
+            continue
+        path = entry.get('nodePath') or ''
+        if not path:
+            continue
+        current_paths.add(path)
+        if previous_paths is not None and path not in previous_paths:
+            fresh.append({'path': path,
+                          'message': str(entry.get('message') or '')[:200]})
+    # One line per op: repeated messages on the same node are noise.
+    listed, seen = [], set()
+    for item in fresh:
+        if item['path'] in seen:
+            continue
+        seen.add(item['path'])
+        listed.append(item)
+    return listed[:max(0, cap)], len(listed), current_paths
+
+
+def _fps_regression(previous_fps, current_fps) -> dict:
+    """A meaningful frame-rate drop between two samples, or {}.
+
+    Requires BOTH a proportional drop (below _EFFECTS_FPS_DROP_FRAC of the
+    previous sample) and an absolute one (_EFFECTS_FPS_DROP_MIN fps), so
+    ordinary jitter never reports. Pure."""
+    try:
+        was = float(previous_fps)
+        now = float(current_fps)
+    except (TypeError, ValueError):
+        return {}
+    if was <= 0 or now <= 0:
+        return {}
+    if now >= was * _EFFECTS_FPS_DROP_FRAC:
+        return {}
+    if (was - now) < _EFFECTS_FPS_DROP_MIN:
+        return {}
+    return {'now': round(now, 1), 'was': round(was, 1),
+            'drop_pct': int(round((was - now) / was * 100))}
+
+
 def _scope_overlaps(a: str, b: str) -> bool:
     """True when two scopes denote overlapping territory.
 
@@ -362,6 +542,12 @@ class EnvoyMCPServer:
         self._loadDurableWorktreeClaims()
 
         self._docs_state = {'resolved': False, 'root': None, 'index': None, 'cache': {}}
+        # get_guidance index: the project's own .claude rules/skills, scanned
+        # from disk on the worker thread. {'ts': float, 'root': str,
+        # 'index': {topic_id: entry}, 'searched': [dirs]}; rebuilt when older
+        # than _GUIDANCE_INDEX_TTL_S so edits to a rule show up mid-session.
+        self._guidance_state = {'ts': 0.0, 'root': None, 'index': None,
+                                'searched': []}
 
         # Import mcp only when server is instantiated (in worker thread).
         # SDK 2.0 renamed FastMCP -> MCPServer (mcp.server.mcpserver); the
@@ -753,6 +939,188 @@ class EnvoyMCPServer:
                 'tdn_unsaved collisions. Never overwrite blind.')
         return result
 
+    # --- get_guidance: serve the project's own rules/skills over MCP ------
+    # Worker-side pure Python + filesystem, ZERO TD access (mcp-safety).
+
+    def _guidanceSearchDirs(self) -> list:
+        """Candidate `.claude` directories, most specific first.
+
+        The repo root Envoy already resolved on the main thread
+        (sys._envoy_repo_root) is the primary location -- it is where
+        embody_git.write_claude_rules_and_skills deploys rules and skills in
+        BOTH this repo and a user project. Ancestors and the process cwd are
+        defensive fallbacks for unusual layouts (a project folder nested
+        under the repo that actually owns .claude).
+        """
+        dirs, seen = [], set()
+
+        def add(base):
+            if not base:
+                return
+            try:
+                candidate = os.path.join(os.path.normpath(str(base)), '.claude')
+            except Exception:
+                return
+            if candidate not in seen:
+                seen.add(candidate)
+                dirs.append(candidate)
+
+        root = getattr(sys, '_envoy_repo_root', None)
+        add(root)
+        if root:
+            try:
+                current = os.path.normpath(str(root))
+                for _ in range(3):
+                    parent = os.path.dirname(current)
+                    if not parent or parent == current:
+                        break
+                    add(parent)
+                    current = parent
+            except Exception:
+                pass
+        try:
+            add(os.getcwd())
+        except Exception:
+            pass
+        return dirs
+
+    @staticmethod
+    def _guidanceScanDir(claude_dir: str) -> dict:
+        """Index one `.claude` directory: {topic_id: entry}. Never raises."""
+        index = {}
+
+        def register(topic_id, kind, path):
+            try:
+                with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                    text = f.read()
+            except Exception:
+                return
+            if not text.strip():
+                return
+            unique = topic_id
+            if unique in index:
+                # Same slug from both a rule and a skill: keep both, and
+                # disambiguate the later one rather than dropping doctrine.
+                unique = '%s-%s' % (topic_id, kind)
+                if unique in index:
+                    return
+            index[unique] = {
+                'topic': unique,
+                'kind': kind,
+                'path': path.replace('\\', '/'),
+                'description': _guidance_description(text),
+            }
+
+        rules_dir = os.path.join(claude_dir, 'rules')
+        try:
+            for filename in sorted(os.listdir(rules_dir)):
+                if not filename.lower().endswith('.md'):
+                    continue
+                register(os.path.splitext(filename)[0], 'rule',
+                         os.path.join(rules_dir, filename))
+        except Exception:
+            pass
+
+        skills_dir = os.path.join(claude_dir, 'skills')
+        try:
+            for slug in sorted(os.listdir(skills_dir)):
+                skill_file = os.path.join(skills_dir, slug, 'SKILL.md')
+                if os.path.isfile(skill_file):
+                    register(slug, 'skill', skill_file)
+        except Exception:
+            pass
+        return index
+
+    def _guidanceIndex(self) -> tuple:
+        """(index, root_dir, searched_dirs) for the first `.claude` directory
+        that actually holds documents. Cached for _GUIDANCE_INDEX_TTL_S so a
+        rule edited on disk is picked up mid-session."""
+        state = self._guidance_state
+        now = time.time()
+        if (state.get('index') is not None
+                and (now - state.get('ts', 0.0)) < _GUIDANCE_INDEX_TTL_S):
+            return state['index'], state.get('root'), state.get('searched', [])
+        searched = self._guidanceSearchDirs()
+        index, root = {}, None
+        for claude_dir in searched:
+            found = self._guidanceScanDir(claude_dir)
+            if found:
+                index, root = found, claude_dir
+                break
+        state['index'] = index
+        state['root'] = root
+        state['searched'] = searched
+        state['ts'] = now
+        return index, root, searched
+
+    def _get_guidance(self, topic=None) -> dict:
+        """Body of the get_guidance tool. Worker-side; never raises."""
+        try:
+            index, root, searched = self._guidanceIndex()
+            if not index:
+                return {
+                    'error': 'No Embody guidance documents found on disk '
+                             '(.claude/rules/*.md, .claude/skills/*/SKILL.md).',
+                    'searched': searched,
+                    'action': 'Ask the user to run op.Embody.InitEnvoy() in '
+                              'TouchDesigner -- it regenerates the AI client '
+                              'config including .claude/rules and '
+                              '.claude/skills. Until then, use get_docs for '
+                              'official TouchDesigner documentation.',
+                }
+            topics = [{'topic': e['topic'], 'kind': e['kind'],
+                       'description': e['description']}
+                      for e in sorted(index.values(),
+                                      key=lambda e: (e['kind'], e['topic']))]
+            listing = {
+                'topics': topics,
+                'count': len(topics),
+                'source': (root or '').replace('\\', '/'),
+                'usage': "Call get_guidance(topic='create-operator') to read "
+                         "one document in full. Rules are always-on project "
+                         "policy; skills are workflows to read BEFORE the "
+                         "matching action (creating operators, writing TD "
+                         "Python, annotations, externalizing, releases).",
+            }
+            query = (topic or '').strip()
+            if not query:
+                return listing
+
+            matched, suggestions = _match_guidance_topic(query, list(index))
+            if matched is None:
+                miss = dict(listing)
+                miss['error'] = 'No guidance topic matches %r' % query
+                if suggestions:
+                    miss['did_you_mean'] = suggestions
+                return miss
+
+            entry = index[matched]
+            try:
+                with open(entry['path'], 'r', encoding='utf-8',
+                          errors='replace') as f:
+                    content = f.read()
+            except Exception as e:
+                return {'error': 'Could not read guidance document %r: %s'
+                                 % (matched, e)}
+            truncated = len(content) > _GUIDANCE_MAX_CHARS
+            if truncated:
+                content = content[:_GUIDANCE_MAX_CHARS]
+            result = {
+                'topic': entry['topic'],
+                'kind': entry['kind'],
+                'description': entry['description'],
+                'path': entry['path'],
+                'content': content,
+            }
+            if truncated:
+                result['truncated'] = True
+                result['note'] = ('Content truncated at %d characters -- read '
+                                  'the file at the reported path for the rest.'
+                                  % _GUIDANCE_MAX_CHARS)
+            return result
+        except Exception as e:
+            return {'error': 'Guidance lookup failed: %s' % e}
+
     def _execute_in_td(self, operation: str, params: dict,
                        timeout: float = 30.0) -> dict:
         """Queue operation to main thread and wait for response"""
@@ -1091,6 +1459,34 @@ class EnvoyMCPServer:
             return self._execute_in_td('get_td_info', {})
 
         @self.mcp.tool()
+        def get_focus() -> dict:
+            """Report what the USER is currently looking at in TouchDesigner.
+
+            Call this to resolve conversational references -- "fix this
+            operator", "add a blur here", "what's wrong with that node" --
+            before guessing a path or calling query_network.
+
+            DISAMBIGUATION RULE: "this operator" / "that node" means the
+            SELECTED (or current) operator. It does NOT mean the rollover
+            operator -- rollover is just whatever the mouse happens to be
+            hovering over and is incidental. Use `target` when it is set;
+            fall back to `selected`/`current`. Only mention `rollover` if
+            the user explicitly talks about hovering.
+
+            Returns:
+                Dict with network (path of the network the current pane is
+                showing), paneType, selected (list of selected operator
+                paths), selectedCount, current (the current operator, or
+                null), rollover (operator under the mouse, or null), target
+                (the operator "this" resolves to, or null when ambiguous),
+                targetSource ('selection'|'current'), and note. A
+                headless/Engine TouchDesigner has no panes: the result then
+                carries headless=true with everything null -- ask the user
+                for an explicit path instead.
+            """
+            return self._execute_in_td('get_focus', {})
+
+        @self.mcp.tool()
         def get_op_errors(op_path: str, recurse: bool = True) -> dict:
             """
             Get error and warning messages for an operator and optionally its children.
@@ -1197,6 +1593,47 @@ class EnvoyMCPServer:
                 text), and optional url / matches / truncated fields.
             """
             return self._get_docs(query, section, source, max_chars)
+
+        @self.mcp.tool()
+        def get_guidance(topic: str = None) -> dict:
+            """Read this project's TouchDesigner rules and workflow skills.
+
+            These are the project's own doctrine -- the same documents
+            Claude Code loads from .claude/rules and .claude/skills. Every
+            other client (Codex, Cursor, opencode, ...) only sees them
+            through this tool.
+
+            Call it with no argument once per session to list the topics,
+            then read the relevant one BEFORE acting:
+              - before creating or moving operators -> 'create-operator',
+                'network-layout'
+              - before writing TD Python (execute_python, DAT content) ->
+                'td-python', 'td-api-reference'
+              - before creating or editing annotations -> 'manage-annotations'
+              - before designing custom parameters -> 'parameter-design'
+              - before externalizing, heavy/visual builds, movie export,
+                releases -> the matching topic in the list
+
+            Complements get_docs: get_docs is official Derivative
+            documentation, get_guidance is how THIS project wants the work
+            done.
+
+            Args:
+                topic: Topic id from the listing (e.g. "create-operator").
+                    Matching ignores case and punctuation, so
+                    "create_operator" and "createoperator" also resolve.
+                    Omit to get the topic list.
+
+            Returns:
+                Without topic: dict with topics (topic, kind 'rule'|'skill',
+                description), count, source, usage. With topic: dict with
+                topic, kind, description, path, content, and truncated/note
+                when the document exceeded the response cap. On a miss: the
+                topic list plus error and did_you_mean.
+            """
+            # Answered on the worker thread from the filesystem -- no TD
+            # access, so no main-thread round-trip (mcp-safety).
+            return self._get_guidance(topic)
 
         # === MCP Prompts ===
 
@@ -2777,6 +3214,15 @@ class EnvoyExt:
         # _peers token-lean; conflicts bypass it. Reset on reinit is fine.
         self._advisories_served: dict = {}
         self._peer_hint_served: set = set()
+        # Write-effect footer baselines: sid (or '_anon') -> {'errors': set,
+        # 'warnings': set, 'fps': float}. A session's FIRST write only
+        # establishes the baseline (nothing pre-existing is ever reported as
+        # newly introduced). Plain instance state -- reset on reinit is fine,
+        # the next write just re-baselines.
+        self._effects_state: dict = {}
+        # Safety valve: flipped False (once, loudly) if the project-wide error
+        # scan ever exceeds _EFFECTS_SCAN_BUDGET_S on the main thread.
+        self._effects_error_scan_ok: bool = True
         self._restart_count: int = 0
         self._deadTicks: int = 0  # consecutive watchdog ticks seeing a dead/refused socket
         self._last_start_time: float = 0.0  # time.time() when Start() was called
@@ -4409,10 +4855,109 @@ class EnvoyExt:
         except Exception:
             pass
 
-    def _send_response(self, request_id, result, sid=None):
-        """Send a response back to the worker thread (token-lean log piggyback)."""
+    def _sampleProjectFps(self):
+        """Current fps from Embody's Perform CHOP, or None.
+
+        Reads `_envoy_perform` ONLY if it already exists -- an unrelated
+        write must never create a monitor operator as a side effect (the
+        get_project_performance tool documents first-call creation; this
+        footer deliberately opts out of it). Never raises."""
+        try:
+            perform = self.ownerComp.op('_envoy_perform')
+            if not perform:
+                return None
+            channel = perform.chan('fps')
+            if channel is None:
+                return None
+            return float(channel.eval())
+        except Exception:
+            return None
+
+    def _attachEffects(self, result, operation, sid=None):
+        """After a MUTATING call, ride back what THIS write just did to the
+        project: operator errors/warnings that did not exist before it, and a
+        meaningful frame-rate drop. Diffed against a per-session baseline so
+        pre-existing damage stays silent.
+
+        Never raises -- an ergonomics layer must not be able to break a
+        response (same contract as _attachRecoveryHints)."""
+        try:
+            if not isinstance(result, dict) or '_effects' in result:
+                return
+            if operation not in _WRITE_OPERATIONS:
+                return
+            key = sid or '_anon'
+            state = self._effects_state.get(key)
+            first_write = state is None
+            if first_write:
+                state = {}
+                self._effects_state[key] = state
+            if len(self._effects_state) > 32:
+                # Crude cap: a long-lived TD session accumulating many
+                # short-lived sids must not grow this unbounded.
+                self._effects_state.clear()
+                self._effects_state[key] = state
+
+            effects = {}
+
+            # --- newly appeared errors / warnings ---
+            snapshot = None
+            if getattr(self, '_effects_error_scan_ok', True):
+                started = time.time()
+                snapshot = mod.envoy_read.get_op_errors(self, '/', True)
+                elapsed = time.time() - started
+                if elapsed > _EFFECTS_SCAN_BUDGET_S:
+                    self._effects_error_scan_ok = False
+                    self._log(
+                        'Write-effect error scan took %.2fs (budget %.2fs) -- '
+                        'disabling it for this session so it cannot tax every '
+                        'write. Use get_op_errors on demand instead.'
+                        % (elapsed, _EFFECTS_SCAN_BUDGET_S), 'WARNING')
+            if isinstance(snapshot, dict) and 'error' not in snapshot:
+                errors, error_total, error_paths = _new_error_entries(
+                    None if first_write else state.get('errors'),
+                    snapshot.get('errors'), _EFFECTS_ERROR_CAP)
+                warnings, warning_total, warning_paths = _new_error_entries(
+                    None if first_write else state.get('warnings'),
+                    snapshot.get('warnings'), _EFFECTS_WARNING_CAP)
+                state['errors'] = error_paths
+                state['warnings'] = warning_paths
+                if errors:
+                    effects['new_errors'] = errors
+                    effects['new_errors_total'] = error_total
+                if warnings:
+                    effects['new_warnings'] = warnings
+                    effects['new_warnings_total'] = warning_total
+
+            # --- meaningful frame-rate drop ---
+            fps = self._sampleProjectFps()
+            if fps is not None:
+                if not first_write:
+                    regression = _fps_regression(state.get('fps'), fps)
+                    if regression:
+                        effects['fps'] = regression
+                state['fps'] = fps
+
+            if effects:
+                effects['hint'] = (
+                    'These appeared after YOUR last write. Inspect with '
+                    'get_op_errors on the listed paths (or '
+                    'get_project_performance for the fps drop) and fix '
+                    'before building further.')
+                result['_effects'] = effects
+        except Exception:
+            pass
+
+    def _send_response(self, request_id, result, sid=None, operation=None):
+        """Send a response back to the worker thread (token-lean log piggyback).
+
+        `operation` is optional so nothing else has to change: pass it for a
+        call that actually EXECUTED, and the write-effect footer runs; leave
+        it None (e.g. for a refused multi-session gate, where no TD state
+        moved) and only the existing attachments apply."""
         self._attachRecoveryHints(result)
         self._attachNotableLogs(result, sid)
+        self._attachEffects(result, operation, sid)
 
         self.response_queue.put({
             'id': request_id,
@@ -4471,6 +5016,8 @@ class EnvoyExt:
                 gate = None
             if gate is not None:
                 if isinstance(request_id, int) and request_id >= 0:
+                    # Refused before execution -- no TD state moved, so the
+                    # write-effect footer must not run (operation omitted).
                     self._send_response(request_id, gate, sid)
                 else:
                     # Deferred op (run_tests uses the -1 sentinel): deliver
@@ -4509,7 +5056,7 @@ class EnvoyExt:
             except Exception:
                 pass
 
-            self._send_response(request_id, result, sid)
+            self._send_response(request_id, result, sid, operation=operation)
 
         # Live build visualization (opt-in): camera follow + node pulse + the
         # dancing builder-bot. Runs every frame AFTER the drain loop. Wrapped so
@@ -4687,6 +5234,7 @@ class EnvoyExt:
             'get_project_performance': self._get_project_performance,
             # Introspection & diagnostics
             'get_td_info': self._get_td_info,
+            'get_focus': self._get_focus,
             'get_op_errors': self._get_op_errors,
             'exec_op_method': self._exec_op_method,
             'get_td_classes': self._get_td_classes,
@@ -5602,6 +6150,10 @@ class EnvoyExt:
         """Get TouchDesigner environment and Envoy server info -- see envoy_read."""
         return mod.envoy_read.get_td_info(self)
 
+    def _get_focus(self) -> dict:
+        """Report the pane/selection the user is looking at -- see envoy_read."""
+        return mod.envoy_read.get_focus(self)
+
     def _get_op_errors(self, op_path: str, recurse: bool = True) -> dict:
         """Get error and warning messages for an operator and its children -- see envoy_read."""
         return mod.envoy_read.get_op_errors(self, op_path, recurse)
@@ -5854,7 +6406,8 @@ class EnvoyExt:
         'get_op', 'get_op_errors', 'get_op_flags', 'get_op_position',
         'get_op_performance', 'get_project_performance', 'get_parameter',
         'get_connections', 'get_annotations', 'get_network_layout',
-        'get_dat_content', 'get_docs', 'get_module_help', 'get_logs',
+        'get_dat_content', 'get_docs', 'get_guidance', 'get_module_help',
+        'get_logs', 'get_focus',
         'get_externalizations', 'get_externalization_status', 'get_sessions',
         'query_network', 'find_children', 'get_enclosed_ops',
         'read_tdn', 'diff_tdn', 'capture_top',
