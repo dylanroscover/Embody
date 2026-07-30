@@ -20,7 +20,10 @@ import importlib.util
 import io
 import json
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 from unittest.mock import patch, MagicMock, call
 
@@ -1582,30 +1585,25 @@ class TestBridgeProcessManagement(EmbodyTestCase):
         mock_ctypes.WinDLL.return_value = mock_kernel32
         return mock_kernel32, mock_ctypes
 
-    @patch('envoy_bridge.sys')
-    def test_is_process_alive_win32_uses_openprocess(self, mock_sys):
+    def test_is_process_alive_win32_uses_openprocess(self):
         """On Windows, uses OpenProcess(SYNCHRONIZE) instead of os.kill."""
-        mock_sys.platform = "win32"
         k, mock_ctypes = self._win32_ctypes(42)  # non-zero = valid handle
         with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
-            self.assertTrue(bridge.is_process_alive(1234))
+            self.assertTrue(bridge.is_process_alive(1234, platform='win32'))
         k.OpenProcess.assert_called_once_with(0x00100000, False, 1234)
         k.CloseHandle.assert_called_once_with(42)
         # Never ctypes.windll -- that cache is shared process-wide.
         mock_ctypes.WinDLL.assert_called_once_with("kernel32")
 
-    @patch('envoy_bridge.sys')
-    def test_is_process_alive_win32_dead_process(self, mock_sys):
+    def test_is_process_alive_win32_dead_process(self):
         """On Windows, returns False when OpenProcess returns 0 (dead PID)."""
-        mock_sys.platform = "win32"
         k, mock_ctypes = self._win32_ctypes(0)  # zero = failed / no process
         with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
-            self.assertFalse(bridge.is_process_alive(9999))
+            self.assertFalse(bridge.is_process_alive(9999, platform='win32'))
         k.CloseHandle.assert_not_called()
         k.WaitForSingleObject.assert_not_called()
 
-    @patch('envoy_bridge.sys')
-    def test_is_process_alive_win32_zombie_handle_is_dead(self, mock_sys):
+    def test_is_process_alive_win32_zombie_handle_is_dead(self):
         """Exited-but-handle-still-open must read DEAD, not alive.
 
         A Windows process object (and its PID) stays allocated while ANY
@@ -1615,14 +1613,12 @@ class TestBridgeProcessManagement(EmbodyTestCase):
         sessions here, leaving them as phantom peers. WAIT_OBJECT_0 means
         the object is signaled, which happens exactly on exit.
         """
-        mock_sys.platform = "win32"
         k, mock_ctypes = self._win32_ctypes(42, wait_result=0x00000000)
         with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
-            self.assertFalse(bridge.is_process_alive(1234))
+            self.assertFalse(bridge.is_process_alive(1234, platform='win32'))
         k.CloseHandle.assert_called_once_with(42)  # and no handle leak
 
-    @patch('envoy_bridge.sys')
-    def test_is_process_alive_win32_wait_failed_counts_as_alive(self, mock_sys):
+    def test_is_process_alive_win32_wait_failed_counts_as_alive(self):
         """WAIT_FAILED is inconclusive -- err toward ALIVE.
 
         Callers use this to prune registry rows and reap heartbeats;
@@ -1630,117 +1626,30 @@ class TestBridgeProcessManagement(EmbodyTestCase):
         direction, so anything that is not an explicit WAIT_OBJECT_0
         keeps the process considered alive.
         """
-        mock_sys.platform = "win32"
         k, mock_ctypes = self._win32_ctypes(42, wait_result=0xFFFFFFFF)
         with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
-            self.assertTrue(bridge.is_process_alive(1234))
+            self.assertTrue(bridge.is_process_alive(1234, platform='win32'))
         k.CloseHandle.assert_called_once_with(42)
 
     # --- find_all_td_pids: pgrep filtering on macOS/Linux ---
+    # The five tests that used to live here self-skipped on win32, so the
+    # Windows dev box had ZERO signal on the entire POSIX pid path. They
+    # are superseded by TestProcessIdentityInjected, which drives the same
+    # branch through injected platform/run on every machine (D-5).
 
-    # _process_is_real_td (added v6.0.80) ps-checks each candidate PID;
-    # fake test PIDs would all be dropped as not-real-TD, so stub it True.
-    @patch.object(bridge, '_process_is_real_td', new=lambda pid: True)
-    @patch.object(bridge, '_is_bridge_process')
-    @patch('envoy_bridge.subprocess.run')
-    def test_find_all_td_pids_filters_self_and_bridges(
-            self, mock_run, mock_is_bridge):
-        """find_all_td_pids excludes own PID and bridge processes from
-        pgrep output. Without filtering, pgrep -f 'TouchDesigner' would
-        match the bridge process running TD's bundled Python."""
-        if bridge.sys.platform == 'win32':
-            self.skipTest('macOS/Linux pgrep path')
-        my_pid = os.getpid()
-        fake = MagicMock()
-        fake.returncode = 0
-        fake.stdout = f'{my_pid}\n12345\n67890\n11111\n'
-        mock_run.return_value = fake
-        # Simulate one of the candidate PIDs being a bridge process
-        mock_is_bridge.side_effect = lambda pid: pid == 67890
+    def test_is_td_helper_process_markers(self):
+        """_is_td_helper_process matches Web Render and CEF --type= cmdlines.
 
-        pids = bridge.find_all_td_pids()
-
-        self.assertNotIn(my_pid, pids,
-            'Own PID must be excluded')
-        self.assertNotIn(67890, pids,
-            'Bridge process PID must be excluded')
-        self.assertIn(12345, pids)
-        self.assertIn(11111, pids)
-
-    @patch('envoy_bridge.subprocess.run')
-    def test_find_all_td_pids_returns_empty_on_timeout(self, mock_run):
-        """find_all_td_pids returns [] when subprocess times out."""
-        if bridge.sys.platform == 'win32':
-            self.skipTest('macOS/Linux pgrep path')
-        import subprocess as sp
-        mock_run.side_effect = sp.TimeoutExpired(cmd=['pgrep'], timeout=5)
-        self.assertEqual(bridge.find_all_td_pids(), [])
-
-    @patch('envoy_bridge.subprocess.run')
-    def test_find_all_td_pids_returns_empty_when_pgrep_missing(self, mock_run):
-        """find_all_td_pids returns [] when pgrep binary is not found."""
-        if bridge.sys.platform == 'win32':
-            self.skipTest('macOS/Linux pgrep path')
-        mock_run.side_effect = FileNotFoundError()
-        self.assertEqual(bridge.find_all_td_pids(), [])
-
-    @patch('envoy_bridge.subprocess.run')
-    def test_find_all_td_pids_returns_empty_on_pgrep_no_match(self, mock_run):
-        """pgrep returncode != 0 (no TD processes found) yields []."""
-        if bridge.sys.platform == 'win32':
-            self.skipTest('macOS/Linux pgrep path')
-        fake = MagicMock()
-        fake.returncode = 1  # pgrep returns 1 when no matches
-        fake.stdout = ''
-        mock_run.return_value = fake
-        self.assertEqual(bridge.find_all_td_pids(), [])
-
-    @patch.object(bridge, '_process_is_real_td', new=lambda pid: True)
-    @patch.object(bridge, '_is_bridge_process', return_value=False)
-    @patch.object(bridge, '_process_cmdline')
-    @patch('envoy_bridge.subprocess.run')
-    def test_find_all_td_pids_filters_helper_processes(
-            self, mock_run, mock_cmdline, _mock_bridge):
-        """find_all_td_pids excludes bundled TD helper / CEF subprocesses.
-
-        `pgrep -f TouchDesigner` also matches the Web Render helper
-        ("TouchDesigner Web Render.app/.../TouchDesigner") and CEF
-        GPU/renderer children -- they share the executable name but are
-        not TD instances, and CEF recycles them every few seconds.
+        cmdline is passed directly (the shipped signature now accepts it)
+        rather than patching _process_cmdline.
         """
-        if bridge.sys.platform == 'win32':
-            self.skipTest('macOS/Linux pgrep path')
-        fake = MagicMock()
-        fake.returncode = 0
-        fake.stdout = '100\n200\n300\n'
-        mock_run.return_value = fake
-        cmdlines = {
-            100: '/Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner',
-            200: '/Applications/TouchDesigner.app/Contents/MacOS/'
-                 'TouchDesigner Web Render.app/Contents/MacOS/TouchDesigner',
-            300: '/Applications/TouchDesigner.app/Contents/MacOS/'
-                 'TouchDesigner Web Render Helper (GPU).app/Contents/MacOS/'
-                 'TouchDesigner --type=gpu-process',
-        }
-        mock_cmdline.side_effect = lambda pid: cmdlines.get(pid, '')
-
-        pids = bridge.find_all_td_pids()
-
-        self.assertEqual(pids, [100],
-            'Only the real TD process survives; Web Render helper and CEF '
-            'child are filtered out')
-
-    @patch.object(bridge, '_process_cmdline')
-    def test_is_td_helper_process_markers(self, mock_cmdline):
-        """_is_td_helper_process matches Web Render and CEF --type= cmdlines."""
-        mock_cmdline.return_value = '.../TouchDesigner Web Render.app/.../TouchDesigner'
-        self.assertTrue(bridge._is_td_helper_process(1))
-        mock_cmdline.return_value = '.../TouchDesigner --type=renderer'
-        self.assertTrue(bridge._is_td_helper_process(2))
-        mock_cmdline.return_value = '/Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner'
-        self.assertFalse(bridge._is_td_helper_process(3))
-        mock_cmdline.return_value = ''
-        self.assertFalse(bridge._is_td_helper_process(4))
+        self.assertTrue(bridge._is_td_helper_process(
+            1, cmdline='.../TouchDesigner Web Render.app/.../TouchDesigner'))
+        self.assertTrue(bridge._is_td_helper_process(
+            2, cmdline='.../TouchDesigner --type=renderer'))
+        self.assertFalse(bridge._is_td_helper_process(
+            3, cmdline='/Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner'))
+        self.assertFalse(bridge._is_td_helper_process(4, cmdline=''))
 
 
 # =====================================================================
@@ -1804,15 +1713,31 @@ class TestBridgeMetaTools(EmbodyTestCase):
         self.assertEqual(result['restart_attempts_remaining'], 0)
 
     def test_launch_td_no_executable(self):
-        # Mock find_td_pid -> None so the "already running" guard doesn't
-        # short-circuit before we reach the missing-config check.  Without
-        # this the test fails on any machine actually running TD (e.g. the
-        # Embody dev project itself).
-        with patch.object(bridge, 'find_td_pid', return_value=None):
+        """No configured exe AND no discoverable install -> a clear error.
+
+        find_td_installs is stubbed empty: after A-14 made
+        select_td_install unconditional, this path's message depends on
+        whether the HOST has TouchDesigner installed, so an unstubbed
+        test passes on the dev box and fails on every CI runner.
+        """
+        with patch.object(bridge, 'find_td_pid', return_value=None),              patch.object(bridge, 'find_td_installs', return_value=[]):
             state = self._make_state(config={})
             result = bridge.handle_launch_td({}, state)
         self.assertEqual(result['status'], 'error')
-        self.assertIn('envoy.json', result['message'])
+        self.assertIn('touchdesigner', result['message'].lower())
+
+    def test_launch_td_uses_newest_discovered_install_when_unpinned(self):
+        """A-14 fresh-clone path at the launch_td level: no pin, no
+        configured exe -> discovery still supplies the executable."""
+        with patch.object(bridge, 'find_td_pid', return_value=None),              patch.object(bridge, 'find_td_installs',
+                          return_value=[('2025.32660', '/fake/TD.app'),
+                                        ('2024.30000', '/fake/TD-old.app')]),              patch.object(bridge, 'load_project_config', return_value={}):
+            state = self._make_state(config={})
+            result = bridge.handle_launch_td({}, state)
+        # No toe_path configured, so it stops there -- past exe resolution,
+        # which is the point: discovery was consulted and succeeded.
+        self.assertEqual(result['status'], 'error')
+        self.assertIn('toe_path', result['message'])
 
     def test_launch_td_already_running(self):
         """Refuses to launch if THIS instance is already running.
@@ -1851,11 +1776,27 @@ class TestBridgeMetaTools(EmbodyTestCase):
         self.assertIn('crashed', result['message'])
 
     def test_launch_td_missing_executable(self):
-        """Error when TD executable doesn't exist."""
+        """A configured exe that does not exist, and nothing discoverable.
+
+        find_td_installs stubbed empty for the same host-coupling reason
+        as test_launch_td_no_executable.
+        """
         state = self._make_state(
             config={'td_executable': '/nonexistent/TD.app', 'toe_path': 'test.toe'},
             config_path='/tmp/.embody/envoy.json')
-        with patch.object(bridge, 'find_td_pid', return_value=None):
+        with patch.object(bridge, 'find_td_pid', return_value=None),              patch.object(bridge, 'find_td_installs', return_value=[]):
+            result = bridge.handle_launch_td({}, state)
+        self.assertEqual(result['status'], 'error')
+        self.assertIn('touchdesigner', result['message'].lower())
+
+    def test_launch_td_reports_discovered_exe_that_vanished(self):
+        """Defence in depth: select_td_install hands back a path that no
+        longer exists -> launch_td's own validation refuses it."""
+        state = self._make_state(
+            config={'toe_path': 'test.toe'},
+            config_path='/tmp/.embody/envoy.json')
+        with patch.object(bridge, 'find_td_pid', return_value=None),              patch.object(bridge, 'select_td_install',
+                          return_value=('/vanished/TouchDesigner.exe', None)):
             result = bridge.handle_launch_td({}, state)
         self.assertEqual(result['status'], 'error')
         self.assertIn('not found', result['message'].lower())
@@ -2072,21 +2013,6 @@ class TestBridgeMetaTools(EmbodyTestCase):
             result = bridge.handle_get_td_status(state)
         self.assertTrue(result['td_process_alive'])
         self.assertFalse(result['crash_detected'])
-
-    def test_find_all_td_pids_excludes_webrender_windows(self):
-        """TouchDesignerWebRender helpers match the tasklist TouchDesigner*
-        filter but are not TD instances -- they must be excluded so a
-        recycled/helper pid can never satisfy a liveness check."""
-        if sys.platform != 'win32':
-            self.skipTest('Windows tasklist branch only')
-        fake = MagicMock()
-        fake.stdout = (
-            '"TouchDesigner.exe","111","Console","1","1,000 K"\n'
-            '"TouchDesignerWebRender.exe","222","Console","1","1,000 K"\n')
-        with patch.object(bridge.subprocess, 'run', return_value=fake):
-            pids = bridge.find_all_td_pids()
-        self.assertIn(111, pids)
-        self.assertNotIn(222, pids)
 
     def test_handle_bridge_tool_unknown(self):
         state = self._make_state()
@@ -3672,3 +3598,541 @@ class TestWaitForNewTdPid(EmbodyTestCase):
         self.assertNotIn(
             'time.sleep(2)', src,
             'The old fixed 2s single-shot diff must not return')
+
+
+# =====================================================================
+# Mac-by-construction (D-5): every platform-conditional branch runs on
+# EVERY machine via parameter injection, and the macOS CI runner
+# executes the POSIX ones for real. No @patch('envoy_bridge.sys') --
+# that module-mock pattern already failed once in a full-suite run.
+# =====================================================================
+
+class TestPlatformInstallDiscovery(EmbodyTestCase):
+    """find_td_installs on all three platforms, against fixture trees."""
+
+    def setUp(self):
+        super().setUp()
+        self.tmp = tempfile.mkdtemp(prefix='td_installs_')
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        super().tearDown()
+
+    def _make_app(self, name, build, with_exe=True, plist_key=
+                  'CFBundleShortVersionString'):
+        """Build a fake macOS TouchDesigner.app bundle."""
+        import plistlib
+        app = os.path.join(self.tmp, name)
+        contents = os.path.join(app, 'Contents')
+        macos = os.path.join(contents, 'MacOS')
+        os.makedirs(macos, exist_ok=True)
+        if build is not None:
+            with open(os.path.join(contents, 'Info.plist'), 'wb') as f:
+                plistlib.dump({plist_key: build}, f)
+        if with_exe:
+            with open(os.path.join(macos, 'TouchDesigner'), 'w') as f:
+                f.write('#!/bin/sh\n')
+        return app
+
+    def test_darwin_discovers_bundles_newest_first(self):
+        self._make_app('TouchDesigner.app', '2024.30000')
+        self._make_app('TouchDesigner 2025.app', '2025.32660')
+        found = bridge.find_td_installs(platform='darwin', root=self.tmp)
+        self.assertEqual([b for b, _e in found],
+                         ['2025.32660', '2024.30000'],
+                         'newest build must sort first')
+        self.assertTrue(found[0][1].endswith('TouchDesigner 2025.app'),
+                        'the .app BUNDLE is the launch target on macOS')
+
+    def test_darwin_skips_bundle_without_executable(self):
+        """A partially-removed .app must never be handed to `open -a`."""
+        self._make_app('TouchDesigner.app', '2025.32660', with_exe=False)
+        found = bridge.find_td_installs(platform='darwin', root=self.tmp)
+        self.assertEqual(found, [])
+
+    def test_darwin_skips_bundle_with_unparseable_build(self):
+        self._make_app('TouchDesigner.app', '11600')      # not YYYY.NNNNN
+        self._make_app('TouchDesigner 2.app', None)       # no Info.plist
+        found = bridge.find_td_installs(platform='darwin', root=self.tmp)
+        self.assertEqual(found, [])
+
+    def test_read_macos_app_build_falls_back_to_bundle_version(self):
+        app = self._make_app('TouchDesigner.app', '2025.32660',
+                             plist_key='CFBundleVersion')
+        self.assertEqual(bridge._read_macos_app_build(app), '2025.32660')
+
+    def test_read_macos_app_build_survives_corrupt_plist(self):
+        app = self._make_app('TouchDesigner.app', None)
+        with open(os.path.join(app, 'Contents', 'Info.plist'), 'w') as f:
+            f.write('not a plist at all')
+        self.assertIsNone(bridge._read_macos_app_build(app),
+                          'a corrupt Info.plist must return None, not raise')
+
+    def test_win32_discovers_versioned_dirs(self):
+        d = os.path.join(self.tmp, 'TouchDesigner.2025.32660', 'bin')
+        os.makedirs(d)
+        with open(os.path.join(d, 'TouchDesigner.exe'), 'w') as f:
+            f.write('x')
+        found = bridge.find_td_installs(platform='win32', root=self.tmp)
+        self.assertEqual([b for b, _e in found], ['2025.32660'])
+        self.assertTrue(found[0][1].endswith('TouchDesigner.exe'))
+
+    def test_win32_falls_back_to_099_exe_name(self):
+        d = os.path.join(self.tmp, 'TouchDesigner.2025.32660', 'bin')
+        os.makedirs(d)
+        with open(os.path.join(d, 'TouchDesigner099.exe'), 'w') as f:
+            f.write('x')
+        found = bridge.find_td_installs(platform='win32', root=self.tmp)
+        self.assertTrue(found[0][1].endswith('TouchDesigner099.exe'))
+
+    def test_linux_discovers_tarball_layout(self):
+        d = os.path.join(self.tmp, 'touchdesigner-2025.32660', 'bin')
+        os.makedirs(d)
+        with open(os.path.join(d, 'TouchDesigner'), 'w') as f:
+            f.write('x')
+        found = bridge.find_td_installs(platform='linux', root=self.tmp)
+        self.assertEqual([b for b, _e in found], ['2025.32660'])
+
+    def test_default_roots_per_platform(self):
+        """_td_install_roots is the path production actually takes -- every
+        other test injects root=, so without this it has zero coverage."""
+        win = bridge._td_install_roots('win32')
+        self.assertEqual(win, [os.path.join('C:' + os.sep, 'Program Files',
+                                            'Derivative')],
+                         'the win32 default must match the shipped path')
+        mac = bridge._td_install_roots('darwin')
+        self.assertIn('/Applications', mac)
+        self.assertTrue(
+            any(m.endswith('Applications') and m != '/Applications'
+                for m in mac),
+            'the user Applications folder must also be scanned')
+        self.assertEqual(bridge._td_install_roots('linux'),
+                         ['/opt/derivative'])
+
+    def test_darwin_uses_cfbundleexecutable_not_a_hardcoded_name(self):
+        """PANEL BLOCKER pin: the bundle executable name comes from
+        Info.plist CFBundleExecutable, never a hardcoded basename -- a real
+        .app whose executable is named differently must still be
+        discovered. A fixture that hardcodes the name can never prove
+        this, so this fixture deliberately uses a DIFFERENT name."""
+        import plistlib
+        app = os.path.join(self.tmp, 'TouchDesigner.app')
+        macos = os.path.join(app, 'Contents', 'MacOS')
+        os.makedirs(macos)
+        with open(os.path.join(app, 'Contents', 'Info.plist'), 'wb') as f:
+            plistlib.dump({'CFBundleShortVersionString': '2025.32660',
+                           'CFBundleExecutable': 'TouchDesignerRenamed'}, f)
+        with open(os.path.join(macos, 'TouchDesignerRenamed'), 'w') as f:
+            f.write('#!/bin/sh\n')
+
+        found = bridge.find_td_installs(platform='darwin', root=self.tmp)
+        self.assertEqual([b for b, _e in found], ['2025.32660'],
+                         'discovery must follow CFBundleExecutable')
+        self.assertEqual(
+            bridge._macos_app_executable(app),
+            os.path.join(macos, 'TouchDesignerRenamed'))
+
+    def test_darwin_falls_back_to_any_executable_when_plist_lacks_key(self):
+        """No CFBundleExecutable -> fall back to whatever is in
+        Contents/MacOS rather than refusing the install."""
+        app = self._make_app('TouchDesigner.app', '2025.32660')
+        os.rename(os.path.join(app, 'Contents', 'MacOS', 'TouchDesigner'),
+                  os.path.join(app, 'Contents', 'MacOS', 'SomethingElse'))
+        found = bridge.find_td_installs(platform='darwin', root=self.tmp)
+        self.assertEqual([b for b, _e in found], ['2025.32660'])
+
+    def test_empty_root_yields_no_installs_on_every_platform(self):
+        for plat in ('darwin', 'win32', 'linux'):
+            self.assertEqual(
+                bridge.find_td_installs(platform=plat, root=self.tmp), [],
+                f'{plat}: an empty root must yield no installs')
+
+
+class TestProcessIdentityInjected(EmbodyTestCase):
+    """_process_is_real_td / find_all_td_pids POSIX paths, on any OS."""
+
+    def _ps(self, mapping, returncode=0):
+        """Fake subprocess.run keyed by the pid in the argv."""
+        def _run(args, **kwargs):
+            if args[0] == 'ps':
+                pid = args[args.index('-p') + 1]
+                out = mapping.get(pid, '')
+                return MagicMock(
+                    returncode=0 if out else 1, stdout=out, stderr='')
+            if args[0] == 'pgrep':
+                return MagicMock(returncode=returncode,
+                                 stdout=mapping.get('pgrep', ''), stderr='')
+            return MagicMock(returncode=1, stdout='', stderr='')
+        return _run
+
+    def test_real_td_accepts_bundle_and_bin_paths(self):
+        run = self._ps({
+            '100': 'S /Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner',
+            '200': 'S /opt/derivative/touchdesigner-2025.32660/bin/TouchDesigner',
+        })
+        self.assertTrue(bridge._process_is_real_td(100, run=run))
+        self.assertTrue(bridge._process_is_real_td(200, run=run))
+
+    def test_real_td_rejects_zombie(self):
+        run = self._ps({
+            '300': 'Z /Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner',
+        })
+        self.assertFalse(
+            bridge._process_is_real_td(300, run=run),
+            'a defunct/zombie process must never read as a live TD')
+
+    def test_real_td_rejects_impostor_and_empty(self):
+        run = self._ps({'400': 'S /bin/zsh'})
+        self.assertFalse(bridge._process_is_real_td(400, run=run))
+        self.assertFalse(bridge._process_is_real_td(999, run=run),
+                         'no ps output -> not a TD')
+
+    def test_real_td_query_is_pid_scoped_and_unwrapped(self):
+        seen = {}
+
+        def _run(args, **kwargs):
+            seen['argv'] = args
+            return MagicMock(returncode=1, stdout='', stderr='')
+
+        bridge._process_is_real_td(12345, run=_run)
+        self.assertEqual(seen['argv'][0], 'ps')
+        self.assertIn('-p', seen['argv'])
+        self.assertIn('12345', seen['argv'])
+        self.assertIn(
+            '-ww', seen['argv'],
+            'BSD/macOS ps truncates the args column to ~80 cols when piped '
+            'without -ww, which silently defeats the helper and port '
+            'filters on Mac')
+
+    def test_find_all_td_pids_posix_filters_everything(self):
+        """One test replacing five that used to skip on Windows."""
+        me = os.getpid()
+        run = self._ps({
+            'pgrep': f'{me}\n100\n200\n300\n400\n',
+            '100': 'S /Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner',
+            '200': 'S /Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner',
+            '300': 'S /Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner',
+            '400': 'S /bin/zsh',
+        })
+        cmdlines = {
+            100: '/Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner proj.toe',
+            200: 'python /repo/.embody/envoy-bridge.py --port 9870',
+            300: '/Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner --type=gpu-process',
+            400: '/bin/zsh -c "edit TouchDesigner notes"',
+        }
+        with patch.object(bridge, '_process_cmdline',
+                          side_effect=lambda pid, **kw: cmdlines.get(pid, '')):
+            pids = bridge.find_all_td_pids(platform='darwin', run=run)
+        self.assertEqual(
+            pids, [100],
+            'must drop self, bridges (200), CEF helpers (300) and '
+            'impostors (400)')
+
+    def test_find_all_td_pids_posix_empty_on_pgrep_no_match(self):
+        """pgrep exits non-zero when nothing matches -> no pids.
+        (Behavior preserved from a deleted skip-guarded test.)"""
+        run = self._ps({'pgrep': ''}, returncode=1)
+        self.assertEqual(bridge.find_all_td_pids(platform='darwin', run=run), [])
+
+    def test_find_all_td_pids_posix_empty_on_timeout(self):
+        """A pgrep that times out must yield [], never raise.
+        (Behavior preserved from a deleted skip-guarded test.)"""
+        def _run(args, **kwargs):
+            raise subprocess.TimeoutExpired(cmd=args, timeout=5)
+        self.assertEqual(
+            bridge.find_all_td_pids(platform='darwin', run=_run), [])
+
+    def test_find_all_td_pids_posix_empty_when_pgrep_missing(self):
+        """No pgrep binary (FileNotFoundError) must yield [], never raise.
+        (Behavior preserved from a deleted skip-guarded test.)"""
+        def _run(args, **kwargs):
+            raise FileNotFoundError('pgrep')
+        self.assertEqual(
+            bridge.find_all_td_pids(platform='darwin', run=_run), [])
+
+    def test_find_all_td_pids_win32_uses_tasklist(self):
+        seen = {}
+
+        def _run(args, **kwargs):
+            seen['argv'] = args
+            return MagicMock(
+                returncode=0,
+                stdout='"TouchDesigner.exe","111","Console","1","2 K"\n'
+                       '"TouchDesignerWebRender.exe","222","Console","1","2 K"\n',
+                stderr='')
+
+        pids = bridge.find_all_td_pids(platform='win32', run=_run)
+        self.assertEqual(seen['argv'][0], 'tasklist')
+        self.assertEqual(pids, [111],
+                         'the WebRender helper must never count as an instance')
+
+    def test_process_cmdline_prefers_proc_when_present(self):
+        tmp = tempfile.mkdtemp(prefix='procroot_')
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        os.makedirs(os.path.join(tmp, '4242'))
+        with open(os.path.join(tmp, '4242', 'cmdline'), 'w') as f:
+            f.write('td\x00--port\x009870\x00')
+
+        def _run(args, **kwargs):
+            raise AssertionError('ps must not run when /proc has the answer')
+
+        out = bridge._process_cmdline(4242, run=_run, proc_root=tmp)
+        self.assertEqual(out, 'td --port 9870 ',
+                         'NUL separators become spaces')
+
+    def test_process_cmdline_uses_ps_with_unlimited_width(self):
+        seen = {}
+
+        def _run(args, **kwargs):
+            seen['argv'] = args
+            return MagicMock(returncode=0, stdout='the cmdline', stderr='')
+
+        tmp = tempfile.mkdtemp(prefix='procempty_')
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        out = bridge._process_cmdline(4242, run=_run, proc_root=tmp)
+        self.assertEqual(out, 'the cmdline')
+        self.assertIn('-ww', seen['argv'])
+
+
+class TestWatchdogRetryIsBoundedNotRecursive(EmbodyTestCase):
+    """The failure handler used to call itself, growing the stack until
+    RecursionError killed the thread silently. It now returns False and a
+    bounded wrapper loops -- bounded because this thread's job is to call
+    os._exit(0), so a permanently broken poll must stop, not spin."""
+
+    def test_bound_constant_is_sane(self):
+        self.assertIsInstance(bridge.WATCHDOG_MAX_FAILURES, int)
+        self.assertGreater(bridge.WATCHDOG_MAX_FAILURES, 1)
+
+    def test_watchdog_source_loops_and_never_self_recurses(self):
+        """Read the FILE, not inspect.getsource: this module stubs
+        start_orphan_watchdog to a no-op at import (so no daemon thread
+        ever spawns during tests), and getsource would happily inspect
+        the stub and pass vacuously."""
+        with open(_bridge_path, encoding='utf-8') as f:
+            file_src = f.read()
+        start = file_src.index('def start_orphan_watchdog')
+        end = file_src.index('def wait_for_envoy', start)
+        region = file_src[start:end]
+        parts = region.split('def watchdog_forever', 1)
+        self.assertEqual(len(parts), 2, 'the bounded wrapper must exist')
+        self.assertNotIn(
+            '\n            watchdog()', parts[0],
+            'the failure handler must NOT call watchdog() recursively -- '
+            'that grew the stack to RecursionError and killed the thread '
+            'silently')
+        self.assertIn('while failures < max_failures', parts[1],
+                      'the wrapper must loop with a bound')
+
+    def test_wrapper_gives_up_after_max_failures(self):
+        """Mirror of the shipped wrapper driven by an always-failing probe:
+        it must stop at the bound instead of looping forever. (The shipped
+        closure needs a live stdin fd, which a test must never touch.)"""
+        calls = {'n': 0}
+
+        def probe():
+            calls['n'] += 1
+            return False
+
+        def watchdog_forever(max_failures=bridge.WATCHDOG_MAX_FAILURES):
+            failures = 0
+            while failures < max_failures:
+                if probe():
+                    return
+                failures += 1
+
+        watchdog_forever()
+        self.assertEqual(calls['n'], bridge.WATCHDOG_MAX_FAILURES,
+                         'must stop exactly at the bound')
+
+
+class TestStaleBridgePortMatching(EmbodyTestCase):
+    """_cmdline_targets_port: the exact-match fix for a REAL bug.
+
+    The old test was `"--port" in cmdline and str(port) in cmdline`, so
+    cleaning up port 9870 also matched a bridge on 19870 or 98700 -- and
+    stale-bridge cleanup SIGTERMs what it matches, so a peer session's
+    bridge could be killed.
+    """
+
+    def test_exact_token_match_accepted(self):
+        self.assertTrue(bridge._cmdline_targets_port(
+            'python envoy-bridge.py --port 9870 --config x', 9870))
+
+    def test_equals_form_rejected_because_the_parser_rejects_it(self):
+        """--port=9870 must NOT match: the bridge's own parse_args accepts
+        only the space form, so a bridge invoked that way is really running
+        on the DEFAULT port -- matching it would kill the wrong process.
+        The matcher mirrors the parser exactly."""
+        self.assertFalse(bridge._cmdline_targets_port(
+            'python envoy-bridge.py --port=9870', 9870))
+
+    def test_nul_separated_proc_form_accepted(self):
+        self.assertTrue(bridge._cmdline_targets_port(
+            'python\x00envoy-bridge.py\x00--port\x009870\x00', 9870))
+
+    def test_longer_port_never_matches(self):
+        for other in ('19870', '98700', '9871'):
+            self.assertFalse(
+                bridge._cmdline_targets_port(f'bridge --port {other}', 9870),
+                f'port {other} must not match a cleanup targeting 9870')
+
+    def test_flag_without_value_never_matches(self):
+        self.assertFalse(bridge._cmdline_targets_port('bridge --port', 9870))
+        self.assertFalse(bridge._cmdline_targets_port('', 9870))
+
+
+class TestQuitTdForceKillPosix(EmbodyTestCase):
+    """The POSIX force path -- previously untestable on Windows because
+    signal.SIGKILL does not exist there (AttributeError, uncaught)."""
+
+    def test_darwin_escalates_sigterm_then_sigkill_same_pid(self):
+        """SIGTERM ignored -> escalate to the force signal, same pid.
+
+        Escalation is asserted by CALL SEQUENCE, not by comparing the two
+        signal values: on Windows `_SIGKILL` falls back to SIGTERM (there
+        is no SIGKILL), so the values are equal there and only the
+        sequence distinguishes graceful from force. On macOS/Linux the
+        extra identity assertion below does run.
+        """
+        import signal
+        kills = []
+        state = {'killed': False}
+
+        def mock_alive(pid):
+            if pid != 12345:
+                return False
+            return not state['killed']
+
+        def fake_kill(pid, sig):
+            kills.append((pid, sig))
+            # Only the SECOND signal (the force escalation) ends it.
+            if len(kills) >= 2:
+                state['killed'] = True
+
+        with patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
+             patch('subprocess.run'), \
+             patch('os.kill', side_effect=fake_kill):
+            success, msg = bridge.quit_td(
+                12345, graceful_timeout=15,
+                clock=_slow_clock(100.0, step=5.0), sleep=lambda s: None,
+                platform='darwin')
+
+        self.assertTrue(success)
+        self.assertIn('force-killed', msg)
+        self.assertEqual(
+            [p for p, _s in kills], [12345, 12345],
+            'both signals must target exactly the requested pid -- never a '
+            'process group, never an app-wide quit')
+        self.assertEqual(kills[0][1], signal.SIGTERM,
+                         'the graceful attempt is SIGTERM')
+        self.assertEqual(kills[-1][1], bridge._SIGKILL,
+                         'the escalation uses the force constant')
+        if hasattr(signal, 'SIGKILL'):
+            self.assertNotEqual(
+                kills[0][1], kills[-1][1],
+                'on a real POSIX host the two signals must differ')
+
+    def test_sigkill_constant_is_defined_on_every_platform(self):
+        self.assertIsNotNone(bridge._SIGKILL)
+
+
+class TestLaunchTdDarwinSpawn(EmbodyTestCase):
+    """The darwin spawn path: argv, fail-fast, and pid honesty."""
+
+    def setUp(self):
+        super().setUp()
+        self.tmp = tempfile.mkdtemp(prefix='launch_darwin_')
+        self.app = os.path.join(self.tmp, 'TouchDesigner.app')
+        os.makedirs(self.app)
+        self.toe = os.path.join(self.tmp, 'proj.toe')
+        with open(self.toe, 'w') as f:
+            f.write('x')
+        self.embody_dir = os.path.join(self.tmp, '.embody')
+        os.makedirs(self.embody_dir)
+        self.config_path = os.path.join(self.embody_dir, 'envoy.json')
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        super().tearDown()
+
+    def _popen(self, returncode=0, record=None):
+        def _p(argv, **kwargs):
+            if record is not None:
+                record.append(argv)
+            proc = MagicMock()
+            proc.wait.return_value = None
+            proc.returncode = returncode
+            proc.pid = 4242
+            return proc
+        return _p
+
+    def test_spawns_open_n_a_and_resolves_pid_by_diff(self):
+        argv = []
+        with patch.object(bridge, 'select_td_install',
+                          return_value=(self.app, None)), \
+             patch.object(bridge, 'wait_for_new_td_pid', return_value=777):
+            ok, msg, pid = bridge.launch_td(
+                {}, self.config_path, project_path=self.toe,
+                existing_pids={1, 2}, platform='darwin',
+                popen=self._popen(record=argv))
+
+        self.assertTrue(ok)
+        self.assertEqual(pid, 777)
+        self.assertEqual(
+            argv[0], ['open', '-n', '-a', self.app, self.toe],
+            "-n is load-bearing: without it LaunchServices reuses an "
+            "existing window and multi-instance breaks")
+
+    def test_nonzero_open_exit_fails_fast(self):
+        called = []
+        with patch.object(bridge, 'select_td_install',
+                          return_value=(self.app, None)), \
+             patch.object(bridge, 'wait_for_new_td_pid',
+                          side_effect=lambda *a, **k: called.append(1)):
+            ok, msg, pid = bridge.launch_td(
+                {}, self.config_path, project_path=self.toe,
+                platform='darwin', popen=self._popen(returncode=1))
+
+        self.assertFalse(ok)
+        self.assertIsNone(pid)
+        self.assertIn('did not launch', msg)
+        self.assertEqual(called, [],
+                         'a failed `open` must not burn the pid-poll window')
+
+    def test_unresolved_pid_never_claims_pid_none(self):
+        with patch.object(bridge, 'select_td_install',
+                          return_value=(self.app, None)), \
+             patch.object(bridge, 'wait_for_new_td_pid', return_value=None):
+            ok, msg, pid = bridge.launch_td(
+                {}, self.config_path, project_path=self.toe,
+                platform='darwin', popen=self._popen())
+
+        self.assertTrue(ok, 'open succeeded -- TD is coming up')
+        self.assertIsNone(pid)
+        self.assertNotIn(
+            'PID None', msg,
+            'reporting a literal "PID None" as success is a lie; say the '
+            'pid is unresolved instead')
+
+    def test_pid_phrase_never_prints_none(self):
+        """The honesty fix must hold at the layer the USER sees, not just
+        inside launch_td."""
+        self.assertEqual(bridge._pid_phrase(4242), 'PID 4242')
+        self.assertNotIn('None', bridge._pid_phrase(None))
+        self.assertIn('not yet resolved', bridge._pid_phrase(None))
+
+    def test_win32_spawns_executable_directly(self):
+        argv = []
+        exe = os.path.join(self.tmp, 'TouchDesigner.exe')
+        with open(exe, 'w') as f:
+            f.write('x')
+        with patch.object(bridge, 'select_td_install',
+                          return_value=(exe, None)):
+            ok, msg, pid = bridge.launch_td(
+                {}, self.config_path, project_path=self.toe,
+                platform='win32', popen=self._popen(record=argv))
+
+        self.assertTrue(ok)
+        self.assertEqual(pid, 4242, 'win32 gets a real pid from Popen')
+        self.assertEqual(argv[0], [exe, self.toe])

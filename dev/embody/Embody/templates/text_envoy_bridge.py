@@ -24,11 +24,20 @@ import time
 import urllib.error
 import urllib.request
 
+# signal.SIGKILL does not exist on Windows, so referencing it directly
+# makes the POSIX force-kill branch unreachable by a platform-injected
+# test on a Windows dev box (AttributeError, not caught by quit_td's
+# OSError handler). Resolve once at import; SIGTERM is the only
+# sensible stand-in and is never actually used on win32, whose branch
+# shells out to taskkill /F.
+_SIGKILL = getattr(signal, 'SIGKILL', signal.SIGTERM)
+
 DEFAULT_PORT = 9870
 RETRY_INTERVALS = [0.5, 0.5, 1, 1, 2, 2, 3, 3, 5, 5, 8, 8]
 CONNECT_TIMEOUT_S = 60  # Max seconds to wait for Envoy during launch_td/restart_td
 INITIAL_PROBE_TIMEOUT_S = 3  # Quick probe on first tools/list -- reconciler handles recovery
 STDIN_POLL_INTERVAL_MS = 5000  # Watchdog poll timeout (ms) for stdin pipe closure
+WATCHDOG_MAX_FAILURES = 10     # Consecutive watchdog errors before giving up
 HEARTBEAT_STALE_S = 60  # Kill peer bridges with heartbeats older than this
 CRASH_LOOP_WINDOW_S = 300  # 5 minutes
 CRASH_LOOP_MAX = 3  # Max launches within the window
@@ -472,23 +481,86 @@ def _parse_build(s):
     return int(m.group(1)), int(m.group(2))
 
 
-def _read_macos_app_build(app_path):
-    """Read the build string from a macOS TouchDesigner.app's Info.plist.
-    Returns e.g. '2025.32660' or None."""
+def _read_macos_app_plist(app_path):
+    """Parse a macOS .app's Info.plist. Returns a dict (empty on failure)."""
     plist = os.path.join(app_path, "Contents", "Info.plist")
     if not os.path.isfile(plist):
-        return None
+        return {}
     try:
         import plistlib
         with open(plist, "rb") as f:
             data = plistlib.load(f)
-        return (data.get("CFBundleShortVersionString")
-                or data.get("CFBundleVersion"))
+        return data if isinstance(data, dict) else {}
     except Exception:
+        return {}
+
+
+def _read_macos_app_build(app_path):
+    """Read the build string from a macOS TouchDesigner.app's Info.plist.
+    Returns e.g. '2025.32660' or None."""
+    data = _read_macos_app_plist(app_path)
+    return (data.get("CFBundleShortVersionString")
+            or data.get("CFBundleVersion")) or None
+
+
+def _macos_app_executable(app_path, plist=None):
+    """Absolute path to a .app bundle's executable, or None.
+
+    NEVER assume the basename. The bundle declares it in Info.plist as
+    CFBundleExecutable; a hardcoded "TouchDesigner" would silently make
+    discovery return nothing on a Mac whose bundle names it differently,
+    and no fixture-based test could catch that (the fixture would encode
+    the same assumption). Falls back to any regular file in
+    Contents/MacOS so an unreadable plist still resolves.
+    """
+    macos_dir = os.path.join(app_path, "Contents", "MacOS")
+    if not os.path.isdir(macos_dir):
         return None
+    data = _read_macos_app_plist(app_path) if plist is None else plist
+    declared = data.get("CFBundleExecutable")
+    if declared:
+        cand = os.path.join(macos_dir, str(declared))
+        if os.path.isfile(cand):
+            return cand
+    try:
+        for name in sorted(os.listdir(macos_dir)):
+            cand = os.path.join(macos_dir, name)
+            if os.path.isfile(cand):
+                return cand
+    except OSError:
+        pass
+    return None
 
 
-def find_td_installs():
+def _td_install_roots(platform):
+    """The directory each platform scans for TouchDesigner installs.
+
+    Injectable via find_td_installs(root=...) for off-platform tests; the
+    darwin path also scans ~/Applications, which the /Applications-only
+    scan missed (audit finding: a Mac install outside /Applications was
+    invisible)."""
+    if platform == "win32":
+        return [r"C:\Program Files\Derivative"]
+    if platform == "darwin":
+        return ["/Applications",
+                os.path.join(os.path.expanduser("~"), "Applications")]
+    return ["/opt/derivative"]
+
+
+def find_td_installs(platform=None, root=None):
+    """Discover installed TouchDesigner builds.
+
+    platform/root are injectable so every branch is testable on any
+    machine (D-5 Mac-by-construction): pass platform='darwin' with a
+    root pointing at a fixture tree of .app bundles. Defaults preserve
+    the shipped behavior exactly.
+    """
+    platform = platform or sys.platform
+    roots = [root] if root else _td_install_roots(platform)
+    return _find_td_installs_impl(platform, roots)
+
+
+def _find_td_installs_impl(platform, roots):
     """Discover TouchDesigner installs on this system.
 
     Returns a list of (build_str, exe_path) tuples sorted newest-first.
@@ -498,46 +570,54 @@ def find_td_installs():
     import glob
     installs = []
 
-    if sys.platform == "win32":
+    if platform == "win32":
         # Default install dir uses versioned subfolders:
         #   C:\Program Files\Derivative\TouchDesigner.YYYY.NNNNN
-        for d in glob.glob(r"C:\Program Files\Derivative\TouchDesigner.*"):
-            if not os.path.isdir(d):
-                continue
-            parsed = _parse_build(os.path.basename(d))
-            if not parsed:
-                continue
-            build = f"{parsed[0]}.{parsed[1]}"
-            exe = os.path.join(d, "bin", "TouchDesigner.exe")
-            if not os.path.isfile(exe):
-                exe = os.path.join(d, "bin", "TouchDesigner099.exe")
-            if os.path.isfile(exe):
-                installs.append((build, exe))
-    elif sys.platform == "darwin":
-        # macOS users typically rename multiple installs in /Applications
-        # (e.g. TouchDesigner.app, TouchDesigner 2025.app). Globbing the
-        # common patterns covers both.
+        for base in roots:
+            for d in glob.glob(os.path.join(base, "TouchDesigner.*")):
+                if not os.path.isdir(d):
+                    continue
+                parsed = _parse_build(os.path.basename(d))
+                if not parsed:
+                    continue
+                build = f"{parsed[0]}.{parsed[1]}"
+                exe = os.path.join(d, "bin", "TouchDesigner.exe")
+                if not os.path.isfile(exe):
+                    exe = os.path.join(d, "bin", "TouchDesigner099.exe")
+                if os.path.isfile(exe):
+                    installs.append((build, exe))
+    elif platform == "darwin":
+        # macOS users typically rename multiple installs (e.g.
+        # TouchDesigner.app, TouchDesigner 2025.app). Scan each root for
+        # the pattern; validate the executable exists inside the bundle so
+        # a partially-removed .app is never handed to `open -a`.
         candidates = set()
-        for pattern in ("/Applications/TouchDesigner.app",
-                        "/Applications/TouchDesigner*.app"):
-            for p in glob.glob(pattern):
+        for base in roots:
+            for p in glob.glob(os.path.join(base, "TouchDesigner*.app")):
                 candidates.add(p)
-        for app in candidates:
-            build = _read_macos_app_build(app)
+        for app in sorted(candidates):
+            plist = _read_macos_app_plist(app)
+            # A bundle with no resolvable executable is a partial removal
+            # or a stub -- never hand it to `open -a`.
+            if _macos_app_executable(app, plist=plist) is None:
+                continue
+            build = (plist.get("CFBundleShortVersionString")
+                     or plist.get("CFBundleVersion"))
             if build and _parse_build(build):
                 installs.append((build, app))
     else:
         # Linux: tarballs typically extract to /opt/derivative/touchdesigner-YYYY.NNNNN
-        for d in glob.glob("/opt/derivative/touchdesigner-*"):
-            if not os.path.isdir(d):
-                continue
-            parsed = _parse_build(os.path.basename(d))
-            if not parsed:
-                continue
-            build = f"{parsed[0]}.{parsed[1]}"
-            exe = os.path.join(d, "bin", "TouchDesigner")
-            if os.path.isfile(exe):
-                installs.append((build, exe))
+        for base in roots:
+            for d in glob.glob(os.path.join(base, "touchdesigner-*")):
+                if not os.path.isdir(d):
+                    continue
+                parsed = _parse_build(os.path.basename(d))
+                if not parsed:
+                    continue
+                build = f"{parsed[0]}.{parsed[1]}"
+                exe = os.path.join(d, "bin", "TouchDesigner")
+                if os.path.isfile(exe):
+                    installs.append((build, exe))
 
     # Newest first by (year, num)
     installs.sort(key=lambda x: _parse_build(x[0]) or (0, 0), reverse=True)
@@ -617,16 +697,26 @@ def select_td_install(target_build, fallback_exe=None, installs=None):
 # Process management
 # ---------------------------------------------------------------------------
 
-def _process_cmdline(pid):
-    """Return the full command line for a PID, or '' if unavailable."""
+def _process_cmdline(pid, run=None, proc_root=None):
+    """Return the full command line for a PID, or '' if unavailable.
+
+    run/proc_root are injectable so the /proc and ps paths are testable on
+    any OS (D-5 Mac-by-construction): pass a fake `run` returning scripted
+    `ps` output, or a `proc_root` tmpdir with a synthetic cmdline file.
+    Note `-ww`: BSD/macOS ps truncates the args column to the terminal
+    width (~80 cols when piped) without it, which silently defeated the
+    CEF-helper and port filters on Mac (audit finding).
+    """
+    run = run or subprocess.run
     try:
-        cmdline_path = f"/proc/{pid}/cmdline"
+        proc_base = proc_root if proc_root else "/proc"
+        cmdline_path = os.path.join(proc_base, str(pid), "cmdline")
         if os.path.exists(cmdline_path):
             with open(cmdline_path, "r") as f:
-                return f.read().replace("\x00", " ")
+                return f.read().replace(chr(0), " ")
         # macOS / BSD
-        result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "args="],
+        result = run(
+            ["ps", "-ww", "-p", str(pid), "-o", "args="],
             capture_output=True, text=True, timeout=5,
         )
         return result.stdout
@@ -634,14 +724,15 @@ def _process_cmdline(pid):
         return ""
 
 
-def _is_bridge_process(pid):
+def _is_bridge_process(pid, cmdline=None):
     """Check if a PID is an envoy-bridge process (not actual TouchDesigner).
 
     The bridge runs TD's bundled Python, so pgrep -f TouchDesigner matches
     it.  Returns True if the process cmdline contains 'envoy-bridge' or
-    'envoy_bridge'.
+    'envoy_bridge'.  cmdline injectable to avoid a redundant lookup.
     """
-    cmdline = _process_cmdline(pid)
+    if cmdline is None:
+        cmdline = _process_cmdline(pid)
     return "envoy-bridge" in cmdline or "envoy_bridge" in cmdline
 
 
@@ -655,13 +746,14 @@ def _is_bridge_process(pid):
 _TD_HELPER_MARKERS = ("Web Render", "--type=")
 
 
-def _is_td_helper_process(pid):
+def _is_td_helper_process(pid, cmdline=None):
     """True if PID is a bundled TD helper/CEF subprocess, not a TD instance."""
-    cmdline = _process_cmdline(pid)
+    if cmdline is None:
+        cmdline = _process_cmdline(pid)
     return any(marker in cmdline for marker in _TD_HELPER_MARKERS)
 
 
-def _process_is_real_td(pid):
+def _process_is_real_td(pid, run=None):
     """True only if PID is a LIVE TouchDesigner *application* process.
 
     `pgrep -f TouchDesigner` matches any process whose command line merely
@@ -672,9 +764,10 @@ def _process_is_real_td(pid):
     ps-based check is the reliable cross-platform guard.  Verify the process
     is not a zombie and that its actual executable IS the TD binary.
     """
+    run = run or subprocess.run
     try:
-        result = subprocess.run(
-            ["ps", "-o", "state=", "-o", "comm=", "-p", str(pid)],
+        result = run(
+            ["ps", "-ww", "-o", "state=", "-o", "comm=", "-p", str(pid)],
             capture_output=True, text=True, timeout=5,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError, OSError):
@@ -698,17 +791,23 @@ def _process_is_real_td(pid):
             or comm.endswith("/bin/TouchDesigner"))
 
 
-def find_all_td_pids():
+def find_all_td_pids(platform=None, run=None):
     """Return a list of all running TouchDesigner PIDs.
 
     Excludes the bridge's own PID and any other envoy-bridge processes,
     which run TD's bundled Python and would otherwise false-match.
+    platform/run are injectable so the win32 tasklist path AND the POSIX
+    pgrep+filter path both run on any machine (D-5 Mac-by-construction) --
+    the five tests that used to self-skip on the Windows dev box now
+    execute their real branch everywhere.
     """
+    platform = platform or sys.platform
+    run = run or subprocess.run
     pids = []
     my_pid = os.getpid()
-    if sys.platform == "win32":
+    if platform == "win32":
         try:
-            result = subprocess.run(
+            result = run(
                 ["tasklist", "/FI", "IMAGENAME eq TouchDesigner*",
                  "/FO", "CSV", "/NH"],
                 capture_output=True, text=True, timeout=5,
@@ -737,7 +836,7 @@ def find_all_td_pids():
     # macOS / Linux -- pgrep -f matches cmdline, which catches bridges
     # running TD's bundled Python.  Filter them out.
     try:
-        result = subprocess.run(
+        result = run(
             ["pgrep", "-f", "TouchDesigner"],
             capture_output=True, text=True, timeout=5,
         )
@@ -752,11 +851,13 @@ def find_all_td_pids():
                     continue
                 if pid == my_pid:
                     continue
-                if _is_bridge_process(pid):
+                # One cmdline read, shared by both string filters.
+                cmdline = _process_cmdline(pid, run=run)
+                if _is_bridge_process(pid, cmdline=cmdline):
                     continue
-                if _is_td_helper_process(pid):
+                if _is_td_helper_process(pid, cmdline=cmdline):
                     continue
-                if not _process_is_real_td(pid):
+                if not _process_is_real_td(pid, run=run):
                     continue  # unrelated process matching the cmdline, or a zombie
                 pids.append(pid)
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
@@ -778,11 +879,24 @@ def find_td_pid():
     return pids[0] if pids else None
 
 
-def is_process_alive(pid):
-    """Check if a process is still running."""
+def is_process_alive(pid, platform=None, kill=None):
+    """Check if a process is still running.
+
+    platform is injectable (D-5): the existing win32 tests reach this
+    through `@patch('envoy_bridge.sys')`, a module-mock pattern that has
+    already failed once in a full-suite run (a mocked platform silently
+    failed to take and a REAL taskkill escaped to the host). New tests
+    pass platform= instead.
+    """
     if not pid or pid <= 0:
         return False
-    if sys.platform == "win32":
+    platform = platform or sys.platform
+    # kill= exists so injecting platform='darwin' on a Windows host can
+    # never reach the REAL os.kill: on Windows os.kill(pid, 0) calls
+    # TerminateProcess and would kill the target (the documented
+    # TD-killing hazard). Tests inject both.
+    kill = kill or os.kill
+    if platform == "win32":
         # os.kill(pid, 0) on Windows calls TerminateProcess() -- it KILLS the
         # process instead of checking liveness.  Use OpenProcess(SYNCHRONIZE)
         # which only requires the right to wait on the object.
@@ -827,7 +941,7 @@ def is_process_alive(pid):
             return False
     # Unix: signal 0 is a no-op liveness check
     try:
-        os.kill(pid, 0)
+        kill(pid, 0)
         return True
     except (ProcessLookupError, PermissionError):
         return False
@@ -1115,7 +1229,7 @@ def quit_td(pid, graceful_timeout=15, clock=None, sleep=None,
                 capture_output=True, timeout=10,
             )
         else:
-            os.kill(pid, signal.SIGKILL)
+            os.kill(pid, _SIGKILL)
     except (subprocess.TimeoutExpired, OSError) as e:
         return False, f"Failed to kill TouchDesigner (PID {pid}): {e}"
 
@@ -1163,7 +1277,8 @@ def wait_for_new_td_pid(existing_pids, timeout=15.0, poll=0.5,
         sleep(poll)
 
 
-def launch_td(config, config_path, project_path=None, existing_pids=None):
+def launch_td(config, config_path, project_path=None, existing_pids=None,
+              platform=None, popen=None):
     """Launch TouchDesigner with a .toe file.
 
     Args:
@@ -1174,9 +1289,16 @@ def launch_td(config, config_path, project_path=None, existing_pids=None):
         existing_pids: Optional iterable of TD PIDs already running before
             this launch. Used on macOS to identify the spawned PID by
             exclusion (LaunchServices doesn't return one).
+        platform: Override sys.platform, so the darwin spawn path (argv,
+            fail-fast, pid resolution) is testable on any machine
+            (D-5 Mac-by-construction).
+        popen: Override subprocess.Popen for the same reason -- nothing
+            real is ever spawned in a test.
 
     Returns (success: bool, message: str, pid: int|None).
     """
+    platform = platform or sys.platform
+    popen = popen or subprocess.Popen
     existing_pids = set(existing_pids or [])
     # Resolve TD executable: prefer the install matching the machine-local
     # td_build pin (.embody/local.json; a legacy committed pin is
@@ -1210,7 +1332,7 @@ def launch_td(config, config_path, project_path=None, existing_pids=None):
         return False, "No toe_path configured in envoy.json", None
 
     # Validate paths
-    if sys.platform == "darwin":
+    if platform == "darwin":
         # On macOS, td_executable is the .app bundle path
         if not os.path.exists(td_exe):
             return (False,
@@ -1232,11 +1354,11 @@ def launch_td(config, config_path, project_path=None, existing_pids=None):
     # Launch TD
     log(f"Launching TouchDesigner: {td_exe} with {toe_path}")
     try:
-        if sys.platform == "darwin":
+        if platform == "darwin":
             # -n forces a new process even when TouchDesigner is already
             # running. Without it, LaunchServices may reuse an existing
             # window and spawn no new process, breaking multi-instance.
-            proc = subprocess.Popen(
+            proc = popen(
                 ["open", "-n", "-a", td_exe, toe_path],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -1253,16 +1375,31 @@ def launch_td(config, config_path, project_path=None, existing_pids=None):
             # Resolve the spawned pid by polling the snapshot diff until it
             # appears (see wait_for_new_td_pid -- the old fixed 2s single-shot
             # diff missed slow spawns).
-            pid = wait_for_new_td_pid(existing_pids)
-        elif sys.platform == "win32":
-            proc = subprocess.Popen(
-                [td_exe, toe_path],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            pid = proc.pid
+            pid = wait_for_new_td_pid(
+                existing_pids,
+                # Keep the injected platform in force all the way down:
+                # otherwise a darwin test on a Windows host would shell
+                # out to the REAL tasklist through find_all_td_pids.
+                find_pids=lambda: find_all_td_pids(platform=platform))
+            if pid is None:
+                # LaunchServices handed off but no new TD pid surfaced in
+                # the poll window. `open` succeeded, so TD is probably
+                # still coming up -- but claiming "(PID None)" while
+                # reporting success left state.td_pid None, which silently
+                # disables crash detection until the instance registers
+                # itself. Say what is actually known.
+                log("Launched via 'open' but no new TouchDesigner pid "
+                    "appeared within the poll window -- liveness will "
+                    "resolve once the instance registers itself.")
+                return (True,
+                        "TouchDesigner launched (pid not yet resolved -- "
+                        "LaunchServices hand-off; it will register itself "
+                        "shortly)",
+                        None)
         else:
-            proc = subprocess.Popen(
+            # win32 and linux both spawn the executable directly and get a
+            # real pid back.
+            proc = popen(
                 [td_exe, toe_path],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -1563,17 +1700,29 @@ def handle_launch_td(params, state):
         log("Envoy is reachable after TD launch")
         return {
             "status": "success",
-            "message": f"TouchDesigner launched and Envoy is ready. PID: {pid}",
+            "message": ("TouchDesigner launched and Envoy is ready. "
+                        + _pid_phrase(pid)),
         }
     else:
         return {
             "status": "partial",
             "message": (
-                f"TouchDesigner launched (PID {pid}) but Envoy not reachable "
-                f"after {timeout}s. TD may still be loading -- Embody needs "
-                "~75 frames to complete restoration."
+                f"TouchDesigner launched ({_pid_phrase(pid)}) but Envoy not "
+                f"reachable after {timeout}s. TD may still be loading -- "
+                "Embody needs ~75 frames to complete restoration."
             ),
         }
+
+
+def _pid_phrase(pid):
+    """Human phrase for a pid that may be unresolved.
+
+    macOS `open -n -a` hands off to LaunchServices and returns no pid, so
+    the poll can time out with TD genuinely still coming up. Printing
+    "PID None" reads as a bug and hides the real state; say it plainly
+    instead. Used by every user-facing launch/restart message.
+    """
+    return f"PID {pid}" if pid else "pid not yet resolved"
 
 
 def handle_restart_td(params, state):
@@ -1649,14 +1798,14 @@ def handle_restart_td(params, state):
             "status": "success",
             "message": (
                 f"TouchDesigner restarted and Envoy is ready. "
-                f"Old PID: {pid}, New PID: {new_pid}"
+                f"Old PID: {pid}, new {_pid_phrase(new_pid)}"
             ),
         }
     else:
         return {
             "status": "partial",
             "message": (
-                f"TouchDesigner relaunched (PID {new_pid}) but Envoy not "
+                f"TouchDesigner relaunched ({_pid_phrase(new_pid)}) but Envoy not "
                 f"reachable after {timeout}s. TD may still be loading -- "
                 "Embody needs ~75 frames to complete restoration."
             ),
@@ -1875,7 +2024,7 @@ def _get_parent_pid(pid):
     # macOS: ps -p PID -o ppid=
     try:
         result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "ppid="],
+            ["ps", "-ww", "-p", str(pid), "-o", "ppid="],
             capture_output=True, text=True, timeout=5,
         )
         val = result.stdout.strip()
@@ -1892,6 +2041,30 @@ def _is_orphan(pid):
     if ppid <= 1:
         return True  # Reparented to init/launchd
     return not is_process_alive(ppid)
+
+
+def _cmdline_targets_port(cmdline, port):
+    """True when a bridge command line targets EXACTLY this port.
+
+    The old test was `"--port" in cmdline and str(port) in cmdline`, a
+    substring match: cleaning up port 9870 also matched a bridge running
+    on 19870 or 98700, so a peer session's bridge could be terminated.
+    Match the flag and its value as ADJACENT TOKENS, mirroring the
+    bridge's own parse_args exactly -- which supports only the space
+    form. Accepting `--port=9870` would be actively wrong: a bridge
+    invoked that way parses no port at all and is really running on the
+    DEFAULT port, so treating it as a match would kill the wrong bridge.
+    """
+    if not cmdline:
+        return False
+    # /proc/<pid>/cmdline is NUL-separated; ps output is space-separated.
+    tokens = [t for t in cmdline.replace(chr(0), " ").split() if t]
+    target = str(port)
+    for i, tok in enumerate(tokens):
+        if tok == "--port":
+            if i + 1 < len(tokens) and tokens[i + 1] == target:
+                return True
+    return False
 
 
 def kill_stale_bridges(port, config_path):
@@ -1931,7 +2104,10 @@ def kill_stale_bridges(port, config_path):
                 f'Get-CimInstance Win32_Process -Filter '
                 f'"Name like \'%python%\'" | '
                 f'Where-Object {{ $_.CommandLine -match "envoy.bridge" -and '
-                f'$_.CommandLine -match "--port {port}" -and '
+                # Anchor the port so cleaning 9870 cannot match a peer
+                # bridge on 19870/98700 -- the POSIX branch got this fix
+                # via _cmdline_targets_port; the two must agree.
+                f'$_.CommandLine -match "--port {port}(\\s|$)" -and '
                 f'$_.ProcessId -ne {my_pid} }} | '
                 f'Select-Object ProcessId, ParentProcessId | '
                 f'ForEach-Object {{ "$($_.ProcessId),$($_.ParentProcessId)" }}'
@@ -1987,11 +2163,11 @@ def kill_stale_bridges(port, config_path):
                         cmdline = f.read()
                 else:
                     ps = subprocess.run(
-                        ["ps", "-p", str(pid), "-o", "args="],
+                        ["ps", "-ww", "-p", str(pid), "-o", "args="],
                         capture_output=True, text=True, timeout=5,
                     )
                     cmdline = ps.stdout.strip()
-                if f"--port" in cmdline and str(port) in cmdline:
+                if _cmdline_targets_port(cmdline, port):
                     if _is_orphan(pid):
                         os.kill(pid, signal.SIGTERM)
                         log(f"Terminated orphan bridge (PID {pid})")
@@ -2043,11 +2219,37 @@ def start_orphan_watchdog(stdin_probe_fd, config_path):
                             os._exit(0)
         except Exception as e:
             log(f"Orphan watchdog error: {type(e).__name__}: {e}")
-            # Never let the watchdog die silently -- loop and retry
+            # Never let the watchdog die silently -- retry. This MUST be a
+            # loop, not a recursive self-call: a persistently failing
+            # poll() (closed or invalid dup'd fd) added a stack frame per
+            # retry until RecursionError killed the thread silently.
             time.sleep(STDIN_POLL_INTERVAL_MS / 1000)
-            watchdog()
+            return False        # caller re-enters
+        return True
 
-    t = threading.Thread(target=watchdog, daemon=True, name="orphan-watchdog")
+    def watchdog_forever(max_failures=WATCHDOG_MAX_FAILURES):
+        """Re-enter on failure instead of recursing (see watchdog()).
+
+        BOUNDED: the old code recursed and died of RecursionError; an
+        unbounded loop is not the fix either, because this thread's whole
+        job is to call os._exit(0) -- a permanently broken poll spinning
+        forever is a hot loop attached to a process-killer. After
+        max_failures consecutive failures, log loudly and stop watching.
+        The session then relies on ordinary stdin EOF handling in the
+        main loop, which is the same posture as a bridge built without a
+        watchdog at all.
+        """
+        failures = 0
+        while failures < max_failures:
+            if watchdog():
+                return          # clean exit path (never reached today)
+            failures += 1
+        log(f"Orphan watchdog gave up after {max_failures} consecutive "
+            f"failures -- session-end detection is now handled by the "
+            f"main stdin loop only.")
+
+    t = threading.Thread(target=watchdog_forever, daemon=True,
+                         name="orphan-watchdog")
     t.start()
 
 
