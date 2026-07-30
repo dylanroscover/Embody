@@ -272,3 +272,271 @@ class TestConfigMigration(EmbodyTestCase):
         # The specific entries it is a prefix of must survive.
         self.assertIn('.claude/settings.local.json',
                       [ln.strip() for ln in self._lines()])
+
+
+class TestProjectJsonStewardship(EmbodyTestCase):
+    """A-14 (Convoy plan): td_build lives machine-locally in
+    .embody/local.json; the COMMITTED project.json is stewarded with
+    key-level ownership -- the retired td_build key removed once, foreign
+    keys (a future Convoy key) preserved byte-for-byte, and unreadable
+    JSON NEVER treated as empty-and-overwrite.
+
+    Runs against a temp root via an instance-patched _findProjectRoot;
+    Log is recorded, and _write_json_atomic is wrapped with a recorder so
+    no-op paths are proven by WRITE COUNT and content, never by mtime
+    (measured ~33% false-pass under Windows mtime granularity). setUp
+    creates all plain state BEFORE the first live-ext patch, so a raising
+    setUp cannot strand the live ext (the harness never calls tearDown
+    when setUp raises); tearDown restores patches and sweeps temp state
+    in one try/finally with super().tearDown() inside the finally.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # Plain state first -- nothing above this line touches the live ext.
+        self.tmp = Path(tempfile.mkdtemp(prefix='embody_pjson_'))
+        (self.tmp / '.embody').mkdir()
+        self.admin = self.embody.op('embody_admin').module
+        self._logs = []
+        self._writes = []
+        self._patches = []
+        self._mod_patches = []
+        # Live-ext patches last, and nothing after them can raise.
+        self._patch('_findProjectRoot', lambda: self.tmp)
+        self._patch('Log',
+                    lambda msg, level='INFO': self._logs.append((msg, level)))
+        real_write = self.admin._write_json_atomic
+        self._mod_patch('_write_json_atomic',
+                        lambda path, data: (self._writes.append(str(path)),
+                                            real_write(path, data))[1])
+
+    def tearDown(self):
+        try:
+            while self._patches:
+                name, old, sentinel = self._patches.pop()
+                if old is sentinel:
+                    try:
+                        delattr(self.embody_ext, name)
+                    except AttributeError:
+                        pass
+                else:
+                    setattr(self.embody_ext, name, old)
+            while self._mod_patches:
+                name, old = self._mod_patches.pop()
+                setattr(self.admin, name, old)
+        finally:
+            shutil.rmtree(self.tmp, ignore_errors=True)
+            super().tearDown()
+
+    def _patch(self, name, value):
+        sentinel = object()
+        old = self.embody_ext.__dict__.get(name, sentinel)
+        setattr(self.embody_ext, name, value)
+        self._patches.append((name, old, sentinel))
+
+    def _mod_patch(self, name, value):
+        self._mod_patches.append((name, getattr(self.admin, name)))
+        setattr(self.admin, name, value)
+
+    def _read(self, name):
+        import json
+        return json.loads(
+            (self.tmp / '.embody' / name).read_text(encoding='utf-8'))
+
+    def _warnings(self):
+        return [m for m, lvl in self._logs if lvl == 'WARNING']
+
+    # -- local.json pin ----------------------------------------------
+
+    def test_local_pin_written_and_idempotent(self):
+        self.admin.write_local_json(self.embody_ext)
+        self.assertEqual(self._read('local.json'), {'td_build': app.build})
+        writes = len(self._writes)
+        self.admin.write_local_json(self.embody_ext)
+        self.assertEqual(
+            len(self._writes), writes,
+            'a current pin must be a WRITE no-op (idempotent)')
+
+    def test_local_pin_preserves_foreign_keys(self):
+        import json
+        (self.tmp / '.embody' / 'local.json').write_text(
+            json.dumps({'td_build': '2020.10000',
+                        'node_anchor': 'future-machine-key'}),
+            encoding='utf-8')
+        self.admin.write_local_json(self.embody_ext)
+        data = self._read('local.json')
+        self.assertEqual(data.get('td_build'), app.build)
+        self.assertEqual(
+            data.get('node_anchor'), 'future-machine-key',
+            'readable foreign keys must survive the pin update')
+
+    def test_corrupt_local_json_self_heals_with_warning(self):
+        (self.tmp / '.embody' / 'local.json').write_text(
+            'not json {{{', encoding='utf-8')
+        self.admin.write_local_json(self.embody_ext)
+        self.assertEqual(self._read('local.json'), {'td_build': app.build},
+                         'a corrupt machine-local cache is recreated')
+        self.assertTrue(
+            any('unreadable' in w for w in self._warnings()),
+            'the self-heal must be loud, never silent')
+
+    def test_utf16_local_json_self_heals_not_raises(self):
+        """UnicodeDecodeError is a ValueError, not a JSONDecodeError --
+        a UTF-16 file must warn and heal, never propagate (panel
+        finding: the raise silently aborted the project.json steward)."""
+        (self.tmp / '.embody' / 'local.json').write_bytes(
+            '{"td_build": "x"}'.encode('utf-16'))
+        self.admin.write_local_json(self.embody_ext)
+        self.assertEqual(self._read('local.json'), {'td_build': app.build})
+        self.assertTrue(any('unreadable' in w for w in self._warnings()))
+
+    # -- project.json stewardship ------------------------------------
+
+    def test_absent_project_json_created_empty(self):
+        self.admin.write_project_json(self.embody_ext)
+        self.assertEqual(
+            self._read('project.json'), {},
+            'the committed placeholder is created as an empty object')
+
+    def test_td_build_retired_foreign_keys_preserved_then_stable(self):
+        """The migration axis this suite exists for: run the steward
+        REPEATEDLY -- td_build is removed exactly once, foreign keys
+        survive every run, and subsequent runs write nothing at all."""
+        import json
+        (self.tmp / '.embody' / 'project.json').write_text(
+            json.dumps({'td_build': '2025.30000',
+                        'convoy': {'id': 'future'},
+                        'other': [1, 2]}),
+            encoding='utf-8')
+        self.admin.write_project_json(self.embody_ext)
+        data = self._read('project.json')
+        self.assertNotIn('td_build', data,
+                         'the retired machine-specific key is removed')
+        self.assertEqual(data.get('convoy'), {'id': 'future'},
+                         "a co-writer's key must survive the steward")
+        self.assertEqual(data.get('other'), [1, 2])
+
+        writes = len(self._writes)
+        for _ in range(3):
+            self.admin.write_project_json(self.embody_ext)
+        self.assertEqual(
+            len(self._writes), writes,
+            'runs after the retirement must be WRITE no-ops')
+        self.assertEqual(
+            self._read('project.json'),
+            {'convoy': {'id': 'future'}, 'other': [1, 2]},
+            'content must be byte-stable across repeat runs')
+
+    def test_empty_project_json_healed(self):
+        """A zero-byte file (interrupted write, bad checkout) holds
+        nothing a co-writer could lose -- the one corrupt shape the
+        steward heals instead of refusing forever."""
+        path = self.tmp / '.embody' / 'project.json'
+        path.write_text('', encoding='utf-8')
+        self.admin.write_project_json(self.embody_ext)
+        self.assertEqual(self._read('project.json'), {})
+
+    def test_unreadable_project_json_never_overwritten(self):
+        path = self.tmp / '.embody' / 'project.json'
+        path.write_text('corrupt {{{ not json', encoding='utf-8')
+        writes = len(self._writes)
+        self.admin.write_project_json(self.embody_ext)
+        self.assertEqual(
+            path.read_text(encoding='utf-8'), 'corrupt {{{ not json',
+            'unreadable JSON must be left byte-for-byte untouched -- '
+            'never treated as empty-and-overwrite (A-14)')
+        self.assertEqual(len(self._writes), writes)
+        self.assertTrue(
+            any('unreadable' in w for w in self._warnings()),
+            'the refusal must warn loudly')
+
+    def test_utf16_project_json_never_overwritten(self):
+        path = self.tmp / '.embody' / 'project.json'
+        payload = '{"td_build": "x"}'.encode('utf-16')
+        path.write_bytes(payload)
+        self.admin.write_project_json(self.embody_ext)
+        self.assertEqual(
+            path.read_bytes(), payload,
+            'a UTF-16/binary file must be refused, not raised over or '
+            'overwritten')
+        self.assertTrue(any('unreadable' in w for w in self._warnings()))
+
+    def test_non_dict_project_json_never_overwritten(self):
+        import json
+        path = self.tmp / '.embody' / 'project.json'
+        path.write_text(json.dumps(['a', 'list']), encoding='utf-8')
+        self.admin.write_project_json(self.embody_ext)
+        self.assertEqual(self._read('project.json'), ['a', 'list'],
+                         'a non-object file is not Embody-shaped -- '
+                         'leave it alone')
+        self.assertTrue(any('not a JSON object' in w
+                            for w in self._warnings()))
+
+    def test_failed_write_leaves_file_and_warns(self):
+        import json
+        path = self.tmp / '.embody' / 'project.json'
+        original = json.dumps({'td_build': '2025.30000', 'keep': True})
+        path.write_text(original, encoding='utf-8')
+
+        def exploding_write(_path, _data):
+            raise PermissionError('locked (test)')
+        self._mod_patch('_write_json_atomic', exploding_write)
+
+        self.admin.write_project_json(self.embody_ext)
+        self.assertEqual(
+            path.read_text(encoding='utf-8'), original,
+            'a failed write must leave the existing file intact')
+        self.assertTrue(
+            any('Failed to write project.json' in w
+                for w in self._warnings()))
+
+    # -- the wrapper drives both -------------------------------------
+
+    def test_wrapper_pins_locally_and_stewards_tracked(self):
+        import json
+        (self.tmp / '.embody' / 'project.json').write_text(
+            json.dumps({'td_build': '2025.30000'}), encoding='utf-8')
+        self.embody_ext._writeProjectJson()
+        self.assertEqual(self._read('local.json'),
+                         {'td_build': app.build},
+                         'the wrapper must write the machine-local pin')
+        self.assertEqual(self._read('project.json'), {},
+                         'the wrapper must retire the committed pin')
+
+    def test_wrapper_stewards_even_when_local_pin_raises(self):
+        """A raising local-pin write must never block the tracked-file
+        steward (panel finding)."""
+        import json
+        (self.tmp / '.embody' / 'project.json').write_text(
+            json.dumps({'td_build': '2025.30000'}), encoding='utf-8')
+
+        real = self.admin.write_local_json
+
+        def exploding_local(ext):
+            raise RuntimeError('local pin exploded (test)')
+        self._mod_patch('write_local_json', exploding_local)
+
+        self.embody_ext._writeProjectJson()
+        self.assertEqual(self._read('project.json'), {},
+                         'the steward must still run')
+        self.assertTrue(
+            any('local.json pin failed' in w for w in self._warnings()))
+
+    # -- the load-bearing gitignore claim ----------------------------
+
+    def test_local_json_is_gitignored(self):
+        """A-14's whole point dies silently if local.json ever becomes
+        tracked -- pin the ignore with git itself."""
+        import subprocess
+        try:
+            proc = subprocess.run(
+                ['git', 'check-ignore', '-q', '.embody/local.json'],
+                cwd=str(project.folder + '/..'), capture_output=True,
+                timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            self.skipTest('git unavailable for check-ignore')
+        self.assertEqual(
+            proc.returncode, 0,
+            '.embody/local.json must be gitignored -- a tracked '
+            'machine-local pin reintroduces the per-machine churn A-14 '
+            'removed')

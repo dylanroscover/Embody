@@ -595,16 +595,61 @@ def project_json_path(ext) -> Path:
     return ext._findProjectRoot() / '.embody' / 'project.json'
 
 
-def write_project_json(ext) -> None:
-    """Pin the current TouchDesigner build into .embody/project.json.
+def local_json_path(ext) -> Path:
+    """Path to .embody/local.json -- MACHINE-LOCAL project metadata.
 
-    The Envoy bridge reads td_build to pick a matching TD install when
-    launching on a fresh clone, where envoy.json is gitignored and its
-    td_executable path may not exist locally. Idempotent -- skips the
-    write when td_build is already current.
+    Sibling of project.json but never committed (the .gitignore block
+    ignores .embody/* and un-ignores only project.json). Holds keys that
+    are true for THIS machine only -- today td_build, which churned in the
+    tracked file whenever collaborators ran different TD builds (A-14).
     """
+    return ext._findProjectRoot() / '.embody' / 'local.json'
+
+
+def _write_json_atomic(path: Path, data: dict) -> None:
+    """Atomic tmp+replace JSON write with the Windows retry (a reader
+    holding the file open makes os.replace raise PermissionError). On
+    final failure the orphan .tmp is removed before the raise."""
     import json, os
-    path = project_json_path(ext)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = Path(str(path) + '.tmp')
+    content = json.dumps(data, indent=2) + '\n'
+    try:
+        for attempt in range(3):
+            try:
+                tmp.write_text(content, encoding='utf-8', newline='\n')
+                os.replace(str(tmp), str(path))
+                return
+            except PermissionError:
+                if attempt < 2:
+                    import time as _time
+                    _time.sleep(0.1)
+                else:
+                    raise
+    finally:
+        if tmp.is_file():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+
+
+def write_local_json(ext) -> None:
+    """Pin the current TouchDesigner build into .embody/local.json.
+
+    The Envoy bridge prefers this machine-local pin when picking a TD
+    install to launch; the old committed pin churned per machine (A-14).
+    Idempotent -- skips the write when td_build is already current. A
+    corrupt local.json is self-healed (recreated, foreign keys lost) with
+    a loud warning -- it is a regenerable machine-local cache, unlike the
+    tracked project.json below, which is never overwritten blind. Note:
+    every TD instance in a multi-instance repo writes here, so two
+    instances on DIFFERENT TD builds will ping-pong the pin -- harmless
+    for launch selection (either build launches), and readable keys are
+    always merge-preserved.
+    """
+    import json
+    path = local_json_path(ext)
     # app.build is the build proper (e.g. '2025.32460'). app.version is
     # the long-lived major branch ('099') and would only be noise here.
     current_build = app.build
@@ -615,33 +660,104 @@ def write_project_json(ext) -> None:
             loaded = json.loads(path.read_text(encoding='utf-8'))
             if isinstance(loaded, dict):
                 existing = loaded
-        except (json.JSONDecodeError, OSError):
-            pass  # Treat unreadable as empty -- we'll overwrite.
+        except (ValueError, OSError) as e:
+            # ValueError covers JSONDecodeError AND UnicodeDecodeError.
+            ext.Log(
+                f'.embody/local.json was unreadable ({e}) -- recreating '
+                f'the machine-local pin file', 'WARNING')
 
     if existing.get('td_build') == current_build:
         return
 
     existing['td_build'] = current_build
+    try:
+        _write_json_atomic(path, existing)
+        ext.Log(
+            f'Pinned td_build={current_build} in .embody/local.json',
+            'DEBUG')
+    except Exception as e:
+        ext.Log(f'Failed to write local.json: {e}', 'WARNING')
+
+
+def write_project_json(ext) -> None:
+    """Steward the COMMITTED .embody/project.json with key-level ownership.
+
+    A-14 (Convoy plan): td_build was machine-specific and churned in this
+    tracked file whenever collaborators ran different TD builds -- it now
+    lives in .embody/local.json (write_local_json). This steward:
+
+    - NEVER treats unreadable JSON as empty-and-overwrite: a corrupt or
+      foreign-format file is left untouched with a loud warning, so a
+      co-writer's keys (a future Convoy key, anything else) can never be
+      destroyed by a parse failure.
+    - Owns exactly the retired td_build key: removes it once (the one
+      honest diff that ends the churn) and preserves every other key
+      byte-for-byte.
+    - Creates the file as {} when absent, keeping the committed
+      placeholder the un-ignore rule and future keys expect.
+    """
+    import json
+    path = project_json_path(ext)
+
+    existing = {}
+    if path.is_file():
+        try:
+            raw = path.read_text(encoding='utf-8')
+        except (ValueError, OSError) as e:
+            ext.Log(
+                f'.embody/project.json is unreadable ({e}) -- leaving it '
+                f'untouched (a tracked file with co-writers is never '
+                f'overwritten blind). Fix or restore it from git.',
+                'WARNING')
+            return
+        if not raw.strip():
+            # A zero-byte / whitespace-only file holds nothing a co-writer
+            # could lose -- the one corrupt shape the steward may heal.
+            existing = {}
+            action = 'Healed empty'
+        else:
+            try:
+                loaded = json.loads(raw)
+            except ValueError as e:  # JSONDecodeError included
+                ext.Log(
+                    f'.embody/project.json is unreadable ({e}) -- leaving '
+                    f'it untouched (a tracked file with co-writers is '
+                    f'never overwritten blind). Fix or restore it from '
+                    f'git.', 'WARNING')
+                return
+            if not isinstance(loaded, dict):
+                ext.Log(
+                    '.embody/project.json is not a JSON object -- leaving '
+                    'it untouched. Fix or restore it from git.', 'WARNING')
+                return
+            existing = loaded
+            if 'td_build' not in existing:
+                return  # nothing owned to change
+            existing.pop('td_build')
+            action = 'Retired td_build from'
+    else:
+        action = 'Created'
 
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = Path(str(path) + '.tmp')
-        content = json.dumps(existing, indent=2) + '\n'
-        for attempt in range(3):
+        if action == 'Created':
+            # Exclusive create closes the check-then-write window: a
+            # co-writer that lands the file first must not be clobbered
+            # with {} -- A-14's guarantee. The next steward run handles
+            # whatever they wrote.
+            path.parent.mkdir(parents=True, exist_ok=True)
             try:
-                tmp.write_text(content, encoding='utf-8', newline='\n')
-                os.replace(str(tmp), str(path))
+                with open(path, 'x', encoding='utf-8', newline='\n') as f:
+                    f.write(json.dumps(existing, indent=2) + '\n')
+            except FileExistsError:
                 ext.Log(
-                    f'Pinned td_build={current_build} in '
-                    f'.embody/project.json',
-                    'DEBUG')
+                    '.embody/project.json appeared mid-create (co-writer) '
+                    '-- leaving it alone', 'DEBUG')
                 return
-            except PermissionError:
-                if attempt < 2:
-                    import time as _time
-                    _time.sleep(0.1)
-                else:
-                    raise
+        else:
+            _write_json_atomic(path, existing)
+        ext.Log(
+            f'{action} .embody/project.json (machine-local pin lives in '
+            f'.embody/local.json)', 'DEBUG')
     except Exception as e:
         ext.Log(f'Failed to write project.json: {e}', 'WARNING')
 

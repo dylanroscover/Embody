@@ -425,26 +425,33 @@ def resolve_toe_path(config, config_path):
 
 
 def load_project_config(config_path):
-    """Load .embody/project.json (committed project metadata).
+    """Load project metadata: committed project.json + machine-local
+    local.json, with local keys taking precedence.
 
-    Sibling of envoy.json. Currently records ``td_build`` so the bridge
-    can pick a matching TouchDesigner install on a fresh clone, where
-    envoy.json is gitignored and its ``td_executable`` may be invalid.
+    Both are siblings of envoy.json. ``td_build`` lives in local.json
+    (machine-local -- A-14: the committed pin churned whenever
+    collaborators ran different TD builds); a td_build still present in
+    a repo's committed project.json is tolerated as a legacy fallback.
     Returns a dict (possibly empty).
     """
     if not config_path:
         return {}
-    project_json = os.path.join(
-        os.path.dirname(os.path.abspath(config_path)), "project.json")
-    if not os.path.isfile(project_json):
-        return {}
-    try:
-        with open(project_json, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except (json.JSONDecodeError, OSError) as e:
-        log(f"Warning: could not read project.json: {e}")
-        return {}
+    base_dir = os.path.dirname(os.path.abspath(config_path))
+    merged = {}
+    for name in ("project.json", "local.json"):  # local overlays legacy
+        path = os.path.join(base_dir, name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                merged.update(data)
+        except (ValueError, OSError) as e:
+            # ValueError covers JSONDecodeError AND UnicodeDecodeError --
+            # a UTF-16/binary file must degrade to a warning, not a raise.
+            log(f"Warning: could not read {name}: {e}")
+    return merged
 
 
 # ---------------------------------------------------------------------------
@@ -1171,24 +1178,24 @@ def launch_td(config, config_path, project_path=None, existing_pids=None):
     Returns (success: bool, message: str, pid: int|None).
     """
     existing_pids = set(existing_pids or [])
-    # Resolve TD executable: prefer the install matching project.json's
-    # td_build pin (committed, travels across machines), then fall back
-    # to envoy.json's td_executable (gitignored, machine-local).
+    # Resolve TD executable: prefer the install matching the machine-local
+    # td_build pin (.embody/local.json; a legacy committed pin is
+    # tolerated), then envoy.json's td_executable, then the newest
+    # discovered install. select_td_install owns ALL of that policy and
+    # handles target_build=None -- it must be called UNCONDITIONALLY: the
+    # old `if target_build:` gate made the fresh-clone newest-install
+    # fallback unreachable the moment no pin existed (panel blocker --
+    # A-14 retires the committed pin, so unpinned is now the normal state
+    # for a clone where TD has never run).
     project_config = load_project_config(config_path)
     target_build = project_config.get("td_build")
     fallback_exe = config.get("td_executable")
 
-    if target_build:
-        td_exe, warning = select_td_install(target_build, fallback_exe)
-        if warning:
-            log(f"Warning: {warning}")
-        if td_exe is None:
-            return False, warning or "No TouchDesigner install found", None
-    else:
-        # Backward compat: no pin -> use td_executable verbatim, as before.
-        td_exe = fallback_exe
-        if not td_exe:
-            return False, "No td_executable configured in envoy.json", None
+    td_exe, warning = select_td_install(target_build, fallback_exe)
+    if warning:
+        log(f"Warning: {warning}")
+    if td_exe is None:
+        return False, warning or "No TouchDesigner install found", None
 
     if project_path:
         # Resolve relative paths against git root

@@ -1997,9 +1997,13 @@ class EmbodyExt:
         # version writes one.
         embody_dir = old_root / '.embody'
         if embody_dir.is_dir():
+            # local.json is the regenerable machine-local pin (A-14):
+            # delete rather than move, the next startup rewrites it at
+            # the new root -- leaving it would strand the old .embody/
+            # dir and orphan a stale pin.
             for name in ('envoy.json', 'envoy-bridge.py',
                          'envoy-tools-cache.json',
-                         '.envoy-tools-cache.json'):
+                         '.envoy-tools-cache.json', 'local.json'):
                 p = embody_dir / name
                 if p.is_file():
                     try:
@@ -2548,7 +2552,20 @@ class EmbodyExt:
         return mod.embody_admin.project_json_path(self)
 
     def _writeProjectJson(self) -> None:
-        """Pin the current TouchDesigner build into .embody/project.json -- see embody_admin."""
+        """Steward .embody/project.json and pin td_build machine-locally.
+
+        A-14: the pin lives in .embody/local.json (machine-local); the
+        tracked project.json is stewarded with key-level ownership (the
+        retired td_build key removed once, everything else preserved,
+        unreadable JSON never overwritten) -- see embody_admin.
+        """
+        try:
+            mod.embody_admin.write_local_json(self)
+        except Exception as e:
+            # The machine-local pin must never block the tracked-file
+            # steward (panel finding: an unexpected raise here silently
+            # stopped A-14 stewardship on that machine).
+            self.Log(f'local.json pin failed: {e}', 'WARNING')
         return mod.embody_admin.write_project_json(self)
 
     def _saveSettings(self) -> None:

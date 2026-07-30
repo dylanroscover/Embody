@@ -84,7 +84,7 @@ Claude Code connects to Envoy through a STDIO bridge script (`.embody/envoy-brid
 | Tool | Description |
 |------|-------------|
 | `get_td_status` | Check if TD is running, whether Envoy is reachable, crash detection, restart attempts remaining, and instance registry status |
-| `launch_td` | Launch TD with the project's `.toe` file and wait for Envoy to become reachable. On fresh clones (where `.embody/envoy.json`'s `td_executable` path doesn't exist locally), the bridge reads `td_build` from the committed `.embody/project.json` and auto-picks the matching TouchDesigner install — see [Architecture](architecture.md#embodyprojectjson-build-pin-committed). |
+| `launch_td` | Launch TD with the project's `.toe` file and wait for Envoy to become reachable. On fresh clones (where `.embody/envoy.json`'s `td_executable` path doesn't exist locally), the bridge auto-picks a TouchDesigner install — the machine-local `.embody/local.json` build pin when present, the newest installed TD otherwise — see [Architecture](architecture.md#embodylocaljson-build-pin-machine-local-and-embodyprojectjson-committed). |
 | `restart_td` | Gracefully quit TD, then relaunch and wait for Envoy. Targets only the active instance's verified process — on machines running several TD projects, the others are never touched |
 | `switch_instance` | List all registered TD instances or switch the bridge to a different running instance |
 

@@ -1338,6 +1338,128 @@ class TestBridgeProjectJsonAndDiscovery(EmbodyTestCase):
             envoy_json = os.path.join(embody, 'envoy.json')
             self.assertEqual(bridge.load_project_config(envoy_json), {})
 
+    def test_load_project_config_local_overlays_legacy(self):
+        """A-14: the machine-local local.json pin wins over a legacy
+        td_build still committed in project.json; foreign project.json
+        keys survive the merge."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            embody = os.path.join(td, '.embody')
+            os.makedirs(embody)
+            with open(os.path.join(embody, 'project.json'), 'w') as f:
+                json.dump({'td_build': '2025.30000',
+                           'convoy': {'id': 'future-key'}}, f)
+            with open(os.path.join(embody, 'local.json'), 'w') as f:
+                json.dump({'td_build': '2025.33070'}, f)
+            result = bridge.load_project_config(
+                os.path.join(embody, 'envoy.json'))
+            self.assertEqual(result.get('td_build'), '2025.33070',
+                             'the machine-local pin must win')
+            self.assertEqual(result.get('convoy'), {'id': 'future-key'},
+                             'foreign committed keys must survive the merge')
+
+    def test_load_project_config_local_only(self):
+        """A repo with the td_build key already retired from project.json
+        resolves the pin from local.json alone."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            embody = os.path.join(td, '.embody')
+            os.makedirs(embody)
+            with open(os.path.join(embody, 'project.json'), 'w') as f:
+                json.dump({}, f)
+            with open(os.path.join(embody, 'local.json'), 'w') as f:
+                json.dump({'td_build': '2025.33070'}, f)
+            result = bridge.load_project_config(
+                os.path.join(embody, 'envoy.json'))
+            self.assertEqual(result.get('td_build'), '2025.33070')
+
+    def test_load_project_config_malformed_local_keeps_legacy(self):
+        """A corrupt local.json must not poison the legacy fallback."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            embody = os.path.join(td, '.embody')
+            os.makedirs(embody)
+            with open(os.path.join(embody, 'project.json'), 'w') as f:
+                json.dump({'td_build': '2025.30000'}, f)
+            with open(os.path.join(embody, 'local.json'), 'w') as f:
+                f.write('not json {{{')
+            result = bridge.load_project_config(
+                os.path.join(embody, 'envoy.json'))
+            self.assertEqual(result.get('td_build'), '2025.30000')
+
+    def test_load_project_config_mangled_project_good_local(self):
+        """The realistic post-migration recovery case: a mangled committed
+        file must not block the machine-local pin."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            embody = os.path.join(td, '.embody')
+            os.makedirs(embody)
+            with open(os.path.join(embody, 'project.json'), 'w') as f:
+                f.write('corrupt {{{')
+            with open(os.path.join(embody, 'local.json'), 'w') as f:
+                json.dump({'td_build': '2025.33070'}, f)
+            result = bridge.load_project_config(
+                os.path.join(embody, 'envoy.json'))
+            self.assertEqual(result.get('td_build'), '2025.33070')
+
+    def test_load_project_config_non_dict_local_keeps_legacy(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            embody = os.path.join(td, '.embody')
+            os.makedirs(embody)
+            with open(os.path.join(embody, 'project.json'), 'w') as f:
+                json.dump({'td_build': '2025.30000'}, f)
+            with open(os.path.join(embody, 'local.json'), 'w') as f:
+                json.dump(['not', 'a', 'dict'], f)
+            result = bridge.load_project_config(
+                os.path.join(embody, 'envoy.json'))
+            self.assertEqual(result.get('td_build'), '2025.30000')
+
+    def test_load_project_config_utf16_degrades_to_warning(self):
+        """UnicodeDecodeError is a ValueError, not JSONDecodeError -- a
+        UTF-16/binary file must degrade to {} with a warning, never
+        raise out of the bridge (panel finding)."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            embody = os.path.join(td, '.embody')
+            os.makedirs(embody)
+            with open(os.path.join(embody, 'project.json'), 'wb') as f:
+                f.write('{"td_build": "x"}'.encode('utf-16'))
+            result = bridge.load_project_config(
+                os.path.join(embody, 'envoy.json'))
+            self.assertEqual(result, {})
+
+    def test_launch_td_unpinned_reaches_install_discovery(self):
+        """PANEL BLOCKER pin: with NO pin anywhere (the normal fresh-clone
+        state after A-14 retires the committed td_build), launch_td must
+        still consult select_td_install -- whose newest-install tier is
+        the fresh-clone story -- instead of failing on a missing
+        td_executable. The old `if target_build:` gate made that tier
+        unreachable exactly when it was needed."""
+        import tempfile
+        selected = []
+
+        def fake_select(target_build, fallback_exe=None, installs=None):
+            selected.append(target_build)
+            return None, 'no install (test stop)'
+
+        with tempfile.TemporaryDirectory() as td:
+            embody = os.path.join(td, '.embody')
+            os.makedirs(embody)
+            with open(os.path.join(embody, 'project.json'), 'w') as f:
+                json.dump({}, f)   # post-migration committed file
+            with patch.object(bridge, 'select_td_install',
+                              side_effect=fake_select):
+                ok, msg, pid = bridge.launch_td(
+                    {}, os.path.join(embody, 'envoy.json'))
+
+        self.assertEqual(
+            selected, [None],
+            'select_td_install must be consulted unconditionally, with '
+            'target_build=None when no pin exists')
+        self.assertFalse(ok)
+        self.assertIn('no install (test stop)', msg)
+
     # --- _parse_build --------------------------------------------------
 
     def test_parse_build_valid(self):

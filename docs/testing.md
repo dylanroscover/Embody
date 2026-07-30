@@ -144,7 +144,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_envoy_bridge` | 193 | STDIO bridge: forwarding, reconciler, registry, meta-tools, and `crash_detected` lifecycle TRANSITIONS (reconnect clears, pid re-resolution honours the session pin, a foreign instance on the port never clears a real crash) |
+| `test_envoy_bridge` | 216 | STDIO bridge: forwarding, reconciler, registry, meta-tools, and `crash_detected` lifecycle TRANSITIONS (reconnect clears, pid re-resolution honours the session pin, a foreign instance on the port never clears a real crash) |
 | `test_claude_config` | 84 | AI client config generation (Claude/Codex/Gemini/Cursor/Windsurf/GitHub Copilot) |
 | `test_envoy_sessions` | 46 | Multi-session awareness, scope claims, peer advisories, destructive-operation gates |
 | `test_server_lifecycle` | 24 | Envoy MCP server start/stop |
@@ -170,9 +170,9 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_catalog_bootstrap_palette` | 10 | Bootstrap palette table parsing + build coverage |
 | `test_catalog_palette_scan` | 39 | Palette scan time-state snapshot/restore |
 | `test_template_sync` | 6 | Template map, disk, release-table, and orphan allowlist sync |
-| `test_release_hooks` | 34 | `ExportPortableTox` release hooks (issue #74) |
+| `test_release_hooks` | 52 | `ExportPortableTox` release hooks (issue #74) |
 | `test_updater` | 20 | UpdaterExt self-update logic (no network, no swap) |
-| `test_config_migration` | 9 | Repo-config writers across a VERSION BUMP -- the migration axis a single-run test cannot see (duplicate managed headers, block consolidation that never swallows user content, `.gitattributes` backfill, the order-dependent `.embody/*` / `!.embody/project.json` pair) |
+| `test_config_migration` | 23 | Repo-config writers across a VERSION BUMP -- the migration axis a single-run test cannot see (duplicate managed headers, block consolidation that never swallows user content, `.gitattributes` backfill, the order-dependent `.embody/*` / `!.embody/project.json` pair) |
 
 ## Execution Modes
 

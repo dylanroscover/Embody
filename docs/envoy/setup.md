@@ -115,11 +115,9 @@ You can also edit `.claude/settings.local.json` directly at any time; the `allow
 
 ## Fresh Clones and TD Version Matching
 
-When you clone a repo someone else built with Embody, the `.embody/envoy.json` file (which records the local TD install path) is gitignored — the path it references won't exist on your machine. Embody handles this by also committing `.embody/project.json`, which records the **TouchDesigner build the project was last saved with** (e.g., `{"td_build": "2025.32660"}`).
+When you clone a repo someone else built with Embody, the `.embody/envoy.json` file (which records the local TD install path) is gitignored — the path it references won't exist on your machine. On a fresh clone the bridge simply scans your standard TouchDesigner install locations (`/Applications/TouchDesigner*.app` on macOS, `C:\Program Files\Derivative\TouchDesigner.*` on Windows, `/opt/derivative/touchdesigner-*` on Linux) and launches the newest install it finds. If nothing is installed, the error response includes the Derivative download link.
 
-The first time the bridge needs to launch TD on a fresh clone, it reads `td_build` from `project.json`, scans your standard TouchDesigner install locations (`/Applications/TouchDesigner*.app` on macOS, `C:\Program Files\Derivative\TouchDesigner.*` on Windows, `/opt/derivative/touchdesigner-*` on Linux), and picks the matching install — exact-build match if you have it, otherwise the closest same-year build (with a warning). If nothing matches, the error response includes the Derivative download link and the exact build number you need.
-
-Backward compatible — projects without `project.json` use `envoy.json`'s `td_executable` exactly as before. See [Architecture](architecture.md#embodyprojectjson-build-pin-committed) for the full match policy.
+Once TD has run on your machine, Embody pins the build you used into the machine-local `.embody/local.json`, and later launches prefer the exact (or closest same-year) match for that pin — so your machine keeps launching the build **you** run, regardless of what your collaborators run. (Older repos may still carry a legacy `td_build` key in the committed `project.json`; it is tolerated as a fallback and removed automatically by newer Embody builds — a committed pin churned whenever collaborators ran different TD builds.) See [Architecture](architecture.md#embodylocaljson-build-pin-machine-local-and-embodyprojectjson-committed) for the full match policy.
 
 ## Verifying the Connection
 

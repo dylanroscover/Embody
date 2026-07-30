@@ -27,7 +27,7 @@ If your project is inside a git repository, Envoy automatically adds the followi
 | `.venv/` | Python virtual environment (auto-created for Envoy dependencies) |
 | `.mcp.json` | MCP client config (auto-generated per machine) |
 | `.embody/*` | Envoy runtime files (instance registry, bridge, cache) |
-| `!.embody/project.json` | Un-ignores the committed `td_build` pin so it stays tracked |
+| `!.embody/project.json` | Un-ignores the committed project metadata file (the `td_build` pin is machine-local in `.embody/local.json` now) |
 | `.claude/settings.local.json` | Claude Code per-machine permissions |
 | `.claude/projects/` | Claude Code session data |
 | `__pycache__/` | Python bytecode cache |
