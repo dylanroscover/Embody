@@ -1829,7 +1829,12 @@ class TestBridgeMetaTools(EmbodyTestCase):
                 'test': {'td_pid': os.getpid(), 'toe_path': 'test.toe'},
             },
         })
-        result = bridge.handle_launch_td({}, state)
+        # The seeded pid must read as a REAL TouchDesigner: inside TD the
+        # runner's own pid genuinely is one, but under pytest (the A-51
+        # dual-runner) it is python.exe -- mock the image check so the
+        # test asserts the guard, not the identity of the test runner.
+        with patch.object(bridge, 'is_td_process_alive', return_value=True):
+            result = bridge.handle_launch_td({}, state)
         self.assertEqual(result['status'], 'error')
         self.assertIn('already running', result['message'])
 
@@ -2280,7 +2285,11 @@ class TestBridgeConnectionLostMessage(EmbodyTestCase):
 
     def test_message_alive_pid(self):
         state = self._state(os.getpid())
-        msg = bridge.connection_lost_message(state)
+        # Runner-agnostic (A-51): inside TD this process IS a live TD;
+        # under pytest it is python.exe -- mock the TD-image check so the
+        # message logic is what gets asserted, not the runner's identity.
+        with patch.object(bridge, 'is_td_process_alive', return_value=True):
+            msg = bridge.connection_lost_message(state)
         self.assertIn('not responding', msg.lower())
         self.assertIn(str(os.getpid()), msg)
 

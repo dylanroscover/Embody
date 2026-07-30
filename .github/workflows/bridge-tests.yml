@@ -1,0 +1,47 @@
+name: bridge-tests
+
+# A-51 (Convoy Phase 0 test-runner story): the Envoy bridge is single-file
+# stdlib-only Python, so its suite runs OUTSIDE TouchDesigner under pytest
+# via the dual-runner shim (dev/embody/unit_tests/conftest.py). The macOS
+# leg is the point -- it executes the darwin quit/launch paths and the
+# pgrep-based find_all_td_pids tests that are skip-only on the Windows dev
+# box and landed flagged "unverified on mac" (commit e28b73e). TD-bound
+# tests skip cleanly off-TD; a skip explosion still shows in the -ra
+# summary.
+
+on:
+  push:
+    paths:
+      - 'dev/embody/envoy_bridge.py'
+      - 'dev/embody/Embody/templates/text_envoy_bridge.py'
+      - 'dev/embody/unit_tests/test_envoy_bridge.py'
+      - 'dev/embody/unit_tests/conftest.py'
+      - 'pytest.ini'
+      - '.github/workflows/bridge-tests.yml'
+  pull_request:
+    paths:
+      - 'dev/embody/envoy_bridge.py'
+      - 'dev/embody/Embody/templates/text_envoy_bridge.py'
+      - 'dev/embody/unit_tests/test_envoy_bridge.py'
+      - 'dev/embody/unit_tests/conftest.py'
+      - 'pytest.ini'
+      - '.github/workflows/bridge-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pytest
+        run: python -m pip install --quiet pytest
+      - name: Run the bridge suite
+        run: python -m pytest -v
