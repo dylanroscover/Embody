@@ -77,3 +77,6 @@ dev/embody/ext-diet-baseline/
 
 # Convoy planning documents -- internal, not for publication (CONVOY_PLAN.md D-3)
 dev/embody/CONVOY_*.md
+
+# Convoy prototype code -- internal until Convoy is announced (same rationale as D-3)
+dev/convoy_tracer/
