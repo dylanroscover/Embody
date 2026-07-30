@@ -1046,24 +1046,31 @@ def _list_stale_heartbeats(config_path, max_age_s):
 
 
 def quit_td(pid, graceful_timeout=15):
-    """Quit a running TouchDesigner process.
+    """Quit a running TouchDesigner process -- always pid-scoped.
 
-    Sends a graceful termination first, then force-kills if needed.
-    Returns (success: bool, message: str).
+    Requests termination (WM_CLOSE via taskkill on Windows -- genuinely
+    graceful; SIGTERM on macOS/Linux -- abrupt but correctly targeted),
+    then force-kills if needed. Returns (success: bool, message: str).
     """
     if pid is None:
         return False, "No TouchDesigner PID to quit"
     if not is_process_alive(pid):
         return True, "TouchDesigner already exited"
 
-    # Graceful quit
+    # ALWAYS scoped to the one target pid. The old darwin path delegated to
+    # an AppleScript application-level quit, which is pid-blind: it targets
+    # whichever running TouchDesigner instance the system resolves -- never
+    # reliably the intended one -- so on multi-instance machines a probe
+    # quit could take the user's dev session down instead. The trade-off,
+    # stated plainly: macOS's only Cocoa-graceful quit path is that
+    # application-level event, which cannot address a pid, so this branch
+    # accepts an ABRUPT-but-correctly-targeted SIGTERM (no save dialog --
+    # which no one could answer headlessly anyway; the force-kill fallback
+    # below is unchanged). Source tripwire tests keep application-wide
+    # quits out of this file. NOTE: darwin path unverified on a physical
+    # Mac at landing time (none attached).
     try:
-        if sys.platform == "darwin":
-            subprocess.run(
-                ["osascript", "-e", 'quit app "TouchDesigner"'],
-                capture_output=True, timeout=10,
-            )
-        elif sys.platform == "win32":
+        if sys.platform == "win32":
             subprocess.run(
                 ["taskkill", "/PID", str(pid)],
                 capture_output=True, timeout=10,
@@ -1099,6 +1106,42 @@ def quit_td(pid, graceful_timeout=15):
         return False, f"TouchDesigner (PID {pid}) could not be terminated"
 
     return True, f"TouchDesigner (PID {pid}) was force-killed"
+
+
+def wait_for_new_td_pid(existing_pids, timeout=15.0, poll=0.5,
+                        find_pids=None, clock=None, sleep=None):
+    """Resolve the pid of a TouchDesigner instance LaunchServices just spawned.
+
+    macOS 'open -n -a' exits immediately and never reports the spawned
+    process, so the launcher diffs live TD pids against the pre-launch
+    snapshot. The old implementation slept a fixed 2s and diffed ONCE: a
+    spawn slower than 2s silently returned None, and a concurrent foreign
+    launch in that window could be misattributed with no trace. Poll the
+    diff until a new pid appears or the deadline passes. Several new pids
+    in the SAME poll window are logged and resolved to the lowest for
+    determinism; a foreign launch landing in an EARLIER window is still
+    misattributed silently -- snapshot-diff attribution cannot distinguish
+    spawners, so this NARROWS the misattribution window, it does not close
+    it.
+
+    find_pids/clock/sleep are injectable so the logic is fully unit-testable
+    off-platform (pure Python, no TD access).
+    """
+    find_pids = find_pids or find_all_td_pids
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
+    existing = set(existing_pids or ())
+    deadline = clock() + timeout
+    while True:
+        new_pids = sorted(p for p in find_pids() if p not in existing)
+        if new_pids:
+            if len(new_pids) > 1:
+                log(f"Multiple new TD pids after launch: {new_pids} -- "
+                    f"attributing the lowest (concurrent launch elsewhere?)")
+            return new_pids[0]
+        if clock() >= deadline:
+            return None
+        sleep(poll)
 
 
 def launch_td(config, config_path, project_path=None, existing_pids=None):
@@ -1180,13 +1223,18 @@ def launch_td(config, config_path, project_path=None, existing_pids=None):
                 stderr=subprocess.DEVNULL,
             )
             # 'open' returns immediately; TD process is spawned by LaunchServices.
-            # Wait briefly for open to finish, then find TD's actual PID by
-            # diffing against the pre-launch snapshot.
+            # A nonzero exit means the app never launched -- fail fast instead
+            # of burning the pid-poll window and reporting a false success.
             proc.wait(timeout=10)
-            time.sleep(2)  # Give TD a moment to start
-            new_pids = [p for p in find_all_td_pids()
-                        if p not in existing_pids]
-            pid = new_pids[0] if new_pids else None
+            if proc.returncode:
+                return (False,
+                        f"'open' failed with exit code {proc.returncode} -- "
+                        f"TouchDesigner did not launch",
+                        None)
+            # Resolve the spawned pid by polling the snapshot diff until it
+            # appears (see wait_for_new_td_pid -- the old fixed 2s single-shot
+            # diff missed slow spawns).
+            pid = wait_for_new_td_pid(existing_pids)
         elif sys.platform == "win32":
             proc = subprocess.Popen(
                 [td_exe, toe_path],
@@ -1553,9 +1601,15 @@ def handle_restart_td(params, state):
         config = state.config
         config_path = state.config_path
 
-    # Launch fresh (optionally with a different .toe)
+    # Launch fresh (optionally with a different .toe). Snapshot the SURVIVING
+    # TD pids after the quit so darwin's pid-diff attribution excludes every
+    # foreign instance -- with no snapshot the polling helper adopts the
+    # oldest foreign TD as ours on multi-instance machines, and a later
+    # restart would aim its quit at the user's other session.
+    surviving_pids = find_all_td_pids()
     success, launch_msg, new_pid = launch_td(config, config_path,
-                                              project_path=project_path)
+                                              project_path=project_path,
+                                              existing_pids=surviving_pids)
     if not success:
         return {"status": "error", "message": launch_msg}
 

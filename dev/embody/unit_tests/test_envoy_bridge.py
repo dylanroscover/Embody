@@ -1732,8 +1732,12 @@ class TestBridgeMetaTools(EmbodyTestCase):
             call_count[0] += 1
             # First call: alive (initial check), second call: dead (after quit)
             return call_count[0] <= 1
+        # os.kill MUST be patched: on macOS/Linux the graceful branch now
+        # sends a pid-scoped SIGTERM (panel finding -- without this patch a
+        # POSIX test run would signal whatever real process holds pid 12345).
         with patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
              patch('subprocess.run'), \
+             patch('os.kill'), \
              patch('time.sleep'), \
              patch('time.monotonic', side_effect=[100, 100, 101]):
             success, msg = bridge.quit_td(12345)
@@ -3320,3 +3324,167 @@ class TestWorktreeCoordination(EmbodyTestCase):
         root = tempfile.mkdtemp(prefix='tsv_none_')
         self.addCleanup(lambda: __import__('shutil').rmtree(root, True))
         self.assertEqual(mod.read_tsv_dirty_paths(root), set())
+
+
+class TestQuitTdPidScoping(EmbodyTestCase):
+    """quit_td must act on ONE pid, never the whole application (v6.0.169+).
+
+    The old darwin graceful path delegated to an AppleScript
+    application-level quit, which is pid-blind -- it targets whichever TD
+    instance the system resolves, never reliably the intended one, so a
+    probe-instance quit could take the user's dev session down instead. The
+    darwin branch is now the pid-scoped SIGTERM the other POSIX platforms
+    already used. Coverage is three-layered: a behavioral test drives the
+    darwin branch with the platform mocked (runs on every OS), source
+    tripwires catch the known app-wide phrasings (exact literals only --
+    they are a cheap alarm, not a proof), and a byte-identity check keeps
+    the shipped template copy honest (deployment PREFERS the template DAT
+    while these tests load the fallback -- drift means green tests over a
+    buggy shipped bridge).
+    """
+
+    def test_no_app_wide_quit_in_bridge_source(self):
+        with open(_bridge_path, encoding='utf-8') as f:
+            src = f.read()
+        for phrase in ('quit app', 'osascript', 'killall', 'pkill'):
+            self.assertNotIn(
+                phrase, src,
+                f'The bridge must never quit TouchDesigner app-wide '
+                f'({phrase!r} found) -- quit_td is pid-scoped (SIGTERM on '
+                f'POSIX, taskkill /PID on Windows)')
+
+    def test_quit_td_posix_branch_is_pid_scoped(self):
+        import inspect
+        src = inspect.getsource(bridge.quit_td)
+        self.assertIn(
+            'signal.SIGTERM', src,
+            'quit_td must send a pid-scoped SIGTERM on POSIX platforms')
+
+    def test_quit_td_darwin_sends_sigterm_to_target_pid(self):
+        """Behavioral pin, runs on every platform: with the platform mocked
+        to darwin, quit_td must SIGTERM exactly the target pid -- not
+        itself, not every TD pid (the app-wide bug in new clothes would
+        pass a source grep; it cannot pass this)."""
+        import signal as _signal
+        kills = []
+        call_count = [0]
+
+        def mock_alive(pid):
+            call_count[0] += 1
+            return call_count[0] <= 1     # alive at entry, dead after quit
+
+        with patch('envoy_bridge.sys') as mock_sys, \
+             patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
+             patch('os.kill', side_effect=lambda p, s: kills.append((p, s))), \
+             patch('time.sleep'), \
+             patch('time.monotonic', side_effect=[100, 100, 101]):
+            mock_sys.platform = 'darwin'
+            success, _msg = bridge.quit_td(12345)
+
+        self.assertTrue(success)
+        self.assertEqual(
+            kills, [(12345, _signal.SIGTERM)],
+            'quit_td on darwin must send exactly one SIGTERM, to exactly '
+            'the target pid')
+
+    def test_template_copy_byte_identical(self):
+        """The two bridge copies must never drift: envoy_setup deploys the
+        TEMPLATE DAT (falling back to this file only when the DAT is
+        missing), while every test in this suite loads the FALLBACK --
+        drift means the suite goes green over a buggy shipped bridge."""
+        import hashlib
+        template_path = os.path.join(
+            project.folder, 'embody', 'Embody', 'templates',
+            'text_envoy_bridge.py')
+        with open(_bridge_path, 'rb') as f:
+            fallback_sha = hashlib.sha256(f.read()).hexdigest()
+        with open(template_path, 'rb') as f:
+            template_sha = hashlib.sha256(f.read()).hexdigest()
+        self.assertEqual(
+            fallback_sha, template_sha,
+            'dev/embody/envoy_bridge.py and templates/text_envoy_bridge.py '
+            'must stay byte-identical (see memory: bridge-template-fallback-'
+            'sync)')
+
+
+class TestWaitForNewTdPid(EmbodyTestCase):
+    """wait_for_new_td_pid: the poll-until-deadline replacement for the old
+    single fixed-2s snapshot diff after a macOS 'open -n' launch. Pure
+    injected logic -- runs on every platform, no real sleeping."""
+
+    def _run(self, snapshots, existing=(1, 2), timeout=5.0, poll=0.5):
+        """Drive the helper with a scripted find_pids() sequence and a fake
+        clock advanced only by the injected sleep. Returns (pid, state)."""
+        state = {'t': 0.0, 'i': 0, 'sleeps': []}
+
+        def find_pids():
+            i = min(state['i'], len(snapshots) - 1)
+            state['i'] += 1
+            return snapshots[i]
+
+        def clock():
+            return state['t']
+
+        def sleep(s):
+            state['sleeps'].append(s)
+            state['t'] += s
+
+        pid = bridge.wait_for_new_td_pid(
+            existing, timeout=timeout, poll=poll,
+            find_pids=find_pids, clock=clock, sleep=sleep)
+        return pid, state
+
+    def test_immediate_new_pid_returns_without_sleeping(self):
+        pid, state = self._run([[1, 2, 77]])
+        self.assertEqual(pid, 77)
+        self.assertEqual(state['sleeps'], [],
+                         'A pid visible on the first diff must return at once')
+
+    def test_slow_spawn_found_on_later_poll(self):
+        pid, state = self._run([[1, 2], [1, 2], [1, 2, 88]])
+        self.assertEqual(
+            pid, 88,
+            'A spawn slower than one poll interval must still be attributed '
+            '-- the old single 2s diff returned None here')
+        self.assertEqual(len(state['sleeps']), 2)
+
+    def test_timeout_returns_none_and_stops_sleeping(self):
+        pid, state = self._run([[1, 2]], timeout=2.0, poll=0.5)
+        self.assertIsNone(pid, 'No new pid by the deadline must yield None')
+        self.assertEqual(
+            sum(state['sleeps']), 2.0,
+            'The loop must stop exactly at the deadline (a >= -> > '
+            'regression would sleep one extra poll and read 2.5 here)')
+
+    def test_pid_appearing_exactly_at_deadline_is_attributed(self):
+        """The loop diffs BEFORE checking the deadline: a pid visible on
+        the final poll (clock == deadline) is attributed, not dropped."""
+        pid, _ = self._run([[1, 2]] * 4 + [[1, 2, 99]],
+                           timeout=2.0, poll=0.5)
+        self.assertEqual(pid, 99)
+
+    def test_existing_pids_never_attributed(self):
+        pid, _ = self._run([[2, 1]], existing=(1, 2), timeout=1.0)
+        self.assertIsNone(
+            pid, 'Pre-launch pids must never be attributed to the launch')
+
+    def test_multiple_new_pids_attributes_lowest_and_logs(self):
+        with patch.object(bridge, 'log') as mock_log:
+            pid, _ = self._run([[1, 2, 90, 85]])
+        self.assertEqual(
+            pid, 85,
+            'Same-window ambiguity must resolve deterministically '
+            '(lowest new pid), never by list order')
+        logged = ' '.join(str(c) for c in mock_log.call_args_list)
+        self.assertIn('85', logged)
+        self.assertIn('90', logged)
+
+    def test_launch_td_darwin_branch_uses_the_helper(self):
+        import inspect
+        src = inspect.getsource(bridge.launch_td)
+        self.assertIn(
+            'wait_for_new_td_pid(', src,
+            'launch_td must resolve the darwin pid via the polling helper')
+        self.assertNotIn(
+            'time.sleep(2)', src,
+            'The old fixed 2s single-shot diff must not return')
