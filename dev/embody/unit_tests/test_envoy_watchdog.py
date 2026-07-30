@@ -39,6 +39,21 @@ Coverage:
     self-heals via the ~24s startup-grace restart.
   - _run_tests Status stomp: the prior Status survives in COMP storage and
     _restoreStatusAfterTests is idempotent, never resurrecting 'Testing'.
+  - PERFORM MODE (v6.0.169): Perform Mode is an idle condition -- no probe, no
+    dead-tick accrual, no revive, 'Perform Mode' status never clobbered --
+    gated on the live par authority (_performModeActive), never the status
+    string. Start() refuses while performing (queued revive/restart Starts
+    armed before Perform entry die here); the Perform-exit restart passes the
+    gate; the watchdog resumes normal revive duty after exit. The Perform
+    signal is STUBBED (instance patch) -- toggling the live Performmode par
+    would sever MCP with no command path back.
+  - PERFORM AUTHORITY + POLL GATES (v6.0.169, panel findings): the REAL
+    _performModeActive wire is exercised unstubbed (matches
+    EmbodyExt._performMode; exceptions read False so self-healing is never
+    disabled), and the three startup polls (_pollImportGate, _pollBootstrap,
+    _pollStartup) honor Perform -- an in-flight start crossing a Perform
+    entry aborts or tears down instead of completing mid-show, with the
+    Perform-off passthrough pinned.
 """
 
 import socket
@@ -504,6 +519,338 @@ class TestWatchdogReviveWhenDown(EnvoyWatchdogBase):
         self.assertEqual(
             self.envoy._startingTicks, 0,
             'The forced restart must reset _startingTicks')
+
+
+class TestWatchdogPerformMode(EnvoyWatchdogBase):
+    """Perform Mode idles the watchdog and refuses Start() (v6.0.169 fix).
+
+    _enterPerformMode Stop()s the server but deliberately leaves Envoyenable
+    True (config.json integrity), so enabled-but-dead is the EXPECTED state
+    during a show. Pre-fix, the watchdog classified 'Perform Mode' as settled,
+    probed the dead socket, revived Envoy ~4-12s after Perform entry, and
+    clobbered the status readout with 'Reviving (watchdog)...'. The thread-exit
+    hooks (_onServerSuccess/_onServerError) already guarded on _performMode;
+    these tests pin the watchdog + Start() to the same authority.
+
+    The Perform signal is stubbed by patching the instance's
+    _performModeActive -- NEVER by toggling the live Performmode par: with the
+    fix in place a real Perform entry severs MCP with no command path back,
+    and the standing rule forbids recovering by killing/restarting TD.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # Record revive calls instead of running the real revive body.
+        self._revives = []
+        self._patch(self.envoy, '_reviveDeadServer',
+                    lambda was_running: self._revives.append(was_running))
+        # Sandbox-scoped Perform stub, flippable mid-test for the exit cases.
+        self._perform = {'on': True}
+        self._patch(self.envoy, '_performModeActive',
+                    lambda: self._perform['on'])
+
+    def test_perform_on_dead_socket_idles_no_accrual_no_revive(self):
+        """Perform on + server stopped: no probe, no dead-tick accrual, no
+        revive -- the enabled-but-dead state is expected, not an outage."""
+        live_gen = self.embody.fetch('_watchdog_gen', 1)
+        self.embody.par.Envoyenable = 1          # Perform leaves this True
+        self.embody.par.Envoystatus = 'Perform Mode'
+        self.embody.store('envoy_running', False)  # Stop() cleared it
+        self.envoy._starting = False
+        self.envoy._deadTicks = 1                # one short of the >=2 threshold
+        self.envoy._startingTicks = 3
+        self._patch(self.envoy, '_probeAlive',
+                    lambda: (_ for _ in ()).throw(
+                        AssertionError('probe must not run during Perform Mode')))
+
+        self.envoy._watchdogTick(live_gen)
+
+        self.assertEqual(
+            len(self._revives), 0,
+            'Perform Mode must never take the dead-socket revive path')
+        self.assertEqual(
+            self.envoy._deadTicks, 0,
+            'Perform Mode must reset _deadTicks, never accrue them')
+        self.assertEqual(
+            self.envoy._startingTicks, 0,
+            'Perform Mode must reset _startingTicks')
+
+    def test_perform_on_status_readout_not_clobbered(self):
+        """Repeated ticks during Perform must leave the 'Perform Mode' status
+        readout untouched and schedule no Start() -- pre-fix the second tick
+        overwrote it with 'Reviving (watchdog)...'. The REAL _reviveDeadServer
+        is exposed for this test (the class stub is removed) so the status
+        assertion has teeth: were the Perform gate absent, the real revive
+        body would flip the status (panel finding -- with the stub in place
+        this assertion could never fail)."""
+        delattr(self.envoy, '_reviveDeadServer')   # expose the real body
+        self.envoy._last_revive_time = 0.0         # cooldown must not mask it
+        live_gen = self.embody.fetch('_watchdog_gen', 1)
+        self.embody.par.Envoyenable = 1
+        self.embody.par.Envoystatus = 'Perform Mode'
+        self.embody.store('envoy_running', False)
+        self.envoy._starting = False
+        self.envoy._deadTicks = 0
+
+        for _ in range(3):                       # > the pre-fix 2-tick fuse
+            self.envoy._watchdogTick(live_gen)
+
+        self.assertEqual(
+            str(self.embody.par.Envoystatus.eval()), 'Perform Mode',
+            "The 'Perform Mode' status readout must survive watchdog ticks")
+        self.assertEqual(
+            self._start_schedule_count(), 0,
+            'No Start() may be scheduled while Perform Mode is active')
+        self.assertEqual(
+            self.envoy._deadTicks, 0,
+            'Perform ticks must keep resetting _deadTicks (idle branch)')
+
+    def test_perform_off_dead_socket_still_revives(self):
+        """REGRESSION: the shipped enabled-but-down revive (a save-wedge /
+        zombie-socket incident fix) must keep working when Perform is off."""
+        self._perform['on'] = False
+        live_gen = self.embody.fetch('_watchdog_gen', 1)
+        self.embody.par.Envoyenable = 1
+        self.embody.par.Envoystatus = 'Running on port 9872'
+        self.embody.store('envoy_running', True)
+        self.envoy._starting = False
+        self.envoy._deadTicks = 1                # one short of the >=2 threshold
+        self._patch(self.envoy, '_probeAlive', lambda: False)
+
+        self.envoy._watchdogTick(live_gen)
+
+        self.assertEqual(
+            len(self._revives), 1,
+            'With Perform off, a dead socket reaching the 2-tick threshold '
+            'must still revive -- the Perform gate must not break self-healing')
+
+    def test_start_refused_during_perform(self):
+        """A queued Start() (revive/restart armed before Perform entry) landing
+        mid-show must refuse with a clear log and mutate nothing."""
+        self._perform['on'] = True
+        self.embody.par.Envoyenable = 1          # master switch alone must not admit it
+        starting_before = self.envoy._starting
+
+        self.envoy.Start()
+
+        self.assertTrue(
+            any('Perform Mode' in msg and level == 'WARNING'
+                for msg, level in self._logs),
+            'The Perform-Mode refusal must log a clear WARNING')
+        self.assertEqual(
+            self._start_schedule_count(), 0,
+            'A refused Start() must not schedule anything')
+        self.assertEqual(
+            self.envoy._starting, starting_before,
+            'A refused Start() must not flip _starting')
+
+    def test_perform_exit_start_passes_gate(self):
+        """The Perform-exit restart runs AFTER the live Performmode par is off,
+        so Start() must pass the Perform gate then. envoy_running is pinned
+        True so the safe duplicate-start check exits Start() right after the
+        gate -- proving passthrough without ever spawning a real server."""
+        self._perform['on'] = False
+        self.embody.par.Envoyenable = 1
+        self.embody.store('envoy_running', True)
+        self.envoy._starting = False
+
+        self.envoy.Start()
+
+        self.assertFalse(
+            any('Start refused -- Perform Mode' in msg for msg, _lvl in self._logs),
+            'With Perform off, Start() must not trip the Perform refusal')
+        self.assertTrue(
+            any('duplicate Start ignored' in msg for msg, _lvl in self._logs),
+            'Start() must have reached the duplicate-start check -- proof it '
+            'passed the Perform gate and took the normal path')
+
+    def test_watchdog_resumes_duty_after_perform_exit(self):
+        """A tick during Perform idles; once Perform ends, the same loop must
+        resume normal revive duty (dead-tick accrual and the 2-tick revive)."""
+        live_gen = self.embody.fetch('_watchdog_gen', 1)
+        self.embody.par.Envoyenable = 1
+        self.embody.par.Envoystatus = 'Perform Mode'
+        self.embody.store('envoy_running', True)
+        self.envoy._starting = False
+        self.envoy._deadTicks = 0
+        self._patch(self.envoy, '_probeAlive', lambda: False)
+
+        self.envoy._watchdogTick(live_gen)       # performing -> idle
+        self.assertEqual(len(self._revives), 0)
+        self.assertEqual(self.envoy._deadTicks, 0)
+
+        # Perform exits; the status settles back to a running readout.
+        self._perform['on'] = False
+        self.embody.par.Envoystatus = 'Running on port 9872'
+
+        self.envoy._watchdogTick(live_gen)       # dead tick 1 -- below threshold
+        self.assertEqual(
+            len(self._revives), 0,
+            'The first post-Perform dead tick must not revive yet (threshold 2)')
+        self.assertEqual(
+            self.envoy._deadTicks, 1,
+            'Post-Perform ticks must accrue _deadTicks again')
+
+        self.envoy._watchdogTick(live_gen)       # dead tick 2 -- revive
+        self.assertEqual(
+            len(self._revives), 1,
+            'The watchdog must resume normal revive duty after Perform exit')
+
+
+class TestPerformModeAuthority(EnvoyWatchdogBase):
+    """The REAL _performModeActive() wire (no stubs in this class).
+
+    Every TestWatchdogPerformMode test stubs the helper, so a silent break in
+    the EnvoyExt -> EmbodyExt._performMode chain (a property rename, a broken
+    ext ref) would return False forever -- reintroducing the shipped bug while
+    the whole suite stays green (panel finding). These pin the two contracts:
+    the helper reads the live authority, and errors read as False (self-healing
+    is never disabled by a broken reference). Read-only: the live Performmode
+    par is never toggled.
+    """
+
+    def test_helper_matches_live_authority(self):
+        self.assertEqual(
+            self.envoy._performModeActive(),
+            bool(self.embody.ext.Embody._performMode),
+            '_performModeActive must read the same live authority as '
+            'EmbodyExt._performMode')
+
+    def test_helper_exception_reads_false(self):
+        """A broken Embody ext / property must read False -- the watchdog
+        keeps self-healing rather than idling forever (fail-open toward
+        liveness; the CLASS property is swapped for a raiser and restored)."""
+        embody_cls = type(self.embody.ext.Embody)
+
+        def _raiser(_self):
+            raise RuntimeError('simulated broken _performMode wire')
+
+        self._patch(embody_cls, '_performMode', property(_raiser))
+
+        self.assertFalse(
+            self.envoy._performModeActive(),
+            'An exception in the Perform authority chain must read as False')
+
+
+class TestPerformModePollGates(EnvoyWatchdogBase):
+    """Perform gates on the three startup polls (panel finding, v6.0.169).
+
+    A start already inside its startup window when Perform Mode is entered
+    used to complete mid-show: _enterPerformMode's Stop() no-ops while
+    envoy_running is False (the whole window), and _pollImportGate /
+    _pollBootstrap / _pollStartup finished the start via _continueStart or
+    declared 'Running' -- bypassing the Start() gate entirely. The polls now
+    honor the same Perform authority. Perform is stubbed at the instance,
+    same rules as TestWatchdogPerformMode.
+    """
+
+    _POLL_ATTRS = ('_import_gate_running', '_import_gate_result',
+                   '_bootstrapping', '_bootstrap_result',
+                   '_startup_event', '_startup_deadline', '_runtime_port',
+                   '_last_start_time')   # the declare-Running branch stamps it
+
+    def setUp(self):
+        super().setUp()
+        self._perform = {'on': True}
+        self._patch(self.envoy, '_performModeActive',
+                    lambda: self._perform['on'])
+        self._continues = []
+        self._patch(self.envoy, '_continueStart',
+                    lambda git_root: self._continues.append(git_root))
+        self._saved_poll_attrs = {
+            name: getattr(self.envoy, name, None) for name in self._POLL_ATTRS}
+
+    def tearDown(self):
+        for name, val in self._saved_poll_attrs.items():
+            setattr(self.envoy, name, val)
+        super().tearDown()
+
+    def test_import_gate_poll_aborts_when_performing(self):
+        self.embody.par.Envoyenable = 1
+        self.embody.par.Envoystatus = 'Perform Mode'
+        self.envoy._import_gate_running = True
+        self.envoy._import_gate_result = (True, 'ok')
+
+        self.envoy._pollImportGate('no-git', {'site_packages': ''})
+
+        self.assertEqual(
+            len(self._continues), 0,
+            'A warmed import gate must NOT finish the start during Perform')
+        self.assertFalse(
+            self.envoy._import_gate_running,
+            'The poll must still clear its running flag')
+        self.assertEqual(
+            str(self.embody.par.Envoystatus.eval()), 'Perform Mode',
+            'The abort must leave the Perform Mode readout alone')
+
+    def test_bootstrap_poll_aborts_when_performing(self):
+        self.embody.par.Envoyenable = 1
+        self.embody.par.Envoystatus = 'Perform Mode'
+        self.envoy._bootstrapping = True
+        self.envoy._bootstrap_result = (True, [], True, '')
+
+        self.envoy._pollBootstrap('no-git',
+                                  {'site_packages': '', 'venv_dir': ''})
+
+        self.assertEqual(
+            len(self._continues), 0,
+            'A finished dependency install must NOT finish the start during '
+            'Perform')
+        self.assertFalse(
+            self.envoy._bootstrapping,
+            'The poll must still clear its bootstrapping flag')
+        self.assertEqual(
+            str(self.embody.par.Envoystatus.eval()), 'Perform Mode',
+            'The abort must leave the Perform Mode readout alone')
+
+    def test_startup_poll_tears_down_bound_server_when_performing(self):
+        """The worker bound while Perform was entering: the poll must shut the
+        newborn down (signal ITS shutdown event) instead of declaring
+        'Running' over the Perform readout."""
+        self.embody.par.Envoyenable = 1
+        self.embody.par.Envoystatus = 'Perform Mode'
+        self.embody.store('envoy_running', False)
+        self.envoy._starting = True
+        bound = threading.Event()
+        bound.set()
+        self.envoy._startup_event = bound
+
+        self.envoy._pollStartup(self.envoy._server_gen)
+
+        self.assertTrue(
+            self.envoy.shutdown_event.is_set(),
+            'The just-bound worker must be signaled to shut down')
+        self.assertFalse(
+            self.envoy._starting,
+            'The teardown must close the startup window')
+        self.assertFalse(
+            self.embody.fetch('envoy_running', False, search=False),
+            "The teardown must never declare envoy_running")
+        self.assertEqual(
+            str(self.embody.par.Envoystatus.eval()), 'Perform Mode',
+            "The teardown must not clobber the 'Perform Mode' readout")
+
+    def test_startup_poll_declares_running_when_not_performing(self):
+        """Passthrough regression: with Perform off, a confirmed bind must
+        still declare Running exactly as shipped."""
+        self._perform['on'] = False
+        self.embody.par.Envoyenable = 1
+        self.embody.store('envoy_running', False)
+        self.envoy._starting = True
+        self.envoy._runtime_port = 65123
+        bound = threading.Event()
+        bound.set()
+        self.envoy._startup_event = bound
+
+        self.envoy._pollStartup(self.envoy._server_gen)
+
+        self.assertTrue(
+            self.embody.fetch('envoy_running', False, search=False),
+            'A confirmed bind with Perform off must declare envoy_running')
+        self.assertEqual(
+            str(self.embody.par.Envoystatus.eval()), 'Running on port 65123',
+            'A confirmed bind with Perform off must set the Running readout')
+        self.assertFalse(self.envoy._starting)
 
 
 class TestProbeAlive(EnvoyWatchdogBase):

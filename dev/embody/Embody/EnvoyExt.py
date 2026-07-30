@@ -4357,6 +4357,16 @@ class EnvoyExt:
         if not self.ownerComp.par.Envoyenable.eval():
             self._log('Start ignored -- Envoy is disabled', 'DEBUG')
             return
+        # Perform Mode suspends Envoy WITHOUT touching Envoyenable (config.json
+        # integrity), so the master-switch gate above cannot catch a queued
+        # Start: a revive/restart armed before Perform entry would otherwise
+        # bring the server back mid-show. Defense-in-depth beside the watchdog's
+        # own Perform idle gate. The Perform-exit restart is unaffected --
+        # _exitPerformMode runs after the live Performmode par is already off,
+        # so its delayed Start() reads False here.
+        if self._performModeActive():
+            self._log('Start refused -- Perform Mode is active', 'WARNING')
+            return
         if self.ownerComp.fetch('envoy_running', False) or self._starting:
             self._log('Server already running/starting (duplicate Start ignored)',
                       'DEBUG')
@@ -4506,6 +4516,21 @@ class EnvoyExt:
                 self.ownerComp.par.Envoystatus = 'Disabled'
             return
 
+        # Perform Mode may have been entered while the gate warmed. Its Stop()
+        # no-ops on a not-yet-bound start (envoy_running is still False), so
+        # finishing the start here would bring the server up mid-show behind
+        # the Start()/watchdog Perform gates. Leave status alone --
+        # _enterPerformMode owns the 'Perform Mode' readout.
+        if self._performModeActive():
+            if ok:
+                # The warm-up itself succeeded -- keep it, so the
+                # post-Perform start takes the fast path instead of
+                # re-running the multi-second import gate.
+                sys._envoy_import_gate_ok = True
+            self._log('Perform Mode entered during Python environment prep '
+                      '-- not starting.', 'DEBUG')
+            return
+
         if not ok:
             # 'Error...' statuses idle the liveness watchdog, so a refusal
             # (e.g. restart-required after an on-disk upgrade) is calm: each
@@ -4613,6 +4638,14 @@ class EnvoyExt:
             if not str(self.ownerComp.par.Envoystatus.eval()).startswith(
                     ('Error', 'Disabled', 'Off')):
                 self.ownerComp.par.Envoystatus = 'Disabled'
+            return
+
+        # Perform Mode entered while deps installed: same reasoning as
+        # _pollImportGate -- Stop() cannot catch a start that has not bound
+        # yet, so refuse to finish it here. Status stays 'Perform Mode'.
+        if self._performModeActive():
+            self._log('Perform Mode entered during dependency install '
+                      '-- not starting.', 'DEBUG')
             return
 
         if not ok:
@@ -4836,6 +4869,33 @@ class EnvoyExt:
             return
         ev = self._startup_event
         if ev is not None and ev.is_set():
+            if self._performModeActive():
+                # The worker bound while Perform Mode was entering:
+                # _enterPerformMode's Stop() no-op'd (envoy_running was still
+                # False for the whole startup window), so tear the newborn
+                # server down here instead of declaring 'Running' over the
+                # 'Perform Mode' readout and leaving it up all show. The
+                # worker's exit callback sees Perform and skips the restart.
+                # After Perform exits, recovery is the watchdog's revive
+                # (~8s): _enterPerformMode snapshotted envoy_was_running as
+                # False (the bind had not confirmed), so the exit path
+                # schedules no Start of its own.
+                self._starting = False
+                # The bind DID confirm -- keep the healthy-port proof: drop
+                # any blacklist entry a stale late error callback left, same
+                # as the declare-Running branch below (round-2 panel note).
+                bad = getattr(sys, '_envoy_bad_bind_ports', None)
+                if bad:
+                    bad.pop(self._runtime_port, None)
+                try:
+                    self.shutdown_event.set()
+                except Exception:
+                    pass
+                self._log(
+                    'Perform Mode entered during startup -- shutting the '
+                    'just-bound server down instead of declaring Running',
+                    'WARNING')
+                return
             # Confirmed bound + serving.
             self._starting = False
             # A real bind proves the port is healthy -- drop any blacklist
@@ -4917,9 +4977,18 @@ class EnvoyExt:
             # _init_complete flags. A project.save() clears _init_complete and a
             # reinit resets _starting, and keying off them is exactly what wedged a
             # dead server forever -- the watchdog went idle and never revived.
-            # Only two idle cases: disabled, or a one-time deps install (legit
-            # long, never interrupt). An explicit Start 'Error' is also left alone
-            # so a hard failure (e.g. broken venv) is not hammered every tick.
+            # Only three idle cases: disabled, Perform Mode, or a one-time deps
+            # install (legit long, never interrupt). An explicit Start 'Error' is
+            # also left alone so a hard failure (e.g. broken venv) is not hammered
+            # every tick. Perform Mode is idle because _enterPerformMode Stop()s
+            # the server deliberately while LEAVING Envoyenable True (config.json
+            # integrity), so enabled-but-dead is the EXPECTED state during a show;
+            # without this gate the watchdog revived Envoy ~4-12s into every
+            # performance and clobbered the 'Perform Mode' status readout with
+            # 'Reviving (watchdog)...'. Gate on the live par (the same authority
+            # the thread-exit hooks use), NEVER the status string -- Stop() and
+            # the hooks overwrite status text.
+            performing = self._performModeActive()
             installing = status.startswith('Installing')
             # 'Preparing' is the fast-path import gate warming the MCP Python
             # stack on a worker thread -- a HEALTHY in-flight startup with no
@@ -4932,7 +5001,7 @@ class EnvoyExt:
             # without finishing the start) still self-heals below.
             transitional = status.startswith(
                 ('Starting', 'Restarting', 'Reviving', 'Preparing'))
-            if not enabled or installing or status.startswith('Error'):
+            if not enabled or performing or installing or status.startswith('Error'):
                 self._deadTicks = 0
                 self._startingTicks = 0
             elif transitional:
@@ -5008,6 +5077,20 @@ class EnvoyExt:
                 sock.close()
             except Exception:
                 pass
+
+    def _performModeActive(self) -> bool:
+        """True while Embody's Perform Mode is suspending Envoy.
+
+        Single authority: Embody's _performMode property (the live Performmode
+        par) -- the same signal the thread-exit restart hooks consult. Never
+        key off the status string: Stop(), the hooks, and the watchdog itself
+        all overwrite status text. Errors read as False so a broken Embody ext
+        reference can never disable self-healing.
+        """
+        try:
+            return bool(self.ownerComp.ext.Embody._performMode)
+        except Exception:
+            return False
 
     def _reviveDeadServer(self, was_running: bool) -> None:
         """Socket is dead while Envoy is enabled and no thread-exit callback fired.
@@ -5733,7 +5816,11 @@ class EnvoyExt:
         self.ownerComp.store('envoy_running', False)
         self.current_task = None
         self._starting = False
-        if self.ownerComp.par.Envoyenable.eval() and not self.ownerComp.ext.Embody._performMode:
+        # _performModeActive is the single Perform authority (errors read as
+        # False, so a broken ext ref degrades to a restart -- self-healing
+        # preserved -- instead of raising out of the hook and scheduling
+        # nothing).
+        if self.ownerComp.par.Envoyenable.eval() and not self._performModeActive():
             self._scheduleRestart('Server exited unexpectedly')
         # If Envoyenable is already off, Stop() set the status -- don't overwrite
 
@@ -5755,7 +5842,7 @@ class EnvoyExt:
             bad = getattr(sys, '_envoy_bad_bind_ports', {})
             bad[port] = time.time()
             sys._envoy_bad_bind_ports = bad
-        if self.ownerComp.par.Envoyenable.eval() and not self.ownerComp.ext.Embody._performMode:
+        if self.ownerComp.par.Envoyenable.eval() and not self._performModeActive():
             self._scheduleRestart(f'Server error: {error}')
 
     def _scheduleRestart(self, reason: str):

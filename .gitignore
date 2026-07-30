@@ -74,3 +74,6 @@ dev/_promo*
 .embody/*
 !.embody/project.json
 dev/embody/ext-diet-baseline/
+
+# Convoy planning documents -- internal, not for publication (CONVOY_PLAN.md D-3)
+dev/embody/CONVOY_*.md

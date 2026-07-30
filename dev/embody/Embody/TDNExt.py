@@ -476,7 +476,12 @@ class TDNExt:
 		try:
 			tmp_fd, tmp_path = tempfile.mkstemp(
 				dir=str(target.parent), suffix='.tdn.tmp')
-			with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
+			# newline: os.fdopen defaults to newline=None, which translates
+			# every line feed to os.linesep -- CRLF on Windows. .gitattributes
+			# declares *.tdn eol=lf, so without this every re-export flipped a
+			# committed .tdn to CRLF. Reads use universal newlines, so existing
+			# CRLF files still parse -- no migration needed.
+			with os.fdopen(tmp_fd, 'w', encoding='utf-8', newline='\n') as f:
 				tmp_fd = None  # os.fdopen takes ownership of the fd
 				f.write(content)
 				f.flush()

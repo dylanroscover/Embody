@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1026
-generator: Embody/6.0.168
+build: 1047
+generator: Embody/6.0.169
 td_build: 099.2025.33070
-source_file: Embody-6.168.toe
-exported_at: '2026-07-29T22:05:46Z'
+source_file: Embody-6.169.toe
+exported_at: '2026-07-30T09:45:34Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -292,7 +292,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 22:03:11 UTC
+    value: Saved 09:43:13 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -724,7 +724,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.168
+    value: 6.0.169
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -741,7 +741,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 1026
+    value: 1047
   - name: Github
     style: Pulse
     label: GitHub
@@ -752,7 +752,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-29 22:05:46 UTC
+    value: 2026-07-30 09:45:34 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
