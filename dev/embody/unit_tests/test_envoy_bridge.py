@@ -52,6 +52,25 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 # Argument Parsing
 # =====================================================================
 
+def _slow_clock(start, step=0.01):
+    """Callable stand-in for time.monotonic that rises `step` per call.
+
+    NEVER a finite side_effect list: a global time.monotonic patch is
+    visible to EVERY thread in the process (the in-process Envoy/uvicorn
+    worker calls it constantly), and stray consumers exhaust a finite
+    iterator into StopIteration -- observed once mid full-suite run. The
+    slow rise keeps timeout deadlines far away; tests using it must drive
+    their exit through mocks, never through this clock hitting a deadline.
+    """
+    state = {'t': start}
+
+    def _tick():
+        state['t'] += step
+        return state['t']
+
+    return _tick
+
+
 class TestBridgeParseArgs(EmbodyTestCase):
 
     def test_default_port(self):
@@ -1725,43 +1744,68 @@ class TestBridgeMetaTools(EmbodyTestCase):
         self.assertTrue(success)
         self.assertIn('already exited', msg)
 
+    # The quit_td tests inject clock/sleep (quit_td grew injectable params
+    # for exactly this) and key their aliveness mocks by PID + state, never
+    # by absolute call counts. Both lessons are from full-suite failures:
+    # a global time.monotonic patch fed the in-process uvicorn threads,
+    # which exhausted finite side_effect lists into StopIteration; and a
+    # concurrent bridge caller consumed a call-count-keyed aliveness mock,
+    # making quit_td see 'already exited' before it ever signaled.
+
     def test_quit_td_graceful_exit(self):
-        """Graceful quit succeeds when process exits promptly."""
-        call_count = [0]
+        """Graceful quit succeeds when the process exits promptly."""
+        seen = {'n': 0}
+
         def mock_alive(pid):
-            call_count[0] += 1
-            # First call: alive (initial check), second call: dead (after quit)
-            return call_count[0] <= 1
-        # os.kill MUST be patched: on macOS/Linux the graceful branch now
-        # sends a pid-scoped SIGTERM (panel finding -- without this patch a
-        # POSIX test run would signal whatever real process holds pid 12345).
+            if pid != 12345:
+                return False        # stray concurrent caller -- not ours
+            seen['n'] += 1
+            return seen['n'] <= 1   # alive at entry, dead after the request
+
+        # os.kill stays patched: on macOS/Linux the graceful branch sends a
+        # pid-scoped SIGTERM (a POSIX run would otherwise signal whatever
+        # real process holds pid 12345).
         with patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
              patch('subprocess.run'), \
-             patch('os.kill'), \
-             patch('time.sleep'), \
-             patch('time.monotonic', side_effect=[100, 100, 101]):
-            success, msg = bridge.quit_td(12345)
+             patch('os.kill'):
+            success, msg = bridge.quit_td(
+                12345, clock=_slow_clock(100.0), sleep=lambda s: None,
+                platform='win32')
         self.assertTrue(success)
         self.assertIn('gracefully', msg)
 
     def test_quit_td_force_kill(self):
-        """Force kill when graceful quit times out."""
-        call_count = [0]
+        """Force kill when the graceful quit times out."""
+        state = {'killed': False}
+
         def mock_alive(pid):
-            call_count[0] += 1
-            # Alive through graceful period (calls 1-3), dead after force kill (call 4)
-            return call_count[0] <= 3
-        # monotonic calls: deadline calc, then loop iterations, then past deadline
-        # deadline = 100 + 15 = 115
-        # Loop: check 105 (<115, iter), check 110 (<115, iter), check 116 (>=115, exit)
-        # is_process_alive calls: 1 (initial), 2 (loop iter 1), 3 (loop iter 2), 4 (post-kill)
-        mono_values = [100, 105, 110, 116]
+            if pid != 12345:
+                return False
+            return not state['killed']   # alive until the FORCE action
+
+        def fake_run(args, **_kw):
+            # taskkill /F is the Windows force path; plain taskkill is the
+            # graceful request and must not count as the kill.
+            if '/F' in args:
+                state['killed'] = True
+            return MagicMock()
+
+        import signal
+
+        def fake_kill(_pid, sig):
+            if sig == signal.SIGKILL:    # POSIX force path; SIGTERM is not
+                state['killed'] = True
+
+        # Fast clock (step 5.0): the 15s deadline is exceeded within a few
+        # loop iterations; the loop exit is time-driven by the INJECTED
+        # clock, which no other thread can touch.
         with patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
-             patch('subprocess.run'), \
-             patch('os.kill'), \
-             patch('time.sleep'), \
-             patch('time.monotonic', side_effect=mono_values):
-            success, msg = bridge.quit_td(12345, graceful_timeout=15)
+             patch('subprocess.run', side_effect=fake_run), \
+             patch('os.kill', side_effect=fake_kill):
+            success, msg = bridge.quit_td(
+                12345, graceful_timeout=15,
+                clock=_slow_clock(100.0, step=5.0), sleep=lambda s: None,
+                platform='win32')
         self.assertTrue(success)
         self.assertIn('force-killed', msg)
 
@@ -3367,19 +3411,28 @@ class TestQuitTdPidScoping(EmbodyTestCase):
         pass a source grep; it cannot pass this)."""
         import signal as _signal
         kills = []
-        call_count = [0]
+        seen = {'n': 0}
 
         def mock_alive(pid):
-            call_count[0] += 1
-            return call_count[0] <= 1     # alive at entry, dead after quit
+            if pid != 12345:
+                return False        # stray concurrent caller -- not ours
+            seen['n'] += 1
+            return seen['n'] <= 1   # alive at entry, dead after SIGTERM
 
-        with patch('envoy_bridge.sys') as mock_sys, \
-             patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
-             patch('os.kill', side_effect=lambda p, s: kills.append((p, s))), \
-             patch('time.sleep'), \
-             patch('time.monotonic', side_effect=[100, 100, 101]):
-            mock_sys.platform = 'darwin'
-            success, _msg = bridge.quit_td(12345)
+        # Everything quit_td needs is INJECTED (clock/sleep/platform) --
+        # no time patching (uvicorn threads exhausted a finite list into
+        # StopIteration) and no module-sys mocking (a mocked platform
+        # silently failed to take in a full run and a REAL
+        # `taskkill /PID 12345` escaped to the host). subprocess.run is
+        # patched as pure belt-and-suspenders: if platform routing ever
+        # regresses, nothing real executes. os.kill is the recorder; a
+        # stray concurrent os.kill would ADD entries and fail loudly.
+        with patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
+             patch('subprocess.run'), \
+             patch('os.kill', side_effect=lambda p, s: kills.append((p, s))):
+            success, _msg = bridge.quit_td(
+                12345, clock=_slow_clock(100.0), sleep=lambda s: None,
+                platform='darwin')
 
         self.assertTrue(success)
         self.assertEqual(

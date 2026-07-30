@@ -110,6 +110,11 @@ SKIP_PARAMS = {
 
 # Embody-managed About page parameters -- excluded from TDN export
 # because they are reconstructed from externalizations.tsv at import time.
+# This trio is the metadata stamp Embody writes on EVERY externalized comp;
+# a page that is only the stamp carries no authored content. The Embody
+# COMP's own, larger About page is NOT dropped (its definitions and help
+# text belong in the diffable record) -- only its churning machine-written
+# values are omitted, via EmbodyExt._TDN_VALUE_OMIT_PARS (A-50).
 _EMBODY_ABOUT_PARS = {'Build', 'Date', 'Touchbuild'}
 
 # Built-in parameter styles to skip (actions, not state)
@@ -2969,6 +2974,14 @@ class TDNExt:
 		sequences = {}
 		seen = set()
 
+		# Runtime-status sequences (A-50): same registry the custom-par
+		# exporter consults, scoped by the comp's global OP shortcut.
+		try:
+			transient_names = self.ownerComp.ext.Embody._transientParNames(
+				target)
+		except Exception:
+			transient_names = frozenset()
+
 		try:
 			all_seqs = list(target.seq)
 		except Exception as e:
@@ -2984,6 +2997,18 @@ class TDNExt:
 			seq_data = self._exportSequenceBlocks(target, seq)
 			# Truthiness, not `is not None`: an empty list is unimportable
 			# (TD refuses numBlocks=0), so it must never reach the file.
+			if seq_data and seq.name in transient_names:
+				# Registered runtime-status sequence (A-50): ship no
+				# session values. At the type-default block count the
+				# whole key is omitted (default-omission, the amendment's
+				# 'so the sequence is omitted'); a non-default count keeps
+				# [{}]*len -- list length is the import-side numBlocks and
+				# an empty list would mean numBlocks=0, which TD refuses.
+				if (len(seq_data)
+						== self._getDefaultSequenceBlockCount(target, seq)):
+					seq_data = None
+				else:
+					seq_data = [{} for _ in seq_data]
 			if seq_data:
 				sequences[seq.name] = seq_data
 
@@ -3089,6 +3114,24 @@ class TDNExt:
 		if not hasattr(target, 'customPages'):
 			return {}
 
+		# Runtime-status scrub (A-50): registered {name: resting} for THIS
+		# comp plus the TDN-only value-omit names -- both scoped by the
+		# comp's global OP shortcut, so every user comp gets empty sets.
+		# Registered values are session state ('Testing', 'Saved <time>',
+		# 'Running on port N'), never authored config: the .tdn records the
+		# RESTING value instead (never par.default -- Status's default ''
+		# is a state the enable machinery cannot leave). Omit names are
+		# machine-written metadata whose value key is dropped while the
+		# definition ships. One registry, one lookup (the registries live
+		# on EmbodyExt; never cache the ext reference).
+		try:
+			embody_ext = self.ownerComp.ext.Embody
+			transient = embody_ext._transientParNames(target)
+			omit_names = embody_ext._tdnValueOmitNames(target)
+		except Exception:
+			transient = {}
+			omit_names = frozenset()
+
 		pages_dict = {}
 		seen_names = set()
 
@@ -3134,12 +3177,41 @@ class TDNExt:
 							# the `sequences` key, not `value` here
 							par_def.pop('value', None)
 							par_def.pop('values', None)
+					par_name = par_def.get('name')
+					if par_name in transient or par_name in omit_names:
+						# Runtime status / machine-written metadata (A-50):
+						# the definition ships (style/label/help), the
+						# session's value does not. Registered status pars
+						# record their RESTING value; omit names drop the
+						# value key outright. Guards: the '='/'~' shorthand
+						# encodes expression/bind mode INTO the value key --
+						# scrubbing it would destroy the reference (the
+						# ExportPortableTox scrub refuses the same); tuplet
+						# 'values' lists are out of the registry's contract
+						# and are left untouched.
+						existing = par_def.get('value')
+						is_ref = (isinstance(existing, str)
+						          and existing[:1] in ('=', '~'))
+						if not is_ref and 'values' not in par_def:
+							if par_name in transient:
+								resting = transient[par_name]
+								if resting is None:
+									par_def.pop('value', None)
+								else:
+									par_def['value'] = resting
+							else:
+								par_def.pop('value', None)
 					page_pars.append(par_def)
 
 			if page_pars:
 				pages_dict[page.name] = page_pars
 
-		# Filter Embody-managed About pages (metadata lives in externalizations.tsv)
+		# Filter Embody-managed About pages (metadata lives in
+		# externalizations.tsv): a page that is ONLY the per-comp metadata
+		# stamp carries no authored content. A page with anything more --
+		# including the Embody COMP's own About page -- keeps its
+		# definitions; churning stamp VALUES are handled by the value-omit
+		# registry above, never by deleting definitions.
 		if 'About' in pages_dict:
 			about_par_names = {d.get('name') for d in pages_dict['About']}
 			if about_par_names <= _EMBODY_ABOUT_PARS:

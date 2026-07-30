@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1047
+build: 1063
 generator: Embody/6.0.169
 td_build: 099.2025.33070
 source_file: Embody-6.169.toe
-exported_at: '2026-07-30T09:45:34Z'
+exported_at: '2026-07-30T14:10:20Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -92,7 +92,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Current Embody status (read-only). Shows whether Embody is initialized and running.
-    value: Testing
+    value: Disabled
   Tags:
   - name: Toxtags
     style: Header
@@ -292,7 +292,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 09:43:13 UTC
+    value: Idle
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -434,7 +434,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-    value: Starting...
+    value: Disabled
   Logs:
   - name: Verbose
     style: Toggle
@@ -680,7 +680,7 @@ custom_pars:
     - Always Keep Files
     - Always Delete Files
     help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-    value: delete
+    value: keep
   - name: Toxdropexpr
     style: Menu
     label: Dropped .tox Expression
@@ -695,7 +695,6 @@ custom_pars:
     - Always Clean
     - Always Ignore
     help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
-    value: ignore
   - name: Tdndatsafety
     style: Menu
     label: Content Safety
@@ -741,7 +740,6 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 1047
   - name: Github
     style: Pulse
     label: GitHub
@@ -752,7 +750,6 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-30 09:45:34 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -780,6 +777,7 @@ custom_pars:
     default: Disabled
     readOnly: true
     help: 'Result of the last update check or install: Disabled while Auto-Update is Off (the fresh-install resting state), up to date, a newer version available, download/install progress, or an error summary (read-only).'
+    value: Disabled
 parameters:
   w: ~op('./manager').par.w
   h: ~op('./manager').par.h

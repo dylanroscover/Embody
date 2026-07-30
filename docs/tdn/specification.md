@@ -344,6 +344,20 @@ The `custom_pars` object maps page names to arrays of parameter definitions. Unl
 !!! note
     Only COMPs can have custom parameters in TouchDesigner.
 
+!!! note "Transient status parameters (Embody-managed COMPs)"
+    Parameters registered as runtime status readouts on Embody-managed
+    COMPs (registry: `EmbodyExt._TRANSIENT_STATUS_PARS`, scoped by the
+    COMP's global OP shortcut) are exported with their declared **resting
+    value** instead of the session value -- a status like
+    `Running on port 9872` is machine state, not authored config, and
+    would otherwise churn in version control on every export. Companion
+    registry `_TDN_VALUE_OMIT_PARS` drops the `value` key of
+    machine-written metadata stamps (definitions still ship). Expression
+    and bind values (the `=`/`~` shorthand) are never replaced. A
+    registered parameter **sequence** exports no block values; its block
+    count ships only when it differs from the type default. User COMPs
+    are never affected -- the registries key on global OP shortcuts.
+
 ### Page-Grouped Format
 
 Custom parameters are grouped by page name. Each page contains an array of parameter definitions:

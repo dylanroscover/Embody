@@ -3798,6 +3798,153 @@ class EmbodyExt:
             self.Log(f'_purgeExternalizationTracking failed for {op_path}: {e}',
                      'DEBUG')
 
+    # A-50 (Convoy plan 5.1): custom parameters whose VALUES are runtime
+    # status readouts, never authored state. ONE declarative source, TWO
+    # consumers: TDN export writes the RESTING value in place of the
+    # session value (the v6.0.169 release commit itself baked
+    # 'value: Testing' into git -- an autosave checkpoint caught the
+    # Status par mid-test-run between diff-read and staging), and
+    # ExportPortableTox resets them around the save so released .tox
+    # files never carry one session's status text. Keyed by the owning
+    # comp's GLOBAL OP SHORTCUT so a user parameter that merely shares a
+    # name ('Status' on their own comp) is never touched.
+    #
+    # Values are per-par RESTING states, NEVER par.default: Status's
+    # default is '' -- a state the enable state-machine cannot leave
+    # (UpdateHandler gates on == 'Disabled', the toolbar on ==
+    # 'Enabled'), so shipping it would brick the enable path on cached
+    # installs (Opus panel blocker). The restings mirror the ones
+    # execute.py already applies on project open (Disabled/Idle/
+    # Disabled), keeping the two mechanisms in agreement. A value of
+    # None means "reset to par defaults" and is the only valid entry for
+    # a registered SEQUENCE name (blocks reset to defaults; block COUNT
+    # preserved, never numBlocks=0). Names must be single parameters --
+    # tuplet base names are skipped by every consumer.
+    #
+    # Contract: the registry is the LAST word in every export mode. A
+    # pre_release hook cannot ship a session value for a registered par
+    # -- in live mode the scrub runs after the hook, and in copy mode
+    # the export core scrubs the staged candidate the same way.
+    _TRANSIENT_STATUS_PARS = {
+        'Embody': {
+            'Status': 'Disabled',        # 'Testing'/'Enabled' at runtime
+            'Autosavestatus': 'Idle',    # 'Saved <time> UTC'/'Bypassed'
+            'Envoystatus': 'Disabled',   # 'Running on port N'/'Perform Mode'
+            'Updatestatus': 'Disabled',  # updater state beyond its rest
+        },
+    }
+
+    # TDN-only companion registry: machine-written metadata whose values
+    # churn per save (the About-page stamp the release machinery rewrites).
+    # The .tdn omits their value key -- definitions and help text stay in
+    # the diffable record, and ExportPortableTox does NOT touch them (a
+    # released .tox must carry its real Build/Date).
+    _TDN_VALUE_OMIT_PARS = {
+        'Embody': frozenset({'Build', 'Date'}),
+    }
+
+    @staticmethod
+    def _registryShortcut(comp) -> str:
+        """The comp's global-OP-shortcut par VALUE (the registry key), or ''."""
+        try:
+            return str(comp.par.opshortcut.eval())
+        except Exception:
+            return ''
+
+    def _transientParNames(self, comp) -> dict:
+        """Registered {par_name: resting_value} for `comp`, else empty dict.
+
+        Scoped by the comp's global OP shortcut -- the registry key -- so
+        the scrub can never reach a user parameter that happens to share
+        a registered name.
+        """
+        shortcut = self._registryShortcut(comp)
+        if not shortcut:
+            return {}
+        return self._TRANSIENT_STATUS_PARS.get(shortcut, {})
+
+    def _tdnValueOmitNames(self, comp) -> frozenset:
+        """Registered TDN-value-omit par names for `comp`, else empty."""
+        shortcut = self._registryShortcut(comp)
+        if not shortcut:
+            return frozenset()
+        return self._TDN_VALUE_OMIT_PARS.get(shortcut, frozenset())
+
+    def _scrubTransientPars(self, root) -> list:
+        """Reset registered runtime-status pars to their RESTING values on
+        `root` and every descendant COMP; return a [(par, value)] snapshot
+        so a live-mode export can hand the session its readouts back.
+
+        Constant-mode pars only -- an expression or bind carries no baked
+        value to leak, and resetting it would destroy the reference. A
+        registered sequence (resting None) resets per-block values to
+        defaults but NEVER touches numBlocks. This function never raises:
+        whatever was scrubbed before any failure is always returned, so
+        the caller's restore can undo partial progress.
+        """
+        snapshot = []
+        try:
+            comps = [root] + root.findChildren(type=COMP)
+        except Exception:
+            comps = [root]
+        try:
+            for comp in comps:
+                for name, resting in self._transientParNames(comp).items():
+                    # Per-name containment: a raise must never escape with
+                    # pars already reset but the snapshot unreturned.
+                    try:
+                        # Sequence lookup via enumeration, not attribute
+                        # access -- TDNExt documents the attribute accessor
+                        # as unreliable (POPs); enumeration is the
+                        # discovery path the exporter itself trusts.
+                        seq = None
+                        try:
+                            for s in comp.seq:
+                                if s is not None and s.name == name:
+                                    seq = s
+                                    break
+                        except Exception:
+                            seq = None
+                        if seq is not None:
+                            # Iterating a SequenceBlock yields tuple-like
+                            # ParGroups (their .mode is a TUPLE -- comparing
+                            # it to ParMode.CONSTANT silently never
+                            # matches); unwrap to the individual Pars.
+                            for block in seq.blocks:
+                                for group in block:
+                                    for p in group:
+                                        if (p.mode == ParMode.CONSTANT
+                                                and p.val != p.default):
+                                            snapshot.append((p, p.val))
+                                            p.val = p.default
+                            continue
+                        p = getattr(comp.par, name, None)
+                        if p is None:
+                            continue
+                        target_val = (p.default if resting is None
+                                      else resting)
+                        if p.mode == ParMode.CONSTANT and p.val != target_val:
+                            snapshot.append((p, p.val))
+                            p.val = target_val
+                    except Exception as e:
+                        self.Log(
+                            f'Transient scrub skipped {comp.path}.{name}: '
+                            f'{e}', 'WARNING')
+        except Exception as e:
+            # Outer containment: even a failure between names/comps must
+            # hand back the partial snapshot for restore.
+            self.Log(f'Transient scrub aborted mid-walk: {e}', 'WARNING')
+        return snapshot
+
+    def _restoreTransientPars(self, snapshot) -> None:
+        """Reapply the values _scrubTransientPars captured (always runs,
+        success or failure -- a live session must get its readouts back)."""
+        for p, val in snapshot:
+            try:
+                p.val = val
+            except Exception:
+                pass
+
     def ExportPortableTox(self, target: 'OP' = None,
                           save_path: Optional[str] = None,
                           run_hooks: bool = True,
@@ -3941,6 +4088,7 @@ class EmbodyExt:
         # restore below and the post_release hook ALWAYS get their turn.
         saved_state = []
         saved_tags = []  # list of (op_ref, set_of_removed_tags, path)
+        transient_snapshot = []  # [(par, value)] -- runtime-status scrub (A-50)
         success = False
         try:
             # Phase 1: Collect file references and externalization params to
@@ -4040,6 +4188,11 @@ class EmbodyExt:
                         f"Failed to strip tags from {op_path}: {e}",
                         "WARNING")
 
+            # Phase 2c: Reset runtime-status pars (A-50) -- 'Testing',
+            # 'Saved <time>', 'Running on port N' must never ship in a
+            # released artifact. Snapshot taken; Phase 4 always restores.
+            transient_snapshot = self._scrubTransientPars(target)
+
             # Phase 3: Save the .tox.
             target.save(str(save_path))
             try:
@@ -4082,6 +4235,10 @@ class EmbodyExt:
             except Exception as e:
                 self.Log(
                     f"Failed to restore tags on {op_path}: {e}", "WARNING")
+
+        # Restore runtime-status readouts (always -- live-mode exports run
+        # on the session's real comp and must hand its status back).
+        self._restoreTransientPars(transient_snapshot)
 
         # Phase 5: Author's post_release hook -- the reset half of the
         # set/reset contract. Runs whenever pre_release did not abort,
@@ -4378,6 +4535,12 @@ class EmbodyExt:
                     "be fully neutralized.", "ERROR")
                 return False
 
+            # No transient-par scrub here: the export core (the live path
+            # this method delegates to for the candidate) scrubs registered
+            # pars right before the save, in EVERY mode -- the registry is
+            # the last word, and a pre_release hook cannot ship a session
+            # value for a registered par (see _TRANSIENT_STATUS_PARS).
+
             # Capture the copy's hook DATs NOW -- a pre hook that renames
             # itself must not let hook code escape into the artifact.
             cand_hooks = []
@@ -4481,12 +4644,22 @@ class EmbodyExt:
         .eval(), so no cook side effects and a match for what TDN records.
         Embody-managed About-page metadata (Build/Date/Touchbuild) is excluded
         to match TDN export and avoid spurious dirty flags on build bumps.
+        Registered transient status pars and TDN value-omit pars are likewise
+        excluded (constant mode only -- an expression edit must still dirty)
+        for comps where they are registered: the export no longer serializes
+        their session values, so a status flip must not mark the COMP dirty
+        and trigger a byte-identical main-thread re-export.
         """
         skip = {'Build', 'Date', 'Touchbuild'}
+        shortcut = EmbodyExt._registryShortcut(operator)
+        if shortcut:
+            skip |= set(EmbodyExt._TRANSIENT_STATUS_PARS.get(shortcut, ()))
+            skip |= set(EmbodyExt._TDN_VALUE_OMIT_PARS.get(shortcut, ()))
         out = []
         for p in operator.pars():
             try:
-                if p.name in skip or p.isDefault:
+                if (p.name in skip and p.mode.name == 'CONSTANT') \
+                        or p.isDefault:
                     continue
                 mode = p.mode.name
                 if mode == 'EXPRESSION':

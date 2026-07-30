@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 65
-generator: Embody/6.0.168
+build: 69
+generator: Embody/6.0.169
 td_build: 099.2025.33070
 source_file: Embody-6.169.toe
-exported_at: '2026-07-30T09:03:54Z'
+exported_at: '2026-07-30T13:37:01Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -37,7 +37,7 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 1743
+    rows: 719
     cols: 5
   flags:
   - viewer

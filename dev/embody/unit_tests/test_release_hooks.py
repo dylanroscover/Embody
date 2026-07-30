@@ -878,3 +878,406 @@ class TestReleaseAll(EmbodyTestCase):
                     set(), 'artifact must carry no Embody tags')
             finally:
                 loaded.destroy()
+
+
+class TestTransientParScrub(EmbodyTestCase):
+    """A-50 (Convoy plan): the declarative runtime-status par registry and
+    its consumers -- TDN custom-par export records RESTING values (never
+    par.default: Status's default '' is a state the enable machinery
+    cannot leave), the TDN value-omit companion drops machine-stamp values
+    while definitions ship, and ExportPortableTox resets registered pars
+    around the save in EVERY mode (the registry is the last word; hooks
+    cannot ship a session value for a registered par).
+
+    Behavioral tests run against sandbox comps given a throwaway global OP
+    shortcut plus TEMPORARILY patched registry entries. Both class
+    attributes are restored in tearDown even on failure; the live Embody
+    comp's entries are only ever READ. Temp dirs are cleaned in tearDown
+    (addCleanup does not run under this harness) and /sys/quiet is swept
+    of rht_-prefixed staging leftovers.
+    """
+
+    _SHORTCUT = 'Rhtscrub'
+    _RESTING = 'Testresting'
+
+    def setUp(self):
+        super().setUp()
+        self._cls = type(self.embody_ext)
+        self._orig_registry = self._cls._TRANSIENT_STATUS_PARS
+        self._orig_omit = self._cls._TDN_VALUE_OMIT_PARS
+        self._tmp_dirs = []
+
+    def tearDown(self):
+        self._cls._TRANSIENT_STATUS_PARS = self._orig_registry
+        self._cls._TDN_VALUE_OMIT_PARS = self._orig_omit
+        for d in self._tmp_dirs:
+            shutil.rmtree(d, ignore_errors=True)
+        quiet = op(STAGING)
+        if quiet is not None:
+            for child in list(quiet.children):
+                if child.name.startswith('rht_'):
+                    child.destroy()
+        super().tearDown()
+
+    def _tmpdir(self, prefix):
+        d = tempfile.mkdtemp(prefix=prefix)
+        self._tmp_dirs.append(d)
+        return d
+
+    def _make_scrub_comp(self, name='rht_scrub_target'):
+        """Sandbox comp with a registered transient par ('Teststatus',
+        runtime-looking value, non-default resting) and an unregistered
+        authored par. The par's default is '' while the registered resting
+        is 'Testresting', so a reset-to-default bug cannot pass as a
+        reset-to-resting."""
+        comp = self.sandbox.create(baseCOMP, name)
+        comp.par.opshortcut = self._SHORTCUT
+        page = comp.appendCustomPage('Info')
+        page.appendStr('Teststatus')[0].val = 'Running on port 999'
+        page.appendStr('Authored')[0].val = 'keep-me'
+        patched = dict(self._orig_registry)
+        patched[self._SHORTCUT] = {'Teststatus': self._RESTING}
+        self._cls._TRANSIENT_STATUS_PARS = patched
+        return comp
+
+    # -- registry + scoping ------------------------------------------
+
+    def test_registered_embody_names_exist_with_truthy_restings(self):
+        """Typo/rename tripwire, plus the blocker tripwire: every
+        registered Embody name must exist on the live comp, and every
+        resting must be a truthy state string -- never '' (Status's
+        default), which the enable state-machine cannot leave."""
+        for name, resting in sorted(
+                self._orig_registry['Embody'].items()):
+            self.assertIsNotNone(
+                getattr(self.embody.par, name, None),
+                'registered transient par %r does not exist on the '
+                'Embody COMP -- registry is stale' % name)
+            self.assertTrue(
+                isinstance(resting, str) and resting,
+                'resting for %r must be a truthy state string, got %r'
+                % (name, resting))
+        for name in sorted(self._orig_omit['Embody']):
+            self.assertIsNotNone(
+                getattr(self.embody.par, name, None),
+                'value-omit par %r does not exist on the Embody COMP'
+                % name)
+
+    def test_embody_about_page_names_are_consciously_registered(self):
+        """Sync tripwire: adding a par to the Embody About page must be a
+        conscious decision about churn -- either register it in
+        _TDN_VALUE_OMIT_PARS (machine-written, per-save churn) or accept
+        its value in version control. This assertion forces the look."""
+        expected = {'Version', 'Touchbuild', 'Author', 'Build', 'Date',
+                    'Github', 'Help', 'Autoupdate', 'Checkforupdate',
+                    'Updatestatus'}
+        live = set()
+        for page in self.embody.customPages:
+            if page.name == 'About':
+                live = {p.name for p in page.pars}
+        self.assertEqual(
+            live, expected,
+            'The Embody About page changed. Decide churn-handling for the '
+            'new/renamed pars (EmbodyExt._TDN_VALUE_OMIT_PARS) and update '
+            'this expected set.')
+
+    def test_scoping_by_op_shortcut(self):
+        self.assertEqual(
+            self.embody_ext._transientParNames(self.embody),
+            self._orig_registry['Embody'])
+        self.assertEqual(
+            self.embody_ext._tdnValueOmitNames(self.embody),
+            self._orig_omit['Embody'])
+        plain = self.sandbox.create(baseCOMP, 'rht_plain_scope')
+        self.assertEqual(
+            self.embody_ext._transientParNames(plain), {},
+            'a comp with no registered shortcut must scrub nothing')
+        self.assertEqual(
+            self.embody_ext._tdnValueOmitNames(plain), frozenset())
+
+    # -- scrub / restore ---------------------------------------------
+
+    def test_scrub_sets_resting_and_restore_reapplies(self):
+        comp = self._make_scrub_comp()
+        snap = self.embody_ext._scrubTransientPars(comp)
+        self.assertEqual(
+            comp.par.Teststatus.eval(), self._RESTING,
+            'a registered constant-mode par must reset to its RESTING '
+            'value, not its default')
+        self.assertEqual(
+            comp.par.Authored.eval(), 'keep-me',
+            'an unregistered par must never be touched')
+        self.embody_ext._restoreTransientPars(snap)
+        self.assertEqual(
+            comp.par.Teststatus.eval(), 'Running on port 999',
+            'restore must reapply the snapshotted session value')
+
+    def test_scrub_walks_descendant_comps(self):
+        comp = self._make_scrub_comp('rht_scrub_parent')
+        child = comp.create(baseCOMP, 'rht_scrub_child')
+        child.par.opshortcut = self._SHORTCUT
+        page = child.appendCustomPage('Info')
+        page.appendStr('Teststatus')[0].val = 'child-session-value'
+
+        snap = self.embody_ext._scrubTransientPars(comp)
+
+        self.assertEqual(
+            child.par.Teststatus.eval(), self._RESTING,
+            'the scrub must walk descendant COMPs with registered '
+            'shortcuts, not just the root')
+        self.embody_ext._restoreTransientPars(snap)
+        self.assertEqual(child.par.Teststatus.eval(), 'child-session-value')
+
+    def test_scrub_leaves_expression_mode_alone(self):
+        comp = self._make_scrub_comp()
+        comp.par.Teststatus.expr = "'live-' + 'value'"
+        snap = self.embody_ext._scrubTransientPars(comp)
+        self.assertEqual(
+            comp.par.Teststatus.mode.name, 'EXPRESSION',
+            'an expression-mode par carries no baked value -- scrubbing '
+            'it would destroy the reference')
+        self.assertFalse(
+            any(p.name == 'Teststatus' for p, _val in snap),
+            'expression-mode pars must not enter the snapshot')
+
+    def test_scrub_on_live_embody_roundtrips_exactly(self):
+        """Snapshot/reset/restore on the REAL Embody comp: values after
+        must equal values before, and while scrubbed each registered par
+        reads its RESTING value. Status is 'Enabled' in a live dev
+        session while its resting is 'Disabled', so the snapshot is
+        guaranteed non-empty -- this test cannot pass vacuously."""
+        registry = self._orig_registry['Embody']
+        names = sorted(registry)
+        before = {n: getattr(self.embody.par, n).eval() for n in names}
+        snap = self.embody_ext._scrubTransientPars(self.embody)
+        try:
+            self.assertTrue(
+                snap, 'the live comp must yield a non-empty snapshot '
+                '(Status runs Enabled while resting is Disabled)')
+            for n in names:
+                p = getattr(self.embody.par, n)
+                if any(sp is p for sp, _v in snap):
+                    self.assertEqual(
+                        p.eval(), registry[n],
+                        '%s must read its resting value while scrubbed' % n)
+        finally:
+            self.embody_ext._restoreTransientPars(snap)
+        after = {n: getattr(self.embody.par, n).eval() for n in names}
+        self.assertEqual(before, after,
+                         'live status readouts must survive the roundtrip')
+
+    # -- TDN export consumer -----------------------------------------
+
+    def test_tdn_export_records_resting_definition_ships(self):
+        comp = self._make_scrub_comp()
+        pages = self.embody.ext.TDN._exportCustomPars(comp)
+        defs = {d['name']: d for d in pages.get('Info', [])}
+        self.assertIn('Teststatus', defs,
+                      'the definition (style/label/help) must still ship')
+        self.assertEqual(
+            defs['Teststatus'].get('value'), self._RESTING,
+            'the .tdn must record the RESTING value, not the session '
+            'value and not an omitted key')
+        self.assertEqual(defs['Authored'].get('value'), 'keep-me')
+
+    def test_tdn_export_preserves_expression_on_registered_par(self):
+        """The '='/'~' shorthand encodes the MODE into the value key --
+        replacing it would destroy the reference (the scrub half refuses
+        the same; the two consumers must agree)."""
+        comp = self._make_scrub_comp()
+        comp.par.Teststatus.expr = "'live-' + 'value'"
+        pages = self.embody.ext.TDN._exportCustomPars(comp)
+        defs = {d['name']: d for d in pages.get('Info', [])}
+        value = defs['Teststatus'].get('value')
+        self.assertTrue(
+            isinstance(value, str) and value.startswith('='),
+            'an expression on a registered par must survive TDN export, '
+            'got %r' % (value,))
+        self.assertIn('live-', value)
+
+    def test_tdn_export_omit_names_drop_value_definition_ships(self):
+        comp = self._make_scrub_comp('rht_omit_target')
+        page = comp.customPages[0]
+        page.appendStr('Stampval')[0].val = '2026-07-30 09:45:00 UTC'
+        patched = dict(self._orig_omit)
+        patched[self._SHORTCUT] = frozenset({'Stampval'})
+        self._cls._TDN_VALUE_OMIT_PARS = patched
+
+        pages = self.embody.ext.TDN._exportCustomPars(comp)
+        defs = {d['name']: d for d in pages.get('Info', [])}
+        self.assertIn('Stampval', defs,
+                      'the omit-name definition must still ship')
+        self.assertNotIn(
+            'value', defs['Stampval'],
+            'an omit-name value must never reach the .tdn')
+
+    def test_tdn_export_keeps_same_named_par_on_user_comp(self):
+        comp = self.sandbox.create(baseCOMP, 'rht_user_status')
+        page = comp.appendCustomPage('Info')
+        page.appendStr('Status')[0].val = 'user-authored'
+        pages = self.embody.ext.TDN._exportCustomPars(comp)
+        defs = {d['name']: d for d in pages.get('Info', [])}
+        self.assertEqual(
+            defs['Status'].get('value'), 'user-authored',
+            'a user par named Status must keep its value -- the registry '
+            'is scoped by OP shortcut, never bare names')
+
+    def test_tdn_export_user_about_page_survives(self):
+        comp = self.sandbox.create(baseCOMP, 'rht_user_about')
+        page = comp.appendCustomPage('About')
+        page.appendStr('Version')[0].val = '1.0'
+        pages = self.embody.ext.TDN._exportCustomPars(comp)
+        self.assertIn(
+            'About', pages,
+            'a user comp About page must survive -- only a page that is '
+            'exactly the Embody metadata stamp is dropped')
+
+    def test_live_embody_export_ships_restings_and_full_about(self):
+        """The live Embody export must carry no session status strings,
+        record restings for registered pars, KEEP the About page
+        definitions (they are the diffable record), and omit only the
+        churning stamp values."""
+        pages = self.embody.ext.TDN._exportCustomPars(self.embody)
+        self.assertIn(
+            'About', pages,
+            "the Embody About page's definitions belong in the .tdn")
+        registry = self._orig_registry['Embody']
+        omit = self._orig_omit['Embody']
+        for page_name, page_defs in pages.items():
+            for d in page_defs:
+                name = d.get('name')
+                if name in registry:
+                    self.assertEqual(
+                        d.get('value'), registry[name],
+                        '%s on page %s must record its resting value'
+                        % (name, page_name))
+                if name in omit:
+                    self.assertNotIn(
+                        'value', d,
+                        '%s on page %s leaked a machine-written value'
+                        % (name, page_name))
+
+    def test_registered_sequence_count_kept_values_dropped(self):
+        comp = self._make_scrub_comp('rht_seq_target')
+        page = comp.customPages[0]
+        page.appendSequence('Rows')
+        page.appendStr('Rowlabel')
+        comp.seq.Rows.blockSize = 1
+        comp.seq.Rows.numBlocks = 3
+        for block in comp.seq.Rows.blocks:
+            for group in block:
+                for p in group:
+                    p.val = 'runtime-row'
+
+        # Pre-check WITHOUT registration: the unfiltered export must carry
+        # the session values -- proves the filtered assertion below cannot
+        # pass vacuously (panel finding).
+        data = self.embody.ext.TDN._exportBuiltinSequences(comp)
+        self.assertTrue(
+            any(b for b in data.get('Rows', [])),
+            'precondition: unregistered export must include block values')
+
+        patched = dict(self._orig_registry)
+        patched[self._SHORTCUT] = {'Teststatus': self._RESTING,
+                                   'Rows': None}
+        self._cls._TRANSIENT_STATUS_PARS = patched
+
+        data = self.embody.ext.TDN._exportBuiltinSequences(comp)
+        self.assertEqual(
+            data.get('Rows'), [{}, {}, {}],
+            'a registered sequence at a NON-default count must export the '
+            'count (never numBlocks=0) with no session values')
+
+        snap = self.embody_ext._scrubTransientPars(comp)
+        self.assertEqual(comp.seq.Rows.numBlocks, 3,
+                         'the scrub must never change the block count')
+        for block in comp.seq.Rows.blocks:
+            for group in block:
+                for p in group:
+                    self.assertEqual(p.eval(), p.default,
+                                     'scrubbed blocks must sit at defaults')
+        self.embody_ext._restoreTransientPars(snap)
+
+    def test_registered_sequence_at_default_count_is_omitted(self):
+        comp = self._make_scrub_comp('rht_seq_default')
+        page = comp.customPages[0]
+        page.appendSequence('Cols')
+        page.appendStr('Collabel')
+        comp.seq.Cols.blockSize = 1          # default numBlocks stays 1
+        for block in comp.seq.Cols.blocks:
+            for group in block:
+                for p in group:
+                    p.val = 'runtime-col'
+
+        patched = dict(self._orig_registry)
+        patched[self._SHORTCUT] = {'Teststatus': self._RESTING,
+                                   'Cols': None}
+        self._cls._TRANSIENT_STATUS_PARS = patched
+
+        data = self.embody.ext.TDN._exportBuiltinSequences(comp)
+        self.assertNotIn(
+            'Cols', data,
+            "a registered sequence at the DEFAULT count ships nothing -- "
+            "the amendment's 'reset blocks to defaults so the sequence is "
+            "omitted'")
+
+    # -- ExportPortableTox consumer ----------------------------------
+
+    def test_portable_export_ships_resting_and_restores_live(self):
+        comp = self._make_scrub_comp('rht_scrub_live')
+        sp = os.path.join(self._tmpdir('rht_scrub_'), 'scrubbed.tox')
+
+        ok = self.embody_ext.ExportPortableTox(target=comp, save_path=sp)
+
+        self.assertTrue(ok, 'export must succeed')
+        self.assertEqual(
+            comp.par.Teststatus.eval(), 'Running on port 999',
+            'the LIVE value must be restored after a live-mode export')
+        loaded = self.sandbox.loadTox(sp)
+        try:
+            self.assertEqual(
+                loaded.par.Teststatus.eval(), self._RESTING,
+                'the artifact must ship the resting value, never session '
+                'status')
+            self.assertEqual(loaded.par.Authored.eval(), 'keep-me')
+        finally:
+            loaded.destroy()
+
+    def test_copy_mode_export_ships_resting_live_untouched(self):
+        """Copy mode: the export core scrubs the staged candidate (the
+        registry is the last word in every mode); the LIVE comp is never
+        touched at all."""
+        comp = self._make_scrub_comp('rht_scrub_copy')
+        comp.create(textDAT, 'pre_release').text = '# no-op hook\n'
+        sp = os.path.join(self._tmpdir('rht_scrubc_'), 'scrubbed_copy.tox')
+
+        ok = self.embody_ext.ExportPortableTox(target=comp, save_path=sp)
+
+        self.assertTrue(ok, 'copy-mode export must succeed')
+        self.assertEqual(
+            comp.par.Teststatus.eval(), 'Running on port 999',
+            'copy mode must never touch the live comp')
+        loaded = self.sandbox.loadTox(sp)
+        try:
+            self.assertEqual(
+                loaded.par.Teststatus.eval(), self._RESTING,
+                'the staged candidate must be scrubbed before the save')
+        finally:
+            loaded.destroy()
+
+    def test_portable_export_restores_after_save_failure(self):
+        """Phase 4's always-restore contract on the FAILURE path: a save
+        into an impossible location must still hand the session its
+        values back."""
+        comp = self._make_scrub_comp('rht_scrub_fail')
+        bad_dir = os.path.join(self._tmpdir('rht_scrubf_'), 'blocker')
+        with open(bad_dir, 'w', encoding='utf-8') as f:
+            f.write('a file where a directory is needed')
+        sp = os.path.join(bad_dir, 'nested', 'impossible.tox')
+
+        ok = self.embody_ext.ExportPortableTox(target=comp, save_path=sp)
+
+        self.assertFalse(ok, 'the export must report the save failure')
+        self.assertEqual(
+            comp.par.Teststatus.eval(), 'Running on port 999',
+            'the live value must be restored even when the save fails')

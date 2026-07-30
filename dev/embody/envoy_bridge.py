@@ -1045,13 +1045,25 @@ def _list_stale_heartbeats(config_path, max_age_s):
     return stale
 
 
-def quit_td(pid, graceful_timeout=15):
+def quit_td(pid, graceful_timeout=15, clock=None, sleep=None,
+            platform=None):
     """Quit a running TouchDesigner process -- always pid-scoped.
 
     Requests termination (WM_CLOSE via taskkill on Windows -- genuinely
     graceful; SIGTERM on macOS/Linux -- abrupt but correctly targeted),
     then force-kills if needed. Returns (success: bool, message: str).
+
+    clock/sleep/platform are injectable for tests (same pattern as
+    wait_for_new_td_pid): patching the GLOBAL time module fed every
+    thread in the process (uvicorn exhausted finite side_effect lists
+    into StopIteration), and mocking the module's `sys` proved
+    full-run-fragile -- a mocked platform silently failed to take and a
+    REAL taskkill escaped to the host. Injection needs no patching at
+    all.
     """
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
+    platform = platform or sys.platform
     if pid is None:
         return False, "No TouchDesigner PID to quit"
     if not is_process_alive(pid):
@@ -1070,7 +1082,7 @@ def quit_td(pid, graceful_timeout=15):
     # quits out of this file. NOTE: darwin path unverified on a physical
     # Mac at landing time (none attached).
     try:
-        if sys.platform == "win32":
+        if platform == "win32":
             subprocess.run(
                 ["taskkill", "/PID", str(pid)],
                 capture_output=True, timeout=10,
@@ -1081,16 +1093,16 @@ def quit_td(pid, graceful_timeout=15):
         log(f"Graceful quit failed: {e}")
 
     # Wait for exit
-    deadline = time.monotonic() + graceful_timeout
-    while time.monotonic() < deadline:
+    deadline = clock() + graceful_timeout
+    while clock() < deadline:
         if not is_process_alive(pid):
             return True, f"TouchDesigner (PID {pid}) exited gracefully"
-        time.sleep(0.5)
+        sleep(0.5)
 
     # Force kill
     log(f"TouchDesigner (PID {pid}) did not exit gracefully, force killing")
     try:
-        if sys.platform == "win32":
+        if platform == "win32":
             subprocess.run(
                 ["taskkill", "/F", "/PID", str(pid)],
                 capture_output=True, timeout=10,
@@ -1101,7 +1113,7 @@ def quit_td(pid, graceful_timeout=15):
         return False, f"Failed to kill TouchDesigner (PID {pid}): {e}"
 
     # Brief wait after force kill
-    time.sleep(1)
+    sleep(1)
     if is_process_alive(pid):
         return False, f"TouchDesigner (PID {pid}) could not be terminated"
 
