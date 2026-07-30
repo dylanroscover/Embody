@@ -3697,8 +3697,11 @@ class TestPlatformInstallDiscovery(EmbodyTestCase):
         """_td_install_roots is the path production actually takes -- every
         other test injects root=, so without this it has zero coverage."""
         win = bridge._td_install_roots('win32')
-        self.assertEqual(win, [os.path.join('C:' + os.sep, 'Program Files',
-                                            'Derivative')],
+        # LITERAL, not os.path.join: this asserts a WINDOWS path, and
+        # os.sep is '/' on the macOS CI runner -- which is exactly how
+        # this test failed on its first real cross-platform run. A test
+        # for platform-independence must not itself depend on the host.
+        self.assertEqual(win, ['C:\\Program Files\\Derivative'],
                          'the win32 default must match the shipped path')
         mac = bridge._td_install_roots('darwin')
         self.assertIn('/Applications', mac)

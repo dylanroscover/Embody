@@ -604,7 +604,14 @@ def _scopes_for_operation(operation: str, params: dict, result=None) -> list:
         scopes.append(special)
     params = params or {}
     if operation == 'batch_operations':
-        for sub in (params.get('operations') or [])[:16]:
+        # Every sub-operation, not the first 16. The scopes recorded here
+        # are what PEERS see as your territory, and the destructive gate
+        # evaluates the whole batch -- so a 16-item cap meant sub-ops
+        # 17..N were gate-checked but left no trace for anyone else,
+        # silently under-reporting where this session had been working.
+        # The caller-visible list is deduped and capped downstream; the
+        # cap belongs there, on presentation, not here on detection.
+        for sub in (params.get('operations') or []):
             if isinstance(sub, dict):
                 scopes.extend(_scopes_for_operation(
                     sub.get('tool', ''), sub.get('params') or {}))
@@ -5286,7 +5293,14 @@ class EnvoyExt:
             return ['project:save'], 'save_project'
         if operation == 'batch_operations':
             gated = []
-            for sub in (params.get('operations') or [])[:32]:
+            subs = params.get('operations') or []
+            # EVERY sub-operation is evaluated, never a prefix. The old
+            # code sliced [:32], so a destructive sub-op at index 33 was
+            # never gated -- a bypass costing an attacker 32 padding
+            # entries, and a silent half-evaluation for an honest caller
+            # with a long batch. A batch too large to evaluate must be
+            # REFUSED (see _BATCH_GATE_LIMIT below), never partly checked.
+            for sub in subs:
                 if not isinstance(sub, dict):
                     continue
                 sub_params = sub.get('params') or {}
@@ -5300,6 +5314,50 @@ class EnvoyExt:
             return [], ''
         return [], ''
 
+    # A batch longer than this is refused outright rather than evaluated:
+    # the gate must never make a safety decision on a prefix of the work
+    # it is being asked to authorize. Generous enough that no honest
+    # batch hits it (the tool's own guidance is to group a handful of
+    # repetitive calls), small enough that evaluation stays cheap.
+    _BATCH_GATE_LIMIT = 512
+
+    def _gateVerdict(self, sid, operation, params):
+        """The destructive gate's verdict, with a FAIL-CLOSED policy.
+
+        Returns a refusal dict to send back, or None to proceed.
+
+        This wrapper exists because the policy is the whole point and it
+        used to live inline in the main-thread pump as a bare
+        `except Exception: gate = None` -- and None means PROCEED, so any
+        error inside the gate silently authorized the very operation the
+        gate exists to stop, with no log line. A gate that cannot reach a
+        verdict has not granted permission.
+
+        The fail-closed rule applies to GATED operations only. An
+        internal gate error must not break unrelated tools that were
+        never the gate's business.
+        """
+        try:
+            return self._checkDestructiveGate(sid, operation, params)
+        except Exception as e:
+            if operation in self._GATED_OPERATIONS:
+                self._log(
+                    f'MULTI-SESSION GATE: refusing {operation} -- the gate '
+                    f'itself failed ({type(e).__name__}: {e}). Failing '
+                    f'closed.', 'ERROR')
+                return {
+                    'error': f'MULTI-SESSION GATE: {operation} refused -- '
+                             f'the safety gate could not reach a verdict '
+                             f'({type(e).__name__}: {e}). This fails CLOSED '
+                             f'by design. Retry, or pass override=True if '
+                             f'you are certain no peer is working in this '
+                             f'scope.',
+                    'gate_error': f'{type(e).__name__}: {e}'}
+            self._log(
+                f'Destructive-gate check errored for non-gated {operation} '
+                f'(proceeding): {type(e).__name__}: {e}', 'WARNING')
+            return None
+
     def _checkDestructiveGate(self, sid, operation, params):
         """Refuse a destructive operation when a LIVE peer session claimed
         an overlapping scope or wrote it within the conflict window, unless
@@ -5309,6 +5367,22 @@ class EnvoyExt:
             return None
         if (params or {}).get('override'):
             return None
+        # A batch the gate cannot fully evaluate is refused, not
+        # half-checked: authorizing a prefix of the requested work is
+        # exactly the bypass the old [:32] slice created.
+        if operation == 'batch_operations':
+            subs = (params or {}).get('operations') or []
+            if len(subs) > self._BATCH_GATE_LIMIT:
+                self._log(
+                    f'MULTI-SESSION GATE: refused a batch of {len(subs)} '
+                    f'operations -- above the {self._BATCH_GATE_LIMIT} the '
+                    f'gate will evaluate', 'WARNING')
+                return {'error': f'MULTI-SESSION GATE: batch_operations '
+                                 f'refused -- {len(subs)} sub-operations '
+                                 f'exceeds the {self._BATCH_GATE_LIMIT} the '
+                                 f'safety gate evaluates. Split the batch. '
+                                 f'(The gate never authorizes a prefix of '
+                                 f'the work it was asked to check.)'}
         targets, reason = self._destructiveTargets(operation, params)
         if not targets:
             return None
@@ -5728,10 +5802,16 @@ class EnvoyExt:
 
             # Multi-session Phase 3: destructive-op gate. Refusal is
             # instant and skips execution entirely.
-            try:
-                gate = self._checkDestructiveGate(sid, operation, params)
-            except Exception:
-                gate = None
+            #
+            # FAIL CLOSED for gated operations. This used to be a bare
+            # `except Exception: gate = None`, and `None` means PROCEED --
+            # so any error inside the gate silently authorized the very
+            # operation the gate exists to stop, with no log line at all.
+            # A gate that cannot reach a verdict has not granted
+            # permission. Non-gated operations are unaffected: they were
+            # never the gate's business, so an internal error there must
+            # not break unrelated tools.
+            gate = self._gateVerdict(sid, operation, params)
             if gate is not None:
                 if isinstance(request_id, int) and request_id >= 0:
                     # Refused before execution -- no TD state moved, so the

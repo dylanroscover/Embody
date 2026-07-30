@@ -677,3 +677,185 @@ class TestDestructiveGates(EmbodyTestCase):
             self.B, 'set_parameter', {'op_path': '/_tc_gate/child'}))
         self.assertIsNone(self.ext._checkDestructiveGate(
             self.B, 'get_op', {'op_path': '/_tc_gate/child'}))
+
+
+class TestDestructiveGateFailsClosed(EmbodyTestCase):
+    """The gate must never authorize by accident (2026-07-30).
+
+    Found by the Convoy section-17 rebase and verified in the shipped
+    code: the gate call site wrapped _checkDestructiveGate in a bare
+    `except Exception: gate = None`, and None means PROCEED. Any error
+    inside the gate -- including one raised by a future check added to
+    it -- silently authorized the very operation the gate exists to
+    stop, with no log line at all. A gate that cannot reach a verdict
+    has not granted permission.
+    """
+
+    A = '_tc_fc_a'
+    B = '_tc_fc_b'
+
+    def setUp(self):
+        super().setUp()
+        import sys as _sys
+        self.ext = op.Embody.ext.Envoy
+        self.lock = getattr(_sys, '_envoy_sessions_lock')
+        self.claims = getattr(_sys, '_envoy_claims')
+        self.sessions = getattr(_sys, '_envoy_sessions')
+        self._patches = []
+        self._purge()
+        now = time.time()
+        with self.lock:
+            for sid, label in ((self.A, 'fc-a@x'), (self.B, 'fc-b@y')):
+                self.sessions[sid] = {
+                    'sid': sid, 'label': label, 'pid': None,
+                    'first_seen': now, 'last_seen': now,
+                    'requests': 1, 'last_tool': None}
+
+    def tearDown(self):
+        while self._patches:
+            obj, name, old = self._patches.pop()
+            setattr(obj, name, old)
+        self._purge()
+        super().tearDown()
+
+    def _purge(self):
+        with self.lock:
+            for k in [k for k in self.claims if '/_tc_fc' in k]:
+                del self.claims[k]
+            for sid in (self.A, self.B):
+                self.sessions.pop(sid, None)
+
+    def _patch(self, obj, name, value):
+        self._patches.append((obj, name, getattr(obj, name)))
+        setattr(obj, name, value)
+
+    def _explode(self, *a, **kw):
+        raise RuntimeError('gate exploded (test)')
+
+    # -- the headline contract ---------------------------------------
+
+    def test_gated_operation_refused_when_the_gate_itself_errors(self):
+        """delete_op must be REFUSED, not silently allowed, when the gate
+        raises. Drives the real dispatch path, not the gate in
+        isolation, because the bug lived at the CALL SITE."""
+        self._patch(self.ext, '_checkDestructiveGate', self._explode)
+        payload = self.ext._gateVerdict(
+            self.B, 'delete_op', {'op_path': '/_tc_fc/victim'})
+        self.assertIsNotNone(
+            payload, 'a gate that cannot reach a verdict must REFUSE -- '
+                     'None means PROCEED, which is how the bug worked')
+        self.assertIn('MULTI-SESSION GATE', payload['error'])
+        self.assertIn('fails CLOSED', payload['error'])
+        self.assertIn('gate_error', payload,
+                      'the refusal must name the underlying failure')
+
+    def test_non_gated_operation_still_proceeds_when_the_gate_errors(self):
+        """Failing closed applies to GATED operations only -- an internal
+        gate error must not break unrelated tools."""
+        self._patch(self.ext, '_checkDestructiveGate', self._explode)
+        self.assertIsNone(
+            self.ext._gateVerdict(self.B, 'get_op', {'op_path': '/'}),
+            'get_op is not gated; a gate error must not refuse it')
+
+    def test_every_gated_operation_is_covered_by_the_fail_closed_path(self):
+        """Whatever _GATED_OPERATIONS contains must fail closed -- this
+        stays true when someone adds a new gated op."""
+        self._patch(self.ext, '_checkDestructiveGate', self._explode)
+        for operation in self.ext._GATED_OPERATIONS:
+            payload = self.ext._gateVerdict(self.B, operation, {})
+            self.assertIsNotNone(
+                payload, f'{operation} is gated but did not fail closed')
+            self.assertIn('MULTI-SESSION GATE', payload['error'])
+
+    def test_the_pump_uses_the_fail_closed_wrapper(self):
+        """The policy must be ON the dispatch path, not merely available:
+        _onRefresh has to call _gateVerdict, never _checkDestructiveGate
+        directly (which is where the bare except used to live)."""
+        # Read the externalized FILE: TD extensions load from DATs, so
+        # inspect.getsource raises "source code not available" here.
+        path = os.path.join(project.folder, 'embody', 'Embody',
+                            'EnvoyExt.py')
+        with open(path, encoding='utf-8') as f:
+            file_src = f.read()
+        start = file_src.index('def _onRefresh(self)')
+        end = file_src.index(chr(10) + "    def ", start + 10)
+        pump = file_src[start:end]
+        self.assertIn('_gateVerdict', pump,
+                      'the pump must consult the fail-closed wrapper')
+        self.assertNotIn(
+            '_checkDestructiveGate', pump,
+            'the pump must NOT call the raw gate -- that is where the '
+            'bare except/fail-open lived')
+
+
+class TestDestructiveGateEvaluatesWholeBatch(EmbodyTestCase):
+    """A batch must be evaluated in full or refused -- never in part.
+
+    The gate used to slice the first 32 sub-operations, so a destructive
+    sub-op at index 33 was never gated (a bypass costing 32 padding
+    entries), and touch recording capped at 16, so sub-ops 17..32 were
+    gate-checked but left no peer-visible trace.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.ext = op.Embody.ext.Envoy
+
+    def test_destructive_sub_op_past_the_old_32_cap_is_still_gated(self):
+        padding = [{'tool': 'get_op', 'params': {'op_path': '/pad'}}
+                   for _ in range(40)]
+        batch = padding + [{'tool': 'delete_op',
+                            'params': {'op_path': '/_tc_batch/victim'}}]
+        targets, reason = self.ext._destructiveTargets(
+            'batch_operations', {'operations': batch})
+        self.assertIn('/_tc_batch/victim', targets,
+                      'a destructive sub-op at index 40 must be gated -- '
+                      'the old [:32] slice let it through')
+        self.assertIn('batch_operations', reason)
+
+    def test_scope_recording_covers_sub_ops_past_the_old_16_cap(self):
+        padding = [{'tool': 'get_op', 'params': {'op_path': f'/pad{i}'}}
+                   for i in range(20)]
+        batch = padding + [{'tool': 'delete_op',
+                            'params': {'op_path': '/_tc_batch/late'}}]
+        scopes = _envoy_mod._scopes_for_operation(
+            'batch_operations', {'operations': batch})
+        # The return is deduped and capped at 8 for presentation; what
+        # matters is that a LATE sub-op can reach the list at all.
+        all_scopes = []
+        for sub in batch:
+            all_scopes.extend(_envoy_mod._scopes_for_operation(
+                sub['tool'], sub['params']))
+        self.assertIn('/_tc_batch/late', all_scopes)
+        self.assertLessEqual(len(scopes), 8,
+                             'presentation stays capped')
+
+    def test_batch_above_the_evaluation_limit_is_refused_not_truncated(self):
+        limit = self.ext._BATCH_GATE_LIMIT
+        batch = [{'tool': 'get_op', 'params': {'op_path': '/x'}}
+                 for _ in range(limit + 1)]
+        gate = self.ext._checkDestructiveGate(
+            '_tc_batch_sid', 'batch_operations', {'operations': batch})
+        self.assertIsNotNone(
+            gate, 'a batch too large to evaluate must be REFUSED -- the '
+                  'gate never authorizes a prefix of the work')
+        self.assertIn('exceeds', gate['error'])
+
+    def test_batch_at_the_limit_is_still_evaluated(self):
+        limit = self.ext._BATCH_GATE_LIMIT
+        batch = [{'tool': 'get_op', 'params': {'op_path': '/x'}}
+                 for _ in range(limit)]
+        # No peer claims anything, so a fully-evaluated batch passes.
+        self.assertIsNone(self.ext._checkDestructiveGate(
+            '_tc_batch_sid', 'batch_operations', {'operations': batch}))
+
+    def test_override_on_a_sub_op_still_skips_only_that_sub_op(self):
+        batch = [
+            {'tool': 'delete_op', 'params': {'op_path': '/_tc_b/one',
+                                             'override': True}},
+            {'tool': 'delete_op', 'params': {'op_path': '/_tc_b/two'}},
+        ]
+        targets, _reason = self.ext._destructiveTargets(
+            'batch_operations', {'operations': batch})
+        self.assertNotIn('/_tc_b/one', targets)
+        self.assertIn('/_tc_b/two', targets)
