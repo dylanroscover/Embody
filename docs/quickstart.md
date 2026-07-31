@@ -2,7 +2,7 @@
 
 **From nothing to your first AI-built network in about five minutes.**
 
-The fastest way to experience Embody is the AI way: install one thing, drag in one file, click one button, then *talk* to TouchDesigner and watch it build. You describe what you want in plain language — no coding, no scripting, and git is entirely optional.
+The fastest way to experience Embody is the AI way: install one thing, paste one line (or drag in one file), click one button, then *talk* to TouchDesigner and watch it build. You describe what you want in plain language — no coding, no scripting, and git is entirely optional.
 
 Embody itself is free, open source (MIT), and runs entirely on your own machine — no Embody account, no subscription, nothing SaaSy. You'll sign in to your AI assistant (a Claude account for Claude Code, for example), but that's the only login involved. The server Embody starts is local-only; nothing about your project leaves your computer unless you choose to share it.
 
@@ -20,21 +20,29 @@ You need two things installed before you start:
 
 ---
 
-## Step 2 — Download Embody
+## Step 2 — Install Embody
 
-Grab the latest Embody `.tox` from **[GitHub Releases](https://github.com/dylanroscover/Embody/releases/latest)**. It's a single file.
+Two ways in — both end in the same place. Pick whichever suits you.
+
+=== "Paste into a Textport"
+
+    Open your `.toe` project (or a brand-new one), open a Textport (**Dialogs → Textport and DATs**, or **Alt + Shift + T**), and paste this one line:
+
+    ```python
+    import requests, hashlib, tempfile, os; h = {'User-Agent': 'Embody-Install'}; mf = requests.get('https://github.com/dylanroscover/Embody/releases/latest/download/embody-release.json', headers=h, timeout=30).json(); b = requests.get('https://github.com/dylanroscover/Embody/releases/download/%s/%s' % (mf['tag'], mf['asset']), headers=h, timeout=120).content; assert hashlib.sha256(b).hexdigest() == mf['sha256'], 'checksum mismatch'; f = os.path.join(tempfile.gettempdir(), mf['asset']); open(f, 'wb').write(b); n = ui.panes.current; n = n if n.type == PaneType.NETWORKEDITOR else next(x for x in ui.panes if x.type == PaneType.NETWORKEDITOR); print('Embody', mf['version'], 'installed at', n.owner.loadTox(f).path)
+    ```
+
+    It downloads the latest release from GitHub, verifies its sha256 against the release manifest, and drops Embody into your current network — exactly like dragging the file in. TouchDesigner pauses for a few seconds while it fetches. Works the same on macOS and Windows.
+
+=== "Download the .tox"
+
+    Grab the latest Embody `.tox` from **[GitHub Releases](https://github.com/dylanroscover/Embody/releases/latest)** — it's a single file — and **drag it into the network** of your open project.
+
+Either way, that's the entire install — there's nothing else to set up. Embody initializes itself automatically over the next couple of frames. The core externalization features are self-contained and need no external dependencies.
 
 ---
 
-## Step 3 — Drag it into your project
-
-Open your `.toe` project (or a brand-new one) and **drag the `.tox` into the network**. That's the entire install — there's nothing else to set up.
-
-Embody initializes itself automatically over the next couple of frames. The core externalization features are self-contained and need no external dependencies.
-
----
-
-## Step 4 — Say yes to Envoy, the AI bridge
+## Step 3 — Say yes to Envoy, the AI bridge
 
 As soon as Embody finishes initializing, its [setup wizard](embody/setup-wizard.md) opens — a few quick screens, one decision each. For the fast path, take the recommended option on every screen: **Auto** mode, **Claude Code** as the assistant, **Don't ask** for permissions — then click **Set up Embody** on the summary. Nothing changes until that final click.
 
@@ -54,7 +62,7 @@ Clicked **Not now**, or want to change a choice later? Pulse the **Setup Wizard*
 
 ---
 
-## Step 5 — Open your AI assistant and start talking
+## Step 4 — Open your AI assistant and start talking
 
 **Keep TouchDesigner open** — your AI assistant talks to the live session.
 
