@@ -4139,3 +4139,157 @@ class TestLaunchTdDarwinSpawn(EmbodyTestCase):
         self.assertTrue(ok)
         self.assertEqual(pid, 4242, 'win32 gets a real pid from Popen')
         self.assertEqual(argv[0], [exe, self.toe])
+
+
+class TestConvoyProbe(EmbodyTestCase):
+    """The Phase 1 probe-only slice: the bridge reports whether a Convoy
+    host app is present (running/absent/stale) and NEVER changes routing.
+    The decision tree is isolated from the filesystem by patching the
+    portfile read, pid liveness, and /health check -- mirroring the shape
+    of convoy_hostprobe's own tests."""
+
+    def _portfile(self, **kw):
+        base = {'port': 59991, 'pid': 4242, 'host_id': 'abc123'}
+        base.update(kw)
+        return base
+
+    def test_absent_when_no_portfile(self):
+        with patch.object(bridge, '_read_convoy_portfile', return_value=None):
+            r = bridge.probe_convoy_host()
+        self.assertEqual(r['convoy'], 'absent')
+        # the CLEAN absent path, not the outer error fallback -- so a
+        # regression that routed here via an exception would be caught
+        self.assertIn('no Convoy host app', r['detail'])
+
+    def test_absent_when_data_dir_undeterminable(self):
+        with patch.object(bridge, 'convoy_data_dir', return_value=None):
+            r = bridge.probe_convoy_host()
+        self.assertEqual(r['convoy'], 'absent')
+        # must reach the clean guard, not the try/except error path
+        self.assertIn('no Convoy host app', r['detail'])
+
+    def test_stale_when_writer_is_dead(self):
+        with patch.object(bridge, '_read_convoy_portfile',
+                          return_value=self._portfile()), \
+             patch.object(bridge, 'is_process_alive', return_value=False):
+            r = bridge.probe_convoy_host()
+        self.assertEqual(r['convoy'], 'stale')
+        self.assertIn('writer not alive', r['detail'])
+
+    def test_stale_when_health_unreachable(self):
+        """A live pid whose port does not answer /health is not trusted --
+        a recycled pid could hold it."""
+        with patch.object(bridge, '_read_convoy_portfile',
+                          return_value=self._portfile()), \
+             patch.object(bridge, 'is_process_alive', return_value=True), \
+             patch.object(bridge, '_convoy_health_host_id',
+                          return_value=None):
+            r = bridge.probe_convoy_host()
+        self.assertEqual(r['convoy'], 'stale')
+        self.assertIn('/health', r['detail'])
+
+    def test_stale_on_recycled_port_identity_mismatch(self):
+        with patch.object(bridge, '_read_convoy_portfile',
+                          return_value=self._portfile(host_id='expected')), \
+             patch.object(bridge, 'is_process_alive', return_value=True), \
+             patch.object(bridge, '_convoy_health_host_id',
+                          return_value='someone-else'):
+            r = bridge.probe_convoy_host()
+        self.assertEqual(r['convoy'], 'stale')
+        self.assertIn('recycled', r['detail'])
+
+    def test_running_when_identity_confirmed(self):
+        with patch.object(bridge, '_read_convoy_portfile',
+                          return_value=self._portfile(host_id='abc123',
+                                                      port=59991)), \
+             patch.object(bridge, 'is_process_alive', return_value=True), \
+             patch.object(bridge, '_convoy_health_host_id',
+                          return_value='abc123'):
+            r = bridge.probe_convoy_host()
+        self.assertEqual(r['convoy'], 'running')
+        self.assertEqual(r['host_id'], 'abc123')
+        self.assertEqual(r['port'], 59991)
+        # honest about Phase 1: routing is still direct
+        self.assertIn('direct to local Envoy', r['detail'])
+
+    def test_running_when_portfile_has_no_host_id(self):
+        """A portfile without a host_id cannot be identity-checked; the
+        probe trusts a live /health (matching convoy_hostprobe's
+        short-circuit) -- pinned so a regression that made identity the
+        ONLY gate is a deliberate change, not an accident."""
+        pf = self._portfile()
+        pf.pop('host_id')
+        with patch.object(bridge, '_read_convoy_portfile', return_value=pf), \
+             patch.object(bridge, 'is_process_alive', return_value=True), \
+             patch.object(bridge, '_convoy_health_host_id',
+                          return_value='whatever-it-reports'):
+            r = bridge.probe_convoy_host()
+        self.assertEqual(r['convoy'], 'running')
+        self.assertEqual(r['host_id'], 'whatever-it-reports')
+
+    def test_non_integer_pid_is_stale_not_a_probe_error(self):
+        with patch.object(bridge, '_read_convoy_portfile',
+                          return_value=self._portfile(pid='not-a-number')):
+            r = bridge.probe_convoy_host()
+        self.assertEqual(r['convoy'], 'stale')
+        self.assertIn('writer not alive', r['detail'])
+
+    def test_probe_never_raises_even_on_an_unexpected_failure(self):
+        """The contract is "never raises" -- the bridge coming up must not
+        be broken by a probe fault. Force an unexpected exception deep in
+        the health check and prove the probe still returns a dict, not a
+        traceback."""
+        with patch.object(bridge, '_read_convoy_portfile',
+                          return_value=self._portfile()), \
+             patch.object(bridge, 'is_process_alive', return_value=True), \
+             patch.object(bridge, '_convoy_health_host_id',
+                          side_effect=Exception('unexpected')):
+            try:
+                r = bridge.probe_convoy_host()
+                raised = False
+            except Exception:
+                raised = True
+        self.assertFalse(raised, 'probe_convoy_host must never raise')
+        # and it degrades to a USABLE dict (main() does _convoy.get(...))
+        self.assertIsInstance(r, dict)
+        self.assertEqual(r['convoy'], 'absent')
+
+    def test_data_dir_win32_uses_localappdata_and_backslashes(self):
+        with patch.object(bridge.sys, 'platform', 'win32'), \
+             patch.dict(bridge.os.environ,
+                        {'LOCALAPPDATA': r'C:\Users\x\AppData\Local'}):
+            d = bridge.convoy_data_dir()
+        # ntpath.join is used for the win32 target regardless of host OS,
+        # so the separator shape is validated even on a POSIX CI runner
+        self.assertEqual(d, r'C:\Users\x\AppData\Local\EmbodyConvoy')
+
+    def test_data_dir_darwin_uses_application_support_with_slashes(self):
+        with patch.object(bridge.sys, 'platform', 'darwin'), \
+             patch.object(bridge.os.path, 'expanduser',
+                          return_value='/Users/x'):
+            d = bridge.convoy_data_dir()
+        self.assertEqual(
+            d, '/Users/x/Library/Application Support/EmbodyConvoy')
+
+    def test_data_dir_linux_uses_xdg_state_home(self):
+        with patch.object(bridge.sys, 'platform', 'linux'), \
+             patch.dict(bridge.os.environ, {'XDG_STATE_HOME': '/home/x/.state'}):
+            d = bridge.convoy_data_dir()
+        self.assertEqual(d, '/home/x/.state/embody-convoy')
+
+    def test_meta_tool_registered_and_dispatched(self):
+        self.assertIn('get_convoy_status', bridge.BRIDGE_TOOL_NAMES)
+        with patch.object(bridge, '_read_convoy_portfile', return_value=None):
+            content = bridge.handle_bridge_tool('get_convoy_status', {}, None)
+        # meta-tools return [{"type":"text","text": <json>}]
+        self.assertEqual(content[0]['type'], 'text')
+        payload = json.loads(content[0]['text'])
+        self.assertEqual(payload['convoy'], 'absent')
+
+    def test_meta_tool_advertised_in_tools_list(self):
+        response = {'jsonrpc': '2.0', 'id': 1,
+                    'result': {'tools': [{'name': 'query_network'}]}}
+        bridge.augment_tools_list(response)
+        names = {t['name'] for t in response['result']['tools']}
+        self.assertIn('get_convoy_status', names)
+        self.assertIn('get_td_status', names, 'existing meta-tools intact')

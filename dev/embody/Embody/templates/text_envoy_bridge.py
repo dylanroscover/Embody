@@ -161,6 +161,23 @@ BRIDGE_TOOLS = [
             "required": [],
         },
     },
+    {
+        "name": "get_convoy_status",
+        "description": (
+            "Report whether a Convoy host app (embody-convoy) is running on "
+            "this machine: 'running' with its host_id and port, 'absent' "
+            "(no host app -- the normal, supported state), or 'stale' (a "
+            "portfile whose process is dead, or a recycled port). PHASE 1: "
+            "presence only -- the host app does not execute relayed "
+            "operations yet, so this bridge always routes direct to local "
+            "Envoy. Works whether or not TD is running."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
 ]
 
 BRIDGE_TOOL_NAMES = {t["name"] for t in BRIDGE_TOOLS}
@@ -962,6 +979,142 @@ def is_td_process_alive(pid):
     if not is_process_alive(pid):
         return False
     return pid in find_all_td_pids()
+
+
+# ---------------------------------------------------------------------------
+# Convoy host-app probe (Phase 1: presence only)
+#
+# A one-per-machine "embody-convoy" host app may run OUTSIDE TouchDesigner
+# (see dev/convoy). This bridge CANNOT import convoy_hostprobe -- it is a
+# single-file, stdlib-only, byte-identical-two-copy artifact (A-44) -- so a
+# minimal faithful copy of the client-side fallback contract (12.3) is
+# inlined. It answers ONE question: is a live host app present, and where?
+# It NEVER changes routing: every request still goes direct to local Envoy.
+# The host app does not execute relayed operations yet (Phase 4), so
+# presence is reported, not used. Three outcomes mirror
+# convoy_hostprobe.probe(): running (live, identity-confirmed), absent (no
+# host app -- a normal state), stale (dead writer, or a recycled/foreign
+# port). The safety property is preserved: a port is reported RUNNING only
+# when the pid that wrote the portfile is alive AND /health confirms the
+# same host_id -- a dead or recycled port is never reported live.
+
+CONVOY_APP_DIR_WIN = "EmbodyConvoy"
+CONVOY_APP_DIR_POSIX = "embody-convoy"
+CONVOY_PORTFILE = "host.portfile.json"
+CONVOY_HEALTH_TIMEOUT_S = 1.5
+
+
+def convoy_data_dir():
+    """Per-user Convoy state dir on THIS machine, or None.
+
+    Joins with the TARGET platform's separator (ntpath on win32, posixpath
+    elsewhere), matching convoy_platform.data_dir. At runtime sys.platform
+    is the host, so this is just the right separator; the explicit choice
+    also lets a foreign-platform test validate the real path SHAPE rather
+    than silently getting host-flavored separators (the failure a macOS CI
+    run caught one layer down)."""
+    import ntpath
+    import posixpath
+    try:
+        join = ntpath.join if sys.platform == "win32" else posixpath.join
+        home = os.path.expanduser("~")
+        if sys.platform == "win32":
+            base = os.environ.get("LOCALAPPDATA") or join(
+                home, "AppData", "Local")
+            return join(base, CONVOY_APP_DIR_WIN)
+        if sys.platform == "darwin":
+            return join(home, "Library", "Application Support",
+                        CONVOY_APP_DIR_WIN)
+        base = os.environ.get("XDG_STATE_HOME") or join(
+            home, ".local", "state")
+        return join(base, CONVOY_APP_DIR_POSIX)
+    except Exception:
+        return None
+
+
+def _read_convoy_portfile(data_dir):
+    """Parse the host-app portfile, or None if absent/corrupt."""
+    try:
+        with open(os.path.join(data_dir, CONVOY_PORTFILE),
+                  "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and data.get("port"):
+            return data
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _convoy_health_host_id(port):
+    """GET the host app's UNAUTHENTICATED /health and return the host_id it
+    reports, or None if unreachable. No token is sent -- identity is
+    confirmed before any credential would be."""
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:%d/health" % int(port))
+        with urllib.request.urlopen(
+                req, timeout=CONVOY_HEALTH_TIMEOUT_S) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return data.get("host_id")
+    except Exception:
+        return None
+
+
+def probe_convoy_host():
+    """Locate the local Convoy host app. Returns a dict, NEVER raises:
+    {"convoy": "running"|"absent"|"stale", "detail": str, ...}. Reports
+    presence only -- routing is unaffected. The whole body is guarded
+    because this runs on the bridge STARTUP path and from a meta-tool
+    call: a probe fault must degrade to 'behave as if Convoy is absent'
+    (direct Envoy), never crash the bridge or the tool call."""
+    try:
+        data_dir = convoy_data_dir()
+        result = {"data_dir": data_dir}
+        raw = _read_convoy_portfile(data_dir) if data_dir else None
+        if raw is None:
+            result["convoy"] = "absent"
+            result["detail"] = ("no Convoy host app on this machine; "
+                                "using direct Envoy")
+            return result
+        try:
+            pid = int(raw.get("pid"))
+        except (TypeError, ValueError):
+            pid = 0     # a corrupt/missing pid is unverifiable -> stale
+        if pid <= 0 or not is_process_alive(pid):
+            result["convoy"] = "stale"
+            result["detail"] = ("host-app portfile is stale (writer not "
+                                "alive); using direct Envoy")
+            return result
+        expected = raw.get("host_id")
+        # NOTE: unlike convoy_hostprobe (which returns ABSENT when a live
+        # host's IPC token is unreadable), this presence-only probe does
+        # not read the token -- token readability is a RELAY concern
+        # (Phase 4), and this slice only reports whether the host app is
+        # THERE. It never sends the token or routes through the host app.
+        confirmed = _convoy_health_host_id(raw.get("port"))
+        if confirmed is None:
+            result["convoy"] = "stale"
+            result["detail"] = ("a process holds the host port but did not "
+                                "answer /health; using direct Envoy")
+            return result
+        if expected and confirmed != expected:
+            result["convoy"] = "stale"
+            result["detail"] = ("the process on the host port identifies "
+                                "as %r, not the expected %r (recycled "
+                                "port); using direct Envoy"
+                                % (confirmed, expected))
+            return result
+        result["convoy"] = "running"
+        result["host_id"] = confirmed
+        result["port"] = raw.get("port")
+        result["detail"] = ("Convoy host app present. NOTE: the Phase 1 "
+                            "host app is loopback-only and does not execute "
+                            "relayed operations yet; this bridge routes "
+                            "every request direct to local Envoy regardless.")
+        return result
+    except Exception as e:
+        return {"convoy": "absent",
+                "detail": "probe error (%s); using direct Envoy" % e}
 
 
 def ping_envoy_port(port):
@@ -1822,6 +1975,8 @@ def handle_bridge_tool(name, params, state):
         result = handle_restart_td(params, state)
     elif name == "switch_instance":
         result = handle_switch_instance(params, state)
+    elif name == "get_convoy_status":
+        result = probe_convoy_host()
     else:
         result = {"error": f"Unknown bridge tool: {name}"}
 
@@ -2821,6 +2976,15 @@ def main():
             log(f"WARNING: TouchDesigner not found at {td_exe}")
 
     log(f"Python: {sys.executable} ({sys.version.split()[0]})")
+
+    # Convoy presence -- informational only, never gates startup or routing.
+    # Bounded (a /health call runs at most once, and only when a live host
+    # portfile exists); wrapped so it can never break the bridge coming up.
+    try:
+        _convoy = probe_convoy_host()
+        log(f"Convoy: {_convoy.get('convoy')} -- {_convoy.get('detail', '')}")
+    except Exception as _e:
+        log(f"Convoy: probe failed ({_e}); using direct Envoy")
 
     # Dup stdin fd BEFORE any threads start -- the watchdog polls this for
     # POLLHUP to detect session end without stealing bytes from the main loop.
