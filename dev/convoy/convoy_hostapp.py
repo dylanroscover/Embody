@@ -403,12 +403,24 @@ class HostApp:
         except Exception as e:      # a forwarder must not crash dispatch
             outcome = None
             detail = f"{type(e).__name__}: {e}"
+        if outcome is mcpclient.UNREACHABLE:
+            # The node refused the connection: the request was never
+            # delivered, so the op did NOT run. Leave the job QUEUED to
+            # retry -- a transient node-down must never burn a job to
+            # indeterminate (or, worse, a fabricated verdict).
+            self.db.audit("hostapp", "dispatch_unreachable",
+                          {"delivery_id": delivery_id,
+                           "operation": job["operation"]})
+            return 409, {"ok": False, "reason": "node_unreachable",
+                         "detail": "the node's Envoy refused the connection; "
+                                   "the job stays queued to retry"}
         if outcome is None:
-            # Transport failure: the operation MAY have executed on the
-            # node, and we have no result. Indeterminate is the only
-            # honest terminal here -- never a silent retry or a fake fail.
+            # Transport failure AFTER the request may have been sent: the
+            # operation MAY have executed, and we have no result.
+            # Indeterminate is the only honest terminal -- never a silent
+            # retry (it might double-run) or a fake fail.
             updated = self.db.mark_indeterminate(delivery_id, {
-                "reason": "node_unreachable",
+                "reason": "no_response",
                 "detail": detail or "no response from the node's Envoy",
                 "operation": job["operation"]})
             self.db.audit("hostapp", "dispatch_indeterminate",

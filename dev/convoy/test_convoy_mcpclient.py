@@ -69,16 +69,32 @@ def test_jsonrpc_protocol_error_is_ok_false():
     assert out["error"]["code"] == -32601
 
 
-def test_transport_failure_returns_none():
+def test_no_response_transport_failure_is_none():
+    """A failure with no clear 'never delivered' signal (a reset after
+    send) is None -> the op MAY have run -> indeterminate."""
     def boom(req, timeout=None):
-        raise urllib.error.URLError("connection refused")
+        raise urllib.error.URLError("some mid-stream failure")
     assert mc.forward(9872, "op", {}, opener=boom) is None
 
 
-def test_os_error_returns_none():
+def test_os_error_after_send_is_none():
     def boom(req, timeout=None):
         raise OSError("reset")
     assert mc.forward(9872, "op", {}, opener=boom) is None
+
+
+def test_refused_connection_is_unreachable_not_indeterminate():
+    """A refused connection never delivered the request -- the op did NOT
+    run, so it is UNREACHABLE (retry-safe), never None (indeterminate)."""
+    def refused(req, timeout=None):
+        raise ConnectionRefusedError("nobody home")
+    assert mc.forward(9872, "op", {}, opener=refused) is mc.UNREACHABLE
+
+
+def test_url_error_wrapping_a_refused_connection_is_unreachable():
+    def refused(req, timeout=None):
+        raise urllib.error.URLError(ConnectionRefusedError("nope"))
+    assert mc.forward(9872, "op", {}, opener=refused) is mc.UNREACHABLE
 
 
 def test_http_error_is_a_tool_error_not_transport_failure():
@@ -101,9 +117,10 @@ def test_malformed_result_is_ok_false():
     assert out == {"ok": False, "error": "malformed tool response"}
 
 
-def test_non_numeric_port_is_transport_failure():
+def test_non_numeric_port_is_unreachable():
     assert mc.forward("nope", "op", {},
-                      opener=opener_returning(sse(tool_response({})))) is None
+                      opener=opener_returning(
+                          sse(tool_response({})))) is mc.UNREACHABLE
 
 
 def test_never_raises_on_a_weird_opener():

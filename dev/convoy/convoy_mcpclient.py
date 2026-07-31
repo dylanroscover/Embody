@@ -29,6 +29,23 @@ SESSION_HEADER = "X-Envoy-Session"
 DEFAULT_TIMEOUT_S = 30.0
 
 
+class _Unreachable:
+    """The node's Envoy REFUSED the connection: the TCP connect failed, so
+    the HTTP request was never delivered and the operation definitely did
+    NOT run. Distinct from None (a failure AFTER the request may have been
+    sent, where the op may have run): the dispatcher leaves an unreachable
+    job QUEUED to retry, but records a no-response failure as
+    indeterminate. Never confuse 'did not run, retry' with 'may have run,
+    unknown'."""
+    __slots__ = ()
+
+    def __repr__(self):
+        return "UNREACHABLE"
+
+
+UNREACHABLE = _Unreachable()
+
+
 def _parse_jsonrpc(body):
     """Parse a Streamable-HTTP response: SSE-framed ('data: {json}') or a
     plain JSON body. Returns the JSON-RPC object, or None if unparseable.
@@ -71,9 +88,11 @@ def forward(port, operation, arguments, opener=None,
 
     Returns {"ok": True, "result": ...} for an executed tool, {"ok":
     False, "error": ...} for a tool or protocol error the node reported,
-    or None on a TRANSPORT failure (no usable response) -- which the
-    dispatcher treats as indeterminate. Never raises: a broken transport
-    must not crash dispatch.
+    UNREACHABLE when the connection was REFUSED (the op did NOT run --
+    retry-safe), or None on any other transport failure (no usable
+    response after the request may have been sent -- the op MAY have run,
+    so the dispatcher records indeterminate). Never raises: a broken
+    transport must not crash dispatch.
     """
     opener = opener or urllib.request.urlopen
     message = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -87,7 +106,7 @@ def forward(port, operation, arguments, opener=None,
                      SESSION_HEADER: session,
                      "X-Envoy-Label": "convoy host dispatch"})
     except (TypeError, ValueError):
-        return None             # a non-numeric port cannot be reached
+        return UNREACHABLE      # a non-numeric port cannot be reached
     try:
         with opener(req, timeout=timeout) as resp:
             body = resp.read().decode("utf-8")
@@ -98,8 +117,15 @@ def forward(port, operation, arguments, opener=None,
             body = e.read().decode("utf-8")
         except Exception:
             return {"ok": False, "error": "HTTP %s" % e.code}
-    except (urllib.error.URLError, OSError, ValueError):
-        return None             # transport gone -> indeterminate
+    except urllib.error.URLError as e:
+        # A refused connection never delivered the request -> did not run.
+        if isinstance(getattr(e, "reason", None), ConnectionRefusedError):
+            return UNREACHABLE
+        return None             # other transport failure -> may have run
+    except ConnectionRefusedError:
+        return UNREACHABLE
+    except (OSError, ValueError):
+        return None             # transport gone after send -> indeterminate
     parsed = _parse_jsonrpc(body)
     if not isinstance(parsed, dict):
         return None

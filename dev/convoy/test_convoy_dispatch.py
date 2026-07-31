@@ -116,14 +116,34 @@ def test_dispatch_mirrors_a_node_error(server):
     assert body["job"]["verdict_source"] == "node_sync"
 
 
-def test_transport_failure_is_indeterminate_never_a_fake_verdict(server):
+def test_no_response_is_indeterminate_never_a_fake_verdict(server):
     node = register(server)
     job = enqueue(server, node)
-    server.app.forwarder = lambda p, o, a: None   # no response
+    server.app.forwarder = lambda p, o, a: None   # sent, no response back
     code, body = server.call("/dispatch",
                              {"delivery_id": job["delivery_id"]})
     assert code == 200 and body["job"]["state"] == "indeterminate"
-    assert body["job"]["result"]["reason"] == "node_unreachable"
+    assert body["job"]["result"]["reason"] == "no_response"
+
+
+def test_a_refused_node_keeps_the_job_queued_to_retry(server):
+    """A briefly-down node (connection refused) did NOT run the op, so the
+    job must stay QUEUED for the next attempt -- never burned to
+    indeterminate."""
+    import convoy_mcpclient as mcpclient
+    node = register(server)
+    job = enqueue(server, node)
+    server.app.forwarder = lambda p, o, a: mcpclient.UNREACHABLE
+    code, body = server.call("/dispatch",
+                             {"delivery_id": job["delivery_id"]})
+    assert code == 409 and body["reason"] == "node_unreachable"
+    _, fetched = server.call(f"/jobs/{job['delivery_id']}")
+    assert fetched["job"]["state"] == "queued", "still queued to retry"
+    # and a later dispatch, once the node is up, succeeds normally
+    server.app.forwarder = lambda p, o, a: {"ok": True, "result": {"n": 1}}
+    code, body = server.call("/dispatch",
+                             {"delivery_id": job["delivery_id"]})
+    assert code == 200 and body["job"]["state"] == "succeeded"
 
 
 def test_a_raising_forwarder_is_indeterminate_not_a_crash(server):
