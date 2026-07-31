@@ -178,7 +178,7 @@ def test_job_create_is_idempotent_over_the_wire(server):
     _, first = server.call("/jobs", payload)
     _, second = server.call("/jobs", payload)
     assert first["created"] is True and second["created"] is False
-    assert first["job"]["job_id"] == second["job"]["job_id"]
+    assert first["job"]["delivery_id"] == second["job"]["delivery_id"]
 
 
 def test_malformed_job_refused(server):
@@ -205,7 +205,7 @@ def test_nodes_and_jobs_survive_a_full_host_restart(tmp_path):
     _, created = first.call("/jobs", {"idempotency_key": "survive-me",
                                       "node_id": node["node_id"],
                                       "operation": "capture_top"})
-    job_id = created["job"]["job_id"]
+    delivery_id = created["job"]["delivery_id"]
     host_id = first.app.host_id
     first.stop()
 
@@ -213,7 +213,7 @@ def test_nodes_and_jobs_survive_a_full_host_restart(tmp_path):
     try:
         assert second.app.host_id == host_id, "host identity is stable"
 
-        code, body = second.call(f"/jobs/{job_id}")
+        code, body = second.call(f"/jobs/{delivery_id}")
         assert code == 200, "the acknowledged job must still exist"
         assert body["job"]["idempotency_key"] == "survive-me"
 
@@ -231,7 +231,7 @@ def test_nodes_and_jobs_survive_a_full_host_restart(tmp_path):
                                          "node_id": node["node_id"],
                                          "operation": "capture_top"})
         assert retry["created"] is False
-        assert retry["job"]["job_id"] == job_id
+        assert retry["job"]["delivery_id"] == delivery_id
     finally:
         second.stop()
 
@@ -304,7 +304,7 @@ def test_jobs_for_two_nodes_do_not_collide_over_the_wire(server):
                                   "node_id": b["node_id"],
                                   "operation": "query_network"})
     assert ja["created"] is True and jb["created"] is True
-    assert ja["job"]["job_id"] != jb["job"]["job_id"]
+    assert ja["job"]["delivery_id"] != jb["job"]["delivery_id"]
     assert jb["job"]["node_id"] == b["node_id"]
 
 

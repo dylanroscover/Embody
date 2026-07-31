@@ -212,13 +212,13 @@ def test_signed_envelope_becomes_a_durable_idempotent_job(server):
     assert job["arguments"] == {"parent_path": "/"}
 
     # Durable: readable back through the job route.
-    code, fetched = server.call(f"/jobs/{job['job_id']}")
-    assert code == 200 and fetched["job"]["job_id"] == job["job_id"]
+    code, fetched = server.call(f"/jobs/{job['delivery_id']}")
+    assert code == 200 and fetched["job"]["delivery_id"] == job["delivery_id"]
 
     # Idempotent: the SAME envelope acknowledges the SAME job.
     code, again = server.call("/envelope", {"envelope": env})
     assert code == 200 and again["created"] is False
-    assert again["job"]["job_id"] == job["job_id"]
+    assert again["job"]["delivery_id"] == job["delivery_id"]
 
 
 def test_wrong_psk_is_bad_signature_and_no_job(server):

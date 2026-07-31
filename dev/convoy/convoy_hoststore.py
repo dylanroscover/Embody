@@ -26,9 +26,11 @@ cross-machine reconciliation over very large histories, THAT is when a
 database earns its place -- not before.
 """
 
+import hashlib
 import json
 import os
 import secrets
+import stat
 import time
 
 import convoy_identity as identity
@@ -40,6 +42,29 @@ JOBS_DIR = "jobs"
 AUDIT_FILE = "audit.jsonl"
 
 JOB_STATES = ("queued", "running", "succeeded", "failed", "indeterminate")
+
+# A-15, "one authority, two records". The NODE originates the execution
+# verdict; the host record MIRRORS it. So the host may write two states
+# on its own authority and no more:
+#   queued        -- accepted, not yet dispatched (there is no dispatcher
+#                    in Phase 1, so this is where a host job rests).
+#   indeterminate -- dispatched, outcome unobservable (partition, node
+#                    gone, TD restarted mid-job). Only the host witnessed
+#                    the dispatch-without-response, so only the host can
+#                    record it -- and it is never deleted, it is the sole
+#                    proof a consequential operation MAY have run (16.4).
+# running / succeeded / failed are NODE verdicts: they may only be
+# recorded through record_node_verdict, which demands the provenance
+# (node_job_id + observed_at) that proves a node produced them. The host
+# cannot fabricate a success -- the method that would write it refuses
+# without the evidence.
+_HOST_ORIGINABLE_STATES = ("queued", "indeterminate")
+
+# The shipped node vocabulary (EnvoyExt _job_public: running|done|error)
+# mapped to the host mirror. Kept explicit so a new node status cannot
+# silently map to a host state by coincidence.
+_NODE_STATUS_TO_STATE = {"running": "running", "done": "succeeded",
+                         "error": "failed"}
 
 
 class StoreTooNew(Exception):
@@ -196,101 +221,231 @@ class HostStore:
         return self._state.get("convoy_psks", {}).get(convoy_id)
 
     # -- jobs (one file each, like .embody/jobs/) -----------------------
+    #
+    # Two ids live here, and keeping them distinct is A-15's "two
+    # records": delivery_id (cj_...) is the HOST's routing/delivery
+    # record -- did the mesh accept and route this request; node_job_id
+    # (job_<8hex>) is the NODE's execution record -- what TD actually
+    # did. The host mirrors the node's verdict into its own record but
+    # never originates one (see record_node_verdict / mark_indeterminate).
 
-    def _job_path(self, job_id):
-        return os.path.join(self.jobs_dir, f"{job_id}.json")
+    def _job_path(self, delivery_id):
+        return os.path.join(self.jobs_dir, f"{delivery_id}.json")
 
-    def _index_path(self):
-        return os.path.join(self.jobs_dir, "_by_key.json")
+    def _idem_path(self, convoy_id, node_id, idempotency_key):
+        """Path of the per-key admission MARKER.
 
-    def _load_index(self):
-        try:
-            with open(self._index_path(), "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return data if isinstance(data, dict) else {}
-        except (OSError, ValueError):
-            return {}
+        Idempotency is scoped, never global: a single global key space
+        meant a submission for node B returned node A's job, and let one
+        convoy squat a guessable key across every other convoy. The three
+        parts are NUL-joined (a NUL cannot appear in any of them, so no
+        combination can forge another scope) and hashed, so arbitrary key
+        text can neither escape the jobs dir nor collide with a cj_ job
+        file.
+
+        ONE FILE PER KEY, deliberately: the old shared _by_key.json blob
+        turned a single unreadable read into "no keys exist" and re-minted
+        a duplicate job for EVERY prior key (proven 2026-07-31). A per-key
+        marker's blast radius is one key, and its read fails CLOSED.
+        """
+        scope = "\x00".join((convoy_id, node_id, idempotency_key))
+        digest = hashlib.sha256(scope.encode("utf-8")).hexdigest()[:24]
+        return os.path.join(self.jobs_dir, f"idem_{digest}.json")
 
     @staticmethod
-    def _scope_key(convoy_id, node_id, idempotency_key):
-        """Idempotency is scoped, never global.
+    def _claim_marker(path):
+        """O_EXCL-create the marker as the admission GATE. Returns True
+        if we created it (we own this key's admission), False if it
+        already existed. The atomic create IS the decision, so there is
+        no write-body-then-index window in which a crash drops the
+        mapping."""
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        try:
+            fd = os.open(path, flags, stat.S_IRUSR | stat.S_IWUSR)
+        except FileExistsError:
+            return False
+        os.close(fd)
+        return True
 
-        A single global key space meant a submission for node B returned
-        node A's job -- B's work silently never created -- and let one
-        convoy squat a guessable key across every other convoy. The
-        separator is a NUL, which cannot appear in any of the three
-        parts, so no combination of ids can forge another scope's key.
+    @staticmethod
+    def _read_marker(path):
+        """Return the marker dict, None if it is absent or created-but-
+        not-yet-filled, and RAISE on a persistent read error or corrupt
+        content.
+
+        Fail-closed is the whole point: treating an unreadable marker as
+        "absent" would re-mint a job that already exists (the annihilation
+        class). Empty is distinct from unreadable -- an empty marker is
+        the O_EXCL-created-but-not-yet-filled window left by a crash mid
+        accept, which the caller heals by minting; a locked/corrupt marker
+        is refused so the caller retries rather than duplicates.
         """
-        return "\x00".join((convoy_id, node_id, idempotency_key))
+        last = None
+        for _attempt in range(4):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    text = f.read().strip()
+            except FileNotFoundError:
+                return None
+            except OSError as e:        # locked / sharing violation: retry
+                last = e
+                continue
+            if not text:
+                return None             # created but not yet filled (crash)
+            try:
+                data = json.loads(text)
+            except ValueError:
+                # os.replace is atomic, so a NON-EMPTY marker we wrote is
+                # always whole JSON. Unparseable-but-present means disk
+                # corruption or tampering -- refuse, never heal-into-dup.
+                raise OSError(
+                    f"idempotency marker at {path} is present but corrupt")
+            return data if isinstance(data, dict) else None
+        raise OSError(f"idempotency marker at {path} unreadable: {last}")
 
     def create_job(self, idempotency_key, node_id, operation, arguments,
                    convoy_id):
-        """Persist-before-acknowledge. Returns (job, created).
+        """Persist-before-acknowledge, idempotent per (convoy, node, key).
+        Returns (job, created).
 
-        The job file is written and replaced atomically BEFORE this
-        returns, so an acknowledged job can never be lost to a crash.
+        Order is crash-safe: claim the marker (atomic gate), write the
+        JOB file (durable), then fill the marker to point at it. A crash
+        before the job write leaves an empty marker the next retry heals;
+        a crash before the marker fill leaves an unreferenced job (never
+        acknowledged, so never dispatched) that retention reaps -- neither
+        is a duplicate of ACKNOWLEDGED work, because the caller only
+        receives the delivery_id after the marker names it.
         """
         if not idempotency_key or not isinstance(idempotency_key, str):
             raise ValueError("idempotency_key is required")
         if not convoy_id or not isinstance(convoy_id, str):
             raise ValueError("convoy_id is required to scope idempotency")
 
-        index = self._load_index()
-        scope = self._scope_key(convoy_id, node_id, idempotency_key)
-        existing_id = index.get(scope)
-        if existing_id:
-            existing = self.get_job(existing_id)
-            if existing is not None:
-                return existing, False
-            # Index pointed at a job whose file is gone -- heal it rather
-            # than refusing forever.
-            index.pop(scope, None)
+        marker = self._idem_path(convoy_id, node_id, idempotency_key)
+        if not self._claim_marker(marker):
+            # Seen before. The filled marker names the delivery record;
+            # read it FAIL-CLOSED (an unreadable marker raises here rather
+            # than re-minting).
+            prior = self._read_marker(marker)
+            if prior and prior.get("delivery_id"):
+                existing = self.get_job(prior["delivery_id"])
+                if existing is not None:
+                    return existing, False
+                # Marker names a delivery record whose file is gone -- heal
+                # by minting a fresh one under the same marker.
+            # else: marker was created but never filled (a prior accept
+            # crashed between the gate and the job write) -- heal.
 
         now = self._now()
+        delivery_id = "cj_" + identity.mint_id()[:12]
         job = {
-            "job_id": "cj_" + identity.mint_id()[:12],
+            "delivery_id": delivery_id,
             "idempotency_key": idempotency_key,
             "node_id": node_id,
             "convoy_id": convoy_id,
             "operation": operation,
             "arguments": arguments or {},
+            # Host-originated (A-15): the host may rest a record at queued;
+            # the execution verdict is mirrored from the node later.
             "state": "queued",
             "result": None,
+            # The node-minted execution id (job_<8hex>) and the provenance
+            # of the current state. None until a node verdict is mirrored
+            # in -- and in Phase 1 nothing dispatches yet, so they stay
+            # None. Their presence is what distinguishes a real node
+            # verdict from a host-originated state.
+            "node_job_id": None,
+            "verdict_source": None,
+            "observed_at": None,
             "created": now,
             "updated": now,
         }
         platform_mod._write_private(
-            self._job_path(job["job_id"]),
+            self._job_path(delivery_id),
             json.dumps(job, indent=1, sort_keys=True) + "\n")
-        index[scope] = job["job_id"]
         platform_mod._write_private(
-            self._index_path(), json.dumps(index, sort_keys=True) + "\n")
+            marker,
+            json.dumps({"delivery_id": delivery_id, "created": now},
+                       sort_keys=True) + "\n")
         self.audit("hoststore", "job_created",
-                   {"job_id": job["job_id"], "operation": operation,
-                    "node_id": node_id})
+                   {"delivery_id": delivery_id,
+                    "idempotency_key": idempotency_key,
+                    "operation": operation, "node_id": node_id})
         return job, True
 
-    def get_job(self, job_id):
-        if not job_id or "/" in job_id or "\\" in job_id or ".." in job_id:
+    def get_job(self, delivery_id):
+        if (not delivery_id or "/" in delivery_id or "\\" in delivery_id
+                or ".." in delivery_id):
             return None         # never let an id escape the jobs dir
         try:
-            with open(self._job_path(job_id), "r", encoding="utf-8") as f:
+            with open(self._job_path(delivery_id), "r",
+                      encoding="utf-8") as f:
                 return json.load(f)
         except (OSError, ValueError):
             return None
 
-    def set_job_state(self, job_id, state, result=None):
+    def record_node_verdict(self, delivery_id, node_status, node_job_id,
+                            observed_at, result=None):
+        """Mirror a verdict OBSERVED on the node into the host record.
+
+        A-15: the node originates the execution verdict; the host only
+        caches it, and only with the provenance that proves a node
+        produced it -- node_job_id (the node's own job_<8hex>) and
+        observed_at. This is the strongest form of "one authority": the
+        method that would write "succeeded" cannot be called without the
+        evidence a node returned it, so the host can never fabricate a
+        success. node_status is the shipped node vocabulary
+        (running|done|error); it maps to the host mirror.
+        """
+        state = _NODE_STATUS_TO_STATE.get(node_status)
+        if state is None:
+            raise ValueError(
+                f"unknown node status {node_status!r} (expected one of "
+                f"{sorted(_NODE_STATUS_TO_STATE)})")
+        if not node_job_id or not observed_at:
+            raise ValueError(
+                "a cached node verdict MUST carry node_job_id and "
+                "observed_at -- its provenance is what separates it from a "
+                "host-fabricated result (A-15)")
+        return self._apply_state(delivery_id, state, result=result,
+                                 verdict_source="node_poll",
+                                 observed_at=observed_at,
+                                 node_job_id=node_job_id)
+
+    def mark_indeterminate(self, delivery_id, evidence):
+        """Host-ORIGINATED terminal outcome: the operation MAY have run
+        and the node cannot be observed. The one execution-ambiguous
+        state the host may write on its own authority, because only the
+        host witnessed the dispatch-without-response. Never delete such a
+        record -- it is the sole proof a consequential operation may have
+        executed (16.4), so evidence is required."""
+        if not evidence:
+            raise ValueError(
+                "mark_indeterminate requires evidence (what was seen, and "
+                "why the outcome is unknown)")
+        return self._apply_state(delivery_id, "indeterminate",
+                                 result=evidence, verdict_source="host")
+
+    def _apply_state(self, delivery_id, state, result=None,
+                     verdict_source=None, observed_at=None, node_job_id=None):
         if state not in JOB_STATES:
             raise ValueError(f"unknown job state {state!r}")
-        job = self.get_job(job_id)
+        job = self.get_job(delivery_id)
         if job is None:
-            raise KeyError(job_id)
+            raise KeyError(delivery_id)
         job["state"] = state
         if result is not None:
             job["result"] = result
+        if verdict_source is not None:
+            job["verdict_source"] = verdict_source
+        if observed_at is not None:
+            job["observed_at"] = observed_at
+        if node_job_id is not None:
+            job["node_job_id"] = node_job_id
         job["updated"] = self._now()
         platform_mod._write_private(
-            self._job_path(job_id),
+            self._job_path(delivery_id),
             json.dumps(job, indent=1, sort_keys=True) + "\n")
         return job
 
@@ -301,12 +456,16 @@ class HostStore:
         except OSError:
             return out
         for name in names:
-            if not name.endswith(".json") or name.startswith("_"):
+            # Skip the per-key idempotency markers and any underscore-
+            # prefixed bookkeeping file -- only cj_ delivery records here.
+            if (not name.endswith(".json") or name.startswith("_")
+                    or name.startswith("idem_")):
                 continue
             job = self.get_job(name[:-len(".json")])
             if job and (state is None or job.get("state") == state):
                 out.append(job)
-        out.sort(key=lambda j: (j.get("created", 0), j.get("job_id", "")))
+        out.sort(key=lambda j: (j.get("created", 0),
+                                j.get("delivery_id", "")))
         return out
 
     # -- audit (A-40: host-side, never the Embody logger) ---------------

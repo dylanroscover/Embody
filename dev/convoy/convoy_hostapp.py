@@ -328,11 +328,11 @@ class HostApp:
             convoy_id=node["convoy_id"])
         return 200, {"ok": True, "created": created, "job": job}
 
-    def get_job(self, job_id):
-        job = self.db.get_job(job_id)
+    def get_job(self, delivery_id):
+        job = self.db.get_job(delivery_id)
         if job is None:
             return 404, {"ok": False, "reason": "unknown_job",
-                         "detail": job_id}
+                         "detail": delivery_id}
         return 200, {"ok": True, "job": job}
 
     # -- the guarded request path (Phase 1 completion) ------------------
@@ -490,7 +490,12 @@ class HostApp:
         job, created = self.db.create_job(
             idempotency_key, node["node_id"], operation,
             envelope.get("arguments"), convoy_id=node["convoy_id"])
-        # A-22: the ack carries the target-minted job_id.
+        # The ack carries the HOST's delivery_id (cj_...), the id of the
+        # routing record -- NOT A-22's target-minted job_id, which is the
+        # node's own job_<8hex> and does not exist until a node accepts
+        # and runs the work (job["node_job_id"], None here). Keeping the
+        # two distinct is A-15's "two records": one for delivery, one for
+        # execution.
         return 200, {"ok": True, "created": created, "job": job}
 
     # -- capability manifest (A-23) --------------------------------------

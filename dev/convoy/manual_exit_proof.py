@@ -44,8 +44,8 @@ print(f"  distinct: {a['node_id'] != b['node_id']} | same host: {a['host_id'] ==
 print('\n=== durable job ===')
 j = call(port, '/jobs', {'idempotency_key': 'exit-proof', 'node_id': a['node_id'],
                          'operation': 'query_network', 'arguments': {'parent_path': '/'}})
-job_id = j['job']['job_id']
-print(f"  created {job_id} state={j['job']['state']}")
+delivery_id = j['job']['delivery_id']
+print(f"  created {delivery_id} state={j['job']['state']}")
 
 print('\n=== KILL the host app (supervisor restart) ===')
 proc.terminate(); proc.wait(timeout=15)
@@ -56,11 +56,11 @@ proc2, port2 = start()
 print(f'  host app pid={proc2.pid} port={port2} (new port, found via portfile)')
 st = call(port2, '/status')
 print('  status:', json.dumps(st))
-recovered = call(port2, f'/jobs/{job_id}')
-print(f"  job {job_id} SURVIVED: state={recovered['job']['state']} key={recovered['job']['idempotency_key']}")
+recovered = call(port2, f'/jobs/{delivery_id}')
+print(f"  job {delivery_id} SURVIVED: state={recovered['job']['state']} key={recovered['job']['idempotency_key']}")
 again = call(port2, '/register', {'project_root': '/Work/anchor-A', 'convoy_id': 'studio', 'comp_path': '/projA/Embody'})
 print(f"  node A re-registered to the SAME id: {again['node_id'] == a['node_id']}")
 retry = call(port2, '/jobs', {'idempotency_key': 'exit-proof', 'node_id': a['node_id'], 'operation': 'query_network'})
-print(f"  idempotency held across restart: created={retry['created']} same_job={retry['job']['job_id'] == job_id}")
+print(f"  idempotency held across restart: created={retry['created']} same_job={retry['job']['delivery_id'] == delivery_id}")
 proc2.terminate(); proc2.wait(timeout=15)
 print('\nPHASE 1 EXIT (local slice): two nodes registered, jobs survived a real process restart.')

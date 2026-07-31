@@ -91,7 +91,24 @@ def _write_private(path, data):
         except OSError:
             pass
         raise
-    os.replace(tmp, path)
+    # os.replace is atomic, but on Windows it raises a sharing violation
+    # (PermissionError) when a concurrent reader holds the destination
+    # open -- exactly what happens when the host app rewrites a job record
+    # a status poll is reading. The reader's window is sub-millisecond, so
+    # a few immediate retries clear it without sleeping. The node-side
+    # _write_job learned this the same way; mirror it here so a hot record
+    # write is not lost to a transient lock.
+    for attempt in range(5):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 4:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
 
 
 def ensure_ipc_token(directory):

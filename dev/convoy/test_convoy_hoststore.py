@@ -117,18 +117,22 @@ def test_directory_survives_restart_with_ids_and_approvals(tmp_path):
 
 # -- durable jobs -----------------------------------------------------
 
-def test_job_id_is_host_minted_not_caller_supplied(db):
+def test_delivery_id_is_host_minted_not_caller_supplied(db):
     job, created = db.create_job("key-1", "node-1", "query_network", {}, "cv")
     assert created is True
-    assert job["job_id"].startswith("cj_")
+    assert job["delivery_id"].startswith("cj_")
     assert job["state"] == "queued"
+    # The two records of A-15: the host's delivery id exists now; the
+    # node's execution id does not until a node runs the work.
+    assert job["node_job_id"] is None
+    assert job["verdict_source"] is None
 
 
 def test_idempotent_create_returns_the_same_job(db):
     first, created_1 = db.create_job("same-key", "n", "capture_top", {"a": 1}, "cv")
     second, created_2 = db.create_job("same-key", "n", "capture_top", {"a": 1}, "cv")
     assert created_1 is True and created_2 is False
-    assert first["job_id"] == second["job_id"], (
+    assert first["delivery_id"] == second["delivery_id"], (
         "a retry must never create a duplicate job")
     assert len(db.jobs()) == 1
 
@@ -139,7 +143,7 @@ def test_idempotency_holds_even_if_the_retry_differs(db):
     first, _ = db.create_job("k", "n", "query_network", {"parent_path": "/"}, "cv")
     second, created = db.create_job("k", "n", "delete_op", {"op_path": "/x"}, "cv")
     assert created is False
-    assert second["job_id"] == first["job_id"]
+    assert second["delivery_id"] == first["delivery_id"]
     assert second["operation"] == "query_network"
 
 
@@ -148,38 +152,84 @@ def test_jobs_survive_host_restart(tmp_path):
     path = str(tmp_path / "state")
     db1 = hdb.HostStore(path)
     job, _ = db1.create_job("persist-me", "node-9", "query_network", {}, "cv")
-    db1.set_job_state(job["job_id"], "running")
+    db1.record_node_verdict(job["delivery_id"], "running",
+                            node_job_id="job_ab12cd34", observed_at=1000.0)
     db1.close()
 
     db2 = hdb.HostStore(path)
-    restored = db2.get_job(job["job_id"])
+    restored = db2.get_job(job["delivery_id"])
     assert restored is not None, "an acknowledged job must never be lost"
     assert restored["state"] == "running"
+    assert restored["node_job_id"] == "job_ab12cd34"
+    assert restored["verdict_source"] == "node_poll"
     assert restored["idempotency_key"] == "persist-me"
     # And the idempotency guarantee spans the restart too.
     again, created = db2.create_job("persist-me", "node-9",
                                     "query_network", {}, "cv")
-    assert created is False and again["job_id"] == job["job_id"]
+    assert created is False and again["delivery_id"] == job["delivery_id"]
     db2.close()
 
 
-def test_indeterminate_is_a_first_class_state(db):
+def test_indeterminate_is_host_originated_and_first_class(db):
     job, _ = db.create_job("k", "n", "capture_top", {}, "cv")
-    db.set_job_state(job["job_id"], "indeterminate",
-                     {"detail": "no response within deadline"})
-    assert db.get_job(job["job_id"])["state"] == "indeterminate"
+    updated = db.mark_indeterminate(
+        job["delivery_id"], {"detail": "no response within deadline"})
+    assert updated["state"] == "indeterminate"
+    assert updated["verdict_source"] == "host"
+    assert db.get_job(job["delivery_id"])["state"] == "indeterminate"
     assert "indeterminate" in hdb.JOB_STATES
 
 
-def test_unknown_state_refused(db):
+def test_indeterminate_requires_evidence(db):
+    """The record is the only proof a consequential op MAY have run
+    (16.4), so it must carry what was seen."""
+    job, _ = db.create_job("k", "n", "capture_top", {}, "cv")
+    with pytest.raises(ValueError):
+        db.mark_indeterminate(job["delivery_id"], None)
+
+
+def test_host_cannot_originate_an_execution_verdict(db):
+    """A-15: the node owns the verdict. There is NO host method that
+    writes succeeded/failed without node provenance -- the only path is
+    record_node_verdict, which demands node_job_id + observed_at."""
+    job, _ = db.create_job("k", "n", "capture_top", {}, "cv")
+    with pytest.raises(ValueError):
+        db.record_node_verdict(job["delivery_id"], "done",
+                               node_job_id="", observed_at=1000.0)
+    with pytest.raises(ValueError):
+        db.record_node_verdict(job["delivery_id"], "done",
+                               node_job_id="job_x", observed_at=None)
+    # And the state never changed off queued.
+    assert db.get_job(job["delivery_id"])["state"] == "queued"
+
+
+def test_node_verdict_maps_shipped_statuses(db):
+    for node_status, expected in (("running", "running"),
+                                  ("done", "succeeded"),
+                                  ("error", "failed")):
+        job, _ = db.create_job(f"k-{node_status}", "n", "x", {}, "cv")
+        updated = db.record_node_verdict(
+            job["delivery_id"], node_status,
+            node_job_id="job_deadbeef", observed_at=1234.5,
+            result={"summary": node_status})
+        assert updated["state"] == expected
+        assert updated["node_job_id"] == "job_deadbeef"
+        assert updated["observed_at"] == 1234.5
+
+
+def test_unknown_node_status_refused(db):
     job, _ = db.create_job("k", "n", "x", {}, "cv")
     with pytest.raises(ValueError):
-        db.set_job_state(job["job_id"], "probably_fine")
+        db.record_node_verdict(job["delivery_id"], "probably_fine",
+                               node_job_id="job_x", observed_at=1.0)
 
 
-def test_setting_state_on_a_missing_job_raises(db):
+def test_verdict_on_a_missing_job_raises(db):
     with pytest.raises(KeyError):
-        db.set_job_state("cj_nope", "succeeded")
+        db.record_node_verdict("cj_nope", "done",
+                               node_job_id="job_x", observed_at=1.0)
+    with pytest.raises(KeyError):
+        db.mark_indeterminate("cj_nope", {"detail": "gone"})
 
 
 def test_missing_idempotency_key_refused(db):
@@ -215,9 +265,16 @@ def test_audit_is_append_only_and_survives_a_torn_line(tmp_path):
     st2.close()
 
 
-def test_job_creation_is_audited(db):
-    db.create_job("k", "n", "query_network", {}, "cv")
-    assert any(r["event"] == "job_created" for r in db.audit_tail())
+def test_job_creation_is_audited_with_the_join_key(db):
+    """audit.jsonl is the one append-only artifact that survives a store
+    restore, so the create line must carry idempotency_key -- otherwise a
+    recovered audit cannot be joined back to a controller's request."""
+    db.create_job("join-key", "n", "query_network", {}, "cv")
+    created = [r for r in db.audit_tail() if r["event"] == "job_created"]
+    assert created
+    detail = created[-1]["detail"]
+    assert detail["idempotency_key"] == "join-key"
+    assert detail["delivery_id"].startswith("cj_")
 
 
 # =====================================================================
@@ -232,7 +289,7 @@ def test_idempotency_is_scoped_per_node_not_global(db):
     b, created_b = db.create_job("deploy", "node-B", "query_network", {}, "cv")
     assert created_a is True
     assert created_b is True, "node B's job must actually be created"
-    assert a["job_id"] != b["job_id"]
+    assert a["delivery_id"] != b["delivery_id"]
     assert b["node_id"] == "node-B"
     assert b["operation"] == "query_network"
 
@@ -242,13 +299,13 @@ def test_idempotency_is_scoped_per_convoy(db):
     deny it to another (A-25 namespace isolation)."""
     a, _ = db.create_job("nightly", "n", "capture_top", {}, "convoy-A")
     b, created = db.create_job("nightly", "n", "capture_top", {}, "convoy-B")
-    assert created is True and a["job_id"] != b["job_id"]
+    assert created is True and a["delivery_id"] != b["delivery_id"]
 
 
 def test_retry_within_the_same_scope_still_dedupes(db):
     first, _ = db.create_job("k", "n", "x", {}, "cv")
     second, created = db.create_job("k", "n", "x", {}, "cv")
-    assert created is False and second["job_id"] == first["job_id"]
+    assert created is False and second["delivery_id"] == first["delivery_id"]
 
 
 def test_convoy_id_is_required_for_scoping(db):
@@ -322,3 +379,74 @@ def test_one_bad_row_does_not_crash_the_daemon_at_boot(tmp_path):
     assert len(foreign) == 1
     assert "load_error" in foreign[0]
     db2.close()
+
+
+# =====================================================================
+# Per-key idempotency markers (2026-07-31 A-15 resolution)
+#
+# Replaces the shared _by_key.json blob whose single unreadable read
+# annihilated EVERY prior mapping and re-minted a duplicate per key
+# (proven live). These pin the anti-fragility properties of the marker
+# design: one-key blast radius, fail-closed reads, crash-window heal.
+# =====================================================================
+
+def test_one_unreadable_marker_cannot_annihilate_other_keys(db):
+    """The headline fix. Corrupting ONE key's marker must not touch any
+    other key, and the corrupted key must FAIL CLOSED (raise) rather than
+    silently re-minting a duplicate -- the exact inversion of the old
+    shared-index annihilation."""
+    a, _ = db.create_job("key-A", "n", "capture_top", {}, "cv")
+    b, _ = db.create_job("key-B", "n", "query_network", {}, "cv")
+
+    marker_a = db._idem_path("cv", "n", "key-A")
+    with open(marker_a, "w", encoding="utf-8") as f:
+        f.write("{ corrupt, not json")     # non-empty + unparseable
+
+    # key-B's marker is independent -> its retry still dedupes.
+    b_again, created_b = db.create_job("key-B", "n", "query_network", {}, "cv")
+    assert created_b is False
+    assert b_again["delivery_id"] == b["delivery_id"]
+
+    # key-A fails closed rather than duplicating.
+    with pytest.raises(OSError):
+        db.create_job("key-A", "n", "capture_top", {}, "cv")
+
+    a_jobs = [j for j in db.jobs() if j["idempotency_key"] == "key-A"]
+    assert len(a_jobs) == 1 and a_jobs[0]["delivery_id"] == a["delivery_id"]
+
+
+def test_empty_marker_from_a_crash_heals_without_duplicate(db):
+    """A crash AFTER the O_EXCL gate but BEFORE the job write leaves an
+    empty marker. The next accept heals it and a retry then dedupes to
+    that one job -- never a second."""
+    marker = db._idem_path("cv", "n", "crash-key")
+    open(marker, "w", encoding="utf-8").close()     # gated, not yet filled
+
+    job, created = db.create_job("crash-key", "n", "capture_top", {}, "cv")
+    assert created is True and job["delivery_id"].startswith("cj_")
+
+    again, created2 = db.create_job("crash-key", "n", "capture_top", {}, "cv")
+    assert created2 is False and again["delivery_id"] == job["delivery_id"]
+    assert len([j for j in db.jobs()
+                if j["idempotency_key"] == "crash-key"]) == 1
+
+
+def test_marker_pointing_at_a_deleted_job_heals(db):
+    """If the delivery record a marker names is gone (manual cleanup,
+    retention), a retry mints a fresh one rather than refusing forever."""
+    job, _ = db.create_job("k", "n", "x", {}, "cv")
+    os.remove(db._job_path(job["delivery_id"]))
+    healed, created = db.create_job("k", "n", "x", {}, "cv")
+    assert created is True
+    assert healed["delivery_id"] != job["delivery_id"]
+
+
+def test_idempotency_markers_are_not_listed_as_jobs(db):
+    db.create_job("k1", "n", "x", {}, "cv")
+    db.create_job("k2", "n", "y", {}, "cv")
+    jobs = db.jobs()
+    assert len(jobs) == 2
+    assert all(j["delivery_id"].startswith("cj_") for j in jobs)
+    markers = [f for f in os.listdir(os.path.join(db.dir, "jobs"))
+               if f.startswith("idem_")]
+    assert len(markers) == 2, "one marker per key, invisible to jobs()"
