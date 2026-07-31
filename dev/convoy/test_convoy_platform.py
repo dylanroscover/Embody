@@ -17,13 +17,17 @@ def test_win32_uses_local_appdata_not_roaming():
     got = cp.data_dir(platform="win32",
                       env={"LOCALAPPDATA": r"C:\Users\x\AppData\Local"},
                       home=r"C:\Users\x")
-    assert got == os.path.join(r"C:\Users\x\AppData\Local", cp.APP_DIR_NAME)
+    # LITERAL expectation, never os.path.join: this asserts a WINDOWS
+    # path, and os.path.join yields forward slashes on the macOS
+    # runner. The identical mistake failed the first-ever macOS CI run
+    # of the bridge suite -- it must not be reintroduced here.
+    assert got == r"C:\Users\x\AppData\Local\EmbodyConvoy"
     assert "Roaming" not in got
 
 
 def test_win32_falls_back_when_localappdata_unset():
     got = cp.data_dir(platform="win32", env={}, home=r"C:\Users\x")
-    assert got.endswith(os.path.join("AppData", "Local", cp.APP_DIR_NAME))
+    assert got == r"C:\Users\x\AppData\Local\EmbodyConvoy"
 
 
 def test_darwin_uses_application_support():

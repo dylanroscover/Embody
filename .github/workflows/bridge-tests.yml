@@ -16,6 +16,7 @@ on:
       - 'dev/embody/Embody/templates/text_envoy_bridge.py'
       - 'dev/embody/unit_tests/test_envoy_bridge.py'
       - 'dev/embody/unit_tests/conftest.py'
+      - 'dev/convoy/**'
       - 'pytest.ini'
       - '.github/workflows/bridge-tests.yml'
   pull_request:
@@ -24,6 +25,7 @@ on:
       - 'dev/embody/Embody/templates/text_envoy_bridge.py'
       - 'dev/embody/unit_tests/test_envoy_bridge.py'
       - 'dev/embody/unit_tests/conftest.py'
+      - 'dev/convoy/**'
       - 'pytest.ini'
       - '.github/workflows/bridge-tests.yml'
   workflow_dispatch:
