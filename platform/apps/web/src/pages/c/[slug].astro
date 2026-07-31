@@ -1688,6 +1688,11 @@ function emitKey(key: string): string {
     -webkit-line-clamp: 2;
     line-clamp: 2;
     overflow: hidden;
+    /* overflow: hidden zeroes a flex item's automatic minimum size, so when a
+       long description makes the panel's content exceed its max-height, the
+       column flex squashed the title to 0px (a long-description specimen
+       rendered with NO title). Never shrink it -- the panel scrolls instead. */
+    flex-shrink: 0;
   }
   .specimen-app__desc {
     margin: 0;
