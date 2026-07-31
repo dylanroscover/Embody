@@ -179,9 +179,34 @@ def text_field(body, name, required=True, limit=MAX_ID_CHARS):
     return value
 
 
+def _json_safe(value):
+    """The value itself if it survives strict JSON, else an honest
+    substitute. A node result rides into the durable job file and back
+    out through every /jobs response; an unserializable payload (or a
+    bare NaN, which json.dumps emits but strict parsers and our own
+    _send refuse) would otherwise blow up the RECORDING of a verdict the
+    node really produced -- the verdict must survive even when its
+    payload cannot."""
+    try:
+        # EXACTLY the store's dumps options (sort_keys included): a
+        # value that only fails under sort_keys (mixed-type dict keys)
+        # passed a laxer check here and then blew up the store write,
+        # downgrading a real verdict to indeterminate.
+        json.dumps(value, indent=1, sort_keys=True, allow_nan=False)
+        return value
+    except (TypeError, ValueError):
+        return {"detail": "node result was not JSON-serializable; "
+                          "sanitized to its repr",
+                "repr": repr(value)[:512]}
+
+
 class HostApp:
     """All state behind one lock: a host app is coordination, not
-    throughput. Every handler acquires it around the whole request."""
+    throughput. Every handler acquires it around the whole request --
+    EXCEPT dispatch_job and drain/drain_once, which SELF-lock in phases
+    so the forward I/O runs outside the lock. Never call those from
+    inside `with app.lock:` -- threading.Lock is not reentrant, and the
+    double-acquire deadlocks the handler thread."""
 
     def __init__(self, directory_path, now=None, forwarder=None):
         self.data_dir = directory_path
@@ -212,9 +237,45 @@ class HostApp:
         # leases arrive with wake-leases (Phase 4) if at all.
         self.leases = controllers.LeaseRegistry()
         self.lock = threading.Lock()
+        # The autonomous dispatcher (start_drain_loop). Off by default:
+        # dispatch stays a per-call affair until someone opts in.
+        self._drain_thread = None
+        self._drain_stop = None
+        # Dispatch bookkeeping, all guarded by self.lock:
+        #   _in_flight     delivery_id -> ATTEMPT token for forwards in
+        #                  progress in THIS process -- what separates a
+        #                  live claim from a stranded one (drain_once's
+        #                  reaper). Attempt-scoped, not job-scoped: a
+        #                  finished attempt may only remove ITS OWN
+        #                  marker, because a job released back to queued
+        #                  can be re-claimed by a second attempt before
+        #                  the first attempt's cleanup runs -- a
+        #                  job-scoped discard there erased the live
+        #                  marker and the reaper burned an undelivered
+        #                  job to indeterminate (review probe,
+        #                  2026-07-31).
+        #   _drain_backoff delivery_id -> not-before timestamp; the drain
+        #                  loop skips a refused/deferred job until it
+        #                  passes. Manual /dispatch ignores it (an
+        #                  explicit call is its own authority).
+        #   _drain_noted   delivery_id -> last audited refusal event, so a
+        #                  steady failing state audits ON TRANSITION, not
+        #                  on every tick (unbounded audit growth).
+        self._in_flight = {}
+        self._flight_counter = 0
+        self._drain_backoff = {}
+        self._drain_noted = {}
+        # delivery_ids whose UNREACHABLE requeue write FAILED: the job is
+        # still claimed on disk, its flight marker is deliberately kept
+        # (the reaper must not resolve a never-delivered job), and the
+        # drain pass retries the release until the disk heals.
+        self._pending_release = {}
+        self._last_drain_summary = None
+        self.drain_backoff_s = 30.0
         self.db.audit("hostapp", "started", {"host_id": self.host_id})
 
-    # -- request handlers (all called WITH self.lock held) -------------
+    # -- request handlers (called WITH self.lock held -- except the
+    #    self-locking dispatch_job / drain, see their docstrings) -------
 
     def status(self):
         return {
@@ -224,6 +285,8 @@ class HostApp:
             "nodes": len(self.directory.nodes()),
             "jobs_queued": len(self.db.jobs(state="queued")),
             "quarantined_nodes": len(self.quarantined),
+            "drain_loop": bool(self._drain_thread is not None
+                               and self._drain_thread.is_alive()),
             "uptime_s": round(self._now() - self.started, 1),
         }
 
@@ -349,7 +412,8 @@ class HostApp:
         # its idempotency key lands in.
         job, created = self.db.create_job(
             idempotency_key, node_id, operation, body.get("arguments"),
-            convoy_id=node["convoy_id"])
+            convoy_id=node["convoy_id"],
+            expected_runtime_id=expected_runtime_id)
         return 200, {"ok": True, "created": created, "job": job}
 
     def get_job(self, delivery_id):
@@ -365,77 +429,678 @@ class HostApp:
         """Execute one QUEUED job by forwarding its operation to the node's
         Envoy (loopback), then mirror the verdict.
 
-        This is the first slice of the relay's execution path. The
-        invariant A-15 gave us holds end to end: a job leaves 'queued'
-        ONLY by an observed node result (record_sync_result) or, on a
-        transport failure where the op may have run, mark_indeterminate --
-        the host never invents a verdict. Idempotent: a job already past
-        'queued' is returned unchanged, so a double dispatch cannot
-        re-run the work.
+        SELF-LOCKING, unlike every other handler: called WITHOUT
+        self.lock held (the /dispatch and /drain routes sit outside
+        do_POST's lock block; threading.Lock is not reentrant, so calling
+        this from inside the lock would deadlock). Three phases:
+
+          a) UNDER the lock: read the job and node, re-gate against the
+             CURRENT registry and the runtime AS THE HOST LAST OBSERVED
+             IT, then CLAIM the job (queued -> dispatching, the CAS in
+             claim_for_dispatch) and mark it in-flight. The claim is what
+             lets the drain loop and manual /dispatch race safely --
+             exactly one caller wins a given job.
+          b) OUTSIDE the lock: the forward, up to 30s of I/O. Holding the
+             lock here would freeze every other route for the duration --
+             the drain loop would make that permanent.
+          c) UNDER the lock again: resolve the claim (_resolve_dispatch).
+             The A-15 invariant holds: a node verdict (record_sync_result,
+             demanding a real boolean ok), back to queued (UNREACHABLE =
+             never delivered), or indeterminate (no response, a
+             non-verdict response, or the recording itself failed =
+             outcome unknown). The host never invents a verdict.
+
+        Idempotent: a job already claimed or past queued is returned
+        unchanged (dispatched=False), so a double dispatch cannot re-run
+        the work.
         """
-        job = self.db.get_job(delivery_id)
-        if job is None:
-            return 404, {"ok": False, "reason": "unknown_job",
-                         "detail": delivery_id}
-        if job.get("state") != "queued":
-            # Already dispatched or terminal -- never re-run.
-            return 200, {"ok": True, "dispatched": False, "job": job}
-        node = self.directory.lookup(job["node_id"])
-        if node is None:
-            return 404, {"ok": False, "reason": "unknown_node",
-                         "detail": job["node_id"]}
-        port = node.get("envoy_port")
-        if not port:
-            # No endpoint yet -- the node has not registered its live
-            # Envoy port. Leave the job queued to dispatch once it does;
-            # this is a not-yet, not a failure.
-            self.db.audit("hostapp", "dispatch_deferred",
-                          {"delivery_id": delivery_id,
-                           "reason": "node_endpoint_unknown"})
-            return 409, {"ok": False, "reason": "node_endpoint_unknown",
-                         "detail": "the node has not registered its Envoy "
-                                   "port; the job stays queued"}
-        now = self._now()
-        detail = ""
+        # -- phase a: read, gate, claim -- under the lock ---------------
+        with self.lock:
+            if (not delivery_id or not isinstance(delivery_id, str)
+                    or len(delivery_id) > MAX_ID_CHARS):
+                # Named, audited 400 -- not a TypeError-500 the audit
+                # trail cannot classify (A-39), matching text_field's
+                # treatment on every other route.
+                return self._refuse("dispatch", "malformed",
+                                    "delivery_id must be a string", 400)
+            job = self.db.get_job(delivery_id)
+            if job is None:
+                # Audited directly, NOT through the dedupe map: the map
+                # is pruned against jobs that exist, so ghost ids would
+                # accumulate entries forever (the drain loop never sees
+                # them). Caller-driven and token-gated, so unconditional
+                # audit lines are the caller's own doing.
+                try:
+                    self.db.audit("hostapp", "dispatch_refused",
+                                  {"reason": "unknown_job",
+                                   "delivery_id": delivery_id})
+                except Exception:
+                    pass    # named 404 beats an unaudited 500
+                return 404, {"ok": False, "reason": "unknown_job",
+                             "detail": delivery_id}
+            if job.get("state") != "queued":
+                # Claimed by another dispatcher, or terminal -- never
+                # re-run.
+                return 200, {"ok": True, "dispatched": False, "job": job}
+            node = self.directory.lookup(job["node_id"])
+            if node is None:
+                self._note_dispatch_event(delivery_id, "dispatch_refused",
+                                          {"reason": "unknown_node",
+                                           "node_id": job["node_id"]})
+                self._drain_backoff[delivery_id] = (self._now()
+                                                    + self.drain_backoff_s)
+                return 404, {"ok": False, "reason": "unknown_node",
+                             "detail": job["node_id"]}
+            # Re-gate against the registry AS OF NOW, not as of enqueue:
+            # the entry may have been tightened or removed while the job
+            # sat queued. The runtime re-check below is HONESTLY BOUNDED:
+            # it compares against the runtime the host LAST OBSERVED (the
+            # registry record), so it catches a restart the node has
+            # re-registered -- and CANNOT catch a restart the host has
+            # not seen yet, or one that lands mid-forward, because the
+            # expectation does not ride the wire. Full A-22 closure needs
+            # the node itself to verify expected_runtime_id (Phase 2
+            # ConvoyExt + the A-46 transport); named deferral, not an
+            # oversight.
+            entry = self.operations.get(job["operation"])
+            gating = gating_of(entry) if entry else None
+            if gating is None or gating["executes_arbitrary_code"]:
+                reason = ("operation_not_exposed" if gating is None
+                          else "operation_not_relayable")
+                self._note_dispatch_event(
+                    delivery_id, "dispatch_refused",
+                    {"reason": reason,
+                     "operation": job["operation"][:MAX_OPERATION_CHARS]})
+                self._drain_backoff[delivery_id] = (self._now()
+                                                    + self.drain_backoff_s)
+                return 409, {"ok": False, "reason": reason,
+                             "detail": "the operation is no longer "
+                                       "relayable under the current "
+                                       "registry; the job stays queued"}
+            if gating["runtime_required"]:
+                expected = job.get("expected_runtime_id")
+                current = node.get("runtime_id")
+                if not expected or not current or expected != current:
+                    self._note_dispatch_event(
+                        delivery_id, "dispatch_runtime_changed",
+                        {"reason": f"expected {str(expected)[:64]!r}, "
+                                   f"node {str(current)[:64]!r}",
+                         "expected": str(expected)[:64],
+                         "current": str(current)[:64]})
+                    self._drain_backoff[delivery_id] = (
+                        self._now() + self.drain_backoff_s)
+                    return 409, {
+                        "ok": False, "reason": "runtime_changed",
+                        "detail": f"the job addressed runtime "
+                                  f"{expected!r} but the node is now "
+                                  f"{current!r}; refusing to dispatch "
+                                  f"into a different runtime (A-22)"}
+            port = node.get("envoy_port")
+            if not port:
+                # No endpoint yet -- the node has not registered its live
+                # Envoy port. Leave the job queued (unclaimed) to dispatch
+                # once it does; this is a not-yet, not a failure.
+                self._note_dispatch_event(
+                    delivery_id, "dispatch_deferred",
+                    {"reason": "node_endpoint_unknown"})
+                self._drain_backoff[delivery_id] = (self._now()
+                                                    + self.drain_backoff_s)
+                return 409, {"ok": False, "reason": "node_endpoint_unknown",
+                             "detail": "the node has not registered its "
+                                       "Envoy port; the job stays queued"}
+            try:
+                claimed = self.db.claim_for_dispatch(delivery_id)
+            except Exception as e:
+                # The claim WRITE failed (a Windows sharing violation
+                # that outlived the retries, disk trouble): os.replace
+                # is atomic, so the job on disk is still queued. A named
+                # refusal, never the unaudited 500 this used to become.
+                detail = f"{type(e).__name__}: {e}"
+                try:
+                    self.db.audit("hostapp", "dispatch_store_unavailable",
+                                  {"delivery_id": delivery_id,
+                                   "detail": detail[:256]})
+                except Exception:
+                    pass
+                return 503, {"ok": False, "reason": "store_unavailable",
+                             "detail": f"could not claim the job "
+                                       f"({detail}); it stays queued"}
+            if claimed is None:
+                # Should be unreachable (the state was read as queued
+                # under this same lock hold) -- but a skip is always the
+                # safe answer to a lost claim.
+                job = self.db.get_job(delivery_id) or job
+                return 200, {"ok": True, "dispatched": False, "job": job}
+            self._flight_counter += 1
+            attempt = self._flight_counter
+            self._in_flight[delivery_id] = attempt
+            try:
+                self.db.audit("hostapp", "dispatch_claimed",
+                              {"delivery_id": delivery_id,
+                               "operation": job["operation"], "port": port})
+            except Exception:
+                # An audit failure must never divert or strand a
+                # dispatch: the claim is on disk and the in-flight
+                # marker is set -- the forward proceeds.
+                pass
+            operation = job["operation"]
+            arguments = job.get("arguments") or {}
+
         try:
-            outcome = self.forwarder(port, job["operation"],
-                                     job.get("arguments") or {})
-        except Exception as e:      # a forwarder must not crash dispatch
-            outcome = None
-            detail = f"{type(e).__name__}: {e}"
+            # -- phase b: the forward, OUTSIDE the lock -----------------
+            detail = ""
+            try:
+                outcome = self.forwarder(port, operation, arguments)
+            except Exception as e:  # a forwarder must not crash dispatch
+                outcome = None
+                detail = f"{type(e).__name__}: {e}"
+            if (outcome is not None
+                    and outcome is not mcpclient.UNREACHABLE
+                    and not (isinstance(outcome, dict)
+                             and isinstance(outcome.get("ok"), bool))):
+                # A broken forwarder must resolve like any transport
+                # failure -- and 'broken' includes a DICT carrying no
+                # real boolean verdict. Recording {} or {'error': ...} as
+                # failed would fabricate a node verdict the node never
+                # produced (A-15); the type check alone was half a guard.
+                detail = (f"forwarder returned {type(outcome).__name__} "
+                          f"without a boolean 'ok' verdict")
+                outcome = None
+            observed = self._now()
+
+            # -- phase c: resolve the claim, under the lock -------------
+            try:
+                with self.lock:
+                    return self._resolve_dispatch(delivery_id, operation,
+                                                  outcome, observed,
+                                                  detail)
+            except Exception as e:
+                return self._downgrade_failed_recording(delivery_id,
+                                                        operation, e)
+        finally:
+            with self.lock:
+                # Remove ONLY this attempt's marker. After a release back
+                # to queued, another attempt may already have re-claimed
+                # this job and own a newer marker -- erasing it would let
+                # the reaper mark a live forward stranded. And a PARKED
+                # release (failed requeue write) keeps its marker on
+                # purpose: the claim is still on disk for a job that was
+                # never delivered, and the reaper must not resolve it
+                # before the drain pass retries the release.
+                if (delivery_id not in self._pending_release
+                        and self._in_flight.get(delivery_id) == attempt):
+                    del self._in_flight[delivery_id]
+
+    def _note_dispatch_event(self, delivery_id, event, detail):
+        """Audit a REPEATING per-job dispatch refusal once per transition.
+
+        Called with self.lock held. The drain loop re-attempts refused
+        and deferred jobs on a timer, so auditing every attempt grows
+        audit.jsonl without bound on a steady failing state (a portless
+        node is today's NORMAL state -- nothing in TD auto-registers
+        yet). The noted event clears when the job resolves (see
+        _resolve_dispatch) or falls out of the queue, so a recurrence
+        after a recovery is audited afresh.
+
+        The dedupe key is (event, reason), not the event name alone: a
+        job whose REFUSAL REASON changes (deferred -> unknown_node, one
+        registry refusal -> another) is a genuine transition the trail
+        must show -- deduping on the event name swallowed it."""
+        key = (event, (detail or {}).get("reason"))
+        if self._drain_noted.get(delivery_id) == key:
+            return
+        try:
+            self.db.audit("hostapp", event,
+                          dict(detail, delivery_id=delivery_id))
+        except Exception:
+            # Audit trouble must neither break the dispatch (an escape
+            # here surfaced as an unnamed 500 on a refusal path) nor
+            # poison the dedupe: marking noted for a line never written
+            # would swallow the NEXT attempt's audit too. Leave unnoted
+            # so a later attempt retries the append.
+            return
+        self._drain_noted[delivery_id] = key
+        if len(self._drain_noted) > 2048:
+            # Bounded: on a loop-off host nothing prunes, and the map
+            # must not grow one entry per refused delivery forever.
+            self._drain_noted.pop(next(iter(self._drain_noted)))
+
+    def _resolve_dispatch(self, delivery_id, operation, outcome, observed,
+                          detail):
+        """Phase c of dispatch_job -- called WITH self.lock held."""
         if outcome is mcpclient.UNREACHABLE:
             # The node refused the connection: the request was never
-            # delivered, so the op did NOT run. Leave the job QUEUED to
-            # retry -- a transient node-down must never burn a job to
-            # indeterminate (or, worse, a fabricated verdict).
-            self.db.audit("hostapp", "dispatch_unreachable",
-                          {"delivery_id": delivery_id,
-                           "operation": job["operation"]})
+            # delivered, so the op did NOT run. Release the claim -- the
+            # job returns to QUEUED to retry. A transient node-down must
+            # never burn a job to indeterminate (or, worse, a fabricated
+            # verdict).
+            try:
+                released = self.db.release_claim(delivery_id)
+            except Exception as e:
+                # The REQUEUE write failed. The op was never delivered,
+                # so this must NOT decay to indeterminate (the forbidden
+                # collapse -- round-3 panel reproduced it under natural
+                # file contention). Park the release: this attempt's
+                # flight marker is kept (the finally skips parked ids)
+                # so the reaper cannot resolve the claim, and the drain
+                # pass retries the release until the disk heals. Named
+                # residual: a host that DIES before the retry lands
+                # leaves a claim the boot sweep resolves to
+                # indeterminate -- never-delivered knowledge cannot
+                # outlive the process without a write, which is exactly
+                # what is failing.
+                detail = f"{type(e).__name__}: {e}"
+                self._pending_release[delivery_id] = detail
+                try:
+                    self.db.audit("hostapp", "dispatch_release_failed",
+                                  {"delivery_id": delivery_id,
+                                   "detail": detail[:256]})
+                except Exception:
+                    pass
+                return 503, {"ok": False, "reason": "store_unavailable",
+                             "detail": f"the node refused the connection "
+                                       f"but the requeue write failed "
+                                       f"({detail}); the drain loop will "
+                                       f"retry the requeue"}
+            if released is None:
+                # The CAS did not release. Distinguish UNREADABLE from
+                # GONE before concluding anything: get_job swallows read
+                # errors into None, and treating a transiently
+                # unreadable file as a lost claim handed a
+                # never-delivered job to the reaper (round-4 panel).
+                current = self.db.get_job(delivery_id)
+                state = current.get("state") if current else None
+                if state == "dispatching" or (
+                        current is None
+                        and self.db.job_file_exists(delivery_id)):
+                    # Still claimed on disk (or unreadable-but-present,
+                    # conservatively the same): the CAS's READ failed,
+                    # not the claim. Park it exactly like a failed
+                    # release write.
+                    self._pending_release[delivery_id] = (
+                        "release CAS could not read the record")
+                    try:
+                        self.db.audit("hostapp", "dispatch_release_failed",
+                                      {"delivery_id": delivery_id,
+                                       "detail": "release CAS read failure"})
+                    except Exception:
+                        pass
+                    return 503, {"ok": False,
+                                 "reason": "store_unavailable",
+                                 "detail": "the node refused the "
+                                           "connection but the requeue "
+                                           "could not read the record; "
+                                           "the drain loop will retry"}
+                state = state if current else "missing"
+                try:
+                    self.db.audit("hostapp", "dispatch_claim_lost",
+                                  {"delivery_id": delivery_id,
+                                   "state": state})
+                except Exception:
+                    pass
+                return 409, {"ok": False, "reason": "claim_lost",
+                             "detail": f"the node refused the connection, "
+                                       f"but this dispatcher no longer "
+                                       f"held the claim; the job is now "
+                                       f"{state!r}"}
+            self._note_dispatch_event(delivery_id, "dispatch_unreachable",
+                                      {"operation": operation})
+            self._drain_backoff[delivery_id] = (observed
+                                                + self.drain_backoff_s)
             return 409, {"ok": False, "reason": "node_unreachable",
-                         "detail": "the node's Envoy refused the connection; "
-                                   "the job stays queued to retry"}
+                         "detail": "the node's Envoy refused the "
+                                   "connection; the job stays queued "
+                                   "to retry"}
+        # The job is resolving -- clear its refusal bookkeeping so a
+        # future recurrence is audited afresh.
+        self._drain_noted.pop(delivery_id, None)
+        self._drain_backoff.pop(delivery_id, None)
         if outcome is None:
-            # Transport failure AFTER the request may have been sent: the
-            # operation MAY have executed, and we have no result.
-            # Indeterminate is the only honest terminal -- never a silent
-            # retry (it might double-run) or a fake fail.
+            # Transport failure AFTER the request may have been sent:
+            # the operation MAY have executed, and we have no result.
+            # Indeterminate is the only honest terminal -- never a
+            # silent retry (it might double-run) or a fake fail.
             updated = self.db.mark_indeterminate(delivery_id, {
                 "reason": "no_response",
                 "detail": detail or "no response from the node's Envoy",
-                "operation": job["operation"]})
-            self.db.audit("hostapp", "dispatch_indeterminate",
-                          {"delivery_id": delivery_id,
-                           "operation": job["operation"]})
+                "operation": operation})
+            try:
+                self.db.audit("hostapp", "dispatch_indeterminate",
+                              {"delivery_id": delivery_id,
+                               "operation": operation})
+            except Exception:
+                pass    # the outcome is durably written; audits never
+                        # alter dispatch state (round-3 panel)
             return 200, {"ok": True, "dispatched": True, "job": updated}
-        ok = bool(outcome.get("ok"))
+        ok = outcome.get("ok")      # a real bool -- phase b enforced it
         result = outcome.get("result") if ok else {
             "error": outcome.get("error")}
-        updated = self.db.record_sync_result(delivery_id, ok, now,
+        result = _json_safe(result)
+        updated = self.db.record_sync_result(delivery_id, ok, observed,
                                              result=result)
-        self.db.audit("hostapp", "dispatched",
-                      {"delivery_id": delivery_id, "ok": ok,
-                       "operation": job["operation"]})
+        try:
+            self.db.audit("hostapp", "dispatched",
+                          {"delivery_id": delivery_id, "ok": ok,
+                           "operation": operation})
+        except Exception:
+            # The node's verdict is durably recorded. An audit-append
+            # failure after it must never reach the downgrade path --
+            # that DESTROYED a real node verdict (round-3 panel, A-15).
+            pass
         return 200, {"ok": True, "dispatched": True, "job": updated}
+
+    def _downgrade_failed_recording(self, delivery_id, operation, error):
+        """Phase c raised: the store could not write the honest outcome.
+        The durable record can no longer reflect what was observed, so
+        downgrade the claim to indeterminate with the failure as
+        evidence. If even that write fails, leave the stranded claim for
+        drain_once's reaper (or the load-time sweep) -- never let the
+        exception escape as an unexplained 500 that strands the job
+        silently."""
+        detail = f"{type(error).__name__}: {error}"
+        try:
+            with self.lock:
+                current = self.db.get_job(delivery_id)
+                state = current.get("state") if current else None
+                if state != "dispatching":
+                    # The durable record already resolved -- a verdict
+                    # landed, or the claim was released -- and the raise
+                    # was something else. NEVER overwrite what is on
+                    # disk with a host guess: doing so destroyed a real
+                    # node verdict and re-terminalised a released job
+                    # (round-3 panel, A-15 / 16.4).
+                    try:
+                        self.db.audit("hostapp",
+                                      "dispatch_recording_glitch",
+                                      {"delivery_id": delivery_id,
+                                       "state": state,
+                                       "detail": detail[:256]})
+                    except Exception:
+                        pass
+                    if current is not None:
+                        return 200, {"ok": True,
+                                     "dispatched": state != "queued",
+                                     "job": current}
+                    return 500, {"ok": False,
+                                 "reason": "recording_failed",
+                                 "detail": detail}
+                self.db.mark_indeterminate(delivery_id, {
+                    "reason": "verdict_recording_failed",
+                    "detail": detail, "operation": operation})
+                try:
+                    self.db.audit("hostapp", "dispatch_recording_failed",
+                                  {"delivery_id": delivery_id,
+                                   "detail": detail[:256]})
+                except Exception:
+                    pass    # the downgrade LANDED; the response below
+                            # must not claim it is still pending
+            return 500, {"ok": False, "reason": "recording_failed",
+                         "detail": f"the node outcome could not be "
+                                   f"recorded ({detail}); the job is "
+                                   f"marked indeterminate"}
+        except Exception:
+            return 500, {"ok": False, "reason": "recording_failed",
+                         "detail": f"the node outcome could not be "
+                                   f"recorded and the downgrade write "
+                                   f"also failed ({detail}); the job "
+                                   f"remains claimed until reaped"}
+
+    def drain_once(self, stop=None):
+        """Dispatch every currently-queued job once. Synchronous and
+        directly testable; the background loop is just this on a timer.
+
+        Called WITHOUT the lock (dispatch_job self-locks). Both store
+        snapshots are taken WITHOUT the lock, deliberately: jobs() is
+        O(every job file on disk), and holding the lock across that scan
+        froze every route for the duration (measured in review: tens of
+        seconds cold at a few thousand files). A stale snapshot is safe
+        because dispatch_job re-reads and CASes under the lock -- a job
+        that resolved or got claimed in the window is just a skip.
+
+        stop: optional threading.Event checked between jobs, so a
+        shutdown aborts the pass after the CURRENT forward rather than
+        after the whole queue.
+        """
+        # Reap claims stranded by a failed phase-c write: 'dispatching'
+        # on disk with no forward in flight in THIS process can never
+        # resolve on its own -- without this, such a job is invisible to
+        # every route until a host restart.
+        # Retry PARKED requeues first: a failed release write left a
+        # never-delivered job claimed with its flight marker held. Until
+        # the release lands, the reaper must skip it and the job cannot
+        # retry -- so heal it before anything else in the pass.
+        requeued = 0
+        with self.lock:
+            parked = list(self._pending_release)
+        for did in parked:
+            with self.lock:
+                if did not in self._pending_release:
+                    continue
+                try:
+                    released = self.db.release_claim(did)
+                except Exception:
+                    continue        # disk still failing; next pass
+                if released is None:
+                    current = self.db.get_job(did)
+                    state = current.get("state") if current else None
+                    if state == "dispatching" or (
+                            current is None
+                            and self.db.job_file_exists(did)):
+                        # Unreadable, not resolved -- stay parked. An
+                        # unconditional pop here handed the still-
+                        # claimed job to the same-pass reaper.
+                        continue
+                self._pending_release.pop(did, None)
+                self._in_flight.pop(did, None)
+                if released is not None:
+                    requeued += 1
+                    try:
+                        self.db.audit("hostapp",
+                                      "dispatch_requeued_after_retry",
+                                      {"delivery_id": did})
+                    except Exception:
+                        pass
+
+        # ONE scan for both snapshots -- jobs() parses every job file on
+        # disk, so two filtered calls doubled the pass's dominant cost.
+        snapshot = self.db.jobs()
+        stranded = 0
+        for job in [j for j in snapshot if j.get("state") == "dispatching"]:
+            did = job["delivery_id"]
+            with self.lock:
+                if did in self._in_flight:
+                    continue        # a live dispatch owns it
+                current = self.db.get_job(did)
+                if (current is None
+                        or current.get("state") != "dispatching"):
+                    continue        # resolved in the window -- fine
+                try:
+                    self.db.mark_indeterminate(did, {
+                        "reason": "claim_stranded",
+                        "detail": "claimed for dispatch but no forward "
+                                  "is in flight in this process; a "
+                                  "recording failure likely orphaned it",
+                        "operation": current.get("operation")})
+                except Exception:
+                    continue        # still unwritable; next pass retries
+                stranded += 1       # the reap LANDED -- count it even
+                try:                # if the audit append fails
+                    self.db.audit("hostapp", "stranded_claim_reaped",
+                                  {"delivery_id": did})
+                except Exception:
+                    pass
+
+        queued = [j["delivery_id"] for j in snapshot
+                  if j.get("state") == "queued"]
+        summary = {"examined": len(queued), "dispatched": 0,
+                   "indeterminate": 0, "unreachable": 0, "deferred": 0,
+                   "skipped": 0, "errors": 0, "backoff": 0,
+                   "stranded": stranded, "requeued": requeued,
+                   "aborted": False}
+        now = self._now()
+        for delivery_id in queued:
+            if stop is not None and stop.is_set():
+                summary["aborted"] = True
+                break
+            with self.lock:
+                held_until = self._drain_backoff.get(delivery_id)
+            if held_until is not None and held_until > now:
+                summary["backoff"] += 1
+                continue
+            try:
+                code, payload = self.dispatch_job(delivery_id)
+            except Exception:
+                # One job's failure must cost ONE job, never the rest of
+                # the pass (a leading bad job would wedge the whole
+                # queue every pass -- round-4 panel).
+                summary["errors"] += 1
+                continue
+            if payload.get("dispatched"):
+                summary["dispatched"] += 1
+                if payload.get("job", {}).get("state") == "indeterminate":
+                    # Surfaced separately: 16.4 says a may-have-run must
+                    # never be lost from view, a plain 'dispatched' count
+                    # would hide it.
+                    summary["indeterminate"] += 1
+            elif payload.get("reason") in ("node_unreachable",
+                                           "claim_lost"):
+                summary["unreachable"] += 1
+            elif payload.get("reason") in ("node_endpoint_unknown",
+                                           "runtime_changed",
+                                           "operation_not_exposed",
+                                           "operation_not_relayable"):
+                summary["deferred"] += 1
+            elif code == 200:
+                summary["skipped"] += 1    # raced: claimed or terminal
+            else:
+                summary["errors"] += 1     # unknown_job / unknown_node
+        # Keep the per-job maps from outliving their jobs -- but never
+        # drop an entry whose job is still LIVE. The snapshot is a
+        # start-of-pass view: an entry set mid-pass (a manual /dispatch,
+        # a job created after the snapshot, a file the lock-free scan
+        # transiently failed to read) belongs to a real queued or
+        # claimed job, and dropping it defeated the backoff and
+        # re-audited the same refusal (review probe, 2026-07-31).
+        with self.lock:
+            keep = set(queued)
+            for did in ((set(self._drain_backoff)
+                         | set(self._drain_noted)) - keep):
+                current = self.db.get_job(did)
+                if current is not None and current.get("state") in (
+                        "queued", "dispatching"):
+                    keep.add(did)
+                elif current is None and self.db.job_file_exists(did):
+                    # UNREADABLE is not ABSENT: get_job swallows the
+                    # same transient sharing violation that makes the
+                    # lock-free scan miss files. Keep -- conservative.
+                    keep.add(did)
+            self._drain_backoff = {k: v for k, v
+                                   in self._drain_backoff.items()
+                                   if k in keep}
+            self._drain_noted = {k: v for k, v
+                                 in self._drain_noted.items()
+                                 if k in keep}
+        return summary
+
+    def drain(self):
+        """The /drain route: one synchronous pass over the queue."""
+        return 200, {"ok": True, **self.drain_once()}
+
+    def _audit_drain_pass(self, summary):
+        """One audit line when a pass's shape CHANGES and either side of
+        the change shows trouble -- so a steady state (healthy or stuck)
+        costs nothing, but every degradation and every recovery leaves a
+        trace (A-40)."""
+        def troubled(s):
+            return bool(s and (s["errors"] or s["unreachable"]
+                               or s["stranded"] or s["indeterminate"]))
+        with self.lock:
+            previous = self._last_drain_summary
+            self._last_drain_summary = summary
+            if summary != previous and (troubled(summary)
+                                        or troubled(previous)):
+                self.db.audit("hostapp", "drain_pass", summary)
+
+    def _drain_loop(self, stop, interval_s):
+        while not stop.wait(interval_s):
+            try:
+                self._audit_drain_pass(self.drain_once(stop=stop))
+            except Exception as e:
+                # The loop must survive anything -- a dead drain thread
+                # silently ends autonomous dispatch.
+                try:
+                    with self.lock:
+                        self.db.audit("hostapp", "drain_loop_error", {
+                            "error": f"{type(e).__name__}: {e}"})
+                except Exception:
+                    pass
+
+    def start_drain_loop(self, interval_s=2.0):
+        """Start the autonomous dispatcher: a daemon thread draining the
+        queue every interval_s seconds. OPT-IN (nothing starts it unless
+        asked -- main() wires it to --drain-interval). Returns True when
+        started, False when a loop is already running -- including one a
+        timed-out stop could not retire; the handle is kept alive
+        precisely so this guard and status() stay honest."""
+        with self.lock:
+            if (self._drain_thread is not None
+                    and self._drain_thread.is_alive()):
+                return False
+            # Audit BEFORE publishing any handle: if the append fails,
+            # nothing was half-started. And start() INSIDE the lock:
+            # publishing a not-yet-started thread opened a window where
+            # a concurrent stop joined an unstarted thread
+            # (RuntimeError) or a second start saw is_alive() False and
+            # ran two loops (review probe, 2026-07-31).
+            try:
+                self.db.audit("hostapp", "drain_loop_started",
+                              {"interval_s": interval_s})
+            except Exception:
+                pass    # an audit failure must not block the loop
+            stop = threading.Event()
+            thread = threading.Thread(
+                target=self._drain_loop, args=(stop, interval_s),
+                daemon=True, name="convoy-drain")
+            # start() BEFORE publishing: a start() failure must not leave
+            # handles pointing at a never-started thread (join on one
+            # raises RuntimeError in every stop path).
+            thread.start()
+            self._drain_stop = stop
+            self._drain_thread = thread
+        return True
+
+    def stop_drain_loop(self, timeout_s=None):
+        """Stop the drain loop and wait for it to exit. Returns True when
+        the loop is verifiably stopped (or none was running), False when
+        it did not exit within the bound.
+
+        On False the handles are KEPT: status() keeps reporting the live
+        loop and start_drain_loop keeps refusing, instead of lying that
+        the loop is gone and letting a second one start over it. The
+        default bound covers one full forward (drain_once checks the
+        stop event between jobs, so a stopping pass aborts after the
+        CURRENT forward, never the whole queue). Safe to call when no
+        loop is running."""
+        with self.lock:
+            thread = self._drain_thread
+            if self._drain_stop is not None:
+                self._drain_stop.set()
+        if thread is None:
+            return True
+        if timeout_s is None:
+            timeout_s = mcpclient.DEFAULT_TIMEOUT_S + 5.0
+        thread.join(timeout=timeout_s)
+        if thread.is_alive():
+            with self.lock:
+                self.db.audit("hostapp", "drain_loop_stop_timeout",
+                              {"timeout_s": timeout_s})
+            return False
+        with self.lock:
+            if self._drain_thread is thread:
+                self._drain_thread = None
+                self._drain_stop = None
+            self.db.audit("hostapp", "drain_loop_stopped", {})
+        return True
 
     # -- the guarded request path (Phase 1 completion) ------------------
 
@@ -446,7 +1111,13 @@ class HostApp:
         if node is not None:
             record["node_id"] = node["node_id"]
         record.update(extra or {})
-        self.db.audit("hostapp", f"{source}_refused", record)
+        try:
+            self.db.audit("hostapp", f"{source}_refused", record)
+        except Exception:
+            # A refusal the trail could not record is still a refusal:
+            # answering the named 4xx beats escalating to an unnamed,
+            # equally-unaudited 500 (round-4 panel).
+            pass
         payload = {"ok": False, "reason": reason, "detail": detail}
         return code, payload
 
@@ -591,7 +1262,8 @@ class HostApp:
             return refusal
         job, created = self.db.create_job(
             idempotency_key, node["node_id"], operation,
-            envelope.get("arguments"), convoy_id=node["convoy_id"])
+            envelope.get("arguments"), convoy_id=node["convoy_id"],
+            expected_runtime_id=envelope.get("expected_runtime_id"))
         # The ack carries the HOST's delivery_id (cj_...), the id of the
         # routing record -- NOT A-22's target-minted job_id, which is the
         # node's own job_<8hex> and does not exist until a node accepts
@@ -849,34 +1521,44 @@ def make_handler(app):
                 self._send(400, {"ok": False, "reason": "malformed"})
                 return
             try:
-                with app.lock:
-                    if self.path == "/register":
-                        code, payload = app.register_node(body)
-                    elif self.path == "/remint":
-                        code, payload = app.remint_node(body)
-                    elif self.path == "/jobs":
-                        code, payload = app.create_job(body)
-                    elif self.path == "/dispatch":
-                        code, payload = app.dispatch_job(
-                            body.get("delivery_id") or "")
-                    elif self.path == "/envelope":
-                        code, payload = app.submit_envelope(body)
-                    elif self.path == "/psk":
-                        code, payload = app.issue_convoy_psk(body)
-                    elif self.path == "/leases":
-                        code, payload = app.acquire_lease(body)
-                    elif self.path == "/leases/release":
-                        code, payload = app.release_lease(body)
-                    elif self.path == "/heartbeat":
-                        code, payload = app.heartbeat_controller(body)
-                    else:
-                        code, payload = 404, {"ok": False,
-                                              "reason": "not_found"}
+                # /dispatch and /drain are handled OUTSIDE the lock
+                # block: dispatch_job self-locks in phases so the forward
+                # I/O runs lock-free, and threading.Lock is not reentrant
+                # -- wrapping these in `with app.lock:` would deadlock on
+                # the first claim. They still flow into the SINGLE _send
+                # below, like every other route.
+                if self.path == "/dispatch":
+                    code, payload = app.dispatch_job(
+                        body.get("delivery_id"))
+                elif self.path == "/drain":
+                    code, payload = app.drain()
+                else:
+                    code, payload = self._post_locked(body)
             except Exception as e:      # same last-resort contract
                 code, payload = 500, {"ok": False,
                                       "reason": "internal_error",
                                       "detail": type(e).__name__}
             self._send(code, payload)
+
+        def _post_locked(self, body):
+            with app.lock:
+                if self.path == "/register":
+                    return app.register_node(body)
+                if self.path == "/remint":
+                    return app.remint_node(body)
+                if self.path == "/jobs":
+                    return app.create_job(body)
+                if self.path == "/envelope":
+                    return app.submit_envelope(body)
+                if self.path == "/psk":
+                    return app.issue_convoy_psk(body)
+                if self.path == "/leases":
+                    return app.acquire_lease(body)
+                if self.path == "/leases/release":
+                    return app.release_lease(body)
+                if self.path == "/heartbeat":
+                    return app.heartbeat_controller(body)
+                return 404, {"ok": False, "reason": "not_found"}
 
     return Handler
 
@@ -900,11 +1582,16 @@ def main(argv=None):
                         help="state directory (default: per-user app dir)")
     parser.add_argument("--port", type=int, default=0,
                         help="loopback port (default: OS-assigned)")
+    parser.add_argument("--drain-interval", type=float, default=0.0,
+                        help="seconds between autonomous queue drains "
+                             "(0 = off; dispatch is per-call only)")
     args = parser.parse_args(argv)
 
     directory = args.data_dir or platform_mod.data_dir()
     app = HostApp(directory)
     server, port = serve(app, args.port)
+    if args.drain_interval > 0:
+        app.start_drain_loop(args.drain_interval)
     sys.stderr.write(
         f"embody-convoy host {app.host_id[:8]} on 127.0.0.1:{port} "
         f"(data: {directory})\n")
@@ -930,6 +1617,13 @@ def main(argv=None):
     try:
         server.serve_forever()
     finally:
+        try:
+            app.stop_drain_loop()
+        except Exception:
+            # Shutdown hygiene must not depend on the loop stopping
+            # cleanly: a raise here skipped clear_portfile and left a
+            # portfile pointing at a dead port.
+            pass
         platform_mod.clear_portfile(directory)
         app.db.audit("hostapp", "stopped", {})
         app.db.close()

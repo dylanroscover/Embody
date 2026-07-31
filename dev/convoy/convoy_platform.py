@@ -23,6 +23,7 @@ import os
 import posixpath
 import secrets
 import stat
+import time
 import sys
 
 APP_DIR_NAME = "EmbodyConvoy"
@@ -94,21 +95,26 @@ def _write_private(path, data):
     # os.replace is atomic, but on Windows it raises a sharing violation
     # (PermissionError) when a concurrent reader holds the destination
     # open -- exactly what happens when the host app rewrites a job record
-    # a status poll is reading. The reader's window is sub-millisecond, so
-    # a few immediate retries clear it without sleeping. The node-side
-    # _write_job learned this the same way; mirror it here so a hot record
-    # write is not lost to a transient lock.
-    for attempt in range(5):
+    # a status poll or a LOCK-FREE drain snapshot is reading. The reader's
+    # window used to be sub-millisecond, but drain_once's snapshots scan
+    # job files outside the app lock and hold each open for a whole
+    # json.load -- immediate retries alone provably lost that race under
+    # load (review probe, 2026-07-31). Short growing sleeps cover the
+    # reader's full window; the first retry stays immediate so the hot
+    # path is not slowed.
+    for attempt in range(8):
         try:
             os.replace(tmp, path)
             return
         except PermissionError:
-            if attempt == 4:
+            if attempt == 7:
                 try:
                     os.unlink(tmp)
                 except OSError:
                     pass
                 raise
+            if attempt:
+                time.sleep(0.005 * attempt)
 
 
 def ensure_ipc_token(directory):

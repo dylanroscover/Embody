@@ -41,13 +41,21 @@ HOST_FILE = "host.json"
 JOBS_DIR = "jobs"
 AUDIT_FILE = "audit.jsonl"
 
-JOB_STATES = ("queued", "running", "succeeded", "failed", "indeterminate")
+JOB_STATES = ("queued", "dispatching", "running", "succeeded", "failed",
+              "indeterminate")
 
 # A-15, "one authority, two records". The NODE originates the execution
-# verdict; the host record MIRRORS it. So the host may write two states
+# verdict; the host record MIRRORS it. So the host may write three states
 # on its own authority and no more:
-#   queued        -- accepted, not yet dispatched (there is no dispatcher
-#                    in Phase 1, so this is where a host job rests).
+#   queued        -- accepted, not yet dispatched.
+#   dispatching   -- the host's transient CLAIM: a dispatcher owns this
+#                    job while it forwards to the node. Not a verdict --
+#                    no node was observed yet -- just mutual exclusion so
+#                    two dispatchers (the drain loop and a manual
+#                    /dispatch) can never double-run one job. It resolves
+#                    to a node verdict, back to queued (never delivered),
+#                    or indeterminate (host died mid-forward; see the
+#                    load-time sweep).
 #   indeterminate -- dispatched, outcome unobservable (partition, node
 #                    gone, TD restarted mid-job). Only the host witnessed
 #                    the dispatch-without-response, so only the host can
@@ -58,7 +66,7 @@ JOB_STATES = ("queued", "running", "succeeded", "failed", "indeterminate")
 # (node_job_id + observed_at) that proves a node produced them. The host
 # cannot fabricate a success -- the method that would write it refuses
 # without the evidence.
-_HOST_ORIGINABLE_STATES = ("queued", "indeterminate")
+_HOST_ORIGINABLE_STATES = ("queued", "dispatching", "indeterminate")
 
 # The shipped node vocabulary (EnvoyExt _job_public: running|done|error)
 # mapped to the host mirror. Kept explicit so a new node status cannot
@@ -86,6 +94,7 @@ class HostStore:
         os.makedirs(self.jobs_dir, exist_ok=True)
         self._host_path = os.path.join(directory, HOST_FILE)
         self._state = self._load_host_file()
+        self._sweep_interrupted_dispatches()
 
     # -- host.json ------------------------------------------------------
 
@@ -305,7 +314,7 @@ class HostStore:
         raise OSError(f"idempotency marker at {path} unreadable: {last}")
 
     def create_job(self, idempotency_key, node_id, operation, arguments,
-                   convoy_id):
+                   convoy_id, expected_runtime_id=None):
         """Persist-before-acknowledge, idempotent per (convoy, node, key).
         Returns (job, created).
 
@@ -346,6 +355,12 @@ class HostStore:
             "convoy_id": convoy_id,
             "operation": operation,
             "arguments": arguments or {},
+            # The runtime the caller addressed (A-22), persisted so the
+            # DISPATCHER can re-check it at execution time -- the queue
+            # spans node restarts, which is exactly when it changes.
+            "expected_runtime_id": (expected_runtime_id
+                                    if isinstance(expected_runtime_id, str)
+                                    and expected_runtime_id else None),
             # Host-originated (A-15): the host may rest a record at queued;
             # the execution verdict is mirrored from the node later.
             "state": "queued",
@@ -374,6 +389,17 @@ class HostStore:
                     "operation": operation, "node_id": node_id})
         return job, True
 
+    def job_file_exists(self, delivery_id):
+        """Whether the delivery record FILE is present -- distinct from
+        get_job, which returns None for absent and unreadable alike. A
+        pruner deciding whether bookkeeping may be dropped must treat
+        unreadable as live (the conservative direction)."""
+        if (not delivery_id or not isinstance(delivery_id, str)
+                or "/" in delivery_id or "\\" in delivery_id
+                or ".." in delivery_id):
+            return False
+        return os.path.exists(self._job_path(delivery_id))
+
     def get_job(self, delivery_id):
         if (not delivery_id or "/" in delivery_id or "\\" in delivery_id
                 or ".." in delivery_id):
@@ -384,6 +410,66 @@ class HostStore:
                 return json.load(f)
         except (OSError, ValueError):
             return None
+
+    def claim_for_dispatch(self, delivery_id):
+        """Compare-and-set queued -> dispatching: the dispatcher's CLAIM.
+
+        Returns the claimed job, or None when the job is not claimable --
+        unknown, already claimed by another dispatcher, or past queued.
+        None (not an exception) because the drain loop works from a
+        SNAPSHOT of queued ids: by the time it reaches one, a concurrent
+        /dispatch may already own or have finished it, and that is a
+        skip, not an error.
+
+        The read-then-write pair is NOT atomic at the store level; the
+        host app serializes every claim under its lock. What the store
+        guarantees is durability: the claim is on disk before any forward
+        happens, so a host that dies mid-forward leaves the claim behind
+        for the load-time sweep to resolve honestly.
+        """
+        job = self.get_job(delivery_id)
+        if job is None or job.get("state") != "queued":
+            return None
+        return self._apply_state(delivery_id, "dispatching")
+
+    def release_claim(self, delivery_id):
+        """Compare-and-set dispatching -> queued: the forward was REFUSED
+        (connection refused = the request never reached the node, so the
+        op did not run) and the job goes back to retry. Returns the
+        released job, or None when the job is not currently claimed.
+
+        Only for the never-delivered case. A forward that got no RESPONSE
+        may still have executed -- that resolves to mark_indeterminate,
+        never back to queued."""
+        job = self.get_job(delivery_id)
+        if job is None or job.get("state") != "dispatching":
+            return None
+        return self._apply_state(delivery_id, "queued")
+
+    def _sweep_interrupted_dispatches(self):
+        """Resolve every job left 'dispatching' by a dead host.
+
+        Runs at store load, so a loaded store NEVER holds a live claim --
+        a claim can only belong to the running process (one host app per
+        data dir; A-36's exactly-one-supervisor owns that invariant). A
+        job found dispatching here was claimed by a host run that ended
+        -- crash, kill, or a stop that could not wait out a forward --
+        before recording an outcome; the forward MAY have happened, so
+        the only honest resolution is indeterminate with that as
+        evidence. Never back to queued (a mutation could double-run),
+        never a verdict (A-15: no node was observed)."""
+        swept = []
+        for job in self.jobs(state="dispatching"):
+            self.mark_indeterminate(job["delivery_id"], {
+                "reason": "host_exited_mid_dispatch",
+                "detail": "a previous host app run left this job claimed "
+                          "for dispatch (crash, kill, or a stop that "
+                          "could not wait); the operation may have run",
+                "operation": job.get("operation")})
+            swept.append(job["delivery_id"])
+        if swept:
+            self.audit("hoststore", "interrupted_dispatches_swept",
+                       {"count": len(swept), "delivery_ids": swept[:16]})
 
     def record_node_verdict(self, delivery_id, node_status, node_job_id,
                             observed_at, result=None):

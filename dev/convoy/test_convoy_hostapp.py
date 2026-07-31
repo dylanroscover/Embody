@@ -58,6 +58,10 @@ class Server:
         raise last
 
     def stop(self):
+        # Defensive: a test that started the drain loop and failed before
+        # its own stop must not leak a live daemon thread into the rest
+        # of the session (it would wake later against a deleted tmp_path).
+        self.app.stop_drain_loop()
         self.server.shutdown()
         self.server.server_close()
         self.app.db.close()

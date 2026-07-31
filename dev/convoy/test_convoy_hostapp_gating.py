@@ -770,6 +770,8 @@ TYPE_CONFUSED = [
     ("/leases", {"controller_id": "c", "node_id": ["n"]}),
     ("/leases/release", {"controller_id": {"c": 1}, "node_id": "n"}),
     ("/heartbeat", {"controller_id": ["c"]}),
+    ("/dispatch", {"delivery_id": {"a": 1}}),
+    ("/dispatch", {"delivery_id": 5}),
 ]
 
 
