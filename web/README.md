@@ -1,8 +1,14 @@
-# web/ — embody.tools landing page
+# web/ — LEGACY static landing page (superseded)
 
-A static landing page for [embody.tools](https://embody.tools). Three files,
-no build step, no dependencies, no `node_modules`. Open `index.html` in any
-browser to see it. Drop the whole `web/` folder into any static host to ship it.
+> **This folder is NOT what embody.tools serves.** The live site is the Astro
+> Worker app at `platform/apps/web/` (navbar, Collection, auth — deployed via
+> `wrangler`). This static page was the original landing and is kept for
+> reference only. Do not edit it expecting changes to reach embody.tools.
+
+A static landing page originally built for [embody.tools](https://embody.tools).
+Three files, no build step, no dependencies, no `node_modules`. Open
+`index.html` in any browser to see it. Drop the whole `web/` folder into any
+static host to ship it.
 
 This is *separate* from the MkDocs documentation site under `docs/` — the docs
 site lives at `dylanroscover.github.io/Embody/`, this lives at `embody.tools`.
@@ -19,7 +25,11 @@ web/
     └── embody-screenshot.png   ← copied from docs/assets/, do not edit in place
 ```
 
-That's it. There is no JavaScript file. The page works fully with JS disabled.
+That's it. There is no separate JavaScript file — the few behaviors that need
+JS (scroll-position restore, the footer emoji roller, and the install-command
+copy button) are small inline scripts in `index.html`. The page degrades
+gracefully with JS disabled: the copy button stays hidden and the install
+command remains plain selectable text.
 
 ## Deploy
 
@@ -75,18 +85,29 @@ emoji + place, that's the slot. The `<span class="footer__city">` is so the
 city color stays slightly brighter than the rest of the line.
 
 ### 2. The hero CTAs
-The hero has three text CTAs (plus a `btn--ghost` GitHub icon link):
-1. **Download the .tox** (`btn--primary`, solid green) → `releases/latest`
-2. **Quickstart** (`btn--outline`, green border, fills on hover) → the docs
-   Quickstart page at `dylanroscover.github.io/Embody/quickstart/`
-3. **Read the manifesto** (`btn--ghost`) → the manifesto
+The hero's primary CTA is the **install bar** (`.install`, `id="install"`): a
+one-line Python command the visitor pastes into a TouchDesigner Textport, with
+a solid-green `copy` button (`btn--primary`). The command downloads the latest
+release from GitHub via the stable-named `embody-release.json` manifest asset,
+verifies its sha256, and `loadTox`es it into the current network — the
+drag-and-drop equivalent, mac or windows, no file download. It is the only
+solid-green element in the hero on purpose. If you edit the command, keep it
+one line, pure ASCII, free of `<`/`>`/`&`, and test it in a real Textport on
+both platforms (it relies on TD's bundled `requests`/`certifi` because macOS
+TD ships no system CA roots).
+
+Below the bar sit three text CTAs (plus a `btn--ghost` GitHub icon link):
+1. **Download the .tox** (`btn--outline`) -> `releases/latest`, the manual path
+2. **Quickstart** (`btn--outline`) -> the docs Quickstart page at
+   `dylanroscover.github.io/Embody/quickstart/`
+3. **Read the manifesto** (`btn--ghost`) -> the manifesto
 
 The Quickstart button is the broad-audience entry point — it points at the
 five-minute, AI-first guide rather than a bare file download. There's a second
-`Read the full Quickstart →` CTA at the end of the "four steps to flow" section
-(`.start__cta`), since those steps are a teaser for the same page. If you move
-the docs site off `dylanroscover.github.io/Embody/`, update both Quickstart
-hrefs to match.
+`Read the full Quickstart →` CTA at the end of the "three steps to flow"
+section (`.start__cta`), since those steps are a teaser for the same page. If
+you move the docs site off `dylanroscover.github.io/Embody/`, update both
+Quickstart hrefs to match.
 
 ### 3. The Open Graph meta tags assume embody.tools is live
 `index.html` lines 13–14, 21:
@@ -140,7 +161,7 @@ you can jump straight to it:
 | Three pillars (Envoy / Embody / TDN) | ~91–125 | ~8: Pillars (~318–358) |
 | In Practice (chat-style list) | ~127–162 | ~9: Practice (~361–398) |
 | Meet TDN | ~164–225 | ~10: TDN section (~401–499) |
-| Get Started (4 steps) | ~227–268 | ~11: Steps (~502–573) |
+| Get Started (3 steps) | ~227–268 | ~11: Steps (~502–573) |
 | Manifesto pull quote | ~270–287 | ~12: Pullquote (~576–599) |
 | Footer | ~292–335 | ~13: Footer (~602–685) |
 
@@ -181,7 +202,8 @@ If you want a different mono webfont, add it to the `<link>` at the top of
 
 ## Accessibility notes
 
-- Page works fully with JavaScript disabled
+- Works with JavaScript disabled — the copy button hides itself
+  (`.install__copy[hidden]`) and the install command stays selectable text
 - Reduced-motion media query respects `prefers-reduced-motion`
 - Keyboard focus rings via `:focus-visible` (only show for keyboard users,
   not mouse clicks)

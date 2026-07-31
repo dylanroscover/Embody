@@ -433,6 +433,82 @@ code, kbd, pre {
 
 
 /* ------------------------------------------------------------
+   7b. Install one-liner (the hero's primary CTA)
+   ------------------------------------------------------------ */
+.install {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  max-width: 860px;
+  scroll-margin-top: 6rem; /* #install anchor jumps clear of the fixed mark */
+}
+.install__hint {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+.install__prompt {
+  color: var(--accent);
+  margin-right: 0.55em;
+}
+.install__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.55rem 0.55rem 1.1rem;
+  box-shadow: 0 18px 50px -30px rgba(110, 230, 104, 0.25);
+}
+.install__code {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: pre;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  padding: 0.35rem 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.install__code:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.install__code code {
+  font-size: inherit; /* defeat the global code 0.92em compounding */
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.install__copy[hidden] {
+  display: none; /* .btn's display would otherwise beat the UA [hidden] rule */
+}
+.install__copy {
+  flex-shrink: 0;
+  padding: 0.7rem 1.35rem;
+  min-width: 7.5em;
+  justify-content: center;
+  cursor: pointer;
+}
+.install__meta {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  letter-spacing: 0.01em;
+}
+
+
+/* ------------------------------------------------------------
    8. Pillars (Envoy / Embody / TDN)
    ------------------------------------------------------------ */
 .pillars {
@@ -1097,6 +1173,14 @@ code, kbd, pre {
   .hero__sub { font-size: 1.05rem; }
   .hero__ctas { gap: 0.7rem; }
   .btn { padding: 0.85rem 1.35rem; font-size: 0.92rem; }
+
+  .install__bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.75rem;
+  }
+  .install__code { padding: 0.15rem 0.25rem 0.4rem; }
+  .install__copy { width: 100%; }
 
   .section { padding: clamp(4rem, 12vw, 6rem) 0; }
   .section__title { margin-bottom: 2.25rem; }

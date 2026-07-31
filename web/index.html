@@ -43,6 +43,7 @@
   "description": "Open-source TouchDesigner toolkit. Envoy is an MCP server with 54 tools that lets AI assistants build, wire, parameterize, and debug a live TouchDesigner session; Embody externalizes the network to version-control-friendly text; TDN is the diffable YAML network format that makes both possible.",
   "url": "https://embody.tools/",
   "downloadUrl": "https://github.com/dylanroscover/Embody/releases/latest",
+  "installUrl": "https://embody.tools/#install",
   "softwareHelp": "https://dylanroscover.github.io/Embody/",
   "codeRepository": "https://github.com/dylanroscover/Embody",
   "license": "https://opensource.org/licenses/MIT",
@@ -83,10 +84,18 @@
 
         <h1 class="hero__headline">create at the<br />speed of&nbsp;thought.</h1>
 
+        <div class="install" id="install">
+          <p class="install__hint"><span class="install__prompt" aria-hidden="true">&gt;&gt;&gt;</span> paste this in a Textport to install &mdash; mac or windows</p>
+          <div class="install__bar">
+            <pre class="install__code" tabindex="0" role="region" aria-label="Embody install command &mdash; a one-line Python command for the TouchDesigner Textport"><code id="install-cmd">import requests, hashlib, tempfile, os; h = {'User-Agent': 'Embody-Install'}; mf = requests.get('https://github.com/dylanroscover/Embody/releases/latest/download/embody-release.json', headers=h, timeout=30).json(); b = requests.get('https://github.com/dylanroscover/Embody/releases/download/%s/%s' % (mf['tag'], mf['asset']), headers=h, timeout=120).content; assert hashlib.sha256(b).hexdigest() == mf['sha256'], 'checksum mismatch'; f = os.path.join(tempfile.gettempdir(), mf['asset']); open(f, 'wb').write(b); n = ui.panes.current; n = n if n.type == PaneType.NETWORKEDITOR else next(x for x in ui.panes if x.type == PaneType.NETWORKEDITOR); print('Embody', mf['version'], 'installed at', n.owner.loadTox(f).path)</code></pre>
+            <button class="btn btn--primary install__copy" type="button" aria-live="polite" hidden>copy</button>
+          </div>
+          <p class="install__meta">downloads the latest release, verifies its sha256, and drops Embody into your current network &mdash; the same as drag and drop. TD pauses for a few seconds while it fetches.</p>
+        </div>
 
         <div class="hero__ctas">
-          <a class="btn btn--primary" href="https://github.com/dylanroscover/Embody/releases/latest">
-            Download the .tox <span aria-hidden="true">→</span>
+          <a class="btn btn--outline" href="https://github.com/dylanroscover/Embody/releases/latest">
+            Download the .tox <span aria-hidden="true">&rarr;</span>
           </a>
           <a class="btn btn--outline" href="https://dylanroscover.github.io/Embody/quickstart/">
             Quickstart <span aria-hidden="true">→</span>
@@ -262,32 +271,25 @@
     <section class="section section--start">
       <div class="container">
         <p class="eyebrow">GET STARTED</p>
-        <h2 class="section__title">four steps to flow.</h2>
+        <h2 class="section__title">three steps to flow.</h2>
 
         <ol class="steps">
           <li class="step">
             <span class="step__num">01</span>
             <div class="step__body">
-              <h3 class="step__title">download</h3>
-              <p>Grab the Embody <code>.tox</code> from <a href="https://github.com/dylanroscover/Embody/releases/latest">GitHub Releases</a>.</p>
+              <h3 class="step__title">install</h3>
+              <p>Open a Textport (<kbd>alt</kbd>+<kbd>shift</kbd>+<kbd>t</kbd>) and paste <a href="#install">the one-liner</a>. Prefer a file? Grab the <code>.tox</code> from <a href="https://github.com/dylanroscover/Embody/releases/latest">GitHub Releases</a> and drop it into your project.</p>
             </div>
           </li>
           <li class="step">
             <span class="step__num">02</span>
-            <div class="step__body">
-              <h3 class="step__title">drag and drop</h3>
-              <p>Drop it into your TouchDesigner project. That's the install.</p>
-            </div>
-          </li>
-          <li class="step">
-            <span class="step__num">03</span>
             <div class="step__body">
               <h3 class="step__title">enable Envoy</h3>
               <p>Connect your AI assistant to the session with one toggle.</p>
             </div>
           </li>
           <li class="step">
-            <span class="step__num">04</span>
+            <span class="step__num">03</span>
             <div class="step__body">
               <h3 class="step__title">tag operators</h3>
               <p>Double-tap <kbd>lctrl</kbd> on any operator to externalize it. Start building.</p>
@@ -413,6 +415,50 @@
       }
       roll();
       el.addEventListener("click", roll);
+    })();
+  </script>
+  <script>
+    // Install-command copy button. Hidden until JS runs; with JS disabled
+    // the command is still plain selectable text. The checkmark is a
+    // unicode escape so the source stays pure ASCII (repo rule).
+    (function () {
+      var btn = document.querySelector(".install__copy");
+      var cmd = document.getElementById("install-cmd");
+      if (!btn || !cmd) return;
+      btn.hidden = false;
+      var idle = btn.textContent;
+      var timer = null;
+
+      function done(ok) {
+        btn.textContent = ok ? "copied \u2713" : "copy failed";
+        clearTimeout(timer);
+        timer = setTimeout(function () { btn.textContent = idle; }, 2200);
+      }
+
+      function fallbackCopy() {
+        var ta = document.createElement("textarea");
+        ta.value = cmd.textContent;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = false;
+        try { ok = document.execCommand("copy"); } catch (e) {}
+        document.body.removeChild(ta);
+        done(ok);
+      }
+
+      btn.addEventListener("click", function () {
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(cmd.textContent).then(
+            function () { done(true); },
+            fallbackCopy
+          );
+        } else {
+          fallbackCopy();
+        }
+      });
     })();
   </script>
 </body>
