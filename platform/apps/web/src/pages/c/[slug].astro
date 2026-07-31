@@ -1593,9 +1593,7 @@ function emitKey(key: string): string {
      same insets as the panels (its own quadrant). */
   .specimen-app :global(.tdn-viewer__breadcrumb) {
     top: auto;
-    /* Clears the TDN drawer handle docked below it (47px tall at bottom: 0,
-       same left offset) with a small gap. */
-    bottom: 60px;
+    bottom: var(--app-bottom);
     left: var(--app-side);
   }
 
@@ -1829,10 +1827,10 @@ function emitKey(key: string): string {
   .tdn-tab {
     position: absolute;
     z-index: 30;
-    /* Docked to the BOTTOM edge, left-aligned with the drawer it opens (the
-       drawer expands at left: var(--app-side)) -- a wide drawer handle new
+    /* Docked to the BOTTOM CENTER of the page -- a wide drawer handle new
        visitors actually see, not the old slim vertical tab. */
-    left: var(--app-side);
+    left: 50%;
+    transform: translateX(-50%);
     bottom: 0;
     display: flex;
     align-items: center;
