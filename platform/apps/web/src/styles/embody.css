@@ -1186,8 +1186,10 @@ h3 {
   position: relative;
   overflow: hidden;
   /* True aspect-ratio box (was relying on the img's min-height) so the slot
-     reserves space before the image loads -> no layout shift. 16:9 matches the
-     640x360 thumbnails. */
+     reserves space before the image loads -> no layout shift. 16:9 is the
+     card's DISPLAY crop -- stored thumbnails keep their own aspect ratio
+     (object-fit: cover center-crops here; the specimen page shows the full
+     frame). */
   aspect-ratio: 16 / 9;
   border-bottom: 1px solid var(--border-faint);
   background: var(--bg-code);

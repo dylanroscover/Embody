@@ -628,7 +628,20 @@ function emitKey(key: string): string {
       <h1 class="specimen-app__title">{specimen.name}</h1>
       <p class="specimen-byline">by <a class="specimen-byline__link" href={`/u/${encodeURIComponent(specimen.author_handle)}`}>{specimen.author_display_name ?? `@${specimen.author_handle}`}</a></p>
 
-      {specimen.description && <p class="specimen-app__desc">{specimen.description}</p>}
+      {specimen.description && (
+        <div class="specimen-app__desc">
+          {/* Markdown-style prose: blank lines separate paragraphs; single
+              newlines inside a paragraph are treated as incidental textarea
+              hard-wraps and reflow as spaces. */}
+          {specimen.description
+            .split(/\r?\n(?:\s*\r?\n)+/)
+            .map((para) => para.replace(/\s*\r?\n\s*/g, " ").trim())
+            .filter((para) => para.length > 0)
+            .map((para) => (
+              <p>{para}</p>
+            ))}
+        </div>
+      )}
 
       <div class="badge-row">
         <span class="badge">{specimen.level}</span>
@@ -716,16 +729,19 @@ function emitKey(key: string): string {
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
         </button>
       </div>
-      <figure class="thumb-figure">
+      <figure class:list={["thumb-figure", { "thumb-figure--video": Boolean(coverVideo) }]}>
         {/* The poster <img> ALWAYS renders (unchanged for image-only covers). A
             video cover layers a <video> on top of it, so if the video fails to
             load the poster underneath stays visible -- never a broken media
             element. This mirrors the grid cover's poster + layered <video>. */}
+        {/* Width/height only when a 16:9 video pins the box; image-only
+            covers keep their native ratio, so a fixed 640x360 reservation
+            would reflow the panel when a portrait cover loads. */}
         <img
           src={cover.src}
           alt={cover.baked ? `${specimen.name} rendered result` : `${specimen.name} preview placeholder`}
-          width="640"
-          height="360"
+          width={coverVideo ? "640" : undefined}
+          height={coverVideo ? "360" : undefined}
           loading="lazy"
         />
         {coverVideo && (
@@ -1675,6 +1691,12 @@ function emitKey(key: string): string {
     font-size: 0.95rem;
     line-height: 1.55;
   }
+  .specimen-app__desc p {
+    margin: 0 0 0.75em;
+  }
+  .specimen-app__desc p:last-child {
+    margin-bottom: 0;
+  }
   /* The pills row has no text leading to fill the panel's flex gap, so the
      paragraph -> pills gap reads tighter than the byline -> heading -> paragraph
      rhythm. A little extra top space evens it out. */
@@ -1842,13 +1864,26 @@ function emitKey(key: string): string {
   .thumb-figure {
     position: relative;
     margin: 0;
-    aspect-ratio: 16 / 9;
     overflow: hidden;
     border: 1px solid var(--border-faint);
     border-radius: var(--radius-sm);
     background: var(--bg-code);
   }
-  .thumb-figure img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* Image covers keep their NATIVE aspect ratio -- TD output is not always
+     16:9, so the panel adapts to the frame instead of cropping it. Tall
+     portraits are capped and letterbox inside the figure. Video covers stay
+     a fixed 16:9 box (the video pipeline is 16:9 end to end). */
+  .thumb-figure img {
+    width: 100%;
+    height: auto;
+    max-height: 68vh;
+    object-fit: contain;
+    display: block;
+  }
+  .thumb-figure--video {
+    aspect-ratio: 16 / 9;
+  }
+  .thumb-figure--video img { width: 100%; height: 100%; object-fit: cover; }
   /* The video layers ON TOP of the always-present poster img, filling the figure.
      If it errors, the controller hides it (is-error) and the poster shows through
      underneath -- never a broken media element. */

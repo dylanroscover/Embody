@@ -38,11 +38,13 @@ export async function getThumbnail(blobs: R2Bucket, key: string): Promise<R2Obje
   return blobs.get(key);
 }
 
-// Thumbnails are resized to a 640x360 WebP on the client before upload, so they
-// land around 15-50 KB. Validate content type + a generous byte cap here as
-// defense in depth: reject a non-image or an oversized payload so a caller that
-// bypasses the client resizer can't store a multi-MB original for a card slot.
-const THUMBNAIL_MAX_BYTES = 500 * 1024; // 0.5 MB -- resized WebP is far smaller
+// Thumbnails are downscaled on the client to a WebP that KEEPS its aspect
+// ratio (long edge capped at 1200px, quality stepped down until the payload
+// fits under this cap -- see thumbDataUrl in contribute.astro / edit.astro).
+// Validate content type + the byte cap here as defense in depth: reject a
+// non-image or an oversized payload so a caller that bypasses the client
+// resizer can't store a multi-MB original.
+const THUMBNAIL_MAX_BYTES = 500 * 1024; // 0.5 MB ceiling the client encodes under
 const THUMBNAIL_CONTENT_TYPES = new Set(["image/webp", "image/png", "image/jpeg"]);
 
 export async function putThumbnail(

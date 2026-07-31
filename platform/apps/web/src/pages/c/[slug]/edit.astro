@@ -182,12 +182,13 @@ const currentLicenseLabel =
         </div>
       </div>
       <label class="submit-field">
-        <span>thumbnail <em>(optional - replaces the current cover, resized to 640x360)</em></span>
+        <span>thumbnail <em>(optional - replaces the current cover; keeps its aspect ratio)</em></span>
         <span class="submit-file" data-file>
           <input type="file" name="thumbnail" accept="image/png,image/jpeg,image/webp" class="submit-file__input" data-file-input />
           <span class="submit-file__btn" aria-hidden="true">choose image</span>
           <span class="submit-file__name" data-file-name>keep current</span>
         </span>
+        <small class="submit-hint">or copy an image and paste it (Ctrl+V / Cmd+V) anywhere on this page.</small>
       </label>
       <label class="submit-field">
         <span>cover video <em>(optional MP4, H.264, 16:9, max 10 MB)</em></span>
@@ -257,6 +258,39 @@ const currentLicenseLabel =
     else fileName.removeAttribute("data-has-file");
   });
 
+  // Paste-to-upload for the replacement thumbnail -- mirrors contribute.astro's
+  // handler (keep the two in sync): a clipboard image fills the SAME
+  // input[type=file] via DataTransfer so the whole pipeline stays identical,
+  // while pastes aimed at text entry (incl. contenteditable) are left alone.
+  if (fileInput) {
+    document.addEventListener("paste", (event: ClipboardEvent) => {
+      const data = event.clipboardData;
+      if (!data) return;
+      const item = Array.from(data.items).find(
+        (i) => i.kind === "file" && i.type.startsWith("image/")
+      );
+      const image = item?.getAsFile();
+      if (!image) return;
+      const target = event.target;
+      const inTextEntry =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof Element &&
+          target.closest("[contenteditable], .cm-content") !== null);
+      const hasText =
+        data.types.includes("text/plain") || data.types.includes("text/html");
+      if (inTextEntry && hasText) return;
+      event.preventDefault();
+      const named = new File([image], "pasted image.png", {
+        type: image.type || "image/png",
+      });
+      const dt = new DataTransfer();
+      dt.items.add(named);
+      fileInput.files = dt.files;
+      fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
+
   // Cover-video picker + "remove video" control. The filename mirror shows the
   // chosen file (or the current state); the remove button DELETEs the video and
   // reverts the cover to image-only. Both track a live "has video" flag so the UI
@@ -316,25 +350,52 @@ const currentLicenseLabel =
     }
   });
 
-  // Resize a chosen thumbnail to a 640x360 (16:9) cover-cropped WebP on the
-  // client, so a multi-MB original never gets uploaded for a small card slot.
-  // The API + R2 also enforce WebP + a byte cap as defense in depth.
+  // Downscale a chosen thumbnail to a WebP that KEEPS its aspect ratio -- TD
+  // output is not always 16:9, and a portrait or square render must survive
+  // upload uncropped. Long edge capped, quality steps down until the payload
+  // fits the server's 500 KB thumbnail cap. Mirrors contribute.astro's
+  // thumbDataUrl -- keep the two in sync.
   async function thumbDataUrl(file: File): Promise<string> {
     const bitmap = await createImageBitmap(file);
-    const W = 640;
-    const H = 360;
-    const canvas = document.createElement("canvas");
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("canvas unavailable");
-    // cover: scale to fill the 16:9 box, then center-crop the overflow.
-    const scale = Math.max(W / bitmap.width, H / bitmap.height);
-    const dw = bitmap.width * scale;
-    const dh = bitmap.height * scale;
-    ctx.drawImage(bitmap, (W - dw) / 2, (H - dh) / 2, dw, dh);
-    bitmap.close();
-    return canvas.toDataURL("image/webp", 0.82);
+    try {
+      const ATTEMPTS = [
+        { edge: 1200, q: 0.82 },
+        { edge: 1200, q: 0.68 },
+        { edge: 800, q: 0.72 },
+        { edge: 640, q: 0.6 },
+      ];
+      const MAX_BYTES = 460 * 1024; // headroom under the server's 500 KB cap
+      const estBytes = (dataUrl: string) => dataUrl.length * 0.75; // base64 -> bytes
+      let out = "";
+      for (let i = 0; i < ATTEMPTS.length; i++) {
+        const { edge, q } = ATTEMPTS[i]!;
+        const scale = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
+        const w = Math.max(1, Math.round(bitmap.width * scale));
+        const h = Math.max(1, Math.round(bitmap.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("canvas unavailable");
+        ctx.drawImage(bitmap, 0, 0, w, h);
+        out = canvas.toDataURL("image/webp", q);
+        // Firefox/Safari can't encode WebP and silently return PNG, where q
+        // is a no-op -- skip straight to the smallest edge in that case.
+        if (!out.startsWith("data:image/webp") && i < ATTEMPTS.length - 1) {
+          i = ATTEMPTS.length - 2;
+          continue;
+        }
+        if (estBytes(out) <= MAX_BYTES) break;
+      }
+      // Never hand the server a payload it will silently drop (putThumbnail
+      // rejects over-cap uploads with no error surfaced to the client).
+      if (estBytes(out) > MAX_BYTES) {
+        throw new Error("could not compress the thumbnail under the 500 KB cap");
+      }
+      return out;
+    } finally {
+      bitmap.close();
+    }
   }
 
   // Client-side video limits, mirrored from the server (putCoverVideo / the video
@@ -343,8 +404,9 @@ const currentLicenseLabel =
   const VIDEO_MAX_BYTES = 10 * 1024 * 1024;
 
   // Extract the first frame of a chosen video as a 640x360 (16:9) cover-cropped
-  // WebP data URL, using the SAME cover math as thumbDataUrl. This poster is fed
-  // into the existing thumbnail path so a video cover always carries a fast static
+  // WebP data URL (video covers are a fixed-16:9 pipeline, unlike image
+  // thumbnails, which keep their own aspect ratio). This poster is fed into the
+  // existing thumbnail path so a video cover always carries a fast static
   // image and the grid / og pipeline is reused unchanged.
   function videoPosterDataUrl(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -489,8 +551,9 @@ const currentLicenseLabel =
       return;
     }
 
-    // Optional replacement thumbnail: resize to a 640x360 WebP on the client, the
-    // same as contribute. Omitted from the payload when no new file is chosen, so
+    // Optional replacement thumbnail: downscaled on the client to an
+    // aspect-ratio-keeping WebP under the server's byte cap, the same as
+    // contribute. Omitted from the payload when no new file is chosen, so
     // the server leaves the current cover untouched.
     let thumbnail: string | undefined;
     const thumbFile = data.get("thumbnail");

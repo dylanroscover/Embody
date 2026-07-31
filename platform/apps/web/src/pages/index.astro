@@ -342,6 +342,51 @@ const jsonLd = {
     color: var(--accent);
     margin-right: 0.55em;
   }
+  /* Rolling green shimmer over the instruction -- a slow accent band sweeps
+     the text left-to-right, looping seamlessly (the gradient's ends match, and
+     one cycle shifts the 200%-wide tile by exactly one period). Gated: only
+     when the browser can clip a background to text AND the visitor allows
+     motion; everyone else keeps the plain solid line above (a transparent
+     fill without those guards would strand reduced-motion visitors on a
+     static bright band -- or blank text on old engines). */
+  @supports ((-webkit-background-clip: text) or (background-clip: text)) {
+    @media (prefers-reduced-motion: no-preference) {
+      .install__hint {
+        /* Dimmed base + a wide bright band (peak = the favicon orb mint) so
+           the sweep reads as a real pulse of light, not a subtle sheen. */
+        background: linear-gradient(
+            90deg,
+            var(--text-muted) 0%,
+            var(--text-muted) 36%,
+            var(--accent) 46%,
+            #c9f5c4 51%,
+            var(--accent) 56%,
+            var(--text-muted) 66%,
+            var(--text-muted) 100%
+          )
+          0 0 / 200% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        -webkit-text-fill-color: transparent;
+        animation: install-hint-roll 2.2s linear infinite;
+      }
+      /* The >>> prompt sits out of the shimmer: re-assert its solid accent
+         fill (text-fill-color inherits from the transparent parent). */
+      .install__hint .install__prompt {
+        color: var(--accent);
+        -webkit-text-fill-color: var(--accent);
+      }
+    }
+  }
+  @keyframes install-hint-roll {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: 0% 0;
+    }
+  }
   .install__bar {
     display: flex;
     align-items: center;

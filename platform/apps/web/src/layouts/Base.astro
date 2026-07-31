@@ -158,14 +158,6 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
             <span class="navbar__label">docs</span>
             <span class="nav-item__desc">guides and API reference for Embody and Envoy.</span>
           </a>
-          <a
-            class:list={["navbar__item", { "is-active": isActive("/contribute") }]}
-            href="/contribute"
-            aria-current={isActive("/contribute") ? "page" : undefined}
-          >
-            <span class="navbar__label">contribute</span>
-            <span class="nav-item__desc">add your own TDN network to the Collection.</span>
-          </a>
           {user ? (
             <div class="navbar__user" data-user-menu>
               <button
@@ -439,7 +431,8 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
       // into a "..." button at the end of the bar that opens a small blurred
       // menu. The account chip and sign in (plus the wordmark) are never
       // overflowed; the rightmost low-priority items go first (github, then
-      // contribute, then manifesto, then collection).
+      // docs, then manifesto, then collection). The contribute nav item was
+      // replaced by the "post a TDN" button on /collection.
       const moreNav = document.querySelector("[data-nav-more]");
       const moreBtn = document.querySelector("[data-nav-more-toggle]");
       const moreMenu = document.querySelector("[data-nav-more-menu]");
