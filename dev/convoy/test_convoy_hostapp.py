@@ -7,6 +7,7 @@ Includes the PHASE 1 EXIT criterion:
 import json
 import os
 import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -36,13 +37,25 @@ class Server:
         if token is not None:
             headers[ha.TOKEN_HEADER] = token
         data = None if body is None else json.dumps(body).encode()
-        req = urllib.request.Request(self.url + path, data=data,
-                                     headers=headers, method=method)
-        try:
-            with urllib.request.urlopen(req, timeout=10) as r:
-                return r.status, json.loads(r.read().decode())
-        except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read().decode())
+        # Retry ONLY a transient transport failure -- a loopback connection
+        # aborted/reset under CI load (WinError 10053 flaked the matrix on
+        # test_every_new_route_requires_the_token). A real HTTP response
+        # (HTTPError, any 4xx/5xx) is caught FIRST and returned immediately,
+        # never retried, so a genuine refusal can never be masked; and the
+        # retry path is reached only when NO response was received.
+        last = None
+        for attempt in range(4):
+            req = urllib.request.Request(self.url + path, data=data,
+                                         headers=headers, method=method)
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return r.status, json.loads(r.read().decode())
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read().decode())
+            except (urllib.error.URLError, ConnectionError, OSError) as e:
+                last = e
+                time.sleep(0.1 * (attempt + 1))
+        raise last
 
     def stop(self):
         self.server.shutdown()
