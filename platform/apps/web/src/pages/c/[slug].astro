@@ -628,21 +628,6 @@ function emitKey(key: string): string {
       <h1 class="specimen-app__title">{specimen.name}</h1>
       <p class="specimen-byline">by <a class="specimen-byline__link" href={`/u/${encodeURIComponent(specimen.author_handle)}`}>{specimen.author_display_name ?? `@${specimen.author_handle}`}</a></p>
 
-      {specimen.description && (
-        <div class="specimen-app__desc">
-          {/* Markdown-style prose: blank lines separate paragraphs; single
-              newlines inside a paragraph are treated as incidental textarea
-              hard-wraps and reflow as spaces. */}
-          {specimen.description
-            .split(/\r?\n(?:\s*\r?\n)+/)
-            .map((para) => para.replace(/\s*\r?\n\s*/g, " ").trim())
-            .filter((para) => para.length > 0)
-            .map((para) => (
-              <p>{para}</p>
-            ))}
-        </div>
-      )}
-
       <div class="badge-row">
         <span class="badge">{specimen.level}</span>
         {specimen.requires.map((req) => (
@@ -674,6 +659,23 @@ function emitKey(key: string): string {
           <span class="engagement-status" data-engagement-status role="status" aria-live="polite"></span>
         </div>
       </div>
+
+      {/* Description sits BELOW the embody-it / engagement cluster so a long
+          write-up can never push the primary actions off-screen. */}
+      {specimen.description && (
+        <div class="specimen-app__desc">
+          {/* Markdown-style prose: blank lines separate paragraphs; single
+              newlines inside a paragraph are treated as incidental textarea
+              hard-wraps and reflow as spaces. */}
+          {specimen.description
+            .split(/\r?\n(?:\s*\r?\n)+/)
+            .map((para) => para.replace(/\s*\r?\n\s*/g, " ").trim())
+            .filter((para) => para.length > 0)
+            .map((para) => (
+              <p>{para}</p>
+            ))}
+        </div>
+      )}
 
       {isOwner && (
         <div class={`owner-status__card ${isPublic ? "is-public" : "is-private"}`} data-owner-status data-slug={specimen.slug}>
