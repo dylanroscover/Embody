@@ -28,6 +28,7 @@ database earns its place -- not before.
 
 import json
 import os
+import secrets
 import time
 
 import convoy_identity as identity
@@ -161,6 +162,38 @@ class HostStore:
     def delete_node(self, node_id):
         if self._state["nodes"].pop(node_id, None) is not None:
             self._write_host()
+
+    # -- convoy pre-shared keys (Phase 1 group auth, A-8) ----------------
+
+    def ensure_convoy_psk(self, convoy_id):
+        """Return this convoy's pre-shared signing key, minting it on
+        first sight. Idempotent.
+
+        Phase 1's HMAC-over-PSK is GROUP/membership authentication (A-8):
+        one key per convoy, held host-private in host.json (0600 via
+        _write_private). Phase 3 replaces the PSK with per-host keypairs
+        through the Signer seam; this store key then becomes legacy.
+
+        `convoy_psks` is an ADDITIVE key: older builds load host.json
+        whole and rewrite the whole dict, so the key round-trips through
+        them intact -- no STORE_VERSION bump needed. The audit line
+        records THAT a key was minted, never the key itself.
+        """
+        if not convoy_id or not isinstance(convoy_id, str):
+            raise ValueError("convoy_id is required to mint a PSK")
+        psks = self._state.setdefault("convoy_psks", {})
+        psk = psks.get(convoy_id)
+        if psk:
+            return psk
+        psk = secrets.token_hex(32)
+        psks[convoy_id] = psk
+        self._write_host()
+        self.audit("hoststore", "convoy_psk_minted", {"convoy_id": convoy_id})
+        return psk
+
+    def convoy_psk(self, convoy_id):
+        """The convoy's PSK, or None if never minted. Read-only."""
+        return self._state.get("convoy_psks", {}).get(convoy_id)
 
     # -- jobs (one file each, like .embody/jobs/) -----------------------
 

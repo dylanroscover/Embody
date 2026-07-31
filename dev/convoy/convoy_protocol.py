@@ -39,6 +39,7 @@ cannot silently multiply a per-hop timeout.
 import hashlib
 import hmac
 import json
+import math
 import time
 import uuid
 
@@ -171,13 +172,6 @@ def build_envelope(convoy_id, origin_host_id, controller_id, target_node_id,
     return envelope
 
 
-# Operation classes for which A-22 makes expected_runtime_id MANDATORY: a
-# request that could act on stale state must name the run it addressed.
-# The operation registry (not built in Phase 1) will own the membership
-# test; the constant lives here so the verifier can enforce it now.
-RUNTIME_ID_REQUIRED_OPS = frozenset()   # populated when the registry lands
-
-
 def verify_envelope(envelope, signer, convoy_id, my_node_id,
                     my_runtime_id=None, now=None,
                     runtime_required=False):
@@ -189,11 +183,14 @@ def verify_envelope(envelope, signer, convoy_id, my_node_id,
     as a raw TypeError/ValueError (that would be an unnamed failure the
     audit trail cannot classify).
 
-    runtime_required: the caller (eventually the operation registry)
-    passes True for restart / read-modify-write / exclusive-batch /
-    wake-lease operations, for which A-22 makes expected_runtime_id
-    mandatory. When True, a missing expected_runtime_id is REFUSED, not
-    waved through.
+    runtime_required: True for restart / read-modify-write /
+    exclusive-batch / wake-lease operations, for which A-22 makes
+    expected_runtime_id mandatory. When True, a missing
+    expected_runtime_id is REFUSED, not waved through. The caller owns
+    the membership test -- today that is the host app's operation
+    registry entry (`runtime_required`), which is also what the
+    capability digest covers, so the classification travels with the
+    operation instead of being duplicated here.
     """
     now = time.time() if now is None else now
 
@@ -270,6 +267,14 @@ def verify_envelope(envelope, signer, convoy_id, my_node_id,
         # ValueError escaping the verifier.
         raise EnvelopeRejected("malformed",
                                "deadline_unix is not a number")
+    if not math.isfinite(deadline):
+        # NaN and Infinity are FAIL-OPEN here if waved through: every
+        # comparison against NaN is False, so `deadline <= now` never
+        # fires and the request becomes immortal -- and JSON's NaN /
+        # Infinity tokens make that reachable over the wire. A deadline
+        # that cannot expire is not a deadline.
+        raise EnvelopeRejected("malformed",
+                               "deadline_unix must be a finite number")
     if deadline <= now:
         raise EnvelopeRejected("deadline_exceeded",
                                "the request expired before it was executed")
@@ -283,9 +288,15 @@ def verify_envelope(envelope, signer, convoy_id, my_node_id,
 
 def remaining_budget(envelope, now=None):
     """Seconds left before the absolute deadline (never negative, never
-    raises on a malformed deadline)."""
+    NaN, never raises on a malformed deadline)."""
     now = time.time() if now is None else now
     try:
-        return max(0.0, float(envelope.get("deadline_unix")) - now)
+        deadline = float(envelope.get("deadline_unix"))
     except (TypeError, ValueError):
         return 0.0
+    if not math.isfinite(deadline):
+        # A non-finite deadline yields a non-finite budget, which every
+        # downstream timeout comparison then reads as "plenty of time".
+        # No budget is the safe reading of an unusable deadline.
+        return 0.0
+    return max(0.0, deadline - now)

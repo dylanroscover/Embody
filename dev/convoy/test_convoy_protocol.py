@@ -239,3 +239,30 @@ def test_non_object_rejected():
     with pytest.raises(cp.EnvelopeRejected) as e:
         _verify(["nope"])
     assert e.value.reason == "malformed"
+
+
+# -- panel regression (2026-07-31): non-finite deadlines --------------
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"),
+                                 float("-inf")])
+def test_non_finite_deadline_is_refused(bad):
+    """PROVEN FAIL-OPEN: every comparison against NaN is False, so
+    `deadline <= now` never fired and a signed NaN deadline produced a
+    request that could never expire. Infinity is the same guarantee
+    broken the honest way. JSON's NaN/Infinity tokens make both
+    reachable over the wire, so the verifier -- not just the transport
+    -- must refuse them."""
+    env = _envelope()
+    env["deadline_unix"] = bad
+    env["signature"] = signer().sign(cp._signing_payload(env))
+    with pytest.raises(cp.EnvelopeRejected) as e:
+        _verify(env)
+    assert e.value.reason == "malformed"
+    assert "finite" in e.value.detail
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_remaining_budget_of_a_non_finite_deadline_is_zero(bad):
+    """A non-finite budget reads as 'plenty of time' to every downstream
+    timeout comparison; no budget is the safe reading."""
+    assert cp.remaining_budget({"deadline_unix": bad}) == 0.0

@@ -28,6 +28,17 @@ and relies on its single caller -- the host app -- serializing every
 method under one lock (the host app already does this for all state). No
 method may be called concurrently. Stated as an invariant because the
 correctness of the read/write accounting depends on it.
+
+TRUST BOUNDARY -- leases are COORDINATION, not security. `controller_id`
+is whatever the caller says it is: on the local IPC routes it is
+unauthenticated, and on the signed envelope path it is covered only by
+the group PSK (A-8), so any convoy member can sign any controller_id.
+Nothing here stops a caller from naming another controller's id to take,
+release, or act under its lease. That is the same bargain Embody's
+shipped claim_scope makes between cooperating sessions, and it is why a
+lease refusal is a coordination signal rather than an access-control
+decision. Per-controller authentication is a Phase 3 keypair question,
+not something this module claims today.
 """
 
 LEASE_EXCLUSIVE = "exclusive"
