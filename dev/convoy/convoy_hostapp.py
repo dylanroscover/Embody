@@ -155,6 +155,19 @@ class Malformed(Exception):
         self.detail = detail
 
 
+def _unwired_forwarder(port, operation, arguments):
+    """The default dispatch forwarder: not yet wired to a transport.
+
+    Reaching a node's Envoy is an MCP client over Streamable HTTP; that
+    transport is the A-46 rework's job. Until it lands, dispatch has no
+    way to actually execute a job, so this returns None -- which the
+    dispatcher treats as a transport failure and records as
+    INDETERMINATE (never a fabricated success/failure). A real deployment
+    injects a working forwarder; the orchestration around it is complete
+    and tested."""
+    return None
+
+
 def text_field(body, name, required=True, limit=MAX_ID_CHARS):
     """Read a string field from a request body, or raise Malformed.
 
@@ -182,7 +195,7 @@ class HostApp:
     """All state behind one lock: a host app is coordination, not
     throughput. Every handler acquires it around the whole request."""
 
-    def __init__(self, directory_path, now=None):
+    def __init__(self, directory_path, now=None, forwarder=None):
         self.data_dir = directory_path
         self._now = now or time.time
         self.started = self._now()
@@ -190,6 +203,15 @@ class HostApp:
         self.db = hoststore.HostStore(directory_path, now=now)
         self.host_id = self.db.host_id()
         self.directory, self.quarantined = self.db.load_directory()
+        # The dispatch SEAM: how the host executes a queued job against a
+        # node's Envoy. Signature (port, operation, arguments) -> a dict
+        # {"ok": bool, "result"/"error": ...} for an observed node result,
+        # or None on a transport failure (-> indeterminate). The default
+        # is unwired because reaching a node's Envoy is an MCP-client over
+        # Streamable HTTP -- the A-46 transport rework owns that; slice 1
+        # builds the dispatch ORCHESTRATION and verdict model behind this
+        # seam, exactly as the Signer seams cryptography.
+        self.forwarder = forwarder or _unwired_forwarder
         # DEEP copy per instance: a shallow one shares the nested schema
         # and side_effects dicts with the module constant, so mutating
         # one in a test would silently change every other instance's
@@ -224,6 +246,9 @@ class HostApp:
         # fine (the host mints one); what matters is that it CHANGES on
         # every TD start so a stale request can be caught.
         runtime_id = body.get("runtime_id")
+        # Where the node's local Envoy listens, so the host can dispatch a
+        # job back to it (loopback, Phase 1). Optional and per-launch.
+        envoy_port = body.get("envoy_port")
         if (not comp_path or not isinstance(comp_path, str)
                 or len(comp_path) > 512):
             self.db.audit("hostapp", "register_refused",
@@ -231,10 +256,19 @@ class HostApp:
             return 400, {"ok": False, "reason": "malformed",
                          "detail": "comp_path is required (1..512 chars) "
                                    "-- omitting it would mint a new identity"}
+        if envoy_port is not None and (
+                isinstance(envoy_port, bool)
+                or not isinstance(envoy_port, int)
+                or not (1 <= envoy_port <= 65535)):
+            self.db.audit("hostapp", "register_refused",
+                          {"reason": "malformed", "detail": "envoy_port"})
+            return 400, {"ok": False, "reason": "malformed",
+                         "detail": "envoy_port must be an integer 1..65535"}
         known_before = {r["node_id"] for r in self.directory.nodes()}
         try:
             record = self.directory.register(
-                project_root, comp_path, convoy_id, runtime_id=runtime_id)
+                project_root, comp_path, convoy_id, runtime_id=runtime_id,
+                envoy_port=envoy_port)
         except identity.IdentityError as e:
             # A-39: refusals are AUDITED, not silent -- with no admission
             # control yet, visibility is the compensating control.
@@ -273,6 +307,7 @@ class HostApp:
                      "node_id": record["node_id"],
                      "runtime_id": record["runtime_id"],
                      "host_id": self.host_id,
+                     "envoy_port": record.get("envoy_port"),
                      "td_python_approved": record["td_python_approved"]}
 
     def remint_node(self, body):
@@ -334,6 +369,72 @@ class HostApp:
             return 404, {"ok": False, "reason": "unknown_job",
                          "detail": delivery_id}
         return 200, {"ok": True, "job": job}
+
+    # -- dispatch: execute a queued job against the node (Phase 4 slice 1)
+
+    def dispatch_job(self, delivery_id):
+        """Execute one QUEUED job by forwarding its operation to the node's
+        Envoy (loopback), then mirror the verdict.
+
+        This is the first slice of the relay's execution path. The
+        invariant A-15 gave us holds end to end: a job leaves 'queued'
+        ONLY by an observed node result (record_sync_result) or, on a
+        transport failure where the op may have run, mark_indeterminate --
+        the host never invents a verdict. Idempotent: a job already past
+        'queued' is returned unchanged, so a double dispatch cannot
+        re-run the work.
+        """
+        job = self.db.get_job(delivery_id)
+        if job is None:
+            return 404, {"ok": False, "reason": "unknown_job",
+                         "detail": delivery_id}
+        if job.get("state") != "queued":
+            # Already dispatched or terminal -- never re-run.
+            return 200, {"ok": True, "dispatched": False, "job": job}
+        node = self.directory.lookup(job["node_id"])
+        if node is None:
+            return 404, {"ok": False, "reason": "unknown_node",
+                         "detail": job["node_id"]}
+        port = node.get("envoy_port")
+        if not port:
+            # No endpoint yet -- the node has not registered its live
+            # Envoy port. Leave the job queued to dispatch once it does;
+            # this is a not-yet, not a failure.
+            self.db.audit("hostapp", "dispatch_deferred",
+                          {"delivery_id": delivery_id,
+                           "reason": "node_endpoint_unknown"})
+            return 409, {"ok": False, "reason": "node_endpoint_unknown",
+                         "detail": "the node has not registered its Envoy "
+                                   "port; the job stays queued"}
+        now = self._now()
+        detail = ""
+        try:
+            outcome = self.forwarder(port, job["operation"],
+                                     job.get("arguments") or {})
+        except Exception as e:      # a forwarder must not crash dispatch
+            outcome = None
+            detail = f"{type(e).__name__}: {e}"
+        if outcome is None:
+            # Transport failure: the operation MAY have executed on the
+            # node, and we have no result. Indeterminate is the only
+            # honest terminal here -- never a silent retry or a fake fail.
+            updated = self.db.mark_indeterminate(delivery_id, {
+                "reason": "node_unreachable",
+                "detail": detail or "no response from the node's Envoy",
+                "operation": job["operation"]})
+            self.db.audit("hostapp", "dispatch_indeterminate",
+                          {"delivery_id": delivery_id,
+                           "operation": job["operation"]})
+            return 200, {"ok": True, "dispatched": True, "job": updated}
+        ok = bool(outcome.get("ok"))
+        result = outcome.get("result") if ok else {
+            "error": outcome.get("error")}
+        updated = self.db.record_sync_result(delivery_id, ok, now,
+                                             result=result)
+        self.db.audit("hostapp", "dispatched",
+                      {"delivery_id": delivery_id, "ok": ok,
+                       "operation": job["operation"]})
+        return 200, {"ok": True, "dispatched": True, "job": updated}
 
     # -- the guarded request path (Phase 1 completion) ------------------
 
@@ -754,6 +855,9 @@ def make_handler(app):
                         code, payload = app.remint_node(body)
                     elif self.path == "/jobs":
                         code, payload = app.create_job(body)
+                    elif self.path == "/dispatch":
+                        code, payload = app.dispatch_job(
+                            body.get("delivery_id") or "")
                     elif self.path == "/envelope":
                         code, payload = app.submit_envelope(body)
                     elif self.path == "/psk":

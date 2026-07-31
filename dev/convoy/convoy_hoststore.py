@@ -413,6 +413,26 @@ class HostStore:
                                  observed_at=observed_at,
                                  node_job_id=node_job_id)
 
+    def record_sync_result(self, delivery_id, ok, observed_at, result=None):
+        """Record the verdict of a SYNCHRONOUS relay: the host forwarded
+        the operation to the node's Envoy and got the response inline.
+
+        Still a NODE-originated verdict under A-15 -- the success/failure
+        came FROM the node's execution, the host only mirrors it -- but
+        tagged `node_sync` rather than `node_poll` to be honest about the
+        mechanism: a synchronous op mints no node-side job_<8hex>, so
+        there is no node_job_id, and observed_at (when the response
+        arrived) is the provenance. The host still cannot reach here
+        without an actual node response to mirror.
+        """
+        if not observed_at:
+            raise ValueError(
+                "a sync result must carry observed_at -- when the node's "
+                "response was seen is its provenance")
+        return self._apply_state(delivery_id, "succeeded" if ok else "failed",
+                                 result=result, verdict_source="node_sync",
+                                 observed_at=observed_at)
+
     def mark_indeterminate(self, delivery_id, evidence):
         """Host-ORIGINATED terminal outcome: the operation MAY have run
         and the node cannot be observed. The one execution-ambiguous

@@ -101,13 +101,16 @@ class NodeDirectory:
         self._by_node = {}          # node_id -> record
 
     def register(self, project_root, comp_path, convoy_id, runtime_id=None,
-                 minted_id=None, platform=None):
+                 minted_id=None, platform=None, envoy_port=None):
         """Return this location's node record, assigning an id on first
         sight. Re-registering the same location returns the SAME record
         and refreshes its runtime_id -- that is a restart, not a new node.
 
         minted_id exists so the store can replay persisted rows; live
-        callers leave it None.
+        callers leave it None. envoy_port is where the node's local Envoy
+        listens (loopback) so the host can dispatch a job back to it; it
+        is PER-LAUNCH like runtime_id (never persisted), so a store replay
+        passes None and it fills in on the node's next live registration.
         """
         root = normalize_project_root(project_root, platform=platform)
         if not comp_path or not isinstance(comp_path, str):
@@ -128,6 +131,10 @@ class NodeDirectory:
             # A NEW runtime_id here means TD restarted: same node, new
             # run. Recording it is what lets a stale request be refused.
             existing["runtime_id"] = runtime_id or mint_runtime_id()
+            # Refresh the live Envoy port, but never CLEAR a known one on a
+            # replay/re-register that omits it.
+            if envoy_port is not None:
+                existing["envoy_port"] = envoy_port
             return existing
 
         node_id = minted_id or mint_id()
@@ -142,6 +149,9 @@ class NodeDirectory:
             "host_id": self.host_id,
             "convoy_id": convoy_id,
             "runtime_id": runtime_id or mint_runtime_id(),
+            # Where the node's Envoy listens (loopback), for dispatch-back.
+            # None until the node registers live with its port.
+            "envoy_port": envoy_port,
             # Fail-closed: a new identity has NO TD-Python approval.
             "td_python_approved": False,
         }
