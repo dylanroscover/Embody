@@ -43,6 +43,7 @@ import convoy_capabilities as capabilities
 import convoy_controllers as controllers
 import convoy_hoststore as hoststore
 import convoy_identity as identity
+import convoy_mcpclient as mcpclient
 import convoy_platform as platform_mod
 import convoy_protocol as protocol
 
@@ -155,19 +156,6 @@ class Malformed(Exception):
         self.detail = detail
 
 
-def _unwired_forwarder(port, operation, arguments):
-    """The default dispatch forwarder: not yet wired to a transport.
-
-    Reaching a node's Envoy is an MCP client over Streamable HTTP; that
-    transport is the A-46 rework's job. Until it lands, dispatch has no
-    way to actually execute a job, so this returns None -- which the
-    dispatcher treats as a transport failure and records as
-    INDETERMINATE (never a fabricated success/failure). A real deployment
-    injects a working forwarder; the orchestration around it is complete
-    and tested."""
-    return None
-
-
 def text_field(body, name, required=True, limit=MAX_ID_CHARS):
     """Read a string field from a request body, or raise Malformed.
 
@@ -207,11 +195,12 @@ class HostApp:
         # node's Envoy. Signature (port, operation, arguments) -> a dict
         # {"ok": bool, "result"/"error": ...} for an observed node result,
         # or None on a transport failure (-> indeterminate). The default
-        # is unwired because reaching a node's Envoy is an MCP-client over
-        # Streamable HTTP -- the A-46 transport rework owns that; slice 1
-        # builds the dispatch ORCHESTRATION and verdict model behind this
-        # seam, exactly as the Signer seams cryptography.
-        self.forwarder = forwarder or _unwired_forwarder
+        # is the minimal MCP client (convoy_mcpclient.forward), which
+        # handles the synchronous request/response tool call the dispatcher
+        # needs today; tests inject their own. The robust transport
+        # (streaming, long-running node jobs, reconnection) is the A-46
+        # rework, and this seam is exactly where it plugs in.
+        self.forwarder = forwarder or mcpclient.forward
         # DEEP copy per instance: a shallow one shares the nested schema
         # and side_effects dicts with the module constant, so mutating
         # one in a test would silently change every other instance's

@@ -184,17 +184,12 @@ def test_dispatch_requires_the_token(server):
     assert code == 401 and body["reason"] == "unauthenticated"
 
 
-def test_the_default_forwarder_is_unwired_and_yields_indeterminate(server):
-    """With no injected forwarder, dispatch cannot reach a node (the MCP
-    transport is A-46), so it must fail SAFE to indeterminate -- never a
-    fabricated success."""
-    node = register(server)
-    job = enqueue(server, node)
-    # server.app.forwarder is the module default here
-    assert server.app.forwarder is ha._unwired_forwarder
-    code, body = server.call("/dispatch",
-                             {"delivery_id": job["delivery_id"]})
-    assert code == 200 and body["job"]["state"] == "indeterminate"
+def test_the_default_forwarder_is_the_mcp_client(server):
+    """The host app dispatches through the real minimal MCP client by
+    default; a node whose Envoy is unreachable fails SAFE to
+    indeterminate (proven with an injected transport failure elsewhere)."""
+    import convoy_mcpclient as mcpclient
+    assert server.app.forwarder is mcpclient.forward
 
 
 # -- record_sync_result unit contract ----------------------------------
