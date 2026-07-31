@@ -796,10 +796,12 @@ function emitKey(key: string): string {
     <button class="panel-tab panel-tab--props" type="button" data-panel-open="properties" hidden aria-label="show properties (p)" title="properties (p)"><span class="kbd" aria-hidden="true">p</span>roperties</button>
     <button class="panel-tab panel-tab--thumb" type="button" data-panel-open="thumbnail" hidden aria-label="show rendered result (r)" title="rendered result (r)"><span class="kbd" aria-hidden="true">r</span>esult</button>
 
-    {/* Prominent TDN source tab ('t') + the left drawer. */}
+    {/* Prominent TDN source tab ('t') + the left drawer. A wide handle docked
+        to the bottom edge, left-aligned with where the drawer opens -- the old
+        slim vertical tab on the left edge was invisible to new visitors. */}
     <button class="tdn-tab" type="button" data-panel-open="tdn" aria-expanded="false" aria-controls="tdn-panel" aria-label="show TDN source (t)" title="TDN source (t)">
       <svg class="tdn-tab__icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6" /></svg>
-      <span class="tdn-tab__label">TDN</span>
+      <span class="tdn-tab__label"><span class="kbd" aria-hidden="true">t</span><span class="tdn-acr">dn</span>&nbsp;source</span>
     </button>
     <aside class="specimen-app__tdn app-panel is-collapsed" id="tdn-panel" data-panel="tdn" data-draggable aria-label="tdn source">
       <header class="specimen-app__tdn-head" data-drag-handle>
@@ -1591,7 +1593,9 @@ function emitKey(key: string): string {
      same insets as the panels (its own quadrant). */
   .specimen-app :global(.tdn-viewer__breadcrumb) {
     top: auto;
-    bottom: var(--app-bottom);
+    /* Clears the TDN drawer handle docked below it (47px tall at bottom: 0,
+       same left offset) with a small gap. */
+    bottom: 60px;
     left: var(--app-side);
   }
 
@@ -1825,18 +1829,18 @@ function emitKey(key: string): string {
   .tdn-tab {
     position: absolute;
     z-index: 30;
-    left: 0;
-    /* Sit ~3/4 down the left edge so it clears the tall overview panel above. */
-    top: 75%;
-    transform: translateY(-50%);
+    /* Docked to the BOTTOM edge, left-aligned with the drawer it opens (the
+       drawer expands at left: var(--app-side)) -- a wide drawer handle new
+       visitors actually see, not the old slim vertical tab. */
+    left: var(--app-side);
+    bottom: 0;
     display: flex;
-    flex-direction: column;
     align-items: center;
     gap: 10px;
-    padding: 18px 10px;
+    padding: 13px 26px 15px;
     border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--border));
-    border-left: 0;
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    border-bottom: 0;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
     background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated));
     color: var(--accent);
     cursor: pointer;
@@ -1847,13 +1851,16 @@ function emitKey(key: string): string {
     background: color-mix(in srgb, var(--accent) 24%, var(--bg-elevated));
     border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
   }
-  .tdn-tab__icon { color: var(--accent); }
+  .tdn-tab__icon { color: var(--accent); flex-shrink: 0; }
   .tdn-tab__label {
+    display: inline-flex;
+    align-items: center;
     font: 700 12px/1 var(--font-mono);
-    letter-spacing: 0.22em;
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
   }
+  .tdn-tab__label .kbd { margin-right: 0; }
+  .tdn-tab .tdn-acr { text-transform: uppercase; }
 
   /* Rendered-result thumbnail, pinned bottom-right. */
   .specimen-app__thumb {
