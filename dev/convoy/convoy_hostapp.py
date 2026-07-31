@@ -199,8 +199,12 @@ def make_handler(app):
 
         def do_GET(self):
             if self.path == "/health":
-                # The ONLY unauthenticated route: liveness, no state.
-                self._send(200, {"ok": True, "protocol": "convoy-host/1"})
+                # The ONLY unauthenticated route: liveness + IDENTITY, no
+                # secrets. host_id lets a client confirm it reached the
+                # right host app (not a recycled pid) BEFORE it sends the
+                # IPC token -- see convoy_hostprobe identity confirmation.
+                self._send(200, {"ok": True, "protocol": "convoy-host/1",
+                                 "host_id": app.host_id})
                 return
             if not self._authenticated():
                 self._send(401, {"ok": False, "reason": "unauthenticated"})
