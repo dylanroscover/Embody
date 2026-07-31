@@ -474,12 +474,18 @@ def _jobs_dir():
     return os.path.join(str(root), '.embody', 'jobs')
 
 
-def _new_job(kind, params):
+def _new_job(kind, params, idempotency_key=None):
     import uuid
-    return {'id': 'job_' + uuid.uuid4().hex[:8], 'kind': kind,
-            'params': {k: v for k, v in (params or {}).items()
-                       if v is not None},
-            'status': 'running', 'started': time.time()}
+    job = {'id': 'job_' + uuid.uuid4().hex[:8], 'kind': kind,
+           'params': {k: v for k, v in (params or {}).items()
+                      if v is not None},
+           'status': 'running', 'started': time.time()}
+    if idempotency_key:
+        # A-22 / 16.5: the key a controller (or a retrying caller) uses to
+        # reconcile a redelivered request to THIS job instead of running
+        # the work twice. Absent for a direct call that opts out.
+        job['idempotency_key'] = idempotency_key
+    return job
 
 
 def _job_path(job_id):
@@ -530,6 +536,153 @@ def _read_job(job_id):
         return None
 
 
+# -- idempotency index (16.5): one marker file per key -----------------
+#
+# A redelivered request (same idempotency_key) must reconcile to the
+# job it already minted, never run the work twice. The shipped layer had
+# only save_project's 120s in-flight heuristic, which a retry at 121s --
+# or any run_tests retry after a severed ack -- defeats by minting a
+# second job. ONE marker file per key (idem_<sha256[:24]>.json holding
+# {job_id, created}), not a shared index blob: a torn/locked read then
+# affects one key and FAILS CLOSED, never annihilates the whole map (the
+# defect the host-side store had, fixed 2026-07-31). Single-writer here
+# (job starts are main-thread), so no cross-writer gate is needed.
+
+_JOB_IDEM_PREFIX = 'idem_'
+
+
+class _IdemMarkerUnreadable(Exception):
+    """A key's marker is present but unreadable. Admission must FAIL
+    CLOSED on this -- treating it as 'no prior job' would run the work a
+    second time."""
+
+
+class _IdemKeyConflict(Exception):
+    """A key already names a job of a DIFFERENT kind than the caller is
+    starting. Reusing one idempotency_key across operations is a caller
+    error; refuse rather than silently reconcile (e.g. a save handed a
+    test run's handle, its save never running)."""
+
+
+def _idem_marker_path(idempotency_key):
+    """Path of a key's marker, or None with no jobs dir / no key. The key
+    is HASHED into the filename so arbitrary key text can neither escape
+    the jobs dir nor collide with a job_<8hex> record.
+
+    SCOPING: the key is used RAW here -- this node's job dir is its own
+    namespace. When multi-convoy dispatch lands (A-21 signs convoy_id
+    alongside idempotency_key), the CALLER must combine convoy_id /
+    controller_id into the key before submitting, so two controllers
+    picking the same string cannot cross-reconcile. The node does not
+    namespace it, because in Phase 1 there is one local caller."""
+    d = _jobs_dir()
+    if not d or not idempotency_key or not isinstance(idempotency_key, str):
+        return None
+    import hashlib
+    digest = hashlib.sha256(idempotency_key.encode('utf-8')).hexdigest()[:24]
+    return os.path.join(d, _JOB_IDEM_PREFIX + digest + '.json')
+
+
+def _record_job_key(idempotency_key, job_id):
+    """Point a key's marker at the job it minted (atomic, best-effort,
+    mirroring _write_job). Called AFTER the job record is durable, so a
+    marker never names a job that was never persisted."""
+    path = _idem_marker_path(idempotency_key)
+    if not path:
+        return
+    tmp = path + '.%d.tmp' % os.getpid()
+    try:
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump({'job_id': job_id, 'created': time.time()}, f)
+        for attempt in range(3):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == 2:
+                    raise
+    except Exception:
+        # Best-effort: a lost marker means at worst a future retry
+        # re-mints -- never a duplicate of ACKNOWLEDGED work, since the
+        # job record itself is already durable and its handle returned.
+        # Clean the temp so a failed write leaves nothing behind.
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+def _job_for_key(idempotency_key, expected_kind=None):
+    """The job RECORD a key already minted, or None on a miss.
+
+    Raises _IdemMarkerUnreadable on a present-but-unreadable marker so the
+    caller refuses rather than duplicating. Raises _IdemKeyConflict if the
+    key names a job of a kind other than expected_kind -- a key reused
+    across operations must not silently reconcile a save to a test run's
+    handle. A marker naming a job whose record is gone (retention,
+    cleanup) reads as a MISS, so the caller re-mints -- healing rather
+    than refusing forever.
+    """
+    path = _idem_marker_path(idempotency_key)
+    if not path:
+        return None
+    last = None
+    for _attempt in range(4):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                text = f.read().strip()
+        except FileNotFoundError:
+            return None
+        except OSError as e:            # locked / sharing violation: retry
+            last = e
+            continue
+        if not text:
+            return None                 # created but not yet filled
+        try:
+            data = json.loads(text)
+        except ValueError:
+            # os.replace is atomic, so a non-empty marker we wrote is whole
+            # JSON. Unparseable-but-present is corruption -- fail closed.
+            raise _IdemMarkerUnreadable(path)
+        job_id = data.get('job_id') if isinstance(data, dict) else None
+        if not job_id:
+            return None
+        # Honor the marker only if its job still exists (job_id is
+        # re-validated by _job_path inside _read_job), else miss -> re-mint.
+        record = _read_job(job_id)
+        if record is None:
+            return None
+        if expected_kind is not None and record.get('kind') != expected_kind:
+            raise _IdemKeyConflict(
+                '%r names a %s job, not %s'
+                % (idempotency_key, record.get('kind'), expected_kind))
+        return record
+    raise _IdemMarkerUnreadable('%s: %s' % (path, last))
+
+
+def _prune_orphan_marker(path):
+    """Drop a per-key marker once the job it names no longer exists, so a
+    marker lives EXACTLY as long as its job record is fetchable: never
+    shorter (a shorter life would re-mint a still-live job -- the bug a
+    'created'-age horizon had, since a done record is retained from its
+    FINISH while a marker's age counts from the job's START, and a
+    running/indeterminate record is never pruned at all), never
+    unboundedly longer. An unreadable/corrupt marker is LEFT untouched --
+    it is a fail-closed signal an operator should see, not silently
+    erase."""
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        return
+    job_id = data.get('job_id') if isinstance(data, dict) else None
+    if not job_id or _read_job(job_id) is None:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
 def _job_public(job, now):
     out = dict(job)
     try:
@@ -557,6 +710,12 @@ def _list_jobs(now):
         return []
     for name in names:
         if not name.endswith('.json'):
+            continue
+        if name.startswith(_JOB_IDEM_PREFIX):
+            # Per-key idempotency markers are not job records: never list
+            # them, and prune ones whose job is gone so they stay bounded
+            # (nothing else sweeps them -- _read_job rejects their ids).
+            _prune_orphan_marker(os.path.join(d, name))
             continue
         record = _read_job(name[:-5])
         if record is None:
@@ -3143,7 +3302,8 @@ class EnvoyMCPServer:
 
         @self.mcp.tool()
         def run_tests(suite_name: str = None, test_name: str = None,
-                      override: bool = False, background: bool = False) -> dict:
+                      override: bool = False, background: bool = False,
+                      idempotency_key: str = None) -> dict:
             """
             Run Embody test suites and return results.
 
@@ -3165,19 +3325,33 @@ class EnvoyMCPServer:
                     session holds project:tests or wrote very recently.
                 background: Return {'job_id', 'status': 'running'}
                     immediately; results park restart-proof on disk.
+                idempotency_key: background only. A stable key that makes a
+                    RETRY safe: a second background run with the same key
+                    reconciles to the original run's handle instead of
+                    starting (or being refused as) a duplicate. Omit for a
+                    one-shot run.
 
             Returns:
                 Synchronous: dict with passed/failed/error/skip counts and
                 the failing tests. background=True: {'job_id', 'status',
                 'hint'}.
             """
+            if idempotency_key and not background:
+                # A synchronous run holds the transport open and returns
+                # results inline -- there is no durable record to reconcile
+                # a retry to, so a key here would be silently useless.
+                # Refuse loudly rather than drop an idempotency guarantee.
+                return {'error': 'idempotency_key requires background=True '
+                                 '-- a synchronous run has no durable record '
+                                 'to reconcile a retry to.'}
             if background:
                 # Normal round-trip: the main-thread handler only STARTS
                 # the deferred run and returns the job handle; results
                 # land in the disk record, immune to server restarts.
                 return self._execute_in_td('run_tests', {
                     'suite_name': suite_name, 'test_name': test_name,
-                    'override': override, 'background': True})
+                    'override': override, 'background': True,
+                    'idempotency_key': idempotency_key})
 
             # Use a dedicated Event so the worker thread can wait directly
             # for test completion -- bypasses the response_queue which is
@@ -3257,7 +3431,7 @@ class EnvoyMCPServer:
             return {'jobs': jobs, 'count': len(jobs)}
 
         @self.mcp.tool()
-        def save_project() -> dict:
+        def save_project(idempotency_key: str = None) -> dict:
             """
             Save the TouchDesigner project as a tracked background job.
 
@@ -3270,10 +3444,19 @@ class EnvoyMCPServer:
             version_before/version_after and the saved .toe name. Expect
             this session's next call to ride a brief bridge reconnect.
 
+            Args:
+                idempotency_key: A stable key that makes a RETRY safe. A
+                    save already dedupes a resubmission arriving within its
+                    ~2 min in-flight window; a key extends that to any age,
+                    so a retry after a severed ack reconciles to the
+                    original save instead of queuing a second multi-second
+                    save. Omit for a one-shot save.
+
             Returns:
                 {'job_id', 'status': 'running', 'hint'}
             """
-            return self._execute_in_td('save_project', {})
+            return self._execute_in_td('save_project',
+                                       {'idempotency_key': idempotency_key})
 
         # --- Batch Operations ---
 
@@ -6419,7 +6602,8 @@ class EnvoyExt:
 
     # --- Testing ---
 
-    def _run_tests(self, suite_name=None, test_name=None, background=False):
+    def _run_tests(self, suite_name=None, test_name=None, background=False,
+                   idempotency_key=None):
         """Run Embody test suites via /embody/unit_tests extension (deferred).
 
         Starts tests with RunTestsDeferredPerTest (one test per frame) to
@@ -6437,7 +6621,8 @@ class EnvoyExt:
             # Job mode: start the deferred run, park progress in a disk
             # record, return the handle. No transport Event involved -- a
             # server restart mid-run cannot sever anything.
-            return self._startTestsJob(suite_name, test_name)
+            return self._startTestsJob(suite_name, test_name,
+                                       idempotency_key=idempotency_key)
 
         pending = getattr(sys, '_envoy_pending_test', None)
         if pending is None:
@@ -6508,9 +6693,31 @@ class EnvoyExt:
 
     # --- Background jobs (main-thread side) -------------------------------
 
-    def _startTestsJob(self, suite_name=None, test_name=None) -> dict:
+    def _startTestsJob(self, suite_name=None, test_name=None,
+                       idempotency_key=None) -> dict:
         """Start a deferred test run tracked by a disk job record instead
         of a blocked transport. Main thread; mirrors _run_tests' guards."""
+        # 16.5: idempotency lookup STRICTLY FIRST -- before the guards. A
+        # retry with the same key reconciles to the original run's handle
+        # rather than tripping the 'already in progress' guard (which
+        # would hand a controller an error instead of its own job).
+        if idempotency_key:
+            try:
+                prior = _job_for_key(idempotency_key,
+                                     expected_kind='run_tests')
+            except _IdemMarkerUnreadable as e:
+                return {'error': 'Idempotency marker unreadable (%s) -- '
+                                 'refusing to risk a duplicate run; clear '
+                                 'it or retry.' % e}
+            except _IdemKeyConflict as e:
+                return {'error': 'idempotency_key is already bound to a '
+                                 'different operation (%s) -- use a distinct '
+                                 'key per operation.' % e}
+            if prior is not None:
+                return {'job_id': prior['id'],
+                        'status': prior.get('status', 'running'),
+                        'hint': 'Reconciled to the original run for this '
+                                'idempotency_key (calls are idempotent).'}
         test_comp = op.unit_tests
         if not test_comp:
             return {'error': 'Test framework not found (op.unit_tests)'}
@@ -6525,7 +6732,8 @@ class EnvoyExt:
                              'its extension reinit. Retry when the save '
                              'job finishes.'}
         job = _new_job('run_tests', {'suite_name': suite_name,
-                                     'test_name': test_name})
+                                     'test_name': test_name},
+                       idempotency_key=idempotency_key)
         _write_job(job)
         if _read_job(job['id']) is None:
             # No record can exist (repo root unresolved) -- an unpollable
@@ -6533,6 +6741,10 @@ class EnvoyExt:
             return {'error': 'Job records unavailable (project root not '
                              'resolved yet) -- use the synchronous '
                              'run_tests, or retry shortly.'}
+        # Record the key AFTER the job record is durable (read-back above),
+        # so the marker can never name a job that was not persisted.
+        if idempotency_key:
+            _record_job_key(idempotency_key, job['id'])
         try:
             embody = op.Embody
             prior = embody.par.Status.eval()
@@ -6643,7 +6855,7 @@ class EnvoyExt:
         except Exception:
             pass
 
-    def _save_project(self) -> dict:
+    def _save_project(self, idempotency_key=None) -> dict:
         """Start a project save as a tracked job (main thread).
 
         The save itself runs a few frames later so this response reaches
@@ -6653,9 +6865,29 @@ class EnvoyExt:
         forced Filecleanup='delete' / Status='Testing' into the exported
         .tdn/.toe -- the exact incident class destructive-tests.md records
         -- and its strip/restore kills the deferred run). Idempotent
-        against retries: a second call while a save job is in flight
-        returns the EXISTING handle instead of queueing a second
-        multi-second save."""
+        against retries: an idempotency_key reconciles a redelivery to the
+        original save regardless of age (16.5); even without one, a second
+        call while a save job is in flight returns the EXISTING handle."""
+        # 16.5: key lookup STRICTLY FIRST, before the guards -- an
+        # age-independent dedupe that the keyless _activeSaveJob 120s
+        # window (kept below as a second layer) cannot give.
+        if idempotency_key:
+            try:
+                prior = _job_for_key(idempotency_key,
+                                     expected_kind='save_project')
+            except _IdemMarkerUnreadable as e:
+                return {'error': 'Idempotency marker unreadable (%s) -- '
+                                 'refusing to risk a duplicate save; clear '
+                                 'it or retry.' % e}
+            except _IdemKeyConflict as e:
+                return {'error': 'idempotency_key is already bound to a '
+                                 'different operation (%s) -- use a distinct '
+                                 'key per operation.' % e}
+            if prior is not None:
+                return {'job_id': prior['id'],
+                        'status': prior.get('status', 'running'),
+                        'hint': 'Reconciled to the original save for this '
+                                'idempotency_key (calls are idempotent).'}
         try:
             if op.Embody.ext.Embody._testRunnerActive():
                 return {'error': 'A test run is active -- saving now would '
@@ -6669,7 +6901,7 @@ class EnvoyExt:
             return {'job_id': active['id'], 'status': 'running',
                     'hint': 'A save is already in flight -- returning its '
                             'existing job handle (calls are idempotent).'}
-        job = _new_job('save_project', {})
+        job = _new_job('save_project', {}, idempotency_key=idempotency_key)
         try:
             job['version_before'] = str(op.Embody.par.Version.eval())
         except Exception:
@@ -6678,6 +6910,10 @@ class EnvoyExt:
         if _read_job(job['id']) is None:
             return {'error': 'Job records unavailable (project root not '
                              'resolved yet) -- retry shortly.'}
+        # Record the key AFTER the job is durable, so the marker can never
+        # name a save that was not persisted.
+        if idempotency_key:
+            _record_job_key(idempotency_key, job['id'])
         run("o = op(%r)\nif o and o.valid: o.ext.Envoy._runSaveJob(%r)"
             % (self.ownerComp.path, job['id']),
             fromOP=self.ownerComp, delayFrames=3)
