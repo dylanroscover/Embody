@@ -128,10 +128,15 @@ class TestBridgeForwardToHttp(EmbodyTestCase):
     """
 
     def _make_response(self, body):
-        """Build a mock response object that urlopen would return."""
-        resp = MagicMock()
-        resp.read.return_value = body.encode('utf-8')
-        return resp
+        """Build a stub response object that urlopen would return.
+
+        Backed by a real byte stream rather than a MagicMock: since A-46
+        forward_to_http reads INCREMENTALLY, so the fixture has to hand
+        lines over the way a socket does or these tests would exercise
+        nothing.  Every assertion below is unchanged -- they now run
+        against the streaming reader instead of a read-to-EOF buffer.
+        """
+        return _FakeHTTPResponse(_sse_script(body))
 
     # --- SSE format ---
 
@@ -176,21 +181,38 @@ class TestBridgeForwardToHttp(EmbodyTestCase):
 
     # --- Empty / malformed responses ---
 
+    # A-46 CHANGED THESE THREE (panel: compat-regression, timeouts,
+    # runs-for-real, all "important"). They used to pin a SILENT HANG:
+    # forward_to_http returned None, main() writes nothing when the
+    # response is None, and the client's request id was never answered
+    # or errored while state.connected stayed True. A request that got
+    # no answer is connection loss and must say so, so these now assert
+    # the raise. A forward with no id owed no answer and still gets None
+    # -- see test_empty_body_returns_none_for_a_notification_forward.
+
+    def _expect_severance(self, body):
+        with patch('urllib.request.urlopen',
+                   return_value=self._make_response(body)):
+            raised = None
+            try:
+                bridge.forward_to_http(
+                    'http://localhost:9870/mcp', {'id': 1})
+            except Exception as e:  # noqa: BLE001 -- type asserted below
+                raised = e
+        self.assertIsInstance(
+            raised, ConnectionError,
+            'an unanswered request must reach the main loop, not vanish')
+        self.assertIsInstance(raised, OSError)
+
     def test_empty_response_body(self):
-        with patch('urllib.request.urlopen', return_value=self._make_response('')):
-            result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
-        self.assertIsNone(result)
+        self._expect_severance('')
 
     def test_whitespace_only_response(self):
-        with patch('urllib.request.urlopen', return_value=self._make_response('   \n  ')):
-            result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
-        self.assertIsNone(result)
+        self._expect_severance('   \n  ')
 
     def test_malformed_json_in_plain_body(self):
-        """Garbled non-JSON body returns None, doesn't crash."""
-        with patch('urllib.request.urlopen', return_value=self._make_response('not json at all')):
-            result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
-        self.assertIsNone(result)
+        """Garbled non-JSON body is severance, not silence."""
+        self._expect_severance('not json at all')
 
     # --- Error propagation ---
 
@@ -4293,3 +4315,1319 @@ class TestConvoyProbe(EmbodyTestCase):
         names = {t['name'] for t in response['result']['tools']}
         self.assertIn('get_convoy_status', names)
         self.assertIn('get_td_status', names, 'existing meta-tools intact')
+
+
+# =====================================================================
+# A-46 streaming SSE transport -- BRIDGE leg
+# =====================================================================
+# Before A-46, forward_to_http did resp.read(): the ENTIRE response was
+# buffered to EOF before a single "data:" line was parsed, so nothing a
+# server pushed mid-stream -- progress notifications, tools/list_changed
+# -- could ever reach the client, and the old line scanner returned the
+# first notification AS the answer to the request.
+#
+# These tests pin the incremental reader: per-frame delivery, server-
+# pushed notification pass-through, the idle-window/absolute-cap split
+# and its per-frame renewal, the severance rows of the plan's failure
+# matrix (nothing may EVER leave a request unanswered), the buffering
+# bounds, the read-to-EOF escape hatch, and -- the compatibility floor
+# -- an unchanged plain-JSON path for an Envoy that does not stream.
+
+import types
+
+
+def _sse_script(body):
+    """Split a body into the byte lines a socket would hand over."""
+    return io.BytesIO(body.encode('utf-8')).readlines()
+
+
+def _torn_script(body, size):
+    """Split a body into fixed-size byte chunks, tearing lines anywhere."""
+    raw = body.encode('utf-8')
+    return [raw[i:i + size] for i in range(0, len(raw), size)]
+
+
+class _RecordingSock:
+    """Records every settimeout() the read budget asks the socket for."""
+
+    def __init__(self, log):
+        self._log = log
+
+    def settimeout(self, seconds):
+        self._log.append(seconds)
+
+
+class _FakeHTTPResponse:
+    """Stand-in for the http.client response urlopen returns.
+
+    Implements what forward_to_http touches: ``read1`` (the incremental
+    reader), ``read`` (the escape hatch's read-to-EOF), ``close``, and
+    the ``fp.raw._sock`` chain the read budget reaches through.  The
+    script holds BYTE CHUNKS at arbitrary boundaries -- not lines -- so
+    a test can tear a frame anywhere or dribble bytes.  An entry may be
+    bytes, an exception instance (raised when the reader reaches it), or
+    a callable (invoked for its side effect; its return value is used).
+    """
+
+    def __init__(self, script, on_read=None):
+        self._script = list(script)
+        self._on_read = on_read
+        self.timeouts = []
+        self.closed = False
+        self.reads = 0
+        self.fp = types.SimpleNamespace(
+            raw=types.SimpleNamespace(_sock=_RecordingSock(self.timeouts)))
+
+    def read1(self, size=-1):
+        if self._on_read is not None:
+            self._on_read(self.reads)
+        if not self._script:
+            return b''
+        item = self._script.pop(0)
+        if isinstance(item, BaseException):
+            raise item
+        if callable(item):
+            item = item()
+        self.reads += 1
+        if size is not None and size >= 0 and len(item) > size:
+            self._script.insert(0, item[size:])
+            item = item[:size]
+        return item
+
+    def read(self, size=-1):
+        out = []
+        while True:
+            chunk = self.read1(-1)
+            if not chunk:
+                break
+            out.append(chunk)
+        return b''.join(out)
+
+    def close(self):
+        self.closed = True
+
+
+_PROGRESS = ('data: {"jsonrpc":"2.0","method":"notifications/progress",'
+             '"params":{"pct":%d}}\n\n')
+_ANSWER = 'data: {"jsonrpc":"2.0","id":1,"result":"done"}\n\n'
+
+
+def _stdout_lines(capture):
+    return [json.loads(l) for l in capture.getvalue().split('\n') if l.strip()]
+
+
+class TestBridgeSseFrameParser(EmbodyTestCase):
+    """The pure frame splitter -- no sockets, no responses, no clock."""
+
+    def _frames(self, lines):
+        return list(bridge._sse_frames(lines))
+
+    def test_single_frame(self):
+        self.assertEqual(
+            self._frames(['event: message', 'data: {"a":1}', '']),
+            ['{"a":1}'])
+
+    def test_blank_line_closes_each_frame(self):
+        self.assertEqual(
+            self._frames(['data: one', '', 'data: two', '']),
+            ['one', 'two'])
+
+    def test_multi_line_data_joins_with_newlines(self):
+        self.assertEqual(
+            self._frames(['data: {"id":1,', 'data: "r":2}', '']),
+            ['{"id":1,\n"r":2}'])
+
+    def test_comment_lines_are_keepalives_not_frames(self):
+        self.assertEqual(
+            self._frames([': keep-alive', '', 'data: real', '']),
+            ['real'])
+
+    def test_non_data_fields_are_dropped(self):
+        self.assertEqual(
+            self._frames(['event: message', 'id: 7', 'retry: 100',
+                          'data: payload', '']),
+            ['payload'])
+
+    def test_trailing_frame_without_a_blank_line_is_still_yielded(self):
+        self.assertEqual(self._frames(['data: last']), ['last'])
+
+    def test_data_without_a_space_after_the_colon(self):
+        self.assertEqual(self._frames(['data:{"a":1}', '']), ['{"a":1}'])
+
+    def test_line_with_no_colon_carries_nothing(self):
+        self.assertEqual(self._frames(['garbage', 'data: ok', '']), ['ok'])
+
+    def test_empty_input_yields_nothing(self):
+        self.assertEqual(self._frames([]), [])
+
+    def test_a_frame_past_the_buffer_cap_is_severance_not_a_silent_drop(self):
+        """A never-terminated data frame cannot grow without limit."""
+        lines = ('data: ' + 'x' * 500 for _ in range(20))
+        raised = None
+        with patch.object(bridge, '_MAX_BODY_BYTES', 2000):
+            try:
+                list(bridge._sse_frames(lines))
+            except Exception as e:  # noqa: BLE001 -- type asserted below
+                raised = e
+        self.assertIsInstance(raised, ConnectionError)
+
+    def test_sse_line_recognition_never_fires_on_json(self):
+        """The mirror stops on SSE evidence, so the test must be exact:
+        SSE field names are bare, every JSON key is quoted."""
+        for line in ('data: x', 'event: message', 'id: 3', 'retry: 50',
+                     ': ping', ':'):
+            self.assertTrue(bridge._is_sse_line(line), line)
+        for line in ('{"data": "x"}', '  "id": 3,', '{', '}', 'not json',
+                     '"retry": 1', 'datax: y', ''):
+            self.assertFalse(bridge._is_sse_line(line), line)
+
+
+class TestBridgeBodyMirror(EmbodyTestCase):
+    """The plain-JSON fallback buffer, and its stated bound."""
+
+    def test_records_until_stopped(self):
+        m = bridge._BodyMirror()
+        m.add(b'abc')
+        m.add(b'def')
+        self.assertEqual(m.body(), b'abcdef')
+
+    def test_stop_drops_what_was_held_and_stops_recording(self):
+        m = bridge._BodyMirror()
+        m.add(b'abc')
+        m.stop()
+        m.add(b'def')
+        self.assertEqual(m.body(), b'')
+        self.assertFalse(m.recording)
+
+    def test_recording_stops_at_the_stated_cap(self):
+        m = bridge._BodyMirror()
+        with patch.object(bridge, '_MAX_BODY_BYTES', 100):
+            m.add(b'x' * 99)
+            self.assertTrue(m.recording)
+            m.add(b'xx')
+        self.assertFalse(
+            m.recording,
+            'past the cap the fallback is abandoned, not grown forever')
+        self.assertEqual(m.body(), b'')
+
+
+class TestBridgeStreamingForward(EmbodyTestCase):
+    """forward_to_http delivers each frame as it lands, not at EOF."""
+
+    def _forward(self, body_or_script, message=None, capture=None, **kwargs):
+        script = (body_or_script if isinstance(body_or_script, list)
+                  else _sse_script(body_or_script))
+        on_read = kwargs.pop('on_read', None)
+        resp = _FakeHTTPResponse(script, on_read=on_read)
+        capture = capture if capture is not None else _StdoutCapture()
+        with patch('urllib.request.urlopen', return_value=resp), \
+             patch.object(sys, 'stdout', capture):
+            result = bridge.forward_to_http(
+                'http://127.0.0.1:9870/mcp',
+                message if message is not None else {'jsonrpc': '2.0', 'id': 1},
+                **kwargs)
+        return result, resp, capture
+
+    def _expect_raise(self, body_or_script, message=None, **kwargs):
+        script = (body_or_script if isinstance(body_or_script, list)
+                  else _sse_script(body_or_script))
+        resp = _FakeHTTPResponse(script)
+        capture = _StdoutCapture()
+        with patch('urllib.request.urlopen', return_value=resp), \
+             patch.object(sys, 'stdout', capture):
+            raised = None
+            try:
+                bridge.forward_to_http(
+                    'http://127.0.0.1:9870/mcp',
+                    message if message is not None
+                    else {'jsonrpc': '2.0', 'id': 1},
+                    **kwargs)
+            except Exception as e:  # noqa: BLE001 -- type asserted by caller
+                raised = e
+        return raised, resp, capture
+
+    # --- per-frame delivery -----------------------------------------
+
+    def test_each_notification_reaches_stdout_before_the_next_read(self):
+        """The defect this whole rework exists to kill."""
+        body = (_PROGRESS % 10) + (_PROGRESS % 50) + _ANSWER
+        seen = []
+        capture = _StdoutCapture()
+
+        def observe(_n):
+            seen.append(len(_stdout_lines(capture)))
+
+        result, _resp, capture = self._forward(
+            body, capture=capture, on_read=observe)
+
+        self.assertEqual(result['result'], 'done')
+        self.assertEqual(
+            max(seen), 2,
+            'both notifications must be on stdout while the stream is '
+            f'still being read (observed line counts: {seen})')
+        self.assertEqual(
+            len(_stdout_lines(capture)), 2,
+            'exactly the two notifications, never the response frame')
+
+    def test_a_frame_torn_across_reads_is_still_routed(self):
+        """read1 hands over arbitrary byte boundaries, not lines."""
+        body = (_PROGRESS % 7) + _ANSWER
+        result, _resp, capture = self._forward(_torn_script(body, 5))
+        self.assertEqual(result['result'], 'done')
+        self.assertLen(_stdout_lines(capture), 1)
+
+    def test_multibyte_character_split_across_reads_survives(self):
+        # e-acute, written as an escape so this file stays pure ASCII.
+        marker = '\u00e9'
+        body = 'data: {"jsonrpc":"2.0","id":1,"result":"caf%s"}\n\n' % marker
+        raw = body.encode('utf-8')
+        cut = raw.index(b'\xc3\xa9') + 1  # between the two bytes of e-acute
+        result, _resp, _capture = self._forward([raw[:cut], raw[cut:]])
+        self.assertEqual(result['result'], 'caf' + marker)
+
+    def test_notification_payload_is_passed_through_verbatim(self):
+        result, _resp, capture = self._forward((_PROGRESS % 42) + _ANSWER)
+        lines = _stdout_lines(capture)
+        self.assertLen(lines, 1)
+        self.assertEqual(lines[0]['method'], 'notifications/progress')
+        self.assertEqual(lines[0]['params'], {'pct': 42})
+        self.assertEqual(lines[0]['jsonrpc'], '2.0')
+        self.assertEqual(result['result'], 'done')
+
+    def test_notification_sink_can_be_injected(self):
+        got = []
+        result, _resp, capture = self._forward(
+            (_PROGRESS % 1) + _ANSWER, on_notification=got.append)
+        self.assertLen(got, 1)
+        self.assertEqual(got[0]['method'], 'notifications/progress')
+        self.assertEqual(
+            capture.getvalue(), '',
+            'an injected sink replaces the stdout write, never doubles it')
+        self.assertEqual(result['result'], 'done')
+
+    def test_response_frame_stops_the_read(self):
+        body = _ANSWER + (_PROGRESS % 99)
+        result, resp, capture = self._forward(body)
+        self.assertEqual(result['result'], 'done')
+        self.assertEqual(
+            _stdout_lines(capture), [],
+            'frames after the answer belong to nobody -- do not read on')
+        self.assertTrue(resp.closed, 'the response must be closed')
+
+    def test_server_initiated_request_is_passed_through_not_returned(self):
+        body = ('data: {"jsonrpc":"2.0","id":"srv-1",'
+                '"method":"sampling/createMessage"}\n\n') + _ANSWER
+        result, _resp, capture = self._forward(body)
+        self.assertEqual(result['result'], 'done')
+        lines = _stdout_lines(capture)
+        self.assertLen(lines, 1)
+        self.assertEqual(lines[0]['method'], 'sampling/createMessage')
+
+    def test_frame_answering_our_id_terminates(self):
+        body = 'data: {"jsonrpc":"2.0","id":7,"result":"seven"}\n\n'
+        result, _resp, _capture = self._forward(
+            body, message={'jsonrpc': '2.0', 'id': 7})
+        self.assertEqual(result['result'], 'seven')
+
+    def test_unparseable_frame_is_skipped_not_fatal(self):
+        body = 'data: {not json\n\n' + _ANSWER
+        result, _resp, _capture = self._forward(body)
+        self.assertEqual(result['result'], 'done')
+
+    def test_crlf_framing(self):
+        body = ('event: message\r\ndata: {"jsonrpc":"2.0","id":1,'
+                '"result":"crlf"}\r\n\r\n')
+        result, _resp, _capture = self._forward(body)
+        self.assertEqual(result['result'], 'crlf')
+
+    def test_keepalive_comment_does_not_end_the_wait(self):
+        body = ': ping\n\n' + (_PROGRESS % 5) + _ANSWER
+        result, _resp, capture = self._forward(body)
+        self.assertEqual(result['result'], 'done')
+        self.assertLen(_stdout_lines(capture), 1)
+
+    # --- tools/list_changed ------------------------------------------
+
+    def test_list_changed_frame_invalidates_the_bridge_tool_cache(self):
+        fired = []
+        bridge.set_tools_cache_invalidator(lambda: fired.append(True))
+        try:
+            body = ('data: {"jsonrpc":"2.0",'
+                    '"method":"notifications/tools/list_changed"}\n\n'
+                    + _ANSWER)
+            result, _resp, capture = self._forward(body)
+        finally:
+            bridge.set_tools_cache_invalidator(None)
+        self.assertEqual(fired, [True])
+        self.assertEqual(result['result'], 'done')
+        lines = _stdout_lines(capture)
+        self.assertLen(lines, 1)
+        self.assertEqual(lines[0]['method'],
+                         'notifications/tools/list_changed')
+
+    def test_a_failing_invalidator_never_breaks_a_forward(self):
+        def boom():
+            raise RuntimeError('cache blew up')
+
+        bridge.set_tools_cache_invalidator(boom)
+        try:
+            body = ('data: {"jsonrpc":"2.0",'
+                    '"method":"notifications/tools/list_changed"}\n\n'
+                    + _ANSWER)
+            result, _resp, _capture = self._forward(body)
+        finally:
+            bridge.set_tools_cache_invalidator(None)
+        self.assertEqual(result['result'], 'done')
+
+    def test_progress_notification_does_not_invalidate_the_cache(self):
+        fired = []
+        bridge.set_tools_cache_invalidator(lambda: fired.append(True))
+        try:
+            self._forward((_PROGRESS % 3) + _ANSWER)
+        finally:
+            bridge.set_tools_cache_invalidator(None)
+        self.assertEqual(fired, [])
+
+    # --- timeout split: idle window renewed per frame -----------------
+
+    def test_one_frame_is_not_a_cadence_and_never_shortens_the_cap(self):
+        """PANEL (frame-parser, important): a single early frame used to
+        clamp the whole rest of the forward to the idle window, so an
+        operation that announces itself and then works silently died at
+        60s under a documented 300s ceiling -- and the client was told
+        'Lost connection' for work the server actually completed."""
+        body = (_PROGRESS % 1) + _ANSWER
+        _result, resp, _capture = self._forward(body)
+        self.assertEqual(
+            resp.timeouts, [],
+            'one frame is not a cadence: the socket must keep the cap')
+
+    def test_single_shot_answer_keeps_the_full_cap(self):
+        _result, resp, _capture = self._forward(_ANSWER)
+        self.assertEqual(resp.timeouts, [])
+
+    def test_every_frame_after_the_first_renews_the_allowance(self):
+        """A stream that keeps talking keeps its full inter-frame
+        allowance -- the budget is renewed per frame, never clamped once."""
+        body = ''.join(_PROGRESS % i for i in range(4)) + _ANSWER
+        _result, resp, _capture = self._forward(body)
+        self.assertEqual(
+            resp.timeouts, [bridge.SSE_IDLE_WINDOW_S] * 3,
+            'frames 2..4 each renew the gap allowance')
+
+    def test_idle_window_is_overridable(self):
+        body = (_PROGRESS % 1) + (_PROGRESS % 2) + _ANSWER
+        _result, resp, _capture = self._forward(body, idle_timeout=7)
+        self.assertEqual(resp.timeouts, [7])
+
+    def test_idle_window_never_exceeds_the_caller_timeout(self):
+        body = (_PROGRESS % 1) + (_PROGRESS % 2) + _ANSWER
+        _result, resp, _capture = self._forward(body, timeout=3)
+        self.assertLen(resp.timeouts, 1)
+        self.assertTrue(
+            2.5 <= resp.timeouts[0] <= 3.0,
+            'a 3s reconciler probe must not sit 60s waiting for a frame, '
+            f'got {resp.timeouts}')
+
+    def test_absolute_cap_severs_a_stream_that_never_answers(self):
+        script = _sse_script((_PROGRESS % 1) * 200)
+        raised, resp, _capture = self._expect_raise(
+            script, timeout=30, clock=_slow_clock(0.0, step=10.0))
+        self.assertIsInstance(
+            raised, TimeoutError,
+            'a cap breach must look like today socket timeout (an OSError) '
+            'so the main loop classifies it as connection loss')
+        self.assertIsInstance(raised, OSError)
+        self.assertTrue(resp.closed)
+
+    def test_the_socket_is_clamped_to_what_is_left_of_the_cap(self):
+        """PANEL (timeouts/runs-for-real): the cap was only checked
+        BETWEEN reads while the socket kept its original timeout, so a
+        forward could run to ~2x the documented ceiling."""
+        script = _sse_script((_PROGRESS % 1) * 40)
+        _raised, resp, _capture = self._expect_raise(
+            script, timeout=30, clock=_slow_clock(0.0, step=5.0))
+        self.assertTrue(resp.timeouts, 'the socket budget must be re-armed')
+        self.assertTrue(
+            all(t <= 30 for t in resp.timeouts),
+            f'no read may be given more than the cap: {resp.timeouts}')
+        self.assertTrue(
+            resp.timeouts[-1] < resp.timeouts[0],
+            f'the budget must shrink as the cap is spent: {resp.timeouts}')
+
+    def test_timeout_none_means_no_cap_instead_of_a_type_error(self):
+        """PANEL (timeouts): min(None, 60) raised before urlopen."""
+        result, _resp, _capture = self._forward(
+            (_PROGRESS % 1) + _ANSWER, timeout=None)
+        self.assertEqual(result['result'], 'done')
+
+    def test_socket_timeout_mid_stream_propagates_as_oserror(self):
+        import socket as _socket
+        script = _sse_script(_PROGRESS % 1) + [_socket.timeout('timed out')]
+        raised, _resp, capture = self._expect_raise(script)
+        self.assertIsInstance(raised, OSError)
+        self.assertLen(
+            _stdout_lines(capture), 1,
+            'frames delivered before the stall stay delivered')
+
+    # --- failure matrix: nothing may leave a request unanswered -------
+
+    def test_severed_stream_raises_instead_of_hanging_the_client(self):
+        raised, _resp, capture = self._expect_raise(
+            (_PROGRESS % 1) + (_PROGRESS % 2))
+        self.assertIsInstance(raised, ConnectionError)
+        self.assertIsInstance(raised, OSError)
+        self.assertLen(
+            _stdout_lines(capture), 2,
+            'everything that arrived before the cut is already delivered')
+
+    def test_clean_eof_before_any_frame_raises(self):
+        """PANEL (timeouts, important): headers then FIN -- the ordinary
+        shape of a TD crash mid-operation -- used to return None, so the
+        client was never answered and connectivity never flipped."""
+        raised, _resp, _capture = self._expect_raise('')
+        self.assertIsInstance(raised, ConnectionError)
+
+    def test_keepalive_only_then_eof_raises(self):
+        raised, _resp, _capture = self._expect_raise(
+            ': ping - 1\n\n: ping - 2\n\n')
+        self.assertIsInstance(raised, ConnectionError)
+
+    def test_whitespace_only_body_raises_for_a_request(self):
+        raised, _resp, _capture = self._expect_raise('   \n  ')
+        self.assertIsInstance(raised, ConnectionError)
+
+    def test_garbage_plain_body_raises_for_a_request(self):
+        """PANEL (runs-for-real, important): HTTP 200 with an error page
+        on the Envoy port returned None and hung the client forever."""
+        raised, _resp, _capture = self._expect_raise(
+            '<html>502 Bad Gateway</html>')
+        self.assertIsInstance(raised, ConnectionError)
+
+    def test_truncated_plain_json_raises_for_a_request(self):
+        raised, _resp, _capture = self._expect_raise(
+            '{"jsonrpc":"2.0","id":1,"resu')
+        self.assertIsInstance(raised, ConnectionError)
+
+    def test_severed_stream_after_a_notification_forward_returns_none(self):
+        """We posted a notification -- no answer was ever owed."""
+        result, _resp, capture = self._forward(
+            _PROGRESS % 1,
+            message={'jsonrpc': '2.0', 'method': 'notifications/initialized'})
+        self.assertIsNone(result)
+        self.assertLen(_stdout_lines(capture), 1)
+
+    def test_empty_body_returns_none_for_a_notification_forward(self):
+        result, _resp, _capture = self._forward(
+            '', message={'jsonrpc': '2.0', 'method': 'notifications/x'})
+        self.assertIsNone(result)
+
+    def test_truncated_response_frame_still_answers(self):
+        import http.client as _http_client
+        script = _sse_script(_ANSWER) + [
+            _http_client.IncompleteRead(b'partial')]
+        result, _resp, _capture = self._forward(script)
+        self.assertEqual(result['result'], 'done')
+
+    def test_incomplete_read_before_the_answer_is_connection_loss(self):
+        """http.client raises IncompleteRead -- an HTTPException, not an
+        OSError -- on a graceful FIN mid-body, so untranslated it reached
+        main()'s catch-all and reported "Unexpected error" with no
+        reconnect hint.  A cut transport gets one verdict."""
+        import http.client as _http_client
+        script = _sse_script(_PROGRESS % 1) + [
+            _http_client.IncompleteRead(b'partial')]
+        raised, _resp, _capture = self._expect_raise(script)
+        self.assertIsInstance(raised, ConnectionError)
+        self.assertIsInstance(raised, OSError)
+        self.assertIn('mid-body', str(raised))
+
+    # --- buffering bounds ---------------------------------------------
+
+    def test_a_keepalive_stream_stops_mirroring_the_body(self):
+        """PANEL (frame-parser): the mirror only stopped on a complete
+        DATA frame, so a keepalive-only stream recorded forever.  Proof
+        it now stops at the first SSE line: a plain-JSON payload placed
+        AFTER a keepalive is no longer reachable by the fallback."""
+        raised, _resp, _capture = self._expect_raise(
+            ': ping\n{"jsonrpc":"2.0","id":1,"result":"unreachable"}')
+        self.assertIsInstance(
+            raised, ConnectionError,
+            'the mirror kept recording past SSE evidence')
+
+    def test_an_unterminated_line_past_the_cap_is_severance(self):
+        script = [b'x' * 500] * 20
+        with patch.object(bridge, '_MAX_BODY_BYTES', 2000):
+            raised, _resp, _capture = self._expect_raise(script)
+        self.assertIsInstance(raised, ConnectionError)
+
+    def test_a_line_that_terminates_at_the_cap_cannot_skip_the_guard(self):
+        """PANEL round 2: the cap check used to be gated on "this chunk
+        has no newline", so a line that finally ENDED at the cap slipped
+        past it -- and the bytes() copy, split, decode, strip and
+        partitions then all ran over a ~128 MiB line, measured at 4x the
+        nominal ceiling in transient allocation."""
+        # Four chunks sit exactly AT the cap without tripping it; the cap
+        # is crossed by the chunk that carries the newline, which is the
+        # only shape the old gating let through.
+        script = [b'x' * 500] * 4 + [b'x' * 500 + b'\n']
+        with patch.object(bridge, '_MAX_BODY_BYTES', 2000):
+            raised, _resp, _capture = self._expect_raise(script)
+        self.assertIsInstance(
+            raised, ConnectionError,
+            'a newline arriving past the cap must not launder the line')
+        self.assertIn('unterminated line', str(raised))
+
+    def test_the_cap_is_measured_per_line_not_per_body(self):
+        """Guard hoisting must not sever an ordinary long body: after each
+        split the buffer holds only the trailing partial line, so a body
+        far bigger than the cap still streams as long as its LINES fit."""
+        body = ''.join(_PROGRESS % i for i in range(40)) + _ANSWER
+        with patch.object(bridge, '_MAX_BODY_BYTES', 2000):
+            result, _resp, capture = self._forward(body)
+        self.assertEqual(result['result'], 'done')
+        self.assertLen(_stdout_lines(capture), 40)
+
+    # --- non-streaming Envoy: the compatibility floor -----------------
+
+    def test_plain_json_body_is_returned_unchanged(self):
+        body = '{"jsonrpc":"2.0","id":1,"result":"legacy"}'
+        result, resp, capture = self._forward(body)
+        self.assertEqual(result['result'], 'legacy')
+        self.assertEqual(
+            resp.timeouts, [],
+            'a plain JSON answer is not a stream -- never touch the socket')
+        self.assertEqual(_stdout_lines(capture), [])
+
+    def test_plain_json_spanning_several_lines(self):
+        body = '{\n  "jsonrpc": "2.0",\n  "id": 1,\n  "result": "pretty"\n}\n'
+        result, _resp, _capture = self._forward(body)
+        self.assertEqual(result['result'], 'pretty')
+
+    def test_response_is_closed_on_every_path(self):
+        _result, resp, _capture = self._forward('{"id":1,"result":"x"}')
+        self.assertTrue(resp.closed)
+        _raised, resp2, _capture2 = self._expect_raise('')
+        self.assertTrue(resp2.closed)
+
+
+class TestBridgeStreamEscapeHatch(EmbodyTestCase):
+    """EMBODY_BRIDGE_NO_STREAM: read to EOF, then the SAME parser.
+
+    The hatch exists because a transport regression severs the one
+    channel a user has to report it.  It is NOT a revert to the
+    pre-A-46 line scanner: that scanner returns the first notification
+    AS the answer, so a naive hatch would trade a timeout bug for
+    silently wrong tool results.  In hatch mode pushed frames are still
+    delivered, but BATCHED at EOF -- progress stops being live, which
+    is the documented cost of pulling the lever.
+    """
+
+    def _forward(self, body, message=None, env='1', **kwargs):
+        resp = _FakeHTTPResponse(_sse_script(body))
+        capture = _StdoutCapture()
+        with patch('urllib.request.urlopen', return_value=resp), \
+             patch.dict(bridge.os.environ, {}), \
+             patch.object(sys, 'stdout', capture):
+            if env is None:
+                bridge.os.environ.pop(bridge._STREAM_FALLBACK_ENV, None)
+            else:
+                bridge.os.environ[bridge._STREAM_FALLBACK_ENV] = env
+            result = bridge.forward_to_http(
+                'http://127.0.0.1:9870/mcp',
+                message if message is not None else {'jsonrpc': '2.0', 'id': 1},
+                **kwargs)
+        return result, resp, capture
+
+    def test_hatch_still_answers_an_sse_response(self):
+        result, _resp, _capture = self._forward((_PROGRESS % 1) + _ANSWER)
+        self.assertEqual(result['result'], 'done')
+
+    def test_hatch_never_returns_a_notification_as_the_response(self):
+        """The single most important property of the hatch: the old line
+        scanner returned this notification as the tool-call answer."""
+        result, _resp, capture = self._forward((_PROGRESS % 5) + _ANSWER)
+        self.assertEqual(result['result'], 'done')
+        self.assertEqual(result.get('method'), None)
+        lines = _stdout_lines(capture)
+        self.assertLen(lines, 1)
+        self.assertEqual(lines[0]['method'], 'notifications/progress')
+
+    def test_hatch_delivers_every_pushed_frame_batched_at_eof(self):
+        body = ''.join(_PROGRESS % i for i in range(3)) + _ANSWER
+        result, _resp, capture = self._forward(body)
+        self.assertEqual(result['result'], 'done')
+        self.assertLen(_stdout_lines(capture), 3)
+
+    def test_hatch_reads_to_eof_and_never_touches_the_socket_budget(self):
+        body = ''.join(_PROGRESS % i for i in range(3)) + _ANSWER
+        _result, resp, _capture = self._forward(body)
+        self.assertEqual(
+            resp.timeouts, [],
+            'the hatch has no incremental reader, so no budget to arm')
+
+    def test_hatch_still_handles_plain_json(self):
+        result, _resp, _capture = self._forward(
+            '{"jsonrpc":"2.0","id":1,"result":"plainhatch"}')
+        self.assertEqual(result['result'], 'plainhatch')
+
+    def test_hatch_still_refuses_to_leave_a_request_unanswered(self):
+        raised = None
+        try:
+            self._forward('')
+        except Exception as e:  # noqa: BLE001 -- type asserted below
+            raised = e
+        self.assertIsInstance(raised, ConnectionError)
+
+    def test_hatch_is_off_by_default(self):
+        """Unset, and every falsy spelling, keeps the streaming reader."""
+        for env in (None, '', '0', 'false', 'NO'):
+            body = (_PROGRESS % 1) + (_PROGRESS % 2) + _ANSWER
+            _result, resp, _capture = self._forward(body, env=env)
+            self.assertEqual(
+                resp.timeouts, [bridge.SSE_IDLE_WINDOW_S],
+                f'{env!r} must not disable streaming')
+
+
+class TestBridgeStreamingStdoutSerialization(EmbodyTestCase):
+    """Frames land on stdout from whichever thread is forwarding."""
+
+    def test_concurrent_streams_and_responses_produce_valid_jsonl(self):
+        """PANEL (concurrency, important): this test used to call
+        `patch('urllib.request.urlopen')` INSIDE each worker thread.
+        mock.patch is not thread-safe -- overlapping patches clobber each
+        other's saved original, so workers consumed each other's scripts
+        and, worse, an out-of-order __exit__ left a MagicMock installed
+        on urllib.request.urlopen for the rest of the process (inside TD
+        that is every later urllib user in the session).  ONE mock is
+        installed around the whole thread block, dispatching by request
+        id, so nothing is patched concurrently.
+        """
+        frames_per_stream = 20
+        stream_threads = 8
+        response_threads = 4
+        responses_each = 50
+
+        body = ''.join(_PROGRESS % i for i in range(frames_per_stream))
+        responses = {
+            worker: _FakeHTTPResponse(_sse_script(body + _ANSWER))
+            for worker in range(stream_threads)
+        }
+
+        def dispatch(req, **_kw):
+            return responses[json.loads(req.data.decode('utf-8'))['id']]
+
+        capture = _StdoutCapture()
+        errors = []
+
+        def stream(worker):
+            try:
+                out = bridge.forward_to_http(
+                    'http://127.0.0.1:9870/mcp',
+                    {'jsonrpc': '2.0', 'id': worker})
+                if out is None:
+                    errors.append(RuntimeError('stream returned no answer'))
+            except Exception as e:  # noqa: BLE001 -- surfaced below
+                errors.append(e)
+
+        def responder(worker):
+            try:
+                for i in range(responses_each):
+                    bridge.send_response(
+                        {'jsonrpc': '2.0', 'id': f'{worker}-{i}',
+                         'result': 'ok'})
+            except Exception as e:  # noqa: BLE001 -- surfaced below
+                errors.append(e)
+
+        with patch('urllib.request.urlopen', side_effect=dispatch), \
+             patch.object(sys, 'stdout', capture):
+            threads = (
+                [threading.Thread(target=stream, args=(w,), name=f'stream-{w}')
+                 for w in range(stream_threads)]
+                + [threading.Thread(target=responder, args=(w,),
+                                    name=f'resp-{w}')
+                   for w in range(response_threads)])
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30)
+                self.assertFalse(t.is_alive(), f'{t.name} did not finish')
+
+        self.assertEqual(
+            errors, [],
+            f'workers raised: {[type(e).__name__ + ": " + str(e) for e in errors]}')
+
+        lines = [l for l in capture.getvalue().split('\n') if l.strip()]
+        expected = (stream_threads * frames_per_stream
+                    + response_threads * responses_each)
+        self.assertEqual(
+            len(lines), expected,
+            f'expected {expected} lines, got {len(lines)}')
+
+        bad = []
+        for idx, line in enumerate(lines):
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError as e:
+                bad.append((idx, f'invalid JSON: {e}: {line[:80]}'))
+                continue
+            if not isinstance(obj, dict) or obj.get('jsonrpc') != '2.0':
+                bad.append((idx, f'not a JSON-RPC object: {line[:80]}'))
+        self.assertEqual(
+            bad, [],
+            f'{len(bad)} corrupt lines (stdout lock is not covering the '
+            f'frame writer): {bad[:5]}')
+
+    def test_the_suite_never_patches_urlopen_inside_a_thread(self):
+        """Tripwire for the leak above: a patch that unwinds out of order
+        reinstalls a MagicMock process-wide, and inside TouchDesigner
+        that poisons every later urllib user in the session."""
+        import urllib.request as _urlreq
+        self.assertNotEqual(
+            type(_urlreq.urlopen).__name__, 'MagicMock',
+            'urllib.request.urlopen was left patched by an earlier test')
+        source = open(os.path.abspath(__file__), 'r', encoding='utf-8').read()
+        marker = 'def stream(worker):'
+        body = source[source.index(marker):source.index(marker) + 600]
+        self.assertNotIn(
+            "patch('urllib.request.urlopen'", body,
+            'the concurrent worker must not install its own patch')
+
+    def test_notification_write_survives_a_closed_stdout(self):
+        class _Broken:
+            def write(self, _s):
+                raise BrokenPipeError('client went away')
+
+            def flush(self):
+                pass
+
+        with patch.object(sys, 'stdout', _Broken()):
+            bridge.deliver_server_message(
+                {'jsonrpc': '2.0', 'method': 'notifications/progress'})
+
+
+class TestBridgeStreamingLoopback(EmbodyTestCase):
+    """One real socket, one real chunked SSE server.
+
+    Everything above scripts the response object; this proves the
+    assumptions the design rests on -- read1 returns the instant bytes
+    land, the budget really bounds a stalled peer, and a severance on
+    the wire really reaches the main loop -- on THIS platform.
+    """
+
+    def _serve(self, handler_body):
+        import http.server
+
+        outer_body = handler_body
+
+        class _Handler(http.server.BaseHTTPRequestHandler):
+            protocol_version = 'HTTP/1.1'
+
+            def do_POST(self):
+                length = int(self.headers.get('Content-Length', 0))
+                self.rfile.read(length)
+                try:
+                    outer_body(self)
+                except (BrokenPipeError, ConnectionError, OSError, ValueError):
+                    pass  # The test cut this connection on purpose
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), _Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return server, thread
+
+    @staticmethod
+    def _sse_headers(handler):
+        handler.send_response(200)
+        handler.send_header('Content-Type', 'text/event-stream')
+        handler.send_header('Transfer-Encoding', 'chunked')
+        handler.end_headers()
+
+    @staticmethod
+    def _chunk(wfile, text):
+        raw = text.encode('utf-8')
+        wfile.write(b'%X\r\n' % len(raw) + raw + b'\r\n')
+        wfile.flush()
+
+    def _forward(self, body, message=None, **kwargs):
+        server, _thread = self._serve(body)
+        try:
+            port = server.server_address[1]
+            started = time.monotonic()
+            raised = None
+            result = None
+            try:
+                result = bridge.forward_to_http(
+                    f'http://127.0.0.1:{port}/mcp',
+                    message if message is not None
+                    else {'jsonrpc': '2.0', 'id': 1},
+                    **kwargs)
+            except Exception as e:  # noqa: BLE001 -- classified by callers
+                raised = e
+            elapsed = time.monotonic() - started
+        finally:
+            server.shutdown()
+            server.server_close()
+        return result, raised, elapsed
+
+    # --- per-frame delivery on a real socket --------------------------
+
+    def test_a_frame_is_delivered_while_the_response_is_still_open(self):
+        """The server refuses to send the answer until the client has
+        already ACTED on the first notification.  Under a read-to-EOF
+        forwarder that is a deadlock; passing it is proof of per-frame
+        delivery."""
+        delivered = threading.Event()
+        acted_before_answer = []
+
+        def body(handler):
+            self._sse_headers(handler)
+            self._chunk(handler.wfile,
+                        'event: message\r\n'
+                        'data: {"jsonrpc":"2.0",'
+                        '"method":"notifications/progress",'
+                        '"params":{"pct":10}}\r\n\r\n')
+            acted_before_answer.append(delivered.wait(timeout=10))
+            self._chunk(handler.wfile,
+                        'data: {"jsonrpc":"2.0","id":1,'
+                        '"result":"finished"}\n\n')
+            handler.wfile.write(b'0\r\n\r\n')
+            handler.wfile.flush()
+
+        got = []
+
+        def sink(msg):
+            got.append(msg)
+            delivered.set()
+
+        result, raised, _elapsed = self._forward(
+            body, timeout=20, on_notification=sink)
+
+        self.assertIsNone(raised)
+        self.assertEqual(
+            acted_before_answer, [True],
+            'the server waited for the client to act on frame 1 and timed '
+            'out -- the body is still being buffered to EOF')
+        self.assertLen(got, 1)
+        self.assertEqual(result['result'], 'finished')
+
+    def test_the_default_sink_writes_stdout_mid_stream(self):
+        written = threading.Event()
+
+        class _GatedCapture(_StdoutCapture):
+            def write(self, s):
+                _StdoutCapture.write(self, s)
+                written.set()
+
+        capture = _GatedCapture()
+        acted_before_answer = []
+
+        def body(handler):
+            self._sse_headers(handler)
+            self._chunk(handler.wfile,
+                        'data: {"jsonrpc":"2.0",'
+                        '"method":"notifications/progress",'
+                        '"params":{"pct":25}}\n\n')
+            acted_before_answer.append(written.wait(timeout=10))
+            self._chunk(handler.wfile,
+                        'data: {"jsonrpc":"2.0","id":1,"result":"live"}\n\n')
+            handler.wfile.write(b'0\r\n\r\n')
+            handler.wfile.flush()
+
+        with patch.object(sys, 'stdout', capture):
+            result, raised, _elapsed = self._forward(body, timeout=20)
+
+        self.assertIsNone(raised)
+        self.assertEqual(acted_before_answer, [True])
+        self.assertEqual(result['result'], 'live')
+        lines = _stdout_lines(capture)
+        self.assertLen(lines, 1)
+        self.assertEqual(lines[0]['params'], {'pct': 25})
+
+    def test_three_notifications_stream_ahead_of_the_answer(self):
+        seen = []
+        gate = threading.Event()
+
+        def body(handler):
+            self._sse_headers(handler)
+            for i in range(3):
+                self._chunk(
+                    handler.wfile,
+                    'data: {"jsonrpc":"2.0","method":"notifications/progress",'
+                    '"params":{"step":%d}}\n\n' % i)
+            gate.wait(timeout=10)
+            self._chunk(handler.wfile,
+                        'data: {"jsonrpc":"2.0","id":1,"result":"ok"}\n\n')
+            handler.wfile.write(b'0\r\n\r\n')
+            handler.wfile.flush()
+
+        def sink(msg):
+            seen.append(msg['params']['step'])
+            if len(seen) == 3:
+                gate.set()
+
+        result, raised, _elapsed = self._forward(
+            body, timeout=20, on_notification=sink)
+        self.assertIsNone(raised)
+        self.assertEqual(seen, [0, 1, 2])
+        self.assertEqual(result['result'], 'ok')
+
+    # --- the idle window, on real time --------------------------------
+
+    def test_one_early_frame_then_long_silence_still_answers(self):
+        """PANEL (frame-parser, important) -- A/B reproduction.
+
+        One progress frame, then the server works SILENTLY for far
+        longer than the idle window, then answers.  Before the per-frame
+        renewal fix this died at the idle window and the client was told
+        the link dropped for work that completed.
+        """
+        def body(handler):
+            self._sse_headers(handler)
+            self._chunk(handler.wfile,
+                        'data: {"jsonrpc":"2.0",'
+                        '"method":"notifications/progress"}\n\n')
+            time.sleep(1.2)
+            self._chunk(handler.wfile,
+                        'data: {"jsonrpc":"2.0","id":1,"result":"slow"}\n\n')
+            handler.wfile.write(b'0\r\n\r\n')
+            handler.wfile.flush()
+
+        got = []
+        result, raised, _elapsed = self._forward(
+            body, timeout=20, idle_timeout=0.4, on_notification=got.append)
+        self.assertIsNone(
+            raised, f'a lone frame must not shorten the cap: {raised!r}')
+        self.assertEqual(result['result'], 'slow')
+        self.assertLen(got, 1)
+
+    def test_a_cadence_of_frames_renews_its_allowance(self):
+        """Gaps under the idle window, for longer in total than the idle
+        window -- every frame renews the budget, so the stream lives."""
+        def body(handler):
+            self._sse_headers(handler)
+            for i in range(6):
+                self._chunk(
+                    handler.wfile,
+                    'data: {"jsonrpc":"2.0","method":"notifications/progress",'
+                    '"params":{"step":%d}}\n\n' % i)
+                time.sleep(0.2)
+            self._chunk(handler.wfile,
+                        'data: {"jsonrpc":"2.0","id":1,"result":"cadence"}\n\n')
+            handler.wfile.write(b'0\r\n\r\n')
+            handler.wfile.flush()
+
+        got = []
+        result, raised, elapsed = self._forward(
+            body, timeout=20, idle_timeout=0.6, on_notification=got.append)
+        self.assertIsNone(raised, f'{raised!r}')
+        self.assertEqual(result['result'], 'cadence')
+        self.assertLen(got, 6)
+        self.assertGreater(
+            elapsed, 0.6,
+            'the stream outlived a single idle window, as intended')
+
+    def test_silence_past_the_idle_window_after_a_cadence_fails_fast(self):
+        """Once a cadence is established, prolonged silence IS severance
+        -- and it must be bound by the idle window, not the cap."""
+        def body(handler):
+            self._sse_headers(handler)
+            for i in range(3):
+                self._chunk(
+                    handler.wfile,
+                    'data: {"jsonrpc":"2.0","method":"notifications/progress",'
+                    '"params":{"step":%d}}\n\n' % i)
+                time.sleep(0.1)
+            time.sleep(6)
+
+        got = []
+        _result, raised, elapsed = self._forward(
+            body, timeout=20, idle_timeout=0.5, on_notification=got.append)
+        self.assertIsInstance(raised, OSError)
+        self.assertLen(got, 3)
+        self.assertLess(
+            elapsed, 5.0,
+            f'severance must be idle-bound, not cap-bound: {elapsed:.2f}s')
+
+    def test_a_byte_dribbler_cannot_outlive_the_cap(self):
+        """PANEL (timeouts): a peer that trickles bytes without ever
+        completing a line reset the per-recv socket timeout forever, so
+        a blocking readline pinned the stdin dispatch loop with neither
+        bound applying.  read1 + a per-read budget check closes it."""
+        def body(handler):
+            self._sse_headers(handler)
+            self._chunk(handler.wfile, 'data: {"jsonrpc":"2.0",')
+            for _ in range(60):
+                time.sleep(0.1)
+                self._chunk(handler.wfile, ' ')
+
+        _result, raised, elapsed = self._forward(body, timeout=2.0)
+        self.assertIsInstance(
+            raised, OSError,
+            f'a dribbling peer must be severed, got {raised!r}')
+        self.assertLess(
+            elapsed, 8.0,
+            f'the cap must hold against a dribbler: {elapsed:.2f}s')
+
+    # --- severance on the wire ----------------------------------------
+
+    def test_server_closing_mid_stream_is_connection_loss(self):
+        got = []
+
+        def body(handler):
+            self._sse_headers(handler)
+            self._chunk(handler.wfile,
+                        'data: {"jsonrpc":"2.0",'
+                        '"method":"notifications/progress"}\n\n')
+            handler.close_connection = True
+            handler.wfile.close()
+
+        _result, raised, _elapsed = self._forward(
+            body, timeout=20, on_notification=got.append)
+        self.assertLen(got, 1, 'the frame that did arrive was delivered')
+        self.assertIsInstance(raised, OSError, f'{raised!r}')
+
+    def test_headers_then_graceful_close_is_connection_loss(self):
+        """PANEL (compat, important): a graceful FIN with no body used to
+        raise IncompleteRead out of resp.read(); read1 returns b'' there,
+        so without the guard the client was silently never answered."""
+        def body(handler):
+            self._sse_headers(handler)
+            handler.close_connection = True
+            handler.wfile.close()
+
+        _result, raised, _elapsed = self._forward(body, timeout=20)
+        self.assertIsInstance(raised, OSError, f'{raised!r}')
+
+    def test_content_length_truncated_body_is_connection_loss(self):
+        """The Content-Length variant of the same severance."""
+        def body(handler):
+            payload = ('event: message\r\ndata: {"jsonrpc":"2.0","id":1,'
+                       '"result":"never-arrives"}\r\n\r\n')
+            handler.send_response(200)
+            handler.send_header('Content-Type', 'text/event-stream')
+            handler.send_header('Content-Length', str(len(payload) + 500))
+            handler.end_headers()
+            handler.wfile.write(payload[:15].encode('utf-8'))
+            handler.wfile.flush()
+            handler.close_connection = True
+            handler.wfile.close()
+
+        _result, raised, _elapsed = self._forward(body, timeout=20)
+        self.assertIsInstance(raised, OSError, f'{raised!r}')
+
+    def test_chunked_eof_mid_body_is_connection_loss(self):
+        """The chunked variant: a chunk header promising bytes that never
+        arrive, then FIN."""
+        def body(handler):
+            self._sse_headers(handler)
+            handler.wfile.write(b'40\r\ndata: {"jsonrpc":')
+            handler.wfile.flush()
+            handler.close_connection = True
+            handler.wfile.close()
+
+        _result, raised, _elapsed = self._forward(body, timeout=20)
+        self.assertIsInstance(raised, OSError, f'{raised!r}')
+
+    # --- what the cap does NOT cover ----------------------------------
+
+    def _raw_header_server(self, gap, pieces, payload):
+        """A peer that dribbles its status line and headers.
+
+        Written raw rather than through send_response so the header phase
+        can be paced -- that phase belongs to urlopen, and no budget of
+        ours runs during it.
+        """
+        head = ('HTTP/1.1 200 OK\r\n'
+                'Content-Type: text/event-stream\r\n'
+                'Content-Length: %d\r\n'
+                'Connection: close\r\n\r\n' % len(payload)).encode('utf-8')
+        step = max(1, len(head) // pieces)
+
+        def body(handler):
+            for i in range(0, len(head), step):
+                handler.wfile.write(head[i:i + step])
+                handler.wfile.flush()
+                time.sleep(gap)
+            handler.wfile.write(payload.encode('utf-8'))
+            handler.wfile.flush()
+            handler.close_connection = True
+
+        return body
+
+    def test_slow_headers_within_the_cap_still_complete(self):
+        """Paced headers are not an error -- they just are not budgeted."""
+        answer = 'data: {"jsonrpc":"2.0","id":1,"result":"slowhdr"}\n\n'
+        result, raised, _elapsed = self._forward(
+            self._raw_header_server(0.05, 4, answer), timeout=5)
+        self.assertIsNone(raised, f'{raised!r}')
+        self.assertEqual(result['result'], 'slowhdr')
+
+    def test_the_header_phase_is_not_covered_by_the_cap(self):
+        """PANEL round 2 (important), pinned as CURRENT behavior, not as
+        a property we want.
+
+        urlopen reads the status line and headers itself, bounded by the
+        per-recv socket timeout that every arriving byte resets, so a
+        peer dribbling headers under that timeout runs past the cap; the
+        budget only bites once the body phase starts.  This is
+        byte-identical to shipped behavior and fixing it means rewriting
+        connection setup, so the code documents it instead of claiming
+        an absolute cap it does not hold.  If a future change DOES bound
+        the header phase, this test is the one to delete.
+        """
+        answer = 'data: {"jsonrpc":"2.0","id":1,"result":"late"}\n\n'
+        cap = 0.5
+        _result, raised, elapsed = self._forward(
+            self._raw_header_server(0.25, 4, answer), timeout=cap)
+        self.assertGreater(
+            elapsed, cap,
+            'the header phase is expected to be able to exceed the cap; '
+            'if this now holds, the cap became absolute and the comments '
+            'in envoy_bridge.py should say so')
+        self.assertIsInstance(
+            raised, OSError,
+            'once the body phase starts the budget must sever it, so the '
+            f'overrun is bounded by the peer, not unbounded: {raised!r}')
+
+    def test_plain_json_over_a_real_socket_still_works(self):
+        def body(handler):
+            payload = b'{"jsonrpc":"2.0","id":1,"result":"plain"}'
+            handler.send_response(200)
+            handler.send_header('Content-Type', 'application/json')
+            handler.send_header('Content-Length', str(len(payload)))
+            handler.end_headers()
+            handler.wfile.write(payload)
+
+        result, raised, _elapsed = self._forward(body, timeout=20)
+        self.assertIsNone(raised)
+        self.assertEqual(result['result'], 'plain')
+
+    def test_a_large_single_line_response_survives_chunked_reads(self):
+        """The live Envoy puts a whole tools/list on ONE data: line."""
+        big = 'y' * 400000
+
+        def body(handler):
+            self._sse_headers(handler)
+            self._chunk(
+                handler.wfile,
+                'data: {"jsonrpc":"2.0","id":1,"result":"%s"}\n\n' % big)
+            handler.wfile.write(b'0\r\n\r\n')
+            handler.wfile.flush()
+
+        result, raised, _elapsed = self._forward(body, timeout=20)
+        self.assertIsNone(raised)
+        self.assertEqual(len(result['result']), len(big))
+
+
+class TestBridgeMainLoopStreamingWiring(EmbodyTestCase):
+    """main() has to hand the frame router something to invalidate."""
+
+    def test_main_registers_a_tools_cache_invalidator(self):
+        bridge.set_tools_cache_invalidator(None)
+        stdin = io.StringIO(
+            json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'test'}) + '\n')
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', io.StringIO()), \
+             patch.object(sys, 'stderr', io.StringIO()), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True), \
+             patch.object(bridge, 'forward_to_http', return_value=None), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'):
+            bridge.main()
+        self.assertIsNotNone(
+            bridge._tools_cache_invalidator,
+            'a server-pushed tools/list_changed has nothing to clear')
+        bridge._tools_cache_invalidator()  # must not raise
+
+    def test_list_changed_drops_the_cached_tool_list(self):
+        """A tools/call streams a list_changed back mid-operation; the
+        tools/list that follows inside the 5s cache window must REFETCH.
+        The sibling test test_second_tools_list_within_window_uses_cache
+        pins the no-invalidation case at exactly one forward."""
+        forwards = [0]
+
+        def forward(url, msg, **kwargs):
+            method = msg.get('method')
+            if method == 'tools/list':
+                forwards[0] += 1
+            elif method == 'tools/call':
+                bridge._tools_cache_invalidator()
+            return {'jsonrpc': '2.0', 'id': msg.get('id'),
+                    'result': {'tools': [{'name': 'create_op',
+                                          'description': 'create'}]}}
+
+        msgs = [
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'},
+            {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'},
+            {'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',
+             'params': {'name': 'query_network'}},
+            {'jsonrpc': '2.0', 'id': 4, 'method': 'tools/list'},
+        ]
+        stdin = io.StringIO('\n'.join(json.dumps(m) for m in msgs) + '\n')
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', io.StringIO()), \
+             patch.object(sys, 'stderr', io.StringIO()), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True), \
+             patch.object(bridge, 'forward_to_http', side_effect=forward), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'):
+            bridge.main()
+
+        self.assertEqual(
+            forwards[0], 2,
+            'the second tools/list was served from a surface the server '
+            'already invalidated')
+
+
+class TestBridgeStreamingDocumentedLimits(EmbodyTestCase):
+    """Comments in this file have twice asserted safety the code lacked.
+
+    Both were caught by the panel, both are pinned here so the prose and
+    the behavior cannot drift apart again.
+    """
+
+    def test_the_docstring_does_not_claim_the_deadlock_is_gone(self):
+        """PANEL (runs-for-real): the reader made server-pushed
+        NOTIFICATIONS deliverable; a server-to-client REQUEST still
+        cannot be answered until the forward returns, because the stdin
+        dispatch loop is parked inside it."""
+        doc = ' '.join((bridge.forward_to_http.__doc__ or '').split())
+        self.assertNotIn('must answer without deadlocking', doc)
+        self.assertIn('cannot be answered until the forward returns', doc)
+
+    def test_the_cap_comment_names_what_it_actually_bounds(self):
+        source = open(_bridge_path, 'r', encoding='utf-8').read()
+        head = source[:source.index('# Reconciler tick intervals')]
+        self.assertIn('REQUEST_TIMEOUT_S', head)
+        self.assertIn('re-armed', head,
+                      'the cap only holds because every read is re-armed '
+                      'against what is left of it -- say so')
+        self.assertIn(
+            'FIRST BODY', head,
+            'the cap starts at the first body byte; the header phase is '
+            'per-recv only (see test_the_header_phase_is_not_covered_by_'
+            'the_cap) and the comment must not claim otherwise')
+
+    def test_the_hatch_docstring_names_every_bound_it_drops(self):
+        """Batching is not the hatch's only cost -- it drops the cap, the
+        idle window and the accumulation bound too, and an operator
+        flipping it during an incident needs to know that."""
+        doc = ' '.join((bridge.forward_to_http.__doc__ or '').split())
+        self.assertIn('NO cap, NO idle window, and NO accumulation', doc)
+        self.assertIn('per-recv socket timeout alone', doc)
+
+    def test_the_max_body_comment_admits_the_accumulators_are_separate(self):
+        source = open(_bridge_path, 'r', encoding='utf-8').read()
+        head = source[:source.index('# Reconciler tick intervals')]
+        self.assertIn(
+            'INDEPENDENT', head,
+            'mirror, line buffer and frame data are separate accumulators, '
+            'so peak memory is a MULTIPLE of _MAX_BODY_BYTES -- say so')

@@ -15,6 +15,7 @@ The bridge runs a background reconciler thread that continuously manages connect
 - **Process discovery**: Detects new and exited TD processes via `find_all_td_pids()`. Forces a config re-read when new TDs appear.
 - **Tool cache**: Persists the tool list to disk so new sessions start with full tools immediately, without waiting for a backend round-trip.
 - **Single-attempt forwarding**: Failed requests return an error immediately -- no per-request retry loop. The reconciler handles recovery in the background.
+- **Streaming forwards (A-46)**: Tool responses stream incrementally -- server-pushed notifications reach the client per-frame, an idle window bounds a stalled stream, and an absolute cap bounds the whole forward. If a suspected STREAMING defect is wedging every forward (and only then), the env var `EMBODY_BRIDGE_NO_STREAM=1` (set in `.mcp.json`'s `env` block, then reopen the session) falls back to read-to-EOF with the same parser: pushed frames then arrive batched at the end, and the read is bounded ONLY by the per-recv socket timeout. It is a lever for a broken parser, not for a broken peer -- and note Envoy regenerates `.mcp.json` on config deploys, so re-add the var if it disappears.
 
 ## The Envoy Liveness Watchdog (TD-side)
 
