@@ -159,13 +159,33 @@ class TestConvoyRegistrations(EmbodyTestCase):
                              '%s must never be persisted (A-49)' % (name,))
 
     def test_convoy_readouts_are_registered_transients(self):
+        """Both readouts must be scrubbed on export, and each must use
+        the registry mechanism that FITS it.
+
+        Convoystatus is a state, so it names a truthy resting string.
+        Convoyid is an IDENTIFIER that legitimately rests empty (no
+        convoy until the first explicit enable), so it registers None --
+        which the scrub reads as 'reset to the par's own default'. A
+        literal '' resting is banned outright by the state-machine
+        invariant in test_release_hooks, and would fail there. What
+        matters for A-50 is only that the name IS registered: unregistered,
+        this machine's convoy id bakes into the tracked Embody.tdn and
+        into every released .tox.
+        """
         registry = self.embody_ext._TRANSIENT_STATUS_PARS['Embody']
         self.assertEqual(registry.get('Convoystatus'), 'Disabled')
-        self.assertEqual(
-            registry.get('Convoyid'), '',
-            "Convoyid MUST rest at '' -- unregistered, this machine's "
+        self.assertIn(
+            'Convoyid', registry,
+            "Convoyid MUST be registered -- unregistered, this machine's "
             'convoy id bakes into the tracked Embody.tdn and every '
             'released .tox (A-50)')
+        self.assertIsNone(
+            registry['Convoyid'],
+            'Convoyid rests at its default (empty), which the registry '
+            'spells None; a literal "" is refused by the resting-value '
+            'invariant')
+        # And the default it resets TO must actually be the empty state.
+        self.assertEqual(self.embody.par.Convoyid.default, '')
 
     def test_convoy_generation_never_serializes(self):
         skip = self.embody.op('TDNExt').module.SKIP_STORAGE_KEYS

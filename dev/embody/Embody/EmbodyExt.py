@@ -3890,7 +3890,14 @@ class EmbodyExt:
             # convoy id into git and into every user's download. Exactly
             # the A-50 leak class (value: Testing, v6.0.169).
             'Convoystatus': 'Disabled',  # 'Registered <node8> (host <host8>)'
-            'Convoyid': '',              # this project's convoy id
+            # None = reset to the par's own DEFAULT. Convoyid is an
+            # identifier, not a state: it legitimately rests EMPTY (no
+            # convoy until the first explicit enable), so it has no
+            # truthy resting string to name -- and '' as a literal
+            # resting is exactly what the state-machine invariant
+            # forbids. Reset-to-default gives the same leak protection
+            # without pretending an id is a status.
+            'Convoyid': None,
         },
     }
 

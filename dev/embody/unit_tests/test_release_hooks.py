@@ -946,7 +946,15 @@ class TestTransientParScrub(EmbodyTestCase):
         """Typo/rename tripwire, plus the blocker tripwire: every
         registered Embody name must exist on the live comp, and every
         resting must be a truthy state string -- never '' (Status's
-        default), which the enable state-machine cannot leave."""
+        default), which the enable state-machine cannot leave.
+
+        None is the ONE other legal resting: the scrub reads it as
+        'reset to the par's own default', which is what an IDENTIFIER
+        par needs (Convoyid rests empty because a project has no convoy
+        until the first explicit enable). It carries the same leak
+        protection; what stays banned is a literal '' resting, which
+        would claim an empty string is a state.
+        """
         for name, resting in sorted(
                 self._orig_registry['Embody'].items()):
             self.assertIsNotNone(
@@ -954,9 +962,16 @@ class TestTransientParScrub(EmbodyTestCase):
                 'registered transient par %r does not exist on the '
                 'Embody COMP -- registry is stale' % name)
             self.assertTrue(
-                isinstance(resting, str) and resting,
-                'resting for %r must be a truthy state string, got %r'
-                % (name, resting))
+                resting is None or (isinstance(resting, str) and resting),
+                'resting for %r must be a truthy state string, or None '
+                'for reset-to-default; got %r' % (name, resting))
+            if resting is None:
+                par = getattr(self.embody.par, name, None)
+                self.assertEqual(
+                    par.default, '',
+                    'reset-to-default resting only makes sense for a par '
+                    'whose default is the empty resting state; %r has '
+                    'default %r' % (name, par.default))
         for name in sorted(self._orig_omit['Embody']):
             self.assertIsNotNone(
                 getattr(self.embody.par, name, None),

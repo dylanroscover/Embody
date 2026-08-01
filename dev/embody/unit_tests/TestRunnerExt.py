@@ -1000,6 +1000,16 @@ class TestRunnerExt:
         if hasattr(instance, 'setUp'):
             try:
                 instance.setUp()
+            except SkipTest as e:
+                # `raise SkipTest` in setUp is the documented way to skip
+                # a whole class (a suite that needs a socket, a CLI, an
+                # OS feature). SkipTest IS an Exception, so the broad
+                # handler below used to swallow it and report every such
+                # skip as an ERROR -- 14 of them in one suite, which is
+                # how this was finally noticed.
+                self._recordAndAdvance(entry, method_name, 'SKIP', str(e))
+                self._scheduleAgentTick()
+                return
             except Exception as e:
                 self._recordAndAdvance(entry, method_name, 'ERROR',
                                        f'setUp failed: {e}')
@@ -1462,6 +1472,11 @@ class TestRunnerExt:
         if hasattr(instance, 'setUp'):
             try:
                 instance.setUp()
+            except SkipTest as e:
+                # See the agent-tier twin: SkipTest from setUp is a SKIP,
+                # not an ERROR. It must be caught BEFORE Exception.
+                self._addResult(suite_name, method_name, 'SKIP', str(e))
+                return
             except Exception as e:
                 self._addResult(suite_name, method_name, 'ERROR',
                                 f'setUp failed: {e}')

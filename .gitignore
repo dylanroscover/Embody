@@ -78,6 +78,11 @@ dev/embody/ext-diet-baseline/
 # Convoy planning documents -- internal, not for publication (CONVOY_PLAN.md D-3)
 dev/embody/CONVOY_*.md
 
+# Agent isolation worktrees (git worktree add targets created by the
+# Claude Agent tool). They are working copies of this same repo --
+# committing one would nest the repo inside itself.
+.claude/worktrees/
+
 # Convoy prototype code -- internal until Convoy is announced (same rationale as D-3)
 dev/convoy_tracer/
 
