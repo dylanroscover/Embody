@@ -1390,7 +1390,15 @@ def test_the_drain_summary_counts_started_and_no_handle(server):
 def test_the_async_registry_entries_are_honestly_gated(server):
     """The two entries are MUTATING and runtime_required: a run_tests job
     is refused without the A-22 precondition, exactly like any other
-    stale-state-sensitive operation."""
+    stale-state-sensitive operation.
+
+    They are also the two operations that are NOT remotely exposed --
+    run_tests because TestRunnerExt execs every test file it finds on
+    disk (so "the project's own code" is a loopback assumption), and
+    save_project because it blocks TD's main thread for 15+ seconds
+    while show protection is still Phase 4 work. Both stay fully
+    available LOCALLY; only a future remote peer is refused.
+    """
     node = register_rt(server)
     code, body = server.call("/jobs", {
         "idempotency_key": "no-rt", "node_id": node["node_id"],
@@ -1400,7 +1408,8 @@ def test_the_async_registry_entries_are_honestly_gated(server):
         entry = ha.PHASE1_OPERATIONS[name]
         assert ha.gating_of(entry) == {"executes_arbitrary_code": False,
                                        "mutating": True,
-                                       "runtime_required": True}
+                                       "runtime_required": True,
+                                       "remote_exposed": False}
         assert entry["async_job"]["key_arg"] == "idempotency_key"
 
 

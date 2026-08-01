@@ -122,6 +122,7 @@ PHASE1_OPERATIONS = {
         "schema": {},
         "mutating": False,
         "executes_arbitrary_code": False,
+        "remote_exposed": True,    # X0 liveness
         "runtime_required": False,
         "side_effects": {},
     },
@@ -129,6 +130,7 @@ PHASE1_OPERATIONS = {
         "schema": {"parent_path": "string", "recursive": "bool?"},
         "mutating": False,
         "executes_arbitrary_code": False,
+        "remote_exposed": True,    # X0 read
         "runtime_required": False,
         "side_effects": {},
     },
@@ -136,6 +138,7 @@ PHASE1_OPERATIONS = {
         "schema": {"op_path": "string", "format": "string?"},
         "mutating": False,
         "executes_arbitrary_code": False,
+        "remote_exposed": True,    # X0 read (confidentiality, not executability)
         "runtime_required": False,
         "side_effects": {"cooks": True},
     },
@@ -143,6 +146,7 @@ PHASE1_OPERATIONS = {
         "schema": {"op_path": "string", "x": "number?", "y": "number?"},
         "mutating": True,
         "executes_arbitrary_code": False,
+        "remote_exposed": True,    # X5 layout nudge -- refused under observe-only
         "runtime_required": False,
         "side_effects": {"layout": True},
     },
@@ -159,10 +163,24 @@ PHASE1_OPERATIONS = {
         # Filecleanup, creates and destroys sandbox operators, writes
         # dev/logs, and can restart the Envoy server under itself.
         "mutating": True,
-        # It runs the PROJECT'S OWN checked-in suites -- not caller-
-        # supplied code. That is the A-1 distinction; the code that runs
-        # is the code already in the project.
+        # A-1, stated precisely, because the earlier wording here was
+        # WRONG and a LAN listener would have made it dangerous: this is
+        # not caller-supplied code, but it is not "the code already in
+        # the project" either. TestRunnerExt._discoverTestSuites scans
+        # unit_tests/ and exec_module's every test_*.py AND test_*.txt it
+        # FINDS ON DISK. That is only equivalent to project-own code
+        # while nothing can put a file there -- a LOOPBACK assumption.
+        # It holds today (loopback + a 0600 IPC token means "remote
+        # caller" does not exist) and it dissolves the moment a socket
+        # binds off-box. So the flag stays False (the LOCAL path must
+        # keep working -- it is the owner running their own tests), and
+        # the boundary is drawn by remote_exposed below instead.
         "executes_arbitrary_code": False,
+        # A-1 / R-2: NEVER relayable to a remote peer. Phase 3 reads
+        # this; nothing reads it today, which is exactly why it is being
+        # written now -- the data is correct before the code that could
+        # arm it exists.
+        "remote_exposed": False,
         "runtime_required": True,       # A-22 exclusive-batch class
         "side_effects": {"runs_tests": True, "writes_logs": True,
                          "may_restart_server": True},
@@ -183,6 +201,15 @@ PHASE1_OPERATIONS = {
         "schema": {},
         "mutating": True,               # writes the .toe + release .tox
         "executes_arbitrary_code": False,
+        # NOT relayable to a remote peer: it blocks TD's main thread for
+        # 15+ seconds and restarts the Envoy server under itself. A-30's
+        # performance guard and A-31's per-node remote-work policy -- the
+        # machinery whose whole job is to stop a remote peer wrecking a
+        # live output -- are Phase 4. Letting a peer freeze a show
+        # machine before show protection exists is precisely what A-30
+        # was written to prevent. Returns to the remote surface in Phase
+        # 4, gated, never ungated.
+        "remote_exposed": False,
         "runtime_required": True,       # read-modify-write
         "side_effects": {"writes_toe": True, "blocks_main_thread": True,
                          "restarts_server": True},
@@ -200,11 +227,15 @@ PHASE1_OPERATIONS = {
 # The strict reading of a registry entry: anything a registry entry does
 # not say is assumed to be the most dangerous answer. `executes_arbitrary
 # _code` True is A-1 verbatim; `mutating` True demands the exclusive
-# lease; `runtime_required` True demands the A-22 precondition.
+# lease; `runtime_required` True demands the A-22 precondition;
+# `remote_exposed` FALSE means an operation nobody audited for the LAN is
+# not reachable from it -- absence is a refusal, exactly like absence
+# from the registry itself.
 _GATING_DEFAULTS = {
     "executes_arbitrary_code": True,
     "mutating": True,
     "runtime_required": True,
+    "remote_exposed": False,
 }
 
 

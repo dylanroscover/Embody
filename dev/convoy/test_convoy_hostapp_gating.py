@@ -122,9 +122,46 @@ def test_manifest_digest_material_is_the_registry_entry(server):
         "set_op_position",
         schema=entry["schema"],
         gating={"mutating": True, "executes_arbitrary_code": False,
-                "runtime_required": False},
+                "runtime_required": False, "remote_exposed": True},
         side_effects=entry["side_effects"])
     assert body["manifest"]["operations"]["set_op_position"] == expected
+
+
+def test_the_remote_surface_is_a_strict_subset_and_excludes_the_exec_paths():
+    """A-1 / R-2, pinned in the DATA before the code that reads it exists.
+
+    remote_exposed is inert today -- nothing consults it, because nothing
+    binds off-box. It is written now precisely so the boundary is already
+    correct when Phase 3's LAN listener lands, rather than being drawn
+    under time pressure next to a live socket.
+
+    run_tests is the one that matters: its entry says
+    executes_arbitrary_code False, and LOCALLY that is right -- it runs
+    the owner's own suites. But TestRunnerExt discovers suites by
+    SCANNING DISK (every test_*.py AND test_*.txt it finds), so "the code
+    already in the project" is only true while nothing can put a file
+    there. That is a loopback assumption, and this flag is where it stops
+    being one.
+    """
+    remote = {name for name, entry in ha.PHASE1_OPERATIONS.items()
+              if ha.gating_of(entry)["remote_exposed"]}
+    assert remote == {"convoy_ping", "query_network", "capture_top",
+                      "set_op_position"}
+    assert "run_tests" not in remote, (
+        "run_tests execs every test file it finds on disk -- never "
+        "relayable to a remote peer (R-2)")
+    assert "save_project" not in remote, (
+        "save_project blocks TD's main thread 15+s; show protection "
+        "(A-30/A-31) is Phase 4 -- not relayable before it exists")
+    assert remote < set(ha.PHASE1_OPERATIONS), "must be a STRICT subset"
+
+
+def test_an_unaudited_operation_is_not_remotely_exposed():
+    """Absence is a refusal: an entry that never names remote_exposed is
+    read as False, exactly as an unregistered operation is refused."""
+    assert ha.gating_of({})["remote_exposed"] is False
+    assert ha.gating_of({"executes_arbitrary_code": False})[
+        "remote_exposed"] is False
 
 
 def test_per_node_manifest_binds_the_node_and_shares_the_digest(server):
@@ -654,7 +691,7 @@ def test_gating_defaults_are_strict_for_every_field(server):
             "schema": {}, "executes_arbitrary_code": False}
     assert ha.gating_of({"executes_arbitrary_code": False}) == {
         "executes_arbitrary_code": False, "mutating": True,
-        "runtime_required": True}
+        "runtime_required": True, "remote_exposed": False}
 
     # runtime_required defaults True -> refused without the precondition
     code, body = server.call("/jobs", {"idempotency_key": "k",
@@ -675,7 +712,7 @@ def test_manifest_digest_reflects_enforced_gating_not_raw_fields(server):
         capabilities.operation_digest(
             "sparse", schema={},
             gating={"executes_arbitrary_code": True, "mutating": True,
-                    "runtime_required": True},
+                    "runtime_required": True, "remote_exposed": False},
             side_effects=None))
 
 
@@ -929,22 +966,26 @@ def test_psk_survives_restart_and_leases_do_not(tmp_path):
 def test_the_async_entries_declare_async_in_their_digest(server):
     """A-23: a controller that expects a RESULT and gets a job handle is
     talking to a host it does not understand, so async-ness is digest
-    material. Folded in only when set, so every pre-existing operation
-    keeps the digest it already advertised."""
+    material. Folded in only when set.
+
+    NOTE: adding remote_exposed to the ENFORCED gating moved every digest
+    once, deliberately -- taken now, while there are zero cross-version
+    peers in the field. After the first release with peers it would cost
+    a renegotiation across a live mesh (Phase 3 plan, risk S15)."""
     _, body = server.call("/manifest")
     entry = ha.PHASE1_OPERATIONS["run_tests"]
     assert body["manifest"]["operations"]["run_tests"] == (
         capabilities.operation_digest(
             "run_tests", schema=entry["schema"],
             gating={"executes_arbitrary_code": False, "mutating": True,
-                    "runtime_required": True},
+                    "runtime_required": True, "remote_exposed": False},
             side_effects={**entry["side_effects"], "async_job": True}))
     sync = ha.PHASE1_OPERATIONS["query_network"]
     assert body["manifest"]["operations"]["query_network"] == (
         capabilities.operation_digest(
             "query_network", schema=sync["schema"],
             gating={"executes_arbitrary_code": False, "mutating": False,
-                    "runtime_required": False},
+                    "runtime_required": False, "remote_exposed": True},
             side_effects=sync["side_effects"])), \
         "an existing operation's digest moved"
 
