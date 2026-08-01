@@ -30,6 +30,7 @@ APP_DIR_NAME = "EmbodyConvoy"
 TOKEN_FILE = "host.token"
 PORT_FILE = "host.portfile.json"
 DB_FILE = "host.db"
+LOCK_FILE = "host.lock"
 
 
 def data_dir(platform=None, env=None, home=None):
@@ -284,3 +285,164 @@ def read_live_portfile(directory, platform=None, kill=None):
     if not pid_is_alive(pid, platform=platform, kill=kill):
         return None
     return data
+
+
+# -- the singleton lock (A-36: exactly one host app per data dir) ------
+#
+# WHY A LOCK AND NOT A PID FILE. HostStore.__init__ runs
+# _sweep_interrupted_dispatches(), which burns every job left in
+# `dispatching` to indeterminate -- correct for THIS process's own
+# interrupted forwards, catastrophic against a SECOND live daemon's
+# claims on the same data dir. Nothing enforced "one host app per data
+# dir" before this function existed; IgnoreNew only covers instances the
+# supervisor itself launched, so a hand-started daemon beside a
+# supervised one is entirely unpoliced.
+#
+# A pid file cannot do this job: it survives a crash, so every hard kill
+# (SIGKILL, power loss, Windows terminate()) would leave a stale claim
+# that either blocks the restart forever or has to be second-guessed by
+# the same liveness probe that a recycled pid defeats. An OS-level
+# exclusive lock on an open handle is released BY THE KERNEL when the
+# process dies, however it dies. That is the whole reason for the shape.
+
+
+class SingletonHandle:
+    """A held singleton lock. Truthy; keep it alive for the process.
+
+    The lock lives on the OPEN FILE, not on its contents, so this handle
+    must outlive nothing less than the daemon itself -- letting it fall
+    out of scope closes the file and releases the lock, and a second
+    daemon would then walk straight into the sweep this guards.
+    """
+
+    def __init__(self, path, fileobj, unlocker=None):
+        self.path = path
+        self.file = fileobj
+        self._unlocker = unlocker
+        self.released = False
+
+    def __repr__(self):
+        return "<SingletonHandle %s%s>" % (
+            self.path, " (released)" if self.released else "")
+
+
+def _default_lock_opener(path):
+    """Open (creating) the lock file for locking.
+
+    "a+b" never truncates -- a truncating open would let a NEW process
+    clobber the file a LIVE holder has locked, and on POSIX that is
+    exactly how a lock file gets replaced out from under its owner.
+    """
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    return open(path, "a+b")
+
+
+def _win32_lock(fileobj):
+    """msvcrt byte-range lock, non-blocking. Returns its unlocker.
+
+    msvcrt.locking works from the CURRENT file position, so seek(0)
+    first and lock exactly one byte -- locking a byte past EOF is legal
+    and keeps the file itself empty. Raises OSError when another process
+    holds it, which is the "someone else is running" signal.
+    """
+    import msvcrt
+    fileobj.seek(0)
+    msvcrt.locking(fileobj.fileno(), msvcrt.LK_NBLCK, 1)
+
+    def _unlock():
+        fileobj.seek(0)
+        msvcrt.locking(fileobj.fileno(), msvcrt.LK_UNLCK, 1)
+
+    return _unlock
+
+
+def _posix_lock(fileobj):
+    """flock LOCK_EX|LOCK_NB. Returns its unlocker.
+
+    Raises BlockingIOError (an OSError) when held elsewhere.
+    """
+    import fcntl
+    fcntl.flock(fileobj.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def _unlock():
+        fcntl.flock(fileobj.fileno(), fcntl.LOCK_UN)
+
+    return _unlock
+
+
+def default_locker(platform=None):
+    """The locking primitive for a platform: msvcrt on win32, flock on
+    POSIX. Exposed so a test can ask for the FOREIGN branch by name and
+    prove the selection, without owning that hardware (D-5)."""
+    platform = platform or sys.platform
+    return _win32_lock if platform == "win32" else _posix_lock
+
+
+def acquire_singleton(data_dir, *, platform=None, opener=None, locker=None):
+    """Claim "the one host app for this data dir". Handle, or None.
+
+    None means ANOTHER PROCESS HOLDS IT -- a normal, expected outcome
+    that main() reports and exits 0 on, never an error.
+
+    opener and locker are both injected (D-5) so the foreign platform's
+    branch is exercised on any machine: opener(path) -> a file object,
+    locker(fileobj) -> an unlock callable (or None), raising OSError when
+    the lock is already held.
+
+    An OSError from the LOCKER is "held" -> None. An error from the
+    OPENER is NOT: an unwritable data dir is a broken install, and
+    reporting it as "already running" would make the daemon exit 0 every
+    minute forever with a message naming the wrong cause -- the silent
+    death loop this whole slice exists to avoid. It propagates.
+    """
+    path = os.path.join(data_dir, LOCK_FILE)
+    open_lock = opener or _default_lock_opener
+    lock = locker or default_locker(platform)
+    fileobj = open_lock(path)
+    try:
+        unlocker = lock(fileobj)
+    except OSError:
+        # Held by a live daemon (or, on POSIX, by a process that has not
+        # yet released it). Close OUR handle immediately -- an abandoned
+        # open file on the same path is harmless, but leaking one per
+        # supervisor tick is not.
+        try:
+            fileobj.close()
+        except OSError:
+            pass
+        return None
+    except Exception:
+        try:
+            fileobj.close()
+        except OSError:
+            pass
+        raise
+    return SingletonHandle(path, fileobj, unlocker)
+
+
+def release_singleton(handle):
+    """Release a handle from acquire_singleton. Idempotent, never raises.
+
+    Only the ORDERLY exit path needs this -- the kernel releases the lock
+    on process death regardless, which is the property that makes a
+    crashed daemon replaceable a minute later. It exists so an in-process
+    caller (a test, or a host app embedded in another program) can hand
+    the slot back without exiting.
+    """
+    if handle is None or getattr(handle, "released", False):
+        return
+    unlocker = getattr(handle, "_unlocker", None)
+    if unlocker is not None:
+        try:
+            unlocker()
+        except OSError:
+            pass
+    fileobj = getattr(handle, "file", None)
+    if fileobj is not None:
+        try:
+            fileobj.close()
+        except OSError:
+            pass
+    handle.released = True

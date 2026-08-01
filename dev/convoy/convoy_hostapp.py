@@ -601,6 +601,12 @@ class HostApp:
             self.hostkeys = hostkeys.load_or_create(directory_path)
         except hostkeys.CryptographyMissing as e:
             self.identity_detail = e.detail
+        # How /shutdown stops the server. Set by main() to EXACTLY the
+        # callable the SIGTERM handler uses -- one shutdown path, not
+        # two. None until then, so an embedded HostApp (every test that
+        # builds one without serve()) refuses the route instead of
+        # pretending it stopped something.
+        self._shutdown_hook = None
         self.db.audit("hostapp", "started", {"host_id": self.host_id})
         self._auditIdentityAtBoot()
 
@@ -637,6 +643,13 @@ class HostApp:
                       {"fingerprint": current,
                        "certificate": self.hostkeys.certificate_pem is not None,
                        "certificate_reason": self.hostkeys.cert_reason})
+
+    def set_shutdown_hook(self, hook):
+        """Wire /shutdown to the server-stopping callable main() already
+        installs for SIGTERM. Kept a setter rather than a constructor
+        argument because the server does not exist until after
+        HostApp is built and handed to serve()."""
+        self._shutdown_hook = hook
 
     # -- request handlers (called WITH self.lock held -- except the
     #    self-locking dispatch_job / drain, see their docstrings) -------
@@ -813,6 +826,38 @@ class HostApp:
             return self.hostkeys.fingerprint
         except Exception:
             return None
+    def request_shutdown(self, body=None):
+        """Stop the host app cleanly, on request. Authenticated (every
+        POST is) and audited.
+
+        THE POINT IS THE PORTFILE. Stop, upgrade and uninstall all need
+        the daemon gone, and their only alternative is a hard kill --
+        which on Windows skips every cleanup path and leaves a portfile
+        naming a dead port. Clients survive that (read_live_portfile
+        checks the writer's pid), but the NEXT install then starts
+        against a data dir that looks occupied. An orderly exit unwinds
+        main()'s `finally`, which clears it.
+
+        This does NOT stop the server itself: it fires the SAME callable
+        the SIGTERM handler does -- a thread that calls
+        server.shutdown() -- so there is exactly one shutdown path and
+        the response still goes out on this connection before
+        serve_forever() unwinds. Inventing a second path here is how the
+        two drift.
+        """
+        if self._shutdown_hook is None:
+            # No server to stop: an embedded HostApp, or one built
+            # without serve(). Refusing beats reporting a shutdown that
+            # nothing performed.
+            return 409, {"ok": False, "reason": "shutdown_unavailable",
+                         "detail": "this host app is not serving"}
+        try:
+            self.db.audit("hostapp", "shutdown_requested",
+                          {"host_id": self.host_id})
+        except Exception:
+            pass        # an audit failure must not strand a stop request
+        self._shutdown_hook()
+        return 200, {"ok": True, "host_id": self.host_id, "stopping": True}
 
     def register_node(self, body):
         project_root = body.get("project_root")
@@ -3026,6 +3071,13 @@ def make_handler(app):
                     return app.release_lease(body)
                 if self.path == "/heartbeat":
                     return app.heartbeat_controller(body)
+                if self.path == "/shutdown":
+                    # Authenticated by do_POST like every other POST --
+                    # an unauthenticated caller was already refused 401
+                    # before the body was even parsed, which is what
+                    # keeps "anything on this machine can stop it" from
+                    # meaning "anything on the NETWORK can".
+                    return app.request_shutdown(body)
                 return 404, {"ok": False, "reason": "not_found"}
 
     return Handler
@@ -3044,7 +3096,11 @@ def serve(app, port=0):
     return server, actual_port
 
 
-def main(argv=None):
+def build_parser():
+    """The command line, as its own function so the flag wiring is
+    testable without starting a daemon -- `--singleton` defaulting ON is
+    a safety property, and a test that rebuilt its own parser to check
+    it would be asserting against a copy."""
     parser = argparse.ArgumentParser(description="embody-convoy host app")
     parser.add_argument("--data-dir", default=None,
                         help="state directory (default: per-user app dir)")
@@ -3054,11 +3110,61 @@ def main(argv=None):
                         help="seconds between autonomous ticks -- each "
                              "polls running node jobs, then dispatches "
                              "queued ones (0 = off; per-call only)")
-    args = parser.parse_args(argv)
+    parser.add_argument("--singleton", dest="singleton",
+                        action="store_true", default=True,
+                        help="refuse to start when another host app "
+                             "already holds this data dir (the default)")
+    parser.add_argument("--no-singleton", dest="singleton",
+                        action="store_false",
+                        help="start even if another host app holds this "
+                             "data dir -- UNSAFE, for tests only: two "
+                             "daemons on one data dir burn each other's "
+                             "live claims to indeterminate")
+    return parser
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
 
     directory = args.data_dir or platform_mod.data_dir()
-    app = HostApp(directory)
-    server, port = serve(app, args.port)
+
+    # BEFORE HostApp(), not after. HostStore.__init__ runs
+    # _sweep_interrupted_dispatches() the moment it opens the data dir,
+    # so a second daemon that got as far as constructing the app has
+    # ALREADY burned the first one's in-flight claims to indeterminate --
+    # and 16.4/A-15 make those records permanent. The lock has to come
+    # first or it does not protect the thing it exists for.
+    singleton = None
+    if args.singleton:
+        singleton = platform_mod.acquire_singleton(directory)
+        if singleton is None:
+            # EXIT 0, deliberately. The supervisor runs this every
+            # minute by design (Repetition PT1M + IgnoreNew), so on a
+            # healthy machine the daemon is ALREADY running and this is
+            # the expected outcome, not a fault. A nonzero exit would
+            # paint Task Scheduler's LastTaskResult as a failure once a
+            # minute forever and bury a real one.
+            sys.stderr.write(
+                f"embody-convoy host app already running for {directory} "
+                f"(another process holds host.lock); this launch is a "
+                f"no-op\n")
+            sys.stderr.flush()
+            return 0
+
+    try:
+        app = HostApp(directory)
+    except Exception:
+        platform_mod.release_singleton(singleton)
+        raise
+    try:
+        server, port = serve(app, args.port)
+    except Exception:
+        # A bind failure must not strand the slot: the kernel would drop
+        # it on process exit, but an in-process caller (a test, or a
+        # supervisor calling main() twice) would refuse itself forever.
+        app.db.close()
+        platform_mod.release_singleton(singleton)
+        raise
     if args.drain_interval > 0:
         app.start_drain_loop(args.drain_interval)
     sys.stderr.write(
@@ -3072,8 +3178,14 @@ def main(argv=None):
     # clients at a dead port. Handle it so the COMMON stop is clean;
     # clients still verify liveness, because SIGKILL/power-loss can
     # never be handled here.
-    def _stop(signum, _frame):
+    def _stop(signum=None, _frame=None):
         threading.Thread(target=server.shutdown, daemon=True).start()
+
+    # ONE shutdown path, two triggers: the signal above and the
+    # authenticated POST /shutdown route. Stop/upgrade/uninstall use the
+    # route so the `finally` below runs and the portfile is cleared;
+    # a hard kill is what that exists to avoid.
+    app.set_shutdown_hook(_stop)
 
     for signame in ("SIGTERM", "SIGINT", "SIGBREAK"):
         sig = getattr(signal, signame, None)
@@ -3096,6 +3208,11 @@ def main(argv=None):
         platform_mod.clear_portfile(directory)
         app.db.audit("hostapp", "stopped", {})
         app.db.close()
+        # Last of all: the kernel drops this on process exit anyway, but
+        # an in-process caller (a test, or a supervisor that runs main()
+        # twice) must get the slot back without exiting.
+        platform_mod.release_singleton(singleton)
+    return 0
 
 
 if __name__ == "__main__":
