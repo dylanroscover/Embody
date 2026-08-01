@@ -44,6 +44,12 @@ AUDIT_FILE = "audit.jsonl"
 JOB_STATES = ("queued", "dispatching", "running", "succeeded", "failed",
               "indeterminate")
 
+# The states a job never leaves. A record here is DONE being decided:
+# succeeded/failed are node verdicts, indeterminate is the host's own
+# may-have-run proof (16.4). Named once, so every guard that must not
+# reopen a settled record reads the same list.
+TERMINAL_STATES = ("succeeded", "failed", "indeterminate")
+
 # A-15, "one authority, two records". The NODE originates the execution
 # verdict; the host record MIRRORS it. So the host may write three states
 # on its own authority and no more:
@@ -457,7 +463,15 @@ class HostStore:
         before recording an outcome; the forward MAY have happened, so
         the only honest resolution is indeterminate with that as
         evidence. Never back to queued (a mutation could double-run),
-        never a verdict (A-15: no node was observed)."""
+        never a verdict (A-15: no node was observed).
+
+        It sweeps 'dispatching' ONLY, and that narrowness is load-bearing.
+        A 'running' record is not a host claim: it is a mirror of a NODE
+        job the node still owns and will still answer for after this host
+        restarts (the poller resumes it). Widening this to "resolve
+        everything non-terminal" would burn every in-flight node job to
+        indeterminate on every host start -- pinned by
+        test_the_load_sweep_touches_only_dispatching."""
         swept = []
         for job in self.jobs(state="dispatching"):
             self.mark_indeterminate(job["delivery_id"], {
@@ -483,6 +497,16 @@ class HostStore:
         evidence a node returned it, so the host can never fabricate a
         success. node_status is the shipped node vocabulary
         (running|done|error); it maps to the host mirror.
+
+        ONE regression is refused: 'running' onto an already-TERMINAL
+        record. A poll answer can land after the job settled (a slow
+        response overtaken by a later poll, or by the stale-record
+        terminalisation), and applying it would drag a finished job back
+        to running and re-open it for polling forever. Only this
+        direction is blocked -- a node correcting done -> error is a real
+        verdict it authored, and release_claim's dispatching -> queued
+        must keep working, so a blanket state machine here would break
+        both.
         """
         state = _NODE_STATUS_TO_STATE.get(node_status)
         if state is None:
@@ -494,6 +518,19 @@ class HostStore:
                 "a cached node verdict MUST carry node_job_id and "
                 "observed_at -- its provenance is what separates it from a "
                 "host-fabricated result (A-15)")
+        if state == "running":
+            current = self.get_job(delivery_id)
+            if current is not None and current.get("state") in TERMINAL_STATES:
+                try:
+                    self.audit("hoststore", "verdict_regression_ignored",
+                               {"delivery_id": delivery_id,
+                                "state": current.get("state"),
+                                "node_job_id": node_job_id,
+                                "observed_at": observed_at})
+                except OSError:
+                    pass        # the REFUSAL is the contract; the trail
+                                # is best-effort, exactly as elsewhere
+                return current
         return self._apply_state(delivery_id, state, result=result,
                                  verdict_source="node_poll",
                                  observed_at=observed_at,
@@ -532,6 +569,31 @@ class HostStore:
                 "why the outcome is unknown)")
         return self._apply_state(delivery_id, "indeterminate",
                                  result=evidence, verdict_source="host")
+
+    def record_dispatch_note(self, delivery_id, reason, at):
+        """Count a dispatch ATTEMPT that ended in a refusal, on the
+        delivery record itself. Never touches state, result, or verdict
+        provenance -- it is bookkeeping, not an outcome.
+
+        Why it has to be on the RECORD and not only in the audit trail:
+        a job that requeues on every pass (a node refusal that will
+        never resolve) audits ONCE, by design -- the dedupe that keeps
+        audit.jsonl bounded. Without a counter, that job is byte-
+        indistinguishable from one enqueued a second ago, and the retry
+        loop is invisible to /jobs. The host still does not terminalise
+        it (that stays the deferred reaper's call, A-15 item b), but the
+        evidence a human needs to SEE it now exists.
+        """
+        job = self.get_job(delivery_id)
+        if job is None:
+            return None
+        job["attempts"] = int(job.get("attempts") or 0) + 1
+        job["last_attempt"] = {"at": at, "reason": str(reason)[:128]}
+        job["updated"] = self._now()
+        platform_mod._write_private(
+            self._job_path(delivery_id),
+            json.dumps(job, indent=1, sort_keys=True) + "\n")
+        return job
 
     def _apply_state(self, delivery_id, state, result=None,
                      verdict_source=None, observed_at=None, node_job_id=None):
@@ -573,6 +635,21 @@ class HostStore:
         out.sort(key=lambda j: (j.get("created", 0),
                                 j.get("delivery_id", "")))
         return out
+
+    def state_counts(self):
+        """{state: count} over every delivery record, in ONE scan.
+
+        status() needs several of these numbers at once, and each
+        jobs(state=...) call parses every job file on disk -- three
+        filtered calls read the queue three times under the app lock.
+        States with no jobs are simply absent (the caller reads with a
+        default), so this never claims a state exists that does not.
+        """
+        counts = {}
+        for job in self.jobs():
+            state = job.get("state")
+            counts[state] = counts.get(state, 0) + 1
+        return counts
 
     # -- audit (A-40: host-side, never the Embody logger) ---------------
 

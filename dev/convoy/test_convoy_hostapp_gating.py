@@ -916,3 +916,74 @@ def test_psk_survives_restart_and_leases_do_not(tmp_path):
         assert code == 200 and body["created"] is True
     finally:
         second.stop()
+
+
+# =====================================================================
+# The async registry entries (Phase 4 polling slice)
+#
+# run_tests and save_project answer with a node-job HANDLE rather than a
+# result. That is a GATING question as much as a transport one: they are
+# consequential mutations, and their manifest digest has to say so.
+# =====================================================================
+
+def test_the_async_entries_declare_async_in_their_digest(server):
+    """A-23: a controller that expects a RESULT and gets a job handle is
+    talking to a host it does not understand, so async-ness is digest
+    material. Folded in only when set, so every pre-existing operation
+    keeps the digest it already advertised."""
+    _, body = server.call("/manifest")
+    entry = ha.PHASE1_OPERATIONS["run_tests"]
+    assert body["manifest"]["operations"]["run_tests"] == (
+        capabilities.operation_digest(
+            "run_tests", schema=entry["schema"],
+            gating={"executes_arbitrary_code": False, "mutating": True,
+                    "runtime_required": True},
+            side_effects={**entry["side_effects"], "async_job": True}))
+    sync = ha.PHASE1_OPERATIONS["query_network"]
+    assert body["manifest"]["operations"]["query_network"] == (
+        capabilities.operation_digest(
+            "query_network", schema=sync["schema"],
+            gating={"executes_arbitrary_code": False, "mutating": False,
+                    "runtime_required": False},
+            side_effects=sync["side_effects"])), \
+        "an existing operation's digest moved"
+
+
+@pytest.mark.parametrize("bad", [["a", "b"], "suite=x", 5, True])
+def test_a_signed_envelope_with_non_dict_arguments_is_malformed(server, bad):
+    """The envelope path accepts a non-dict `arguments` all the way
+    through verification -- canonical_arguments_digest json-dumps any
+    JSON value happily -- so the SAME named refusal has to live here, or
+    one create path admits what the other refuses. `arguments` becomes
+    the node's tool kwargs; a list was never meaningful."""
+    node = register(server)
+    env = signed_envelope(server, node, psk_for(server), arguments=bad)
+    code, body = server.call("/envelope", {"envelope": env})
+    assert code == 400 and body["reason"] == "malformed"
+    assert "arguments" in body["detail"]
+    _, status = server.call("/status")
+    assert status["jobs_queued"] == 0
+
+
+def test_the_async_operations_are_lease_gated_on_both_create_paths(server):
+    """They are MUTATING, so a read lease must not grant the right to
+    start one -- on either job-creating path. (The gate applies at
+    ENQUEUE; dispatch re-checks the registry, the code flag and the
+    runtime, but NOT leases, which are cooperative and TTL-bounded --
+    re-checking them at dispatch would strand accepted jobs.)"""
+    node = register(server)
+    psk = psk_for(server)
+    nid = node["node_id"]
+    assert acquire(server, "ctl-reader", nid, "shared")[0] == 200
+
+    code, body = server.call("/jobs", {
+        "idempotency_key": "async-local", "node_id": nid,
+        "operation": "run_tests", "controller_id": "ctl-reader",
+        "expected_runtime_id": node["runtime_id"]})
+    assert code == 409 and body["reason"] == "shared_lease_no_mutation"
+
+    env = signed_envelope(server, node, psk, operation="save_project",
+                          controller_id="ctl-reader",
+                          expected_runtime_id=node["runtime_id"])
+    code, body = server.call("/envelope", {"envelope": env})
+    assert code == 409 and body["reason"] == "shared_lease_no_mutation"

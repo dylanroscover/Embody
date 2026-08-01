@@ -1101,6 +1101,530 @@ def test_a_landed_reap_is_counted_even_if_its_audit_fails(server,
     assert fetched["job"]["state"] == "indeterminate"
 
 
+# =====================================================================
+# The ASYNC HANDOFF: an operation that mints a node-side job returns a
+# HANDLE, not a result. Dispatch records 'running' with the node's
+# provenance and hands the job to the poller -- it never blocks a drain
+# pass on a test run, and it never fabricates the outcome of one.
+# =====================================================================
+
+def register_rt(server, envoy_port=9800, comp="/RT", runtime_id="rt1"):
+    """A node with a runtime -- the async operations are
+    runtime_required, so a job for one must name the run it addressed."""
+    code, node = server.call("/register", {
+        "project_root": "/Work/p", "convoy_id": CONVOY, "comp_path": comp,
+        "envoy_port": envoy_port, "runtime_id": runtime_id})
+    assert code == 200
+    return node
+
+
+def enqueue_async(server, node, operation="run_tests", key="ka",
+                  arguments=None):
+    code, body = server.call("/jobs", {
+        "idempotency_key": key, "node_id": node["node_id"],
+        "operation": operation, "arguments": arguments or {},
+        "expected_runtime_id": node["runtime_id"]})
+    assert code == 200, body
+    return body["job"]
+
+
+def started_handle(job_id="job_1a2b3c4d"):
+    """What _startTestsJob returns on a successful start."""
+    return {"ok": True, "result": {"job_id": job_id, "status": "running",
+                                   "hint": "Poll get_job_status(...)"}}
+
+
+def test_an_async_op_is_recorded_running_with_node_provenance(server):
+    """B6, the headline: the node answered with a job HANDLE, so the host
+    mirrors 'running' carrying the node's own job id -- the state that
+    tells the poller this delivery is owned by a live node job."""
+    node = register_rt(server)
+    job = enqueue_async(server, node)
+    server.app.forwarder = lambda p, o, a: started_handle()
+    code, body = server.call("/dispatch", {"delivery_id": job["delivery_id"]})
+    assert code == 200 and body["dispatched"] is True
+    assert body["started"] is True
+    updated = body["job"]
+    assert updated["state"] == "running"
+    assert updated["node_job_id"] == "job_1a2b3c4d"
+    assert updated["verdict_source"] == "node_poll"
+    assert updated["observed_at"] is not None
+    assert updated["result"]["status"] == "running"
+
+
+def test_a_running_handoff_leaves_dispatching_before_any_reaper_pass(server):
+    """The reaper resolves 'dispatching' claims with no forward in flight.
+    An async handoff must therefore LEAVE dispatching inside phase c --
+    if it parked at 'dispatching' waiting for a poll, the very next drain
+    pass would burn a healthy node job to indeterminate."""
+    node = register_rt(server)
+    job = enqueue_async(server, node)
+    did = job["delivery_id"]
+    server.app.forwarder = lambda p, o, a: started_handle()
+    server.call("/dispatch", {"delivery_id": did})
+    with server.app.lock:
+        assert did not in server.app._in_flight, "flight marker leaked"
+    summary = server.app.drain_once()
+    assert summary["stranded"] == 0, "the reaper touched a running node job"
+    _, fetched = server.call(f"/jobs/{did}")
+    assert fetched["job"]["state"] == "running"
+
+
+def test_the_delivery_idempotency_key_rides_to_the_node(server):
+    """B7: the node's own 16.5 index is what makes a retry recover a lost
+    handle, and it is keyed by the idempotency_key WE send. Sending the
+    delivery's key (not the caller's, not a fresh one) is what anchors
+    every redelivery of this job to the same node run."""
+    node = register_rt(server)
+    job = enqueue_async(server, node, key="the-run-key")
+    seen = {}
+
+    def forwarder(port, operation, arguments):
+        seen.update(operation=operation, arguments=dict(arguments))
+        return started_handle()
+
+    server.app.forwarder = forwarder
+    server.call("/dispatch", {"delivery_id": job["delivery_id"]})
+    assert seen["operation"] == "run_tests"
+    assert seen["arguments"]["idempotency_key"] == "the-run-key"
+    assert seen["arguments"]["background"] is True
+    # and the merged arguments are NOT persisted onto the job record
+    _, fetched = server.call(f"/jobs/{job['delivery_id']}")
+    assert fetched["job"]["arguments"] == {}
+
+
+def test_injected_arguments_override_a_hostile_caller(server):
+    """B8: host policy WINS over caller-supplied arguments. background
+    False would block the forward for the whole run (a fabricated
+    indeterminate), a caller idempotency_key would break the 16.5 anchor,
+    and override True would bypass the node's own multi-session
+    destructive gate."""
+    node = register_rt(server)
+    job = enqueue_async(server, node, key="honest-key", arguments={
+        "background": False, "override": True,
+        "idempotency_key": "attacker-key", "suite_name": "test_sandbox"})
+    seen = {}
+    server.app.forwarder = lambda p, o, a: (seen.update(a) or
+                                            started_handle())
+    server.call("/dispatch", {"delivery_id": job["delivery_id"]})
+    assert seen["background"] is True
+    assert seen["override"] is False
+    assert seen["idempotency_key"] == "honest-key"
+    # a benign caller argument still rides through untouched
+    assert seen["suite_name"] == "test_sandbox"
+
+
+def test_save_project_gets_only_its_idempotency_key(server):
+    """B9: save_project's MCP signature accepts idempotency_key ONLY, so
+    anything else on the wire is a validation error at the node -- a
+    failure the host would have invented.
+
+    Enqueued WITH hostile and junk arguments on purpose: an empty
+    `inject` overrides nothing, so this passed for years-in-miniature on
+    an empty-arguments job while the property its name asserts was false
+    (panel finding, 2026-08-01). The empty `caller_args` is what
+    actually delivers it."""
+    node = register_rt(server)
+    job = enqueue_async(server, node, operation="save_project", key="ks",
+                        arguments={"background": True, "override": True,
+                                   "junk": "surprise"})
+    seen = {}
+    server.app.forwarder = lambda p, o, a: (seen.update(args=dict(a)) or
+                                            started_handle("job_00ff00ff"))
+    code, body = server.call("/dispatch", {"delivery_id": job["delivery_id"]})
+    assert code == 200 and body["job"]["state"] == "running"
+    assert seen["args"] == {"idempotency_key": "ks"}, seen["args"]
+
+
+def test_run_tests_keeps_its_own_arguments_and_drops_the_rest(server):
+    """The other half of the same contract: a field the node's tool
+    signature accepts rides through, one it does not is DROPPED rather
+    than forwarded for the node to reject -- and the drop is audited, so
+    a caller can see why its argument vanished."""
+    node = register_rt(server)
+    job = enqueue_async(server, node, key="kt", arguments={
+        "suite_name": "test_sandbox", "junk": 1, "override": True})
+    did = job["delivery_id"]
+    seen = {}
+    server.app.forwarder = lambda p, o, a: (seen.update(args=dict(a)) or
+                                            started_handle())
+    assert server.call("/dispatch", {"delivery_id": did})[0] == 200
+    assert seen["args"] == {"suite_name": "test_sandbox",
+                            "background": True, "override": False,
+                            "idempotency_key": "kt"}, seen["args"]
+    with server.app.lock:
+        claimed = [e for e in server.app.db.audit_tail(limit=300)
+                   if e["event"] == "dispatch_claimed"
+                   and (e["detail"] or {}).get("delivery_id") == did]
+    assert claimed[0]["detail"]["dropped"] == ["junk", "override"]
+
+
+def test_a_sync_op_gets_no_injected_arguments(server):
+    """B10: injection is per-operation, from the registry entry. A plain
+    relayed read must reach the node byte-identical to what was enqueued."""
+    node = register(server)
+    job = enqueue(server, node, operation="query_network",
+                  arguments={"parent_path": "/"})
+    seen = {}
+    server.app.forwarder = lambda p, o, a: (seen.update(args=dict(a)) or
+                                            {"ok": True, "result": {}})
+    server.call("/dispatch", {"delivery_id": job["delivery_id"]})
+    assert seen["args"] == {"parent_path": "/"}
+
+
+@pytest.mark.parametrize("status,state", [("done", "succeeded"),
+                                          ("error", "failed")])
+def test_an_async_handle_that_is_already_terminal_is_recorded_terminal(
+        server, status, state):
+    """B11: an idempotency reconcile can hand back a FINISHED run, and a
+    mint-then-fail-to-start answers 'error' with its handle. Both are
+    node verdicts with provenance -- terminal immediately, no poll."""
+    node = register_rt(server)
+    job = enqueue_async(server, node, key=f"k-{status}")
+    server.app.forwarder = lambda p, o, a: {
+        "ok": True, "result": {"job_id": "job_abcdef01", "status": status,
+                               "error": "Test run failed to start: boom"}}
+    code, body = server.call("/dispatch", {"delivery_id": job["delivery_id"]})
+    assert code == 200 and body["job"]["state"] == state
+    assert body["started"] is False
+    assert body["job"]["verdict_source"] == "node_poll"
+    assert body["job"]["node_job_id"] == "job_abcdef01"
+
+
+def test_an_async_answer_without_a_handle_requeues_never_terminalises(server):
+    """B12: the node refused before minting ({'error': ...}, NO job_id) --
+    but it may also have started work whose id we lost (the 30s
+    _execute_in_td timeout). Neither 'failed' nor 'indeterminate' is
+    honest: the job goes back to QUEUED, and the redelivery carries the
+    same idempotency_key so the node's 16.5 index hands back the original
+    handle."""
+    node = register_rt(server)
+    job = enqueue_async(server, node)
+    did = job["delivery_id"]
+    server.app.forwarder = lambda p, o, a: {
+        "ok": True, "result": {"error": "A test run is already in progress"}}
+    code, body = server.call("/dispatch", {"delivery_id": did})
+    assert code == 409 and body["reason"] == "no_node_job_handle"
+    _, fetched = server.call(f"/jobs/{did}")
+    assert fetched["job"]["state"] == "queued", "never burned"
+    assert fetched["job"]["verdict_source"] is None
+    # audited once per transition, and paced
+    server.call("/dispatch", {"delivery_id": did})
+    with server.app.lock:
+        events = [e for e in server.app.db.audit_tail(limit=200)
+                  if e["event"] == "dispatch_no_handle"
+                  and (e["detail"] or {}).get("delivery_id") == did]
+        assert did in server.app._drain_backoff
+    assert len(events) == 1, events
+
+
+def test_a_requeued_async_delivery_recovers_the_lost_handle(server):
+    """B13: the recovery the requeue is BETTING on. The retry sends the
+    same idempotency_key, the node reconciles to the run it already
+    started, and the host adopts that handle -- the lost id comes back."""
+    node = register_rt(server)
+    job = enqueue_async(server, node, key="recover-me")
+    did = job["delivery_id"]
+    attempts = {"n": 0}
+
+    def forwarder(port, operation, arguments):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            # the answer whose handle we lost
+            return {"ok": True, "result": {"error": "Operation timed out "
+                                                    "after 30 seconds"}}
+        assert arguments["idempotency_key"] == "recover-me"
+        return {"ok": True, "result": {
+            "job_id": "job_beadfeed", "status": "running",
+            "hint": "Reconciled to the original run for this "
+                    "idempotency_key (calls are idempotent)."}}
+
+    server.app.forwarder = forwarder
+    assert server.call("/dispatch", {"delivery_id": did})[0] == 409
+    code, body = server.call("/dispatch", {"delivery_id": did})
+    assert code == 200 and body["job"]["state"] == "running"
+    assert body["job"]["node_job_id"] == "job_beadfeed"
+    assert attempts["n"] == 2
+
+
+def test_an_async_op_with_no_response_is_still_indeterminate(server):
+    """B14: the async branch changes what a HANDLE means, not what
+    silence means. A forward that got no response may have started the
+    run, and that stays indeterminate."""
+    node = register_rt(server)
+    job = enqueue_async(server, node)
+    server.app.forwarder = lambda p, o, a: None
+    code, body = server.call("/dispatch", {"delivery_id": job["delivery_id"]})
+    assert code == 200 and body["job"]["state"] == "indeterminate"
+    assert body["job"]["result"]["reason"] == "no_response"
+
+
+def test_the_drain_summary_counts_started_and_no_handle(server):
+    """B15: the pass summary must name both new outcomes. A handoff is
+    not a completed dispatch and a handle-less answer is not an error --
+    burying either in 'dispatched' would make the summary lie."""
+    server.app.drain_backoff_s = 0.0
+    node = register_rt(server)
+    good = enqueue_async(server, node, key="k-good")
+    lost = enqueue_async(server, node, key="k-lost")
+
+    def forwarder(port, operation, arguments):
+        if arguments["idempotency_key"] == "k-good":
+            return started_handle()
+        return {"ok": True, "result": {"error": "Job records unavailable"}}
+
+    server.app.forwarder = forwarder
+    code, body = server.call("/drain", {})
+    assert code == 200
+    assert body["examined"] == 2
+    assert body["started"] == 1
+    assert body["no_handle"] == 1
+    assert body["dispatched"] == 1, "a handoff is counted as dispatched too"
+    assert body["errors"] == 0
+    _, fetched = server.call(f"/jobs/{good['delivery_id']}")
+    assert fetched["job"]["state"] == "running"
+    _, fetched = server.call(f"/jobs/{lost['delivery_id']}")
+    assert fetched["job"]["state"] == "queued"
+
+
+def test_the_async_registry_entries_are_honestly_gated(server):
+    """The two entries are MUTATING and runtime_required: a run_tests job
+    is refused without the A-22 precondition, exactly like any other
+    stale-state-sensitive operation."""
+    node = register_rt(server)
+    code, body = server.call("/jobs", {
+        "idempotency_key": "no-rt", "node_id": node["node_id"],
+        "operation": "run_tests", "arguments": {}})
+    assert code == 400 and body["reason"] == "runtime_id_required"
+    for name in ("run_tests", "save_project"):
+        entry = ha.PHASE1_OPERATIONS[name]
+        assert ha.gating_of(entry) == {"executes_arbitrary_code": False,
+                                       "mutating": True,
+                                       "runtime_required": True}
+        assert entry["async_job"]["key_arg"] == "idempotency_key"
+
+
+# =====================================================================
+# Panel regressions (2026-08-01, four-lens review of the polling slice)
+#
+# The BLOCKER: `arguments` was type-checked nowhere, and the async merge
+# `dict(arguments)` sat between the durable claim and the try/finally
+# that clears the in-flight marker. A list/str/int reached it, raised,
+# and left the delivery claimed on disk with a phantom marker -- so the
+# stranded-claim reaper skipped it FOREVER, /dispatch skipped it (not
+# queued), /poll skipped it (not running), and a host restart finally
+# wrote a FALSE indeterminate for an operation that never left phase a.
+# =====================================================================
+
+@pytest.mark.parametrize("bad", [["a", "b"], "suite=x", 5, True, 98.6,
+                                 [], "", 0])
+def test_non_dict_arguments_are_refused_at_enqueue(server, bad):
+    """Layer 1: `arguments` becomes the node's tool kwargs, so a non-dict
+    was never meaningful. It is a named, audited 400 at the door, exactly
+    like every other caller-supplied field of the wrong type (A-39)."""
+    node = register(server)
+    code, body = server.call("/jobs", {
+        "idempotency_key": f"bad-{bad!r}", "node_id": node["node_id"],
+        "operation": "query_network", "arguments": bad})
+    assert code == 400 and body["reason"] == "malformed"
+    assert "arguments" in body["detail"]
+    _, status = server.call("/status")
+    assert status["jobs_queued"] == 0, "a refused enqueue created a job"
+
+
+def test_absent_or_empty_arguments_are_still_fine(server):
+    """The refusal is about TYPE, not emptiness: no arguments at all and
+    an empty dict must both keep working."""
+    node = register(server)
+    for key, args in (("none", None), ("empty", {})):
+        code, body = server.call("/jobs", {
+            "idempotency_key": key, "node_id": node["node_id"],
+            "operation": "query_network", "arguments": args})
+        assert code == 200, body
+        assert body["job"]["arguments"] == {}
+
+
+def test_a_legacy_non_dict_arguments_record_never_wedges_a_claim(server):
+    """THE PROBE, verbatim. A record whose arguments are a list (an older
+    build, or hand-edited state -- the door refuses them now) must
+    resolve as a NAMED refusal that releases the claim, never a raise
+    that leaks the flight marker and hides the job from every route."""
+    node = register_rt(server)
+    # Written straight to the store: the enqueue gate would refuse it,
+    # so this is the only way such a record can exist at all.
+    with server.app.lock:
+        job, _ = server.app.db.create_job(
+            "legacy-args", node["node_id"], "run_tests", ["not", "a", "dict"],
+            convoy_id=CONVOY, expected_runtime_id=node["runtime_id"])
+    did = job["delivery_id"]
+    assert job["arguments"] == ["not", "a", "dict"]
+    calls = {"n": 0}
+
+    def counting(port, operation, arguments):
+        calls["n"] += 1
+        return started_handle()
+
+    server.app.forwarder = counting
+    code, body = server.call("/dispatch", {"delivery_id": did})
+    assert code == 409, body
+    assert body["reason"] == "malformed_arguments"
+    assert calls["n"] == 0, "malformed arguments went on the wire"
+    _, fetched = server.call(f"/jobs/{did}")
+    assert fetched["job"]["state"] == "queued", "the claim was not released"
+    with server.app.lock:
+        assert did not in server.app._in_flight, "flight marker leaked"
+    # the job is visible to every route again -- paced, not wedged
+    summary = server.app.drain_once()
+    assert summary["backoff"] == 1 and summary["errors"] == 0
+    assert calls["n"] == 0
+    # and the SYNC path refuses identically -- one authority, not two
+    with server.app.lock:
+        sync_job, _ = server.app.db.create_job(
+            "legacy-sync", node["node_id"], "query_network", ["x"],
+            convoy_id=CONVOY)
+    code, body = server.call("/dispatch",
+                             {"delivery_id": sync_job["delivery_id"]})
+    assert code == 409 and body["reason"] == "malformed_arguments"
+
+
+def test_any_raise_after_the_claim_still_clears_the_flight_marker(server,
+                                                                  monkeypatch):
+    """Layer 3, STRUCTURAL. The claim and its cleanup now share ONE
+    failure domain: the try/finally opens BEFORE the claim, so no future
+    edit to the post-claim tail can reopen the leak class. Proven with a
+    raise injected into that tail."""
+    node = register_rt(server)
+    job = enqueue_async(server, node)
+    did = job["delivery_id"]
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("a future edit raises here")
+
+    monkeypatch.setattr(server.app, "_merged_arguments", boom)
+    code, body = server.call("/dispatch", {"delivery_id": did})
+    assert code == 500 and body["reason"] == "internal_error"
+    monkeypatch.undo()
+    with server.app.lock:
+        assert did not in server.app._in_flight, "flight marker leaked"
+    # the claim is debris, but VISIBLE debris: the reaper resolves it
+    # instead of skipping it forever
+    summary = server.app.drain_once()
+    assert summary["stranded"] == 1
+    _, fetched = server.call(f"/jobs/{did}")
+    assert fetched["job"]["state"] == "indeterminate"
+
+
+def test_a_failed_handoff_write_parks_instead_of_burning_the_handle(
+        server, monkeypatch):
+    """PANEL, important: the node IS running the job and the host holds
+    its handle -- and a single transient failure of the running-mirror
+    write used to fall into the indeterminate downgrade, terminalising a
+    run the host provably observed AND throwing away the only key to an
+    outcome the node can still answer for 24h. It parks, exactly like a
+    failed requeue, and the drain pass recovers it."""
+    node = register_rt(server)
+    job = enqueue_async(server, node)
+    did = job["delivery_id"]
+    server.app.forwarder = lambda p, o, a: started_handle()
+    real = server.app.db.record_node_verdict
+    calls = {"n": 0}
+
+    def flaky(delivery_id, node_status, node_job_id, observed_at,
+              result=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise PermissionError("sharing violation outlived retries")
+        return real(delivery_id, node_status, node_job_id=node_job_id,
+                    observed_at=observed_at, result=result)
+
+    monkeypatch.setattr(server.app.db, "record_node_verdict", flaky)
+    code, body = server.call("/dispatch", {"delivery_id": did})
+    assert code == 503 and body["reason"] == "store_unavailable"
+    assert "job_1a2b3c4d" in body["detail"], "the handle is not even named"
+    _, fetched = server.call(f"/jobs/{did}")
+    assert fetched["job"]["state"] == "dispatching", "claim parked"
+    with server.app.lock:
+        assert did in server.app._pending_handoff
+        assert did in server.app._in_flight, "marker handed to the reaper"
+        # the handle is DURABLE in the trail even though the write failed
+        # -- that is why the audit now precedes the write
+        started = [e for e in server.app.db.audit_tail(limit=300)
+                   if e["event"] == "dispatch_node_job_started"
+                   and (e["detail"] or {}).get("delivery_id") == did]
+    assert started and started[0]["detail"]["node_job_id"] == "job_1a2b3c4d"
+    # the reaper must NOT burn it, and the same pass recovers the mirror
+    summary = server.app.drain_once()
+    assert summary["stranded"] == 0 and summary["handoffs"] == 1
+    _, fetched = server.call(f"/jobs/{did}")
+    assert fetched["job"]["state"] == "running"
+    assert fetched["job"]["node_job_id"] == "job_1a2b3c4d"
+    assert fetched["job"]["verdict_source"] == "node_poll"
+    with server.app.lock:
+        assert did not in server.app._pending_handoff
+        assert did not in server.app._in_flight
+
+
+def test_a_requeued_delivery_records_its_attempts_on_the_record(server):
+    """PANEL, important: a node refusal that can never resolve (a key
+    already bound to another operation) requeues forever by design --
+    the host does not terminalise it, that stays the deferred reaper's
+    call. But the audit line is deduped to ONE, so without a counter on
+    the record the retry loop was completely invisible: the job looked
+    freshly enqueued, no matter how many times it had been refused."""
+    server.app.drain_backoff_s = 0.0
+    node = register_rt(server)
+    job = enqueue_async(server, node)
+    did = job["delivery_id"]
+    server.app.forwarder = lambda p, o, a: {
+        "ok": True, "result": {"error": "idempotency_key is already bound "
+                                        "to a different operation"}}
+    for _ in range(3):
+        code, body = server.call("/dispatch", {"delivery_id": did})
+        assert code == 409 and body["reason"] == "no_node_job_handle"
+    _, fetched = server.call(f"/jobs/{did}")
+    record = fetched["job"]
+    assert record["state"] == "queued", "never terminalised (A-15)"
+    assert record["attempts"] == 3
+    assert record["last_attempt"]["reason"] == "no_node_job_handle"
+    assert record["last_attempt"]["at"] is not None
+    # bookkeeping ONLY: it must never touch the verdict fields
+    assert record["verdict_source"] is None
+    assert record["result"] is None and record["node_job_id"] is None
+    # and the audit stays deduped -- the RECORD is what makes it visible
+    with server.app.lock:
+        events = [e for e in server.app.db.audit_tail(limit=300)
+                  if e["event"] == "dispatch_no_handle"
+                  and (e["detail"] or {}).get("delivery_id") == did]
+    assert len(events) == 1
+
+
+def test_a_terminal_reconcile_handle_says_it_carries_no_outcome(server):
+    """PANEL, minor: a 16.5 reconcile hands back {'job_id','status':
+    'done','hint'} with NO result body, and the delivery is terminal --
+    so the poller never revisits it and the host's permanent record of a
+    completed run held no outcome at all. The record now says so, and
+    names where the outcome still lives for the node's 24h window."""
+    node = register_rt(server)
+    job = enqueue_async(server, node, key="reconcile")
+    server.app.forwarder = lambda p, o, a: {"ok": True, "result": {
+        "job_id": "job_beadfeed", "status": "done",
+        "hint": "Reconciled to the original run for this idempotency_key"}}
+    code, body = server.call("/dispatch", {"delivery_id": job["delivery_id"]})
+    assert code == 200 and body["job"]["state"] == "succeeded"
+    result = body["job"]["result"]
+    assert result["job_id"] == "job_beadfeed"
+    assert "no result body" in result["detail"]
+    assert "get_job_status" in result["detail"]
+    # a terminal handle that DOES carry an outcome is mirrored verbatim
+    job2 = enqueue_async(server, node, key="witherror")
+    server.app.forwarder = lambda p, o, a: {"ok": True, "result": {
+        "job_id": "job_abcdef01", "status": "error",
+        "error": "Test run failed to start: boom"}}
+    code, body = server.call("/dispatch", {"delivery_id": job2["delivery_id"]})
+    assert code == 200 and body["job"]["state"] == "failed"
+    assert "detail" not in body["job"]["result"]
+
+
 def test_repeated_refusals_audit_once_per_transition(server):
     """The steady failing state must not grow audit.jsonl without bound:
     the same refusal audits on TRANSITION, not on every attempt."""

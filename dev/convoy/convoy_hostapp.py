@@ -33,6 +33,7 @@ import hmac
 import json
 import math
 import os
+import re
 import signal
 import sys
 import threading
@@ -49,6 +50,51 @@ import convoy_protocol as protocol
 
 MAX_BODY_BYTES = 1 * 1024 * 1024
 TOKEN_HEADER = "X-Convoy-Host-Token"
+
+# -- async node jobs (the polling slice) ------------------------------
+#
+# Some node operations do not RETURN a result -- they mint a node-side
+# job and return its HANDLE (run_tests background=True, save_project).
+# The host mirrors that handle as 'running' and then POLLS the node for
+# the outcome, so a 20-minute test run never sits inside a 30s forward.
+#
+# The one operation the poller calls, hardcoded: read-only, worker-side
+# on the node (it answers while TD's main thread is blocked), and the
+# only argument it takes is an id the node itself minted.
+POLL_OPERATION = "get_job_status"
+# Mirrors EnvoyExt's own job-id validation (_job_path). A node-supplied
+# id is UNTRUSTED input that we hand straight back to the node and store
+# in a durable record -- validate its shape before either.
+NODE_JOB_ID_RE = re.compile(r"^job_[0-9a-f]{8}\Z")
+# The node's status vocabulary, read from the store's mapping so the two
+# can never drift apart (the store is what translates them to states).
+NODE_JOB_STATUSES = tuple(hoststore._NODE_STATUS_TO_STATE)
+# A node result rides into a durable job file and back out of every
+# /jobs response. A test-run summary is small; a pathological one is
+# not, and nothing else bounds it.
+MAX_RESULT_BYTES = 64 * 1024
+# Before a poll may conclude the node FORGOT a job (which terminalises
+# it as indeterminate), the unknown answer must repeat and outlast a
+# grace window. A node restarting between flushes, the 24h retention,
+# and the transient dark-job layer all produce one-off unknowns.
+POLL_UNKNOWN_MIN_OBSERVATIONS = 3
+POLL_UNKNOWN_GRACE_S = 60.0
+# The node's "I have no such job" answer, specifically (EnvoyExt
+# get_job_status: {'error': "no job with id 'job_x'", 'jobs': [...]}).
+# The unknown-job path is the ONE place a read turns into a terminal,
+# precious record, so it may not fire on just any error payload: a
+# node answering {'error': 'Job records unavailable'} is reporting its
+# OWN trouble, not the job's absence, and terminalising on it would put
+# a claim in the record the node never made.
+_NODE_UNKNOWN_JOB_RE = re.compile(r"no job with id", re.IGNORECASE)
+# A running mirror is rewritten at most this often. Every successful
+# running-poll used to rewrite the whole job file for a record whose
+# state and provenance had not changed -- measured at 6-38 ms each, 200
+# atomic rewrites per backoff window at 200 running jobs, forever. The
+# durable record may lag its last observation by this much; nothing
+# reads observed_at for a decision, and a real change (state, handle,
+# stale, terminal) always writes immediately.
+POLL_MIRROR_REFRESH_S = 300.0
 
 # The Phase 1 SEED of the operation registry. The canonical registry --
 # every Envoy operation audited for executability -- is later work (A-1);
@@ -100,6 +146,55 @@ PHASE1_OPERATIONS = {
         "runtime_required": False,
         "side_effects": {"layout": True},
     },
+    # The two ASYNC entries. `async_job` is what tells the dispatcher
+    # this operation answers with a HANDLE rather than a result:
+    #   kind     -- the node job kind, for the audit trail,
+    #   key_arg  -- the argument carrying our idempotency key, which is
+    #               the anchor the node's own idempotency index (16.5)
+    #               uses to hand a retry back the ORIGINAL run,
+    #   inject   -- arguments host policy forces, overriding the caller.
+    "run_tests": {
+        "schema": {"suite_name": "string?", "test_name": "string?"},
+        # Not "runs a pure read": a run flips Embody's Status and
+        # Filecleanup, creates and destroys sandbox operators, writes
+        # dev/logs, and can restart the Envoy server under itself.
+        "mutating": True,
+        # It runs the PROJECT'S OWN checked-in suites -- not caller-
+        # supplied code. That is the A-1 distinction; the code that runs
+        # is the code already in the project.
+        "executes_arbitrary_code": False,
+        "runtime_required": True,       # A-22 exclusive-batch class
+        "side_effects": {"runs_tests": True, "writes_logs": True,
+                         "may_restart_server": True},
+        "async_job": {"kind": "run_tests", "key_arg": "idempotency_key",
+                      # The caller fields run_tests actually accepts;
+                      # anything else is dropped rather than forwarded
+                      # for the node to reject.
+                      "caller_args": ("suite_name", "test_name"),
+                      # background True is not optional: False would
+                      # block the forward for the whole run and
+                      # manufacture an indeterminate out of a healthy
+                      # test pass. override False is fail-closed -- the
+                      # host must never bypass the NODE's own
+                      # multi-session destructive gate.
+                      "inject": {"background": True, "override": False}},
+    },
+    "save_project": {
+        "schema": {},
+        "mutating": True,               # writes the .toe + release .tox
+        "executes_arbitrary_code": False,
+        "runtime_required": True,       # read-modify-write
+        "side_effects": {"writes_toe": True, "blocks_main_thread": True,
+                         "restarts_server": True},
+        # save_project's MCP signature accepts idempotency_key ONLY, so
+        # any extra argument is a validation error at the node -- a
+        # failure the host would have invented. An empty `inject`
+        # overrides nothing, so the empty `caller_args` is what actually
+        # delivers that: NO caller argument rides, and the key is the
+        # only thing on the wire.
+        "async_job": {"kind": "save_project", "key_arg": "idempotency_key",
+                      "caller_args": (), "inject": {}},
+    },
 }
 
 # The strict reading of a registry entry: anything a registry entry does
@@ -145,6 +240,51 @@ _REFUSAL_HTTP = {
 MAX_ID_CHARS = 128
 MAX_OPERATION_CHARS = 128
 
+# Which summary bucket a per-job refusal reason falls in. A DICT, not a
+# chain of `in (...)` tuples: as tuples, a refusal reason added later
+# silently landed in `errors` and the pass summary quietly lied about
+# what happened. Anything not named here is counted as an error on
+# purpose -- an unbucketed reason is a bug, and it must be visible.
+_DRAIN_BUCKET = {
+    "node_unreachable": "unreachable",
+    "claim_lost": "unreachable",
+    "no_node_job_handle": "no_handle",
+    # A stored-arguments defect: permanent, not paced -- an anomaly the
+    # summary must show rather than bury in 'deferred'.
+    "malformed_arguments": "errors",
+    "node_endpoint_unknown": "deferred",
+    "runtime_changed": "deferred",
+    "operation_not_exposed": "deferred",
+    "operation_not_relayable": "deferred",
+    "store_unavailable": "errors",
+}
+
+# The same, for a poll pass. 'unreachable' covers BOTH ways a poll can
+# fail to observe the node (refused connection, no usable answer): each
+# leaves the job running and teaches nothing, so they are one bucket.
+# A running job with no node provenance is an anomaly, not a pacing
+# state -- it counts as an error so it cannot hide.
+_POLL_BUCKET = {
+    "node_unreachable": "unreachable",
+    "poll_no_response": "unreachable",
+    # The node answered but does not (yet) know the job: still an
+    # unobserved job, and the grace window has not elapsed.
+    "node_forgot_job_pending": "unreachable",
+    "node_endpoint_unknown": "deferred",
+    "poll_in_flight": "skipped",
+    "no_node_provenance": "errors",
+    "poll_id_mismatch": "errors",
+    "unknown_job": "errors",
+    "unknown_node": "errors",
+    "poll_recording_failed": "errors",
+    "malformed": "errors",
+}
+
+# What a COMPLETED poll's resulting job state counts as.
+_POLL_STATE_BUCKET = {"succeeded": "finished", "failed": "failed",
+                      "indeterminate": "indeterminate",
+                      "running": "running"}
+
 
 class Malformed(Exception):
     """A caller-supplied field is the wrong type/shape. Raised by the
@@ -179,6 +319,28 @@ def text_field(body, name, required=True, limit=MAX_ID_CHARS):
     return value
 
 
+def dict_field(body, name):
+    """Read an OBJECT field from a request body, or raise Malformed.
+
+    `arguments` is the one caller-supplied field that is neither an id
+    nor a scalar, and it becomes the node tool's KEYWORD ARGUMENTS -- a
+    list, string or number was never meaningful there. It was type-
+    checked nowhere: the store wrote `arguments or {}` verbatim, the
+    envelope digest json-dumps any JSON value, and the dispatcher then
+    built the async call with `dict(arguments)`, which RAISES on a list.
+    That raise landed between a durable claim and its cleanup and wedged
+    the delivery permanently (panel probe, 2026-08-01). Refuse it at the
+    door, on both create paths, like every other wrong-typed field.
+    """
+    value = body.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise Malformed(f"{name} must be an object, got "
+                        f"{type(value).__name__}")
+    return value
+
+
 def _json_safe(value):
     """The value itself if it survives strict JSON, else an honest
     substitute. A node result rides into the durable job file and back
@@ -200,13 +362,73 @@ def _json_safe(value):
                 "repr": repr(value)[:512]}
 
 
+def _bounded_result(value):
+    """_json_safe, plus a size cap. A terminal node payload is COPIED
+    into the delivery record (the node's own fetch-by-id window closes at
+    24h, so the host record is what survives), and nothing else bounds
+    what a node may return. An oversized payload is replaced by an HONEST
+    note carrying its head -- the verdict is what matters, and it is
+    recorded either way."""
+    value = _json_safe(value)
+    try:
+        blob = json.dumps(value, indent=1, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError):     # cannot happen after _json_safe
+        return value
+    if len(blob.encode("utf-8")) <= MAX_RESULT_BYTES:
+        return value
+    return {"detail": f"node result exceeded {MAX_RESULT_BYTES} bytes and "
+                      f"was truncated; the verdict is unaffected",
+            "truncated": True,
+            "bytes": len(blob.encode("utf-8")),
+            "head": blob[:2048]}
+
+
+def _is_unknown_job_answer(payload):
+    """Whether an ok=True payload is the node saying it has no such job.
+
+    Two independent signals, either of which is enough: the companion
+    `jobs` listing the node ships with that answer and nothing else, or
+    the message itself. Deliberately narrow -- see
+    _NODE_UNKNOWN_JOB_RE."""
+    if not isinstance(payload, dict):
+        return False
+    message = payload.get("error")
+    if not isinstance(message, str):
+        return False
+    return ("jobs" in payload
+            or bool(_NODE_UNKNOWN_JOB_RE.search(message)))
+
+
+def _node_job_handle(payload):
+    """(node_job_id, node_status) when a node payload is a JOB HANDLE,
+    else None.
+
+    A handle is what an async operation returns INSTEAD of a result: the
+    node minted a job and this names it. Both fields are required and the
+    id is shape-validated -- an unvalidated node-supplied id would be
+    handed straight back to the node as a poll argument and written into
+    a durable record. `job_id` is the starting tool's field, `id` the
+    poll record's; one reader serves both legs.
+    """
+    if not isinstance(payload, dict):
+        return None
+    job_id = payload.get("job_id")
+    if not isinstance(job_id, str):
+        job_id = payload.get("id")
+    status = payload.get("status")
+    if (not isinstance(job_id, str) or not NODE_JOB_ID_RE.match(job_id)
+            or status not in NODE_JOB_STATUSES):
+        return None
+    return job_id, status
+
+
 class HostApp:
     """All state behind one lock: a host app is coordination, not
     throughput. Every handler acquires it around the whole request --
-    EXCEPT dispatch_job and drain/drain_once, which SELF-lock in phases
-    so the forward I/O runs outside the lock. Never call those from
-    inside `with app.lock:` -- threading.Lock is not reentrant, and the
-    double-acquire deadlocks the handler thread."""
+    EXCEPT dispatch_job, drain/drain_once, and poll_job/poll_once, which
+    SELF-lock in phases so the forward I/O runs outside the lock. Never
+    call those from inside `with app.lock:` -- threading.Lock is not
+    reentrant, and the double-acquire deadlocks the handler thread."""
 
     def __init__(self, directory_path, now=None, forwarder=None):
         self.data_dir = directory_path
@@ -216,15 +438,23 @@ class HostApp:
         self.db = hoststore.HostStore(directory_path, now=now)
         self.host_id = self.db.host_id()
         self.directory, self.quarantined = self.db.load_directory()
-        # The dispatch SEAM: how the host executes a queued job against a
+        # The node SEAM: how the host executes a queued job against a
         # node's Envoy. Signature (port, operation, arguments) -> a dict
         # {"ok": bool, "result"/"error": ...} for an observed node result,
         # or None on a transport failure (-> indeterminate). The default
         # is the minimal MCP client (convoy_mcpclient.forward), which
         # handles the synchronous request/response tool call the dispatcher
         # needs today; tests inject their own. The robust transport
-        # (streaming, long-running node jobs, reconnection) is the A-46
-        # rework, and this seam is exactly where it plugs in.
+        # (streaming, reconnection) is the A-46 rework, and this seam is
+        # exactly where it plugs in.
+        #
+        # ONE seam, TWO callers: the poll pass forwards through the same
+        # function with operation POLL_OPERATION ("get_job_status"). A
+        # test fake therefore answers BOTH legs and must branch on the
+        # operation -- a fake that always returns a dispatch result will
+        # answer polls with nonsense. Existing fakes are unaffected:
+        # only an async operation ever reaches 'running', and only a
+        # running job is ever polled.
         self.forwarder = forwarder or mcpclient.forward
         # DEEP copy per instance: a shallow one shares the nested schema
         # and side_effects dicts with the module constant, so mutating
@@ -265,25 +495,66 @@ class HostApp:
         self._flight_counter = 0
         self._drain_backoff = {}
         self._drain_noted = {}
+        # Poll bookkeeping -- SEPARATE maps, not the drain ones. The
+        # drain prune's notion of "live" is the QUEUED set, so a poll
+        # entry parked in a drain map would be wiped by the next drain
+        # pass (the sharpest trap in this slice). Same shapes:
+        #   _polls_in_flight delivery_id -> ATTEMPT token, so a late
+        #                    response cannot clear a newer poll's marker.
+        #                    In-memory only and NOT a claim: a poll is a
+        #                    READ, two concurrent polls are harmless, and
+        #                    a host dying mid-poll must leave the job
+        #                    running (the node still owns it).
+        #   _poll_backoff    delivery_id -> not-before timestamp; paces
+        #                    the node. Manual /poll ignores it.
+        #   _poll_noted      delivery_id -> last audited (event, reason).
+        #   _poll_unknown    delivery_id -> {first, count, node_job_id,
+        #                    message}: the evidence behind RULE 2's
+        #                    node_forgot_job terminalisation.
+        self._polls_in_flight = {}
+        self._poll_counter = 0
+        self._poll_backoff = {}
+        self._poll_noted = {}
+        self._poll_unknown = {}
         # delivery_ids whose UNREACHABLE requeue write FAILED: the job is
         # still claimed on disk, its flight marker is deliberately kept
         # (the reaper must not resolve a never-delivered job), and the
         # drain pass retries the release until the disk heals.
         self._pending_release = {}
-        self._last_drain_summary = None
+        # delivery_ids whose ASYNC HANDOFF write failed: the node IS
+        # running the job and the host holds its handle, but the running
+        # mirror could not be written. Parked exactly like a failed
+        # requeue -- claim still on disk, flight marker deliberately
+        # kept, drain pass retries the mirror until the disk heals --
+        # because the alternative (falling into the indeterminate
+        # downgrade) DESTROYS the handle and with it the only key to an
+        # outcome the node can still answer for 24h.
+        self._pending_handoff = {}
+        # Last summary PER PASS KIND (drain, poll) -- the audit only
+        # fires when a pass's shape changes, and the two passes must not
+        # overwrite each other's baseline.
+        self._last_pass_summary = {}
         self.drain_backoff_s = 30.0
+        self.poll_backoff_s = 30.0
         self.db.audit("hostapp", "started", {"host_id": self.host_id})
 
     # -- request handlers (called WITH self.lock held -- except the
     #    self-locking dispatch_job / drain, see their docstrings) -------
 
     def status(self):
+        # ONE scan for every job number reported here -- each filtered
+        # jobs() call parses every job file on disk, under the lock.
+        counts = self.db.state_counts()
         return {
             "ok": True,
             "protocol": "convoy-host/1",
             "host_id": self.host_id,
             "nodes": len(self.directory.nodes()),
-            "jobs_queued": len(self.db.jobs(state="queued")),
+            "jobs_queued": counts.get("queued", 0),
+            # Node jobs the host handed off and is polling: work in
+            # flight ON THE NODE, invisible in jobs_queued.
+            "jobs_running": counts.get("running", 0),
+            "polls_in_flight": len(self._polls_in_flight),
             "quarantined_nodes": len(self.quarantined),
             "drain_loop": bool(self._drain_thread is not None
                                and self._drain_thread.is_alive()),
@@ -397,6 +668,7 @@ class HostApp:
                                        required=False)
             expected_runtime_id = text_field(body, "expected_runtime_id",
                                              required=False)
+            arguments = dict_field(body, "arguments")
         except Malformed as e:
             return self._refuse("jobs", "malformed", e.detail, 400)
         node = self.directory.lookup(node_id)
@@ -411,7 +683,7 @@ class HostApp:
         # request: a caller must not be able to choose which namespace
         # its idempotency key lands in.
         job, created = self.db.create_job(
-            idempotency_key, node_id, operation, body.get("arguments"),
+            idempotency_key, node_id, operation, arguments,
             convoy_id=node["convoy_id"],
             expected_runtime_id=expected_runtime_id)
         return 200, {"ok": True, "created": created, "job": job}
@@ -450,6 +722,13 @@ class HostApp:
              non-verdict response, or the recording itself failed =
              outcome unknown). The host never invents a verdict.
 
+        ASYNC operations (registry entries carrying `async_job`) resolve
+        differently in phase c: the node answers with a job HANDLE, not
+        a result, so the job is recorded 'running' with that provenance
+        and the POLL pass owns its outcome from there. An async answer
+        with no handle goes back to queued -- the retry reconciles on
+        the idempotency key rather than guessing a verdict.
+
         Idempotent: a job already claimed or past queued is returned
         unchanged (dispatched=False), so a double dispatch cannot re-run
         the work.
@@ -487,8 +766,8 @@ class HostApp:
                 self._note_dispatch_event(delivery_id, "dispatch_refused",
                                           {"reason": "unknown_node",
                                            "node_id": job["node_id"]})
-                self._drain_backoff[delivery_id] = (self._now()
-                                                    + self.drain_backoff_s)
+                self._set_drain_backoff(delivery_id,
+                                        self._now() + self.drain_backoff_s)
                 return 404, {"ok": False, "reason": "unknown_node",
                              "detail": job["node_id"]}
             # Re-gate against the registry AS OF NOW, not as of enqueue:
@@ -511,8 +790,8 @@ class HostApp:
                     delivery_id, "dispatch_refused",
                     {"reason": reason,
                      "operation": job["operation"][:MAX_OPERATION_CHARS]})
-                self._drain_backoff[delivery_id] = (self._now()
-                                                    + self.drain_backoff_s)
+                self._set_drain_backoff(delivery_id,
+                                        self._now() + self.drain_backoff_s)
                 return 409, {"ok": False, "reason": reason,
                              "detail": "the operation is no longer "
                                        "relayable under the current "
@@ -527,7 +806,7 @@ class HostApp:
                                    f"node {str(current)[:64]!r}",
                          "expected": str(expected)[:64],
                          "current": str(current)[:64]})
-                    self._drain_backoff[delivery_id] = (
+                    self._set_drain_backoff(delivery_id,
                         self._now() + self.drain_backoff_s)
                     return 409, {
                         "ok": False, "reason": "runtime_changed",
@@ -543,8 +822,8 @@ class HostApp:
                 self._note_dispatch_event(
                     delivery_id, "dispatch_deferred",
                     {"reason": "node_endpoint_unknown"})
-                self._drain_backoff[delivery_id] = (self._now()
-                                                    + self.drain_backoff_s)
+                self._set_drain_backoff(delivery_id,
+                                        self._now() + self.drain_backoff_s)
                 return 409, {"ok": False, "reason": "node_endpoint_unknown",
                              "detail": "the node has not registered its "
                                        "Envoy port; the job stays queued"}
@@ -571,22 +850,70 @@ class HostApp:
                 # safe answer to a lost claim.
                 job = self.db.get_job(delivery_id) or job
                 return 200, {"ok": True, "dispatched": False, "job": job}
+            # Capture everything the rest of the dispatch needs BEFORE
+            # the marker goes up, so that nothing at all sits between
+            # the marker and the try/finally below.
+            operation = job["operation"]
+            raw_arguments = job.get("arguments")
+            idempotency_key = job.get("idempotency_key")
+            async_spec = entry.get("async_job")
             self._flight_counter += 1
             attempt = self._flight_counter
             self._in_flight[delivery_id] = attempt
-            try:
-                self.db.audit("hostapp", "dispatch_claimed",
-                              {"delivery_id": delivery_id,
-                               "operation": job["operation"], "port": port})
-            except Exception:
-                # An audit failure must never divert or strand a
-                # dispatch: the claim is on disk and the in-flight
-                # marker is set -- the forward proceeds.
-                pass
-            operation = job["operation"]
-            arguments = job.get("arguments") or {}
 
+        # FROM HERE the claim is durable and the marker is up, so the
+        # claim and its cleanup share ONE failure domain. They did not:
+        # the async argument merge sat inside phase a, ABOVE this try,
+        # and a raise there (a non-dict `arguments` -> `dict(list)`)
+        # leaked the marker forever. That made drain_once's reaper skip
+        # the job permanently (`if did in self._in_flight: continue`),
+        # left it invisible to /dispatch and /poll alike, and ended in a
+        # host restart writing a FALSE indeterminate for an operation
+        # that never left phase a (panel probe, 2026-08-01). Structural
+        # on purpose: no future edit to the post-claim tail can reopen
+        # the class.
         try:
+            # -- phase a tail: the arguments actually put on the wire ---
+            with self.lock:
+                try:
+                    arguments, injected, dropped = self._merged_arguments(
+                        raw_arguments, idempotency_key, async_spec)
+                except Malformed as e:
+                    # Belt to the door's braces: enqueue refuses a
+                    # non-dict on both create paths, so only an older
+                    # build or hand-edited state reaches this -- and it
+                    # RELEASES the claim into a named refusal instead of
+                    # raising. The job never goes on the wire malformed.
+                    return self._requeue_claim(
+                        delivery_id, operation, self._now(),
+                        reason="malformed_arguments",
+                        event="dispatch_malformed_arguments",
+                        detail=f"the job's stored arguments are unusable "
+                               f"({e.detail}); it stays queued and nothing "
+                               f"was forwarded",
+                        cause="the job's stored arguments are unusable")
+                # Unconditional, and deliberately NOT deduped: this
+                # records a real state transition on disk (queued ->
+                # dispatching), not a refusal. Named cost (panel,
+                # 2026-08-01): a delivery that requeues forever appends
+                # one line per attempt, ~2 per minute at the default
+                # backoff. Deduping it would hide genuine claims; the
+                # bound belongs to the deferred reaper that stops the
+                # retry loop itself, and until then `attempts` on the
+                # record is what makes such a job findable without
+                # reading the trail at all.
+                try:
+                    self.db.audit("hostapp", "dispatch_claimed",
+                                  {"delivery_id": delivery_id,
+                                   "operation": operation, "port": port,
+                                   "injected": injected,
+                                   "dropped": dropped})
+                except Exception:
+                    # An audit failure must never divert or strand a
+                    # dispatch: the claim is on disk and the in-flight
+                    # marker is set -- the forward proceeds.
+                    pass
+
             # -- phase b: the forward, OUTSIDE the lock -----------------
             detail = ""
             try:
@@ -613,7 +940,7 @@ class HostApp:
                 with self.lock:
                     return self._resolve_dispatch(delivery_id, operation,
                                                   outcome, observed,
-                                                  detail)
+                                                  detail, async_spec)
             except Exception as e:
                 return self._downgrade_failed_recording(delivery_id,
                                                         operation, e)
@@ -623,13 +950,59 @@ class HostApp:
                 # to queued, another attempt may already have re-claimed
                 # this job and own a newer marker -- erasing it would let
                 # the reaper mark a live forward stranded. And a PARKED
-                # release (failed requeue write) keeps its marker on
-                # purpose: the claim is still on disk for a job that was
-                # never delivered, and the reaper must not resolve it
-                # before the drain pass retries the release.
+                # release (failed requeue write) or PARKED HANDOFF
+                # (failed running-mirror write) keeps its marker on
+                # purpose: the claim is still on disk, and the reaper
+                # must not resolve it before the drain pass retries.
                 if (delivery_id not in self._pending_release
+                        and delivery_id not in self._pending_handoff
                         and self._in_flight.get(delivery_id) == attempt):
                     del self._in_flight[delivery_id]
+
+    def _merged_arguments(self, raw_arguments, idempotency_key, async_spec):
+        """The arguments actually put on the wire: (arguments, injected,
+        dropped). Raises Malformed if the stored arguments are unusable.
+
+        Pure and side-effect free, so a raise here can only ever be a
+        refusal -- never a half-applied state.
+
+        For a SYNC operation this is the caller's arguments verbatim.
+        For an ASYNC one, host policy OVERRIDES the caller: `inject`
+        forces the fields whose caller-supplied values would each break
+        a different invariant (background False blocks the forward for
+        the whole run, a caller idempotency_key breaks the node's 16.5
+        anchor, override True bypasses the NODE's destructive gate), and
+        `caller_args` -- when the entry declares one -- is the exhaustive
+        list of caller fields the node's tool signature actually accepts.
+        Anything else is DROPPED rather than forwarded: the host knows
+        the operation's argument surface, and putting a field on the
+        wire that the node must reject is a failure the host invented
+        (panel finding, 2026-08-01: save_project's `inject: {}` overrode
+        nothing, so junk rode through and killed the job at the node).
+        This is not general schema validation (out of scope) -- it is
+        the async injection contract being complete.
+
+        The merged arguments are deliberately NOT persisted onto the job
+        record: they are how THIS host relays it, not what was asked.
+        """
+        if raw_arguments is None:
+            raw_arguments = {}
+        if not isinstance(raw_arguments, dict):
+            raise Malformed(f"arguments must be an object, got "
+                            f"{type(raw_arguments).__name__}")
+        if not async_spec:
+            return dict(raw_arguments), [], []
+        allowed = async_spec.get("caller_args")
+        dropped = []
+        base = dict(raw_arguments)
+        if allowed is not None:
+            dropped = sorted(k for k in base if k not in allowed)
+            base = {k: v for k, v in base.items() if k in allowed}
+        base.update(async_spec.get("inject") or {})
+        key_arg = async_spec.get("key_arg", "idempotency_key")
+        base[key_arg] = idempotency_key
+        injected = sorted(set(async_spec.get("inject") or {}) | {key_arg})
+        return base, injected, dropped
 
     def _note_dispatch_event(self, delivery_id, event, detail):
         """Audit a REPEATING per-job dispatch refusal once per transition.
@@ -665,8 +1038,106 @@ class HostApp:
             # must not grow one entry per refused delivery forever.
             self._drain_noted.pop(next(iter(self._drain_noted)))
 
+    def _requeue_claim(self, delivery_id, operation, observed, reason,
+                       event, detail, cause):
+        """Release a claim back to QUEUED and refuse -- the shared
+        never-terminalise path. Called WITH self.lock held.
+
+        Two callers, one honesty contract: UNREACHABLE (the connection
+        was refused, so the request was never delivered) and an async
+        answer carrying no node-job handle (the node may have started
+        work whose id we lost, and the retry's idempotency key provably
+        recovers it). Both must return the job to the queue rather than
+        burn it -- indeterminate is terminal and precious (16.4).
+
+        `cause` is the human phrase naming why, spliced into the failure
+        responses; `reason`/`event`/`detail` shape the normal refusal.
+        Returns (code, payload).
+        """
+        try:
+            released = self.db.release_claim(delivery_id)
+        except Exception as e:
+            # The REQUEUE write failed. The op was never delivered (or
+            # is recoverable by key), so this must NOT decay to
+            # indeterminate (the forbidden collapse -- round-3 panel
+            # reproduced it under natural file contention). Park the
+            # release: this attempt's flight marker is kept (the finally
+            # skips parked ids) so the reaper cannot resolve the claim,
+            # and the drain pass retries the release until the disk
+            # heals. Named residual: a host that DIES before the retry
+            # lands leaves a claim the boot sweep resolves to
+            # indeterminate -- never-delivered knowledge cannot outlive
+            # the process without a write, which is exactly what is
+            # failing.
+            failure = f"{type(e).__name__}: {e}"
+            self._pending_release[delivery_id] = failure
+            try:
+                self.db.audit("hostapp", "dispatch_release_failed",
+                              {"delivery_id": delivery_id,
+                               "reason": reason,
+                               "detail": failure[:256]})
+            except Exception:
+                pass
+            return 503, {"ok": False, "reason": "store_unavailable",
+                         "detail": f"{cause} but the requeue write failed "
+                                   f"({failure}); the drain loop will "
+                                   f"retry the requeue"}
+        if released is None:
+            # The CAS did not release. Distinguish UNREADABLE from GONE
+            # before concluding anything: get_job swallows read errors
+            # into None, and treating a transiently unreadable file as a
+            # lost claim handed a never-delivered job to the reaper
+            # (round-4 panel).
+            current = self.db.get_job(delivery_id)
+            state = current.get("state") if current else None
+            if state == "dispatching" or (
+                    current is None
+                    and self.db.job_file_exists(delivery_id)):
+                # Still claimed on disk (or unreadable-but-present,
+                # conservatively the same): the CAS's READ failed, not
+                # the claim. Park it exactly like a failed release write.
+                self._pending_release[delivery_id] = (
+                    "release CAS could not read the record")
+                try:
+                    self.db.audit("hostapp", "dispatch_release_failed",
+                                  {"delivery_id": delivery_id,
+                                   "reason": reason,
+                                   "detail": "release CAS read failure"})
+                except Exception:
+                    pass
+                return 503, {"ok": False,
+                             "reason": "store_unavailable",
+                             "detail": f"{cause} but the requeue could not "
+                                       f"read the record; the drain loop "
+                                       f"will retry"}
+            state = state if current else "missing"
+            try:
+                self.db.audit("hostapp", "dispatch_claim_lost",
+                              {"delivery_id": delivery_id,
+                               "reason": reason, "state": state})
+            except Exception:
+                pass
+            return 409, {"ok": False, "reason": "claim_lost",
+                         "detail": f"{cause}, but this dispatcher no "
+                                   f"longer held the claim; the job is "
+                                   f"now {state!r}"}
+        try:
+            # The retry loop's ONLY on-record evidence. The audit line
+            # is deduped to one per transition (that is what keeps
+            # audit.jsonl bounded on a steady failing state), so without
+            # this a job requeuing forever looks brand new in /jobs.
+            # Best-effort and strictly after the release: a bookkeeping
+            # write must never alter or divert dispatch state.
+            self.db.record_dispatch_note(delivery_id, reason, observed)
+        except Exception:
+            pass
+        self._note_dispatch_event(delivery_id, event,
+                                  {"operation": operation})
+        self._set_drain_backoff(delivery_id, observed + self.drain_backoff_s)
+        return 409, {"ok": False, "reason": reason, "detail": detail}
+
     def _resolve_dispatch(self, delivery_id, operation, outcome, observed,
-                          detail):
+                          detail, async_spec=None):
         """Phase c of dispatch_job -- called WITH self.lock held."""
         if outcome is mcpclient.UNREACHABLE:
             # The node refused the connection: the request was never
@@ -674,83 +1145,58 @@ class HostApp:
             # job returns to QUEUED to retry. A transient node-down must
             # never burn a job to indeterminate (or, worse, a fabricated
             # verdict).
-            try:
-                released = self.db.release_claim(delivery_id)
-            except Exception as e:
-                # The REQUEUE write failed. The op was never delivered,
-                # so this must NOT decay to indeterminate (the forbidden
-                # collapse -- round-3 panel reproduced it under natural
-                # file contention). Park the release: this attempt's
-                # flight marker is kept (the finally skips parked ids)
-                # so the reaper cannot resolve the claim, and the drain
-                # pass retries the release until the disk heals. Named
-                # residual: a host that DIES before the retry lands
-                # leaves a claim the boot sweep resolves to
-                # indeterminate -- never-delivered knowledge cannot
-                # outlive the process without a write, which is exactly
-                # what is failing.
-                detail = f"{type(e).__name__}: {e}"
-                self._pending_release[delivery_id] = detail
-                try:
-                    self.db.audit("hostapp", "dispatch_release_failed",
-                                  {"delivery_id": delivery_id,
-                                   "detail": detail[:256]})
-                except Exception:
-                    pass
-                return 503, {"ok": False, "reason": "store_unavailable",
-                             "detail": f"the node refused the connection "
-                                       f"but the requeue write failed "
-                                       f"({detail}); the drain loop will "
-                                       f"retry the requeue"}
-            if released is None:
-                # The CAS did not release. Distinguish UNREADABLE from
-                # GONE before concluding anything: get_job swallows read
-                # errors into None, and treating a transiently
-                # unreadable file as a lost claim handed a
-                # never-delivered job to the reaper (round-4 panel).
-                current = self.db.get_job(delivery_id)
-                state = current.get("state") if current else None
-                if state == "dispatching" or (
-                        current is None
-                        and self.db.job_file_exists(delivery_id)):
-                    # Still claimed on disk (or unreadable-but-present,
-                    # conservatively the same): the CAS's READ failed,
-                    # not the claim. Park it exactly like a failed
-                    # release write.
-                    self._pending_release[delivery_id] = (
-                        "release CAS could not read the record")
-                    try:
-                        self.db.audit("hostapp", "dispatch_release_failed",
-                                      {"delivery_id": delivery_id,
-                                       "detail": "release CAS read failure"})
-                    except Exception:
-                        pass
-                    return 503, {"ok": False,
-                                 "reason": "store_unavailable",
-                                 "detail": "the node refused the "
-                                           "connection but the requeue "
-                                           "could not read the record; "
-                                           "the drain loop will retry"}
-                state = state if current else "missing"
-                try:
-                    self.db.audit("hostapp", "dispatch_claim_lost",
-                                  {"delivery_id": delivery_id,
-                                   "state": state})
-                except Exception:
-                    pass
-                return 409, {"ok": False, "reason": "claim_lost",
-                             "detail": f"the node refused the connection, "
-                                       f"but this dispatcher no longer "
-                                       f"held the claim; the job is now "
-                                       f"{state!r}"}
-            self._note_dispatch_event(delivery_id, "dispatch_unreachable",
-                                      {"operation": operation})
-            self._drain_backoff[delivery_id] = (observed
-                                                + self.drain_backoff_s)
-            return 409, {"ok": False, "reason": "node_unreachable",
-                         "detail": "the node's Envoy refused the "
-                                   "connection; the job stays queued "
-                                   "to retry"}
+            return self._requeue_claim(
+                delivery_id, operation, observed,
+                reason="node_unreachable", event="dispatch_unreachable",
+                detail="the node's Envoy refused the connection; the job "
+                       "stays queued to retry",
+                cause="the node refused the connection")
+        handle = None
+        if (async_spec is not None and isinstance(outcome, dict)
+                and outcome.get("ok") is True):
+            # An async operation must answer with a node-job HANDLE. The
+            # payload arrives as ok=True even when it is a refusal --
+            # Envoy's MCP layer sets isError only when a tool RAISES,
+            # and these tools RETURN {'error': ...} dicts. So 'ok' means
+            # the CALL completed, never that the operation succeeded:
+            # the payload itself has to be inspected.
+            handle = _node_job_handle(outcome.get("result"))
+            if handle is None:
+                # No handle. The node refused before minting -- OR it
+                # started a run whose id we lost (the node's own 30s
+                # main-thread timeout answers exactly like a refusal).
+                # Recording either 'failed' or 'indeterminate' would be
+                # a guess; requeue instead, because the retry carries
+                # the same idempotency_key and the node's index hands
+                # back the original handle (proven by
+                # test_a_requeued_async_delivery_recovers_the_lost_handle).
+                # Checked BEFORE the bookkeeping is cleared below, so
+                # the repeat audits once per transition like every other
+                # steady refusal.
+                #
+                # NAMED RESIDUAL (panel, 2026-08-01): the retry only
+                # PROVABLY recovers when the node actually minted a job.
+                # Part of the 'refused before minting' family is
+                # permanent by construction -- an idempotency_key
+                # already bound to a different operation is caused BY
+                # the key the retry keeps sending; the multi-session
+                # gate and 'Job records unavailable' persist as long as
+                # their cause does. Those requeue at the backoff rate
+                # forever. That is deliberate under A-15 (the host has
+                # no node-originated evidence to terminalise on, and
+                # inventing one is the forbidden collapse); bounding it
+                # is the deferred host reaper's job (A-15 item b). What
+                # this slice owes such a job is VISIBILITY, and that is
+                # record_dispatch_note in _requeue_claim: attempts and
+                # last_attempt on the delivery record, because the audit
+                # line is deduped to one by design.
+                return self._requeue_claim(
+                    delivery_id, operation, observed,
+                    reason="no_node_job_handle", event="dispatch_no_handle",
+                    detail="the node answered an async operation without a "
+                           "job handle; the job stays queued and the retry "
+                           "reconciles on its idempotency key",
+                    cause="the node returned no job handle")
         # The job is resolving -- clear its refusal bookkeeping so a
         # future recurrence is audited afresh.
         self._drain_noted.pop(delivery_id, None)
@@ -772,6 +1218,74 @@ class HostApp:
                 pass    # the outcome is durably written; audits never
                         # alter dispatch state (round-3 panel)
             return 200, {"ok": True, "dispatched": True, "job": updated}
+        if handle is not None:
+            # THE HANDOFF. The node minted a job and named it; the host
+            # mirrors that with the node's provenance and stops here --
+            # the poller owns the outcome from now on.
+            #
+            # 'running' the instant the handle lands is load-bearing:
+            # the job LEAVES 'dispatching' inside this phase, before any
+            # drain pass can run, so the stranded-claim reaper (which
+            # resolves dispatching claims with no forward in flight)
+            # can never see it. Parking an awaited node job at
+            # 'dispatching' would have it reaped to indeterminate on the
+            # very next tick.
+            node_job_id, node_status = handle
+            # AUDIT FIRST, then write. The handle is the only key to an
+            # outcome the node can still answer for 24h; audit.jsonl is
+            # append-only and survives a process death that the parked
+            # retry below would not. Auditing after the write meant a
+            # failed write threw the handle away entirely (panel probe,
+            # 2026-08-01).
+            try:
+                self.db.audit(
+                    "hostapp", "dispatch_node_job_started",
+                    {"delivery_id": delivery_id, "operation": operation,
+                     "node_job_id": node_job_id, "status": node_status,
+                     "kind": (async_spec or {}).get("kind")})
+            except Exception:
+                pass    # audits never alter dispatch state (round-3 panel)
+            result = _bounded_result(self._handoff_result(outcome.get(
+                "result"), node_status))
+            try:
+                updated = self.db.record_node_verdict(
+                    delivery_id, node_status, node_job_id=node_job_id,
+                    observed_at=observed, result=result)
+            except Exception as e:
+                # The mirror write failed -- transiently, most likely
+                # (the sharing-violation class _requeue_claim parks
+                # for). PARK it: the node is RUNNING this job and we
+                # hold its handle, so letting this fall through to the
+                # indeterminate downgrade would terminalise a run the
+                # host provably observed AND destroy the only key to
+                # its outcome. Claim stays on disk, flight marker stays
+                # up (the finally skips parked ids, so the reaper cannot
+                # touch it), and the drain pass retries the mirror.
+                # Named residual: a host that DIES before the retry
+                # lands leaves a claim the boot sweep resolves to
+                # indeterminate -- but the handle is already in the
+                # audit trail above, so the run stays findable by hand.
+                failure = f"{type(e).__name__}: {e}"
+                self._pending_handoff[delivery_id] = {
+                    "node_job_id": node_job_id, "node_status": node_status,
+                    "observed_at": observed, "result": result,
+                    "detail": failure}
+                try:
+                    self.db.audit("hostapp", "dispatch_handoff_parked",
+                                  {"delivery_id": delivery_id,
+                                   "node_job_id": node_job_id,
+                                   "status": node_status,
+                                   "detail": failure[:256]})
+                except Exception:
+                    pass
+                return 503, {"ok": False, "reason": "store_unavailable",
+                             "detail": f"the node started {node_job_id!r} "
+                                       f"but the running mirror could not "
+                                       f"be written ({failure}); the drain "
+                                       f"loop will retry the mirror"}
+            started = updated.get("state") == "running"
+            return 200, {"ok": True, "dispatched": True, "started": started,
+                         "job": updated}
         ok = outcome.get("ok")      # a real bool -- phase b enforced it
         result = outcome.get("result") if ok else {
             "error": outcome.get("error")}
@@ -788,6 +1302,31 @@ class HostApp:
             # that DESTROYED a real node verdict (round-3 panel, A-15).
             pass
         return 200, {"ok": True, "dispatched": True, "job": updated}
+
+    @staticmethod
+    def _handoff_result(payload, node_status):
+        """The handle payload as it is mirrored, with an honest note when
+        a TERMINAL handle carries no outcome.
+
+        A 16.5 idempotency RECONCILE hands back {'job_id', 'status':
+        'done', 'hint'} -- a real node verdict, but with no result body,
+        because the node is answering "you already asked for this" and
+        not "here is what happened". Recording it terminal is right (the
+        node authored the status), but the record would then hold no
+        outcome at all, and the poller never revisits a terminal job. So
+        say so, on the record, and name where the outcome still lives
+        for the node's 24h window. Polling for the body instead would
+        mean either a forward under the lock or writing a 'running'
+        state the node never reported."""
+        if node_status == "running" or not isinstance(payload, dict):
+            return payload
+        if payload.get("result") is not None or payload.get("error"):
+            return payload      # the node did carry an outcome
+        return dict(payload, detail=(
+            "the node reconciled this delivery to a run that had already "
+            "finished, so its answer carried no result body; fetch "
+            "get_job_status(job_id) on the node within its 24h retention "
+            "for the outcome"))
 
     def _downgrade_failed_recording(self, delivery_id, operation, error):
         """Phase c raised: the store could not write the honest outcome.
@@ -845,6 +1384,519 @@ class HostApp:
                                    f"also failed ({detail}); the job "
                                    f"remains claimed until reaped"}
 
+    # -- poll: observe a node job the host handed off -------------------
+
+    def poll_job(self, delivery_id):
+        """Ask the node what became of ONE running node job, and mirror
+        the answer.
+
+        SELF-LOCKING, exactly like dispatch_job, and for the same reason
+        (/poll sits outside do_POST's lock block; calling this from
+        inside `with app.lock:` deadlocks). Three phases: read under the
+        lock, forward outside it, resolve under it again.
+
+        What is DELIBERATELY absent, versus dispatch:
+
+          - no durable claim. A poll is a READ; two concurrent polls are
+            harmless, and a host that dies mid-poll must leave the job
+            running -- the node owns the execution and will still answer
+            for it. _polls_in_flight is in-memory only: it avoids
+            duplicate I/O and keeps a late answer from regressing state.
+          - no re-gate. The gate decides whether work may START; this
+            job already did. Re-gating would refuse to LOOK at a running
+            node job and abandon it to limbo. The bound is that this
+            calls exactly one hardcoded read-only operation, with a
+            shape-validated id the node itself minted.
+        """
+        # -- phase a: read the job, node and port -- under the lock -----
+        with self.lock:
+            if (not delivery_id or not isinstance(delivery_id, str)
+                    or len(delivery_id) > MAX_ID_CHARS):
+                return self._refuse("poll", "malformed",
+                                    "delivery_id must be a string", 400)
+            job = self.db.get_job(delivery_id)
+            if job is None:
+                # Audited directly, not through the dedupe map -- ghost
+                # ids would accumulate entries nothing prunes (the same
+                # reasoning as dispatch_job's unknown_job).
+                try:
+                    self.db.audit("hostapp", "poll_refused",
+                                  {"reason": "unknown_job",
+                                   "delivery_id": delivery_id})
+                except Exception:
+                    pass    # named 404 beats an unaudited 500
+                return 404, {"ok": False, "reason": "unknown_job",
+                             "detail": delivery_id}
+            if job.get("state") != "running":
+                # Queued, claimed, or already settled -- not ours.
+                return 200, {"ok": True, "polled": False, "job": job}
+            node_job_id = job.get("node_job_id")
+            if (not isinstance(node_job_id, str)
+                    or not NODE_JOB_ID_RE.match(node_job_id)):
+                # Unreachable through this code (record_node_verdict
+                # demands the provenance), so this is hand-edited or
+                # corrupt state. Refuse loudly rather than forward a
+                # guessed id.
+                self._note_poll_event(delivery_id, "poll_missing_provenance",
+                                      {"reason": "no_node_provenance",
+                                       "node_job_id": str(node_job_id)[:64]})
+                self._set_poll_backoff(delivery_id,
+                                       self._now() + self.poll_backoff_s)
+                return 409, {"ok": False, "reason": "no_node_provenance",
+                             "detail": "the job is running but carries no "
+                                       "valid node job id; refusing to poll "
+                                       "for an id the node never minted"}
+            if delivery_id in self._polls_in_flight:
+                return 200, {"ok": True, "polled": False,
+                             "reason": "poll_in_flight", "job": job}
+            node = self.directory.lookup(job["node_id"])
+            if node is None:
+                self._note_poll_event(delivery_id, "poll_refused",
+                                      {"reason": "unknown_node",
+                                       "node_id": job["node_id"]})
+                self._set_poll_backoff(delivery_id,
+                                       self._now() + self.poll_backoff_s)
+                return 404, {"ok": False, "reason": "unknown_node",
+                             "detail": job["node_id"]}
+            port = node.get("envoy_port")
+            if not port:
+                # envoy_port is PER-LAUNCH and never persisted, so after
+                # a host restart every poll defers here until the node
+                # re-registers. The job stays running -- honest: the run
+                # is still the node's, we simply cannot ask yet.
+                self._note_poll_event(delivery_id, "poll_deferred",
+                                      {"reason": "node_endpoint_unknown"})
+                self._set_poll_backoff(delivery_id,
+                                       self._now() + self.poll_backoff_s)
+                return 409, {"ok": False, "reason": "node_endpoint_unknown",
+                             "detail": "the node has not registered its "
+                                       "Envoy port; the job stays running"}
+            self._poll_counter += 1
+            attempt = self._poll_counter
+            self._polls_in_flight[delivery_id] = attempt
+
+        try:
+            # -- phase b: the poll forward, OUTSIDE the lock ------------
+            detail = ""
+            try:
+                outcome = self.forwarder(port, POLL_OPERATION,
+                                         {"job_id": node_job_id})
+            except Exception as e:      # a forwarder must not crash the pass
+                outcome = None
+                detail = f"{type(e).__name__}: {e}"
+            if (outcome is not None
+                    and outcome is not mcpclient.UNREACHABLE
+                    and not (isinstance(outcome, dict)
+                             and isinstance(outcome.get("ok"), bool))):
+                detail = (f"forwarder returned {type(outcome).__name__} "
+                          f"without a boolean 'ok' verdict")
+                outcome = None
+            observed = self._now()
+
+            # -- phase c: mirror the answer, under the lock -------------
+            try:
+                with self.lock:
+                    return self._resolve_poll(delivery_id, node_job_id,
+                                              outcome, observed, detail)
+            except Exception as e:
+                # Contrast _downgrade_failed_recording: a dispatch holds
+                # a CLAIM, so a failed phase-c write must resolve it or
+                # the job strands. A poll holds NOTHING -- the record is
+                # exactly as the node last left it, so the honest answer
+                # is to leave it running and let the next poll retry.
+                failure = f"{type(e).__name__}: {e}"
+                try:
+                    with self.lock:
+                        self.db.audit("hostapp", "poll_recording_failed",
+                                      {"delivery_id": delivery_id,
+                                       "detail": failure[:256]})
+                except Exception:
+                    pass
+                return 500, {"ok": False, "reason": "poll_recording_failed",
+                             "detail": f"the node's answer could not be "
+                                       f"recorded ({failure}); the job is "
+                                       f"unchanged and stays running"}
+        finally:
+            with self.lock:
+                # ATTEMPT-scoped, like _in_flight: a slow poll finishing
+                # after a newer one started must not clear the newer
+                # one's marker.
+                if self._polls_in_flight.get(delivery_id) == attempt:
+                    del self._polls_in_flight[delivery_id]
+
+    def _note_poll_event(self, delivery_id, event, detail):
+        """Audit a REPEATING per-job poll event once per transition.
+
+        Called with self.lock held. A clone of _note_dispatch_event
+        against its OWN map: the poll pass re-visits the same running
+        jobs on a timer, and an unreachable node (today's normal state
+        between TD restarts) would otherwise append a line per tick
+        forever. Same (event, reason) dedupe key, so a CHANGED failure
+        is still a visible transition."""
+        key = (event, (detail or {}).get("reason"))
+        if self._poll_noted.get(delivery_id) == key:
+            return
+        try:
+            self.db.audit("hostapp", event,
+                          dict(detail, delivery_id=delivery_id))
+        except Exception:
+            # Never poison the dedupe with a line that was not written:
+            # leave it unnoted so a later poll retries the append.
+            return
+        self._poll_noted[delivery_id] = key
+        if len(self._poll_noted) > 2048:
+            self._poll_noted.pop(next(iter(self._poll_noted)))
+
+    def _resolve_poll(self, delivery_id, node_job_id, outcome, observed,
+                      detail):
+        """Phase c of poll_job -- called WITH self.lock held.
+
+        THE ASYMMETRY WITH DISPATCH, stated once and deliberately:
+
+            a dispatch that got no response may have EXECUTED the
+            operation, so the only honest terminal is indeterminate. A
+            poll is a READ. A read that failed teaches nothing at all --
+            the node's own job record is durable and will answer when
+            the node returns. So an unreachable or unanswered poll NEVER
+            writes anything: the job stays running.
+
+        This is not an oversight in the symmetry; inverting it would
+        burn a healthy 20-minute test run every time the node blipped --
+        and save_project restarts the Envoy server under itself, so the
+        first poll after one is EXPECTED to be unreachable.
+
+        Two answers do terminalise, and both carry the node's own
+        evidence rather than a host guess: the node repeatedly and
+        durably not knowing the job (node_forgot_job, gated by
+        observations AND a grace window), and the node's own derived
+        stale-running verdict.
+        """
+        if outcome is mcpclient.UNREACHABLE:
+            return self._defer_poll(delivery_id, "poll_unreachable",
+                                    "node_unreachable",
+                                    {"node_job_id": node_job_id},
+                                    observed,
+                                    "the node's Envoy refused the "
+                                    "connection; the job stays running "
+                                    "and the next poll retries")
+        if outcome is None:
+            return self._defer_poll(delivery_id, "poll_no_response",
+                                    "poll_no_response",
+                                    {"node_job_id": node_job_id,
+                                     "reason": "transport",
+                                     "detail": (detail
+                                                or "no response")[:256]},
+                                    observed,
+                                    "no usable answer about the node job; "
+                                    "the job stays running and the next "
+                                    "poll retries")
+        if outcome.get("ok") is not True:
+            # A protocol-level refusal (JSON-RPC error / isError): the
+            # CALL failed, so we learned nothing about the job either.
+            return self._defer_poll(delivery_id, "poll_no_response",
+                                    "poll_no_response",
+                                    {"node_job_id": node_job_id,
+                                     "reason": "node_error",
+                                     "detail": str(outcome.get("error")
+                                                   )[:256]},
+                                    observed,
+                                    "the node refused the status call; the "
+                                    "job stays running")
+        payload = outcome.get("result")
+        handle = _node_job_handle(payload)
+        if handle is None:
+            if _is_unknown_job_answer(payload):
+                # "no job with id ..." -- RULE 2 territory. Gated on the
+                # node's ACTUAL not-found answer, not on any error key:
+                # this is the one path that turns a read into a terminal
+                # record, and the host distrusts node-supplied data
+                # everywhere else (NODE_JOB_ID_RE, the id-mismatch
+                # check). An unrecognised node error defers below, like
+                # every other answer we cannot read.
+                return self._resolve_unknown_job(delivery_id, node_job_id,
+                                                 payload, observed)
+            if (isinstance(payload, dict)
+                    and payload.get("error") is not None):
+                return self._defer_poll(delivery_id, "poll_no_response",
+                                        "poll_no_response",
+                                        {"node_job_id": node_job_id,
+                                         "reason": "node_error_payload",
+                                         "detail": str(payload["error"]
+                                                       )[:256]},
+                                        observed,
+                                        "the node reported its own trouble "
+                                        "rather than this job's status; the "
+                                        "job stays running")
+            # Anything else is an answer we cannot read. Learning
+            # nothing is not evidence of anything.
+            return self._defer_poll(delivery_id, "poll_no_response",
+                                    "poll_no_response",
+                                    {"node_job_id": node_job_id,
+                                     "reason": "unreadable"},
+                                    observed,
+                                    "the node's answer was not a job "
+                                    "record; the job stays running")
+        answered_id, node_status = handle
+        if answered_id != node_job_id:
+            # Debris (a confused node, a crossed response). Mirroring it
+            # would file ANOTHER run's verdict against this delivery.
+            return self._defer_poll(delivery_id, "poll_id_mismatch",
+                                    "poll_id_mismatch",
+                                    {"node_job_id": node_job_id,
+                                     "answered": answered_id},
+                                    observed,
+                                    f"the node answered about "
+                                    f"{answered_id!r}, not {node_job_id!r}; "
+                                    f"ignored")
+        if node_status == "running":
+            if isinstance(payload, dict) and payload.get("stale") is True:
+                # RULE 3: the NODE's own derived verdict -- its
+                # completion poll chain died. The host mirrors that as
+                # indeterminate carrying the node's payload; it does NOT
+                # invent a second host-side staleness horizon.
+                updated = self.db.mark_indeterminate(delivery_id, {
+                    "reason": "node_reported_stale",
+                    "detail": "the node's own record reports this run as "
+                              "stale (running far past its expected "
+                              "lifetime); the outcome is unobservable",
+                    "node_job_id": node_job_id,
+                    "node_record": _bounded_result(payload)})
+                self._forget_poll(delivery_id)
+                try:
+                    self.db.audit("hostapp", "poll_stale_indeterminate",
+                                  {"delivery_id": delivery_id,
+                                   "node_job_id": node_job_id})
+                except Exception:
+                    pass    # the outcome is durably written; audits
+                            # never alter poll state
+                return 200, {"ok": True, "polled": True, "job": updated}
+            # Still running: a clean observation, and nothing DECISION-
+            # RELEVANT changed -- same state, same handle. The payload
+            # itself always differs (the node stamps a fresh age_s, and
+            # progress fields may move), so the skip deliberately trades
+            # /jobs-view freshness for I/O: a running record's mirrored
+            # payload can lag reality by up to POLL_MIRROR_REFRESH_S.
+            # No reader decides on a running result or observed_at
+            # (verified in round-2 review); stale:true and terminals
+            # always write immediately. Rewriting the file every poll
+            # cost 6-38 ms per poll per job, forever (measured, 200
+            # running jobs). So write only when something real changed
+            # or the mirror has gone stale past POLL_MIRROR_REFRESH_S.
+            # The freshness comes off the RECORD, not an in-memory map:
+            # no map to bound, and it survives a host restart. When we
+            # do write, _apply_state reads the file anyway, so the skip
+            # is strictly fewer I/O operations, never more.
+            current = self.db.get_job(delivery_id)
+            last = current.get("observed_at") if current else None
+            unchanged = (current is not None
+                         and current.get("state") == "running"
+                         and current.get("node_job_id") == node_job_id
+                         and isinstance(last, (int, float))
+                         and (observed - last) < POLL_MIRROR_REFRESH_S)
+            if unchanged:
+                updated = current
+            else:
+                # Refresh the mirror FIRST -- if that write fails, the
+                # bookkeeping must stay exactly as it was so the next
+                # pass retries unpaced.
+                updated = self.db.record_node_verdict(
+                    delivery_id, "running", node_job_id=node_job_id,
+                    observed_at=observed, result=_bounded_result(payload))
+            # Clear the failure bookkeeping (a later failure is a fresh
+            # transition) and pace the node.
+            self._poll_noted.pop(delivery_id, None)
+            self._poll_unknown.pop(delivery_id, None)
+            self._set_poll_backoff(delivery_id, observed + self.poll_backoff_s)
+            return 200, {"ok": True, "polled": True, "refreshed": not unchanged,
+                         "job": updated}
+        # done / error: the node's verdict on its own run. The terminal
+        # payload is COPIED in -- the node's fetch-by-id window closes
+        # at 24h, so the host's record is what survives.
+        updated = self.db.record_node_verdict(
+            delivery_id, node_status, node_job_id=node_job_id,
+            observed_at=observed, result=_bounded_result(payload))
+        self._forget_poll(delivery_id)
+        try:
+            self.db.audit("hostapp", "poll_finished",
+                          {"delivery_id": delivery_id,
+                           "node_job_id": node_job_id,
+                           "status": node_status,
+                           "state": updated.get("state")})
+        except Exception:
+            pass        # the verdict is durably written; an audit
+                        # failure must never destroy it (A-15)
+        return 200, {"ok": True, "polled": True, "job": updated}
+
+    def _defer_poll(self, delivery_id, event, reason, note, observed,
+                    detail):
+        """Leave the job RUNNING, write nothing, audit once per
+        transition, and pace the next attempt. Every non-terminal poll
+        outcome funnels here, so there is exactly ONE place that could
+        ever be mistakenly taught to terminalise.
+
+        The note's own `reason` WINS over the response reason when it
+        carries one: the dedupe key is (event, reason), so a
+        poll_no_response that changes cause (transport -> the node
+        refusing the status call) is a genuine transition the trail must
+        show. Defaulting them all to the response reason collapsed
+        exactly that distinction."""
+        self._note_poll_event(delivery_id, event,
+                              dict({"reason": reason}, **note))
+        self._set_poll_backoff(delivery_id, observed + self.poll_backoff_s)
+        return 409, {"ok": False, "reason": reason, "detail": detail}
+
+    def _set_poll_backoff(self, delivery_id, not_before):
+        """Pace the next poll of one job, BOUNDED. Called with the lock.
+
+        The other two poll maps evict past 2048; this one was pruned
+        only by poll_once's end-of-pass sweep -- and the drain loop is
+        off by default, so a controller driving /poll by hand had
+        nothing pruning it at all. Same cap, same eviction, one writer."""
+        self._poll_backoff[delivery_id] = not_before
+        if len(self._poll_backoff) > 2048:
+            self._poll_backoff.pop(next(iter(self._poll_backoff)))
+
+    def _set_drain_backoff(self, delivery_id, not_before):
+        """Pace the next drain attempt of one job, BOUNDED. Called with
+        the lock. Same rationale as _set_poll_backoff: the end-of-pass
+        prune is the only other reclaim and the drain loop is off by
+        default, so hand-driven /dispatch refusals grew the map one
+        entry per distinct delivery forever (round-2 verify probe:
+        3000 portless dispatches -> 3000 entries)."""
+        self._drain_backoff[delivery_id] = not_before
+        if len(self._drain_backoff) > 2048:
+            self._drain_backoff.pop(next(iter(self._drain_backoff)))
+
+    def _forget_poll(self, delivery_id):
+        """Drop a settled job's poll bookkeeping. Called with the lock."""
+        self._poll_backoff.pop(delivery_id, None)
+        self._poll_noted.pop(delivery_id, None)
+        self._poll_unknown.pop(delivery_id, None)
+
+    def _resolve_unknown_job(self, delivery_id, node_job_id, payload,
+                             observed):
+        """RULE 2: the node says it has no such job.
+
+        That is real evidence -- but not YET proof the run is lost. A
+        node restarting between record flushes, the 24h retention, and
+        the transient dark-job layer (a repo root the node had not
+        resolved when it wrote the record) all produce one-off unknowns.
+        So terminalisation needs BOTH a repeated observation and a grace
+        window, and the evidence written down is the node's own message.
+
+        A host restart resets the counter, which only ever DELAYS
+        terminalisation -- safe in the direction that matters.
+        """
+        entry = self._poll_unknown.get(delivery_id)
+        if entry is None or entry.get("node_job_id") != node_job_id:
+            entry = {"first": observed, "count": 0,
+                     "node_job_id": node_job_id}
+        entry["count"] += 1
+        entry["message"] = str(payload.get("error"))[:256]
+        self._poll_unknown[delivery_id] = entry
+        if len(self._poll_unknown) > 2048:
+            self._poll_unknown.pop(next(iter(self._poll_unknown)))
+        aged = (observed - entry["first"]) >= POLL_UNKNOWN_GRACE_S
+        if entry["count"] >= POLL_UNKNOWN_MIN_OBSERVATIONS and aged:
+            updated = self.db.mark_indeterminate(delivery_id, {
+                "reason": "node_forgot_job",
+                "detail": f"the node has no record of {node_job_id!r} "
+                          f"({entry['message']}); the run may have "
+                          f"completed unobserved",
+                "node_job_id": node_job_id,
+                "node_message": entry["message"],
+                "first_unknown_at": entry["first"],
+                "observations": entry["count"]})
+            self._forget_poll(delivery_id)
+            try:
+                self.db.audit("hostapp", "poll_node_forgot_job",
+                              {"delivery_id": delivery_id,
+                               "node_job_id": node_job_id,
+                               "observations": entry["count"]})
+            except Exception:
+                pass    # durably written; audits never alter poll state
+            return 200, {"ok": True, "polled": True, "job": updated}
+        return self._defer_poll(
+            delivery_id, "poll_node_forgot_job_pending",
+            "node_forgot_job_pending",
+            {"node_job_id": node_job_id, "observations": entry["count"]},
+            observed,
+            f"the node does not know {node_job_id!r} yet "
+            f"({entry['count']} of {POLL_UNKNOWN_MIN_OBSERVATIONS} "
+            f"observations); the job stays running")
+
+    def poll_once(self, stop=None):
+        """Poll every currently-running node job once. Synchronous and
+        directly testable; the background loop runs this before each
+        dispatch pass.
+
+        Called WITHOUT the lock (poll_job self-locks). The snapshot is
+        taken lock-free for the same reason drain_once's is: jobs() is
+        O(every job file on disk). A stale snapshot is safe -- poll_job
+        re-reads under the lock, and a job that settled in the window is
+        just a skip.
+
+        stop: optional threading.Event checked between jobs, so a
+        shutdown aborts the pass after the CURRENT poll.
+        """
+        running = [j["delivery_id"] for j in self.db.jobs(state="running")]
+        summary = {"examined": len(running), "finished": 0, "failed": 0,
+                   "running": 0, "indeterminate": 0, "unreachable": 0,
+                   "deferred": 0, "skipped": 0, "errors": 0, "backoff": 0,
+                   "aborted": False}
+        now = self._now()
+        for delivery_id in running:
+            if stop is not None and stop.is_set():
+                summary["aborted"] = True
+                break
+            with self.lock:
+                held_until = self._poll_backoff.get(delivery_id)
+            if held_until is not None and held_until > now:
+                summary["backoff"] += 1
+                continue
+            try:
+                code, payload = self.poll_job(delivery_id)
+            except Exception:
+                # One job's failure costs ONE job, never the rest of the
+                # pass (drain_once learned this the hard way).
+                summary["errors"] += 1
+                continue
+            if payload.get("polled"):
+                bucket = _POLL_STATE_BUCKET.get(
+                    payload.get("job", {}).get("state"))
+                summary[bucket if bucket else "errors"] += 1
+            else:
+                bucket = _POLL_BUCKET.get(payload.get("reason"))
+                if bucket is not None:
+                    summary[bucket] += 1
+                elif code == 200:
+                    summary["skipped"] += 1   # settled in the window
+                else:
+                    summary["errors"] += 1
+        # Prune against THIS pass's own snapshot -- never the drain
+        # maps' queued view, which would wipe every poll entry. Same
+        # conservative rule: keep anything still live, and keep an
+        # unreadable-but-present job (get_job returns None for absent
+        # AND unreadable alike).
+        with self.lock:
+            keep = set(running)
+            for did in ((set(self._poll_backoff) | set(self._poll_noted)
+                         | set(self._poll_unknown)) - keep):
+                current = self.db.get_job(did)
+                if current is not None and current.get("state") == "running":
+                    keep.add(did)
+                elif current is None and self.db.job_file_exists(did):
+                    keep.add(did)
+            self._poll_backoff = {k: v for k, v
+                                  in self._poll_backoff.items()
+                                  if k in keep}
+            self._poll_noted = {k: v for k, v in self._poll_noted.items()
+                                if k in keep}
+            self._poll_unknown = {k: v for k, v
+                                  in self._poll_unknown.items()
+                                  if k in keep}
+        return summary
+
     def drain_once(self, stop=None):
         """Dispatch every currently-queued job once. Synchronous and
         directly testable; the background loop is just this on a timer.
@@ -901,6 +1953,36 @@ class HostApp:
                     except Exception:
                         pass
 
+        # Retry PARKED HANDOFFS on the same terms: a node job the host
+        # observed START, whose running mirror could not be written.
+        # Until it lands the claim is held (marker kept, reaper skipping
+        # it) -- so heal it here, before the reaper runs, or a transient
+        # write failure would end up terminalising a live node job.
+        handoffs = 0
+        with self.lock:
+            pending = list(self._pending_handoff.items())
+        for did, park in pending:
+            with self.lock:
+                if did not in self._pending_handoff:
+                    continue
+                try:
+                    self.db.record_node_verdict(
+                        did, park["node_status"],
+                        node_job_id=park["node_job_id"],
+                        observed_at=park["observed_at"],
+                        result=park["result"])
+                except Exception:
+                    continue        # disk still failing; next pass
+                self._pending_handoff.pop(did, None)
+                self._in_flight.pop(did, None)
+                handoffs += 1
+                try:
+                    self.db.audit("hostapp", "dispatch_handoff_recovered",
+                                  {"delivery_id": did,
+                                   "node_job_id": park["node_job_id"]})
+                except Exception:
+                    pass
+
         # ONE scan for both snapshots -- jobs() parses every job file on
         # disk, so two filtered calls doubled the pass's dominant cost.
         snapshot = self.db.jobs()
@@ -932,11 +2014,11 @@ class HostApp:
 
         queued = [j["delivery_id"] for j in snapshot
                   if j.get("state") == "queued"]
-        summary = {"examined": len(queued), "dispatched": 0,
-                   "indeterminate": 0, "unreachable": 0, "deferred": 0,
-                   "skipped": 0, "errors": 0, "backoff": 0,
+        summary = {"examined": len(queued), "dispatched": 0, "started": 0,
+                   "indeterminate": 0, "unreachable": 0, "no_handle": 0,
+                   "deferred": 0, "skipped": 0, "errors": 0, "backoff": 0,
                    "stranded": stranded, "requeued": requeued,
-                   "aborted": False}
+                   "handoffs": handoffs, "aborted": False}
         now = self._now()
         for delivery_id in queued:
             if stop is not None and stop.is_set():
@@ -957,23 +2039,25 @@ class HostApp:
                 continue
             if payload.get("dispatched"):
                 summary["dispatched"] += 1
-                if payload.get("job", {}).get("state") == "indeterminate":
+                state = payload.get("job", {}).get("state")
+                if state == "indeterminate":
                     # Surfaced separately: 16.4 says a may-have-run must
                     # never be lost from view, a plain 'dispatched' count
                     # would hide it.
                     summary["indeterminate"] += 1
-            elif payload.get("reason") in ("node_unreachable",
-                                           "claim_lost"):
-                summary["unreachable"] += 1
-            elif payload.get("reason") in ("node_endpoint_unknown",
-                                           "runtime_changed",
-                                           "operation_not_exposed",
-                                           "operation_not_relayable"):
-                summary["deferred"] += 1
-            elif code == 200:
-                summary["skipped"] += 1    # raced: claimed or terminal
+                elif state == "running":
+                    # An async HANDOFF, not a completed operation: the
+                    # work is now running on the node and the poll pass
+                    # owns its outcome.
+                    summary["started"] += 1
             else:
-                summary["errors"] += 1     # unknown_job / unknown_node
+                bucket = _DRAIN_BUCKET.get(payload.get("reason"))
+                if bucket is not None:
+                    summary[bucket] += 1
+                elif code == 200:
+                    summary["skipped"] += 1   # raced: claimed or terminal
+                else:
+                    summary["errors"] += 1    # unknown_job / unknown_node
         # Keep the per-job maps from outliving their jobs -- but never
         # drop an entry whose job is still LIVE. The snapshot is a
         # start-of-pass view: an entry set mid-pass (a manual /dispatch,
@@ -1006,25 +2090,46 @@ class HostApp:
         """The /drain route: one synchronous pass over the queue."""
         return 200, {"ok": True, **self.drain_once()}
 
-    def _audit_drain_pass(self, summary):
+    def _audit_pass(self, kind, summary):
         """One audit line when a pass's shape CHANGES and either side of
         the change shows trouble -- so a steady state (healthy or stuck)
         costs nothing, but every degradation and every recovery leaves a
-        trace (A-40)."""
+        trace (A-40). Keyed by pass kind: the drain and poll passes have
+        different shapes and must not overwrite each other's baseline."""
         def troubled(s):
-            return bool(s and (s["errors"] or s["unreachable"]
-                               or s["stranded"] or s["indeterminate"]))
+            # .get, not [...]: the two summaries share only some keys,
+            # and a KeyError here would kill the loop thread.
+            return bool(s and (s.get("errors") or s.get("unreachable")
+                               or s.get("stranded") or s.get("indeterminate")
+                               or s.get("no_handle")))
         with self.lock:
-            previous = self._last_drain_summary
-            self._last_drain_summary = summary
+            previous = self._last_pass_summary.get(kind)
+            self._last_pass_summary[kind] = summary
             if summary != previous and (troubled(summary)
                                         or troubled(previous)):
-                self.db.audit("hostapp", "drain_pass", summary)
+                self.db.audit("hostapp", f"{kind}_pass", summary)
 
     def _drain_loop(self, stop, interval_s):
         while not stop.wait(interval_s):
+            # POLL FIRST, then dispatch. Learning what already-running
+            # node jobs did before starting new work keeps a finished
+            # job from being re-polled on the next tick, and keeps the
+            # running set from growing across one tick. Separate
+            # try/except per pass: a poll failure must not cost the
+            # dispatch pass (or vice versa).
             try:
-                self._audit_drain_pass(self.drain_once(stop=stop))
+                self._audit_pass("poll", self.poll_once(stop=stop))
+            except Exception as e:
+                try:
+                    with self.lock:
+                        self.db.audit("hostapp", "poll_loop_error", {
+                            "error": f"{type(e).__name__}: {e}"})
+                except Exception:
+                    pass
+            if stop.is_set():
+                continue        # stopping: do not open a new forward
+            try:
+                self._audit_pass("drain", self.drain_once(stop=stop))
             except Exception as e:
                 # The loop must survive anything -- a dead drain thread
                 # silently ends autonomous dispatch.
@@ -1088,7 +2193,11 @@ class HostApp:
         if thread is None:
             return True
         if timeout_s is None:
-            timeout_s = mcpclient.DEFAULT_TIMEOUT_S + 5.0
+            # TWO forwards, not one: a tick can be inside a poll forward
+            # AND then a dispatch forward, and each pass only checks the
+            # stop event BETWEEN jobs. Bounding to a single timeout made
+            # a healthy stop report failure.
+            timeout_s = 2 * mcpclient.DEFAULT_TIMEOUT_S + 5.0
         thread.join(timeout=timeout_s)
         if thread.is_alive():
             with self.lock:
@@ -1253,6 +2362,12 @@ class HostApp:
         try:
             idempotency_key = text_field(envelope, "idempotency_key")
             controller_id = text_field(envelope, "controller_id")
+            # Read AFTER verification, like the two above: the signature
+            # covers arguments_sha256, so a tampered value never reaches
+            # here -- but a SIGNED non-dict does, and it is refused for
+            # the same reason the local path refuses it. One rule for
+            # both create paths, never two authorities.
+            arguments = dict_field(envelope, "arguments")
         except Malformed as e:
             return self._refuse("envelope", "malformed", e.detail, 400, node)
         refusal = self._gate_operation(
@@ -1262,7 +2377,7 @@ class HostApp:
             return refusal
         job, created = self.db.create_job(
             idempotency_key, node["node_id"], operation,
-            envelope.get("arguments"), convoy_id=node["convoy_id"],
+            arguments, convoy_id=node["convoy_id"],
             expected_runtime_id=envelope.get("expected_runtime_id"))
         # The ack carries the HOST's delivery_id (cj_...), the id of the
         # routing record -- NOT A-22's target-minted job_id, which is the
@@ -1282,6 +2397,14 @@ class HostApp:
         manifest = capabilities.CapabilityManifest(protocol.PROTOCOL, node_id)
         for name in sorted(self.operations):
             entry = self.operations[name]
+            # Whether an operation is ASYNC is compatibility-relevant: a
+            # controller that expects a result and gets a job handle is
+            # talking to a host it does not understand. Folded in only
+            # when set, so the operations that predate the async slice
+            # keep their existing digests byte-identical.
+            side_effects = dict(entry.get("side_effects") or {})
+            if entry.get("async_job"):
+                side_effects["async_job"] = True
             # gating_of, not entry.get: the digest must describe the
             # gating that is actually ENFORCED, defaults included, or a
             # controller could match digests with a host that treats the
@@ -1290,7 +2413,7 @@ class HostApp:
                 name,
                 schema=entry.get("schema"),
                 gating=gating_of(entry),
-                side_effects=entry.get("side_effects")))
+                side_effects=side_effects))
         return manifest
 
     def get_manifest(self, node_id=None):
@@ -1521,8 +2644,8 @@ def make_handler(app):
                 self._send(400, {"ok": False, "reason": "malformed"})
                 return
             try:
-                # /dispatch and /drain are handled OUTSIDE the lock
-                # block: dispatch_job self-locks in phases so the forward
+                # /dispatch, /drain and /poll are handled OUTSIDE the
+                # lock block: they self-lock in phases so the forward
                 # I/O runs lock-free, and threading.Lock is not reentrant
                 # -- wrapping these in `with app.lock:` would deadlock on
                 # the first claim. They still flow into the SINGLE _send
@@ -1532,6 +2655,8 @@ def make_handler(app):
                         body.get("delivery_id"))
                 elif self.path == "/drain":
                     code, payload = app.drain()
+                elif self.path == "/poll":
+                    code, payload = app.poll_job(body.get("delivery_id"))
                 else:
                     code, payload = self._post_locked(body)
             except Exception as e:      # same last-resort contract
@@ -1583,8 +2708,9 @@ def main(argv=None):
     parser.add_argument("--port", type=int, default=0,
                         help="loopback port (default: OS-assigned)")
     parser.add_argument("--drain-interval", type=float, default=0.0,
-                        help="seconds between autonomous queue drains "
-                             "(0 = off; dispatch is per-call only)")
+                        help="seconds between autonomous ticks -- each "
+                             "polls running node jobs, then dispatches "
+                             "queued ones (0 = off; per-call only)")
     args = parser.parse_args(argv)
 
     directory = args.data_dir or platform_mod.data_dir()

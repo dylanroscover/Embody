@@ -450,3 +450,118 @@ def test_idempotency_markers_are_not_listed_as_jobs(db):
     markers = [f for f in os.listdir(os.path.join(db.dir, "jobs"))
                if f.startswith("idem_")]
     assert len(markers) == 2, "one marker per key, invisible to jobs()"
+
+
+# =====================================================================
+# The RUNNING mirror (async node jobs, Phase 4 polling slice)
+#
+# A node job the host handed off is mirrored 'running' with the node's
+# provenance. That record is NODE-OWNED: the host's own recovery
+# machinery (the load sweep, the drain reaper) resolves CLAIMS, and a
+# running mirror is not a claim. These pin that boundary -- a future
+# "sweep everything non-terminal" edit would destroy every in-flight
+# node job on a host restart.
+# =====================================================================
+
+def test_a_running_mirror_survives_a_host_restart_untouched(tmp_path):
+    """A1: the crash-recovery contract for async node jobs. The node owns
+    the execution; the host's mirror must come back byte-identical so the
+    poller can resume it."""
+    path = str(tmp_path / "state")
+    db1 = hdb.HostStore(path)
+    job, _ = db1.create_job("k", "n", "run_tests", {}, "cv")
+    did = job["delivery_id"]
+    db1.claim_for_dispatch(did)
+    started = db1.record_node_verdict(did, "running", node_job_id="job_1a2b3c4d",
+                                      observed_at=1000.0,
+                                      result={"status": "running"})
+    assert started["state"] == "running"
+    db1.close()
+
+    db2 = hdb.HostStore(path)              # the host restarts
+    revived = db2.get_job(did)
+    assert revived["state"] == "running", "the sweep burned a node job"
+    assert revived["node_job_id"] == "job_1a2b3c4d"
+    assert revived["verdict_source"] == "node_poll"
+    assert revived["observed_at"] == 1000.0
+    db2.close()
+
+
+def test_the_load_sweep_touches_only_dispatching(tmp_path):
+    """A2: one job per state through a restart. Only the host's own
+    transient CLAIM is resolved; every other state is left exactly as the
+    authority that wrote it left it."""
+    path = str(tmp_path / "state")
+    db1 = hdb.HostStore(path)
+    ids = {}
+    for key, state in (("q", "queued"), ("d", "dispatching"),
+                       ("r", "running"), ("s", "succeeded"),
+                       ("f", "failed"), ("i", "indeterminate")):
+        job, _ = db1.create_job(key, "n", "run_tests", {}, "cv")
+        ids[state] = job["delivery_id"]
+    db1.claim_for_dispatch(ids["dispatching"])
+    db1.claim_for_dispatch(ids["running"])
+    db1.record_node_verdict(ids["running"], "running",
+                            node_job_id="job_00000001", observed_at=1.0)
+    db1.record_sync_result(ids["succeeded"], True, observed_at=1.0)
+    db1.record_sync_result(ids["failed"], False, observed_at=1.0)
+    db1.mark_indeterminate(ids["indeterminate"], {"reason": "test"})
+    db1.close()
+
+    db2 = hdb.HostStore(path)
+    after = {state: db2.get_job(did)["state"] for state, did in ids.items()}
+    assert after == {"queued": "queued",
+                     "dispatching": "indeterminate",   # the claim, resolved
+                     "running": "running",
+                     "succeeded": "succeeded",
+                     "failed": "failed",
+                     "indeterminate": "indeterminate"}
+    db2.close()
+
+
+def test_a_terminal_job_never_regresses_to_running(tmp_path):
+    """A3: a poll answer that arrives AFTER the job terminalised must not
+    drag it back. record_node_verdict('running') on a terminal record is
+    ignored and audited -- the late response is debris, not news."""
+    db = hdb.HostStore(str(tmp_path / "state"))
+    job, _ = db.create_job("k", "n", "run_tests", {}, "cv")
+    did = job["delivery_id"]
+    db.record_node_verdict(did, "done", node_job_id="job_deadbeef",
+                           observed_at=10.0, result={"summary": "ok"})
+    unchanged = db.record_node_verdict(did, "running",
+                                       node_job_id="job_deadbeef",
+                                       observed_at=20.0,
+                                       result={"status": "running"})
+    assert unchanged["state"] == "succeeded"
+    assert unchanged["result"] == {"summary": "ok"}
+    assert unchanged["observed_at"] == 10.0
+    assert any(r["event"] == "verdict_regression_ignored"
+               for r in db.audit_tail(limit=20))
+    # a terminal answer still lands (done -> failed is a real correction
+    # the node authored, not a regression)
+    assert db.record_node_verdict(did, "error", node_job_id="job_deadbeef",
+                                  observed_at=30.0)["state"] == "failed"
+    db.close()
+
+
+def test_state_counts_matches_a_full_jobs_scan(db):
+    """A4: status() reports from state_counts, so it must agree with the
+    scan it replaces -- exactly, including states with no jobs at all."""
+    assert db.state_counts() == {}
+    for n in range(3):
+        db.create_job(f"q{n}", "n", "query_network", {}, "cv")
+    claimed, _ = db.create_job("c", "n", "query_network", {}, "cv")
+    db.claim_for_dispatch(claimed["delivery_id"])
+    running, _ = db.create_job("r", "n", "run_tests", {}, "cv")
+    db.record_node_verdict(running["delivery_id"], "running",
+                           node_job_id="job_0000000a", observed_at=1.0)
+    done, _ = db.create_job("d", "n", "query_network", {}, "cv")
+    db.record_sync_result(done["delivery_id"], True, observed_at=1.0)
+
+    counts = db.state_counts()
+    scanned = {}
+    for job in db.jobs():
+        scanned[job["state"]] = scanned.get(job["state"], 0) + 1
+    assert counts == scanned
+    assert counts == {"queued": 3, "dispatching": 1, "running": 1,
+                      "succeeded": 1}

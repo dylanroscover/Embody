@@ -9,12 +9,16 @@ network). So a forward is one POST and one response parse, mirroring the
 bridge's own forward_to_http.
 
 Scope, stated honestly: this handles the SYNCHRONOUS request/response tool
-call the dispatcher's slice 1 uses. The robust transport -- server-pushed
-progress, tools/list_changed, streaming / long-running tools, reconnection
--- is the A-46 rework, and long-running node-job operations (run_tests,
-save_project) are a later dispatcher slice that polls the node job rather
-than blocking here. Anything this cannot complete returns None, which the
-dispatcher records as INDETERMINATE (never a fabricated verdict).
+call, and that is ALL a forward ever has to be -- long-running node-job
+operations (run_tests, save_project) never block here. They start in
+background mode and answer immediately with a job handle; the host then
+POLLS the node with this same function (operation 'get_job_status'), so
+one 30s request/response transport covers a twenty-minute test run. The
+robust transport -- server-pushed progress, tools/list_changed, streaming
+responses, reconnection -- is the A-46 rework. Anything this cannot
+complete returns None, which the dispatcher records as INDETERMINATE on
+the dispatch leg (never a fabricated verdict); on the POLL leg a None
+changes nothing at all, because a failed read teaches nothing.
 
 LOOPBACK ONLY: the target is always 127.0.0.1:<port> (Phase 1). The port
 comes from the node's own registration, so the reach is bounded to a
