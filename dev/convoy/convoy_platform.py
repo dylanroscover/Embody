@@ -177,9 +177,53 @@ def clear_portfile(directory):
         pass
 
 
-def pid_is_alive(pid, platform=None, kill=None):
-    """Is this pid running? platform/kill injected (D-5), never reached
-    on a foreign-platform test.
+# Windows access rights / error codes for the liveness probe.
+_SYNCHRONIZE = 0x00100000
+_ERROR_ACCESS_DENIED = 5
+_WAIT_OBJECT_0 = 0
+
+
+def _win32_pid_is_alive(pid, kernel32=None):
+    """win32 liveness, applying the SAME rule the POSIX branch states:
+    a process we are not ALLOWED to open is a process that EXISTS.
+
+    OpenProcess failing is not evidence of death. ACCESS_DENIED means
+    the kernel FOUND the process and refused us -- exactly what EPERM
+    means on POSIX, where this module already maps to alive. Calling it
+    dead lets a host app at another integrity level (elevated, or the
+    service-mode supervisor A-47 implies) read as gone, so every client
+    would probe STALE forever while /health answered fine.
+
+    Measured on Windows 11: pid 4 (System, alive) -> OpenProcess NULL
+    with GetLastError 5; an unused pid -> GetLastError 87
+    (ERROR_INVALID_PARAMETER). Retrying with
+    PROCESS_QUERY_LIMITED_INFORMATION was considered and rejected: it
+    returns the SAME error code for both pids, so it decides nothing the
+    ACCESS_DENIED rule has not already decided, and a handle opened
+    without SYNCHRONIZE makes WaitForSingleObject fail -- reintroducing
+    the "openable after death reads alive forever" bug this function
+    exists to avoid.
+
+    kernel32 is injected so both outcomes are testable off-Windows.
+    """
+    if kernel32 is None:
+        import ctypes
+        kernel32 = ctypes.WinDLL("kernel32")
+    handle = kernel32.OpenProcess(_SYNCHRONIZE, False, int(pid))
+    if not handle:
+        return kernel32.GetLastError() == _ERROR_ACCESS_DENIED
+    try:
+        # WAIT_OBJECT_0 means the process object is signaled, which
+        # happens exactly on exit -- a handle alone stays openable
+        # after death and would read alive forever.
+        return kernel32.WaitForSingleObject(handle, 0) != _WAIT_OBJECT_0
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def pid_is_alive(pid, platform=None, kill=None, kernel32=None):
+    """Is this pid running? platform/kill/kernel32 injected (D-5), never
+    reached on a foreign-platform test.
 
     On Windows os.kill(pid, 0) calls TerminateProcess and would KILL the
     target -- the documented TD-killing hazard -- so win32 uses
@@ -190,19 +234,7 @@ def pid_is_alive(pid, platform=None, kill=None):
         return False
     if platform == "win32":
         try:
-            import ctypes
-            kernel32 = ctypes.WinDLL("kernel32")
-            SYNCHRONIZE = 0x00100000
-            handle = kernel32.OpenProcess(SYNCHRONIZE, False, int(pid))
-            if not handle:
-                return False
-            try:
-                # WAIT_OBJECT_0 means the process object is signaled,
-                # which happens exactly on exit -- a handle alone stays
-                # openable after death and would read alive forever.
-                return kernel32.WaitForSingleObject(handle, 0) != 0
-            finally:
-                kernel32.CloseHandle(handle)
+            return _win32_pid_is_alive(pid, kernel32=kernel32)
         except Exception:
             return False
     if kill is None:

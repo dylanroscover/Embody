@@ -1,6 +1,7 @@
 """The find-the-host-app + fallback contract (12.3). Pure, injected I/O."""
 
 import json
+import os
 import urllib.error
 
 import pytest
@@ -152,6 +153,34 @@ def test_a_port_that_does_not_answer_health_is_stale():
                  token_reader=lambda d: "tok",
                  health_check=lambda handle: None)   # no /health answer
     assert r.status == hp.STATUS_STALE
+
+
+# -- the token reader must not be able to raise ---------------------
+
+def test_a_non_utf8_token_file_reads_as_absent_not_an_exception(tmp_path):
+    """UnicodeDecodeError IS a ValueError, and _read_token used to catch
+    only OSError -- so a host.token saved as UTF-16 (Notepad's
+    "Unicode") raised straight through probe(), breaking its documented
+    "never raises" contract and killing the caller."""
+    directory = str(tmp_path)
+    with open(os.path.join(directory, hp.platform_mod.TOKEN_FILE),
+              "wb") as f:
+        f.write(b"\xff\xfe\x00s\x00e\x00c\x00r\x00e\x00t\x00")
+    assert hp._read_token(directory) is None
+
+
+def test_probe_survives_a_non_utf8_token_file(tmp_path):
+    """The whole point: the decision tree still answers, and answers
+    ABSENT -- a token we cannot read is a host we cannot authenticate
+    to."""
+    directory = str(tmp_path)
+    with open(os.path.join(directory, hp.platform_mod.TOKEN_FILE),
+              "wb") as f:
+        f.write(b"\xff\xfe\x00secret")
+    r = hp.probe(data_dir=directory, portfile_reader=_live_reader(),
+                 health_check=lambda handle: "h" * 32)
+    assert r.status == hp.STATUS_ABSENT
+    assert r.use_convoy is False
 
 
 def test_health_check_confirms_before_token_is_transmitted():

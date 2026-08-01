@@ -190,3 +190,52 @@ def test_malformed_host_id_refused(bad):
 def test_malformed_registration_refused(root, comp, convoy):
     with pytest.raises(ci.IdentityError):
         ci.NodeDirectory(HOST_A).register(root, comp, convoy)
+
+
+# -- the live Envoy port: set on register, cleared only explicitly -----
+
+def test_clear_envoy_port_forgets_the_port_but_keeps_the_node():
+    """A node's clean exit. node_id is the durable address an approval
+    attaches to; only the per-launch port goes."""
+    d = ci.NodeDirectory(HOST_A)
+    record = d.register(ROOT, "/Embody", CONVOY, envoy_port=9981)
+    d.approve_td_python(record["node_id"])
+
+    cleared = d.clear_envoy_port(record["node_id"])
+    assert cleared["envoy_port"] is None
+    assert cleared["node_id"] == record["node_id"]
+    assert cleared["td_python_approved"] is True
+    assert d.lookup(record["node_id"]) is cleared
+
+
+def test_clear_envoy_port_is_idempotent():
+    d = ci.NodeDirectory(HOST_A)
+    record = d.register(ROOT, "/Embody", CONVOY, envoy_port=9981)
+    d.clear_envoy_port(record["node_id"])
+    assert d.clear_envoy_port(record["node_id"])["envoy_port"] is None
+
+
+def test_clear_envoy_port_of_an_unknown_node_refused():
+    d = ci.NodeDirectory(HOST_A)
+    with pytest.raises(ci.IdentityError) as e:
+        d.clear_envoy_port("ghost")
+    assert e.value.reason == "unknown_node"
+
+
+def test_a_portless_re_register_never_clears_a_known_port():
+    """The rule clear_envoy_port exists to preserve: a store replay (or
+    any re-register omitting the port) passes None, and treating that as
+    "clear it" would wipe a live port on every restart replay."""
+    d = ci.NodeDirectory(HOST_A)
+    d.register(ROOT, "/Embody", CONVOY, envoy_port=9981)
+    again = d.register(ROOT, "/Embody", CONVOY)
+    assert again["envoy_port"] == 9981
+
+
+def test_registering_after_a_clear_restores_the_port():
+    d = ci.NodeDirectory(HOST_A)
+    first = d.register(ROOT, "/Embody", CONVOY, envoy_port=9981)
+    d.clear_envoy_port(first["node_id"])
+    again = d.register(ROOT, "/Embody", CONVOY, envoy_port=9982)
+    assert again["node_id"] == first["node_id"]
+    assert again["envoy_port"] == 9982

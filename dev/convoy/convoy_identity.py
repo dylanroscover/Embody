@@ -159,6 +159,26 @@ class NodeDirectory:
         self._by_node[node_id] = record
         return record
 
+    def clear_envoy_port(self, node_id):
+        """Forget a node's live Envoy port -- that node has gone away.
+
+        Its own method precisely BECAUSE register() must never clear a
+        known port: a store replay (or any re-register that omits the
+        port) passes envoy_port=None, and treating that as "clear it"
+        would wipe a live port on every restart replay. So clearing is an
+        explicit act with an explicit caller -- the node's clean exit --
+        and the replay rule above stays untouched.
+
+        The record itself SURVIVES: node_id is the address a TD-Python
+        approval attaches to and must outlive a restart (the two-identifier
+        split at the top of this module). Only the per-launch port goes.
+        """
+        record = self._by_node.get(node_id)
+        if record is None:
+            raise IdentityError("unknown_node", node_id)
+        record["envoy_port"] = None
+        return record
+
     def approve_td_python(self, node_id):
         record = self._by_node.get(node_id)
         if record is None:

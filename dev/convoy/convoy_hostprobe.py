@@ -140,13 +140,21 @@ def _default_health_check(handle):
 
 
 def _read_token(data_dir):
+    """The per-install IPC token, or None if unreadable.
+
+    ValueError is caught alongside OSError because UnicodeDecodeError IS
+    a ValueError: a host.token that is not UTF-8 would otherwise raise
+    straight through probe() and break its "never raises" contract.
+    read_portfile and ensure_ipc_token already catch both; this was the
+    one reader that did not.
+    """
     import os
     try:
         with open(os.path.join(data_dir, platform_mod.TOKEN_FILE),
                   "r", encoding="utf-8") as f:
             token = f.read().strip()
         return token or None
-    except OSError:
+    except (OSError, ValueError):
         return None
 
 

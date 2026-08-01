@@ -8,6 +8,12 @@ name: bridge-tests
 # box and landed flagged "unverified on mac" (commit e28b73e). TD-bound
 # tests skip cleanly off-TD; a skip explosion still shows in the -ra
 # summary.
+#
+# The Convoy suites ride the same matrix (see pytest.ini testpaths): the
+# host app and its TD-side client twin are stdlib-only too, and
+# test_convoy_client.py's PARITY test is the only thing keeping the two
+# copies of the probe decision tree -- convoy_hostprobe.py and
+# Embody/convoy/convoy_client.py -- in agreement.
 
 on:
   push:
@@ -15,7 +21,9 @@ on:
       - 'dev/embody/envoy_bridge.py'
       - 'dev/embody/Embody/templates/text_envoy_bridge.py'
       - 'dev/embody/unit_tests/test_envoy_bridge.py'
+      - 'dev/embody/unit_tests/test_convoy_client.py'
       - 'dev/embody/unit_tests/conftest.py'
+      - 'dev/embody/Embody/convoy/**'
       - 'dev/convoy/**'
       - 'pytest.ini'
       - '.github/workflows/bridge-tests.yml'
@@ -24,7 +32,9 @@ on:
       - 'dev/embody/envoy_bridge.py'
       - 'dev/embody/Embody/templates/text_envoy_bridge.py'
       - 'dev/embody/unit_tests/test_envoy_bridge.py'
+      - 'dev/embody/unit_tests/test_convoy_client.py'
       - 'dev/embody/unit_tests/conftest.py'
+      - 'dev/embody/Embody/convoy/**'
       - 'dev/convoy/**'
       - 'pytest.ini'
       - '.github/workflows/bridge-tests.yml'

@@ -346,6 +346,222 @@ def test_oversized_comp_path_refused(server):
     assert code == 400 and body["reason"] == "malformed"
 
 
+# =====================================================================
+# POST /unregister -- the clean-exit counterpart to /register
+# =====================================================================
+
+def _register(server, port=None, root="/Work/x", comp="/Embody",
+              runtime_id=None):
+    body = {"project_root": root, "convoy_id": "cv", "comp_path": comp}
+    if port is not None:
+        body["envoy_port"] = port
+    if runtime_id is not None:
+        body["runtime_id"] = runtime_id
+    return server.call("/register", body)
+
+
+def test_unregister_clears_the_envoy_port(server):
+    """The round trip: a node registers a live port, unregisters, and the
+    directory no longer hands that port to the dispatcher."""
+    _, node = _register(server, port=9981)
+    _, listing = server.call("/nodes")
+    assert listing["nodes"][0]["envoy_port"] == 9981
+
+    code, body = server.call("/unregister", {"node_id": node["node_id"]})
+    assert code == 200 and body["ok"] is True
+    assert body["cleared"] is True
+    assert body["envoy_port"] is None
+    assert body["node_id"] == node["node_id"]
+
+    _, listing = server.call("/nodes")
+    assert listing["nodes"][0]["envoy_port"] is None
+
+
+def test_unregister_keeps_the_node_record(server):
+    """Only the per-launch port goes. node_id is the durable address an
+    approval attaches to -- deleting it would silently revoke consent."""
+    _, node = _register(server, port=9981)
+    with server.app.lock:
+        server.app.directory.approve_td_python(node["node_id"])
+
+    server.call("/unregister", {"node_id": node["node_id"]})
+
+    _, listing = server.call("/nodes")
+    assert [n["node_id"] for n in listing["nodes"]] == [node["node_id"]]
+    assert listing["nodes"][0]["td_python_approved"] is True
+
+
+def test_unregister_is_idempotent(server):
+    """onExit() is best-effort and may double-fire; a second clear is a
+    plain 200, never a 404 or a state change."""
+    _, node = _register(server, port=9981)
+    first = server.call("/unregister", {"node_id": node["node_id"]})
+    second = server.call("/unregister", {"node_id": node["node_id"]})
+    assert first[0] == 200 and second[0] == 200
+    assert second[1]["envoy_port"] is None
+
+
+def test_unregister_of_unknown_node_is_a_named_404(server):
+    code, body = server.call("/unregister", {"node_id": "ghost"})
+    assert code == 404 and body["reason"] == "unknown_node"
+
+
+def test_unregister_requires_the_token(server):
+    code, body = server.call("/unregister", {"node_id": "n"}, token=None)
+    assert code == 401 and body["reason"] == "unauthenticated"
+
+
+@pytest.mark.parametrize("body", [
+    {},                             # missing
+    {"node_id": ""},                # empty
+    {"node_id": ["not", "a", "string"]},    # unhashable -> would be a 500
+    {"node_id": "x" * 200},         # over MAX_ID_CHARS
+])
+def test_malformed_node_id_is_a_named_400(server, body):
+    """text_field, not a bare dict lookup: a list node_id would raise
+    TypeError at the directory lookup and become an unaudited 500."""
+    code, payload = server.call("/unregister", body)
+    assert code == 400 and payload["reason"] == "malformed"
+
+
+def test_unregister_is_audited(server):
+    _, node = _register(server, port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    with server.app.lock:
+        events = [r["event"] for r in server.app.db.audit_tail()]
+    assert "node_unregistered" in events
+
+
+def test_unregister_stamps_last_seen(server):
+    """STRICTLY greater. `>=` is vacuously true when nothing is written,
+    so it would still pass with the save_node call deleted -- and
+    stamping last_seen is that call's ONLY effect (the port clear is
+    memory-complete), i.e. the one behaviour it exists to protect."""
+    _, node = _register(server, port=9981)
+    with server.app.lock:
+        before = server.app.db._state["nodes"][node["node_id"]]["last_seen"]
+    time.sleep(0.05)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    with server.app.lock:
+        after = server.app.db._state["nodes"][node["node_id"]]["last_seen"]
+    assert after > before
+
+
+# -- ownership: only clear the port YOU registered ----------------------
+
+def test_a_superseded_run_cannot_clear_a_live_port(server):
+    """THE REGRESSION: two TD sessions on ONE project folder share a
+    node_id (OQ-1), so without a precondition the first session's clean
+    exit zeroes the SECOND session's live port and the survivor goes
+    undispatchable -- a failure manufactured by an orderly shutdown."""
+    _, first = _register(server, port=9981, runtime_id="rt_aaaaaaaaaaaaaaaa")
+    _, second = _register(server, port=9990, runtime_id="rt_bbbbbbbbbbbbbbbb")
+    assert first["node_id"] == second["node_id"], "shared identity (OQ-1)"
+
+    # The DEPARTING first instance unregisters, naming its own run.
+    code, body = server.call("/unregister",
+                             {"node_id": first["node_id"],
+                              "runtime_id": "rt_aaaaaaaaaaaaaaaa"})
+    assert code == 200, "do not fight -- a no-op, not a refusal"
+    assert body["cleared"] is False
+    assert body["reason"] == "runtime_superseded"
+
+    _, listing = server.call("/nodes")
+    assert listing["nodes"][0]["envoy_port"] == 9990, (
+        "the surviving instance keeps its live port")
+
+
+def test_the_current_run_can_clear_its_own_port(server):
+    _, node = _register(server, port=9981, runtime_id="rt_aaaaaaaaaaaaaaaa")
+    code, body = server.call("/unregister",
+                             {"node_id": node["node_id"],
+                              "runtime_id": "rt_aaaaaaaaaaaaaaaa"})
+    assert code == 200 and body["cleared"] is True
+    assert body["envoy_port"] is None
+
+
+def test_an_unregister_without_a_runtime_id_still_clears(server):
+    """Best-effort by contract: a caller with no runtime_id to offer is
+    not blocked, it just gets no ownership protection."""
+    _, node = _register(server, port=9981, runtime_id="rt_aaaaaaaaaaaaaaaa")
+    code, body = server.call("/unregister", {"node_id": node["node_id"]})
+    assert code == 200 and body["cleared"] is True
+
+
+def test_a_superseded_unregister_is_audited(server):
+    _, node = _register(server, port=9981, runtime_id="rt_aaaaaaaaaaaaaaaa")
+    _register(server, port=9990, runtime_id="rt_bbbbbbbbbbbbbbbb")
+    server.call("/unregister", {"node_id": node["node_id"],
+                                "runtime_id": "rt_aaaaaaaaaaaaaaaa"})
+    with server.app.lock:
+        events = [r["event"] for r in server.app.db.audit_tail()]
+    assert "unregister_superseded" in events
+    assert "node_unregistered" not in events, (
+        "a no-op must not claim it unregistered anything")
+
+
+def test_a_superseded_unregister_does_not_stamp_last_seen(server):
+    """It did nothing, so it must not look like a visit."""
+    _, node = _register(server, port=9981, runtime_id="rt_aaaaaaaaaaaaaaaa")
+    _register(server, port=9990, runtime_id="rt_bbbbbbbbbbbbbbbb")
+    with server.app.lock:
+        before = server.app.db._state["nodes"][node["node_id"]]["last_seen"]
+    time.sleep(0.05)
+    server.call("/unregister", {"node_id": node["node_id"],
+                                "runtime_id": "rt_aaaaaaaaaaaaaaaa"})
+    with server.app.lock:
+        after = server.app.db._state["nodes"][node["node_id"]]["last_seen"]
+    assert after == before
+
+
+@pytest.mark.parametrize("bad", [123, ["a"], {"a": 1}, "x" * 200])
+def test_a_malformed_runtime_id_is_a_named_400(server, bad):
+    _, node = _register(server, port=9981)
+    code, body = server.call("/unregister", {"node_id": node["node_id"],
+                                             "runtime_id": bad})
+    assert code == 400 and body["reason"] == "malformed"
+
+
+def test_registering_again_after_unregister_restores_the_port(server):
+    """The heartbeat's healing path: a node that unregistered on exit and
+    came back must get its port back, on the SAME node_id."""
+    _, node = _register(server, port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+
+    _, again = _register(server, port=9982)
+    assert again["node_id"] == node["node_id"]
+    assert again["envoy_port"] == 9982
+
+    _, listing = server.call("/nodes")
+    assert listing["nodes"][0]["envoy_port"] == 9982
+
+
+def test_a_portless_re_register_still_never_clears_a_known_port(server):
+    """The rule /unregister exists to preserve: only the explicit route
+    clears a port. A re-register that omits one must leave it alone."""
+    _, node = _register(server, port=9981)
+    _, again = _register(server)          # no envoy_port in the body
+    assert again["envoy_port"] == 9981
+
+
+def test_a_failed_last_seen_stamp_does_not_fail_the_clear(server,
+                                                          monkeypatch):
+    """The clear lives in memory and is already complete; save_node only
+    stamps last_seen. Refusing a clear that demonstrably happened would
+    be a lie, so the failure is audited, not escalated."""
+    _, node = _register(server, port=9981)
+
+    def boom(record):
+        raise OSError("disk full (test)")
+    monkeypatch.setattr(server.app.db, "save_node", boom)
+
+    code, body = server.call("/unregister", {"node_id": node["node_id"]})
+    assert code == 200 and body["envoy_port"] is None
+
+    _, listing = server.call("/nodes")
+    assert listing["nodes"][0]["envoy_port"] is None
+
+
 def test_refusals_are_audited(server):
     server.call("/register", {"project_root": "/Work/x", "convoy_id": "c1", "comp_path": "/Embody"})
     server.call("/register", {"project_root": "/Work/x", "convoy_id": "c2"})

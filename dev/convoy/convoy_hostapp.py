@@ -633,6 +633,90 @@ class HostApp:
                      "envoy_port": record.get("envoy_port"),
                      "td_python_approved": record["td_python_approved"]}
 
+    def unregister_node(self, body):
+        """Clear a node's live Envoy port -- it is shutting down cleanly.
+
+        The counterpart to /register, called best-effort from the TD side
+        on exit and on disable. It does NOT delete the node: node_id is
+        the durable address (approvals attach to it), and only envoy_port
+        is per-launch. Without this, a closed TD leaves behind a port the
+        dispatcher keeps forwarding into, retrying every 30 s, forever.
+
+        A hard kill still leaves a stale port -- unavoidable, and handled
+        elsewhere: an UNREACHABLE forward keeps the job queued and backs
+        off. This route makes the COMMON case clean, exactly like the
+        SIGTERM handler makes the common host stop clean.
+
+        ONLY CLEAR THE PORT YOU REGISTERED. node_id is derived from
+        (project_root, comp_path), so two TD sessions on one project
+        folder share it -- the plan's OQ-1. Without a precondition, the
+        first session's CLEAN EXIT zeroes the second session's live
+        port, and the surviving node goes undispatchable until its next
+        heartbeat: a wrong-direction failure manufactured by an orderly
+        shutdown. runtime_id is the per-launch proof of which run is
+        talking (the same field A-22's expected_runtime_id relies on),
+        so a caller that supplies it and does not match is answered with
+        a 200 no-op. That is the plan's shared-identity rule -- "do not
+        fight" -- rather than a refusal, because the departing session
+        genuinely has nothing left to do.
+        """
+        try:
+            node_id = text_field(body, "node_id")
+            runtime_id = text_field(body, "runtime_id", required=False)
+        except Malformed as e:
+            return self._refuse("unregister", "malformed", e.detail, 400)
+        record = self.directory.lookup(node_id)
+        if record is None:
+            return self._refuse("unregister", "unknown_node", node_id, 404)
+        current = record.get("runtime_id")
+        if runtime_id and current and runtime_id != current:
+            self._audit_best_effort("unregister_superseded",
+                                    {"node_id": node_id,
+                                     "claimed_runtime_id": runtime_id,
+                                     "current_runtime_id": current})
+            return 200, {"ok": True,
+                         "cleared": False,
+                         "reason": "runtime_superseded",
+                         "node_id": record["node_id"],
+                         "host_id": self.host_id,
+                         "envoy_port": record.get("envoy_port"),
+                         "td_python_approved":
+                             record["td_python_approved"]}
+        self.directory.clear_envoy_port(node_id)
+        # Unlike register there is NOTHING to roll back: envoy_port is
+        # per-launch and hoststore.save_node does not persist it, so the
+        # clear is already complete in the only place it lives. This write
+        # exists to stamp last_seen. Refusing a clear that has demonstrably
+        # happened would be a lie, so a failed stamp is audited, not
+        # escalated to a 500.
+        try:
+            self.db.save_node(record)
+        except Exception as e:
+            self._audit_best_effort("unregister_persist_failed",
+                                    {"node_id": node_id,
+                                     "error": f"{type(e).__name__}: {e}"})
+        self._audit_best_effort("node_unregistered",
+                                {"node_id": record["node_id"],
+                                 "comp_path": record["comp_path"]})
+        return 200, {"ok": True,
+                     "cleared": True,
+                     "node_id": record["node_id"],
+                     "host_id": self.host_id,
+                     "envoy_port": record.get("envoy_port"),
+                     "td_python_approved": record["td_python_approved"]}
+
+    def _audit_best_effort(self, event, detail):
+        """Audit without letting the trail's failure fail the request.
+
+        Same reasoning as _refuse's swallowed audit: an unregister that
+        really cleared the port must report success even if the append
+        could not be written.
+        """
+        try:
+            self.db.audit("hostapp", event, detail)
+        except Exception:
+            pass
+
     def remint_node(self, body):
         node_id = body.get("node_id") or ""
         try:
@@ -2669,6 +2753,8 @@ def make_handler(app):
             with app.lock:
                 if self.path == "/register":
                     return app.register_node(body)
+                if self.path == "/unregister":
+                    return app.unregister_node(body)
                 if self.path == "/remint":
                     return app.remint_node(body)
                 if self.path == "/jobs":
