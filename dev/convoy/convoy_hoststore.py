@@ -235,6 +235,37 @@ class HostStore:
         """The convoy's PSK, or None if never minted. Read-only."""
         return self._state.get("convoy_psks", {}).get(convoy_id)
 
+    # -- host identity fingerprint (Phase 3 slice 1) --------------------
+
+    def last_identity_fingerprint(self):
+        """The host fingerprint recorded at the previous boot, or None.
+
+        Exists so a CHANGE of identity between boots is detectable at
+        all. Without it, "the key file was present" and "the key file is
+        the same key as last time" are indistinguishable -- so restoring
+        the wrong backup, an operator swapping in another machine's
+        identity, or a half-completed rotation all come up silently as
+        a normal start, and the single most audit-worthy event in the
+        whole Phase 3 trust model goes unrecorded.
+
+        `identity_fingerprint` is an ADDITIVE key, like `convoy_psks`
+        above: older builds round-trip it untouched, so no
+        STORE_VERSION bump. It is PUBLIC data -- a fingerprint is what
+        peers compare out loud -- so unlike the PSKs beside it there is
+        nothing secret here.
+        """
+        value = self._state.get("identity_fingerprint")
+        return value if isinstance(value, str) and value else None
+
+    def record_identity_fingerprint(self, value):
+        """Remember this boot's fingerprint. Writes only on a change, so
+        a steady host does not rewrite host.json on every start."""
+        if not value or self._state.get("identity_fingerprint") == value:
+            return False
+        self._state["identity_fingerprint"] = value
+        self._write_host()
+        return True
+
     # -- jobs (one file each, like .embody/jobs/) -----------------------
     #
     # Two ids live here, and keeping them distinct is A-15's "two

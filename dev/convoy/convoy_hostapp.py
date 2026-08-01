@@ -15,6 +15,12 @@ What it owns TODAY (the Phase 1 exit slice):
   - authenticated local IPC: every request presents the per-install
     token; a wrong/missing token is refused before ANY state is touched,
   - the audit trail (A-40),
+  - THE HOST KEYPAIR (Phase 3 slice 1, convoy_hostkeys): one Ed25519
+    identity per machine, served on /identity and replaceable via
+    /identity/rotate. NOTHING BINDS OFF-BOX YET -- the key exists, the
+    TLS listener that will use it is slice 3. Absent `cryptography`
+    degrades (no identity, named reason); a corrupt key file refuses to
+    start,
   - THE GUARDED REQUEST PATH: a signed Convoy/1 envelope submitted to
     /envelope is verified (convoy_protocol), gated by the operation
     registry (A-1 executability), authorized against leases
@@ -42,6 +48,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import convoy_capabilities as capabilities
 import convoy_controllers as controllers
+import convoy_hostkeys as hostkeys
 import convoy_hoststore as hoststore
 import convoy_identity as identity
 import convoy_mcpclient as mcpclient
@@ -50,6 +57,13 @@ import convoy_protocol as protocol
 
 MAX_BODY_BYTES = 1 * 1024 * 1024
 TOKEN_HEADER = "X-Convoy-Host-Token"
+
+# ONE condition, ONE machine-readable code, on every surface: /status's
+# identity_reason, /identity's and /identity/rotate's refusal reason,
+# and the audit line all carry this exact string, which is also
+# hostkeys.CryptographyMissing.reason. A client keying off `reason`
+# used to get a different answer depending on which route it asked.
+IDENTITY_UNAVAILABLE_REASON = "cryptography_missing"
 
 # -- async node jobs (the polling slice) ------------------------------
 #
@@ -567,7 +581,62 @@ class HostApp:
         self._last_pass_summary = {}
         self.drain_backoff_s = 30.0
         self.poll_backoff_s = 30.0
+        # HOST IDENTITY (Phase 3 slice 1). The Ed25519 keypair that signs
+        # envelopes and, from slice 3, backs the TLS certificate.
+        #
+        # TWO FAILURES, TWO OPPOSITE ANSWERS, and getting them the wrong
+        # way round would be a security bug either way:
+        #   - `cryptography` ABSENT -> DEGRADE. An older install has no
+        #     such package; the loopback host app owes it nothing, and a
+        #     daemon that refuses to start is a worse failure than one
+        #     that cannot yet speak to peers. status() and /identity say
+        #     so by name.
+        #   - key file CORRUPT/UNREADABLE -> REFUSE TO START, by letting
+        #     HostKeyError propagate out of __init__. Minting a fresh
+        #     identity instead would orphan every peer relationship on
+        #     every peer (convoy_hostkeys' module docstring).
+        self.hostkeys = None
+        self.identity_detail = ""
+        try:
+            self.hostkeys = hostkeys.load_or_create(directory_path)
+        except hostkeys.CryptographyMissing as e:
+            self.identity_detail = e.detail
         self.db.audit("hostapp", "started", {"host_id": self.host_id})
+        self._auditIdentityAtBoot()
+
+    def _auditIdentityAtBoot(self):
+        """Record THIS boot's fingerprint, and shout if it moved.
+
+        The fingerprint is audited on EVERY boot, not only on the
+        interesting origins. `origin == 'loaded'` means "a key file was
+        present" -- it does NOT mean "the same key as last time", so
+        auditing only the other origins left the single most
+        audit-worthy event in the Phase 3 trust model completely
+        unrecorded: restore the wrong backup, swap in another machine's
+        identity.key, or half-complete a rotation, and the host came up
+        with a different fingerprint, an unchanged host_id, and not one
+        line in the trail.
+        """
+        if self.hostkeys is None:
+            self.db.audit("hostkeys", "identity_unavailable",
+                          {"reason": "cryptography_missing",
+                           "detail": self.identity_detail})
+            return
+        current = self.hostkeys.fingerprint
+        previous = self.db.last_identity_fingerprint()
+        if previous and previous != current:
+            self.db.audit("hostkeys", "identity_changed",
+                          {"previous_fingerprint": previous,
+                           "fingerprint": current,
+                           "origin": self.hostkeys.origin,
+                           "detail": "this host's identity is NOT the one "
+                                     "recorded at the previous start; every "
+                                     "peer that pinned it must re-admit"})
+        self.db.record_identity_fingerprint(current)
+        self.db.audit("hostkeys", "identity_" + self.hostkeys.origin,
+                      {"fingerprint": current,
+                       "certificate": self.hostkeys.certificate_pem is not None,
+                       "certificate_reason": self.hostkeys.cert_reason})
 
     # -- request handlers (called WITH self.lock held -- except the
     #    self-locking dispatch_job / drain, see their docstrings) -------
@@ -589,8 +658,161 @@ class HostApp:
             "quarantined_nodes": len(self.quarantined),
             "drain_loop": bool(self._drain_thread is not None
                                and self._drain_thread.is_alive()),
+            # Identity, reported HONESTLY rather than omitted: a host
+            # with no keypair is a host that can never join a LAN
+            # convoy, and "no identity" must be visible in the same
+            # place an operator already looks, with the reason attached.
+            #
+            # TWO SEPARATE CONDITIONS, two separate fields, because they
+            # have different consequences: identity_reason means there
+            # is NO identity at all, while identity_cert_reason means
+            # the identity is fine and only the derived TLS artifact is
+            # missing. Collapsing them would make "cannot sign anything"
+            # and "cannot serve TLS yet" look identical.
+            #
+            # identity_reason carries the HostKeyError reason verbatim,
+            # the same string /identity, /identity/rotate and the audit
+            # trail use -- one condition, one machine-readable code, on
+            # every surface.
+            "identity_alg": (self.hostkeys.alg if self.hostkeys
+                             else None),
+            "identity_fingerprint": (self.hostkeys.fingerprint
+                                     if self.hostkeys else None),
+            "identity_reason": (None if self.hostkeys
+                                else IDENTITY_UNAVAILABLE_REASON),
+            "identity_certificate": (
+                bool(self.hostkeys and self.hostkeys.certificate_pem)),
+            "identity_cert_reason": (self.hostkeys.cert_reason
+                                     if self.hostkeys else None),
             "uptime_s": round(self._now() - self.started, 1),
         }
+
+    # -- host identity (Phase 3 slice 1) -------------------------------
+    #
+    # LOOPBACK ONLY, behind the existing IPC token, in the existing
+    # route table. When the LAN listener arrives in slice 3 it gets its
+    # OWN handler class and its own table; /identity* is named in the
+    # plan's loopback list and must never appear in the peer one.
+
+    def _identity_unavailable(self):
+        return 503, {"ok": False, "reason": IDENTITY_UNAVAILABLE_REASON,
+                     "detail": self.identity_detail,
+                     "host_id": self.host_id}
+
+    def get_identity(self):
+        """This host's PUBLIC identity. Never the private key -- there
+        is no code path on any route that serializes it."""
+        if self.hostkeys is None:
+            return self._identity_unavailable()
+        payload = {"ok": True, "host_id": self.host_id}
+        payload.update(self.hostkeys.public_identity())
+        return 200, payload
+
+    def rotate_identity(self, body):
+        """Mint a fresh keypair, retiring the old one. GATED.
+
+        Every peer that pinned this host will now see pin_mismatch and
+        must re-admit after comparing fingerprints out of band. That is
+        the point of the operation, not a side effect of it -- and it is
+        why the caller must ECHO THE CURRENT FINGERPRINT
+        (`confirm_fingerprint`) to prove it knows which identity it is
+        destroying. A bare POST with `{}` used to be sufficient, which
+        made a blind or replayed call permanently cost a two-human
+        out-of-band re-admission on every peer in the fleet.
+
+        THE THREE OUTCOMES ARE REPORTED HONESTLY, and getting that wrong
+        is how the previous version silently changed the host identity:
+          200  rotated      -- disk moved, memory follows, audited.
+          409  refused      -- disk did NOT move. Safe to retry.
+          500  indeterminate-- disk MAY have moved and could not be
+               rolled back. Never reported as a refusal; the identity is
+               RE-READ FROM DISK so what this process serves is what the
+               next boot will load, and the audit says so.
+        """
+        if not hostkeys.cryptography_available():
+            return self._identity_unavailable()
+        previous = self.hostkeys.fingerprint if self.hostkeys else None
+        confirm = body.get("confirm_fingerprint")
+        if isinstance(confirm, str):
+            # The display form is what an operator copies off a screen;
+            # accept it and canonicalize rather than refusing a correct
+            # answer over letter case.
+            confirm = confirm.strip().lower()
+        try:
+            fresh = hostkeys.rotate(self.data_dir, confirm)
+        except hostkeys.RotationIndeterminate as e:
+            # THE DISK MAY HAVE MOVED. Re-read it so memory and disk can
+            # never disagree, and audit the outcome under its own name
+            # -- a caller must not be able to read this as "refused".
+            landed = self._reload_identity()
+            self.db.audit("hostkeys", "identity_rotate_indeterminate",
+                          {"reason": e.reason, "detail": e.detail,
+                           "previous_fingerprint": previous,
+                           "fingerprint": landed})
+            return 500, {"ok": False, "reason": e.reason,
+                         "detail": e.detail,
+                         "host_id": self.host_id,
+                         "previous_fingerprint": previous,
+                         "fingerprint": landed}
+        except hostkeys.HostKeyError as e:
+            # A TRUE refusal: nothing on disk changed. Includes the
+            # compare-and-swap refusals and a staged/commit write that
+            # failed and rolled back.
+            self.db.audit("hostkeys", "identity_rotate_refused",
+                          {"reason": e.reason, "detail": e.detail,
+                           "fingerprint": previous})
+            code = 409 if e.reason.startswith("rotation_") else 500
+            return code, {"ok": False, "reason": e.reason,
+                          "detail": e.detail, "host_id": self.host_id,
+                          "fingerprint": previous}
+        except OSError as e:
+            # The write layer raises OSError, NOT HostKeyError, and an
+            # uncaught one used to escape as an unnamed 500 while the
+            # new key sat on disk. rotate() is all-or-nothing now, but
+            # this stays as the belt: name it, re-read, audit.
+            landed = self._reload_identity()
+            self.db.audit("hostkeys", "identity_rotate_indeterminate",
+                          {"reason": "rotation_io_error",
+                           "detail": f"{type(e).__name__}: {e}",
+                           "previous_fingerprint": previous,
+                           "fingerprint": landed})
+            return 500, {"ok": False, "reason": "rotation_io_error",
+                         "detail": f"{type(e).__name__}: {e}",
+                         "host_id": self.host_id,
+                         "previous_fingerprint": previous,
+                         "fingerprint": landed}
+        self.hostkeys = fresh
+        self.identity_detail = ""
+        # GRANT RESET HOOK (A-12's precedent: remint resets
+        # td_python_approved, because a new identity inherits no
+        # privileges). Rotation resets every grant attached to the
+        # identity -- peer admissions, pins, lan_exposed_approved. There
+        # are NO peer grants in slice 1, so there is nothing to reset
+        # here yet; slice 2 adds the reset at exactly this point, when
+        # peers.json exists to be reset.
+        self.db.record_identity_fingerprint(fresh.fingerprint)
+        self.db.audit("hostkeys", "identity_rotated",
+                      {"previous_fingerprint": previous,
+                       "fingerprint": fresh.fingerprint})
+        payload = {"ok": True, "host_id": self.host_id,
+                   "previous_fingerprint": previous}
+        payload.update(fresh.public_identity())
+        return 200, payload
+
+    def _reload_identity(self):
+        """Re-read the identity from disk after an uncertain write.
+
+        Returns the fingerprint now in force, or None. NEVER raises: it
+        is called on the error path, and the caller's job there is to
+        report the truth, not to acquire a second failure. A key that is
+        now unreadable leaves self.hostkeys as it was and returns None,
+        which the audit records as "unknown".
+        """
+        try:
+            self.hostkeys = hostkeys.load_or_create(self.data_dir)
+            return self.hostkeys.fingerprint
+        except Exception:
+            return None
 
     def register_node(self, body):
         project_root = body.get("project_root")
@@ -2729,6 +2951,8 @@ def make_handler(app):
                     elif self.path.startswith("/manifest/"):
                         code, payload = app.get_manifest(
                             self.path[len("/manifest/"):])
+                    elif self.path == "/identity":
+                        code, payload = app.get_identity()
                     elif self.path == "/leases":
                         code, payload = app.list_leases()
                     elif self.path.startswith("/jobs/"):
@@ -2794,6 +3018,8 @@ def make_handler(app):
                     return app.submit_envelope(body)
                 if self.path == "/psk":
                     return app.issue_convoy_psk(body)
+                if self.path == "/identity/rotate":
+                    return app.rotate_identity(body)
                 if self.path == "/leases":
                     return app.acquire_lease(body)
                 if self.path == "/leases/release":

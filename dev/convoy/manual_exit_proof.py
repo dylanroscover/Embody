@@ -8,17 +8,32 @@ STATE = tempfile.mkdtemp(prefix='convoy_exit_')
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 def start():
+    # Clear first, then wait for a LIVE portfile -- never match Popen's
+    # pid. On Windows a virtualenv's Scripts/python.exe is a LAUNCHER
+    # that runs the base interpreter as a child, so Popen's pid is the
+    # launcher's and the portfile carries the real one; the old pid
+    # equality check therefore never fired inside a venv and this script
+    # hung on p.stderr.read() against a process that was running fine.
+    cp.clear_portfile(STATE)
     p = subprocess.Popen([sys.executable, os.path.join(HERE, 'convoy_hostapp.py'),
                           '--data-dir', STATE],
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     for _ in range(60):
-        info = cp.read_portfile(STATE)
-        if info and info.get('pid') == p.pid:
+        if p.poll() is not None:
+            raise SystemExit('host app exited: ' + p.stderr.read())
+        info = cp.read_live_portfile(STATE)
+        if info:
             try:
                 urllib.request.urlopen(f"http://127.0.0.1:{info['port']}/health", timeout=2)
                 return p, info['port']
             except Exception: pass
         time.sleep(0.25)
+    # kill() FIRST, then read: the process is dead so the pipe is closed
+    # and the read returns immediately. (Reading a LIVE process's stderr
+    # is what used to hang this script forever.) Losing the diagnostic
+    # entirely was the wrong cure.
+    p.kill()
+    p.wait(timeout=15)
     raise SystemExit('host app never came up: ' + p.stderr.read())
 
 def call(port, path, body=None):
@@ -33,6 +48,16 @@ print('=== boot #1 (as a supervisor would) ===')
 proc, port = start()
 print(f'  host app pid={proc.pid} port={port}')
 print('  status:', json.dumps(call(port, '/status')))
+
+print('\n=== host identity minted (Phase 3 slice 1) ===')
+ident = call(port, '/identity')
+print(f"  {ident.get('alg')}  {ident.get('fingerprint_display')}")
+# The REAL hunt, not a marker check: a PKCS8 PEM's base64 BODY contains
+# no 'PRIVATE KEY' string, so looking for that marker would print True
+# even with the key material in the response.
+secret = ''.join(open(os.path.join(STATE, 'identity.key')).read().splitlines()[1:-1])
+print(f"  private key on disk, never on the wire: "
+      f"{secret not in json.dumps(ident)}")
 
 print('\n=== two fake nodes register ===')
 a = call(port, '/register', {'project_root': '/Work/anchor-A', 'convoy_id': 'studio', 'comp_path': '/projA/Embody'})
@@ -62,5 +87,9 @@ again = call(port2, '/register', {'project_root': '/Work/anchor-A', 'convoy_id':
 print(f"  node A re-registered to the SAME id: {again['node_id'] == a['node_id']}")
 retry = call(port2, '/jobs', {'idempotency_key': 'exit-proof', 'node_id': a['node_id'], 'operation': 'query_network'})
 print(f"  idempotency held across restart: created={retry['created']} same_job={retry['job']['delivery_id'] == delivery_id}")
+again_ident = call(port2, '/identity')
+print(f"  identity SURVIVED: same fingerprint="
+      f"{again_ident.get('fingerprint') == ident.get('fingerprint')} "
+      f"{again_ident.get('fingerprint_display')}")
 proc2.terminate(); proc2.wait(timeout=15)
 print('\nPHASE 1 EXIT (local slice): two nodes registered, jobs survived a real process restart.')
