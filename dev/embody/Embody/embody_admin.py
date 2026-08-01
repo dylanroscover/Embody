@@ -12,6 +12,10 @@ ext-diet WP7c + WP7d clusters C5 + C9). Holds:
   - C9  Settings/config.json persistence: settings_path / find_settings_file /
         project_json_path / write_project_json / save_settings /
         defer_save_settings / restore_settings / show_tdn_migration_nudge.
+        Plus the project.json 'convoy' key steward (Convoy Phase 2):
+        mint_convoy_id / read_convoy_entry / read_convoy_id /
+        ensure_convoy_id, which own that ONE key with the same key-level
+        discipline write_project_json applies to td_build.
 
 EmbodyExt keeps a thin delegating stub for every function here (identical
 signatures; promoted names stay UpperCamelCase). No module-level TD access --
@@ -760,6 +764,176 @@ def write_project_json(ext) -> None:
             f'.embody/local.json)', 'DEBUG')
     except Exception as e:
         ext.Log(f'Failed to write project.json: {e}', 'WARNING')
+
+
+# --------------------------------------------------------------------------
+# The 'convoy' key in .embody/project.json (Convoy Phase 2)
+# --------------------------------------------------------------------------
+# A-14 reserved this key when it retired td_build; Phase 2 is its first
+# writer. Shape:
+#
+#     "convoy": {
+#       "id": "cv_<16 lowercase hex>",
+#       "consent_scope": "local host app only",
+#       "granted_at": "2026-08-01T09:12:33Z"
+#     }
+#
+# Tracked on purpose (A-13 Model B): every clone of a repo converges on ONE
+# convoy, which is safe because a convoy id is an IDENTIFIER, not a
+# credential -- the group PSK is host-private and never leaves the host app.
+CONVOY_KEY = 'convoy'
+CONVOY_SCOPE_LOCAL = 'local host app only'
+
+
+def mint_convoy_id() -> str:
+    """A fresh convoy id: 'cv_' + 16 lowercase hex characters.
+
+    The host app accepts any non-empty string, so this format is ours to
+    keep stable. Prefixed so a convoy id can never be mistaken for a
+    node_id or host_id (both bare 32-hex) in a log line or an audit record.
+    """
+    import secrets
+    return 'cv_' + secrets.token_hex(8)
+
+
+def _load_project_json(ext, purpose: str):
+    """(data, readable) for the tracked .embody/project.json.
+
+    Mirrors write_project_json's key-level-ownership discipline rather than
+    refactoring it (that function is the shipped td_build retirement path
+    and is deliberately left untouched): a tracked file with co-writers is
+    NEVER overwritten blind, so unreadable or non-object JSON comes back as
+    readable=False with a loud warning naming what was skipped, and every
+    caller leaves the file exactly as it found it.
+
+    A missing file reads as ({}, True) -- absence is not corruption; the
+    writer below closes the check-then-write window with an exclusive
+    create.
+    """
+    path = project_json_path(ext)
+    if not path.is_file():
+        return {}, True
+    try:
+        raw = path.read_text(encoding='utf-8')
+    except (ValueError, OSError) as e:
+        # ValueError covers UnicodeDecodeError.
+        ext.Log(
+            f'.embody/project.json is unreadable ({e}) -- leaving it '
+            f'untouched, so {purpose} was skipped. Fix or restore it from '
+            f'git.', 'WARNING')
+        return None, False
+    if not raw.strip():
+        # A zero-byte / whitespace-only file holds nothing a co-writer
+        # could lose -- the one corrupt shape a steward may heal.
+        return {}, True
+    try:
+        loaded = json.loads(raw)
+    except ValueError as e:  # JSONDecodeError included
+        ext.Log(
+            f'.embody/project.json is unreadable ({e}) -- leaving it '
+            f'untouched, so {purpose} was skipped. Fix or restore it from '
+            f'git.', 'WARNING')
+        return None, False
+    if not isinstance(loaded, dict):
+        ext.Log(
+            f'.embody/project.json is not a JSON object -- leaving it '
+            f'untouched, so {purpose} was skipped. Fix or restore it from '
+            f'git.', 'WARNING')
+        return None, False
+    return loaded, True
+
+
+def read_convoy_entry(ext) -> dict:
+    """The 'convoy' object from .embody/project.json, or {}.
+
+    Read-only and TOTAL: an unreadable file, a missing key, or a value of
+    the wrong shape all read as "no convoy recorded". It never raises,
+    because one of its callers is a reconcile tick that must not be able to
+    die on a hand-edited file.
+    """
+    data, readable = _load_project_json(ext, 'reading the convoy id')
+    if not readable or not data:
+        return {}
+    entry = data.get(CONVOY_KEY)
+    return entry if isinstance(entry, dict) else {}
+
+
+def read_convoy_id(ext) -> str:
+    """This project's convoy id, or '' when none is recorded."""
+    return str(read_convoy_entry(ext).get('id') or '')
+
+
+def ensure_convoy_id(ext, convoy_id=None,
+                     consent_scope=CONVOY_SCOPE_LOCAL) -> str:
+    """Record the convoy key; return the id now in force, or '' on failure.
+
+    KEY-LEVEL OWNERSHIP, exactly as write_project_json: this function owns
+    the 'convoy' key and NOTHING else. Every other key is preserved
+    byte-for-byte, an unreadable file is left untouched with a WARNING
+    (never overwritten with {}), and a missing file is created with an
+    EXCLUSIVE create so a co-writer that lands it first is not clobbered.
+
+    IDEMPOTENT: an already-recorded id wins and comes back unchanged. A
+    second enable never re-mints, never re-stamps granted_at, and never
+    silently widens a recorded consent scope -- Phase 3's LAN widening is a
+    deliberate separate write with its own confirmation, which is the whole
+    point of storing the scope beside the id.
+
+    Called ONLY from the explicit-enable path (ConvoyExt._ensureConsent),
+    never from a tick and never on project open: minting diffs a tracked
+    file, so it happens when a human said yes.
+    """
+    path = project_json_path(ext)
+    data, readable = _load_project_json(ext, 'recording the convoy id')
+    if not readable:
+        return ''
+
+    existing = data.get(CONVOY_KEY)
+    if isinstance(existing, dict) and existing.get('id'):
+        return str(existing['id'])
+
+    from datetime import datetime, timezone
+    entry = {
+        'id': str(convoy_id or mint_convoy_id()),
+        'consent_scope': str(consent_scope or CONVOY_SCOPE_LOCAL),
+        'granted_at': datetime.now(timezone.utc).strftime(
+            '%Y-%m-%dT%H:%M:%SZ'),
+    }
+    data[CONVOY_KEY] = entry
+    try:
+        if path.is_file():
+            _write_json_atomic(path, data)
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                with open(path, 'x', encoding='utf-8', newline='\n') as f:
+                    f.write(json.dumps(data, indent=2) + '\n')
+            except FileExistsError:
+                # A co-writer landed the file between the read and here.
+                # Merge onto THEIR content instead of replacing it -- and if
+                # they recorded a convoy first, theirs wins (one project,
+                # one convoy).
+                merged, ok = _load_project_json(
+                    ext, 'recording the convoy id')
+                if not ok:
+                    return ''
+                theirs = merged.get(CONVOY_KEY)
+                if isinstance(theirs, dict) and theirs.get('id'):
+                    ext.Log(
+                        '.embody/project.json gained a convoy id from a '
+                        'co-writer mid-create -- keeping theirs', 'DEBUG')
+                    return str(theirs['id'])
+                merged[CONVOY_KEY] = entry
+                _write_json_atomic(path, merged)
+    except Exception as e:
+        ext.Log(f'Failed to record the convoy id in project.json: {e}',
+                'WARNING')
+        return ''
+    ext.Log(
+        f'Recorded convoy {entry["id"]} in .embody/project.json '
+        f'(consent scope: {entry["consent_scope"]}). It is a TRACKED file, '
+        f'so every clone of this repo shares the convoy.', 'INFO')
+    return entry['id']
 
 
 def save_settings(ext) -> None:

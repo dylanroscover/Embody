@@ -1,0 +1,39 @@
+format: tdn
+version: '2.0'
+build: 1
+generator: Embody/6.0.169
+td_build: 099.2025.33070
+source_file: Embody-6.169.toe
+exported_at: '2026-08-01T15:32:44Z'
+network_path: /embody/Embody/convoy
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textDAT:
+    parameters:
+      syncfile: true
+      language: python
+    size: [130, 90]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - py
+type: baseCOMP
+sequences:
+  ext:
+  - object: op('./ConvoyExt').module.ConvoyExt(me)
+    name: ConvoyExt
+    promote: true
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: ConvoyExt
+  type: textDAT
+  parameters:
+    file: embody/Embody/convoy/ConvoyExt.py
+- name: convoy_client
+  type: textDAT
+  parameters:
+    file: embody/Embody/convoy/convoy_client.py
+  position: [400, 0]

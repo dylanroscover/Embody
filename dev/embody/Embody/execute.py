@@ -44,6 +44,23 @@ def init():
 	p.readOnly = False
 	p.val = 'Idle'
 	p.readOnly = was_ro
+	# Convoy: the same baked-value scrub that protects Envoyenable above.
+	# A released .tox must NEVER auto-enable Convoy -- enabling it mints a
+	# convoy id into a tracked file and registers the session with a local
+	# host app, both of which require an explicit human yes (A-13). Off on
+	# every open; _restoreSettings puts the user's own choice back a few
+	# frames later, and parexec stays suppressed until it finishes.
+	# getattr-guarded because init() also runs on an upgraded .tox that
+	# predates the Convoy page.
+	p = getattr(parent.Embody.par, 'Convoyenable', None)
+	if p is not None:
+		p.val = 0
+	p = getattr(parent.Embody.par, 'Convoystatus', None)
+	if p is not None:
+		was_ro = p.readOnly
+		p.readOnly = False
+		p.val = 'Disabled'
+		p.readOnly = was_ro
 	# Clear any save-time dialog suppression that baked into the .toe/.tox.
 	# _suppress_dialogs is a save-window-only flag; a fresh open must start with
 	# dialogs enabled so genuine first-run onboarding can prompt.
@@ -110,6 +127,30 @@ def onCreate():
 	return
 
 def onExit():
+	# Convoy: clear this node's Envoy port on the local host app so the
+	# dispatcher stops aiming jobs at a port that dies with this process.
+	# Best-effort by contract (one attempt, 1s timeout, every outcome a
+	# value) and BLOCKING, because no run() callback will ever fire again
+	# on a TD that is closing. Costs nothing at all when Convoy was never
+	# enabled -- Unregister() returns before touching the filesystem when
+	# this process holds no node id.
+	#
+	# NOT suppressed for an in-flight Convoy-relayed job, deliberately.
+	# Two reasons: (1) node-side job records carry no Convoy provenance --
+	# only an optional idempotency_key any caller may supply -- so "is a
+	# relayed job running" is not knowable here; and (2) any job running
+	# in THIS process dies with it, so holding the stale port back would
+	# preserve a route to work that cannot survive the exit. The honest
+	# tradeoff of clearing it: the host defers dispatch to this node until
+	# it re-registers on next launch, which is exactly the Stage A
+	# landing note's position.
+	try:
+		convoy = parent.Embody.op('convoy')
+		if convoy:
+			convoy.ext.ConvoyExt.Unregister(blocking=True, reason='TD exit')
+	except Exception:
+		# A shutting-down TD must never be blocked or broken by this.
+		pass
 	return
 
 def onFrameStart(frame):

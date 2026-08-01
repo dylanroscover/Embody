@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 951
+build: 913
 generator: Embody/6.0.169
 td_build: 099.2025.33070
 source_file: Embody-6.169.toe
-exported_at: '2026-07-30T14:10:24Z'
+exported_at: '2026-08-01T15:33:05Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -460,6 +460,25 @@ operators:
       readOnly: true
       help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
       value: Disabled
+    Convoy:
+    - name: Convoyenable
+      style: Toggle
+      label: Enable Convoy
+      help: 'Register this project as a Convoy node with this machine''s local host app, letting approved local controllers relay operations (queries, test runs, project saves) into this project through Envoy. This build is loopback-only: nothing leaves this machine, and only operations in the host app''s audited registry can be relayed. The first enable creates the project''s convoy identity and asks for confirmation; a future LAN-enabled phase will ask again before any wider exposure.'
+    - name: Convoyid
+      style: Str
+      label: Convoy ID
+      startSection: true
+      readOnly: true
+      help: The convoy this project belongs to (from .embody/project.json). Created on the first explicit enable; empty until then. An identifier, not a credential.
+      value: ''
+    - name: Convoystatus
+      style: Str
+      label: Convoy Status
+      default: Disabled
+      readOnly: true
+      help: Live registration state with the local Convoy host app. 'No Convoy host app' is a normal resting state, not an error -- the host app simply is not installed or running on this machine.
+      value: Disabled
     Logs:
     - name: Verbose
       style: Toggle
@@ -847,7 +866,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 268
+    rows: 272
     cols: 11
   flags:
   - viewer

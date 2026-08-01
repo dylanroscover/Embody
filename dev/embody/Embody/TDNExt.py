@@ -245,7 +245,7 @@ SKIP_STORAGE_KEYS = {
 	# Embody.tdn on EVERY export (measured 2026-07-27: _clip_watch_gen
 	# 884 -> 917 and _shortcut_rec_gen 503 -> 517 across one test run),
 	# producing pure diff churn in committed specimens.
-	'_watchdog_gen', '_clip_watch_gen', '_shortcut_rec_gen',
+	'_watchdog_gen', '_clip_watch_gen', '_shortcut_rec_gen', '_convoy_gen',
 	# Transient UI/interaction state -- classified as runtime by
 	# EmbodyExt._STORAGE_SKIP_KEYS but previously absent here, so it
 	# serialized anyway (a held button could bake `pressed: true` and the

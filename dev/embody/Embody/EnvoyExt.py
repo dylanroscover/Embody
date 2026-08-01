@@ -5375,6 +5375,18 @@ class EnvoyExt:
         # Update status
         self.ownerComp.par.Envoystatus = 'Disabled'
 
+    def RuntimePort(self) -> Optional[int]:
+        """The confirmed-bound loopback port, or None.
+
+        The public read of what _pollStartup CONFIRMED: a port is reported
+        only once a real bind happened (envoy_running) and no start is in
+        flight. Exists so ConvoyExt never has to parse Envoystatus for a
+        'port (\\d+)' -- the exact anti-pattern A-9 removed.
+        """
+        if self._starting or not self.ownerComp.fetch('envoy_running', False):
+            return None
+        return getattr(self, '_runtime_port', None)
+
     # === Thread Manager Target (runs in worker thread) ===
 
     @staticmethod

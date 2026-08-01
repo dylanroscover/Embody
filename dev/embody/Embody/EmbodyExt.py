@@ -96,6 +96,12 @@ class EmbodyExt:
         # opt-in dies in the very update it triggers (the replacement COMP
         # restores prefs from config.json).
         'Autoupdate',
+        # Convoy consent (Convoy page). The canonical gate must survive a
+        # restart or the user re-opts-in every launch; the convoy IDENTITY
+        # is not here (it lives in the tracked .embody/project.json), and
+        # the Phase 3+ dangerous gates deliberately stay OUT of this
+        # whitelist per A-49.
+        'Convoyenable',
         # Keyboard shortcuts (issue #50)
         'Enablekeyboardshortcuts',
         'Shortcutmanager', 'Shortcutupdateall', 'Shortcutupdatecomp',
@@ -2568,6 +2574,35 @@ class EmbodyExt:
             self.Log(f'local.json pin failed: {e}', 'WARNING')
         return mod.embody_admin.write_project_json(self)
 
+    # --- project.json 'convoy' key (Convoy Phase 2) -----------------------
+    # ConvoyExt lives on the 'convoy' child COMP, where `mod.embody_admin`
+    # does not resolve (mod searches from the calling DAT's own network).
+    # These are its only door to the steward, and they keep the delegating
+    # -stub contract this file already follows for every embody_admin call.
+
+    def _readConvoyEntry(self) -> dict:
+        """The 'convoy' object from .embody/project.json, or {} -- see
+        embody_admin. Never raises."""
+        return mod.embody_admin.read_convoy_entry(self)
+
+    def _readConvoyId(self) -> str:
+        """This project's convoy id, or '' -- see embody_admin."""
+        return mod.embody_admin.read_convoy_id(self)
+
+    def _mintConvoyId(self) -> str:
+        """A candidate convoy id ('cv_' + 16 hex), unwritten -- so the
+        first-enable confirmation can NAME the id before minting it."""
+        return mod.embody_admin.mint_convoy_id()
+
+    def _ensureConvoyId(self, convoy_id=None, consent_scope=None) -> str:
+        """Record the convoy key (id + consent scope + grant time) with
+        key-level ownership; return the id in force, or '' -- see
+        embody_admin. Explicit-enable path only."""
+        if consent_scope is None:
+            return mod.embody_admin.ensure_convoy_id(self, convoy_id)
+        return mod.embody_admin.ensure_convoy_id(
+            self, convoy_id, consent_scope)
+
     def _saveSettings(self) -> None:
         """Persist whitelisted parameter values to .embody/config.json -- see embody_admin."""
         return mod.embody_admin.save_settings(self)
@@ -3848,6 +3883,14 @@ class EmbodyExt:
             'Autosavestatus': 'Idle',    # 'Saved <time> UTC'/'Bypassed'
             'Envoystatus': 'Disabled',   # 'Running on port N'/'Perform Mode'
             'Updatestatus': 'Disabled',  # updater state beyond its rest
+            # Convoy readouts. Convoyid is the one that MUST be here: it
+            # projects .embody/project.json's convoy id, and Embody.tdn is
+            # the tracked source ExportPortableTox builds released .tox
+            # files from -- unregistered, it would bake THIS machine's
+            # convoy id into git and into every user's download. Exactly
+            # the A-50 leak class (value: Testing, v6.0.169).
+            'Convoystatus': 'Disabled',  # 'Registered <node8> (host <host8>)'
+            'Convoyid': '',              # this project's convoy id
         },
     }
 

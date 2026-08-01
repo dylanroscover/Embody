@@ -79,6 +79,28 @@ def onValueChange(par, prev):
 			# Delay restart to ensure clean shutdown
 			run("parent.Embody.ext.Envoy.Start()", delayFrames=2)
 
+	elif par.name == 'Convoyenable':
+		# The ONE explicit-enable path. Everything above this handler is
+		# already suppressed during init and settings restore, which is
+		# exactly what keeps A-13's first-enable confirmation out of
+		# startup: a restored Convoyenable=True never reaches here, so it
+		# can never raise a modal on project open. Register() owns the
+		# consent gate (mint + confirm on first enable) and the reconcile;
+		# Unregister() clears this node's port on the host app.
+		# Guarded like the other child-COMP hooks -- a partial or
+		# pre-Convoy install where the par exists but the child does not
+		# skips with one warning instead of raising every toggle.
+		convoy = parent.Embody.op('convoy')
+		if convoy:
+			if par.eval():
+				convoy.ext.ConvoyExt.Register()
+			else:
+				convoy.ext.ConvoyExt.Unregister()
+		else:
+			parent.Embody.Log(
+				'Convoy: convoy component missing '
+				'(reinstall Embody to enable Convoy)', 'WARNING')
+
 	# UI color pars changed - reload list theme
 	elif 'color' in par.name.lower():
 		list_comp = op('list/list1')
