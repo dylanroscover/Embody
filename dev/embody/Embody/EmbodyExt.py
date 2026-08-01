@@ -60,6 +60,7 @@ class EmbodyExt:
         'text_skill_pop_networks':        'pop-networks',
         'text_skill_visual_aesthetics':   'visual-aesthetics',
         'text_skill_brief':               'brief',
+        'text_skill_merge_divergent_tox': 'merge-divergent-tox',
     }
 
     # Parameters persisted to .embody/config.json across upgrades.

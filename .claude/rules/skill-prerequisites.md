@@ -20,6 +20,7 @@ Skills are prerequisites, not optional reference. **Load the relevant skill BEFO
 | Connectivity broken beyond ~15s of self-heal waiting | `/td-recovery` |
 | The moment a `_peers` advisory or a second session appears | `/multi-session-etiquette` |
 | Diagnosing operator errors | `/debug-operator` |
+| A merge/rebase conflicting on a `.tox`/`.toe`, or comparing a component across branches, machines, or TD builds | `/merge-divergent-tox` |
 | Building or refining any visual / rendered output (generative art, VJ visuals, shaders, scenes, renders, anything shown on screen) | `/visual-aesthetics` |
 | Creating or editing POP operators, particle systems, GPU point/geometry work, glslPOP compute, or converting SOP chains to POPs | `/pop-networks` |
 | Building or styling a TD panel UI (dialog, wizard, HUD, control panel, buttons/text) | `/build-ui` (design system + mechanics reference) |

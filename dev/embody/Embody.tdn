@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1039
+build: 1040
 generator: Embody/6.0.171
 td_build: 099.2025.33070
 source_file: Embody-6.171.toe
-exported_at: '2026-08-01T16:02:05Z'
+exported_at: '2026-08-01T19:40:47Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -698,7 +698,7 @@ custom_pars:
     - Always Keep Files
     - Always Delete Files
     help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-    value: delete
+    value: keep
   - name: Toxdropexpr
     style: Menu
     label: Dropped .tox Expression
@@ -713,7 +713,6 @@ custom_pars:
     - Always Clean
     - Always Ignore
     help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
-    value: ignore
   - name: Tdndatsafety
     style: Menu
     label: Content Safety
