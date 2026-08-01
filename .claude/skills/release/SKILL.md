@@ -110,6 +110,30 @@ Templates should be UTF-8 with LF line endings and no BOM. Each template carries
 
 Dev-only rules and skills (e.g. `.claude/rules/commit-push-checklist.md`, `.claude/rules/skill-prerequisites.md`, `.claude/skills/release/` (this skill, incl. `references/github-release.md`), `.claude/skills/agent-tests/`, `.claude/skills/add-mcp-tool/`, `.claude/skills/run-tests/`) live under `.claude/` for Embody developers only and are NOT shipped to user projects -- they have no template counterpart. The root `CLAUDE.md` and `dev/embody/Embody/templates/text_claude.md` serve different audiences and are maintained independently.
 
+## 4b. Re-Vendor the Convoy Host App
+
+The Convoy host-app daemon exists TWICE on purpose: the source of truth in `dev/convoy/`, and a vendored copy at `dev/embody/Embody/convoy/host/` carried inside the `.tox` as text DATs so that installing works with no network access. If the vendored copy is stale, the release ships an installer that writes an OLD daemon -- and nothing about the running project looks wrong.
+
+```
+python dev/convoy/vendor_host_modules.py --check    # exit 1 = drift
+python dev/convoy/vendor_host_modules.py            # re-vendor, then SAVE
+```
+
+The vendored DATs are `syncfile=True`, so copying the file is the whole re-vendor -- TD reloads the DAT on its own. **The new content only reaches the shipped `.tox` on the next `project.save()`**, so re-vendor BEFORE step 0's save, never after.
+
+`--check` reports four drift classes; only the first is fixed by copying:
+
+| Class | Meaning | Fix |
+|---|---|---|
+| `STALE` | content differs | re-vendor (this script) |
+| `MISSING` | daemon module has NO vendored DAT | create a text DAT of that name in the `host` COMP and externalize it (tag `py`) -- **a file copy alone does not make it ship** |
+| `ORPHAN` | vendored file with no daemon source | `delete_op` the DAT (deleting only the file lets the next save re-create it) |
+| `ok` | current | -- |
+
+`test_convoy_host_vendor.py` asserts the same thing on the CI matrix, comparing newline-normalized text (Embody writes CRLF on Windows; `.gitattributes` stores LF, so the committed bytes are identical). Do not "fix" a CRLF diff by changing how Embody writes files -- that path is shared by every externalized DAT in the project.
+
+Note `convoy_install.HOST_MODULES` is a hardcoded manifest and has gone stale twice already. It is not the gate; the parity test is. If you add a daemon module, the test tells you what else to do.
+
 ## 5. Fresh-Install Smoke (before the release is announced)
 
 Cold-open smoke of the DEV project is not enough: a fresh install runs a

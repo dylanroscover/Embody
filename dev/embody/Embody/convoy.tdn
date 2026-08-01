@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1
-generator: Embody/6.0.169
+build: 12
+generator: Embody/6.0.172
 td_build: 099.2025.33070
-source_file: Embody-6.169.toe
-exported_at: '2026-08-01T15:32:44Z'
+source_file: Embody-6.172.toe
+exported_at: '2026-08-01T23:06:20Z'
 network_path: /embody/Embody/convoy
 options:
   include_dat_content: false
@@ -28,6 +28,80 @@ color: [0.3, 0.5, 0.9]
 tags:
 - tdn
 operators:
+- name: host
+  type: baseCOMP
+  position: [0, -400]
+  size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  children:
+  - name: convoy_hostapp
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_hostapp.py
+    position: [800, 0]
+  - name: convoy_hostkeys
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_hostkeys.py
+    position: [1200, 0]
+  - name: convoy_identity
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_identity.py
+    position: [800, -400]
+  - name: convoy_platform
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_platform.py
+    position: [0, -800]
+  - name: convoy_protocol
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_protocol.py
+    position: [400, -800]
+  - name: convoy_hostprobe
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_hostprobe.py
+    position: [0, -400]
+  - name: convoy_hoststore
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_hoststore.py
+    position: [400, -400]
+  - name: convoy_mcpclient
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_mcpclient.py
+    position: [1200, -400]
+  - name: convoy_controllers
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_controllers.py
+    position: [400, 0]
+  - name: convoy_capabilities
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_capabilities.py
+  annotations:
+  - name: annotate1
+    mode: annotate
+    title: Vendored Convoy host app -- DO NOT EDIT HERE
+    text: |-
+      These are VENDORED COPIES of the host-app daemon, carried inside the .tox so an
+      install works offline. The source of truth is dev/convoy/*.py -- edit there, then
+      re-vendor (copy the files over embody/Embody/convoy/host/; the DATs are syncfile
+      and pick the change up). An edit made HERE is overwritten by the next re-vendor.
+
+      test_convoy_host_vendor.py asserts these stay identical to dev/convoy/ (comparing
+      newline-normalized text: Embody writes CRLF on Windows, .gitattributes stores LF).
+
+      The daemon is TD-free and never imported in TouchDesigner -- it is inert text here.
+      On install, ConvoyExt reads each DAT's .text on the main thread and a worker writes
+      it to the per-user data dir.
+    position: [-70, -870]
+    size: [1470, 1130]
+    color: [0.45, 0.45, 0.45]
 - name: ConvoyExt
   type: textDAT
   parameters:
@@ -37,3 +111,8 @@ operators:
   parameters:
     file: embody/Embody/convoy/convoy_client.py
   position: [400, 0]
+- name: convoy_install
+  type: textDAT
+  parameters:
+    file: embody/Embody/convoy/convoy_install.py
+  position: [800, 0]

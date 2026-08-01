@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 25
+build: 26
 generator: Embody/6.0.171
 td_build: 099.2025.33070
 source_file: Embody-6.171.toe
-exported_at: '2026-08-01T19:43:01Z'
+exported_at: '2026-08-01T20:11:52Z'
 network_path: /embody/Embody/templates
 options:
   include_dat_content: false
