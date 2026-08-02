@@ -70,6 +70,14 @@ MAC_DATA = '/Users/x/Library/Application Support/EmbodyConvoy'
 WIN_PY = (r'C:\Program Files\Derivative\TouchDesigner.2025.33070'
           r'\bin\pythonw.exe')
 WIN_USER = r'TEC-B4A\admin'
+# The win32 account, as the process environment carries it. Injected into
+# install() so the Scheduled-Task path resolves an account DETERMINISTICALLY
+# on any CI OS: current_user_account reads USERNAME, a Windows variable the
+# macos-latest runner does not set, so a win32 install() left to read the
+# real os.environ refused with no_user_account and reddened the mac leg of
+# bridge-tests. Injecting env (never mutating os.environ -- that has bitten
+# this suite before) keeps the real resolver under test with a stable input.
+WIN_ENV = {'USERDOMAIN': 'TEC-B4A', 'USERNAME': 'admin'}
 MAC_PY = ('/Applications/TouchDesigner.app/Contents/Frameworks/'
           'Python.framework/Versions/Current/bin/python3')
 
@@ -2033,7 +2041,8 @@ class TestConvoyInstallActions(EmbodyTestCase):
         with _TempDir() as root:
             runner = _Runner()
             got = install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
-                                      platform='win32', runner=runner)
+                                      platform='win32', runner=runner,
+                                      env=WIN_ENV)
             self.assertTrue(got['ok'], got)
             self.assertTrue(got['registered'])
             self.assertTrue(os.path.isfile(
@@ -2056,7 +2065,8 @@ class TestConvoyInstallActions(EmbodyTestCase):
         with _TempDir() as root:
             runner = _Runner()
             got = install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
-                                      platform='win32', runner=runner)
+                                      platform='win32', runner=runner,
+                                      env=WIN_ENV)
             self.assertEqual(got['steps'][-1], 'installed.json')
             self.assertEqual(got['steps'][0], 'payload')
 
@@ -2065,7 +2075,8 @@ class TestConvoyInstallActions(EmbodyTestCase):
         with _TempDir() as root:
             runner = _Runner(returncode=1, stderr='ERROR: access denied')
             got = install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
-                                      platform='win32', runner=runner)
+                                      platform='win32', runner=runner,
+                                      env=WIN_ENV)
             self.assertFalse(got['ok'])
             self.assertEqual(got['reason'], 'register_failed')
             self.assertIn('access denied', got['detail'])
@@ -2119,7 +2130,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
             install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
                                 platform='win32', runner=_Runner(),
                                 drain_interval=5.0,
-                                installed_by='/project/x.toe')
+                                installed_by='/project/x.toe', env=WIN_ENV)
             record = install_mod.read_installed(root, 'win32')
             self.assertEqual(record['interpreter'], WIN_PY)
             self.assertEqual(record['drain_interval'], 5.0)
@@ -2382,7 +2393,8 @@ class TestConvoyInstallActions(EmbodyTestCase):
     def test_uninstall_unregisters_the_supervisor(self):
         with _TempDir() as root:
             install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
-                                platform='win32', runner=_Runner())
+                                platform='win32', runner=_Runner(),
+                                env=WIN_ENV)
             runner = _Runner()
             install_mod.uninstall(root, platform='win32', runner=runner)
             joined = [' '.join(c) for c in runner.calls]
@@ -2398,7 +2410,8 @@ class TestConvoyInstallActions(EmbodyTestCase):
     def test_uninstall_keeps_a_stranger_and_reports_it(self):
         with _TempDir() as root:
             install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
-                                platform='win32', runner=_Runner())
+                                platform='win32', runner=_Runner(),
+                                env=WIN_ENV)
             stranger = os.path.join(
                 install_mod.app_dir(root, '6.0.171', 'win32'), 'mine.txt')
             with open(stranger, 'w') as f:
