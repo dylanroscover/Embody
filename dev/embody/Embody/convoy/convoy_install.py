@@ -135,6 +135,16 @@ HOST_MODULES = (
     # module load, so a payload without it cannot start the daemon at
     # all. No network code yet (that is slice 3); safe to vendor now.
     "convoy_peers.py",
+    # Phase 3 slice 3 (the LAN transport). convoy_hostapp imports all
+    # three at module load: convoy_lan (the lan.json switch + bind-address
+    # selection), convoy_peerserver (the mutual-TLS peer listener), and
+    # convoy_peerclient (the pinned client). A payload missing any of them
+    # cannot start the daemon. They bind NOTHING off-box unless lan.json
+    # enables it -- absent lan.json (the shipped state) means no LAN
+    # socket -- so vendoring them changes no default behaviour.
+    "convoy_lan.py",
+    "convoy_peerserver.py",
+    "convoy_peerclient.py",
 )
 
 # Autonomous dispatch, ON for an installed host app: a supervised daemon

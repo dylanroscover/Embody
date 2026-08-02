@@ -9,22 +9,41 @@ before a socket exists.
 """
 
 import json
+import tempfile
 import time
 
 import pytest
 
 import convoy_controllers as controllers
 import convoy_hostapp as ha
+import convoy_hostkeys as hk
 import convoy_hoststore as hs
 import convoy_peers as cp
 import convoy_protocol as protocol
 from test_convoy_hostapp import Server
 
 CONVOY = "studio"
+
+# SLICE 3: a peer is now identified by a REAL pinned Ed25519 key, not a
+# fictional fingerprint. The two test peers get actual identities (minted
+# once, in throwaway temp dirs) so their fingerprints are real, their
+# envelopes carry real Ed25519 signatures, and submit_envelope's peer
+# path -- which builds the verifier from the PINNED public key and refuses
+# a source that is not the authenticated peer -- exercises the production
+# contract instead of a PSK simulation. host_id stays independent of the
+# key (the pin is the binding (host_id, fingerprint)).
+_PEER_KEYS = hk.load_or_create(tempfile.mkdtemp(prefix="cv_peer_"))
+_OTHER_KEYS = hk.load_or_create(tempfile.mkdtemp(prefix="cv_other_"))
+
 PEER = "ab" * 16
-PEER_FP = "cvfp1-m188-6zc5-0w2r-5k7q-755g-k244-fk1h-5jw8"
+PEER_FP = _PEER_KEYS.fingerprint
 OTHER = "cd" * 16
-OTHER_FP = "cvfp1-0000-1111-2222-3333-4444-5555-6666-7777"
+OTHER_FP = _OTHER_KEYS.fingerprint
+
+# Look up a peer's key material by the fingerprint being pinned/presented,
+# so a re-pin (admit PEER under OTHER_FP) or a mismatch test picks the key
+# that matches the fingerprint, not the host_id.
+_KEYS_BY_FP = {PEER_FP: _PEER_KEYS, OTHER_FP: _OTHER_KEYS}
 
 
 @pytest.fixture
@@ -57,6 +76,12 @@ def envelope_for(server, node, psk, operation="query_network",
 
 
 def admit(server, host_id=PEER, fingerprint=PEER_FP, **kw):
+    # Carry the certificate that matches the fingerprint being pinned, so
+    # the admission is realistic (the LAN listener's trust store needs it);
+    # authorize_peer only checks the fingerprint, so tests that pin a
+    # deliberate mismatch still behave as before.
+    if "cert_pem" not in kw and fingerprint in _KEYS_BY_FP:
+        kw["cert_pem"] = _KEYS_BY_FP[fingerprint].certificate_pem
     code, body = server.call("/peers/admit",
                              {"host_id": host_id,
                               "fingerprint": fingerprint, **kw})
@@ -66,11 +91,32 @@ def admit(server, host_id=PEER, fingerprint=PEER_FP, **kw):
 
 def submit_as_peer(server, envelope, host_id=PEER, fingerprint=PEER_FP):
     """The slice-3 seam: an envelope arriving FROM a peer whose identity
-    the transport established locally."""
+    the TLS layer established LOCALLY from the certificate it presented.
+
+    This stands in for a correct peer client: it stamps the envelope's
+    origin AND source to the authenticated host (the LAN listener refuses
+    any other -- source_mismatch, tested in test_convoy_peerserver) and
+    re-signs with the peer's PINNED Ed25519 key, then hands submit_envelope
+    the public key the way the real listener recomputes it from the cert.
+    A fingerprint with no matching key (a deliberate mismatch/unknown
+    test) is left unsigned with no public_der -- authorize_peer refuses it
+    before verification, so the signature never matters.
+    """
+    envelope = dict(envelope)
+    envelope["origin_host_id"] = host_id
+    envelope["source_host_id"] = host_id
+    keys = _KEYS_BY_FP.get(fingerprint)
+    public_der = None
+    if keys is not None:
+        envelope["sig_alg"] = keys.alg
+        envelope["signature"] = keys.signer().sign(
+            protocol._signing_payload(envelope))
+        public_der = keys.public_der
     with server.app.lock:
         return server.app.submit_envelope(
             {"envelope": envelope},
-            origin={"host_id": host_id, "fingerprint": fingerprint})
+            origin={"host_id": host_id, "fingerprint": fingerprint,
+                    "public_der": public_der})
 
 
 def write_denylist(server, payload, age_s=5.0):

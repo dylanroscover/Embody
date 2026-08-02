@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 12
-generator: Embody/6.0.175
+build: 15
+generator: Embody/6.0.178
 td_build: 099.2025.33070
-source_file: Embody-6.175.toe
-exported_at: '2026-08-02T12:37:06Z'
+source_file: Embody-6.178.toe
+exported_at: '2026-08-02T15:32:17Z'
 network_path: /embody/Embody/convoy
 options:
   include_dat_content: false
@@ -34,6 +34,11 @@ operators:
   size: [160, 130]
   color: [0.3, 0.5, 0.9]
   children:
+  - name: convoy_lan
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_lan.py
+    position: [1200, -800]
   - name: convoy_peers
     type: textDAT
     parameters:
@@ -79,6 +84,16 @@ operators:
     parameters:
       file: embody/Embody/convoy/host/convoy_mcpclient.py
     position: [1200, -400]
+  - name: convoy_peerclient
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_peerclient.py
+    position: [400, -1200]
+  - name: convoy_peerserver
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_peerserver.py
+    position: [0, -1200]
   - name: convoy_controllers
     type: textDAT
     parameters:

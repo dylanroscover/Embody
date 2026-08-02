@@ -57,8 +57,10 @@ import convoy_controllers as controllers
 import convoy_hostkeys as hostkeys
 import convoy_hoststore as hoststore
 import convoy_identity as identity
+import convoy_lan as lan_mod
 import convoy_mcpclient as mcpclient
 import convoy_peers as peers_mod
+import convoy_peerserver as peerserver
 import convoy_platform as platform_mod
 import convoy_protocol as protocol
 
@@ -291,6 +293,10 @@ _REFUSAL_HTTP = {
     peers_mod.REASON_UNKNOWN: 403,
     peers_mod.REASON_PIN_MISMATCH: 403,
     peers_mod.REASON_OBSERVE_ONLY: 403,
+    # Peer TRANSPORT (Phase 3 slice 3). Channel binding and an unusable
+    # pinned key are both "this host will not hear you" refusals.
+    "source_mismatch": 403,
+    "peer_key_unusable": 403,
 }
 
 # Bounds for caller-supplied text. Ids are host-minted 32-hex or
@@ -696,6 +702,21 @@ class HostApp:
             self.hostkeys = hostkeys.load_or_create(directory_path)
         except hostkeys.CryptographyMissing as e:
             self.identity_detail = e.detail
+        # THE LAN LISTENER (Phase 3 slice 3). None until main() binds it,
+        # and it binds ONLY when lan.json enables it (convoy_lan;
+        # `absent = NO LAN SOCKET EVER`). These describe its state for
+        # /lan/status and for the shutdown order (the LAN listener stops
+        # FIRST). An embedded HostApp -- every test that does not call
+        # serve_lan -- leaves them None and reports "not bound".
+        self.lan_server = None
+        self.lan_thread = None
+        self.lan_address = None
+        self.lan_port = None
+        # Why the LAN listener is not up, when it is not: 'disabled' (no
+        # lan.json), a convoy_lan reason, a bind refusal, or 'no_identity'.
+        # Surfaced on /lan/status so "off" is never indistinguishable from
+        # "broken".
+        self.lan_reason = "disabled"
         # How /shutdown stops the server. Set by main() to EXACTLY the
         # callable the SIGTERM handler uses -- one shutdown path, not
         # two. None until then, so an embedded HostApp (every test that
@@ -3020,16 +3041,6 @@ class HostApp:
             except Malformed as e:
                 return self._refuse("peer", peers_mod.REASON_UNKNOWN,
                                     e.detail, 403)
-            # NOTE the one check that is NOT here: CHANNEL BINDING, i.e.
-            # refusing `source_mismatch` when the envelope's signed
-            # source_host_id disagrees with the TLS-authenticated peer
-            # (plan 1.2). It belongs to slice 3, with the handshake that
-            # establishes the peer in the first place -- named here as a
-            # deferral rather than left to be noticed as a gap, because
-            # S7 says its absence is INVISIBLE. What slice 2 already does
-            # is the half that does not need a socket: the delivery
-            # record's origin is taken from the AUTHENTICATED identity,
-            # never from anything the envelope asserted.
             peer_decision = self.peers.authorize_peer(peer_host,
                                                       peer_fingerprint)
             if not peer_decision.allowed:
@@ -3039,6 +3050,35 @@ class HostApp:
                     extra={"peer_digest": peer_decision.digest,
                            "peer_state": peer_decision.state})
             origin_host_id = peer_decision.host_id
+            # The peer's PINNED public key, carried IN-PROCESS by the LAN
+            # listener from the certificate it actually presented (never
+            # from the request body). It is what makes THE LISTENER CHOOSE
+            # THE SIGNER below -- a peer envelope is verified against this
+            # key, not the group PSK.
+            peer_public_der = origin.get("public_der")
+            # CHANNEL BINDING (source_mismatch) -- the half slice 2 named
+            # as deferred because S7 says its absence is INVISIBLE, now
+            # closed with the handshake that establishes the peer. The
+            # envelope's SIGNED origin and source must BOTH be the
+            # TLS-authenticated peer. Checked BEFORE verification because
+            # it is an identity check, not a content check: a mismatch is
+            # refused whether or not the signature is valid, and
+            # verify_envelope then re-confirms these very fields are signed
+            # (so a matching value cannot have been forged). Together with
+            # v1's origin==source this closes the path by which an admitted
+            # peer replays a third party's envelope (L-09) or names a third
+            # machine as origin to make it execute elsewhere (L-10).
+            claimed_origin = envelope.get("origin_host_id")
+            claimed_source = envelope.get("source_host_id")
+            if (claimed_origin != origin_host_id
+                    or claimed_source != origin_host_id):
+                return self._refuse(
+                    "peer", "source_mismatch",
+                    f"the envelope names origin={str(claimed_origin)[:64]!r} "
+                    f"source={str(claimed_source)[:64]!r}, but the "
+                    f"TLS-authenticated peer is {origin_host_id!r}; a peer "
+                    f"may only submit envelopes it originated as itself", 403,
+                    extra={"peer_digest": peer_decision.digest})
         # PRE-VERIFICATION READS. Two fields are read before the
         # signature is checked, and both only SELECT, never decide:
         # target_node_id selects the node record (and so the convoy PSK
@@ -3059,11 +3099,32 @@ class HostApp:
         node = self.directory.lookup(target)
         if node is None:
             return self._refuse("envelope", "unknown_node", target, 404)
-        # ensure (not read): self-heals a register that predates PSK
-        # minting; a fresh key can never validate an old signature, so
-        # healing here can only produce a refusal, never an acceptance.
-        signer = protocol.HmacSigner(
-            self.db.ensure_convoy_psk(node["convoy_id"]))
+        # THE LISTENER CHOOSES THE SIGNER, NEVER THE ENVELOPE (plan 1.1).
+        # A LOOPBACK envelope is group-authenticated with the convoy PSK,
+        # exactly as before; a PEER envelope is verified against the
+        # peer's PINNED Ed25519 key -- the one in the certificate the TLS
+        # layer already matched to the pin. An envelope that arrived over
+        # the LAN but is signed hmac-sha256 is refused by verify_envelope's
+        # algorithm_mismatch: that IS the PSK-downgrade defense (S5), and
+        # /psk is structurally unreachable from the LAN handler, so a peer
+        # cannot obtain the group key to begin with.
+        if peer_decision is not None:
+            try:
+                signer = hostkeys.verifier_from_public_der(peer_public_der)
+            except hostkeys.HostKeyError as e:
+                # No usable pinned key for this peer (missing/corrupt DER,
+                # or cryptography absent -- in which case no LAN listener
+                # could have bound at all). Refuse rather than fall back to
+                # a signer that would verify the wrong thing.
+                return self._refuse(
+                    "peer", "peer_key_unusable", e.detail, 403, node,
+                    {"peer_digest": peer_decision.digest})
+        else:
+            # ensure (not read): self-heals a register that predates PSK
+            # minting; a fresh key can never validate an old signature, so
+            # healing here can only produce a refusal, never an acceptance.
+            signer = protocol.HmacSigner(
+                self.db.ensure_convoy_psk(node["convoy_id"]))
         entry = self.operations.get(operation)
         gating = gating_of(entry) if entry else None
         # The A-22 precondition is asked of RELAYABLE operations only.
@@ -3184,6 +3245,207 @@ class HostApp:
         manifest = self.build_manifest(node_id)
         return 200, {"ok": True, "host_id": self.host_id,
                      "manifest": manifest.to_dict()}
+
+    def build_remote_manifest(self):
+        """The manifest a PEER sees -- FILTERED to remote_exposed
+        operations only.
+
+        A peer must never even see run_tests or save_project (they are
+        remote_exposed False), so refuse-before-send is honest: a
+        controller reads this and never tries to relay something the host
+        would refuse. This is a VIEW filter, not slice 6's digest break:
+        each operation's digest is byte-identical to build_manifest's, so
+        no cross-version compatibility changes here. Slice 6 folds
+        remote_exposed INTO the digest (the deliberate one-time break)
+        along with the full A-5 boundary suite; until then, hiding the
+        non-exposed rows is the strictly-safer subset.
+        """
+        manifest = capabilities.CapabilityManifest(protocol.PROTOCOL, None)
+        for name in sorted(self.operations):
+            entry = self.operations[name]
+            if not gating_of(entry)["remote_exposed"]:
+                continue
+            side_effects = dict(entry.get("side_effects") or {})
+            if entry.get("async_job"):
+                side_effects["async_job"] = True
+            manifest.add(name, capabilities.operation_digest(
+                name,
+                schema=entry.get("schema"),
+                gating=gating_of(entry),
+                side_effects=side_effects))
+        return manifest
+
+    def get_peer_manifest(self, host_id):
+        """The remote-exposed manifest, served on the LAN /peer/manifest.
+
+        LOCK-FREE, and it MUST stay so: it reads only self.operations,
+        which is deep-copied once in __init__ and never mutated at
+        runtime, so no app-lock is needed and the peer GET path does not
+        take one. `host_id` is the TLS-authenticated peer -- the peer
+        handler has already run authorize_peer before calling this, so a
+        blocked/pending/killswitched peer never reaches here. The manifest
+        is the same for every admitted peer today; the parameter is a seam
+        for a future per-peer view -- BUT any such view that reads
+        lock-guarded mutable state (self.peers, self._peer_controllers,
+        self.leases) MUST take self.lock, because this method is called
+        without it."""
+        manifest = self.build_remote_manifest()
+        return 200, {"ok": True, "host_id": self.host_id,
+                     "manifest": manifest.to_dict()}
+
+    def peer_job_view(self, host_id, delivery_id, since=None):
+        """A delivery record's status for the PEER THAT SUBMITTED IT, with
+        a monotonic cursor. Served on the LAN /peer/jobs/<delivery_id>.
+
+        PER-PEER AUTHORIZATION (Gap 2): a peer may read its OWN delivery
+        records and no others. The job's origin_host_id must equal the
+        TLS-authenticated peer -- otherwise the answer is
+        indistinguishable from 'no such job' (a not_found, never a
+        'forbidden' that would confirm the id exists to a peer not
+        entitled to it).
+
+        THE CURSOR is the record's own `updated` timestamp -- the
+        TARGET's clock, which the caller echoes back in `since`, so there
+        is no cross-machine clock dependency (the field is compared to
+        itself). since >= updated -> not changed (the caller already has
+        this state); since < updated (or absent) -> the current view. A
+        monotonic integer sequence with SSE push is the A-46 upgrade,
+        deferred.
+
+        LOCK-FREE: it reads only self.db.get_job, a pure atomic read of a
+        job file (OSError/ValueError -> None), exactly the pattern
+        status() uses off the lock. The peer handler has already
+        authorized the peer; this adds per-peer OWNERSHIP (the job's
+        origin must be this peer). Any future enrichment from lock-guarded
+        in-memory state MUST take self.lock -- the peer GET path holds
+        none.
+        """
+        job = self.db.get_job(delivery_id) if delivery_id else None
+        # NOT FOUND covers three cases a peer must not be able to tell
+        # apart: no such id, an unreadable record, and a record owned by
+        # a DIFFERENT origin. Confirming existence to an unentitled peer
+        # is itself a leak.
+        if job is None or (job.get("origin_host_id") or None) != host_id:
+            return 404, {"ok": False, "reason": "not_found",
+                         "delivery_id": str(delivery_id)[:64]}
+        updated = job.get("updated")
+        try:
+            updated_f = float(updated)
+        except (TypeError, ValueError):
+            updated_f = None
+        if (since is not None and updated_f is not None
+                and float(since) >= updated_f):
+            return 200, {"ok": True, "changed": False, "cursor": updated_f,
+                         "delivery_id": job["delivery_id"],
+                         "state": job.get("state")}
+        # A BOUNDED, PEER-SAFE VIEW: delivery status and the node's
+        # verdict, never internal attribution (controller_id,
+        # origin_admission_id) or another node's business. The result is
+        # bounded exactly as the loopback /jobs path bounds it.
+        view = {
+            "delivery_id": job["delivery_id"],
+            "state": job.get("state"),
+            "operation": job.get("operation"),
+            "node_job_id": job.get("node_job_id"),
+            "verdict_source": job.get("verdict_source"),
+            "result": _bounded_result(job.get("result"))
+            if job.get("result") is not None else None,
+            "created": job.get("created"),
+            "updated": job.get("updated"),
+        }
+        return 200, {"ok": True, "changed": True, "cursor": updated_f,
+                     "job": view}
+
+    # -- LAN transport (Phase 3 slice 3) ---------------------------------
+
+    def lan_trust_material(self):
+        """(signature, [cert_pem, ...]) for the LAN server's TLS trust
+        store. Called by convoy_peerserver's context provider, which
+        rebuilds the SSL context whenever the signature changes.
+
+        EVERY PEER WITH A STORED CERTIFICATE, including blocked ones: a
+        blocked peer keeps its pin, so it still HANDSHAKES and is then
+        refused by authorize_peer at accept and again at /peer/envelope --
+        which is exactly what makes 'refused while holding a valid key'
+        true (L-06) and the verifier-spy order test meaningful. A peer
+        with NO stored cert is fail-closed out of the trust store and
+        cannot connect at all. The signature is cheap and changes on any
+        admit/block/forget/re-pin, so admission takes effect without a
+        restart.
+        """
+        pems = []
+        signature = []
+        for record in self.peers.peers():
+            cert_pem = record.get("cert_pem")
+            if not cert_pem:
+                continue
+            pems.append(cert_pem)
+            signature.append((record.get("host_id"),
+                              record.get("fingerprint")))
+        # Sorted so the signature is order-independent, and prefixed with
+        # THIS host's own fingerprint: a local identity rotation must also
+        # rebuild the server cert chain.
+        signature.sort()
+        my_fp = self.hostkeys.fingerprint if self.hostkeys else None
+        return (my_fp, tuple(signature)), pems
+
+    def lan_status(self):
+        """Whether the LAN listener is up, and where. LOOPBACK-only route
+        (/lan/status): an operator asks their OWN host, never a peer."""
+        bound = self.lan_server is not None
+        peers_material = self.lan_trust_material()[1]
+        return 200, {
+            "ok": True,
+            "host_id": self.host_id,
+            "lan_bound": bound,
+            "lan_address": self.lan_address,
+            "lan_port": self.lan_port,
+            "lan_reason": None if bound else self.lan_reason,
+            # How many peers could actually establish a mutual-TLS
+            # connection right now (have a pinned cert). Admission state
+            # is separate -- these can still be refused by authorize_peer.
+            "lan_trust_anchors": len(peers_material),
+            "identity_fingerprint": (self.hostkeys.fingerprint
+                                     if self.hostkeys else None),
+            "identity_certificate": bool(
+                self.hostkeys and self.hostkeys.certificate_pem),
+        }
+
+    def set_lan_server(self, server, thread, address, port):
+        """Record the bound LAN listener (main() calls this after
+        serve_lan). Kept a setter for the same reason as the shutdown
+        hook: the server does not exist until after HostApp is built."""
+        self.lan_server = server
+        self.lan_thread = thread
+        self.lan_address = address
+        self.lan_port = port
+        self.lan_reason = None
+
+    def stop_lan_server(self, timeout_s=5.0):
+        """Stop the LAN listener FIRST and unconditionally (A-46 point 4:
+        stop accepting peer connections -> stop_drain_loop ->
+        clear_portfile). Idempotent and never raises -- shutdown hygiene
+        must not depend on it, exactly like stop_drain_loop."""
+        server = self.lan_server
+        if server is None:
+            return
+        self.lan_server = None
+        try:
+            server.shutdown()
+        except Exception:
+            pass
+        try:
+            server.server_close()
+        except Exception:
+            pass
+        thread = self.lan_thread
+        if thread is not None:
+            try:
+                thread.join(timeout_s)
+            except Exception:
+                pass
+        self.lan_thread = None
+        self.lan_reason = "stopped"
 
     # -- convoy PSK issuance (Phase 1 local key distribution) ------------
 
@@ -3963,6 +4225,12 @@ def make_handler(app):
                             self.path[len("/manifest/"):])
                     elif self.path == "/identity":
                         code, payload = app.get_identity()
+                    elif self.path == "/lan/status":
+                        # LOOPBACK ONLY: an operator asks their OWN host
+                        # whether the LAN listener is up. The peer leg has
+                        # its own /peer/health; this is never in the LAN
+                        # route table.
+                        code, payload = app.lan_status()
                     elif self.path == "/peers":
                         code, payload = app.list_peers()
                     elif self.path == "/leases":
@@ -4088,6 +4356,64 @@ def serve(app, port=0):
     return server, actual_port
 
 
+def start_lan_if_configured(app, log=None):
+    """Bind and start the LAN listener IF AND ONLY IF lan.json enables it.
+
+    Returns True when the LAN listener is now serving, False otherwise --
+    and False is the ORDINARY, non-error outcome for every shipped build
+    (no lan.json = no LAN socket, ever). Every reason for not binding is
+    recorded on app.lan_reason so /lan/status can tell 'off' from
+    'broken', and NONE of them stops the loopback daemon: a host that
+    cannot serve peers is still fully usable locally.
+
+    The gate is deliberately layered so no single check silently opens a
+    socket: (1) lan.json must exist AND enable it; (2) this host must have
+    a usable identity CERTIFICATE (no cert -> no TLS); (3) a routable
+    interface must resolve; (4) the port must be free.
+    """
+    say = log or (lambda msg: sys.stderr.write(msg + "\n"))
+    try:
+        config = lan_mod.load_config(app.data_dir)
+    except lan_mod.LanConfigError as e:
+        app.lan_reason = e.reason
+        say(f"convoy LAN: {e}")
+        return False
+    if not config.should_bind:
+        app.lan_reason = "disabled"
+        return False
+    # TLS needs the derived certificate, not just the signing key. No
+    # cert -> the identity still signs envelopes locally, but no mutual
+    # TLS is possible, so the LAN listener stays down with a named reason.
+    if app.hostkeys is None:
+        app.lan_reason = "no_identity"
+        say("convoy LAN: refusing to bind -- no host identity "
+            f"({app.identity_detail or hostkeys.CryptographyMissing().reason})")
+        return False
+    if not app.hostkeys.certificate_pem:
+        app.lan_reason = "no_certificate"
+        say("convoy LAN: refusing to bind -- the identity has no TLS "
+            f"certificate ({app.hostkeys.cert_reason or 'unknown'})")
+        return False
+    try:
+        address = lan_mod.resolve_bind(config)
+    except lan_mod.LanConfigError as e:
+        app.lan_reason = e.reason
+        say(f"convoy LAN: {e}")
+        return False
+    try:
+        server, port = peerserver.serve_lan(app, address, config.port)
+    except peerserver.LanBindError as e:
+        app.lan_reason = e.reason
+        say(f"convoy LAN: {e}")
+        return False
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    app.set_lan_server(server, thread, address, port)
+    say(f"convoy LAN: peer listener on {address}:{port} "
+        f"(pinned mutual TLS; identity {app.hostkeys.fingerprint})")
+    return True
+
+
 def build_parser():
     """The command line, as its own function so the flag wiring is
     testable without starting a daemon -- `--singleton` defaulting ON is
@@ -4159,6 +4485,11 @@ def main(argv=None):
         raise
     if args.drain_interval > 0:
         app.start_drain_loop(args.drain_interval)
+    # The LAN listener, IF lan.json enables it. A default build has none,
+    # so this is a no-op and the daemon is loopback-only, exactly as
+    # before this slice. A bind failure NEVER stops the loopback daemon
+    # (start_lan_if_configured returns False and records a reason).
+    start_lan_if_configured(app)
     sys.stderr.write(
         f"embody-convoy host {app.host_id[:8]} on 127.0.0.1:{port} "
         f"(data: {directory})\n")
@@ -4170,8 +4501,16 @@ def main(argv=None):
     # clients at a dead port. Handle it so the COMMON stop is clean;
     # clients still verify liveness, because SIGKILL/power-loss can
     # never be handled here.
+    #
+    # SHUTDOWN ORDER (A-46 point 4): stop accepting PEER connections
+    # FIRST, unconditionally, THEN the loopback server. The LAN listener
+    # is the off-box surface; it goes down before anything else so no new
+    # peer work can arrive while the daemon is winding down.
     def _stop(signum=None, _frame=None):
-        threading.Thread(target=server.shutdown, daemon=True).start()
+        def _teardown():
+            app.stop_lan_server()
+            server.shutdown()
+        threading.Thread(target=_teardown, daemon=True).start()
 
     # ONE shutdown path, two triggers: the signal above and the
     # authenticated POST /shutdown route. Stop/upgrade/uninstall use the
@@ -4190,6 +4529,14 @@ def main(argv=None):
     try:
         server.serve_forever()
     finally:
+        # LAN listener FIRST (idempotent -- _stop may already have stopped
+        # it), THEN the drain loop, THEN the portfile: the plan's exact
+        # order, so no peer connection is accepted after the daemon has
+        # begun clearing its own state.
+        try:
+            app.stop_lan_server()
+        except Exception:
+            pass
         try:
             app.stop_drain_loop()
         except Exception:

@@ -1387,8 +1387,14 @@ def test_identity_route_returns_the_public_identity(server):
 
 def test_identity_route_never_leaks_the_private_key(server):
     """Not a shape check -- a SUBSTRING hunt over the whole response for
-    the actual bytes on disk, plus every PEM header that could carry
-    them."""
+    the actual private-key bytes on disk, plus every PRIVATE-key PEM
+    header that could carry them.
+
+    The route now DOES carry the public certificate PEM (slice 3: a peer
+    must obtain it to pin this host), so '-----BEGIN' is no longer a
+    leak marker -- 'BEGIN CERTIFICATE' is expected and safe. The hunt
+    narrows to PRIVATE-key markers, which the certificate can never
+    contain, and the actual secret bytes of the key file."""
     code, body = server.call("/identity")
     assert code == 200
     blob = json.dumps(body)
@@ -1396,8 +1402,15 @@ def test_identity_route_never_leaks_the_private_key(server):
         stored = f.read()
     secret_body = "".join(stored.splitlines()[1:-1])
     assert secret_body not in blob
-    for marker in ("PRIVATE KEY", "BEGIN EC", "BEGIN RSA", "-----BEGIN"):
+    for marker in ("PRIVATE KEY", "BEGIN EC PRIVATE", "BEGIN RSA PRIVATE",
+                   "BEGIN OPENSSH PRIVATE"):
         assert marker not in blob
+    # The PUBLIC certificate IS published here now, deliberately: it is
+    # the material an operator copies to a peer's /peers/admit to pin
+    # this host. Lock that in so a future refactor cannot quietly drop it.
+    assert body.get("certificate_pem")
+    assert "BEGIN CERTIFICATE" in body["certificate_pem"]
+    assert "PRIVATE KEY" not in body["certificate_pem"]
 
 
 def test_status_never_leaks_the_private_key(server):

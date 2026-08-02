@@ -2529,12 +2529,16 @@ class TestConvoyInstallIsTouchDesignerFree(EmbodyTestCase):
         self.assertEqual(set(install_mod.HOST_MODULES), on_disk)
         # The count is asserted as well as the set so that a rename plus
         # an addition cannot cancel out. It moved 9 -> 10 when Phase 3
-        # slice 1 added convoy_hostkeys.py, and 10 -> 11 when slice 2
-        # added convoy_peers.py -- THIS TEST is what catches a payload
-        # that would otherwise ship without a module the daemon imports.
-        self.assertEqual(len(install_mod.HOST_MODULES), 11,
+        # slice 1 added convoy_hostkeys.py, 10 -> 11 when slice 2 added
+        # convoy_peers.py, and 11 -> 14 when slice 3 added convoy_lan.py,
+        # convoy_peerserver.py and convoy_peerclient.py (the LAN
+        # transport) -- THIS TEST is what catches a payload that would
+        # otherwise ship without a module the daemon imports.
+        self.assertEqual(len(install_mod.HOST_MODULES), 14,
                          'nine plan modules, convoy_hostkeys.py (slice 1), '
-                         'and convoy_peers.py (slice 2)')
+                         'convoy_peers.py (slice 2), and convoy_lan.py + '
+                         'convoy_peerserver.py + convoy_peerclient.py '
+                         '(slice 3 transport)')
 
     def test_the_module_docstring_states_the_honest_limits(self):
         """The code must not read softer than the install dialog. If

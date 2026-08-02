@@ -409,6 +409,44 @@ def verifier_from_public_der(public_der):
     return Ed25519Signer(public_key=public_key)
 
 
+def public_der_from_certificate(certificate_der):
+    """The DER SubjectPublicKeyInfo carried by an X.509 certificate.
+
+    THE bridge slice 3's transport needs and the reason it lives here:
+    a TLS peer is identified by `getpeercert(binary_form=True)`, which
+    returns the whole CERTIFICATE DER -- but the pin, the fingerprint and
+    the envelope verifier are all over the SPKI, NOT the certificate (a
+    cert re-issue with the same key must read as the same identity, see
+    the module header). Parsing X.509 is `cryptography`'s job, and A-44
+    charters exactly one module to import it, so convoy_peerserver /
+    convoy_peerclient recompute a presented peer's fingerprint through
+    here rather than taking the dependency themselves:
+
+        spki = hostkeys.public_der_from_certificate(peer_cert_der)
+        fp   = hostkeys.fingerprint(spki)              # compare to the pin
+        vrfy = hostkeys.verifier_from_public_der(spki) # verify its envelopes
+
+    Malformed input (a truncated cert, a non-Ed25519 key) is a NAMED
+    HostKeyError, never a raw exception escaping into a handler thread.
+    """
+    _require_cryptography()
+    if not isinstance(certificate_der, (bytes, bytearray)) \
+            or not certificate_der:
+        raise HostKeyError("malformed_certificate",
+                           repr(type(certificate_der)))
+    try:
+        certificate = _x509.load_der_x509_certificate(bytes(certificate_der))
+    except Exception as e:
+        raise HostKeyError("malformed_certificate",
+                           f"{type(e).__name__}: {e}")
+    public_key = certificate.public_key()
+    if not isinstance(public_key, _ed25519.Ed25519PublicKey):
+        raise HostKeyError(
+            "unsupported_public_key",
+            f"certificate carries a {type(public_key).__name__}, not Ed25519")
+    return _public_der(public_key)
+
+
 # ---------------------------------------------------------------------
 # On-disk identity
 # ---------------------------------------------------------------------
@@ -458,13 +496,23 @@ class HostKeys:
         return Ed25519Signer(public_key=self._private.public_key())
 
     def public_identity(self):
-        """Everything that is safe to publish. NEVER the private key."""
+        """Everything that is safe to publish. NEVER the private key.
+
+        certificate_pem IS safe to publish -- it carries only the public
+        key, and a peer must obtain it to PIN this host (slice 3). It is
+        the one piece of material an operator setting up admission has to
+        copy from here to a peer's /peers/admit, so it is served on the
+        loopback /identity route beside the fingerprint the operator
+        compares out of band. None when the derived cert could not be
+        written (the identity still signs envelopes; only TLS is missing).
+        """
         return {
             "alg": self.alg,
             "fingerprint": self.fingerprint,
             "fingerprint_display": self.fingerprint_display(),
             "certificate": self.certificate_pem is not None,
             "certificate_reason": self.cert_reason,
+            "certificate_pem": self.certificate_pem,
         }
 
 
