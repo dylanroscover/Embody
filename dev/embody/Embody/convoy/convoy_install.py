@@ -106,12 +106,12 @@ RETAINED_NAMES = ("host.json", "host.token", "host.portfile.json",
                   "audit.jsonl", "host.db", "host.lock")
 RETAINED_DIRS = ("jobs",)
 
-# The nine host-app modules the vendoring step must supply. This is a
+# The host-app modules the vendoring step must supply. This is a
 # MANIFEST OF WHAT TO VENDOR, not a gate: write_payload writes whatever
 # dict it is handed, because the caller reads the DATs on the main thread
 # and is the only thing that knows which exist. The byte-identity parity
-# test between these DATs and dev/convoy/*.py is what actually enforces
-# the set.
+# test between these DATs and dev/convoy/*.py, and the set-equality test
+# against the daemon sources on disk, are what actually enforce the set.
 HOST_MODULES = (
     "convoy_hostapp.py",
     "convoy_hoststore.py",
@@ -130,6 +130,11 @@ HOST_MODULES = (
     # daemon then reports identity_reason cryptography_missing
     # rather than pretending to have an identity.
     "convoy_hostkeys.py",
+    # Phase 3 slice 2. The peer store, the fail-closed denylist, and
+    # THE authorize_peer decision -- convoy_hostapp imports it at
+    # module load, so a payload without it cannot start the daemon at
+    # all. No network code yet (that is slice 3); safe to vendor now.
+    "convoy_peers.py",
 )
 
 # Autonomous dispatch, ON for an installed host app: a supervised daemon

@@ -647,14 +647,18 @@ def test_deadline_check_uses_the_injected_clock(tmp_path):
             CONVOY, app.host_id, "ctl-a", node["node_id"], "query_network",
             signer, timeout_s=30.0, now=now, idempotency_key=key)
 
-    code, body = app.submit_envelope({"envelope": envelope_at(clock.t, "a")})
+    # LOOPBACK_ORIGIN passed explicitly: submit_envelope's origin is a
+    # REQUIRED argument, because a default would mean "this host is the
+    # origin" and silently skip peer authorization (Phase 3 slice 2).
+    code, body = app.submit_envelope({"envelope": envelope_at(clock.t, "a")},
+                                     ha.LOOPBACK_ORIGIN)
     assert code == 200 and body["created"] is True, (
         "an envelope live on the INJECTED clock must be accepted; a "
         "time.time() fallback would call it decades expired")
 
     env = envelope_at(clock.t, "b")
     clock.t += 31
-    code, body = app.submit_envelope({"envelope": env})
+    code, body = app.submit_envelope({"envelope": env}, ha.LOOPBACK_ORIGIN)
     assert code == 410 and body["reason"] == "deadline_exceeded"
 
 
@@ -785,7 +789,8 @@ def test_signed_non_finite_deadline_is_refused(server):
         assert code == 400 and body["reason"] == "malformed", bad
 
         with server.app.lock:
-            code, body = server.app.submit_envelope({"envelope": env})
+            code, body = server.app.submit_envelope({"envelope": env},
+                                                    ha.LOOPBACK_ORIGIN)
         assert code == 400 and body["reason"] == "malformed", bad
         assert "finite" in body["detail"], bad
     _, status = server.call("/status")

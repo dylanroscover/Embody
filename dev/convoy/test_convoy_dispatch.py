@@ -485,16 +485,17 @@ def test_stop_drain_loop_reports_a_loop_it_could_not_stop(server):
         assert entered.wait(timeout=10), "loop never picked up the job"
         # Mid-forward, a too-short stop times out and says so.
         assert server.app.stop_drain_loop(timeout_s=0.2) is False
-        with server.app.lock:
-            status = server.app.status()
+        # status() is SELF-LOCKING since the /status starvation fix;
+        # holding app.lock around it deadlocks (threading.Lock is not
+        # reentrant) -- the old wrapper here hung the ENTIRE suite.
+        status = server.app.status()
         assert status["drain_loop"] is True, "status lied about the loop"
         assert server.app.start_drain_loop(interval_s=60) is False, \
             "a second loop started over the unstopped first"
     finally:
         release.set()
     assert server.app.stop_drain_loop(timeout_s=10) is True
-    with server.app.lock:
-        assert server.app.status()["drain_loop"] is False
+    assert server.app.status()["drain_loop"] is False
     _, fetched = server.call(f"/jobs/{job['delivery_id']}")
     assert fetched["job"]["state"] == "succeeded"
 
@@ -1648,3 +1649,113 @@ def test_repeated_refusals_audit_once_per_transition(server):
                   if e["event"] == "dispatch_deferred"
                   and e["detail"].get("delivery_id") == job["delivery_id"]]
     assert len(events) == 1, f"expected one deferred audit, got {events}"
+
+
+# -- the drain bookkeeping maps scale with the queue -------------------
+
+def test_drain_maps_scale_past_the_floor_without_eviction_cascade(
+        server, monkeypatch):
+    """At a FIXED 2048 cap, a backlog one entry over made every insertion
+    evict another LIVE entry -- and the eviction CASCADED: each
+    re-attempt evicted the next job's pacing, so one pass over the cap
+    unpaced and re-audited the ENTIRE queue (measured: 2100 queued
+    refusals -> second pass backoff=0, all 2100 re-attempted inside the
+    30s window). The cap now scales to 2x the live queue; the floor is
+    exercised here shrunk to 8 so the test stays fast."""
+    monkeypatch.setattr(ha, "DRAIN_MAP_FLOOR", 8)
+    for i in range(20):
+        with server.app.lock:
+            server.app.db.create_job("cap%d" % i, "nd_missing",
+                                     "query_network", {}, CONVOY)
+    first = server.app.drain_once()
+    assert first["examined"] == 20
+    assert server.app._drain_map_cap == 40, "cap must scale to 2x queue"
+    assert len(server.app._drain_backoff) == 20, (
+        "every queued job must keep its pacing entry -- eviction "
+        "cascaded: %d" % len(server.app._drain_backoff))
+    assert len(server.app._drain_noted) == 20
+    second = server.app.drain_once()
+    assert second["backoff"] == 20 and second["errors"] == 0, (
+        "the second pass must skip ALL 20 via backoff, not re-attempt "
+        "evicted ones: %r" % second)
+    # ... and ONE audit line per job, not one per attempt
+    with server.app.lock:
+        refusals = [e for e in server.app.db.audit_tail(limit=400)
+                    if e["event"] == "dispatch_refused"
+                    and str(e["detail"].get("delivery_id", "")).startswith(
+                        "cj_")]
+    assert len(refusals) == 20, (
+        "dedupe must hold at scale: %d lines" % len(refusals))
+
+
+def test_the_end_of_pass_prune_reads_stale_entries_lock_free(
+        server, monkeypatch):
+    """Panel MAJOR (scale/locks lens). F4's cap rescale let the
+    end-of-pass prune read O(backlog) job files under self.lock; on the
+    pass after a mass-terminalise that wedged every route but /health
+    (the exact starvation status() and the drain snapshot were fixed
+    for). The get_job reads must run LOCK-FREE.
+
+    The stale set is seeded with entries whose jobs DO NOT EXIST -- so
+    the pass's snapshot reads nothing (its get_job calls are what a
+    naive test would miscount) and EVERY get_job here is a PRUNE read.
+    A live thread must be able to take the app lock from inside one."""
+    with server.app.lock:
+        for i in range(30):
+            gid = "cj_ghost%02d" % i
+            server.app._drain_backoff[gid] = 0.0        # past -> not held
+            server.app._drain_noted[gid] = ("dispatch_refused", "x")
+    seen = {"lock_free": None, "reads": 0}
+    real_get = server.app.db.get_job
+
+    def probe_get(delivery_id):
+        seen["reads"] += 1
+        if seen["reads"] == 1:
+            got = server.app.lock.acquire(timeout=2)
+            if got:
+                server.app.lock.release()
+            seen["lock_free"] = got
+        return real_get(delivery_id)
+
+    monkeypatch.setattr(server.app.db, "get_job", probe_get)
+    server.app.drain_once()          # queue empty -> prune scans the ghosts
+    assert seen["reads"] >= 30, (
+        "the prune did not read every stale entry: %d" % seen["reads"])
+    assert seen["lock_free"] is True, (
+        "the end-of-pass prune held self.lock across get_job -- the "
+        "O(backlog)-under-lock stall F4 must not reintroduce")
+    with server.app.lock:
+        assert not any(k.startswith("cj_ghost")
+                       for k in server.app._drain_backoff), "ghosts not reaped"
+        assert not any(k.startswith("cj_ghost")
+                       for k in server.app._drain_noted)
+
+
+def test_a_mid_pass_addition_survives_the_lock_free_prune(server,
+                                                          monkeypatch):
+    """The lock-free prune drops by an explicit `drop` set, never a
+    keep-rebuild -- so an entry added BETWEEN its two lock holds (a
+    concurrent /dispatch pacing another job) survives. A keep-rebuild
+    would silently discard it, defeating its backoff and re-auditing the
+    refusal (the round-3 invariant, now under a two-lock-hold prune)."""
+    with server.app.lock:
+        for i in range(5):
+            server.app._drain_backoff["cj_dead%d" % i] = 0.0   # ghosts
+    injected = "cj_injected_mid_prune"
+    real_get = server.app.db.get_job
+
+    def inject_once(delivery_id):
+        if not getattr(inject_once, "done", False):
+            inject_once.done = True
+            with server.app.lock:
+                server.app._drain_backoff[injected] = server.app._now() + 30
+        return real_get(delivery_id)
+
+    monkeypatch.setattr(server.app.db, "get_job", inject_once)
+    server.app.drain_once()
+    assert injected in server.app._drain_backoff, (
+        "an entry added mid-prune was wrongly dropped -- its job would "
+        "re-dispatch immediately and re-audit the refusal")
+    assert not any(k.startswith("cj_dead")
+                   for k in server.app._drain_backoff), (
+        "the examined-dead ghosts must still be reaped")

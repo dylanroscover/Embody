@@ -41,14 +41,24 @@ HOST_FILE = "host.json"
 JOBS_DIR = "jobs"
 AUDIT_FILE = "audit.jsonl"
 
+# Audit rotation. A supervised host runs unattended for WEEKS, and the
+# killswitch-backlog path can append at ~200 KB/s (measured), so an
+# append-only audit with no ceiling fills the disk -- 118 GB/week in the
+# pathological case. Rotate the current file aside at this size, keeping
+# ONE generation for forensics; the rotated file is overwritten on the
+# next rotation, so the on-disk audit is bounded at ~2x this.
+AUDIT_MAX_BYTES = 8 * 1024 * 1024
+AUDIT_ROTATED = AUDIT_FILE + ".1"
+
 JOB_STATES = ("queued", "dispatching", "running", "succeeded", "failed",
-              "indeterminate")
+              "indeterminate", "refused")
 
 # The states a job never leaves. A record here is DONE being decided:
 # succeeded/failed are node verdicts, indeterminate is the host's own
-# may-have-run proof (16.4). Named once, so every guard that must not
-# reopen a settled record reads the same list.
-TERMINAL_STATES = ("succeeded", "failed", "indeterminate")
+# may-have-run proof (16.4), refused is the host's own DELIVERY verdict
+# (see mark_refused). Named once, so every guard that must not reopen a
+# settled record reads the same list.
+TERMINAL_STATES = ("succeeded", "failed", "indeterminate", "refused")
 
 # A-15, "one authority, two records". The NODE originates the execution
 # verdict; the host record MIRRORS it. So the host may write three states
@@ -67,18 +77,78 @@ TERMINAL_STATES = ("succeeded", "failed", "indeterminate")
 #                    the dispatch-without-response, so only the host can
 #                    record it -- and it is never deleted, it is the sole
 #                    proof a consequential operation MAY have run (16.4).
+#   refused       -- NOT DELIVERED, and never will be: the host declined
+#                    to route this job (its origin peer was revoked while
+#                    it sat queued). PROPOSED AS AMENDMENT A-54, recorded
+#                    here rather than slipped in as a quiet edit.
+#
+#                    Why the host may originate it without breaking A-15:
+#                    A-15 forbids the host originating running/succeeded/
+#                    failed, because those are claims about EXECUTION and
+#                    the node is the authority on execution. `refused`
+#                    makes NO CLAIM ABOUT EXECUTION AT ALL. It is a
+#                    DELIVERY verdict -- "this host did not and will not
+#                    hand this to a node" -- and delivery is precisely
+#                    what the host IS the authority on (it is the same
+#                    authority that lets it write `queued`). It is only
+#                    ever written to a job that never left `queued`, so
+#                    it cannot overwrite anything a node said.
+#
+#                    Why it exists at all: the alternative is leaving a
+#                    revoked peer's work queued forever pending the
+#                    deferred reaper, which makes /jobs LIE -- it would
+#                    report work as pending that the host has already
+#                    decided never to do. Like mark_indeterminate it
+#                    demands EVIDENCE, for the same reason: a terminal
+#                    the host wrote on its own authority must carry what
+#                    it saw.
 # running / succeeded / failed are NODE verdicts: they may only be
 # recorded through record_node_verdict, which demands the provenance
 # (node_job_id + observed_at) that proves a node produced them. The host
 # cannot fabricate a success -- the method that would write it refuses
 # without the evidence.
-_HOST_ORIGINABLE_STATES = ("queued", "dispatching", "indeterminate")
+_HOST_ORIGINABLE_STATES = ("queued", "dispatching", "indeterminate",
+                           "refused")
 
 # The shipped node vocabulary (EnvoyExt _job_public: running|done|error)
 # mapped to the host mirror. Kept explicit so a new node status cannot
 # silently map to a host state by coincidence.
 _NODE_STATUS_TO_STATE = {"running": "running", "done": "succeeded",
                          "error": "failed"}
+
+# The verdict_source values that name a NODE as the authority.
+# _apply_state refuses an execution verdict carrying any other source --
+# enforcement is BY STATE, never by trusting the caller to pass a flag.
+_NODE_VERDICT_SOURCES = ("node_poll", "node_sync")
+
+
+class IdempotencyOriginConflict(Exception):
+    """This idempotency key already names a record from ANOTHER origin.
+
+    Never silently hand the caller the other origin's job: it would be
+    told 200 for an operation that was quietly replaced by someone
+    else's, and (worse, measured) a peer's revocation would then burn a
+    LOCAL caller's acknowledged work.
+
+    The key space is scoped per origin, so a live marker and its record
+    agree by construction. What this catches is the case where they have
+    STOPPED agreeing: a job file whose origin changed underneath its
+    marker -- a hand edit, a restored backup, a partial copy of a state
+    directory, tampering. The marker says "this key belongs to X" and the
+    record says "I belong to Y"; handing X the record would attribute Y's
+    work to X, and X's revocation would then terminalise it. Refuse and
+    let the caller retry with a key that is not in dispute.
+    """
+
+    reason = "idempotency_origin_conflict"
+
+    def __init__(self, delivery_id, existing_origin, requested_origin):
+        super().__init__(
+            f"idempotency key already names delivery {delivery_id}, which "
+            f"was submitted by {existing_origin!r}, not {requested_origin!r}")
+        self.delivery_id = delivery_id
+        self.existing_origin = existing_origin
+        self.requested_origin = requested_origin
 
 
 class StoreTooNew(Exception):
@@ -278,23 +348,40 @@ class HostStore:
     def _job_path(self, delivery_id):
         return os.path.join(self.jobs_dir, f"{delivery_id}.json")
 
-    def _idem_path(self, convoy_id, node_id, idempotency_key):
+    def _idem_path(self, convoy_id, node_id, idempotency_key,
+                   origin_host_id=None):
         """Path of the per-key admission MARKER.
 
         Idempotency is scoped, never global: a single global key space
         meant a submission for node B returned node A's job, and let one
-        convoy squat a guessable key across every other convoy. The three
-        parts are NUL-joined (a NUL cannot appear in any of them, so no
-        combination can forge another scope) and hashed, so arbitrary key
-        text can neither escape the jobs dir nor collide with a cj_ job
-        file.
+        convoy squat a guessable key across every other convoy. THE
+        ORIGIN IS THE FOURTH PART, by exactly the same argument one layer
+        out -- without it a peer could squat a guessable key across every
+        other origin, and both directions of that were reproduced: a peer
+        bound to a local caller's record (its own operation silently
+        replaced, still answered 200), and a local caller's acknowledged
+        job was burned by that peer's revocation.
+
+        origin_host_id=None reproduces the ORIGINAL three-part scope, and
+        that is deliberate rather than vestigial: markers written before
+        delivery records carried an origin used it, so a LOCAL retry
+        still has to be able to find its own job (see create_job) instead
+        of re-minting a duplicate of acknowledged work.
+
+        The parts are NUL-joined (a NUL cannot appear in any of them, so
+        no combination can forge another scope) and hashed, so arbitrary
+        key text can neither escape the jobs dir nor collide with a cj_
+        job file.
 
         ONE FILE PER KEY, deliberately: the old shared _by_key.json blob
         turned a single unreadable read into "no keys exist" and re-minted
         a duplicate job for EVERY prior key (proven 2026-07-31). A per-key
         marker's blast radius is one key, and its read fails CLOSED.
         """
-        scope = "\x00".join((convoy_id, node_id, idempotency_key))
+        parts = [convoy_id, node_id, idempotency_key]
+        if origin_host_id:
+            parts.append(origin_host_id)
+        scope = "\x00".join(parts)
         digest = hashlib.sha256(scope.encode("utf-8")).hexdigest()[:24]
         return os.path.join(self.jobs_dir, f"idem_{digest}.json")
 
@@ -313,6 +400,14 @@ class HostStore:
             return False
         os.close(fd)
         return True
+
+    def _fill_marker(self, path, delivery_id):
+        """Point a claimed marker at the record it names. Atomic replace,
+        so it heals an empty (crash- or inherit-left) marker in place."""
+        platform_mod._write_private(
+            path,
+            json.dumps({"delivery_id": delivery_id, "created": self._now()},
+                       sort_keys=True) + "\n")
 
     @staticmethod
     def _read_marker(path):
@@ -351,9 +446,20 @@ class HostStore:
         raise OSError(f"idempotency marker at {path} unreadable: {last}")
 
     def create_job(self, idempotency_key, node_id, operation, arguments,
-                   convoy_id, expected_runtime_id=None):
+                   convoy_id, expected_runtime_id=None,
+                   origin_host_id=None, controller_id=None,
+                   origin_admission_id=None):
         """Persist-before-acknowledge, idempotent per (convoy, node, key).
         Returns (job, created).
+
+        origin_host_id / controller_id record WHO ASKED. Three things
+        need them and none of them can be reconstructed later:
+        per-peer job-read authorization (a peer may read its own
+        delivery records and no others), revocation-driven skip (the
+        drain must be able to tell whose work to stop), and audit
+        attribution. `None` means the job originated on THIS host --
+        which is also how every record written before this field
+        existed reads, and that is the correct reading of them.
 
         Order is crash-safe: claim the marker (atomic gate), write the
         JOB file (durable), then fill the marker to point at it. A crash
@@ -368,20 +474,61 @@ class HostStore:
         if not convoy_id or not isinstance(convoy_id, str):
             raise ValueError("convoy_id is required to scope idempotency")
 
-        marker = self._idem_path(convoy_id, node_id, idempotency_key)
-        if not self._claim_marker(marker):
+        origin = (origin_host_id if isinstance(origin_host_id, str)
+                  and origin_host_id else None)
+        marker = self._idem_path(convoy_id, node_id, idempotency_key, origin)
+        prior = None
+        claimed_fresh = self._claim_marker(marker)
+        if not claimed_fresh:
             # Seen before. The filled marker names the delivery record;
             # read it FAIL-CLOSED (an unreadable marker raises here rather
             # than re-minting).
             prior = self._read_marker(marker)
-            if prior and prior.get("delivery_id"):
-                existing = self.get_job(prior["delivery_id"])
-                if existing is not None:
+        elif origin is None or origin == self.host_id():
+            # We claimed a FRESH origin-scoped marker -- but a LOCAL
+            # submission may have a pre-scoping marker under the old
+            # three-part scope. Re-minting over one would duplicate
+            # ACKNOWLEDGED work, which is the annihilation class this
+            # whole mechanism exists to prevent. Only a local submission
+            # may inherit one: a record with no origin is local by
+            # definition, so a PEER must never bind to it.
+            legacy = self._idem_path(convoy_id, node_id, idempotency_key)
+            if legacy != marker:
+                prior = self._read_marker(legacy)
+        if prior and prior.get("delivery_id"):
+            existing = self.get_job(prior["delivery_id"])
+            if existing is not None:
+                existing_origin = existing.get("origin_host_id")
+                if (existing_origin or None) != origin and not (
+                        existing_origin is None and origin == self.host_id()):
+                    raise IdempotencyOriginConflict(
+                        prior["delivery_id"], existing_origin, origin)
+                if existing.get("state") != "refused":
+                    if claimed_fresh and marker != self._idem_path(
+                            convoy_id, node_id, idempotency_key,
+                            existing.get("origin_host_id")
+                            if isinstance(existing.get("origin_host_id"),
+                                          str) else None):
+                        # We O_EXCL-claimed the four-part marker as an
+                        # EMPTY gate, then inherited the record through the
+                        # LEGACY marker. Returning now would leave the
+                        # four-part marker empty forever, and _read_marker
+                        # reads empty as "unfilled" -- so the NEXT retry of
+                        # this key re-mints a DUPLICATE of acknowledged
+                        # work, the exact annihilation class this scoping
+                        # exists to prevent. Fill it to name the inherited
+                        # record first.
+                        self._fill_marker(marker, existing["delivery_id"])
                     return existing, False
-                # Marker names a delivery record whose file is gone -- heal
-                # by minting a fresh one under the same marker.
-            # else: marker was created but never filled (a prior accept
-            # crashed between the gate and the job write) -- heal.
+                # A REFUSED record is a delivery this host declined and
+                # never made. It must not wedge its key forever: after a
+                # re-admission the same key has to be able to produce work
+                # again, and answering 200 over a refused record would be
+                # a lie. Nothing ran, so re-minting cannot double-run.
+            # Marker names a delivery record whose file is gone, or a
+            # refused one -- heal by minting a fresh one under it.
+        # else: marker was created but never filled (a prior accept
+        # crashed between the gate and the job write) -- heal.
 
         now = self._now()
         delivery_id = "cj_" + identity.mint_id()[:12]
@@ -398,6 +545,24 @@ class HostStore:
             "expected_runtime_id": (expected_runtime_id
                                     if isinstance(expected_runtime_id, str)
                                     and expected_runtime_id else None),
+            # WHO ASKED (see the docstring). Stored verbatim only when a
+            # non-empty string; anything else is None, so a malformed
+            # value can never masquerade as an admitted origin.
+            "origin_host_id": (origin_host_id
+                               if isinstance(origin_host_id, str)
+                               and origin_host_id else None),
+            # The ADMISSION LINEAGE this delivery was authorized under
+            # (peers admission_id at submission; None for local work).
+            # The dispatch fence compares it against the origin's CURRENT
+            # lineage, so work submitted before a revocation can never be
+            # served after a re-admission -- even work the revocation
+            # sweep could not reach (stale_admission).
+            "origin_admission_id": (origin_admission_id
+                                    if isinstance(origin_admission_id, str)
+                                    and origin_admission_id else None),
+            "controller_id": (controller_id
+                              if isinstance(controller_id, str)
+                              and controller_id else None),
             # Host-originated (A-15): the host may rest a record at queued;
             # the execution verdict is mirrored from the node later.
             "state": "queued",
@@ -467,7 +632,8 @@ class HostStore:
         job = self.get_job(delivery_id)
         if job is None or job.get("state") != "queued":
             return None
-        return self._apply_state(delivery_id, "dispatching")
+        return self._apply_state(delivery_id, "dispatching",
+                                 host_originated=True)
 
     def release_claim(self, delivery_id):
         """Compare-and-set dispatching -> queued: the forward was REFUSED
@@ -481,7 +647,8 @@ class HostStore:
         job = self.get_job(delivery_id)
         if job is None or job.get("state") != "dispatching":
             return None
-        return self._apply_state(delivery_id, "queued")
+        return self._apply_state(delivery_id, "queued",
+                                 host_originated=True)
 
     def _sweep_interrupted_dispatches(self):
         """Resolve every job left 'dispatching' by a dead host.
@@ -599,7 +766,36 @@ class HostStore:
                 "mark_indeterminate requires evidence (what was seen, and "
                 "why the outcome is unknown)")
         return self._apply_state(delivery_id, "indeterminate",
-                                 result=evidence, verdict_source="host")
+                                 result=evidence, verdict_source="host",
+                                 host_originated=True)
+
+    def mark_refused(self, delivery_id, evidence):
+        """Host-ORIGINATED terminal DELIVERY verdict: this host declined
+        to route the job, and it never ran (A-54, proposed).
+
+        Requires evidence for exactly the reason mark_indeterminate does
+        -- a terminal written on the host's own authority must carry what
+        the host saw.
+
+        CAS'd to `queued` on purpose, and the narrowness is the safety
+        argument. `refused` is only honest while the operation provably
+        never left this host; a `dispatching` job's forward may already
+        be in flight (its honest resolution is the dispatcher's, and may
+        be indeterminate), and a `running` job is executing on a node
+        that still owns its verdict. Refusing to terminalise those is how
+        revocation stops NEW work without rewriting history. Returns the
+        refused job, or None when the job is absent or no longer queued.
+        """
+        if not evidence:
+            raise ValueError(
+                "mark_refused requires evidence (why delivery was "
+                "declined) -- a host-originated terminal must carry it")
+        job = self.get_job(delivery_id)
+        if job is None or job.get("state") != "queued":
+            return None
+        return self._apply_state(delivery_id, "refused", result=evidence,
+                                 verdict_source="host",
+                                 host_originated=True)
 
     def record_dispatch_note(self, delivery_id, reason, at):
         """Count a dispatch ATTEMPT that ended in a refusal, on the
@@ -627,9 +823,43 @@ class HostStore:
         return job
 
     def _apply_state(self, delivery_id, state, result=None,
-                     verdict_source=None, observed_at=None, node_job_id=None):
+                     verdict_source=None, observed_at=None, node_job_id=None,
+                     host_originated=False):
         if state not in JOB_STATES:
             raise ValueError(f"unknown job state {state!r}")
+        if state not in _HOST_ORIGINABLE_STATES:
+            # A-15 ENFORCED BY STATE, not by the caller's flag. The first
+            # cut of this guard fired only when host_originated=True was
+            # PASSED, so simply OMITTING the flag let a host-side writer
+            # originate a terminal 'succeeded' with verdict_source=host
+            # and no node provenance (measured 2026-08-02). An execution
+            # verdict (running/succeeded/failed) may land only with the
+            # provenance that proves a node produced it: a node
+            # verdict_source, observed_at, and -- for the poll path,
+            # which mirrors a node-side job -- the node's own job id.
+            # record_node_verdict / record_sync_result validate the same
+            # things at their own doors; this is the belt at the ONLY
+            # write that can rest a record in one of these states.
+            if host_originated:
+                raise ValueError(
+                    f"A-15: the host may not originate {state!r} -- that "
+                    f"is an EXECUTION verdict and only a node can author "
+                    f"one (host-originable: "
+                    f"{list(_HOST_ORIGINABLE_STATES)})")
+            if verdict_source not in _NODE_VERDICT_SOURCES:
+                raise ValueError(
+                    f"A-15: {state!r} is an execution verdict and must "
+                    f"carry a node verdict_source "
+                    f"({list(_NODE_VERDICT_SOURCES)}); got "
+                    f"{verdict_source!r}")
+            if not observed_at:
+                raise ValueError(
+                    f"A-15: {state!r} must carry observed_at -- when the "
+                    f"node's answer was seen is its provenance")
+            if verdict_source == "node_poll" and not node_job_id:
+                raise ValueError(
+                    f"A-15: a polled {state!r} must carry node_job_id -- "
+                    f"the node-minted job id is its provenance")
         job = self.get_job(delivery_id)
         if job is None:
             raise KeyError(delivery_id)
@@ -648,19 +878,55 @@ class HostStore:
             json.dumps(job, indent=1, sort_keys=True) + "\n")
         return job
 
-    def jobs(self, state=None):
-        out = []
-        try:
-            names = sorted(os.listdir(self.jobs_dir))
-        except OSError:
-            return out
-        for name in names:
-            # Skip the per-key idempotency markers and any underscore-
-            # prefixed bookkeeping file -- only cj_ delivery records here.
-            if (not name.endswith(".json") or name.startswith("_")
-                    or name.startswith("idem_")):
+    def _delivery_ids(self):
+        """Every delivery record id on disk. Raises on a listing failure.
+
+        Skips the per-key idempotency markers and any underscore-prefixed
+        bookkeeping file -- only cj_ delivery records.
+        """
+        return [name[:-len(".json")]
+                for name in sorted(os.listdir(self.jobs_dir))
+                if name.endswith(".json") and not name.startswith("_")
+                and not name.startswith("idem_")]
+
+    def scan_jobs(self):
+        """(jobs, unreadable_ids) -- UNREADABLE IS NOT ABSENT.
+
+        jobs() swallows both: get_job returns None for an absent file AND
+        for one it could not read, and a failed listdir comes back as an
+        empty list. That is right for the DRAIN (a record it cannot read
+        this pass is simply not dispatched, and the next pass retries),
+        and it is exactly wrong for a REVOCATION, where "read nothing"
+        and "found nothing" have to be different answers -- otherwise a
+        sweep that examined no records at all reports a clean containment.
+
+        The listing failure RAISES rather than returning empty, for the
+        same reason. Callers that must not proceed on a blind scan can
+        then say so.
+        """
+        jobs, unreadable = [], []
+        for delivery_id in self._delivery_ids():
+            job = self.get_job(delivery_id)
+            if job is None:
+                if self.job_file_exists(delivery_id):
+                    unreadable.append(delivery_id)
                 continue
-            job = self.get_job(name[:-len(".json")])
+            jobs.append(job)
+        jobs.sort(key=lambda j: (j.get("created", 0),
+                                 j.get("delivery_id", "")))
+        return jobs, unreadable
+
+    def jobs(self, state=None):
+        try:
+            ids = self._delivery_ids()
+        except OSError:
+            # Unchanged, and deliberately so: the drain's snapshot treats
+            # an unreadable listing as "nothing to do this pass" and
+            # retries. Anything that needs the distinction uses scan_jobs.
+            return []
+        out = []
+        for delivery_id in ids:
+            job = self.get_job(delivery_id)
             if job and (state is None or job.get("state") == state):
                 out.append(job)
         out.sort(key=lambda j: (j.get("created", 0),
@@ -682,17 +948,144 @@ class HostStore:
             counts[state] = counts.get(state, 0) + 1
         return counts
 
+    def _markers_for(self, job):
+        """Every idempotency marker path that could name THIS record.
+
+        A job carries the four parts of its own scope, so the marker is
+        recomputable -- there is no back-reference to store. A LOCAL job
+        (origin None) uses the three-part legacy scope; a peer job uses
+        the four-part scope; the origin-set case also checks the legacy
+        marker, because a local retry that inherited one leaves it behind.
+        """
+        key = job.get("idempotency_key")
+        convoy_id = job.get("convoy_id")
+        node_id = job.get("node_id")
+        if not (key and convoy_id and node_id):
+            return []
+        origin = (job.get("origin_host_id")
+                  if isinstance(job.get("origin_host_id"), str) else None)
+        paths = [self._idem_path(convoy_id, node_id, key, origin)]
+        if origin:
+            legacy = self._idem_path(convoy_id, node_id, key)
+            if legacy not in paths:
+                paths.append(legacy)
+        return paths
+
+    def reap(self, retention_s, now=None, max_delete=None):
+        """Delete TERMINAL records older than retention_s, and the
+        idempotency markers that name them. Returns
+        {jobs, markers, listing_failed}.
+
+        NOTHING ELSE in this store ever deletes -- without this the jobs
+        dir is an unbounded pile of files, and EVERY status()/revocation
+        scan reads all of it, so a supervised host gets measurably slower
+        every week it runs (0.17s at 1k jobs, 8.1s at 50k, all under the
+        app lock on /status). A record is reapable only when its state is
+        TERMINAL (a node verdict is in, or the host refused it) AND its
+        last update predates the window, so in-flight work and the
+        idempotency horizon are both preserved; retention is >> that
+        horizon by design (a retry lands in seconds, retention in hours).
+
+        LOCK-FREE off the drain loop: it only unlinks records already in
+        a terminal state, and a concurrent reader that held the id finds
+        it gone (get_job -> None), which every caller already tolerates.
+        Markers are unlinked BEFORE the job so a crash mid-reap leaves an
+        unreferenced job the next pass retries, never a filled marker
+        pointing at a deleted record.
+        """
+        now = self._now() if now is None else now
+        cutoff = now - retention_s
+        reaped_jobs = reaped_markers = 0
+        try:
+            ids = self._delivery_ids()
+        except OSError:
+            return {"jobs": 0, "markers": 0, "listing_failed": True}
+        for delivery_id in ids:
+            if max_delete is not None and reaped_jobs >= max_delete:
+                break
+            job = self.get_job(delivery_id)
+            if job is None:
+                continue    # gone or unreadable; not ours to force
+            if job.get("state") not in TERMINAL_STATES:
+                continue
+            # `x or fallback` is the falsy-zero trap on a timestamp: a
+            # legitimately small `updated` would fall through to created.
+            # Prefer updated, fall back only when it is truly absent.
+            updated = job.get("updated")
+            if updated is None:
+                updated = job.get("created")
+            if updated is None:
+                updated = 0
+            if updated > cutoff:
+                continue
+            for marker in self._markers_for(job):
+                # Only unlink a marker that still names THIS record -- a
+                # marker re-minted onto a newer job must survive.
+                try:
+                    m = self._read_marker(marker)
+                except Exception:
+                    m = None    # unreadable: leave it; reap the job anyway
+                if m is not None and m.get("delivery_id") != delivery_id:
+                    continue
+                try:
+                    os.unlink(marker)
+                    reaped_markers += 1
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    pass
+            try:
+                os.unlink(self._job_path(delivery_id))
+                reaped_jobs += 1
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
+        if reaped_jobs or reaped_markers:
+            try:
+                self.audit("hoststore", "jobs_reaped",
+                           {"jobs": reaped_jobs, "markers": reaped_markers,
+                            "retention_s": retention_s})
+            except Exception:
+                pass
+        return {"jobs": reaped_jobs, "markers": reaped_markers,
+                "listing_failed": False}
+
     # -- audit (A-40: host-side, never the Embody logger) ---------------
 
     def audit(self, actor, event, detail=None):
         line = json.dumps({"ts": self._now(), "actor": actor,
                            "event": event, "detail": detail or {}},
                           sort_keys=True)
+        path = os.path.join(self.dir, AUDIT_FILE)
+        # Bound the file BEFORE appending: an append-only log with no
+        # ceiling is the disk-fill vector the killswitch backlog opens.
+        # Best-effort -- a rotation that loses the race (Windows refuses
+        # os.replace on a file another thread has open) just means one
+        # slightly-oversized append and a retry next line, never a lost
+        # record or a raised handler.
+        try:
+            if os.path.getsize(path) >= AUDIT_MAX_BYTES:
+                self._rotate_audit(path)
+        except OSError:
+            pass
         # Append-only: a partial append can damage at most the LAST line,
         # never an earlier record, and pruning is a truncate.
-        with open(os.path.join(self.dir, AUDIT_FILE), "a",
-                  encoding="utf-8", newline="\n") as f:
+        with open(path, "a", encoding="utf-8", newline="\n") as f:
             f.write(line + "\n")
+
+    def _rotate_audit(self, path):
+        """Rename the current audit aside, keeping ONE generation.
+
+        A concurrent appender either committed just before the rename
+        (its line is in the rotated file) or opens fresh just after (its
+        line is in the new file) -- never lost. Best-effort throughout.
+        """
+        keep = os.path.join(self.dir, AUDIT_ROTATED)
+        try:
+            os.replace(path, keep)   # atomic; overwrites the prior .1
+        except OSError:
+            pass
 
     def audit_tail(self, limit=50):
         try:

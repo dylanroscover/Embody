@@ -21,6 +21,12 @@ What it owns TODAY (the Phase 1 exit slice):
     TLS listener that will use it is slice 3. Absent `cryptography`
     degrades (no identity, named reason); a corrupt key file refuses to
     start,
+  - PEERS AND REVOCATION (Phase 3 slice 2, convoy_peers): host-private
+    admission records, a hand-editable FAIL-CLOSED denylist re-read on
+    mtime change, and ONE decision function consulted BEFORE any
+    signature is verified. /peers* and /lan/killswitch are loopback
+    routes; STILL NOTHING BINDS OFF-BOX -- the listener that will call
+    the same decision on a real connection is slice 3,
   - THE GUARDED REQUEST PATH: a signed Convoy/1 envelope submitted to
     /envelope is verified (convoy_protocol), gated by the operation
     registry (A-1 executability), authorized against leases
@@ -52,6 +58,7 @@ import convoy_hostkeys as hostkeys
 import convoy_hoststore as hoststore
 import convoy_identity as identity
 import convoy_mcpclient as mcpclient
+import convoy_peers as peers_mod
 import convoy_platform as platform_mod
 import convoy_protocol as protocol
 
@@ -278,12 +285,53 @@ _REFUSAL_HTTP = {
     "node_leased": 409,
     "shared_lease_no_mutation": 409,
     "deadline_exceeded": 410,
+    # Peer authorization (Phase 3 slice 2). All 403: every one of them is
+    # "this host will not hear you", not "you sent something malformed".
+    peers_mod.REASON_BLOCKED: 403,
+    peers_mod.REASON_UNKNOWN: 403,
+    peers_mod.REASON_PIN_MISMATCH: 403,
+    peers_mod.REASON_OBSERVE_ONLY: 403,
 }
 
 # Bounds for caller-supplied text. Ids are host-minted 32-hex or
 # controller-chosen labels; nothing legitimate approaches these.
 MAX_ID_CHARS = 128
 MAX_OPERATION_CHARS = 128
+# Cap on the in-memory (peer -> controller) map, matching the drain and
+# poll maps: nothing prunes it on a host whose peers churn, and an
+# unbounded map fed by remote input is a slow memory leak with a caller.
+MAX_PEER_CONTROLLERS = 2048
+
+# FLOOR for the drain bookkeeping maps' size cap. The effective cap
+# SCALES with the live queue (2x the last drain snapshot, see
+# drain_once): at a FIXED 2048, a backlog one entry over the cap made
+# every insertion evict another LIVE entry, and the eviction CASCADED --
+# each re-attempt evicted the next job's pacing, so a single pass over
+# the cap unpaced and re-audited the ENTIRE queue, not just the
+# overflow (measured 2026-08-02: 2100 queued refusals -> second pass
+# backoff=0, all 2100 re-attempted and re-audited inside the 30s
+# window). The floor keeps the maps bounded on a loop-off host where no
+# pass ever runs to scale them.
+DRAIN_MAP_FLOOR = 2048
+
+
+class _LoopbackOrigin:
+    """The sentinel meaning "this arrived over the loopback route".
+
+    submit_envelope's `origin` is REQUIRED and has no default, and this
+    is why: a default of None fails OPEN -- it means "this host is the
+    origin" and short-circuits peer authorization entirely, so the whole
+    slice's security rested on slice 3's listener remembering to pass an
+    origin. Omitting it now raises TypeError at the call site instead.
+    None is NOT this sentinel: a caller that computed an origin and got
+    None is refused, not trusted.
+    """
+
+    def __repr__(self):
+        return "<loopback origin: IPC token, this host>"
+
+
+LOOPBACK_ORIGIN = _LoopbackOrigin()
 
 # Which summary bucket a per-job refusal reason falls in. A DICT, not a
 # chain of `in (...)` tuples: as tuples, a refusal reason added later
@@ -302,6 +350,22 @@ _DRAIN_BUCKET = {
     "operation_not_exposed": "deferred",
     "operation_not_relayable": "deferred",
     "store_unavailable": "errors",
+    # The peer that submitted this job is not allowed to right now, but a
+    # SWITCH is what is refusing it (the A-32 killswitch, a denylist
+    # entry, a store this host temporarily cannot read). Membership was
+    # not touched, so the job is skipped and paced rather than burnt --
+    # flipping the switch back must bring exactly this work with it.
+    "origin_not_admitted": "deferred",
+    # A MEMBERSHIP DECISION was taken instead (blocked, forgotten,
+    # narrowed to observe-only, re-pinned, or the operation taken off the
+    # remote surface), so the job was terminalised. NOTE the distinction
+    # is NOT "reversibility": /peers/admit can undo a block, a forget and
+    # a narrowing alike. It is that a human decided about this PEER, and
+    # re-admitting them consents to the peer, not to a specific piece of
+    # work they submitted before. Its own bucket, because counting a
+    # burnt job as 'deferred' would say the pass left it for later when
+    # the pass ended it.
+    "origin_revoked": "refused",
 }
 
 # The same, for a poll pass. 'unreachable' covers BOTH ways a poll can
@@ -511,6 +575,24 @@ class HostApp:
         # exactly like claim_scope's session-silence expiry. Durable
         # leases arrive with wake-leases (Phase 4) if at all.
         self.leases = controllers.LeaseRegistry()
+        # PEERS (Phase 3 slice 2). Host-private admission records plus the
+        # hand-editable, FAIL-CLOSED denylist. NOTHING BINDS OFF-BOX YET:
+        # this is the memory and the decision; the listener that consults
+        # it on a real connection is slice 3. The audit sink is passed as
+        # a plain callable so the store never imports the store it audits
+        # into -- and it is best-effort inside convoy_peers, so a failed
+        # append can never change an admission.
+        self.peers = peers_mod.PeerStore(
+            directory_path, now=now,
+            audit=lambda event, detail: self.db.audit("peers", event,
+                                                      detail))
+        # origin_host_id -> {controller_id: last_seen}. Which controllers
+        # a peer has acted as, so revocation can drop their leases even
+        # for a peer whose job records are unreadable. BOUNDED (see
+        # _note_peer_controller): in-memory, advisory, and unioned with a
+        # scan of the durable job records, which is what survives a
+        # restart.
+        self._peer_controllers = {}
         self.lock = threading.Lock()
         # The autonomous dispatcher (start_drain_loop). Off by default:
         # dispatch stays a per-call affair until someone opts in.
@@ -540,6 +622,10 @@ class HostApp:
         self._flight_counter = 0
         self._drain_backoff = {}
         self._drain_noted = {}
+        # The maps' effective size cap: max(DRAIN_MAP_FLOOR, 2x the live
+        # queue), rescaled at the start of every drain pass so one pass
+        # can hold an entry for EVERY queued job without self-eviction.
+        self._drain_map_cap = DRAIN_MAP_FLOOR
         # Poll bookkeeping -- SEPARATE maps, not the drain ones. The
         # drain prune's notion of "live" is the QUEUED set, so a poll
         # entry parked in a drain map would be wiped by the next drain
@@ -581,6 +667,15 @@ class HostApp:
         self._last_pass_summary = {}
         self.drain_backoff_s = 30.0
         self.poll_backoff_s = 30.0
+        # RETENTION. Terminal records older than this are reaped off the
+        # drain loop so the jobs dir does not grow without bound (every
+        # status/revocation scan reads all of it). Far larger than the
+        # idempotency horizon -- a retry lands in seconds, this is 24h --
+        # so reaping cannot re-open acknowledged work. Reaped at most once
+        # per reap_interval_s, and only when the drain loop is running.
+        self.job_retention_s = 24 * 3600.0
+        self.reap_interval_s = 300.0
+        self._last_reap = 0.0
         # HOST IDENTITY (Phase 3 slice 1). The Ed25519 keypair that signs
         # envelopes and, from slice 3, backs the TLS certificate.
         #
@@ -655,9 +750,30 @@ class HostApp:
     #    self-locking dispatch_job / drain, see their docstrings) -------
 
     def status(self):
-        # ONE scan for every job number reported here -- each filtered
-        # jobs() call parses every job file on disk, under the lock.
+        # SELF-LOCKING, and the reason is a measured starvation, not
+        # tidiness. state_counts() reads EVERY job file; held under the
+        # app lock it made /status the slowest route in the system, and a
+        # single 1 Hz /status poller then drove /peers to 331x its normal
+        # latency while /health (the only lock-free route) stayed at 2 ms
+        # -- so the supervising OS task saw a healthy host that was in
+        # fact wedged for seconds at a stretch. drain_once already moved
+        # its scan out of the lock for exactly this reason. So must this:
+        # the scan runs LOCK-FREE (job files are written atomically; a
+        # vanished one just isn't counted), then the lock is taken only
+        # for the O(1) in-memory snapshot. NEVER call this from inside
+        # `with self.lock:` -- it self-locks and would deadlock.
         counts = self.db.state_counts()
+        with self.lock:
+            return self._status_locked(counts)
+
+    def _status_locked(self, counts):
+        """The in-memory half of status(). CALLED WITH self.lock held.
+
+        Every read here is O(1) in memory or a single cheap stat on a
+        host-private file (peers.json / denylist) -- the unbounded jobs
+        scan is done by the caller, lock-free.
+        """
+        peer_records = self.peers.peers()
         return {
             "ok": True,
             "protocol": "convoy-host/1",
@@ -697,6 +813,20 @@ class HostApp:
                 bool(self.hostkeys and self.hostkeys.certificate_pem)),
             "identity_cert_reason": (self.hostkeys.cert_reason
                                      if self.hostkeys else None),
+            # PEERS, reported where an operator already looks. Three
+            # separate conditions because they mean different things: how
+            # many peers may act, whether the A-32 killswitch is refusing
+            # everyone, and whether either host-private file has gone
+            # unreadable (which refuses everyone too, for a different
+            # reason, and must never look like "no peers admitted").
+            "peers_admitted": sum(
+                1 for p in peer_records
+                if p["state"] == peers_mod.PEER_ADMITTED),
+            "peers_total": len(peer_records),
+            "lan_killswitch": bool(self.peers.killswitch().get("engaged")),
+            "peers_reason": self.peers.unreadable,
+            "denylist_fail_closed": bool(
+                self.peers.denylist.snapshot()["fail_closed"]),
             "uptime_s": round(self._now() - self.started, 1),
         }
 
@@ -1064,10 +1194,21 @@ class HostApp:
         # convoy_id comes from the REGISTERED node, never from the
         # request: a caller must not be able to choose which namespace
         # its idempotency key lands in.
-        job, created = self.db.create_job(
-            idempotency_key, node_id, operation, arguments,
-            convoy_id=node["convoy_id"],
-            expected_runtime_id=expected_runtime_id)
+        try:
+            job, created = self.db.create_job(
+                idempotency_key, node_id, operation, arguments,
+                convoy_id=node["convoy_id"],
+                expected_runtime_id=expected_runtime_id,
+                # THIS host is the origin: the local path is loopback-only
+                # and its credential is the IPC token, so the machine that
+                # asked is this one. Recorded rather than left None so a
+                # local job and a pre-origin legacy record are
+                # distinguishable.
+                origin_host_id=self.host_id, controller_id=controller_id)
+        except hoststore.IdempotencyOriginConflict as e:
+            # A peer already holds this key. Say so, rather than handing
+            # the local caller a record it does not own and cannot keep.
+            return self._refuse("jobs", e.reason, str(e), 409, node)
         return 200, {"ok": True, "created": created, "job": job}
 
     def get_job(self, delivery_id):
@@ -1143,6 +1284,44 @@ class HostApp:
                 # Claimed by another dispatcher, or terminal -- never
                 # re-run.
                 return 200, {"ok": True, "dispatched": False, "job": job}
+            # THE ORDER (plan 1.4) holds here too, and this is its FIRST
+            # step: the origin's admission is re-asked before the registry
+            # gate, the runtime precondition or the claim. A job is
+            # authorized at submission AND again at every dispatch,
+            # because the queue outlives the admission -- a peer blocked
+            # by a hand edit to denylist.json while its work sat queued
+            # must stop dispatching with no API call and no restart, and
+            # this is the caller that notices the mtime change.
+            decision = self._authorize_origin(job.get("origin_host_id"))
+            denied = None if decision is None or decision.allowed else decision
+            if denied is not None:
+                return self._refuse_origin(job, denied)
+            if decision is not None and (job.get("origin_admission_id")
+                                         != decision.admission_id):
+                # THE LINEAGE FENCE. The revocation sweep is only the
+                # fast path and cannot, by construction, reach
+                # everything -- a record unreadable during the sweep, a
+                # claim in flight, work that re-enters the queue after
+                # it ran. This comparison is what makes "re-admitting
+                # the peer does NOT resurrect its pre-revocation work"
+                # (_refuse_origin's contract) true even then: the job
+                # carries the admission lineage it was authorized under
+                # (create_job), and a FULL revocation (block / forget /
+                # re-pin) stamps a fresh epoch the moment it happens
+                # (convoy_peers _set_state / _upsert), so the old lineage
+                # never matches again -- not even a block laundered
+                # through observe-only before the re-admit. (observe-only
+                # itself is a reversible narrowing, NOT an epoch break;
+                # see _refuse_origin.) TERMINAL: a membership decision
+                # intervened, so this job can never be served -- leaving
+                # it queued would make /jobs lie.
+                return self._refuse_origin(
+                    job, decision, reason="stale_admission",
+                    detail="this job was submitted under a previous "
+                           "admission of its origin peer; a revocation "
+                           "intervened, and re-admission consents to the "
+                           "PEER, never to its pre-revocation work",
+                    terminal=True)
             node = self.directory.lookup(job["node_id"])
             if node is None:
                 self._note_dispatch_event(delivery_id, "dispatch_refused",
@@ -1178,6 +1357,25 @@ class HostApp:
                              "detail": "the operation is no longer "
                                        "relayable under the current "
                                        "registry; the job stays queued"}
+            # THE REMOTE SURFACE, and the OBSERVE-ONLY narrowing, re-asked
+            # HERE -- not only at submission. The queue outlives both: a
+            # peer narrowed to observe-only while its mutation was in
+            # flight gets that mutation requeued (UNREACHABLE = never
+            # delivered, which is honest and correct) and the next pass
+            # would forward it. A one-shot revocation sweep CANNOT cover
+            # that by construction, which is why re-authorization per pass
+            # is the containment and the sweep is only the fast path.
+            if decision is not None:
+                if not gating["remote_exposed"]:
+                    return self._refuse_origin(
+                        job, decision, reason="operation_not_remote_exposed",
+                        detail=f"{job['operation']!r} is not on this host's "
+                               f"REMOTE surface", terminal=True)
+                if not decision.may_mutate and gating["mutating"]:
+                    return self._refuse_origin(
+                        job, decision,
+                        reason=peers_mod.REASON_OBSERVE_ONLY,
+                        detail=decision.detail, terminal=True)
             if gating["runtime_required"]:
                 expected = job.get("expected_runtime_id")
                 current = node.get("runtime_id")
@@ -1415,9 +1613,11 @@ class HostApp:
             # so a later attempt retries the append.
             return
         self._drain_noted[delivery_id] = key
-        if len(self._drain_noted) > 2048:
+        while len(self._drain_noted) > self._drain_map_cap:
             # Bounded: on a loop-off host nothing prunes, and the map
-            # must not grow one entry per refused delivery forever.
+            # must not grow one entry per refused delivery forever. The
+            # cap scales with the live queue (see DRAIN_MAP_FLOOR) so
+            # eviction can no longer cascade through live entries.
             self._drain_noted.pop(next(iter(self._drain_noted)))
 
     def _requeue_claim(self, delivery_id, operation, observed, reason,
@@ -2146,7 +2346,8 @@ class HostApp:
         entry per distinct delivery forever (round-2 verify probe:
         3000 portless dispatches -> 3000 entries)."""
         self._drain_backoff[delivery_id] = not_before
-        if len(self._drain_backoff) > 2048:
+        while len(self._drain_backoff) > self._drain_map_cap:
+            # Queue-scaled cap, same as _drain_noted (DRAIN_MAP_FLOOR).
             self._drain_backoff.pop(next(iter(self._drain_backoff)))
 
     def _forget_poll(self, delivery_id):
@@ -2396,10 +2597,18 @@ class HostApp:
 
         queued = [j["delivery_id"] for j in snapshot
                   if j.get("state") == "queued"]
+        with self.lock:
+            # Rescale the bookkeeping caps BEFORE the per-job loop: the
+            # maps must be able to hold one entry per queued job within
+            # a single pass, or eviction defeats the very pacing and
+            # audit dedupe they exist for (see DRAIN_MAP_FLOOR). Never
+            # shrunk below the floor, and 2x leaves room for entries
+            # set mid-pass by manual /dispatch on other jobs.
+            self._drain_map_cap = max(DRAIN_MAP_FLOOR, 2 * len(queued))
         summary = {"examined": len(queued), "dispatched": 0, "started": 0,
                    "indeterminate": 0, "unreachable": 0, "no_handle": 0,
                    "deferred": 0, "skipped": 0, "errors": 0, "backoff": 0,
-                   "stranded": stranded, "requeued": requeued,
+                   "refused": 0, "stranded": stranded, "requeued": requeued,
                    "handoffs": handoffs, "aborted": False}
         now = self._now()
         for delivery_id in queued:
@@ -2447,25 +2656,44 @@ class HostApp:
         # transiently failed to read) belongs to a real queued or
         # claimed job, and dropping it defeated the backoff and
         # re-audited the same refusal (review probe, 2026-07-31).
+        #
+        # THE PER-ENTRY get_job READS RUN LOCK-FREE, and that is not
+        # tidiness -- it is the same measured starvation status() and the
+        # drain snapshot were both restructured for. Since the cap scales
+        # to 2x the queue, a mass-terminalise pass (a re-pin / block /
+        # remote-surface change against a large deferred backlog) leaves
+        # the NEXT pass with O(backlog) stale entries; reading each one's
+        # file under self.lock wedged every route but /health for the
+        # whole scan. So: snapshot the stale KEYS under the lock (O(n)
+        # memory, no disk), read the files WITHOUT it, and re-take the
+        # lock only to drop the confirmed-dead keys. Dropping by an
+        # explicit `drop` set (not rebuilding around `keep`) is what
+        # preserves an entry ADDED between the two lock holds -- a
+        # mid-pass /dispatch on another job -- which a keep-rebuild would
+        # silently discard (the invariant the round-3 probe pinned).
         with self.lock:
             keep = set(queued)
-            for did in ((set(self._drain_backoff)
-                         | set(self._drain_noted)) - keep):
-                current = self.db.get_job(did)
-                if current is not None and current.get("state") in (
-                        "queued", "dispatching"):
-                    keep.add(did)
-                elif current is None and self.db.job_file_exists(did):
-                    # UNREADABLE is not ABSENT: get_job swallows the
-                    # same transient sharing violation that makes the
-                    # lock-free scan miss files. Keep -- conservative.
-                    keep.add(did)
+            stale = (set(self._drain_backoff)
+                     | set(self._drain_noted)) - keep
+        drop = set()
+        for did in stale:
+            current = self.db.get_job(did)
+            if current is not None and current.get("state") in (
+                    "queued", "dispatching"):
+                continue                      # still live -- keep pacing it
+            if current is None and self.db.job_file_exists(did):
+                # UNREADABLE is not ABSENT: get_job swallows the same
+                # transient sharing violation that makes the lock-free
+                # scan miss files. Keep -- conservative.
+                continue
+            drop.add(did)                     # examined, confirmed dead/gone
+        with self.lock:
             self._drain_backoff = {k: v for k, v
                                    in self._drain_backoff.items()
-                                   if k in keep}
+                                   if k not in drop}
             self._drain_noted = {k: v for k, v
                                  in self._drain_noted.items()
-                                 if k in keep}
+                                 if k not in drop}
         return summary
 
     def drain(self):
@@ -2521,6 +2749,35 @@ class HostApp:
                             "error": f"{type(e).__name__}: {e}"})
                 except Exception:
                     pass
+            # RETENTION, on a cadence, LOCK-FREE (reap only unlinks
+            # already-terminal records). Without it the jobs dir grows
+            # forever and every status/revocation scan slows with it.
+            # Wrapped like the passes above: a reap failure must never
+            # end the loop.
+            try:
+                self._maybe_reap()
+            except Exception as e:
+                try:
+                    with self.lock:
+                        self.db.audit("hostapp", "reap_loop_error", {
+                            "error": f"{type(e).__name__}: {e}"})
+                except Exception:
+                    pass
+
+    def _maybe_reap(self):
+        """Reap terminal records at most once per reap_interval_s.
+
+        Cadence-gated because a reap is a full jobs-dir scan; running it
+        every drain tick would reintroduce the very cost it exists to
+        bound. Lock-free -- reap() only unlinks records already terminal.
+        """
+        now = self._now()
+        if now - self._last_reap < self.reap_interval_s:
+            return
+        self._last_reap = now
+        result = self.db.reap(self.job_retention_s, now=now)
+        if result.get("jobs") or result.get("markers"):
+            self._audit_pass("reap", result)
 
     def start_drain_loop(self, interval_s=2.0):
         """Start the autonomous dispatcher: a daemon thread draining the
@@ -2613,11 +2870,18 @@ class HostApp:
         return code, payload
 
     def _gate_operation(self, node, operation, controller_id, source,
-                        expected_runtime_id=None):
+                        expected_runtime_id=None, peer=None):
         """Registry gate (A-1), runtime precondition (A-22), and lease
         gate (A-17) -- shared by BOTH job-creating paths, so /jobs and
         /envelope can never diverge into two authorities. Returns None
         when allowed, or an audited (code, payload) refusal.
+
+        `peer` is the PeerDecision when the request came from a LAN peer,
+        None on the loopback path. It adds two REMOTE-ONLY refusals at
+        the A-1 step, where the operation's class is finally known --
+        deliberately here rather than in a second gate, for the same
+        reason the two create paths share this one: two authorities on
+        what may be invoked is how they drift apart.
         """
         entry = self.operations.get(operation)
         if entry is None:
@@ -2632,6 +2896,38 @@ class HostApp:
                 f"{operation!r} executes arbitrary code; refused until "
                 f"the TD-Python gate exists (A-1)",
                 403, node, {"operation": operation[:MAX_OPERATION_CHARS]})
+        if peer is not None and not gating["remote_exposed"]:
+            # A-1 / R-2, ENFORCED. This flag was written a slice before
+            # anything could read it, and then nothing did: run_tests
+            # (which exec_module's every test_*.py AND test_*.txt it finds
+            # on disk -- the registry's own comment says that argument
+            # "dissolves the moment a socket binds off-box") and
+            # save_project (15+ seconds of blocked main thread on a show
+            # machine, before A-30's show protection exists) were both
+            # remotely submittable. STRICT DEFAULT FALSE: an operation
+            # nobody audited for the LAN is refused by ABSENCE, exactly
+            # like absence from the registry itself. The LOCAL path is
+            # untouched -- this is the owner's own machine.
+            return self._refuse(
+                source, "operation_not_remote_exposed",
+                f"{operation!r} is not on this host's REMOTE surface; it "
+                f"remains available locally",
+                403, node, {"operation": operation[:MAX_OPERATION_CHARS],
+                            "peer_digest": peer.digest})
+        if peer is not None and not peer.may_mutate and gating["mutating"]:
+            # OBSERVE-ONLY (24.6): X0 is permitted, everything past it is
+            # refused REGARDLESS of local gate state. Honest limit, and it
+            # belongs where an operator will read it: this is containment
+            # for EXECUTABILITY, not confidentiality -- an observe-only
+            # peer can still query_network and capture_top. If you do not
+            # want them looking, BLOCK them.
+            return self._refuse(
+                source, peers_mod.REASON_OBSERVE_ONLY,
+                f"{operation!r} is refused: "
+                f"{peer.detail or 'this peer may not mutate'}",
+                _REFUSAL_HTTP[peers_mod.REASON_OBSERVE_ONLY], node,
+                {"operation": operation[:MAX_OPERATION_CHARS],
+                 "peer_digest": peer.digest})
         # A-22: an operation that may act on stale state must name the
         # run it addressed. On the envelope path verify_envelope has
         # already enforced this over the SIGNED field; here it also
@@ -2678,15 +2974,71 @@ class HostApp:
             return code, payload
         return None
 
-    def submit_envelope(self, body):
+    def submit_envelope(self, body, origin):
         """Verify a signed Convoy/1 envelope and enqueue it as a durable
-        job. THE guarded request path: signature -> registry -> leases ->
-        persist-before-acknowledge, refusals structured and audited.
+        job. THE guarded request path, in THE ORDER (plan 1.4):
+
+            denylist -> pin/admission -> envelope verification
+                     -> A-1 registry -> A-22 runtime -> A-17 lease
+
+        `origin` is REQUIRED, with no default, because a default fails
+        OPEN (see LOOPBACK_ORIGIN). It is either that sentinel -- the
+        loopback route, where the IPC token is the credential and this
+        host is itself the origin -- or the PEER this envelope arrived
+        from: {"host_id": ..., "fingerprint": ...}, both established
+        LOCALLY by the TLS layer (slice 3) from the certificate it
+        actually saw, never anything the peer merely asserted in the body.
+
+        THE ORDER IS THE POINT, not the outcome. authorize_peer runs
+        FIRST, before a single signature is checked, so a revoked peer is
+        refused while still holding a perfectly valid key. Pinned by a
+        signature-verifier spy that must never be called for a blocked
+        peer.
         """
         envelope = body.get("envelope")
         if not isinstance(envelope, dict):
             return self._refuse("envelope", "malformed",
                                 "body must carry an 'envelope' object", 400)
+        # -- STEP 1+2: denylist, then pin/admission. BEFORE VERIFICATION.
+        origin_host_id = self.host_id
+        peer_decision = None
+        if origin is not LOOPBACK_ORIGIN:
+            if not isinstance(origin, dict):
+                # NOT the loopback sentinel and not a peer identity: a
+                # caller that computed an origin and got None (or
+                # anything else) is refused, never trusted.
+                return self._refuse(
+                    "peer", peers_mod.REASON_UNKNOWN,
+                    "no peer identity was established for this envelope; "
+                    "the loopback path must pass LOOPBACK_ORIGIN and the "
+                    "peer path must pass the TLS-authenticated identity",
+                    403)
+            try:
+                peer_host = text_field(origin, "host_id")
+                peer_fingerprint = text_field(origin, "fingerprint",
+                                              limit=MAX_ID_CHARS)
+            except Malformed as e:
+                return self._refuse("peer", peers_mod.REASON_UNKNOWN,
+                                    e.detail, 403)
+            # NOTE the one check that is NOT here: CHANNEL BINDING, i.e.
+            # refusing `source_mismatch` when the envelope's signed
+            # source_host_id disagrees with the TLS-authenticated peer
+            # (plan 1.2). It belongs to slice 3, with the handshake that
+            # establishes the peer in the first place -- named here as a
+            # deferral rather than left to be noticed as a gap, because
+            # S7 says its absence is INVISIBLE. What slice 2 already does
+            # is the half that does not need a socket: the delivery
+            # record's origin is taken from the AUTHENTICATED identity,
+            # never from anything the envelope asserted.
+            peer_decision = self.peers.authorize_peer(peer_host,
+                                                      peer_fingerprint)
+            if not peer_decision.allowed:
+                return self._refuse(
+                    "peer", peer_decision.reason, peer_decision.detail,
+                    _REFUSAL_HTTP.get(peer_decision.reason, 403),
+                    extra={"peer_digest": peer_decision.digest,
+                           "peer_state": peer_decision.state})
+            origin_host_id = peer_decision.host_id
         # PRE-VERIFICATION READS. Two fields are read before the
         # signature is checked, and both only SELECT, never decide:
         # target_node_id selects the node record (and so the convoy PSK
@@ -2752,15 +3104,42 @@ class HostApp:
             arguments = dict_field(envelope, "arguments")
         except Malformed as e:
             return self._refuse("envelope", "malformed", e.detail, 400, node)
+        if peer_decision is not None:
+            # NAMESPACE THE CONTROLLER, before it reaches the lease gate,
+            # the heartbeat table, the attribution map or the delivery
+            # record. controller_id is self-asserted free text: unscoped,
+            # a peer names `ctl-local` and (measured) its OWN revocation
+            # releases the local operator's exclusive lease, while one
+            # envelope keeps a long-dead local controller reading alive.
+            controller_id = peers_mod.namespaced_controller(
+                origin_host_id, controller_id)
+            # ... and register it BEFORE the gate, not after. _gate_operation
+            # heartbeats the controller on the way through, so a peer whose
+            # request was REFUSED used to land in the lease registry and
+            # NOT in the attribution map -- invisible to revocation.
+            self._note_peer_controller(origin_host_id, controller_id)
         refusal = self._gate_operation(
             node, operation, controller_id, source="envelope",
-            expected_runtime_id=envelope.get("expected_runtime_id"))
+            expected_runtime_id=envelope.get("expected_runtime_id"),
+            peer=peer_decision)
         if refusal is not None:
             return refusal
-        job, created = self.db.create_job(
-            idempotency_key, node["node_id"], operation,
-            arguments, convoy_id=node["convoy_id"],
-            expected_runtime_id=envelope.get("expected_runtime_id"))
+        try:
+            job, created = self.db.create_job(
+                idempotency_key, node["node_id"], operation,
+                arguments, convoy_id=node["convoy_id"],
+                expected_runtime_id=envelope.get("expected_runtime_id"),
+                origin_host_id=origin_host_id, controller_id=controller_id,
+                # The admission lineage this envelope was authorized
+                # under -- the dispatch fence re-compares it at every
+                # dispatch (stale_admission). None on the loopback path.
+                origin_admission_id=(peer_decision.admission_id
+                                     if peer_decision is not None
+                                     else None))
+        except hoststore.IdempotencyOriginConflict as e:
+            return self._refuse(
+                "envelope", e.reason, str(e), 409, node,
+                {"operation": operation[:MAX_OPERATION_CHARS]})
         # The ack carries the HOST's delivery_id (cj_...), the id of the
         # routing record -- NOT A-22's target-minted job_id, which is the
         # node's own job_<8hex> and does not exist until a node accepts
@@ -2911,6 +3290,586 @@ class HostApp:
         self.leases.reap(now)          # opportunistic GC, not correctness
         return 200, {"ok": True, "leases": self.leases.live_leases(now)}
 
+    # -- peers (Phase 3 slice 2, A-7) ------------------------------------
+    #
+    # LOOPBACK ONLY, behind the existing IPC token, in the existing route
+    # table -- exactly like /identity*. /peers* and /lan* are named in the
+    # plan's LOOPBACK list and must never appear in slice 3's peer table:
+    # a peer that could admit itself is not an admission control.
+
+    def _note_peer_controller(self, host_id, controller_id):
+        """Remember that a peer acted as a controller. BOUNDED, LRU.
+
+        Called WITH self.lock held. The map exists so revocation can drop
+        a peer's leases even when its job records cannot be read; the
+        durable job scan is the primary source.
+
+        Eviction is by OLDEST ENTRY across every peer. It used to pop from
+        the first-INSERTED host's bucket, so a chatty peer could evict a
+        quiet peer's freshly-refreshed attribution -- which is precisely
+        the entry revocation needs.
+        """
+        if not host_id or not controller_id:
+            return
+        seen = self._peer_controllers.setdefault(host_id, {})
+        seen[controller_id] = self._now()
+        total = sum(len(v) for v in self._peer_controllers.values())
+        while total > MAX_PEER_CONTROLLERS:
+            victim = min(
+                ((h, c, t) for h, entry in self._peer_controllers.items()
+                 for c, t in entry.items()), key=lambda row: row[2])
+            entry = self._peer_controllers[victim[0]]
+            entry.pop(victim[1], None)
+            if not entry:
+                self._peer_controllers.pop(victim[0], None)
+            total -= 1
+
+    def _controllers_for_origin(self, host_id, records=None):
+        """Every controller_id this peer has acted as: the in-memory map
+        UNIONED with the durable job records. The records are what
+        survives a host restart; the map is what survives an unreadable
+        job file, and what covers a request the gate REFUSED. Neither
+        alone is enough.
+
+        `records` is passed in by any caller that has already scanned, so
+        the emergency paths scan the job store exactly ONCE.
+        """
+        found = set(self._peer_controllers.get(host_id) or ())
+        if records is None:
+            try:
+                records, _ = self.db.scan_jobs()
+            except Exception:
+                records = []
+        for job in records:
+            if job.get("origin_host_id") == host_id and \
+                    job.get("controller_id"):
+                found.add(job["controller_id"])
+        return found
+
+    def _authorize_origin(self, origin_host_id):
+        """Re-ask THE decision for a stored job's origin.
+
+        Returns None for LOCAL work, or the FULL PeerDecision otherwise --
+        allowed ones included. Returning None for "allowed" threw away
+        `may_mutate`, and an observe-only peer is allowed=True: the
+        dispatcher read that as "go ahead" and forwarded mutations for a
+        peer narrowed to read-only (four reviewers reproduced it; one
+        watched the host connect to the node and record the result as
+        indeterminate -- a mutation logged as MAY HAVE RUN on behalf of a
+        peer that may not mutate at all). The caller needs the whole
+        decision, not a boolean.
+
+        Called on every dispatch, which is what makes a hand-edited
+        denylist bite without an API call and without a restart: the
+        denylist re-reads on mtime change, and this is the caller that
+        notices.
+        """
+        if not origin_host_id or origin_host_id == self.host_id:
+            # Locally originated -- or a record written before this field
+            # existed, which is the same thing: nothing but this host
+            # could have created it.
+            return None
+        return self.peers.authorize_peer(
+            origin_host_id, self.peers.pinned_fingerprint(origin_host_id))
+
+    def _refuse_origin(self, job, decision, reason=None, detail=None,
+                       terminal=None):
+        """Refuse a dispatch on the origin's account. Called WITH the lock.
+
+        BURN OR SKIP, and the distinction is NOT "reversibility" (the
+        earlier comment said that and it was false -- /peers/admit can
+        undo a block, a forget and a narrowing alike). It is whether a
+        MEMBERSHIP DECISION WAS TAKEN:
+
+          - a SWITCH is in force (the A-32 killswitch, a denylist entry,
+            a store this host temporarily cannot read). Membership is
+            untouched, so the work is SKIPPED and paced; flipping the
+            switch back must bring exactly that work with it.
+          - a MEMBERSHIP DECISION was taken (blocked, forgotten,
+            re-pinned, or an operation taken off the remote surface).
+            This host will never serve this job, so leaving it queued
+            makes /jobs LIE -- it terminalises as `refused`. Re-admitting
+            the peer does NOT resurrect it: a FULL revocation (block /
+            forget / re-pin) stamps a fresh admission_id epoch (see
+            convoy_peers _set_state / _upsert), so every job the old
+            lineage stamped is stale at the dispatch fence FOREVER, even
+            work the revocation sweep could not reach and even a block
+            later laundered through observe-only before the re-admit.
+
+        OBSERVE-ONLY IS DELIBERATELY NOT IN THAT LIST, and that is a
+        correction of an earlier overclaim. It is a REVERSIBLE
+        class-narrowing, not a full revocation: 24.6 requires a peer's
+        READS to keep flowing under it, so a read submitted while
+        admitted must survive an observe narrowing AND a later widen --
+        which means observe cannot stamp a new epoch (that would burn the
+        very reads it must preserve). Its containment of MUTATIONS is two
+        other mechanisms, not the epoch: the mutating-only revocation
+        sweep at narrow time, and the per-dispatch may_mutate refusal
+        that is in force for exactly as long as the peer is observe-only.
+        NAMED RESIDUAL: a mutation submitted before the narrow, left
+        UNREACHABLE during that sweep, and still queued when the operator
+        WIDENS the peer back to full admission will then dispatch -- but
+        under the admission the operator just RE-GRANTED, which is
+        indistinguishable from the peer re-submitting it, so no boundary
+        is crossed. A block (not an observe) is the tool for durably
+        killing a peer's in-flight work.
+        """
+        delivery_id = job["delivery_id"]
+        reason = reason or decision.reason
+        detail = detail if detail is not None else decision.detail
+        if terminal is None:
+            terminal = not decision.reversible
+        self._note_dispatch_event(
+            delivery_id, "dispatch_refused",
+            # COMPOUND on purpose: _note_dispatch_event dedupes on
+            # (event, reason), and a job whose refusal moves from
+            # denylisted to forgotten to pin-mismatched is a real
+            # transition the trail must show. Prefix-stable, so a reader
+            # filtering on origin_not_admitted still works.
+            {"reason": "origin_not_admitted:" + reason,
+             "peer_reason": reason,
+             "terminal": bool(terminal),
+             "origin_host_id": str(job.get("origin_host_id"))[:64],
+             "peer_digest": decision.digest})
+        if terminal:
+            try:
+                refused = self.db.mark_refused(delivery_id, {
+                    "reason": "peer_revoked",
+                    "cause": reason,
+                    "peer_reason": reason,
+                    "detail": "the peer that submitted this job may no "
+                              "longer have it served by this host; it was "
+                              "never delivered to a node and never ran",
+                    "origin_host_id": job.get("origin_host_id"),
+                    "operation": job.get("operation"),
+                    "attempts": int(job.get("attempts") or 0),
+                    "at": self._now()})
+            except Exception:
+                refused = None
+            if refused is not None:
+                return 403, {"ok": False, "reason": "origin_revoked",
+                             "detail": detail, "peer_reason": reason,
+                             "job": refused}
+            # The terminalise did not land (unwritable disk, or the job
+            # left queued underneath us). Fall through to the skip: the
+            # next pass retries, and a job left queued is the safe side.
+        self._set_drain_backoff(delivery_id,
+                                self._now() + self.drain_backoff_s)
+        return 403, {"ok": False, "reason": "origin_not_admitted",
+                     "detail": detail, "peer_reason": reason}
+
+    def list_peers(self):
+        killswitch = self.peers.killswitch()
+        return 200, {"ok": True, "host_id": self.host_id,
+                     "peers": self.peers.peers(),
+                     "peers_unreadable": self.peers.unreadable,
+                     "killswitch": killswitch,
+                     "denylist": self.peers.denylist.snapshot()}
+
+    def admit_peer(self, body):
+        """Admit a peer against an EXPLICIT fingerprint the operator has
+        compared out of band. Never a pin auto-update: the fingerprint is
+        mandatory, and a change to it is audited as a re-admission.
+
+        SELF-LOCKING (see _revoke_route): called WITHOUT self.lock. The
+        admission lands O(1) under the lock; a RE-PIN then runs the
+        revocation sweep lock-free, because a re-pin repudiates the old
+        key and the work it authorized must not survive it.
+        """
+        try:
+            host_id = text_field(body, "host_id")
+            fingerprint = text_field(body, "fingerprint")
+            display_name = text_field(body, "display_name", required=False)
+            admitted_via = text_field(body, "admitted_via",
+                                      required=False) or "manual"
+        except Malformed as e:
+            return self._refuse("peers", "malformed", e.detail, 400)
+        # A PEER MAY NEVER CARRY THIS HOST'S OWN ID. Locality is inferred by
+        # string-comparing ids -- _authorize_origin short-circuits on
+        # `origin_host_id == self.host_id` and returns None, meaning "local,
+        # no peer checks" -- so a peer admitted under this id would have its
+        # STORED jobs skip both the may_mutate and the remote_exposed
+        # re-checks at dispatch. That is the original blocker reopened
+        # through the back door: measured, an ordinary peer's narrowed job
+        # is refused 403 origin_revoked while a self-id peer's identical job
+        # reaches the forward (409 node_unreachable). Submission-time checks
+        # still fire, which is exactly what makes it easy to miss.
+        #
+        # The id is not secret -- GET /health publishes it unauthenticated by
+        # design -- so it is freely choosable and the guard belongs here, at
+        # the ONE place membership is granted, rather than at each of the
+        # three places locality is inferred.
+        if host_id and host_id.strip().lower() == self.host_id:
+            return self._refuse(
+                "peers", "peer_is_this_host",
+                "that host_id is THIS host's own id, which the dispatcher "
+                "reads as 'locally originated' and exempts from every peer "
+                "check -- admitting it would let the peer's queued work "
+                "bypass revocation. Use the peer's own host id (from ITS "
+                "GET /health).", 400)
+        with self.lock:
+            # Read the OLD pin before admit overwrites it -- it is what
+            # tells a re-pin from a first admission or a no-op re-admit.
+            old_fp = self.peers.pinned_fingerprint(host_id)
+            try:
+                record = self.peers.admit(
+                    host_id, fingerprint, admitted_via=admitted_via,
+                    display_name=display_name,
+                    endpoints=body.get("endpoints"),
+                    convoy_ids=body.get("convoy_ids"),
+                    cert_pem=body.get("cert_pem"),
+                    clock_offset_s=body.get("clock_offset_s"))
+            except peers_mod.PeerError as e:
+                return self._refuse("peers", e.reason, e.detail,
+                                    409 if e.reason == "peers_unreadable"
+                                    else 400)
+        self._audit_best_effort("peer_admitted",
+                                {"host_id": record["host_id"],
+                                 "peer_digest": peers_mod.peer_digest(
+                                     record["host_id"],
+                                     record["fingerprint"]),
+                                 "admitted_via": record["admitted_via"]})
+        # A RE-PIN REPUDIATES THE OLD KEY, so its queued work must burn.
+        # The per-dispatch re-check re-derives the CURRENT pin, so without
+        # this a job the old key submitted would be re-authorized under
+        # the NEW key and forwarded -- the pin_mismatch BURN case that
+        # _refuse_origin documents but nothing reached, because admit ran
+        # no sweep at all. Only queued work is affected and there is no
+        # new-key work yet (admit just returned), so this cannot burn the
+        # peer's future. Lock-free (SELF-LOCKING _revoke_peer_work).
+        summary = None
+        if old_fp is not None and old_fp != record["fingerprint"]:
+            summary = self._revoke_peer_work(record["host_id"],
+                                             cause="repinned")
+            self._audit_best_effort(
+                "peer_repinned",
+                {"host_id": record["host_id"],
+                 "peer_digest": peers_mod.peer_digest(
+                     record["host_id"], record["fingerprint"]),
+                 **summary})
+        resp = {"ok": True, "peer": record}
+        if summary is not None:
+            resp["revocation"] = summary
+        return 200, resp
+
+    def block_peer(self, body):
+        """Block a peer: every class including X0, and REVOKE its work."""
+        return self._revoke_route(body, peers_mod.PEER_BLOCKED)
+
+    def forget_peer(self, body):
+        """Drop the identity AND the pin, and revoke its work.
+
+        Distinct from block on purpose: a blocked peer stays pinned (so
+        an impersonator still trips pin_mismatch); a forgotten one is a
+        stranger whose next join is a fresh decision.
+        """
+        return self._revoke_route(body, "forgotten")
+
+    def observe_peer(self, body):
+        """Narrow a peer to observe-only: X0 permitted, every mutation
+        refused regardless of local gate state (24.6).
+
+        NOT a full revocation. Its queued MUTATING jobs are terminalised
+        (they can never be dispatched again, so leaving them queued would
+        make /jobs lie) and its WRITER leases are released (it may no
+        longer mutate, so an exclusive hold only blocks everyone else) --
+        its reads keep working, which is the entire point of the state.
+
+        SELF-LOCKING (see _revoke_peer_work): called WITHOUT self.lock.
+        """
+        try:
+            host_id = text_field(body, "host_id")
+        except Malformed as e:
+            return self._refuse("peers", "malformed", e.detail, 400)
+        with self.lock:
+            try:
+                record = self.peers.observe(host_id)
+            except peers_mod.PeerError as e:
+                return self._refuse(
+                    "peers", e.reason, e.detail,
+                    404 if e.reason == "unknown_peer" else 409)
+        summary = self._revoke_peer_work(
+            record["host_id"], cause="peer_observe_only",
+            mutating_only=True, lease_modes=(controllers.LEASE_EXCLUSIVE,))
+        return 200, {"ok": True, "peer": record, "revocation": summary}
+
+    def _revoke_route(self, body, outcome):
+        """SELF-LOCKING: called WITHOUT self.lock.
+
+        The membership change lands FIRST and under the lock (it is O(1),
+        and from that instant authorize_peer refuses the peer everywhere,
+        including at every dispatch). Only then does the sweep run, and
+        it runs lock-free.
+        """
+        try:
+            host_id = text_field(body, "host_id")
+        except Malformed as e:
+            return self._refuse("peers", "malformed", e.detail, 400)
+        with self.lock:
+            try:
+                if outcome == "forgotten":
+                    record = self.peers.forget(host_id)
+                else:
+                    record = self.peers.block(host_id)
+            except peers_mod.PeerError as e:
+                return self._refuse(
+                    "peers", e.reason, e.detail,
+                    404 if e.reason == "unknown_peer" else 409)
+        summary = self._revoke_peer_work(record["host_id"], cause=outcome)
+        self._audit_best_effort(
+            "peer_revoked",
+            {"host_id": record["host_id"], "outcome": outcome,
+             "peer_digest": peers_mod.peer_digest(record["host_id"],
+                                                  record["fingerprint"]),
+             **summary})
+        return 200, {"ok": True, "peer": record, "outcome": outcome,
+                     "revocation": summary}
+
+    def set_lan_killswitch(self, body):
+        """A-32: the SAME predicate applied to every peer at once.
+
+        REVERSIBLE, and it unwinds NO membership -- pins, admissions and
+        observe-only narrowings are all untouched, so releasing it
+        restores the mesh with nobody re-admitting anybody. It therefore
+        terminalises NOTHING: queued peer work is SKIPPED by the drain
+        while the switch is on and dispatches again when it is off.
+        Leases are released, because an emergency stop that leaves a
+        peer's exclusive hold blocking the local operator is not a stop.
+
+        SELF-LOCKING, and this is THE EMERGENCY ROUTE, so the phases
+        matter: the switch is set FIRST, under the lock, in O(1) -- from
+        that instant every peer is refused everywhere. The job scan that
+        finds the leases to drop then runs LOCK-FREE. It used to run one
+        full scan PER PEER inside the global lock: 36.45s at 3000 jobs
+        and 20 peers, during which the operator's own client hit its 10s
+        timeout and RETRIED, starting the whole thing again.
+        """
+        engaged = body.get("engaged")
+        if not isinstance(engaged, bool):
+            return self._refuse("peers", "malformed",
+                                "engaged must be true or false", 400)
+        try:
+            reason = text_field(body, "reason", required=False)
+        except Malformed as e:
+            return self._refuse("peers", "malformed", e.detail, 400)
+        with self.lock:
+            try:
+                state = self.peers.set_killswitch(engaged, reason)
+            except peers_mod.PeerError as e:
+                return self._refuse("peers", e.reason, e.detail, 409)
+            hosts = [r["host_id"] for r in self.peers.peers()]
+        released = 0
+        if engaged:
+            try:
+                records, _unreadable = self.db.scan_jobs()
+            except Exception:
+                records = []        # the switch is already in force
+            with self.lock:
+                for host_id in hosts:
+                    for controller_id in self._controllers_for_origin(
+                            host_id, records):
+                        released += self.leases.release_controller(
+                            controller_id)
+        self._audit_best_effort("lan_killswitch",
+                                {"engaged": engaged, "reason": reason,
+                                 "leases_released": released})
+        return 200, {"ok": True, "killswitch": state,
+                     "leases_released": released}
+
+    def quarantine_peers(self, body):
+        """Move an UNREADABLE peers.json aside so the host is operable.
+
+        The in-band recovery an unreadable store previously had none of:
+        admit, block, forget and the killswitch all refused, leaving a
+        host-private file to hand-edit during an incident. It DESTROYS
+        MEMBERSHIP -- every admission and every block -- so it demands an
+        explicit confirm, refuses a store the host can still read, and
+        never deletes the damaged file.
+        """
+        if body.get("confirm") is not True:
+            return self._refuse(
+                "peers", "confirm_required",
+                "quarantine discards every admission and every block on "
+                "this host; pass confirm=true if that is what you want",
+                400)
+        try:
+            kept = self.peers.quarantine()
+        except peers_mod.PeerError as e:
+            return self._refuse("peers", e.reason, e.detail,
+                                409 if e.reason == "peers_readable" else 500)
+        # HOLD THE EMERGENCY STOP across recovery. quarantine wiped
+        # membership during an incident; resuming peer dispatch the moment
+        # a peer is re-admitted is the opposite of what recovering a
+        # corrupted SECURITY store should do. Re-engage through the store
+        # API so it PERSISTS (a fresh peers.json carries it), and surface
+        # it -- silently changing an emergency stop is the finding.
+        try:
+            self.peers.set_killswitch(
+                True, "peers.json quarantined -- emergency stop held; "
+                      "lift it once the mesh is trusted again")
+        except peers_mod.PeerError:
+            pass    # engaging never raises on a readable store; be safe
+        # Membership is gone, so every lease a peer held is orphaned --
+        # release them, the same reason every other membership-destroying
+        # route does (an exclusive hold left behind would keep blocking
+        # local mutations for the rest of its TTL). Under the app lock
+        # already (this route runs in _post_locked), so touch the lease
+        # registry directly rather than the self-locking sweep.
+        released = 0
+        now = self._now()
+        for lease in self.leases.live_leases(now):
+            cid = lease.get("controller_id", "")
+            if cid.startswith(peers_mod.CONTROLLER_NAMESPACE):
+                self.leases.release_controller(cid)
+                released += 1
+        killswitch = self.peers.killswitch()
+        self._audit_best_effort(
+            "peers_quarantined",
+            {"kept_at": kept, "leases_released": released,
+             "lan_killswitch": bool(killswitch.get("engaged"))})
+        return 200, {
+            "ok": True, "quarantined": kept, "leases_released": released,
+            # SURFACED, never silent: quarantine holds the emergency stop
+            # engaged (see PeerStore.quarantine), and an operator must be
+            # told, because peer dispatch stays paused until they lift it.
+            "lan_killswitch": bool(killswitch.get("engaged")),
+            "detail": "peer records were discarded; the damaged file was "
+                      "kept for inspection. Every peer must be admitted "
+                      "again, and the LAN emergency stop is HELD ENGAGED "
+                      "-- lift it with /lan/killswitch once the mesh is "
+                      "trusted again."}
+
+    def _revoke_peer_work(self, host_id, cause, mutating_only=False,
+                          lease_modes=None):
+        """Apply A-7 revocation to work ALREADY IN THE MESH.
+
+        FOUR CASES, FOUR DIFFERENT RIGHT ANSWERS -- and three of them are
+        "do not touch it", which is the part that is easy to get wrong:
+
+          queued      -> TERMINALISE `refused`, with evidence. It
+                         provably never ran (it never left this host), so
+                         mark_indeterminate would be a LIE: indeterminate
+                         means "may have run" and is the precious record
+                         that says so (16.4). Refused says what actually
+                         happened -- this host declined to deliver it.
+          dispatching -> LEAVE IT. The forward is in flight; you cannot
+                         un-run something. Revocation stops NEW work, it
+                         does not rewrite history, and the dispatcher's
+                         own resolution (verdict / requeue / indeterminate)
+                         is the honest record of what happened.
+          running     -> LEAVE IT, AND KEEP POLLING. The node owns this
+                         job and holds its verdict for 24h. Abandoning it
+                         would manufacture a false indeterminate and
+                         destroy a real answer that still exists.
+          leases      -> RELEASED IMMEDIATELY. A revoked peer's exclusive
+                         hold must not keep blocking local mutations for
+                         the rest of its TTL.
+
+        SELF-LOCKING, and called WITHOUT self.lock. The scan runs
+        lock-free (jobs() is O(every job file on disk); drain_once was
+        explicitly rewritten to keep exactly this scan out of the lock,
+        and holding it here stalled the WHOLE host for 8.1s at 300 jobs
+        -- on the emergency path). Each mark_refused then takes the lock
+        for one file write, which is what keeps its read-then-CAS
+        serialized against a concurrent claim_for_dispatch. A job that
+        becomes queued AFTER this snapshot is not missed containment:
+        every dispatch re-authorizes its origin, which is the real
+        guarantee -- this sweep is the fast path, not the fence.
+        """
+        summary = {"refused": 0, "left_in_flight": 0, "left_running": 0,
+                   "leases_released": 0, "errors": 0, "unreadable": 0,
+                   "examined": 0}
+        try:
+            records, unreadable = self.db.scan_jobs()
+        except Exception as e:
+            # A scan that FAILED must never read as "no work found". The
+            # revocation is INCOMPLETE and the operator has to be told.
+            summary["errors"] += 1
+            self._audit_best_effort(
+                "peer_revocation_incomplete",
+                {"origin_host_id": host_id, "detail": str(e)[:256],
+                 "reason": "job_scan_failed"})
+            records, unreadable = [], []
+        if unreadable:
+            # UNREADABLE IS NOT ABSENT. get_job returns None for both, so
+            # a sweep that could read nothing used to be byte-identical to
+            # one that found nothing -- errors 0, and an operator told the
+            # peer was contained.
+            summary["unreadable"] = len(unreadable)
+            self._audit_best_effort(
+                "peer_revocation_incomplete",
+                {"origin_host_id": host_id, "reason": "records_unreadable",
+                 "count": len(unreadable), "delivery_ids": unreadable[:16]})
+        mine = [j for j in records if j.get("origin_host_id") == host_id]
+        summary["examined"] = len(mine)
+        for job in mine:
+            state = job.get("state")
+            delivery_id = job.get("delivery_id")
+            if state == "queued":
+                if mutating_only:
+                    entry = self.operations.get(job.get("operation"))
+                    # An operation no longer in the registry counts as
+                    # mutating: strict default, same as gating_of.
+                    if entry is not None and not gating_of(entry)["mutating"]:
+                        continue
+                try:
+                    with self.lock:
+                        refused = self.db.mark_refused(delivery_id, {
+                            "reason": "peer_revoked",
+                            "cause": cause,
+                            # "never DISPATCHED" would be false: a
+                            # requeued job has attempts >= 1 and a forward
+                            # WAS attempted (it was never delivered). Only
+                            # "never ran" is true of every case, and the
+                            # attempts counter is right here beside it.
+                            "detail": "the peer that submitted this job is "
+                                      "no longer admitted on this host; it "
+                                      "was never delivered to a node and "
+                                      "never ran",
+                            "peer_reason": cause,
+                            "origin_host_id": host_id,
+                            "operation": job.get("operation"),
+                            "attempts": int(job.get("attempts") or 0),
+                            "at": self._now()})
+                except Exception:
+                    summary["errors"] += 1
+                    continue
+                if refused is None:
+                    # mark_refused DECLINED (the job left queued under us,
+                    # or its file vanished). Counting it anyway made the
+                    # summary -- which is returned to the operator AND
+                    # written into the audit line -- claim refusals that
+                    # never happened. Count only what transitioned.
+                    summary["errors"] += 1
+                    continue
+                summary["refused"] += 1
+                self._audit_best_effort(
+                    "peer_revocation_refused_job",
+                    {"delivery_id": delivery_id, "origin_host_id": host_id})
+            elif state == "dispatching":
+                summary["left_in_flight"] += 1
+                self._audit_best_effort(
+                    "peer_revocation_left_in_flight",
+                    {"delivery_id": delivery_id, "origin_host_id": host_id,
+                     "detail": "a forward was already in flight; it is "
+                               "allowed to finish and be recorded honestly"})
+            elif state == "running":
+                summary["left_running"] += 1
+                self._audit_best_effort(
+                    "peer_revocation_keeps_polling",
+                    {"delivery_id": delivery_id, "origin_host_id": host_id,
+                     "node_job_id": job.get("node_job_id"),
+                     "detail": "the node owns this job and still holds its "
+                               "verdict; polling continues to a terminal"})
+        with self.lock:
+            for controller_id in self._controllers_for_origin(host_id,
+                                                              records):
+                summary["leases_released"] += self.leases.release_controller(
+                    controller_id, modes=lease_modes)
+            if lease_modes is None:
+                self._peer_controllers.pop(host_id, None)
+        return summary
+
 
 def _reject_json_constant(name):
     raise ValueError(f"{name} is not permitted in a request body")
@@ -2986,10 +3945,16 @@ def make_handler(app):
                 self._send(401, {"ok": False, "reason": "unauthenticated"})
                 return
             try:
+                if self.path == "/status":
+                    # OUTSIDE the lock: status() self-locks in phases so
+                    # its jobs-dir scan does not starve every other route
+                    # (see status()). Wrapping it in `with app.lock:`
+                    # would deadlock -- threading.Lock is not reentrant.
+                    code, payload = 200, app.status()
+                    self._send(code, payload)
+                    return
                 with app.lock:
-                    if self.path == "/status":
-                        code, payload = 200, app.status()
-                    elif self.path == "/nodes":
+                    if self.path == "/nodes":
                         code, payload = 200, app.list_nodes()
                     elif self.path == "/manifest":
                         code, payload = app.get_manifest()
@@ -2998,6 +3963,8 @@ def make_handler(app):
                             self.path[len("/manifest/"):])
                     elif self.path == "/identity":
                         code, payload = app.get_identity()
+                    elif self.path == "/peers":
+                        code, payload = app.list_peers()
                     elif self.path == "/leases":
                         code, payload = app.list_leases()
                     elif self.path.startswith("/jobs/"):
@@ -3041,6 +4008,22 @@ def make_handler(app):
                     code, payload = app.drain()
                 elif self.path == "/poll":
                     code, payload = app.poll_job(body.get("delivery_id"))
+                # The revocation routes self-lock in phases too: the
+                # membership change is O(1) under the lock, and the job
+                # sweep that follows runs lock-free. /lan/killswitch is
+                # the EMERGENCY route and must never be the slowest one.
+                elif self.path == "/peers/block":
+                    code, payload = app.block_peer(body)
+                elif self.path == "/peers/forget":
+                    code, payload = app.forget_peer(body)
+                elif self.path == "/peers/observe":
+                    code, payload = app.observe_peer(body)
+                elif self.path == "/lan/killswitch":
+                    code, payload = app.set_lan_killswitch(body)
+                elif self.path == "/peers/admit":
+                    # SELF-LOCKING like the revocation routes: a RE-PIN
+                    # runs the job sweep, which cannot hold the app lock.
+                    code, payload = app.admit_peer(body)
                 else:
                     code, payload = self._post_locked(body)
             except Exception as e:      # same last-resort contract
@@ -3060,11 +4043,20 @@ def make_handler(app):
                 if self.path == "/jobs":
                     return app.create_job(body)
                 if self.path == "/envelope":
-                    return app.submit_envelope(body)
+                    # The loopback sentinel, passed EXPLICITLY: there is
+                    # no default, so slice 3's listener cannot bypass peer
+                    # authorization by forgetting to name an origin.
+                    return app.submit_envelope(body, LOOPBACK_ORIGIN)
                 if self.path == "/psk":
                     return app.issue_convoy_psk(body)
                 if self.path == "/identity/rotate":
                     return app.rotate_identity(body)
+                # Peers and the LAN killswitch: LOOPBACK ONLY. Slice 3's
+                # peer handler is a SEPARATE CLASS with its own table, so
+                # none of these can ever become LAN-reachable by someone
+                # adding a branch to the wrong if-chain.
+                if self.path == "/peers/quarantine":
+                    return app.quarantine_peers(body)
                 if self.path == "/leases":
                     return app.acquire_lease(body)
                 if self.path == "/leases/release":

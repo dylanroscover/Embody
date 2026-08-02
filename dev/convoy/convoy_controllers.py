@@ -168,6 +168,37 @@ class LeaseRegistry:
             del self._nodes[node_id]
         return True
 
+    def release_controller(self, controller_id, modes=None):
+        """Drop EVERY hold this controller has, across every node, and
+        forget the controller itself. Returns the number of holds dropped.
+
+        The revocation path (A-7): when a peer is revoked, the leases its
+        controllers hold must fall IMMEDIATELY rather than waiting out a
+        TTL -- a revoked peer's exclusive lease would otherwise keep
+        blocking every local mutation for up to an hour.
+
+        `modes` optionally narrows it to given lease modes, which is how
+        a narrowing to observe-only drops the peer's WRITER locks (it may
+        no longer mutate, so holding one only blocks others) while
+        leaving its reader holds alone.
+        """
+        if not controller_id:
+            return 0
+        released = 0
+        for node_id in list(self._nodes):
+            entry = self._nodes[node_id]
+            if modes is not None and entry["mode"] not in modes:
+                continue
+            if entry["holders"].pop(controller_id, None) is not None:
+                released += 1
+            if not entry["holders"]:
+                del self._nodes[node_id]
+        if modes is None:
+            # Forget the controller too, so a stale heartbeat cannot keep
+            # a revoked peer's identity alive in the table.
+            self._controllers.pop(controller_id, None)
+        return released
+
     def authorize(self, node_id, controller_id, is_mutating, now):
         """May this controller issue this operation to this node NOW?
         Returns None if allowed, raises LeaseError if not.

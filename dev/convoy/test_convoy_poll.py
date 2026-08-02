@@ -279,8 +279,8 @@ def test_stop_drain_loop_bounds_cover_a_poll_in_flight(server):
     try:
         assert entered.wait(timeout=10), "the loop never polled"
         assert server.app.stop_drain_loop(timeout_s=0.2) is False
-        with server.app.lock:
-            assert server.app.status()["drain_loop"] is True
+        # self-locking status(): never call it under app.lock (deadlock)
+        assert server.app.status()["drain_loop"] is True
         assert server.app.start_drain_loop(interval_s=60) is False
     finally:
         release.set()
@@ -467,8 +467,17 @@ def test_a_job_without_node_provenance_is_never_polled(server):
     node = register(server.app)
     job = enqueue(server.app, node)
     did = job["delivery_id"]
-    with server.app.lock:
-        server.app.db._apply_state(did, "running")   # no provenance
+    # _apply_state now refuses a provenance-less 'running' outright
+    # (A-15 enforced by state), which is this anomaly's whole point: it
+    # is only reachable by HAND-EDITED state -- so the test constructs
+    # it exactly that way, on disk.
+    import json as _json
+    path = server.app.db._job_path(did)
+    with open(path, "r", encoding="utf-8") as f:
+        rec = _json.load(f)
+    rec["state"] = "running"
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        _json.dump(rec, f)
     calls = {"n": 0}
 
     def counting(port, operation, arguments):
