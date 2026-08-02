@@ -14,6 +14,13 @@ name: bridge-tests
 # test_convoy_client.py's PARITY test is the only thing keeping the two
 # copies of the probe decision tree -- convoy_hostprobe.py and
 # Embody/convoy/convoy_client.py -- in agreement.
+#
+# dev/convoy/test_convoy_host_vendor.py is the SECOND parity test, and
+# the one the .tox depends on: the ten host-app modules are vendored as
+# text DATs under Embody/convoy/host/ so a released .tox can install
+# them, and nothing but that test notices when the two copies drift. It
+# needs no new path filter -- 'dev/convoy/**' and
+# 'dev/embody/Embody/convoy/**' already cover both sides of the compare.
 
 on:
   push:

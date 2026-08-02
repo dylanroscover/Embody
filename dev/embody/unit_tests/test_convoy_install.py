@@ -2466,11 +2466,29 @@ class TestConvoyInstallIsTouchDesignerFree(EmbodyTestCase):
             self.assertIn(module.split('.')[0], allowed,
                           '%s is not in the stdlib allowlist' % module)
 
-    def test_it_is_ascii_only_with_unix_newlines_and_no_bom(self):
+    def test_it_is_ascii_only_with_clean_newlines_and_no_bom(self):
+        """No BOM, ASCII only, no stray CR.
+
+        This used to assert `b'\\r\\n' not in raw`. That became
+        untestable the moment convoy_install.py had to become a text DAT
+        so it would actually SHIP in the .tox (it was committed but
+        vendored nowhere): Embody writes every externalized DAT with CRLF
+        on Windows, so the assertion failed on every Windows dev machine
+        while passing in CI -- the worst kind of test.
+
+        The invariant it was protecting is intact and still enforced,
+        just not by this line: .gitattributes declares `*.py text eol=lf`,
+        so the COMMITTED bytes are LF regardless of the working tree.
+        What is asserted here is what a working tree can actually
+        promise -- no BOM, pure ASCII, and no LONE carriage return, which
+        would be real corruption rather than a platform convention.
+        """
         with open(_INSTALL_PATH, 'rb') as f:
             raw = f.read()
         self.assertFalse(raw.startswith(b'\xef\xbb\xbf'), 'no BOM')
-        self.assertNotIn(b'\r\n', raw, 'LF only')
+        stripped = raw.replace(b'\r\n', b'\n')
+        self.assertNotIn(b'\r', stripped,
+                         'a CR not part of a CRLF pair is corruption')
         raw.decode('ascii')
 
     def test_HOST_MODULES_names_exactly_the_daemons_real_modules(self):
@@ -2484,9 +2502,15 @@ class TestConvoyInstallIsTouchDesignerFree(EmbodyTestCase):
         for name in os.listdir(_CONVOY_DIR):
             if not name.endswith('.py') or name.startswith('test_'):
                 continue
-            # conftest is pytest's, and manual_exit_proof is a hand-run
-            # harness -- neither is imported by the daemon.
-            if name in ('conftest.py', 'manual_exit_proof.py'):
+            # conftest is pytest's, manual_exit_proof is a hand-run
+            # harness, and vendor_host_modules is the repo tool that
+            # COPIES the daemon into the .tox -- none of the three is
+            # imported by the daemon, so none belongs in the manifest of
+            # what to vendor. (vendor_host_modules itself discovers by
+            # globbing convoy_*.py, which is why it does not have this
+            # problem in the other direction.)
+            if name in ('conftest.py', 'manual_exit_proof.py',
+                        'vendor_host_modules.py'):
                 continue
             on_disk.add(name)
         self.assertEqual(set(install_mod.HOST_MODULES), on_disk)

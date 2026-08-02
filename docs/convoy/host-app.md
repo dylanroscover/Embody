@@ -2,12 +2,17 @@
 
 The **host app** is the other half of [Convoy](index.md): a small program that runs outside TouchDesigner, keeps the register of this user's Convoy nodes, holds the durable job queue, and relays audited operations into a node through its Envoy server.
 
-!!! warning "Not installable yet — there is no supported install path"
-    Nothing in TouchDesigner installs, starts, supervises, or updates the host app today. There is no Install button on the Convoy page, and the shipped `.tox` does not contain the host app at all. **For every user of the released build, turning Convoy on makes [Convoy Status](index.md#status-vocabulary) read `No Convoy host app` — and it will keep reading it.** That is the honest state of this feature: the TD side (a node that registers itself) shipped; the machine side did not.
+!!! warning "Built, but never yet installed end to end — treat it as unproven"
+    The install path now exists. The `.tox` carries the host app itself (as text DATs, so an install needs no network), and the Convoy page has **Install or Update Host App**, **Start**, **Stop** and **Uninstall Host App**. Pressing Install asks for confirmation, writes the daemon into your per-user data directory, and registers it to start when you log in.
 
-    The host app currently exists only as source in the Embody repository, under `dev/convoy/`, where it is developed and tested. The installer, the login supervision, and the Convoy-page buttons that would drive them are planned — see [What is coming](#what-is-coming) — and none of it is in this build.
+    **What has not happened is a single complete install on real hardware.** The orchestration is covered by tests — including a run inside TouchDesigner — and the daemon has been started from an installed payload and answered `/health`. But the end-to-end acceptance run (install → supervised restart → survives logout and reboot → uninstall → reinstall rejoins the same convoy) has not been performed. Until it has, treat the buttons as unproven rather than supported, and know that [Uninstall](#how-the-install-behaves) removes the program and its login entry while keeping your host identity and job history.
 
-    Everything below marked **not yet available** describes a design, not something you can do.
+    Two specific limits, stated plainly rather than discovered later:
+
+    - **macOS is entirely unverified.** The Launch Agent, the plist and the `launchctl` calls are generated and unit-tested, but no part of the macOS path has ever run on a Mac. Only the Windows leg has been exercised at all.
+    - **A host installed this way has no cryptographic identity.** TouchDesigner bundles Python 3.11.15 without the `cryptography` package, so the daemon starts and serves normally but reports `cryptography_missing` and holds no signing key. That is harmless for the loopback-only feature that exists today, and it is a hard blocker for the LAN peering described under [What is coming](#what-is-coming) — peer admission is built on pinned key fingerprints, and there is no key to pin.
+
+    The program it installs is **unsigned** and lives in a user-writable directory, which is by construction a persistence mechanism; security software may reasonably flag it. It is **one per logged-in user**, not one per machine.
 
 ## Why it lives outside TouchDesigner
 
@@ -62,7 +67,7 @@ One per-user directory, never inside your project and never in git:
 !!! danger "Developer path — not a supported install"
     This is how the host app is exercised during development. It is not an install: nothing supervises the process, nothing restarts it, it does not survive a logout, and closing the terminal ends it. Do not treat it as a way to deploy Convoy.
 
-From a clone of the [Embody repository](https://github.com/dylanroscover/Embody) (the daemon is stdlib-only Python 3; `cryptography`, if present, is used solely for the not-yet-active host identity key):
+From a clone of the [Embody repository](https://github.com/dylanroscover/Embody) (the daemon is stdlib-only Python 3, except that it will use `cryptography` for its host identity key if the interpreter you run it under happens to have it — TouchDesigner's does not):
 
 ```bash
 python dev/convoy/convoy_hostapp.py
@@ -112,19 +117,27 @@ curl -H "X-Convoy-Host-Token: <contents of host.token>" \
 - **Or ask it to stop** over the authenticated `POST /shutdown` route, which runs the same path.
 - **A hard kill** leaves the portfile behind. Nothing breaks: clients verify the writer's pid, so a dead port is never handed out as live — the status simply reads `Host app stale`.
 
+## How the install behaves
+
+These are properties of the install that now exists, not promises.
+
+- **Its own confirmation, separate from Convoy Enable.** Installing a program that runs whenever you are logged in — whether or not TouchDesigner is open — is a different grant from registering a project, so it is asked for separately. **Enabling Convoy never installs anything**, and neither does the setup wizard.
+- **Unsigned and un-notarized**, dependent on TouchDesigner's bundled interpreter (so moving or uninstalling TD needs a repair — press Install again), **per user, not per machine**, loopback only with no firewall rule created or needed, and never elevated.
+- **Install is also repair and upgrade.** Running it again over a broken or older install is the supported fix; it does not need an uninstall first.
+- **Asymmetric self-heal, by construction**: Windows Task Scheduler's repetition means a dead daemon comes back within about a minute, while launchd's `KeepAlive` restarts it in about a second. That difference is a property of the two supervisors, not something Convoy hides.
+- **Stop really stops.** Because the supervisor would otherwise bring the daemon back within a minute, Stop disables the supervision entry first — otherwise the button would look broken.
+- **Uninstall keeps the evidence.** It removes the program files and the supervision entry and deliberately **keeps** `host.json`, `host.token`, `host.portfile.json`, `audit.jsonl` and `jobs/`. A re-install therefore rejoins the same convoy under the same host identity rather than becoming a new host. Uninstall shows you exactly what it will remove and what it will keep before it does anything.
+
 ## What is coming
 
 !!! note "Planned, not shipped — none of this exists in this build"
     Described here so the gap between what shipped and what was designed is visible, not to imply it is available.
 
-- An **Install** action on the Convoy page that writes the host app into the per-user data directory and registers a **per-user** Scheduled Task (Windows) or LaunchAgent (macOS) to start it at login and restart it if it dies.
-- **Its own confirmation, separate from Convoy Enable.** Installing a program that runs whenever you are logged in — whether or not TouchDesigner is open — is a different grant from registering a project, and it will be asked for separately. Enabling Convoy will never install anything.
-- The honest properties that install would ship with, stated in advance: **unsigned and un-notarized** (security software may flag an unsigned Python program that runs at login); dependent on TouchDesigner's bundled interpreter, so a TD uninstall or move needs a repair; **per user, not per machine**; loopback only, with no firewall rule created or needed; and never elevated.
-- **Asymmetric self-heal, by construction**: Windows Task Scheduler's repetition means a dead daemon comes back within about a minute, while launchd's `KeepAlive` restarts it in about a second. That difference is a property of the two supervisors, and the docs will keep saying so rather than papering over it.
-- **Uninstall keeps the evidence.** Removing the host app would delete the program files and the supervision entry, and deliberately **keep** `host.json`, `host.token`, and `jobs/` — the audit trail. Deleting that history would be a separate, second action with its own confirmation, because a re-install afterwards mints a new host identity.
+- **LAN peering between machines.** Everything today is loopback only. Multi-machine Convoy needs a transport, mutual authentication and an admission model, and it is gated on the identity problem noted at the top of this page: a host installed under TouchDesigner's interpreter has no signing key, and peer admission is built on pinned key fingerprints.
+- **A verified install.** The acceptance run described at the top — install, supervised restart with a new pid, survives logout and reboot, uninstall, reinstall rejoining the same convoy — has not been performed on real hardware, and none of the macOS path has run on a Mac at all.
 
 ## Platform honesty
 
 The host app and its TouchDesigner-side libraries are pure-Python and run their test suites on both **windows-latest** and **macos-latest** in CI. That covers path computation, the probe decision tree, the job store, dispatch, and the protocol.
 
-It does not cover the parts that do not exist yet. **No install or login-supervision behaviour has been verified on a Mac**, because none of it has shipped. When it does, the shipping note will state exactly which legs were verified on real hardware and which were only verified by construction and CI.
+It does not cover the parts that only a real machine can exercise. The Scheduled Task XML and the LaunchAgent plist are generated and asserted against golden fixtures, and the supervisor commands are tested against captured `schtasks` and `launchctl` output — but a fixture is not a supervisor. **No install or login-supervision behaviour has been verified on a Mac**: that leg is verified by construction and CI only, and is stated that way deliberately rather than being left for a user to discover. The Windows leg has had its unelevated task-registration path exercised from inside TouchDesigner, but not a full install-to-reboot run.

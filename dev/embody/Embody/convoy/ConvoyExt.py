@@ -66,8 +66,17 @@ not do. sys attributes are the established channel here
 """
 
 import os
+import re
 import sys
 import time
+
+# A payload entry is a BARE FILENAME and nothing else. The accept-list
+# is convoy_install._BARE_NAME_OK's, deliberately duplicated at the READ
+# site rather than trusted from the write site: these names come off DAT
+# parameters a user can edit, and write_payload would reject them anyway
+# -- catching it here means a mis-named DAT is reported as a missing
+# module instead of failing the whole install.
+_BARE_MODULE_NAME = re.compile(r"^[A-Za-z0-9._+-]+\.py$")
 
 
 class ConvoyExt:
@@ -93,6 +102,31 @@ class ConvoyExt:
     POLL_FRAMES = 15
     POLL_ATTEMPTS = 160
 
+    # The HOST-APP poll chain is far longer than the registration one and
+    # has to be: convoy_install.run_command allows 30 s per supervisor
+    # spawn, install() may issue two and start() three, and the install
+    # tail then waits up to HEALTH_WAIT_S for /health. Worst case is
+    # ~170 s of legitimate work, so the cap is 800 x 15 frames (~200 s at
+    # 60 fps). It is a BOUND on a wedged worker, not a timer -- the
+    # worker's own subprocess timeouts are what actually end it.
+    HOST_POLL_ATTEMPTS = 800
+
+    # How long the install/start tail waits for the daemon to answer
+    # /health before reporting what it actually sees. Without this the
+    # readout would say 'Installed -- not running' for up to a minute
+    # after a successful install, which reads exactly like a failure.
+    HEALTH_WAIT_S = 20.0
+    HEALTH_POLL_S = 1.0
+
+    # Mirrors convoy_client.HOST_* -- that module owns the vocabulary and
+    # a test pins these four against it. They are the TRANSIENT states,
+    # which convoy_install never computes because they describe what this
+    # extension is doing rather than what is on disk.
+    HOST_CHECKING = 'checking'
+    HOST_INSTALLING = 'installing'
+    HOST_STARTING = 'starting'
+    HOST_INSTALL_FAILED = 'install_failed'
+
     # Status classes that deserve a WARNING on the transition INTO them.
     # 'unreachable' is here and 'absent'/'stale' are NOT, and the difference
     # is real: unreachable can only happen AFTER probe() confirmed a live
@@ -110,6 +144,15 @@ class ConvoyExt:
         self._result = None
         self._gen = 0
         self._busy = False
+        # The host-app channel gets its OWN slot, generation and busy
+        # flag. Sharing the reconciler's would let a 20-second install and
+        # a 30-second heartbeat drain each other's answers -- and the
+        # reconcile loop has to keep running THROUGH an install, because
+        # re-registering the moment the newly installed host app comes up
+        # is exactly what makes Install look like it worked.
+        self._host_result = None
+        self._host_gen = 0
+        self._host_busy = False
         self._post_init_done = False
         self._logged = ''        # last logged status class (transitions only)
         self._tick_ms = self.TICK_MIN_MS
@@ -167,8 +210,23 @@ class ConvoyExt:
         chain retires itself through _staleInstance.
         """
         try:
+            # A host action in flight dies with this instance: its poll
+            # chain is armed against THIS object (run(..., self, ...)), so
+            # the new instance never drains it and the worker's result
+            # lands on a dead slot. Without this the readout is stranded
+            # on a transient string -- 'Installing...' forever -- and
+            # there is no non-mutating action in the UI that can clear it.
+            # Editing ConvoyExt.py is enough to trigger it, because this
+            # is a syncfile DAT and every save reinitializes the class.
+            # _restoreHostStatus puts back the last KNOWN state and
+            # invents nothing, which is exactly right here: an
+            # interrupted install tells us nothing new about the host.
+            if self._host_busy:
+                self._restoreHostStatus()
             self._result = None
             self._busy = False
+            self._host_result = None
+            self._host_busy = False
         except Exception:
             pass
 
@@ -204,6 +262,102 @@ class ConvoyExt:
             return self._client()
         except Exception:
             return None
+
+    def _installer(self):
+        """The convoy_install module (a sibling DAT inside this COMP).
+
+        MAIN THREAD ONLY, for exactly the reason _client() is: `mod.name`
+        is a LIVE DAT LOOKUP that re-resolves on every attribute get, so
+        binding this module inside a worker body is a threading
+        violation. _hostContext resolves it here and captures the module
+        OBJECT before any thread is created; the workers below only ever
+        see that object.
+
+        The reference below is deliberately the ONLY one in this file,
+        and a test asserts that -- the same pin _client() carries. (Do
+        not spell the attribute a second time anywhere, including in a
+        comment: the test counts occurrences in the source text.)
+
+        It is also the host-app test seam: the in-TD suite patches this to
+        a stubbed installer so no test writes a payload, spawns schtasks,
+        or touches the real per-user data dir.
+        """
+        return mod.convoy_install
+
+    def _safeInstaller(self):
+        """_installer() or None -- for paths that must not raise."""
+        try:
+            return self._installer()
+        except Exception:
+            return None
+
+    def _hostModules(self):
+        """{filename: source text} for the vendored host-app DATs.
+
+        MAIN THREAD ONLY. `dat.text` is DAT CONTENT -- reading it from a
+        worker is the same violation as reading a parameter -- so the
+        whole payload is lifted into a plain dict here and handed over as
+        data. The worker never sees an operator.
+
+        Returns ONLY the modules that actually exist as DATs. It
+        deliberately does NOT filter against convoy_install.HOST_MODULES:
+        that tuple is documented in-code as a manifest of what to vendor,
+        NOT a gate, and gating on it would silently drop any module added
+        to dev/convoy/ but not yet added to the tuple -- shipping a
+        payload the daemon cannot import. The byte-identity parity test
+        (dev/convoy/test_convoy_host_vendor.py) is the enforcement, and
+        it discovers the set by globbing the daemon sources for that
+        exact reason.
+
+        An absent `host` COMP returns {} rather than raising: a .tox
+        upgraded from before the vendoring step has no such child, and
+        the caller turns the empty dict into a stated failure.
+        """
+        host = self.ownerComp.op('host')
+        if host is None:
+            return {}
+        modules = {}
+        for child in host.children:
+            try:
+                if not child.isDAT:
+                    continue
+                name = self._hostModuleName(child)
+                if not name:
+                    continue
+                modules[name] = child.text
+            except Exception:
+                # One unreadable DAT must not cost the other nine. The
+                # caller compares the set it got against what the daemon
+                # needs; a silently dropped module surfaces there.
+                continue
+        return modules
+
+    @staticmethod
+    def _hostModuleName(dat):
+        """The payload filename for one vendored DAT, or '' to skip it.
+
+        The externalized `file` par is the authority -- it is what Embody
+        actually wrote the source to, so it cannot disagree with the
+        parity test -- and the DAT name is the fallback for a DAT that is
+        not externalized yet. Anything that is not a bare `*.py` filename
+        is skipped rather than sanitised: write_payload would refuse it,
+        and a guessed correction would vendor a file under a name the
+        daemon does not import.
+        """
+        name = ''
+        try:
+            par = getattr(dat.par, 'file', None)
+            if par is not None:
+                raw = str(par.eval() or '').replace('\\', '/')
+                name = raw.rsplit('/', 1)[-1]
+        except Exception:
+            name = ''
+        if not name:
+            try:
+                name = '%s.py' % (dat.name,)
+            except Exception:
+                return ''
+        return name if _BARE_MODULE_NAME.match(name) else ''
 
     def _log(self, msg, level='INFO'):
         try:
@@ -710,6 +864,595 @@ class ConvoyExt:
         self._log(msg, level)
 
     # ==================================================================
+    # Host app: context, worker chain, readout
+    # ==================================================================
+
+    def _hostContext(self):
+        """Everything a host worker needs, resolved on the MAIN THREAD.
+
+        The ENTIRE main-thread surface of the host-app feature is this
+        method. Both module objects (never a `mod.` lookup from a
+        thread), the per-user data dir, this Embody's version (a Par
+        read), the home dir and the POSIX uid are all lifted into a plain
+        dict here; every worker below closes over that dict and touches
+        nothing else. Raises if the modules are missing -- callers use
+        _safeHostContext.
+        """
+        client = self._client()
+        installer = self._installer()
+        try:
+            version = str(self._embody.par.Version.eval() or '')
+        except Exception:
+            version = ''
+        try:
+            project_root = str(self._embody.ext.Embody._findProjectRoot())
+        except Exception:
+            project_root = str(project.folder)
+        return {
+            'client': client,
+            'installer': installer,
+            'platform': sys.platform,
+            'data_dir': client.data_dir(),
+            'version': version,
+            'home': os.path.expanduser('~'),
+            'uid': (os.getuid() if hasattr(os, 'getuid') else None),
+            'installed_by': '%s (%s)' % (project_root, self._embody.path),
+            'health_wait_s': self.HEALTH_WAIT_S,
+            'health_poll_s': self.HEALTH_POLL_S,
+        }
+
+    def _safeHostContext(self):
+        """_hostContext() or None, saying WHICH module is missing."""
+        try:
+            return self._hostContext()
+        except Exception as e:
+            self._log('the Convoy host-app modules are not available in '
+                      'this COMP (%s) -- reinstall Embody' % (e,), 'WARNING')
+            self._hostStatus(self.HOST_INSTALL_FAILED)
+            return None
+
+    def _beginHostCall(self, action, fn, note=None):
+        """Kick ONE bounded host worker plus its poll chain. MAIN THREAD.
+
+        Identical in shape to _beginCall -- resolve on the main thread,
+        hand the worker a closure over PLAIN DATA ONLY, publish a
+        generation-tagged dict to a plain attribute, drain it from a
+        bounded run() poll with a stale-instance guard -- on the separate
+        slot described in __init__.
+
+        `fn` must be worker-safe: no operator, no parameter, no DAT
+        content, no run(). Everything it needs comes from the context
+        dict built above.
+        """
+        if note is not None:
+            self._hostStatus(note)
+        self._host_busy = True
+        self._host_result = None
+        self._host_gen += 1
+        gen = self._host_gen
+
+        def _worker():
+            # ZERO TD access in here.
+            out = {'_gen': gen, '_action': action}
+            try:
+                out['result'] = fn()
+            except Exception as e:
+                # The installer is written never to raise; if it ever
+                # does, the worker must still publish something or the
+                # poll spins to its cap.
+                out['result'] = {'ok': False, 'reason': 'worker_error',
+                                 'detail': '%s: %s' % (type(e).__name__, e)}
+            self._host_result = out
+
+        self._runInWorker(_worker)
+        run('args[0]._pollHostCall(args[1], args[2], args[3])',
+            self, action, gen, 0, delayFrames=self.POLL_FRAMES)
+
+    def _pollHostCall(self, action, gen, attempts):
+        """Drain the host worker slot. MAIN THREAD ONLY."""
+        if self._staleInstance():
+            return
+        out = self._host_result
+        # Only accept the result from THIS call's worker generation.
+        if out is None or out.get('_gen') != gen:
+            if attempts < self.HOST_POLL_ATTEMPTS:
+                run('args[0]._pollHostCall(args[1], args[2], args[3])',
+                    self, action, gen, attempts + 1,
+                    delayFrames=self.POLL_FRAMES)
+            else:
+                self._host_busy = False
+                self._finishHost(action, {
+                    'ok': False, 'reason': 'timed_out',
+                    'detail': 'the host %s call timed out' % (action,)})
+            return
+        self._host_result = None
+        self._host_busy = False
+        self._finishHost(action, out.get('result'))
+
+    def _finishHost(self, action, result):
+        """Apply one host call's outcome: session, readout, log, next step."""
+        if not isinstance(result, dict):
+            result = {'ok': False, 'reason': 'no_result',
+                      'detail': 'no result'}
+        session = self._session()
+        ok = bool(result.get('ok'))
+        state = result.get('state')
+        if isinstance(state, dict):
+            session['host_state'] = state
+        if result.get('plan') is not None:
+            session['uninstall_preview'] = result.get('plan')
+
+        detail = str(result.get('detail')
+                     or result.get('reason') or '').strip()
+        if not ok:
+            if action == 'install':
+                # The one action whose failure has its own word in the
+                # vocabulary, because it is the one a user pulsed and is
+                # waiting on.
+                state = self.HOST_INSTALL_FAILED
+            self._log('host %s failed: %s' % (action, detail or 'unknown'),
+                      'WARNING')
+        elif detail:
+            self._log('host %s: %s' % (action, detail), 'DEBUG')
+
+        if action == 'preview':
+            # AN AUDIT MUST NEVER ALTER STATE -- and the readout is state.
+            # Reporting a preview through Convoyhoststatus would overwrite
+            # a live 'Running ...' with something the user did not ask to
+            # change.
+            self._logUninstallPreview(result.get('plan'))
+            return
+
+        if state is None:
+            state = session.get('host_state')
+        if state is None and not ok:
+            # We have no idea what is on disk AND the call failed. The
+            # vocabulary has exactly one string that points somewhere
+            # useful, so that is what it gets.
+            state = self.HOST_INSTALL_FAILED
+        if state is not None:
+            # A successful call that computed no state (an uninstall
+            # preview) LEAVES THE READOUT ALONE rather than inventing
+            # one -- 'Install failed' because we happened not to look is
+            # the kind of lie this field exists to avoid.
+            self._hostStatus(state)
+
+        if action == 'uninstall_preview' and ok:
+            # Stage two of the uninstall: the preview came back, so the
+            # confirmation can now NAME what goes and COUNT what stays.
+            self._confirmUninstall(result.get('plan'))
+
+    def _hostStatus(self, state):
+        """Write the Convoy Host readout. convoy_client owns the words."""
+        client = self._safeClient()
+        try:
+            text = client.host_status_text(state)
+        except Exception:
+            text = 'Install failed -- see log'
+        # getattr, not direct access: this extension can land in a session
+        # whose Convoy page predates the host-app parameters (the same
+        # guard _status uses for Convoystatus).
+        par = getattr(self._embody.par, 'Convoyhoststatus', None)
+        if par is not None:
+            self._setPar(par, str(text)[:160])
+
+    def _restoreHostStatus(self):
+        """Put the readout back to the last KNOWN state, or leave it be.
+
+        Never invents one. A cancelled install must not write
+        'Not installed' over a host app that IS installed (Install is
+        also the repair path, so cancelling it is a common case), and it
+        must not write 'Install failed' either -- nothing failed.
+        """
+        state = self._session().get('host_state')
+        if state is not None:
+            self._hostStatus(state)
+
+    # ------------------------------------------------------------------
+    # Uninstall safety and confirmation (MAIN THREAD)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normPath(path):
+        text = str(path or '').replace('\\', '/').rstrip('/')
+        return text.lower() if sys.platform == 'win32' else text
+
+    def _uninstallTargetsRetained(self, plan):
+        """Retained paths the removal list would touch. MUST come back [].
+
+        A second lock on plan_host_uninstall's door, checked HERE because
+        this is the last main-thread moment before a worker starts
+        unlinking. host.json, host.token, host.portfile.json, audit.jsonl
+        and jobs/ are permanent by design (16.4/A-15) and A-41 forbids
+        uninstall as an evidence-destruction path -- so a preview that
+        aimed at one of them is a refusal, not a warning to click past.
+
+        Directory containment is checked too, not just exact equality:
+        `jobs` is retained as a DIRECTORY, and a remove entry underneath
+        it would destroy the same evidence without ever matching the
+        retained path itself.
+        """
+        if not isinstance(plan, dict):
+            return ['<no preview>']
+        retained = [self._normPath(p) for p in (plan.get('retain') or [])]
+        retained = [p for p in retained if p]
+        targets = []
+        for key in ('remove', 'remove_dirs'):
+            targets.extend(self._normPath(p) for p in (plan.get(key) or []))
+        hits = set()
+        for target in targets:
+            if not target:
+                continue
+            for keep in retained:
+                if target == keep or target.startswith(keep + '/'):
+                    hits.add(target)
+        return sorted(hits)
+
+    def _dialog(self, title, message, buttons):
+        """Embody's message box, or -1 when it cannot be reached.
+
+        -1 is the suppressed-dialog / unseeded-test default and every
+        non-affirmative value means no, so an unreachable dialog can only
+        ever DECLINE a system modification.
+        """
+        try:
+            return self._embody.ext.Embody._messageBox(title, message,
+                                                       buttons)
+        except Exception as e:
+            self._log('could not show the dialog (%s) -- treating it as '
+                      'a decline' % (e,), 'WARNING')
+            return -1
+
+    def _logUninstallPreview(self, plan):
+        """One INFO line summarising an audit. Writes nothing else."""
+        if not isinstance(plan, dict):
+            self._log('the uninstall preview could not be computed', 'WARNING')
+            return
+        self._log(
+            'uninstall preview: %d files and %d directories would be '
+            'removed; %d paths are retained and never touched (%d job '
+            'records, %d indeterminate); %d incomplete and %d unrecognised '
+            'paths would be left in place'
+            % (len(plan.get('remove') or []),
+               len(plan.get('remove_dirs') or []),
+               len(plan.get('retain') or []),
+               int(plan.get('jobs') or 0),
+               int(plan.get('indeterminate') or 0),
+               len(plan.get('incomplete') or []),
+               len(plan.get('stray') or [])), 'INFO')
+
+    def _confirmUninstall(self, plan):
+        """Name what goes, COUNT what stays, then remove -- or don't."""
+        unsafe = self._uninstallTargetsRetained(plan)
+        if unsafe:
+            self._log('REFUSING to uninstall: the plan would remove %d '
+                      'retained path(s) that are permanent by design (%s)'
+                      % (len(unsafe), ', '.join(unsafe[:3])), 'WARNING')
+            self._restoreHostStatus()
+            return
+        ctx = self._safeHostContext()
+        if ctx is None:
+            return
+        retained = plan.get('retain_present') or plan.get('retain') or []
+        message = (
+            'Remove the Convoy host app for this user?\n\n'
+            'This removes:\n'
+            '  - %d files and %d directories under\n'
+            '    %s\n'
+            '  - the %s that starts it when you log in\n\n'
+            'This KEEPS, and never touches:\n'
+            '%s\n'
+            '  - %d job records (%d indeterminate)\n\n'
+            'The job records are kept on purpose. An indeterminate record\n'
+            'is permanent evidence that something may have run, and\n'
+            'uninstall is never a way to destroy evidence. Deleting host\n'
+            'state is a separate action -- and a re-install after it mints\n'
+            'a NEW host id.'
+            % (len(plan.get('remove') or []),
+               len(plan.get('remove_dirs') or []),
+               ctx['data_dir'],
+               self._supervisorNoun(ctx['platform']),
+               '\n'.join('  - %s' % (p,) for p in retained[:8])
+               or '  - (nothing recorded yet)',
+               int(plan.get('jobs') or 0),
+               int(plan.get('indeterminate') or 0)))
+        if self._dialog('Embody - Remove the Convoy host app', message,
+                        ['Cancel', 'Remove']) != 1:
+            self._log('uninstall cancelled -- nothing was removed', 'INFO')
+            self._restoreHostStatus()
+            return
+        self._beginHostCall('uninstall',
+                            lambda: _host_uninstall(ctx),
+                            note=self.HOST_CHECKING)
+
+    @staticmethod
+    def _supervisorNoun(platform):
+        return ('per-user Scheduled Task' if platform == 'win32'
+                else 'per-user LaunchAgent')
+
+    def _confirmInstall(self, ctx, interpreter, plan, modules):
+        """The A-6 dialog. Every sentence in 1.6, none of them softened."""
+        message = (
+            'Install the Convoy host app for THIS user on THIS machine?\n\n'
+            'What this does:\n'
+            '  - writes %d small Python files to\n'
+            '    %s\n'
+            '  - registers a %s that starts the program when you log in\n'
+            '    and restarts it within a minute\n'
+            '  - IT RUNS WHENEVER YOU ARE LOGGED IN, WHETHER OR NOT\n'
+            '    TOUCHDESIGNER IS OPEN\n'
+            '  - runs it under TouchDesigner\'s own Python:\n'
+            '    %s\n\n'
+            'What it does NOT do:\n'
+            '  - it listens on 127.0.0.1 only, on a port the OS assigns.\n'
+            '    Nothing is exposed to the network. No firewall rule is\n'
+            '    created, and none is needed.\n'
+            '  - it never asks for administrator rights, and Embody never\n'
+            '    modifies your firewall.\n\n'
+            'Where the boundary really is:\n'
+            '  - ANYTHING RUNNING AS YOUR USER ON THIS MACHINE CAN READ\n'
+            '    ITS TOKEN AND SEND IT WORK. The token is a boundary\n'
+            '    against OTHER users, not against you.\n'
+            '  - it relays only operations in the audited registry, and\n'
+            '    only into projects where you turned Convoy on.\n'
+            '  - IT IS NOT CODE-SIGNED OR NOTARIZED. Security software may\n'
+            '    flag an unsigned Python program that runs at login.\n'
+            '  - it keeps a record of relayed jobs. Uninstall KEEPS that\n'
+            '    record unless you separately ask for it to be deleted.\n\n'
+            '%s'
+            % (len(modules), ctx['data_dir'],
+               self._supervisorNoun(ctx['platform']), interpreter,
+               plan.get('detail') or ''))
+        return self._dialog('Embody - Install the Convoy host app', message,
+                            ['Cancel', 'Install']) == 1
+
+    def _hostActionAllowed(self, what):
+        """False (with a stated reason) when a host action must not run."""
+        if self._performing():
+            self._log('Perform Mode is on -- %s waits until it ends'
+                      % (what,), 'INFO')
+            return False
+        if self._host_busy:
+            self._log('another Convoy host action is still running -- '
+                      '%s was ignored' % (what,), 'INFO')
+            return False
+        return True
+
+    # ==================================================================
+    # Promoted API: the host app
+    # ==================================================================
+
+    def HostStatus(self, refresh=True):
+        """A plain-dict snapshot of the host app's state. Never raises.
+
+        refresh=True (the default) also kicks ONE bounded worker to
+        recompute it: the computation needs a /health round trip and a
+        schtasks/launchctl spawn, and NEITHER may happen on the main
+        thread. What comes back RIGHT NOW is the last computed answer;
+        the readout updates when that worker's poll drains.
+        """
+        session = self._session()
+        out = {'state': '', 'installed_version': '', 'supervisor': '',
+               'live': False, 'pid': None, 'detail': '', 'busy': False,
+               'status': ''}
+        try:
+            out['busy'] = bool(self._host_busy)
+            state = session.get('host_state')
+            if isinstance(state, dict):
+                for key in ('state', 'installed_version', 'supervisor',
+                            'live', 'pid', 'detail'):
+                    out[key] = state.get(key)
+            par = getattr(self._embody.par, 'Convoyhoststatus', None)
+            if par is not None:
+                out['status'] = str(par.eval())
+            if refresh and not self._host_busy and not self._performing():
+                ctx = self._safeHostContext()
+                if ctx is not None:
+                    # 'Checking...' only when there is nothing to show
+                    # yet; flashing it over a good 'Running 6.0.171
+                    # (pid N)' on every refresh is pure flicker.
+                    note = (None if isinstance(state, dict)
+                            else self.HOST_CHECKING)
+                    self._beginHostCall(
+                        'status',
+                        lambda: {'ok': True, 'state': _host_snapshot(ctx)},
+                        note=note)
+                    out['busy'] = True
+        except Exception as e:
+            out['error'] = '%s: %s' % (type(e).__name__, e)
+        return out
+
+    def InstallHost(self, confirm=True):
+        """Install -- or REPAIR -- the Convoy host app for this user.
+
+        This is the repair path as well as the first install, and that is
+        why it re-runs a full install even when plan_install says the
+        version is already current: writing the payload again, rewriting
+        the launcher and re-registering the supervisor is exactly what
+        fixes 'Needs repair -- Python not found' (the interpreter is
+        re-resolved here) and 'Installed -- no supervisor'. Every one of
+        those steps is idempotent by construction -- temp + os.replace,
+        .complete written last, schtasks /Create /F rewriting the whole
+        definition.
+
+        The ONE refusal is a downgrade: a host app installed by a NEWER
+        Embody is never replaced by an older project (A-36).
+
+        Registering a program that runs at LOGIN is a different grant
+        from enabling Convoy (A-13 covers minting an id and registering
+        with a host app), so it gets its own confirmation naming exactly
+        what is written, what runs, and where the trust boundary is.
+        """
+        if not self._hostActionAllowed('installing the host app'):
+            return {'state': 'deferred'}
+        ctx = self._safeHostContext()
+        if ctx is None:
+            return {'state': 'error', 'detail': 'installer module missing'}
+
+        modules = self._hostModules()
+        if not modules:
+            self._log('the vendored host-app modules are missing from the '
+                      "convoy COMP's `host` child -- this .tox cannot "
+                      'install a host app; reinstall Embody', 'WARNING')
+            self._hostStatus(self.HOST_INSTALL_FAILED)
+            return {'state': 'error', 'detail': 'no vendored host modules'}
+
+        installer = ctx['installer']
+        installed = installer.read_installed(ctx['data_dir'], ctx['platform'])
+        plan = installer.plan_install(installed, ctx['version'],
+                                      ctx['platform'])
+        if plan.get('action') == installer.ACTION_REFUSE_DOWNGRADE:
+            self._log('install refused: %s' % (plan.get('detail'),), 'WARNING')
+            # TWO DIFFERENT FAILURES ARRIVE AS refuse_downgrade, and they
+            # need opposite words. `installed_version` cannot tell them
+            # apart -- plan_install fills it in from the record either
+            # way -- so ask the same question plan_install asked first:
+            # is OUR version usable as a directory name at all? If not,
+            # nothing can be written and this is not "a newer Embody owns
+            # it", which would send the user hunting for a host app that
+            # is not the problem.
+            try:
+                installer.safe_version(ctx['version'])
+                ours_usable = True
+            except Exception:
+                ours_usable = False
+            if ours_usable and plan.get('installed_version'):
+                self._hostStatus({'state': installer.STATE_NEWER_INSTALL,
+                                  'installed_version':
+                                      plan.get('installed_version'),
+                                  'live': bool((self._session().get(
+                                      'host_state') or {}).get('live'))})
+            else:
+                self._hostStatus(self.HOST_INSTALL_FAILED)
+            return {'state': 'refused', 'detail': plan.get('detail')}
+
+        # TD's own bundled Python, resolved HERE so the dialog can name
+        # the interpreter that will run at login, and so a machine with no
+        # usable TD install refuses BEFORE the confirmation rather than
+        # after it. A handful of stat calls, once per pulse.
+        interpreter = installer.choose_interpreter(
+            installer.find_interpreters(ctx['platform']))
+        if not interpreter:
+            self._log('no TouchDesigner Python was found for this user -- '
+                      'the host app has nothing to run under', 'WARNING')
+            self._hostStatus(self.HOST_INSTALL_FAILED)
+            return {'state': 'error', 'detail': 'no interpreter'}
+
+        if confirm and not self._confirmInstall(ctx, interpreter, plan,
+                                                modules):
+            self._log('host app install cancelled -- nothing was written '
+                      'and no task or agent was registered', 'INFO')
+            self._restoreHostStatus()
+            return {'state': 'declined'}
+
+        # A-36's escape hatch: an install already marked external keeps
+        # its own supervisor. Passing the kind through is what stops
+        # install() defaulting to a Scheduled Task and creating a SECOND
+        # supervisor for the same daemon.
+        supervisor = (installer.SUPERVISOR_EXTERNAL
+                      if plan.get('action') == installer.ACTION_EXTERNAL
+                      else None)
+        self._beginHostCall(
+            'install',
+            lambda: _host_install(ctx, modules, interpreter, supervisor),
+            note=self.HOST_INSTALLING)
+        return {'state': 'installing', 'action': plan.get('action'),
+                'interpreter': interpreter, 'modules': sorted(modules)}
+
+    def StartHost(self):
+        """Enable the supervisor and run it now, then wait for /health."""
+        if not self._hostActionAllowed('starting the host app'):
+            return {'state': 'deferred'}
+        ctx = self._safeHostContext()
+        if ctx is None:
+            return {'state': 'error', 'detail': 'installer module missing'}
+        installed = ctx['installer'].read_installed(ctx['data_dir'],
+                                                    ctx['platform'])
+        if not installed:
+            self._log('there is no Convoy host app installed for this user '
+                      '-- use Install first', 'INFO')
+            self._hostStatus({'state': ctx['installer'].STATE_NOT_INSTALLED})
+            return {'state': 'not_installed'}
+        self._beginHostCall('start', lambda: _host_start(ctx),
+                            note=self.HOST_STARTING)
+        return {'state': 'starting'}
+
+    def StopHost(self):
+        """Stop the host app AND stop it coming back.
+
+        The order lives in convoy_install.stop() and it is the whole
+        point: ask the daemon to exit (so it clears its own portfile),
+        wait for it to actually be gone, DISABLE the supervisor, and only
+        then end it. Skipping the disable is what makes the Stop button
+        look broken -- Windows' repetition trigger relaunches within a
+        minute, macOS' KeepAlive within about one second. Nothing here
+        may take a shortcut past stop() and kill the daemon directly.
+        """
+        if not self._hostActionAllowed('stopping the host app'):
+            return {'state': 'deferred'}
+        ctx = self._safeHostContext()
+        if ctx is None:
+            return {'state': 'error', 'detail': 'installer module missing'}
+        self._beginHostCall('stop', lambda: _host_stop(ctx),
+                            note=self.HOST_CHECKING)
+        return {'state': 'stopping'}
+
+    def PreviewHostUninstall(self):
+        """AUDIT ONLY: what an uninstall would remove, and what it keeps.
+
+        Removes nothing, registers nothing, prompts for nothing, and does
+        not even move the Convoy Host readout -- an audit that altered
+        state would not be an audit. The plan is computed in a worker
+        (plan_host_uninstall lists the payload and reads every job record;
+        on a busy host that is not main-thread work), logged as a summary,
+        and stashed in the session.
+
+        Returns the LAST computed preview plus busy=True while the fresh
+        one is in flight -- the same shape ConvoyStatus uses, and the
+        reason the confirmation path (UninstallHost) does not call this
+        one: it needs the plan in hand before it can ask.
+        """
+        if not self._hostActionAllowed('previewing the uninstall'):
+            return {'state': 'deferred'}
+        ctx = self._safeHostContext()
+        if ctx is None:
+            return {'state': 'error', 'detail': 'installer module missing'}
+        self._beginHostCall('preview', lambda: _host_preview(ctx))
+        return {'state': 'previewing', 'busy': True,
+                'preview': self._session().get('uninstall_preview')}
+
+    def UninstallHost(self, confirm=True):
+        """Remove the host app in two stages: preview, then confirm.
+
+        Stage one computes the plan in a worker. Stage two runs on the
+        main thread when it lands: refuse outright if the plan aims at
+        anything retained, then show a confirmation that NAMES the
+        retained paths and COUNTS the job records, and only then start
+        the removal.
+
+        host.json, host.token, host.portfile.json, audit.jsonl and jobs/
+        are never removed. That is checked twice -- once inside
+        plan_host_uninstall, once again in _uninstallTargetsRetained
+        right before the confirmation -- because A-41 forbids uninstall
+        as an evidence-destruction path and a single check is not a
+        guarantee.
+        """
+        if not self._hostActionAllowed('uninstalling the host app'):
+            return {'state': 'deferred'}
+        ctx = self._safeHostContext()
+        if ctx is None:
+            return {'state': 'error', 'detail': 'installer module missing'}
+        if not confirm:
+            # Only the in-TD suite and a scripted repair take this path;
+            # a pulse always confirms.
+            self._beginHostCall('uninstall', lambda: _host_uninstall(ctx),
+                                note=self.HOST_CHECKING)
+            return {'state': 'uninstalling'}
+        self._beginHostCall('uninstall_preview', lambda: _host_preview(ctx),
+                            note=self.HOST_CHECKING)
+        return {'state': 'previewing'}
+
+    # ==================================================================
     # Consent (A-13): the first EXPLICIT enable
     # ==================================================================
 
@@ -894,3 +1637,220 @@ class ConvoyExt:
         except Exception as e:
             out['error'] = '%s: %s' % (type(e).__name__, e)
         return out
+
+
+# ======================================================================
+# HOST-APP WORKER BODIES -- WORKER THREAD, ZERO TD ACCESS
+# ======================================================================
+#
+# Module-level on purpose. A bound method would carry `self`, and `self`
+# is one attribute away from an operator, a parameter or a DAT -- the
+# exact class of access td-python.md forbids off the main thread and the
+# exact mistake that froze TD in the field. These take ONLY the plain
+# context dict _hostContext built on the main thread (two captured module
+# OBJECTS, plus strings and numbers), and they return plain dicts for
+# _finishHost to apply. Nothing here may import td, schedule a frame
+# callback, read a Par, or log -- the poll does all of that.
+#
+# Every one of them is total: convoy_install and convoy_client are
+# written never to raise, and _beginHostCall wraps the call anyway,
+# because a worker that dies leaves the poll spinning to its cap.
+
+
+def _host_snapshot(ctx):
+    """THE host status computation, assembled from its four inputs.
+
+    convoy_install.host_state() owns the decision; this gathers what it
+    decides on -- and every gather here is worker-only work: a /health
+    round trip with a 3 s timeout, a schtasks/launchctl spawn, and a
+    stat of the recorded interpreter.
+    """
+    installer = ctx['installer']
+    client = ctx['client']
+    data_dir = ctx['data_dir']
+    platform = ctx['platform']
+
+    installed = installer.read_installed(data_dir, platform)
+
+    probe_status = None
+    try:
+        probe_status = client.probe(data_dir=data_dir).status
+    except Exception:
+        probe_status = None
+
+    # The pid is the daemon's OWN, from the portfile it wrote -- read
+    # through read_live_portfile so a dead writer can never be reported
+    # as 'Running ... (pid N)'.
+    pid = None
+    try:
+        live = client.read_live_portfile(data_dir)
+        if live:
+            pid = live.get('pid')
+    except Exception:
+        pid = None
+
+    supervisor = None
+    kind = (installed or {}).get('supervisor')
+    if kind in (installer.SUPERVISOR_TASK, installer.SUPERVISOR_AGENT):
+        try:
+            code, out, err = installer.run_command(
+                installer.supervisor_argv('status', platform, uid=ctx['uid']))
+            supervisor = installer.parse_supervisor_status(platform, out, err,
+                                                           code)
+        except Exception:
+            # Leave it None: host_state reads that as no_supervisor only
+            # when the record does not claim one, and query_failed is the
+            # honest reading when we genuinely did not find out.
+            supervisor = None
+
+    interpreter_exists = None
+    interpreter = (installed or {}).get('interpreter')
+    if interpreter:
+        try:
+            interpreter_exists = os.path.isfile(str(interpreter))
+        except Exception:
+            interpreter_exists = None
+
+    return installer.host_state(installed=installed,
+                                probe_status=probe_status,
+                                supervisor=supervisor,
+                                version=ctx['version'],
+                                interpreter_exists=interpreter_exists,
+                                pid=pid)
+
+
+def _host_await_health(ctx, timeout_s, sleep=None, now=None):
+    """Poll /health until the daemon answers, or the bound expires.
+
+    THE TAIL THE PLAN CALLS FOR. A Scheduled Task started with
+    `schtasks /Run` returns the moment it has launched, not when the
+    daemon is serving; without this wait Install would report
+    'Installed -- not running (restarts within a minute)' on a perfectly
+    good install and the user would watch a blank minute. Bounded, so a
+    host app that never comes up is reported as what it is.
+    """
+    client = ctx['client']
+    sleep = sleep or time.sleep
+    now = now or time.monotonic
+    deadline = now() + max(0.0, float(timeout_s or 0.0))
+    while True:
+        try:
+            if client.probe(data_dir=ctx['data_dir']).status == \
+                    client.STATUS_RUNNING:
+                return True
+        except Exception:
+            pass
+        if now() >= deadline:
+            return False
+        sleep(ctx.get('health_poll_s') or 1.0)
+
+
+def _host_shutdown(ctx):
+    """The authenticated POST /shutdown, or a stated no-op.
+
+    Handed to convoy_install.stop()/uninstall() as their `shutdown`
+    callable: they cannot build it themselves because it needs a live
+    probe result and the per-install token. A daemon that will not answer
+    is not a failure here -- it is exactly why the supervisor stop that
+    follows exists.
+    """
+    client = ctx['client']
+    try:
+        probe = client.probe(data_dir=ctx['data_dir'])
+    except Exception as e:
+        return {'ok': False, 'detail': '%s: %s' % (type(e).__name__, e)}
+    if not probe.use_convoy:
+        return {'ok': False,
+                'detail': 'no host app answered (%s)' % (probe.status,)}
+    status, answer = client.host_post(probe.handle, '/shutdown', {})
+    if status is None:
+        return {'ok': False, 'detail': 'the host app did not answer'}
+    ok = isinstance(answer, dict) and answer.get('ok') is not False
+    return {'ok': bool(ok), 'http_status': status, 'answer': answer}
+
+
+def _host_is_running(ctx):
+    """The liveness observer stop()/uninstall() wait on.
+
+    read_live_portfile, never read_portfile: it verifies the writer pid,
+    so a portfile left behind by a supervisor kill reads as gone instead
+    of stranding the wait for its whole bound.
+    """
+    client = ctx['client']
+
+    def observe():
+        try:
+            return client.read_live_portfile(ctx['data_dir']) is not None
+        except Exception:
+            return False
+
+    return observe
+
+
+def _host_install(ctx, modules, interpreter, supervisor=None):
+    """Write the payload, register the supervisor, start it, wait."""
+    installer = ctx['installer']
+    outcome = installer.install(
+        ctx['data_dir'], ctx['version'], modules, interpreter,
+        platform=ctx['platform'], home=ctx['home'], uid=ctx['uid'],
+        installed_by=ctx['installed_by'], supervisor=supervisor)
+    if not outcome.get('ok'):
+        return {'ok': False, 'action': 'install', 'outcome': outcome,
+                'reason': outcome.get('reason'),
+                'detail': outcome.get('detail')}
+    started = None
+    healthy = None
+    if outcome.get('registered'):
+        # An external supervisor registered nothing, so there is nothing
+        # here for us to start -- A-36's rule is never two supervisors,
+        # and that includes never poking someone else's.
+        started = installer.start(platform=ctx['platform'], uid=ctx['uid'],
+                                  home=ctx['home'])
+        healthy = _host_await_health(ctx, ctx.get('health_wait_s'))
+    return {'ok': True, 'action': 'install', 'outcome': outcome,
+            'started': started, 'healthy': healthy,
+            'detail': 'installed %s under %s'
+                      % (outcome.get('version'), interpreter),
+            'state': _host_snapshot(ctx)}
+
+
+def _host_start(ctx):
+    installer = ctx['installer']
+    outcome = installer.start(platform=ctx['platform'], uid=ctx['uid'],
+                              home=ctx['home'])
+    healthy = _host_await_health(ctx, ctx.get('health_wait_s'))
+    return {'ok': bool(outcome.get('ok')), 'action': 'start',
+            'outcome': outcome, 'healthy': healthy,
+            'reason': outcome.get('reason'), 'detail': outcome.get('detail'),
+            'state': _host_snapshot(ctx)}
+
+
+def _host_stop(ctx):
+    installer = ctx['installer']
+    outcome = installer.stop(platform=ctx['platform'], uid=ctx['uid'],
+                             shutdown=lambda: _host_shutdown(ctx),
+                             is_running=_host_is_running(ctx))
+    return {'ok': bool(outcome.get('ok')), 'action': 'stop',
+            'outcome': outcome, 'reason': outcome.get('reason'),
+            'detail': outcome.get('detail'),
+            'state': _host_snapshot(ctx)}
+
+
+def _host_preview(ctx):
+    """plan_host_uninstall, and NOTHING else. Alters no state at all."""
+    installer = ctx['installer']
+    plan = installer.plan_host_uninstall(ctx['data_dir'], ctx['platform'],
+                                         ctx['home'])
+    return {'ok': True, 'action': 'preview', 'plan': plan}
+
+
+def _host_uninstall(ctx):
+    installer = ctx['installer']
+    outcome = installer.uninstall(ctx['data_dir'], platform=ctx['platform'],
+                                  uid=ctx['uid'], home=ctx['home'],
+                                  shutdown=lambda: _host_shutdown(ctx),
+                                  is_running=_host_is_running(ctx))
+    return {'ok': bool(outcome.get('ok')), 'action': 'uninstall',
+            'outcome': outcome, 'reason': outcome.get('reason'),
+            'detail': outcome.get('detail'),
+            'state': _host_snapshot(ctx)}

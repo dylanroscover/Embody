@@ -226,8 +226,45 @@ def onPulse(par):
 				'Check for Update: updater component missing '
 				'(reinstall Embody to enable self-update)', 'WARNING')
 
+	elif par.name in ('Convoyinstallhost', 'Convoystarthost',
+					  'Convoystophost', 'Convoyuninstallhost'):
+		# Convoy host-app lifecycle. Deliberately NOT folded into
+		# Convoyenable and deliberately NOT reachable from the setup
+		# wizard: A-13's consent covers minting a convoy id and
+		# registering with a host app, but installing a program that runs
+		# at LOGIN -- with TouchDesigner closed -- is a different grant,
+		# so it gets its own explicit ask, which ConvoyExt owns (D-6: the
+		# wizard's apply path runs _consent_bulk and in Auto mode applies
+		# SILENTLY, which is no way to register an autostarting OS task).
+		# Guarded like Checkforupdate: a partial or pre-Convoy install
+		# where the par exists but the child does not warns once instead
+		# of raising on every press.
+		convoy = parent.Embody.op('convoy')
+		if convoy:
+			getattr(convoy.ext.ConvoyExt, {
+				'Convoyinstallhost': 'InstallHost',
+				'Convoystarthost': 'StartHost',
+				'Convoystophost': 'StopHost',
+				'Convoyuninstallhost': 'UninstallHost',
+			}[par.name])()
+		else:
+			parent.Embody.Log(
+				'Convoy host app: convoy component missing '
+				'(reinstall Embody to manage the host app)', 'WARNING')
+
 	elif par.name == 'Refresh':
 		parent.Embody.Refresh()
+		# ...and re-read the Convoy host app, because otherwise NOTHING
+		# does. Every other writer of the host readout hangs off a pulse
+		# that CHANGES something (Install/Start/Stop/Uninstall), so
+		# "Running 6.0.174 (pid 24180)" would outlive the daemon it
+		# describes with no non-mutating way to correct it -- the user's
+		# only recourse would be to press a button that installs or stops
+		# something. Refresh is already the "tell me what is true now"
+		# action, so it is the honest home for this.
+		convoy = parent.Embody.op('convoy')
+		if convoy:
+			convoy.ext.ConvoyExt.HostStatus(refresh=True)
 
 	elif par.name == 'Setupwizard':
 		parent.Embody.ext.Embody._openSetupWizard()

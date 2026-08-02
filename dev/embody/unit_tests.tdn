@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 111
-generator: Embody/6.0.171
+build: 94
+generator: Embody/6.0.174
 td_build: 099.2025.33070
-source_file: Embody-6.171.toe
-exported_at: '2026-08-01T19:40:47Z'
+source_file: Embody-6.174.toe
+exported_at: '2026-08-02T00:15:28Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -36,7 +36,7 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 2
+    rows: 157
     cols: 5
   flags:
   - viewer
@@ -413,6 +413,12 @@ operators:
   flags:
   - viewer
   position: [400, -2200]
+  color: [0.9, 0.3, 0.4]
+- name: test_convoy_host_install
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_convoy_host_install.py
+  position: [400, -3800]
   color: [0.9, 0.3, 0.4]
 - name: test_mcp_externalization
   type: textDAT

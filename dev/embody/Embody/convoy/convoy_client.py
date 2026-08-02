@@ -98,6 +98,33 @@ BACKOFF_JITTER = 0.25
 # host_bad_response" would read as a decision the host made about us.
 NOT_A_REFUSAL = ("unserializable_request", "host_bad_response")
 
+# -- the Convoy Host readout's vocabulary ------------------------------
+#
+# convoy_install.host_state() owns the DECISION; this module owns the
+# WORDS. That split is stated in convoy_install's own constants block
+# and it is the reason a host status can never be computed in two places
+# and drift. These eight names MIRROR convoy_install.STATE_*; they are
+# literals rather than an import because convoy_install is a sibling DAT
+# in TD, not an importable package, and an in-TD test drives
+# host_status_text with convoy_install's OWN constants so a rename over
+# there fails here instead of silently falling through to the default.
+HOST_NOT_INSTALLED = "not_installed"
+HOST_RUNNING = "running"
+HOST_NOT_RUNNING = "not_running"
+HOST_STOPPED = "stopped"
+HOST_NO_SUPERVISOR = "no_supervisor"
+HOST_NEEDS_REPAIR_PYTHON = "needs_repair_python"
+HOST_NEWER_INSTALL = "newer_install"
+HOST_EXTERNAL_SUPERVISOR = "external_supervisor"
+
+# The four TRANSIENT states. convoy_install never computes these -- they
+# describe what the EXTENSION is doing right now, not what is on disk,
+# so they are owned here outright.
+HOST_CHECKING = "checking"
+HOST_INSTALLING = "installing"
+HOST_STARTING = "starting"
+HOST_INSTALL_FAILED = "install_failed"
+
 HEALTH_TIMEOUT_S = 3.0
 REGISTER_TIMEOUT_S = 10.0
 # Unregister is best-effort on the way out the door: one attempt, and a
@@ -676,3 +703,81 @@ def status_text(result):
     if state == STATE_ERROR:
         return "Error: %s" % (str(result.get("detail") or "unknown")[:80],)
     return "Error: unexpected state %r" % (state,)
+
+
+def host_status_text(state):
+    """The Convoy Host string for one host-app state. TOTAL, never raises.
+
+    THE SINGLE SOURCE of that field's vocabulary -- twelve strings, and
+    no thirteenth. `state` is either convoy_install.host_state()'s dict
+    or a bare transient name ('checking', 'installing', 'starting',
+    'install_failed'), because the extension needs to say what it is
+    doing before there is anything on disk to describe.
+
+    ASCII ONLY, deliberately: '--' and '...' are the repo rule, and this
+    string is written into a TD parameter that a Windows textport may
+    render through a legacy codepage.
+
+    TWO PLACES THIS DEPARTS FROM A LITERAL READING OF THE PLAN'S LIST,
+    both so the field cannot state something false:
+
+      - newer_install reads 'Running X -- installed by a newer Embody'
+        only when a host app ACTUALLY ANSWERED /health. When it is
+        installed-but-silent the lead word is 'Installed', because
+        printing 'Running' over a dead daemon is the one failure mode
+        this whole status field exists to prevent.
+      - an UNRECOGNISED state falls back to 'Install failed -- see log'.
+        A total function needs a default, and that is the only string in
+        the vocabulary that points the user somewhere useful; reaching
+        it at all is a bug in this file, which the log will show.
+    """
+    if isinstance(state, str):
+        state = {"state": state}
+    if not isinstance(state, dict):
+        return "Install failed -- see log"
+    name = str(state.get("state") or "")
+    version = str(state.get("installed_version") or "")
+
+    if name == HOST_NOT_INSTALLED:
+        return "Not installed"
+    if name == HOST_CHECKING:
+        return "Checking..."
+    if name == HOST_INSTALLING:
+        return "Installing..."
+    if name == HOST_STARTING:
+        return "Installed -- starting..."
+    if name == HOST_RUNNING:
+        return _running_text(version, state.get("pid"))
+    if name == HOST_NOT_RUNNING:
+        return "Installed -- not running (restarts within a minute)"
+    if name == HOST_STOPPED:
+        return "Installed -- stopped"
+    if name == HOST_NO_SUPERVISOR:
+        return "Installed -- no supervisor (use Install or Update)"
+    if name == HOST_NEEDS_REPAIR_PYTHON:
+        return "Needs repair -- Python not found (reinstall)"
+    if name == HOST_NEWER_INSTALL:
+        lead = "Running" if state.get("live") else "Installed"
+        return "%s %s -- installed by a newer Embody" % (
+            lead, version or "?")
+    if name == HOST_EXTERNAL_SUPERVISOR:
+        return "Managed by another supervisor"
+    return "Install failed -- see log"
+
+
+def _running_text(version, pid):
+    """'Running X (pid N)', degrading honestly when either is unknown.
+
+    A missing pid is normal, not exceptional: /health does not report
+    one and the supervisor query is the only source, so a status
+    refreshed without a supervisor query must still be able to say
+    'Running'.
+    """
+    try:
+        pid = int(pid) if pid else None
+    except (TypeError, ValueError):
+        pid = None
+    text = "Running %s" % (version,) if version else "Running"
+    if pid:
+        text += " (pid %s)" % (pid,)
+    return text

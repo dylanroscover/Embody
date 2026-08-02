@@ -187,6 +187,46 @@ class TestConvoyRegistrations(EmbodyTestCase):
         # And the default it resets TO must actually be the empty state.
         self.assertEqual(self.embody.par.Convoyid.default, '')
 
+        # Convoyhoststatus is the third readout, and it leaks harder than
+        # either: it names a pid, a version and a supervisor that exist
+        # only on the machine that installed them. Unregistered, one
+        # developer's 'Running 6.0.173 (pid 24180)' bakes into the tracked
+        # Embody.tdn and tells every downloader their host app is already
+        # running when nothing is installed. It IS a state, so unlike
+        # Convoyid it names a truthy resting.
+        self.assertEqual(
+            registry.get('Convoyhoststatus'), 'Not installed',
+            'Convoyhoststatus must rest at the honest answer for a '
+            'machine that has not installed the host app (A-50)')
+        self.assertEqual(
+            self.embody.par.Convoyhoststatus.default, 'Not installed',
+            'the resting and the default must agree, or a scrub and a '
+            'revert-to-default disagree about the same par')
+        self.assertTrue(
+            self.embody.par.Convoyhoststatus.readOnly,
+            'Convoyhoststatus is a readout, not an input')
+
+    def test_convoy_host_lifecycle_pulses_exist_and_are_documented(self):
+        """The four host-app buttons must exist with help text.
+
+        Installing registers a program that runs at LOGIN with TD closed
+        -- a different grant from A-13's convoy consent -- so the help is
+        the only place a user reads what they are agreeing to before the
+        confirmation dialog. A pulse with no help ships a button whose
+        meaning lives only in the changelog.
+        """
+        for name in ('Convoyinstallhost', 'Convoystarthost',
+                     'Convoystophost', 'Convoyuninstallhost'):
+            par = getattr(self.embody.par, name, None)
+            self.assertIsNotNone(par, '%s must exist on the Embody COMP'
+                                 % name)
+            self.assertEqual(par.style, 'Pulse',
+                             '%s must be a Pulse (fire-once action)' % name)
+            self.assertTrue(
+                par.help and len(par.help) > 40,
+                '%s needs help text that explains what it does, not a '
+                'restatement of its label' % name)
+
     def test_convoy_generation_never_serializes(self):
         skip = self.embody.op('TDNExt').module.SKIP_STORAGE_KEYS
         self.assertIn('_convoy_gen', skip,

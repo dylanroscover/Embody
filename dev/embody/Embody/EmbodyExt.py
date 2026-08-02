@@ -3899,6 +3899,15 @@ class EmbodyExt:
             # forbids. Reset-to-default gives the same leak protection
             # without pretending an id is a status.
             'Convoyid': None,
+            # Host-app install state, and it is MACHINE-SPECIFIC in a way
+            # Convoystatus is not: it names a pid, a version and a
+            # supervisor that exist only on the machine that installed
+            # them ('Running 6.0.173 (pid 24180)'). Baked into Embody.tdn
+            # it would ship one developer's pid to every download and,
+            # worse, tell a fresh user their host app is already running
+            # when nothing is installed. Rests at the honest answer for a
+            # machine that has not installed it.
+            'Convoyhoststatus': 'Not installed',
         },
     }
 

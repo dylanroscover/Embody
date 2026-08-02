@@ -1925,6 +1925,65 @@ _CRYPTOGRAPHY_ALLOWED = {
                                             # circular otherwise)
 }
 
+# THE VENDORED PAYLOAD, and why it is not simply added to the set above.
+#
+# dev/embody/Embody/convoy/host/ holds byte-identical copies of the host
+# app, carried inside the .tox as text DATs so an install works offline
+# (CONVOY_INSTALL_PLAN 1.1). convoy_hostkeys.py is one of them, so the
+# scan sees `from cryptography import ...` inside the shipped TD-side
+# tree -- the exact tree the comment above calls the one place a
+# third-party import would ride into a user's install.
+#
+# Neither standard answer fits. "Move the import back behind
+# convoy_hostkeys' API" is already true -- this IS that module, byte for
+# byte. And a flat allowlist entry would be a PERMANENT, UNCONDITIONAL
+# exemption for a path in the dangerous tree, which is precisely what
+# keying by path instead of basename was meant to prevent.
+#
+# So the exemption is INHERITED and CONDITIONAL: a vendored file is
+# exempt only while it is newline-normalized-identical to an ALLOWED
+# original in dev/convoy/. The moment it diverges -- someone edits the
+# vendored copy, or adds a module that is not a faithful copy -- it stops
+# being "the same module" and is scanned like anything else.
+# test_vendored_exemption_is_revoked_on_divergence pins that, so the
+# exemption cannot quietly become an allowlist.
+#
+# What this deliberately does NOT claim: that shipping the file is
+# harmless. `cryptography` IS absent from TouchDesigner's bundled
+# interpreter (measured: TD 2025.33070 ships Python 3.11.15 without it),
+# and the daemon degrades to identity_reason "cryptography_missing".
+# TD itself never imports this file -- it is inert DAT text, written to
+# disk at install time and executed by a separate interpreter.
+_VENDOR_MIRROR_DIR = "dev/embody/Embody/convoy/host"
+_VENDOR_SOURCE_DIR = "dev/convoy"
+
+
+def _vendored_copy_of(name):
+    """Repo-relative path of the dev/convoy original this file mirrors.
+
+    Returns None unless `name` lives in the vendored payload dir AND its
+    content matches the original exactly (newline-normalized: Embody
+    writes CRLF on Windows while the sources are LF, and .gitattributes
+    stores both as LF). A mismatch returns None, so the caller scans it.
+    """
+    prefix = _VENDOR_MIRROR_DIR + "/"
+    if not name.startswith(prefix):
+        return None
+    origin = _VENDOR_SOURCE_DIR + "/" + name[len(prefix):]
+    mirror_abs = os.path.join(REPO, *name.split("/"))
+    origin_abs = os.path.join(REPO, *origin.split("/"))
+    if not os.path.isfile(origin_abs):
+        return None
+    try:
+        with open(mirror_abs, "rb") as fh:
+            mirror = fh.read().replace(b"\r\n", b"\n")
+        with open(origin_abs, "rb") as fh:
+            source = fh.read().replace(b"\r\n", b"\n")
+    except OSError:
+        # Unreadable is NOT identical -- fail closed and scan it.
+        return None
+    return origin if mirror == source else None
+
 # Per-tree floors. A single global floor was satisfied by dev/convoy
 # alone, so losing an entire other tree -- a rename, a move, a typo in
 # this list -- silently disabled that leg with the test still green.
@@ -2041,12 +2100,70 @@ def test_import_isolation_no_other_module_imports_cryptography():
     for name, path in files:
         if name in _CRYPTOGRAPHY_ALLOWED:
             continue
+        # A vendored copy inherits its original's status, and ONLY while
+        # it is still a faithful copy (see _vendored_copy_of).
+        origin = _vendored_copy_of(name)
+        if origin is not None and origin in _CRYPTOGRAPHY_ALLOWED:
+            continue
         how = _imports_cryptography(path)
         if how:
             offenders[name] = how
     assert offenders == {}, (
         "only dev/convoy/convoy_hostkeys.py may take the `cryptography` "
         f"dependency; these modules also import it: {offenders}")
+
+
+def test_vendored_exemption_is_revoked_on_divergence(tmp_path, monkeypatch):
+    """The vendored exemption must be conditional, not an allowlist.
+
+    A vendored copy is exempt only while it is byte-identical to an
+    allowed original. If editing the vendored file kept the exemption,
+    this would be a permanent hole in the shipped TD-side tree -- exactly
+    what keying the allowlist by path rather than basename prevented.
+    """
+    if REPO is None:
+        pytest.skip(_NO_REPO)
+    (tmp_path / "pytest.ini").write_text("[pytest]\n")
+    source = tmp_path / "dev" / "convoy"
+    mirror = tmp_path / "dev" / "embody" / "Embody" / "convoy" / "host"
+    source.mkdir(parents=True)
+    mirror.mkdir(parents=True)
+    monkeypatch.setattr(sys.modules[__name__], "REPO", str(tmp_path))
+
+    body = "from cryptography.hazmat.primitives import serialization\n"
+    (source / "convoy_hostkeys.py").write_text(body)
+    name = "dev/embody/Embody/convoy/host/convoy_hostkeys.py"
+
+    # Faithful copy -> inherits the exemption.
+    (mirror / "convoy_hostkeys.py").write_text(body)
+    assert _vendored_copy_of(name) == "dev/convoy/convoy_hostkeys.py"
+
+    # CRLF is a representation difference, not a divergence: Embody
+    # writes CRLF on Windows and .gitattributes stores LF.
+    (mirror / "convoy_hostkeys.py").write_bytes(
+        body.replace("\n", "\r\n").encode())
+    assert _vendored_copy_of(name) == "dev/convoy/convoy_hostkeys.py"
+
+    # One added line -> no longer the same module -> exemption REVOKED.
+    (mirror / "convoy_hostkeys.py").write_text(body + "import os\n")
+    assert _vendored_copy_of(name) is None, (
+        "an edited vendored copy must lose the exemption and be scanned")
+
+    # A vendored file with no original at all is never exempt.
+    (mirror / "convoy_invented.py").write_text(body)
+    assert _vendored_copy_of(
+        "dev/embody/Embody/convoy/host/convoy_invented.py") is None
+
+    # And a faithful copy of a NON-allowed original stays scanned: the
+    # inheritance carries the original's status, not a blanket pass.
+    (source / "convoy_platform.py").write_text(body)
+    (mirror / "convoy_platform.py").write_text(body)
+    origin = _vendored_copy_of(
+        "dev/embody/Embody/convoy/host/convoy_platform.py")
+    assert origin == "dev/convoy/convoy_platform.py"
+    assert origin not in _CRYPTOGRAPHY_ALLOWED, (
+        "convoy_platform is not chartered to hold the dependency, so its "
+        "vendored twin must not be exempt either")
 
 
 def test_import_isolation_scans_subdirectories(tmp_path, monkeypatch):
