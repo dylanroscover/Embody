@@ -1648,11 +1648,20 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
         self.assertIn('Consent required', self.status_writes[-1])
 
     def test_an_unsaved_project_never_mints(self):
+        """It must refuse AND SAY SO. Refusing silently is what happened to a
+        macOS user on a fresh install: the wizard reported Convoy enabled, the
+        toggle switched itself back off, and the only explanation was a
+        textport line they had no reason to have open (2026-08-03)."""
         self._patch(self.convoy, '_savedToe', lambda: None)
         self.assertFalse(self.convoy._ensureConsent())
-        self.assertEqual(self.dialogs, [])
-        self.assertEqual(self.recorded, [])
+        self.assertEqual(self.recorded, [], 'nothing may be minted')
         self.assertEqual(self.enable_writes, [False])
+        self.assertLen(self.dialogs, 1,
+                       'an explicit enable that cannot proceed must tell the '
+                       'user, not only the log')
+        title, message, _buttons = self.dialogs[0]
+        self.assertIn('Save', title)
+        self.assertIn('never been saved', message)
 
     def test_a_failed_record_leaves_convoy_off(self):
         self._patch(self.embody_target, '_ensureConvoyId',

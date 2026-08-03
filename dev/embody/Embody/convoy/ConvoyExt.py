@@ -3053,8 +3053,28 @@ class ConvoyExt:
         except Exception:
             return None
         try:
-            if not path or not os.path.isfile(path):
+            if not path:
+                self._log('no venv python path is known for this project '
+                          '-- Convoy cannot start its host app', 'DEBUG')
                 return None
+            if not os.path.isfile(path):
+                # A venv does not always expose the bare name: depending on
+                # how it was built it may carry only python3 / python3.11.
+                # Demanding one spelling made a perfectly good macOS venv read
+                # as "no runtime available" (2026-08-03).
+                folder = os.path.dirname(path)
+                for name in ('python3', 'python3.11', 'python3.12',
+                             'python3.13', 'python'):
+                    candidate = os.path.join(folder, name)
+                    if os.path.isfile(candidate):
+                        path = candidate
+                        break
+                else:
+                    self._log(
+                        'no usable interpreter in %s -- Convoy cannot start '
+                        'its host app (looked for python, python3, '
+                        'python3.x)' % (folder,), 'WARNING')
+                    return None
             # WINDOWLESS on Windows. The host app is a background daemon
             # started by a Scheduled Task at login; launching it with
             # python.exe pops a console window that sits on the user's
@@ -3529,9 +3549,15 @@ class ConvoyExt:
             interpreter = ctx.get('venv_python')
             venv_runtime = bool(interpreter)
         if not interpreter:
-            self._log('no Convoy runtime is available -- neither a signed '
-                      'managed runtime nor an Embody venv python with the '
-                      'crypto floor was found', 'WARNING')
+            # Name the path that was checked. "No runtime is available" with
+            # nothing else sent a macOS user (and me) hunting blind when the
+            # venv was present and healthy (2026-08-03).
+            self._log('no Convoy runtime is available -- no signed managed '
+                      'runtime, and no usable interpreter at %r. Enable Envoy '
+                      'first (it builds the Python environment Convoy shares), '
+                      'then turn Convoy on again.'
+                      % (ctx.get('venv_python') or '<no venv path>',),
+                      'WARNING')
             self._hostStatus(self.HOST_INSTALL_FAILED)
             return {'state': 'error', 'detail': 'no interpreter'}
 
