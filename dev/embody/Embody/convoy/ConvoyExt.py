@@ -3596,6 +3596,14 @@ class ConvoyExt:
              + 'The non-secret binding and this consent are recorded in '
              '.embody/project.json, a committed file shared by project '
              'clones.\n\n'
+             'Convoy needs a small background app to reach the LAN, so '
+             'enabling installs and starts it for YOUR user account if it '
+             'is not already there. It runs whenever you are logged in, '
+             'whether or not TouchDesigner is open, so a node stays '
+             'reachable while TD is closed. It never asks for '
+             'administrator rights, and anything running as your user on '
+             'this machine can talk to it. Uninstall it any time from the '
+             'Convoy parameters.\n\n'
              'Allow Execute TD Python and Allow Full Shell remain separate, '
              'local, default-Off approvals. Turn Enable Convoy off at any '
              'time to withdraw this node.\n\n'
@@ -3650,9 +3658,50 @@ class ConvoyExt:
             return {'state': 'disabled'}
         if not self._ensureConsent():
             return {'state': 'declined'}
+        self._ensureHostApp()
         self._ensureWakeListener()
         self._reconcile(force=True)
         return self.ConvoyStatus()
+
+    def _ensureHostApp(self):
+        """Install and/or start the host app so ENABLING is the only step.
+
+        Plan 8.1 step 2: enabling Convoy ensures the per-user host app is
+        installed and running. Convoy cannot reach the LAN without it, so
+        making the user find a second button afterwards was pure ceremony --
+        the toggle already carries the consent (the enable dialog discloses
+        the background app and its login persistence), which is why the
+        install runs with confirm=False rather than raising a second prompt.
+
+        Both calls are the existing bounded workers with their own poll
+        chains, so this never blocks the main thread and never raises. The
+        Install/Start/Stop/Uninstall pulses remain for repair, upgrade, and
+        deliberate control.
+        """
+        try:
+            if self._host_busy or self._performing():
+                return
+            ctx = self._safeHostContext()
+            if ctx is None:
+                return
+            installed = ctx['installer'].read_installed(
+                ctx['data_dir'], ctx['platform'])
+            if not installed:
+                self._log('Convoy enabled -- installing the host app it '
+                          'needs to reach the LAN', 'INFO')
+                self.InstallHost(confirm=False)
+                return
+            # Installed already: start it only if nothing is answering.
+            probe = ctx['client'].probe(ctx['data_dir'])
+            if getattr(probe, 'status', None) != ctx['client'].STATUS_RUNNING:
+                self._log('Convoy enabled -- starting the installed host app',
+                          'INFO')
+                self.StartHost()
+        except Exception as e:
+            # A host-app problem must never block enabling; the Host App
+            # readout and log carry the reason.
+            self._log('could not ensure the Convoy host app: %s' % (e,),
+                      'WARNING')
 
     def Unregister(self, blocking=False, reason='disabled'):
         """Best-effort: clear this node's Envoy port on the local host app.
