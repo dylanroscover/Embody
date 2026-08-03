@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 20
-generator: Embody/6.0.188
+build: 21
+generator: Embody/6.0.190
 td_build: 099.2025.33070
-source_file: Embody-6.189.toe
-exported_at: '2026-08-03T12:49:08Z'
+source_file: Embody-6.191.toe
+exported_at: '2026-08-03T13:00:30Z'
 network_path: /embody/Embody/wizard
 options:
   include_dat_content: false
@@ -89,7 +89,7 @@ storage:
   git_missing: false
   ext_needed: true
   sel_mode: auto
-  step_id: assistant
+  step_id: convoy
   sel_client: ''
   sel_root: gitroot
   sel_permissions: all
@@ -100,7 +100,7 @@ operators:
 - name: hint
   type: textCOMP
   parameters:
-    text: It lets AI tools work in your network. Easy to remove later.
+    text: Connects this Embody with other Convoy-enabled instances on the same trusted LAN, so they can discover and control each other. Enable only on a network you trust. Convoy installs a small background app so nodes stay reachable while TouchDesigner is closed.
     type: multiline
     wordwrap: true
     callbacks: hint_callbacks
@@ -113,7 +113,7 @@ operators:
     alignx: left
     aligny: top
     w: 452
-    h: 16
+    h: 60
     alignorder: 3
     bgcolorr: 0.11
     bgcolorg: 0.12
@@ -133,7 +133,7 @@ operators:
 - name: title
   type: textCOMP
   parameters:
-    text: Turn on the AI assistant (Envoy)?
+    text: Enable Convoy?
     wordwrap: true
     callbacks: title_callbacks
     fontsize: 18
@@ -169,7 +169,7 @@ operators:
   - name: fill
     type: containerCOMP
     parameters:
-      w: 226
+      w: 376
       h: 4
       bgcolorr: 0.24
       bgcolorg: 0.52
@@ -902,7 +902,7 @@ operators:
 - name: steplabel
   type: textCOMP
   parameters:
-    text: Step 3 of 6
+    text: Step 5 of 6
     callbacks: steplabel_callbacks
     fontsize: 11
     fontcolorr: 0.6
@@ -1762,7 +1762,6 @@ operators:
     h: 190
     hmode: fill
     alignorder: 4
-    display: false
     bgcolorr: 0.11
     bgcolorg: 0.12
     bgcolorb: 0.115
@@ -2011,6 +2010,7 @@ operators:
     h: 235
     hmode: fill
     alignorder: 4
+    display: false
     align: verttb
     spacing: 8
     marginl: 24
