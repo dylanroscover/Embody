@@ -3974,13 +3974,16 @@ class EmbodyExt:
             'Autosavestatus': 'Idle',    # 'Saved <time> UTC'/'Bypassed'
             'Envoystatus': 'Disabled',   # 'Running on port N'/'Perform Mode'
             'Updatestatus': 'Disabled',  # updater state beyond its rest
-            # Convoy readouts. Convoyid is the one that MUST be here: it
-            # projects .embody/project.json's convoy id, and Embody.tdn is
-            # the tracked source ExportPortableTox builds released .tox
-            # files from -- unregistered, it would bake THIS machine's
-            # convoy id into git and into every user's download. Exactly
-            # the A-50 leak class (value: Testing, v6.0.169).
-            'Convoystatus': 'Disabled',  # 'Registered <node8> (host <host8>)'
+            # The single Convoy readout. It merges what used to be two
+            # fields (node registration + host-app state); the separate
+            # Convoyid and Convoyhoststatus rows were removed because a
+            # truncated node hash, a truncated host hash and a process id
+            # are not things a user can act on. It still MUST be scrubbed:
+            # Embody.tdn is the tracked source ExportPortableTox builds
+            # released .tox files from, and a live readout there would ship
+            # one machine's state to every download (the A-50 leak class,
+            # value: Testing, v6.0.169).
+            'Convoystatus': 'Disabled',  # 'Connected'/'No Convoy host app'
             # CONSENT, not state: a released .tox that ships Convoyenable On
             # would enable Convoy -- and its LAN listener -- on every machine
             # that installs it, without anyone opting in. The user's own
@@ -3998,23 +4001,6 @@ class EmbodyExt:
             # while preserving the block count, so another machine's names,
             # addresses and presence never bake into a TDN or release tox.
             'Convoynodes': None,
-            # None = reset to the par's own DEFAULT. Convoyid is an
-            # identifier, not a state: it legitimately rests EMPTY (no
-            # convoy until the first explicit enable), so it has no
-            # truthy resting string to name -- and '' as a literal
-            # resting is exactly what the state-machine invariant
-            # forbids. Reset-to-default gives the same leak protection
-            # without pretending an id is a status.
-            'Convoyid': None,
-            # Host-app install state, and it is MACHINE-SPECIFIC in a way
-            # Convoystatus is not: it names a pid, a version and a
-            # supervisor that exist only on the machine that installed
-            # them ('Running 6.0.173 (pid 24180)'). Baked into Embody.tdn
-            # it would ship one developer's pid to every download and,
-            # worse, tell a fresh user their host app is already running
-            # when nothing is installed. Rests at the honest answer for a
-            # machine that has not installed it.
-            'Convoyhoststatus': 'Not installed',
         },
     }
 

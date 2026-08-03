@@ -588,25 +588,57 @@ class ConvoyExt:
         par.val = value
         par.readOnly = was
 
+    def _publishId(self, convoy_id):
+        """No-op: the Convoy ID is no longer a page parameter.
+
+        It is an opaque, auto-generated identifier a user never chooses or
+        types, so it stopped earning a row on the Convoy page. It remains
+        available where it is actually useful: .embody/project.json, the
+        log, and convoy_list_nodes. Kept as a method because several call
+        sites publish it at natural moments (adopt, consent, reconcile) and
+        a future advanced/details surface would restore it here.
+        """
+        return
+
+    # A host-app state that BLOCKS Convoy (or is mid-flight) outranks the
+    # node's own registration line, because it is the thing the user has to
+    # act on. Anything else lets the node state show through.
+    _BLOCKING_HOST_TEXTS = (
+        'Not installed', 'Checking...', 'Installing...',
+        'Installed -- starting...', 'Installed -- not running',
+        'Installed -- stopped', 'Installed -- no supervisor',
+        'Needs repair', 'Managed by another supervisor',
+        'Install failed',
+    )
+
     def _status(self, text):
+        """Record the node/registration line and republish Status."""
+        self._node_status_text = str(text)[:160]
+        self._publishStatus()
+
+    def _publishStatus(self):
+        """Write the ONE Status readout.
+
+        There used to be two fields -- Convoystatus and Convoyhoststatus --
+        which between them showed a truncated node hash, a truncated host
+        hash and a process id. None of that is actionable, and two status
+        lines for one feature is one too many. This composes the single
+        line: a blocking/transient host-app state wins, otherwise the node's
+        own state shows.
+        """
         # getattr, not direct access: this extension can land in a session
         # whose Convoy page has not been created yet (and in an upgraded
         # .tox that predates it). Same guard UpdaterExt._status uses for
         # Updatestatus.
         par = getattr(self._embody.par, 'Convoystatus', None)
-        if par is not None:
-            self._setPar(par, str(text)[:160])
-
-    def _publishId(self, convoy_id):
-        """Project .embody/project.json's convoy id into the read-only par.
-
-        Registered in EmbodyExt._TRANSIENT_STATUS_PARS (resting ''), which
-        is what stops THIS machine's convoy id from baking into the tracked
-        Embody.tdn and into every released .tox.
-        """
-        par = getattr(self._embody.par, 'Convoyid', None)
-        if par is not None:
-            self._setPar(par, str(convoy_id or ''))
+        if par is None:
+            return
+        host = str(getattr(self, '_host_status_text', '') or '')
+        node = str(getattr(self, '_node_status_text', '') or '')
+        text = node
+        if host and host.startswith(self._BLOCKING_HOST_TEXTS):
+            text = host
+        self._setPar(par, (text or 'Disabled')[:160])
 
     @staticmethod
     def _sequenceByName(comp, name):
@@ -2952,7 +2984,22 @@ class ConvoyExt:
         except Exception:
             return None
         try:
-            return path if (path and os.path.isfile(path)) else None
+            if not path or not os.path.isfile(path):
+                return None
+            # WINDOWLESS on Windows. The host app is a background daemon
+            # started by a Scheduled Task at login; launching it with
+            # python.exe pops a console window that sits on the user's
+            # desktop for the whole session. pythonw.exe is the same
+            # interpreter with no console -- which is why the managed-runtime
+            # manifest demanded it too ("Windows runtimes must use
+            # pythonw.exe for the daemon and python.exe for the captured
+            # capability probe").
+            if sys.platform == 'win32':
+                windowless = os.path.join(os.path.dirname(path),
+                                          'pythonw.exe')
+                if os.path.isfile(windowless):
+                    return windowless
+            return path
         except Exception:
             return None
 
@@ -3087,18 +3134,19 @@ class ConvoyExt:
             self._confirmUninstall(result.get('plan'))
 
     def _hostStatus(self, state):
-        """Write the Convoy Host readout. convoy_client owns the words."""
+        """Record the host-app line and republish the merged Status.
+
+        convoy_client still owns the words; there is simply no separate
+        Host App parameter any more -- _publishStatus decides when this
+        line outranks the node's own.
+        """
         client = self._safeClient()
         try:
             text = client.host_status_text(state)
         except Exception:
             text = 'Install failed -- see log'
-        # getattr, not direct access: this extension can land in a session
-        # whose Convoy page predates the host-app parameters (the same
-        # guard _status uses for Convoystatus).
-        par = getattr(self._embody.par, 'Convoyhoststatus', None)
-        if par is not None:
-            self._setPar(par, str(text)[:160])
+        self._host_status_text = str(text)[:160]
+        self._publishStatus()
 
     def _restoreHostStatus(self):
         """Put the readout back to the last KNOWN state, or leave it be.
@@ -3315,9 +3363,7 @@ class ConvoyExt:
                 for key in ('state', 'installed_version', 'supervisor',
                             'live', 'pid', 'detail'):
                     out[key] = state.get(key)
-            par = getattr(self._embody.par, 'Convoyhoststatus', None)
-            if par is not None:
-                out['status'] = str(par.eval())
+            out['status'] = str(getattr(self, '_host_status_text', '') or '')
             if refresh and not self._host_busy and not self._performing():
                 ctx = self._safeHostContext()
                 if ctx is not None:

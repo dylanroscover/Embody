@@ -1580,8 +1580,10 @@ def status_text(result):
             # separately because it is a real, temporary, non-error
             # state -- Envoy binds after the first tick.
             return "Registered -- Envoy port pending"
-        return "Registered %s (host %s)" % (_short(result.get("node_id")),
-                                            _short(result.get("host_id")))
+        # Plain language: two truncated hashes told a user nothing they
+        # could act on. The ids live in the log and in convoy_list_nodes
+        # for anyone debugging.
+        return "Connected"
     if state == STATE_UNREGISTERED:
         # The only paths that unregister are disable and exit; the
         # resting state after either one is Disabled.

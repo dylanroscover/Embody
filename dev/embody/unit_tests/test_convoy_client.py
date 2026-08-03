@@ -869,9 +869,9 @@ _VOCABULARY = (
     'Host app found',
     'Registering...',
     'Registered -- Envoy port pending',
+    'Connected',
 )
 _VOCABULARY_PATTERNS = (
-    re.compile(r'^Registered [0-9a-zA-Z?]{1,8} \(host [0-9a-zA-Z?]{1,8}\)$'),
     re.compile(r'^Refused: .+$'),
     re.compile(r'^Error: .+$'),
 )
@@ -985,7 +985,7 @@ class TestConvoyClientStatusText(EmbodyTestCase):
                                    'node_id': 'abcdef0123456789' * 2,
                                    'host_id': 'fedcba9876543210' * 2,
                                    'envoy_port': 9981})
-        self.assertEqual(text, 'Registered abcdef01 (host fedcba98)')
+        self.assertEqual(text, 'Connected')
 
     def test_registered_without_a_port_is_named_pending_not_broken(self):
         text = client.status_text({'state': 'registered',
@@ -1046,7 +1046,7 @@ class TestConvoyClientRegister(EmbodyTestCase):
         self.assertEqual(result['realm_state'], 'candidate')
         self.assertIs(result['td_python_approved'], False)
         self.assertEqual(client.status_text(result),
-                         'Registered nnnnnnnn (host hhhhhhhh)')
+                         'Connected')
 
     def test_register_sends_the_token_and_the_body(self):
         seen = {}
@@ -2319,7 +2319,7 @@ class TestConvoyClientAgainstARealHostApp(EmbodyTestCase):
         self.assertEqual(registered['envoy_port'], 9981)
         self.assertEqual(registered['runtime_id'], 'rt_0123456789abcdef',
                          'the host must keep OUR runtime_id, not mint one')
-        self.assertStartsWith(client.status_text(registered), 'Registered ')
+        self.assertEqual(client.status_text(registered), 'Connected')
 
         # 2. /nodes shows exactly one node holding that port.
         nodes = self._nodes()

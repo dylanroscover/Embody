@@ -108,8 +108,12 @@ def test_agreed_controls_have_safe_defaults_and_detailed_help():
     assert "loopback-only" not in enable_help
 
     assert rows["Convoynodename"]["style"] == "Str"
-    assert rows["Convoynodename"]["default"] == ""
-    assert rows["Convoynodename"]["value"].startswith("=")
+    assert rows["Convoynodename"].get("default", "") == ""
+    # It must rest EMPTY, not carry a baked value. It was briefly a
+    # parameter EXPRESSION, and TD stores an expression's last evaluated
+    # result beside it -- which shipped one developer's computer name in
+    # the release .tox. ConvoyExt fills it per machine at load instead.
+    assert rows["Convoynodename"].get("value") in (None, "")
     assert "hostname" in rows["Convoynodename"]["help"]
 
     assert rows["Convoyremotewake"]["default"] is True
@@ -118,7 +122,7 @@ def test_agreed_controls_have_safe_defaults_and_detailed_help():
 
     for name in ("Convoyallowtdpython", "Convoyallowfullshell"):
         assert rows[name]["style"] == "Toggle"
-        assert rows[name]["default"] is False
+        assert rows[name].get("default", False) is False
         assert "only be enabled locally" in rows[name]["help"]
 
     quota = rows["Convoyartifactquota"]
@@ -133,28 +137,29 @@ def test_status_sequence_has_the_agreed_read_only_columns():
     rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
     sequence = rows["Convoynodes"]
     assert sequence["style"] == "Sequence"
-    assert sequence["label"] == "Convoy Status"
+    # Labelled "Convoy Nodes": it lists NODES, and every other
+    # parameter in this system is named for what it shows.
+    assert sequence["label"] == "Convoy Nodes"
     assert sequence["readOnly"] is True
-    assert rows["Convoystatus"]["label"] == "This Node Status"
+    assert rows["Convoystatus"]["label"] == "Status"
 
-    expected = ("Nodename", "Ipaddress", "Nodestatus", "Embodyversion",
-                "Lastseen", "Controllers", "Details")
+    expected = ("Nodename", "Ipaddress", "Nodestatus", "Lastseen")
     for name in expected:
         assert rows[name]["sequence"] == "Convoynodes"
         assert rows[name]["readOnly"] is True
-    assert "presence update" in rows["Lastseen"]["help"]
-    assert "does not perform a separate mesh query" in rows["Controllers"]["help"]
+    assert set(rows[n]["sequence"] for n in expected) == {"Convoynodes"}
 
 
-def test_host_help_distinguishes_offline_retention_from_td_reachability():
+def test_the_single_status_readout_replaces_the_host_field():
+    """Convoyid and Convoyhoststatus were removed: a truncated convoy hash, a
+    truncated host hash and a process id are not actionable. One Status line
+    carries both the node state and any blocking host-app state."""
     rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
-    host_help = rows["Convoyhoststatus"]["help"]
-    assert "offline listing" in host_help
-    assert "TD operations are unavailable" in host_help
-    assert "can reopen" in host_help
+    assert "Convoyhoststatus" not in rows
+    assert "Convoyid" not in rows
+    assert rows["Convoystatus"]["readOnly"] is True
     install_help = rows["Convoyinstallhost"]["help"]
-    assert "signing and platform-certification status" in install_help
-    assert "program is unsigned" not in install_help
+    assert "repair" in install_help.lower()
 
 
 def test_status_sequence_is_registered_for_release_scrubbing():
@@ -222,7 +227,7 @@ def test_wake_only_route_is_advertised_only_for_perform_mode():
         None, None)
 
 
-def test_status_projection_consumes_coalesced_metrics_without_another_query():
+def test_status_projection_is_the_four_agreed_columns():
     ext_class = _load_convoy_ext_class()
     rows = ext_class._nodeStatusRows({
         "state": "nodes",
@@ -236,7 +241,10 @@ def test_status_projection_consumes_coalesced_metrics_without_another_query():
             "last_seen_age_s": 65,
         }],
     })
-    assert rows[0]["Controllers"] == 3
+    # Four columns only. controller_count is still consumed from the
+    # coalesced directory (never a separate mesh query) -- it simply is not
+    # a standing column; convoy_list_controllers is where counts belong.
+    assert set(rows[0]) == {"Nodename", "Ipaddress", "Nodestatus", "Lastseen"}
     assert rows[0]["Lastseen"] == "1m ago"
 
 

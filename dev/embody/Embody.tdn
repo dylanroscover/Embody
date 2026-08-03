@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1073
-generator: Embody/6.0.190
+build: 1078
+generator: Embody/6.0.195
 td_build: 099.2025.33070
-source_file: Embody-6.191.toe
-exported_at: '2026-08-03T13:00:31Z'
+source_file: Embody-6.196.toe
+exported_at: '2026-08-03T13:34:37Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -439,49 +439,19 @@ custom_pars:
   - name: Convoyenable
     style: Toggle
     label: Enable Convoy
-    help: Joins this Embody node to other Convoy-enabled nodes on the same trusted LAN and lets those nodes discover, inspect, and control it -- queries, test runs, project saves, and more -- through Envoy. Enabling this opens an authenticated LAN listener and starts automatic discovery and reconnect. Only enable it on a network you trust; never on guest, public, or mixed-trust networks. Arbitrary TD Python and full shell stay OFF until you enable them locally on this machine. The first enable creates this project's convoy identity and asks for confirmation.
-  - name: Convoyid
-    style: Str
-    label: Convoy ID
-    startSection: true
-    readOnly: true
-    help: The convoy this project belongs to (from .embody/project.json). Created on the first explicit enable; empty until then. An identifier, not a credential.
-  - name: Convoystatus
-    style: Str
-    label: Convoy Status
-    default: Disabled
-    readOnly: true
-    help: Live registration state with the local Convoy host app. 'No Convoy host app' is a normal resting state, not an error -- the host app simply is not installed or running on this machine.
-    value: Disabled
-  - name: Convoyhoststatus
-    style: Str
-    label: Host App
-    startSection: true
-    default: Not installed
-    readOnly: true
-    help: Whether this machine's Convoy host app is installed and running. The host app is a small background program OUTSIDE TouchDesigner, so a node stays reachable while TD is closed. One per LOGGED-IN USER, not one per machine.
-    value: Not installed
-  - name: Convoyinstallhost
-    style: Pulse
-    label: Install or Update Host App
-    help: 'Install the Convoy host app for YOUR user account, and register it to start when you log in -- whether or not TouchDesigner is open. Asks for confirmation first. Safe to run again: it is also the repair and upgrade path. The program is unsigned and lives in your user directory, so security software may flag it.'
-  - name: Convoystarthost
-    style: Pulse
-    label: Start Host App
-    help: Start the installed host app now, without waiting for the next login.
-  - name: Convoystophost
-    style: Pulse
-    label: Stop Host App
-    help: Stop the host app and keep it stopped. This disables the supervisor first -- otherwise it would restart within a minute and the button would look broken. Jobs already queued stay queued. Use Start Host App to resume.
-  - name: Convoyuninstallhost
-    style: Pulse
-    label: Uninstall Host App
-    help: Remove the host app and its login registration. Shows you exactly what will be removed and what will be KEPT before doing anything -- this machine's host identity and its job history are kept, so re-installing later rejoins the same convoy rather than becoming a new host.
+    help: Joins this Embody node to other Convoy-enabled nodes on the same trusted LAN and lets those nodes discover, inspect, and control it -- queries, test runs, project saves, and more -- through Envoy. Enabling this installs and starts Convoy's small background app, opens an authenticated LAN listener, and begins automatic discovery and reconnect. Disable this on guest, public, or otherwise untrusted networks. Arbitrary TD Python and full shell stay OFF until you enable them locally on this machine. Convoy does not configure or launch an AI client. The first enable creates this project's convoy identity and asks for confirmation.
   - name: Convoynodename
     style: Str
     label: Node Name
     startSection: true
     help: Display name for this node in Convoy. Defaults to '<hostname> / <toe filename>'. Editing it sets a persistent override; routing always uses the stable node identity, never this name.
+  - name: Convoystatus
+    style: Str
+    label: Status
+    default: Disabled
+    readOnly: true
+    help: Convoy's current state -- whether this node is connected, and anything blocking it (no host app, install failed, consent required).
+    value: Disabled
   - name: Convoyremotewake
     style: Toggle
     label: Remote Wake
@@ -513,10 +483,11 @@ custom_pars:
     max: 65536.0
     clampMin: true
     normMax: 8192.0
-    help: 'Maximum disk space (MB) this computer may use for temporary Convoy artifacts: screenshots, transferred files, large tool results, command output, and local client-readable copies. When the limit is reached, Convoy removes the least-recently-used unpinned artifacts first. Active transfers, artifacts required by running or unacknowledged jobs, and files you explicitly saved are not removed. This setting applies to all Convoy nodes on this computer.'
+    help: 'Maximum disk space (MB) this computer may use for temporary Convoy artifacts: screenshots, transferred files, large tool results, command output, and local client-readable copies. When the limit is reached, Convoy removes the least-recently-used unpinned artifacts first. Active transfers, artifacts required by running or unacknowledged jobs, and files you explicitly saved are not removed. This setting applies to all Convoy-enabled Embody nodes on this computer.'
   - name: Convoynodes
     style: Sequence
     label: Convoy Nodes
+    readOnly: true
   - name: Nodename
     style: Str
     label: Node Name
@@ -541,6 +512,23 @@ custom_pars:
     readOnly: true
     help: How recently the node was seen.
     sequence: Convoynodes
+  - name: Convoyinstallhost
+    style: Pulse
+    label: Repair Host App
+    startSection: true
+    help: Reinstall or upgrade the background app for YOUR user account. Enabling Convoy installs it automatically; use this to repair a broken install or apply an update.
+  - name: Convoystarthost
+    style: Pulse
+    label: Start Host App
+    help: Start the installed host app now, without waiting for the next login.
+  - name: Convoystophost
+    style: Pulse
+    label: Stop Host App
+    help: Stop the host app and keep it stopped. This disables the supervisor first -- otherwise it would restart within a minute and the button would look broken. Jobs already queued stay queued. Use Start Host App to resume.
+  - name: Convoyuninstallhost
+    style: Pulse
+    label: Uninstall Host App
+    help: Remove the host app and its login registration. Shows you exactly what will be removed and what will be KEPT before doing anything -- this machine's host identity and its job history are kept, so re-installing later rejoins the same convoy rather than becoming a new host.
   UI:
   - name: Openmanager
     style: Pulse
@@ -829,7 +817,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.190
+    value: 6.0.195
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -915,9 +903,6 @@ sequences:
   - {}
   - {}
   - {}
-  - {}
-  - {}
-  Convoynodes:
   - {}
   - {}
 flags:

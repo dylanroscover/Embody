@@ -317,52 +317,39 @@ class TestConvoyRegistrations(EmbodyTestCase):
                              '%s must never be persisted (A-49)' % (name,))
 
     def test_convoy_readouts_are_registered_transients(self):
-        """Both readouts must be scrubbed on export, and each must use
-        the registry mechanism that FITS it.
+        """The Convoy readout must be scrubbed on export, and the removed
+        ones must not come back unregistered.
 
-        Convoystatus is a state, so it names a truthy resting string.
-        Convoyid is an IDENTIFIER that legitimately rests empty (no
-        convoy until the first explicit enable), so it registers None --
-        which the scrub reads as 'reset to the par's own default'. A
-        literal '' resting is banned outright by the state-machine
-        invariant in test_release_hooks, and would fail there. What
-        matters for A-50 is only that the name IS registered: unregistered,
-        this machine's convoy id bakes into the tracked Embody.tdn and
+        Convoystatus is the SINGLE readout (it merged the old Convoystatus
+        + Convoyhoststatus pair). It is a state, so it names a truthy
+        resting string. What matters for A-50 is that anything carrying
+        machine identity is either absent from the page or registered:
+        unregistered, a live readout bakes into the tracked Embody.tdn and
         into every released .tox.
+
+        Convoyid and Convoyhoststatus were REMOVED from the page -- a
+        truncated convoy hash, a truncated host hash and a process id are
+        not things a user can act on. If either is ever restored it must
+        arrive registered, so this asserts the pair-wise invariant rather
+        than just their absence.
         """
         registry = self.embody_ext._TRANSIENT_STATUS_PARS['Embody']
         self.assertEqual(registry.get('Convoystatus'), 'Disabled')
-        self.assertIn(
-            'Convoyid', registry,
-            "Convoyid MUST be registered -- unregistered, this machine's "
-            'convoy id bakes into the tracked Embody.tdn and every '
-            'released .tox (A-50)')
-        self.assertIsNone(
-            registry['Convoyid'],
-            'Convoyid rests at its default (empty), which the registry '
-            'spells None; a literal "" is refused by the resting-value '
-            'invariant')
-        # And the default it resets TO must actually be the empty state.
-        self.assertEqual(self.embody.par.Convoyid.default, '')
-
-        # Convoyhoststatus is the third readout, and it leaks harder than
-        # either: it names a pid, a version and a supervisor that exist
-        # only on the machine that installed them. Unregistered, one
-        # developer's 'Running 6.0.173 (pid 24180)' bakes into the tracked
-        # Embody.tdn and tells every downloader their host app is already
-        # running when nothing is installed. It IS a state, so unlike
-        # Convoyid it names a truthy resting.
         self.assertEqual(
-            registry.get('Convoyhoststatus'), 'Not installed',
-            'Convoyhoststatus must rest at the honest answer for a '
-            'machine that has not installed the host app (A-50)')
-        self.assertEqual(
-            self.embody.par.Convoyhoststatus.default, 'Not installed',
+            self.embody.par.Convoystatus.default, 'Disabled',
             'the resting and the default must agree, or a scrub and a '
             'revert-to-default disagree about the same par')
         self.assertTrue(
-            self.embody.par.Convoyhoststatus.readOnly,
-            'Convoyhoststatus is a readout, not an input')
+            self.embody.par.Convoystatus.readOnly,
+            'Convoystatus is a readout, not an input')
+        for name in ('Convoyid', 'Convoyhoststatus'):
+            if getattr(self.embody.par, name, None) is not None:
+                self.assertIn(
+                    name, registry,
+                    '%s is back on the Convoy page; it carries machine '
+                    'identity, so it MUST be a registered transient or it '
+                    'bakes into Embody.tdn and every released .tox (A-50)'
+                    % name)
 
     def test_convoy_host_lifecycle_pulses_exist_and_are_documented(self):
         """The four host-app buttons must exist with help text.

@@ -5,7 +5,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 <!-- GENERATED FILE - do not edit by hand. Regenerate with: python dev/embody/tools/generate_parameters_doc.py -->
 
 !!! info "Auto-generated from `Embody.tdn`"
-    This page is generated from the externalized Embody COMP (`dev/embody/Embody.tdn`), the source of truth for its parameters, so it stays in sync with the actual component. **137 parameters** across 9 pages.
+    This page is generated from the externalized Embody COMP (`dev/embody/Embody.tdn`), the source of truth for its parameters, so it stays in sync with the actual component. **135 parameters** across 9 pages.
 
 ## Embody
 
@@ -91,14 +91,8 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | <a class="par-anchor" id="par-convoyenable" href="#par-convoyenable">Enable Convoy (`Convoyenable`)</a> | Toggle | - | Joins this Embody node to other Convoy-enabled nodes on the same trusted LAN and lets those nodes discover, inspect, and control it -- queries, test runs, project saves, and more -- through Envoy. Enabling this opens an authenticated LAN listener and starts automatic discovery and reconnect. Only enable it on a network you trust; never on guest, public, or mixed-trust networks. Arbitrary TD Python and full shell stay OFF until you enable them locally on this machine. The first enable creates this project's convoy identity and asks for confirmation. |
-| <a class="par-anchor" id="par-convoyid" href="#par-convoyid">Convoy ID (`Convoyid`)</a> | Str (read-only) | - | The convoy this project belongs to (from .embody/project.json). Created on the first explicit enable; empty until then. An identifier, not a credential. |
-| <a class="par-anchor" id="par-convoystatus" href="#par-convoystatus">Convoy Status (`Convoystatus`)</a> | Str (read-only) | `Disabled` | Live registration state with the local Convoy host app. 'No Convoy host app' is a normal resting state, not an error -- the host app simply is not installed or running on this machine. |
-| <a class="par-anchor" id="par-convoyhoststatus" href="#par-convoyhoststatus">Host App (`Convoyhoststatus`)</a> | Str (read-only) | `Not installed` | Whether this machine's Convoy host app is installed and running. The host app is a small background program OUTSIDE TouchDesigner, so a node stays reachable while TD is closed. One per LOGGED-IN USER, not one per machine. |
-| <a class="par-anchor" id="par-convoyinstallhost" href="#par-convoyinstallhost">Install or Update Host App (`Convoyinstallhost`)</a> | Pulse | - | Install the Convoy host app for YOUR user account, and register it to start when you log in -- whether or not TouchDesigner is open. Asks for confirmation first. Safe to run again: it is also the repair and upgrade path. The program is unsigned and lives in your user directory, so security software may flag it. |
-| <a class="par-anchor" id="par-convoystarthost" href="#par-convoystarthost">Start Host App (`Convoystarthost`)</a> | Pulse | - | Start the installed host app now, without waiting for the next login. |
-| <a class="par-anchor" id="par-convoystophost" href="#par-convoystophost">Stop Host App (`Convoystophost`)</a> | Pulse | - | Stop the host app and keep it stopped. This disables the supervisor first -- otherwise it would restart within a minute and the button would look broken. Jobs already queued stay queued. Use Start Host App to resume. |
-| <a class="par-anchor" id="par-convoyuninstallhost" href="#par-convoyuninstallhost">Uninstall Host App (`Convoyuninstallhost`)</a> | Pulse | - | Remove the host app and its login registration. Shows you exactly what will be removed and what will be KEPT before doing anything -- this machine's host identity and its job history are kept, so re-installing later rejoins the same convoy rather than becoming a new host. |
-| <a class="par-anchor" id="par-convoynodename" href="#par-convoynodename">Node Name (`Convoynodename`)</a> | Str | `=__import__('socket').gethostname() + ' / ' + project.name.rsplit('.', 1)[0]` | Display name for this node in Convoy. Defaults to '<hostname> / <toe filename>'. Editing it sets a persistent override; routing always uses the stable node identity, never this name. |
+| <a class="par-anchor" id="par-convoynodename" href="#par-convoynodename">Node Name (`Convoynodename`)</a> | Str | - | Display name for this node in Convoy. Defaults to '<hostname> / <toe filename>'. Editing it sets a persistent override; routing always uses the stable node identity, never this name. |
+| <a class="par-anchor" id="par-convoystatus" href="#par-convoystatus">Status (`Convoystatus`)</a> | Str (read-only) | `Disabled` | Convoy's current state -- whether this node is connected, and anything blocking it (no host app, install failed, consent required). |
 | <a class="par-anchor" id="par-convoyremotewake" href="#par-convoyremotewake">Remote Wake (`Convoyremotewake`)</a> | Toggle | On | Allows a real remote TouchDesigner operation to temporarily wake Convoy's command service while this node is in Perform Mode. Discovery, status, ping, and controller queries never wake it. After remote work finishes, the node returns to its previous Perform state following the idle grace period. |
 | <a class="par-anchor" id="par-convoywakegrace" href="#par-convoywakegrace">Remote Wake Idle Grace (`Convoywakegrace`)</a> | Float | `60` | Seconds after the final remote wake finishes before Convoy restores this node's previous Perform Mode state. |
 | <a class="par-anchor" id="par-convoyallowtdpython" href="#par-convoyallowtdpython">Allow Execute TD Python (`Convoyallowtdpython`)</a> | Toggle | - | Allows Convoy controllers to execute arbitrary Python inside this TouchDesigner process. Python can access the filesystem, network, credentials available to TouchDesigner, and operating-system process APIs, so enabling this is effectively host-user code execution even when Allow Full Shell is off. Keep it off unless explicitly needed. This setting can only be enabled locally. |
@@ -109,6 +103,10 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 | <a class="par-anchor" id="par-ipaddress" href="#par-ipaddress">IP Address (`Ipaddress`)</a> | Str (read-only) | - | Current LAN endpoint. |
 | <a class="par-anchor" id="par-nodestatus" href="#par-nodestatus">Status (`Nodestatus`)</a> | Str (read-only) | - | Node and connection status; notes an Embody version mismatch only when relevant. |
 | <a class="par-anchor" id="par-lastseen" href="#par-lastseen">Last Seen (`Lastseen`)</a> | Str (read-only) | - | How recently the node was seen. |
+| <a class="par-anchor" id="par-convoyinstallhost" href="#par-convoyinstallhost">Repair Host App (`Convoyinstallhost`)</a> | Pulse | - | Reinstall or upgrade the background app for YOUR user account. Enabling Convoy installs it automatically; use this to repair a broken install or apply an update. |
+| <a class="par-anchor" id="par-convoystarthost" href="#par-convoystarthost">Start Host App (`Convoystarthost`)</a> | Pulse | - | Start the installed host app now, without waiting for the next login. |
+| <a class="par-anchor" id="par-convoystophost" href="#par-convoystophost">Stop Host App (`Convoystophost`)</a> | Pulse | - | Stop the host app and keep it stopped. This disables the supervisor first -- otherwise it would restart within a minute and the button would look broken. Jobs already queued stay queued. Use Start Host App to resume. |
+| <a class="par-anchor" id="par-convoyuninstallhost" href="#par-convoyuninstallhost">Uninstall Host App (`Convoyuninstallhost`)</a> | Pulse | - | Remove the host app and its login registration. Shows you exactly what will be removed and what will be KEPT before doing anything -- this machine's host identity and its job history are kept, so re-installing later rejoins the same convoy rather than becoming a new host. |
 
 ## UI
 
@@ -178,7 +176,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| <a class="par-anchor" id="par-version" href="#par-version">`Version`</a> | Str (read-only) | `6.0.180` | Embody version string (read-only). |
+| <a class="par-anchor" id="par-version" href="#par-version">`Version`</a> | Str (read-only) | `6.0.191` | Embody version string (read-only). |
 | <a class="par-anchor" id="par-touchbuild" href="#par-touchbuild">Touch Build (`Touchbuild`)</a> | Str (read-only) | `2025.33070` | TouchDesigner build number this version was developed on (read-only). |
 | <a class="par-anchor" id="par-author" href="#par-author">`Author`</a> | Str (read-only) | `Dylan Roscover` | Embody author (read-only). |
 | <a class="par-anchor" id="par-build" href="#par-build">Build Number (`Build`)</a> | Int (read-only) | - | Embody build number (read-only). Incremented with each release. |
