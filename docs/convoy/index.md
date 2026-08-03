@@ -235,7 +235,7 @@ The compatibility target is:
 - Windows x64 to Apple Silicon macOS, in both directions
 - Apple Silicon macOS to Apple Silicon macOS
 
-TouchDesigner also runs on Intel macOS, but Convoy's first macOS target is Apple Silicon. The current preview has not completed physical macOS validation, and managed runtime packaging is not yet a finished cross-platform release. Check the release notes before using Convoy in a show-critical deployment.
+TouchDesigner also runs on Intel macOS, but Convoy's first macOS target is Apple Silicon. The current preview has not completed physical macOS validation. Check the release notes before using Convoy in a show-critical deployment.
 
 ## Owlette
 

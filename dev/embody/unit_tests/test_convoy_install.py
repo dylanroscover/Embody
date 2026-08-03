@@ -3098,6 +3098,55 @@ class TestConvoyInstallActions(EmbodyTestCase):
             self.assertEqual(len(runner.calls), 1)
             self.assertEqual(runner.calls[0][:2], ['schtasks', '/Create'])
 
+    def test_a_venv_runtime_records_no_managed_receipt(self):
+        """The host app is plain Python (like the Envoy bridge) and may run
+        under Embody's own uv venv interpreter. That shape has NO bundle to
+        hash, so it records venv_runtime=True and NO 'runtime' receipt -- the
+        two shapes are mutually exclusive, so a record can never claim managed
+        verification it did not get."""
+        def venv_verifier(data_dir, interpreter, platform=None,
+                          architecture=None, runner=None):
+            # What probe_runtime returns: a live crypto-floor pass, with no
+            # runtime_id because there is no managed bundle.
+            return {'ok': True, 'probe': {'python': [3, 11, 15],
+                                          'cryptography_version': '49.0.0'}}
+
+        with _TempDir() as root:
+            got = install_mod.install(
+                root, '6.0.171', _MODULES, WIN_PY, platform='win32',
+                runner=_Runner(), env=WIN_ENV,
+                runtime_verifier=venv_verifier)
+            self.assertTrue(got['ok'], got)
+            record = install_mod.read_installed(root, 'win32')
+            self.assertTrue(record.get('venv_runtime'))
+            self.assertNotIn(
+                'runtime', record,
+                'a venv install must not fabricate a managed-runtime receipt')
+            self.assertEqual(record['interpreter'], WIN_PY)
+
+    def test_a_managed_runtime_records_a_receipt_and_no_venv_flag(self):
+        with _TempDir() as root:
+            self._install(root, '6.0.171', _MODULES, WIN_PY,
+                          platform='win32', runner=_Runner(), env=WIN_ENV)
+            record = install_mod.read_installed(root, 'win32')
+            self.assertEqual(record['runtime']['format'],
+                             install_mod.RUNTIME_RECEIPT_FORMAT)
+            self.assertFalse(record.get('venv_runtime'),
+                             'a managed install is never marked venv')
+
+    def test_the_launcher_venv_branch_still_pins_the_interpreter(self):
+        """The venv branch relaxes the BUNDLE checks (there is no bundle) but
+        must still refuse an interpreter other than the one recorded at
+        install -- otherwise a rewritten installed.json could point the login
+        task at any Python."""
+        source = install_mod.render_launcher('win32', 'C:/tmp/fake')
+        compile(source, 'convoy_host_launch.py', 'exec')
+        self.assertIn('venv_runtime', source)
+        self.assertIn('recorded at install', source)
+        # The live crypto/TLS proof replaces the bundle-integrity proof.
+        self.assertIn('HAS_TLSv1_3', source)
+        self.assertIn('cryptography_available', source)
+
     def test_installed_json_is_written_LAST_of_all(self):
         """It is what the launcher reads to find its payload. Written
         earlier, a crash mid-install would leave a record pointing at

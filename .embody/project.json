@@ -1,1 +1,9 @@
-{}
+{
+  "convoy": {
+    "id": "cv_373a3f415ef5c8bb",
+    "binding_state": "established",
+    "consent_scope": "trusted LAN Convoy mesh",
+    "granted_at": "2026-08-03T10:11:50Z",
+    "bound_at": "2026-08-03T11:17:31Z"
+  }
+}

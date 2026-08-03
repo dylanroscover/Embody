@@ -324,6 +324,14 @@ class TestVenvPaths(EmbodyTestCase):
 		self.assertEqual(mcp_deps[0], expected)
 		self.assertIn('attrs<25', spec['deps'])
 		self.assertIn('pyyaml', spec['deps'])
+		# The Convoy host app runs under THIS venv python and needs the crypto
+		# floor (Ed25519 / X.509 / TLS 1.3) for LAN peer identity. It arrives
+		# transitively today, but Convoy depends on it directly, so it is
+		# pinned explicitly -- a floor, never an exact pin.
+		crypto = [d for d in spec['deps'] if d.startswith('cryptography')]
+		self.assertEqual(len(crypto), 1, 'exactly one cryptography requirement')
+		self.assertTrue(crypto[0].startswith('cryptography>='),
+						'cryptography must carry a floor, not an exact pin')
 
 	def test_ceiling_is_next_major(self):
 		spec = self.ext._venvPaths()

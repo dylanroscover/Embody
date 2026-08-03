@@ -91,7 +91,7 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/unit_tests/test_tag_lifecycle	text	py	embody/unit_tests/test_tag_lifecycle.py	2026-06-20 20:36:02 UTC				0	-600	0.9000,0.3000,0.4000
 /embody/unit_tests/test_strategy_handlers	text	py	embody/unit_tests/test_strategy_handlers.py	2026-06-20 20:36:02 UTC				600	0	0.9000,0.3000,0.4000
 /embody/unit_tests/test_server_lifecycle	text	py	embody/unit_tests/test_server_lifecycle.py	2026-06-20 20:36:02 UTC				0	-2600	0.9000,0.3000,0.4000
-/embody/unit_tests/test_sandbox	base	tdn	embody/unit_tests/test_sandbox.tdn	2026-08-03 09:59:47 UTC		1510	099.2025.33070	400	0	0.3000,0.5000,0.9000
+/embody/unit_tests/test_sandbox	base	tdn	embody/unit_tests/test_sandbox.tdn	2026-08-03 10:14:40 UTC		1511	099.2025.33070	400	0	0.3000,0.5000,0.9000
 /embody/unit_tests/test_rename_move_lifecycle	text	py	embody/unit_tests/test_rename_move_lifecycle.py	2026-06-20 20:36:03 UTC				200	-600	0.9000,0.3000,0.4000
 /embody/unit_tests/test_path_utils	text	py	embody/unit_tests/test_path_utils.py	2026-06-20 20:36:03 UTC				200	-800	0.9000,0.3000,0.4000
 /embody/unit_tests/test_param_tracker	text	py	embody/unit_tests/test_param_tracker.py	2026-06-20 20:36:03 UTC				400	-800	0.9000,0.3000,0.4000
@@ -123,7 +123,7 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/unit_tests/test_catalog_bootstrap_palette	text	py	embody/unit_tests/test_catalog_bootstrap_palette.py	2026-06-20 20:36:03 UTC				900	0	0.9000,0.3000,0.4000
 /embody/unit_tests/results	table	tsv	embody/unit_tests/results.tsv	2026-06-20 20:36:03 UTC				0	0	0.9000,0.3000,0.4000
 /embody/unit_tests/TestRunnerExt	text	py	embody/unit_tests/TestRunnerExt.py	2026-06-20 20:36:03 UTC				200	0	0.9000,0.3000,0.4000
-/embody/unit_tests	base	tdn	embody/unit_tests.tdn	2026-08-03 09:45:10 UTC		95	099.2025.33070	400	102	0.3000,0.5000,0.9000
+/embody/unit_tests	base	tdn	embody/unit_tests.tdn	2026-08-03 11:22:32 UTC		95	099.2025.33070	400	102	0.3000,0.5000,0.9000
 /embody/execute_src_ctrl	execute	py	embody/execute_src_ctrl.py	2026-06-20 20:36:03 UTC				-625	120	0.9000,0.3000,0.4000
 /embody/Embody/window_tagging_menu	window	tdn	embody/Embody/window_tagging_menu.tdn	2026-06-20 20:36:04 UTC		24	099.2025.32820	900	675	0.3000,0.5000,0.9000
 /embody/Embody/window_manager	window	tdn	embody/Embody/window_manager.tdn	2026-06-20 20:36:04 UTC		13	099.2025.32820	500	675	0.3000,0.5000,0.9000
@@ -226,8 +226,8 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/Embody/Collection/CollectionExt	text	py	embody/Embody/Collection/CollectionExt.py	2026-06-20 20:36:05 UTC				200	0	0.9000,0.3000,0.4000
 /embody/Embody/Collection	base	tdn	embody/Embody/Collection.tdn	2026-07-20 11:16:09 UTC		2	099.2025.33070	200	-550	0.3000,0.5000,0.9000
 /embody/Embody/CatalogManagerExt	text	py	embody/Embody/CatalogManagerExt.py	2026-06-20 20:36:05 UTC				-300	300	0.9000,0.3000,0.4000
-/embody/Embody	container	tdn	embody/Embody.tdn	2026-08-03 09:49:57 UTC		1063	099.2025.33070	0	0	0.3000,0.5000,0.9000
-/embody	container	tdn	embody.tdn	2026-08-03 09:52:21 UTC		948	099.2025.33070	100	50	0.3000,0.5000,0.9000
+/embody/Embody	container	tdn	embody/Embody.tdn	2026-08-03 11:22:31 UTC	True	1065	099.2025.33070	0	0	0.3000,0.5000,0.9000
+/embody	container	tdn	embody.tdn	2026-08-03 11:22:32 UTC	True	950	099.2025.33070	100	50	0.3000,0.5000,0.9000
 /embody/unit_tests/test_tdn_diff_engine	text	py	embody/unit_tests/test_tdn_diff_engine.py	2026-06-22 21:36:58 UTC				200	-3200	0.9000,0.3000,0.4000
 /embody/unit_tests/test_tdn_diff	text	py	embody/unit_tests/test_tdn_diff.py	2026-06-22 21:37:00 UTC				0	-3200	0.9000,0.3000,0.4000
 /embody/unit_tests/test_git_status	text	py	embody/unit_tests/test_git_status.py	2026-06-22 23:29:58 UTC				400	-3200	0.9000,0.3000,0.4000
@@ -268,7 +268,7 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/unit_tests/test_opencode_config	text	py	embody/unit_tests/test_opencode_config.py	2026-07-23 16:29:56 UTC				400	-1000	0.9000,0.3000,0.4000
 /embody/Embody/convoy/convoy_client	text	py	embody/Embody/convoy/convoy_client.py	2026-08-01 11:22:40 UTC				400	0	0.9000,0.3000,0.4000
 /embody/Embody/convoy/ConvoyExt	text	py	embody/Embody/convoy/ConvoyExt.py	2026-08-01 11:22:46 UTC				0	0	0.9000,0.3000,0.4000
-/embody/Embody/convoy	base	tdn	embody/Embody/convoy.tdn	2026-08-02 15:32:17 UTC		15	099.2025.33070	925	-550	0.3000,0.5000,0.9000
+/embody/Embody/convoy	base	tdn	embody/Embody/convoy.tdn	2026-08-03 11:22:31 UTC		16	099.2025.33070	925	-550	0.3000,0.5000,0.9000
 /embody/unit_tests/test_convoy_ext	text	py	embody/unit_tests/test_convoy_ext.py	2026-08-01 15:33:04 UTC				200	-3800	0.9000,0.3000,0.4000
 /embody/Embody/templates/text_skill_merge_divergent_tox	text	md	embody/Embody/templates/text_skill_merge_divergent_tox.md	2026-08-01 20:11:49 UTC				4200	-400	0.9000,0.3000,0.4000
 /embody/Embody/convoy/convoy_install	text	py	embody/Embody/convoy/convoy_install.py	2026-08-01 23:04:14 UTC				800	0	0.9000,0.3000,0.4000
@@ -287,3 +287,14 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/Embody/convoy/host/convoy_lan	text	py	embody/Embody/convoy/host/convoy_lan.py	2026-08-02 15:32:03 UTC				1200	-800	0.9000,0.3000,0.4000
 /embody/Embody/convoy/host/convoy_peerserver	text	py	embody/Embody/convoy/host/convoy_peerserver.py	2026-08-02 15:32:08 UTC				0	-1200	0.9000,0.3000,0.4000
 /embody/Embody/convoy/host/convoy_peerclient	text	py	embody/Embody/convoy/host/convoy_peerclient.py	2026-08-02 15:32:13 UTC				400	-1200	0.9000,0.3000,0.4000
+/embody/Embody/convoy/host/convoy_ws	text	py	embody/Embody/convoy/host/convoy_ws.py	2026-08-03 11:22:30 UTC				1000	-2200	0.6700,0.6700,0.6700
+/embody/Embody/convoy/host/convoy_wake	text	py	embody/Embody/convoy/host/convoy_wake.py	2026-08-03 11:22:30 UTC				600	-2200	0.6700,0.6700,0.6700
+/embody/Embody/convoy/host/convoy_sessions	text	py	embody/Embody/convoy/host/convoy_sessions.py	2026-08-03 11:22:30 UTC				200	-2200	0.6700,0.6700,0.6700
+/embody/Embody/convoy/host/convoy_realm	text	py	embody/Embody/convoy/host/convoy_realm.py	2026-08-03 11:22:30 UTC				1400	-1900	0.6700,0.6700,0.6700
+/embody/Embody/convoy/host/convoy_policy	text	py	embody/Embody/convoy/host/convoy_policy.py	2026-08-03 11:22:30 UTC				1000	-1900	0.6700,0.6700,0.6700
+/embody/Embody/convoy/host/convoy_owlette	text	py	embody/Embody/convoy/host/convoy_owlette.py	2026-08-03 11:22:30 UTC				600	-1900	0.6700,0.6700,0.6700
+/embody/Embody/convoy/host/convoy_lifecycle	text	py	embody/Embody/convoy/host/convoy_lifecycle.py	2026-08-03 11:22:30 UTC				200	-1900	0.6700,0.6700,0.6700
+/embody/Embody/convoy/host/convoy_hostops	text	py	embody/Embody/convoy/host/convoy_hostops.py	2026-08-03 11:22:30 UTC				1400	-1600	0.6700,0.6700,0.6700
+/embody/Embody/convoy/host/convoy_discovery	text	py	embody/Embody/convoy/host/convoy_discovery.py	2026-08-03 11:22:30 UTC				1000	-1600	0.6700,0.6700,0.6700
+/embody/Embody/convoy/host/convoy_artifacts	text	py	embody/Embody/convoy/host/convoy_artifacts.py	2026-08-03 11:22:30 UTC				600	-1600	0.6700,0.6700,0.6700
+/embody/Embody/convoy/host/convoy_artifact_http	text	py	embody/Embody/convoy/host/convoy_artifact_http.py	2026-08-03 11:22:30 UTC				200	-1600	0.6700,0.6700,0.6700

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 15
-generator: Embody/6.0.178
+build: 16
+generator: Embody/6.0.182
 td_build: 099.2025.33070
-source_file: Embody-6.178.toe
-exported_at: '2026-08-02T15:32:17Z'
+source_file: Embody-6.183.toe
+exported_at: '2026-08-03T11:22:31Z'
 network_path: /embody/Embody/convoy
 options:
   include_dat_content: false
@@ -13,9 +13,7 @@ type_defaults:
   textDAT:
     parameters:
       syncfile: true
-      language: python
     size: [130, 90]
-    color: [0.9, 0.3, 0.4]
     tags:
     - py
 type: baseCOMP
@@ -34,130 +32,180 @@ operators:
   size: [160, 130]
   color: [0.3, 0.5, 0.9]
   children:
-  - name: convoy_lan
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_lan.py
-    position: [1200, -800]
-  - name: convoy_peers
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_peers.py
-    position: [800, -800]
-  - name: convoy_hostapp
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_hostapp.py
-    position: [800, 0]
-  - name: convoy_hostkeys
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_hostkeys.py
-    position: [1200, 0]
-  - name: convoy_identity
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_identity.py
-    position: [800, -400]
-  - name: convoy_platform
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_platform.py
-    position: [0, -800]
-  - name: convoy_protocol
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_protocol.py
-    position: [400, -800]
-  - name: convoy_hostprobe
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_hostprobe.py
-    position: [0, -400]
-  - name: convoy_hoststore
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_hoststore.py
-    position: [400, -400]
-  - name: convoy_mcpclient
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_mcpclient.py
-    position: [1200, -400]
-  - name: convoy_peerclient
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_peerclient.py
-    position: [400, -1200]
-  - name: convoy_artifact_http
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_artifact_http.py
-    position: [800, -1200]
-  - name: convoy_artifacts
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_artifacts.py
-    position: [1200, -1200]
-  - name: convoy_discovery
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_discovery.py
-    position: [0, -1600]
-  - name: convoy_policy
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_policy.py
-    position: [400, -1600]
-  - name: convoy_realm
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_realm.py
-    position: [800, -1600]
-  - name: convoy_wake
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_wake.py
-    position: [1200, -1600]
-  - name: convoy_hostops
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_hostops.py
-    position: [0, -2000]
-  - name: convoy_lifecycle
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_lifecycle.py
-    position: [400, -2000]
-  - name: convoy_owlette
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_owlette.py
-    position: [800, -2000]
-  - name: convoy_peerserver
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_peerserver.py
-    position: [0, -1200]
-  - name: convoy_controllers
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_controllers.py
-    position: [400, 0]
-  - name: convoy_capabilities
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_capabilities.py
-  - name: convoy_sessions
-    type: textDAT
-    parameters:
-      file: embody/Embody/convoy/host/convoy_sessions.py
-    position: [800, -2400]
   - name: convoy_ws
     type: textDAT
     parameters:
       file: embody/Embody/convoy/host/convoy_ws.py
-    position: [1200, -2400]
+      loadonstart: true
+    position: [1000, -2200]
+    color: [0.67, 0.67, 0.67]
+  - name: convoy_lan
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_lan.py
+      language: python
+    position: [1200, -800]
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_wake
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_wake.py
+      loadonstart: true
+    position: [600, -2200]
+    color: [0.67, 0.67, 0.67]
+  - name: convoy_peers
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_peers.py
+      language: python
+    position: [800, -800]
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_realm
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_realm.py
+      loadonstart: true
+    position: [1400, -1900]
+    color: [0.67, 0.67, 0.67]
+  - name: convoy_policy
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_policy.py
+      loadonstart: true
+    position: [1000, -1900]
+    color: [0.67, 0.67, 0.67]
+  - name: convoy_hostapp
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_hostapp.py
+      language: python
+    position: [800, 0]
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_hostops
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_hostops.py
+      loadonstart: true
+    position: [1400, -1600]
+    color: [0.67, 0.67, 0.67]
+  - name: convoy_owlette
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_owlette.py
+      loadonstart: true
+    position: [600, -1900]
+    color: [0.67, 0.67, 0.67]
+  - name: convoy_hostkeys
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_hostkeys.py
+      language: python
+    position: [1200, 0]
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_identity
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_identity.py
+      language: python
+    position: [800, -400]
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_platform
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_platform.py
+      language: python
+    position: [0, -800]
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_protocol
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_protocol.py
+      language: python
+    position: [400, -800]
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_sessions
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_sessions.py
+      loadonstart: true
+    position: [200, -2200]
+    color: [0.67, 0.67, 0.67]
+  - name: convoy_artifacts
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_artifacts.py
+      loadonstart: true
+    position: [600, -1600]
+    color: [0.67, 0.67, 0.67]
+  - name: convoy_discovery
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_discovery.py
+      loadonstart: true
+    position: [1000, -1600]
+    color: [0.67, 0.67, 0.67]
+  - name: convoy_hostprobe
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_hostprobe.py
+      language: python
+    position: [0, -400]
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_hoststore
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_hoststore.py
+      language: python
+    position: [400, -400]
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_lifecycle
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_lifecycle.py
+      loadonstart: true
+    position: [200, -1900]
+    color: [0.67, 0.67, 0.67]
+  - name: convoy_mcpclient
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_mcpclient.py
+      language: python
+    position: [1200, -400]
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_peerclient
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_peerclient.py
+      language: python
+    position: [400, -1200]
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_peerserver
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_peerserver.py
+      language: python
+    position: [0, -1200]
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_controllers
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_controllers.py
+      language: python
+    position: [400, 0]
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_capabilities
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_capabilities.py
+      language: python
+    color: [0.9, 0.3, 0.4]
+  - name: convoy_artifact_http
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_artifact_http.py
+      loadonstart: true
+    position: [200, -1600]
+    color: [0.67, 0.67, 0.67]
   annotations:
   - name: annotate1
     mode: annotate
@@ -174,20 +222,26 @@ operators:
       The daemon is TD-free and never imported in TouchDesigner -- it is inert text here.
       On install, ConvoyExt reads each DAT's .text on the main thread and a worker writes
       it to the per-user data dir.
-    position: [-70, -2470]
-    size: [1470, 2730]
+    position: [-70, -870]
+    size: [1470, 1130]
     color: [0.45, 0.45, 0.45]
 - name: ConvoyExt
   type: textDAT
   parameters:
     file: embody/Embody/convoy/ConvoyExt.py
+    language: python
+  color: [0.9, 0.3, 0.4]
 - name: convoy_client
   type: textDAT
   parameters:
     file: embody/Embody/convoy/convoy_client.py
+    language: python
   position: [400, 0]
+  color: [0.9, 0.3, 0.4]
 - name: convoy_install
   type: textDAT
   parameters:
     file: embody/Embody/convoy/convoy_install.py
+    language: python
   position: [800, 0]
+  color: [0.9, 0.3, 0.4]

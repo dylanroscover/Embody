@@ -2898,7 +2898,29 @@ class ConvoyExt:
             'installed_by': '%s (%s)' % (project_root, self._embody.path),
             'health_wait_s': self.HEALTH_WAIT_S,
             'health_poll_s': self.HEALTH_POLL_S,
+            # Embody's own uv-managed venv python -- the interpreter the rest
+            # of Embody's Python runs under. It already carries the Convoy
+            # crypto floor (Ed25519/X.509/TLS 1.3), so the host app runs under
+            # it when no signed managed runtime is installed. Resolved on the
+            # main thread here; None if the venv is not built or is missing.
+            'venv_python': self._convoyVenvPython(),
         }
+
+    def _convoyVenvPython(self):
+        """Path to Embody's uv-managed venv python, or None. MAIN THREAD.
+
+        Reads project.folder via EmbodyExt._venvPaths (a main-thread global),
+        so it is resolved here into the plain host context and never touched
+        from a worker.
+        """
+        try:
+            path = self._embody.ext.Embody._venvPaths().get('venv_python')
+        except Exception:
+            return None
+        try:
+            return path if (path and os.path.isfile(path)) else None
+        except Exception:
+            return None
 
     def _safeHostContext(self):
         """_hostContext() or None, saying WHICH module is missing."""
@@ -3343,15 +3365,24 @@ class ConvoyExt:
                 self._hostStatus(self.HOST_INSTALL_FAILED)
             return {'state': 'refused', 'detail': plan.get('detail')}
 
-        # TD's own bundled Python, resolved HERE so the dialog can name
-        # the interpreter that will run at login, and so a machine with no
-        # usable TD install refuses BEFORE the confirmation rather than
-        # after it. A handful of stat calls, once per pulse.
+        # Runtime resolution, resolved HERE so the dialog can name the exact
+        # interpreter that will run at login and a machine with no usable
+        # runtime refuses BEFORE the confirmation. Prefer a signed managed
+        # runtime if one is installed; otherwise run the host app under
+        # Embody's own uv-managed venv python -- the same interpreter the rest
+        # of Embody's Python uses, which already carries the crypto floor. The
+        # managed runtime stays the signed-release path; the venv is the
+        # working default.
         interpreter = installer.choose_interpreter(
             installer.find_interpreters(ctx['platform']))
+        venv_runtime = False
         if not interpreter:
-            self._log('no TouchDesigner Python was found for this user -- '
-                      'the host app has nothing to run under', 'WARNING')
+            interpreter = ctx.get('venv_python')
+            venv_runtime = bool(interpreter)
+        if not interpreter:
+            self._log('no Convoy runtime is available -- neither a signed '
+                      'managed runtime nor an Embody venv python with the '
+                      'crypto floor was found', 'WARNING')
             self._hostStatus(self.HOST_INSTALL_FAILED)
             return {'state': 'error', 'detail': 'no interpreter'}
 
@@ -3371,10 +3402,12 @@ class ConvoyExt:
                       else None)
         self._beginHostCall(
             'install',
-            lambda: _host_install(ctx, modules, interpreter, supervisor),
+            lambda: _host_install(ctx, modules, interpreter, supervisor,
+                                  venv_runtime=venv_runtime),
             note=self.HOST_INSTALLING)
         return {'state': 'installing', 'action': plan.get('action'),
-                'interpreter': interpreter, 'modules': sorted(modules)}
+                'interpreter': interpreter, 'venv_runtime': venv_runtime,
+                'modules': sorted(modules)}
 
     def StartHost(self):
         """Enable the supervisor and run it now, then wait for /health."""
@@ -4253,13 +4286,29 @@ def _host_is_running(ctx):
     return observe
 
 
-def _host_install(ctx, modules, interpreter, supervisor=None):
-    """Write the payload, register the supervisor, start it, wait."""
+def _host_install(ctx, modules, interpreter, supervisor=None,
+                  venv_runtime=False):
+    """Write the payload, register the supervisor, start it, wait.
+
+    WORKER-SAFE. When ``venv_runtime`` is set the interpreter is Embody's own
+    uv-managed venv python, not a signed managed-runtime bundle, so it is
+    verified by the LIVE crypto-floor probe (Ed25519/X.509/TLS 1.3) rather
+    than the managed-runtime receipt -- the default verifier deliberately
+    refuses a .venv interpreter. probe_runtime spawns the interpreter in
+    isolation and touches no TouchDesigner objects.
+    """
     installer = ctx['installer']
+    verifier = None
+    if venv_runtime:
+        def verifier(data_dir, interp, platform=None, architecture=None,
+                     runner=None):
+            return installer.probe_runtime(
+                interp, platform, architecture, runner=runner)
     outcome = installer.install(
         ctx['data_dir'], ctx['version'], modules, interpreter,
         platform=ctx['platform'], home=ctx['home'], uid=ctx['uid'],
-        installed_by=ctx['installed_by'], supervisor=supervisor)
+        installed_by=ctx['installed_by'], supervisor=supervisor,
+        runtime_verifier=verifier)
     if not outcome.get('ok'):
         return {'ok': False, 'action': 'install', 'outcome': outcome,
                 'reason': outcome.get('reason'),

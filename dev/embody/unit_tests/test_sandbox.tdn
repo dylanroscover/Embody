@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1510
+build: 1511
 generator: Embody/6.0.181
 td_build: 099.2025.33070
-source_file: Embody-6.181.toe
-exported_at: '2026-08-03T09:59:47Z'
+source_file: Embody-6.182.toe
+exported_at: '2026-08-03T10:14:40Z'
 network_path: /embody/unit_tests/test_sandbox
 options:
   include_dat_content: false
@@ -15,8 +15,4 @@ flags:
 color: [0.3, 0.5, 0.9]
 tags:
 - tdn
-operators:
-- name: sandbox_test_version_sync
-  type: baseCOMP
-  size: [160, 130]
-  color: [0.67, 0.67, 0.67]
+operators: []

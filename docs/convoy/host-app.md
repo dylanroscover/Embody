@@ -34,13 +34,13 @@ The **Host App** readout uses these user-facing states:
 
 | Readout | What to do |
 |---|---|
-| `Not installed` | Use **Install or Update Host App** if your build contains a runtime package |
+| `Not installed` | Use **Install or Update Host App**. The app is plain Python and runs under Embody's own managed Python environment, so no extra download is needed |
 | `Checking...`, `Installing...`, `Installed -- starting...` | Wait for the current local action to finish |
 | `Running ...` | Ready; the version and process ID may also be shown |
 | `Installed -- not running (restarts within a minute)` | On Windows, the scheduled supervisor may take up to a minute; macOS LaunchAgent recovery is normally prompt. You can press **Start Host App** immediately on either platform. |
 | `Installed -- stopped` | Press **Start Host App** when you want Convoy available again |
 | `Installed -- no supervisor (use Install or Update)` | Run **Install or Update Host App** to repair login startup |
-| `Needs repair -- managed runtime unavailable` | Install the runtime package supplied for this Embody build, then run **Install or Update Host App** |
+| `Needs repair -- managed runtime unavailable` | The Python the app was installed against is gone. Run **Install or Update Host App** to repair it; it is also the repair path if Embody's Python environment was rebuilt |
 | `Running ... -- installed by a newer Embody` or `Installed ... -- installed by a newer Embody` | Do not downgrade it from an older Embody; align versions first |
 | `Managed by another supervisor` | Use the studio or Owlette process that owns startup, rather than competing with it |
 | `Install failed -- see log` | Review the Embody log, then retry the repair action |

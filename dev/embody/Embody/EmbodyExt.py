@@ -378,8 +378,14 @@ class EmbodyExt:
         # python, and v6 .tdn files are YAML, so the venv must carry yaml even
         # though the Envoy bridge itself never imports it.
         ceiling_major = int(self.MCP_MIN_VERSION.split('.')[0]) + 1
+        # cryptography: the Convoy host app runs under THIS venv python and
+        # needs Ed25519 + X.509 + TLS 1.3 for LAN peer identity/mutual-TLS.
+        # It usually arrives transitively, but Convoy depends on it directly,
+        # so pin an explicit floor (matches the bridge-suite CI floor) rather
+        # than relying on another package to keep pulling it in. FLOOR, no
+        # upper bound -- an exact pin is what broke fresh installs at mcp 2.0.
         deps = [f'mcp>={self.MCP_MIN_VERSION},<{ceiling_major}', 'attrs<25',
-                'pyyaml']
+                'pyyaml', 'cryptography>=3.4']
         if sys.platform.startswith('win'):
             site_packages = os.path.join(venv_dir, 'Lib', 'site-packages')
             venv_python = os.path.join(venv_dir, 'Scripts', 'python.exe')

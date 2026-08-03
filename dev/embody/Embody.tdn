@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1063
-generator: Embody/6.0.181
+build: 1065
+generator: Embody/6.0.182
 td_build: 099.2025.33070
-source_file: Embody-6.181.toe
-exported_at: '2026-08-03T09:49:56Z'
+source_file: Embody-6.183.toe
+exported_at: '2026-08-03T11:22:31Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -440,6 +440,7 @@ custom_pars:
     style: Toggle
     label: Enable Convoy
     help: Joins this Embody node to other Convoy-enabled nodes on the same trusted LAN and lets those nodes discover, inspect, and control it -- queries, test runs, project saves, and more -- through Envoy. Enabling this opens an authenticated LAN listener and starts automatic discovery and reconnect. Only enable it on a network you trust; never on guest, public, or mixed-trust networks. Arbitrary TD Python and full shell stay OFF until you enable them locally on this machine. The first enable creates this project's convoy identity and asks for confirmation.
+    value: true
   - name: Convoyid
     style: Str
     label: Convoy ID
@@ -767,7 +768,7 @@ custom_pars:
     - Always Keep Files
     - Always Delete Files
     help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-    value: delete
+    value: keep
   - name: Toxdropexpr
     style: Menu
     label: Dropped .tox Expression
@@ -782,7 +783,6 @@ custom_pars:
     - Always Clean
     - Always Ignore
     help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
-    value: ignore
   - name: Tdndatsafety
     style: Menu
     label: Content Safety
@@ -831,7 +831,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.181
+    value: 6.0.182
   - name: Touchbuild
     style: Str
     label: Touch Build

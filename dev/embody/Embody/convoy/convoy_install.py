@@ -2453,26 +2453,58 @@ def main():
              "must be a plain version like 6.0.171" %% (version,))
         return 1
     runtime = record.get("runtime")
-    if (not isinstance(runtime, dict)
+    # TWO RUNTIME SHAPES, both fail-closed.
+    #
+    # 1. MANAGED (a signed offline runtime bundle): every check below --
+    #    receipt, archive hash, interpreter hash, crypto-inside-the-bundle.
+    #    This is the release shape and nothing about it is relaxed.
+    #
+    # 2. VENV: the host app is plain Python (exactly like the Envoy bridge)
+    #    running under Embody's own uv-managed .venv interpreter, which
+    #    already carries the crypto floor. There is no bundle to hash, so the
+    #    proof is different but still real: the interpreter RECORDED at
+    #    install must be the one actually executing this file (so a rewritten
+    #    installed.json cannot redirect the login task at another Python),
+    #    and cryptography + TLS 1.3 must genuinely import. The payload's own
+    #    .complete check below is unchanged.
+    venv_runtime = bool(record.get("venv_runtime")) and not isinstance(
+        runtime, dict)
+    if venv_runtime:
+        configured = str(record.get("interpreter") or "")
+        try:
+            same_interpreter = (
+                os.path.normcase(os.path.realpath(configured))
+                == os.path.normcase(os.path.realpath(sys.executable)))
+        except (OSError, ValueError):
+            same_interpreter = False
+        if not configured or not same_interpreter:
+            _say("supervisor launched an interpreter other than the one "
+                 "recorded at install -- refusing to start; use Install or "
+                 "Update")
+            return 1
+    elif (not isinstance(runtime, dict)
             or runtime.get("format") != %(runtime_receipt_format)s):
         _say("installed host has no verified managed-runtime receipt -- "
              "use Install or Update to install the signed offline Convoy "
              "Runtime; TouchDesigner and project Python are refused")
         return 1
-    runtime_id = str(runtime.get("runtime_id") or "")
-    if not _safe_segment(runtime_id):
+    runtime_id = "" if venv_runtime else str(runtime.get("runtime_id") or "")
+    if not venv_runtime and not _safe_segment(runtime_id):
         _say("installed host names an unusable managed runtime -- use "
              "Install or Update to repair it")
         return 1
-    runtime_root = os.path.join(DATA_DIR, %(runtime_subdir)s, runtime_id)
+    runtime_root = ("" if venv_runtime
+                    else os.path.join(DATA_DIR, %(runtime_subdir)s,
+                                      runtime_id))
     try:
         with open(os.path.join(runtime_root, %(complete_file)s), "r",
                   encoding="utf-8") as f:
             runtime_receipt = json.load(f)
     except (OSError, ValueError):
         runtime_receipt = None
-    archive_sha256 = str(runtime.get("archive_sha256") or "").lower()
-    if (not isinstance(runtime_receipt, dict)
+    archive_sha256 = ("" if venv_runtime
+                      else str(runtime.get("archive_sha256") or "").lower())
+    if not venv_runtime and (not isinstance(runtime_receipt, dict)
             or runtime_receipt.get("format") != %(runtime_receipt_format)s
             or runtime_receipt.get("runtime_id") != runtime_id
             or not _SHA256_OK.fullmatch(archive_sha256)
@@ -2480,28 +2512,30 @@ def main():
         _say("managed Convoy Runtime receipt is absent or changed -- use "
              "Install or Update to repair the offline runtime bundle")
         return 1
-    python_rel = str(runtime_receipt.get("python") or "")
+    python_rel = ("" if venv_runtime
+                  else str(runtime_receipt.get("python") or ""))
     python_parts = python_rel.split("/")
-    if (not python_parts or "\\\\" in python_rel
+    if not venv_runtime and (not python_parts or "\\\\" in python_rel
             or any(not _safe_segment(part) for part in python_parts)):
         _say("managed Convoy Runtime receipt has an unsafe Python path -- "
              "use Install or Update to repair it")
         return 1
-    receipt_interpreter = os.path.join(runtime_root, *python_parts)
-    configured = str(record.get("interpreter") or "")
-    try:
-        same_interpreter = (os.path.normcase(os.path.realpath(configured))
-                            == os.path.normcase(
-                                os.path.realpath(sys.executable))
-                            == os.path.normcase(
-                                os.path.realpath(receipt_interpreter)))
-    except (OSError, ValueError):
-        same_interpreter = False
-    if not configured or not same_interpreter:
-        _say("supervisor launched an interpreter other than the verified "
-             "Convoy Runtime -- refusing to start; use Install or Update")
-        return 1
-    files = runtime_receipt.get("files")
+    if not venv_runtime:
+        receipt_interpreter = os.path.join(runtime_root, *python_parts)
+        configured = str(record.get("interpreter") or "")
+        try:
+            same_interpreter = (os.path.normcase(os.path.realpath(configured))
+                                == os.path.normcase(
+                                    os.path.realpath(sys.executable))
+                                == os.path.normcase(
+                                    os.path.realpath(receipt_interpreter)))
+        except (OSError, ValueError):
+            same_interpreter = False
+        if not configured or not same_interpreter:
+            _say("supervisor launched an interpreter other than the verified "
+                 "Convoy Runtime -- refusing to start; use Install or Update")
+            return 1
+    files = None if venv_runtime else runtime_receipt.get("files")
     python_records = ([item for item in files
                        if isinstance(item, dict)
                        and item.get("path") == python_rel]
@@ -2520,7 +2554,7 @@ def main():
             and _sha256(receipt_interpreter) == expected_python_sha)
     except OSError:
         python_intact = False
-    if not python_intact:
+    if not venv_runtime and not python_intact:
         _say("managed Convoy Runtime interpreter changed after installation "
              "-- refusing to start; use Install or Update")
         return 1
@@ -2545,30 +2579,38 @@ def main():
         import cryptography
         import convoy_hostkeys
     except Exception as exc:
-        _say("managed Convoy Runtime cannot import cryptography: %%s -- "
-             "use Install or Update to repair the offline runtime bundle"
-             %% (exc,))
+        _say("Convoy runtime cannot import cryptography: %%s -- use Install "
+             "or Update to repair it" %% (exc,))
         return 1
-    crypto_file = getattr(cryptography, "__file__", "")
-    try:
-        crypto_inside = (os.path.commonpath([
-            os.path.normcase(os.path.realpath(runtime_root)),
-            os.path.normcase(os.path.realpath(crypto_file)),
-        ]) == os.path.normcase(os.path.realpath(runtime_root)))
-    except (OSError, ValueError):
-        crypto_inside = False
-    if (not convoy_hostkeys.cryptography_available() or not crypto_inside
-            or not getattr(ssl, "HAS_TLSv1_3", False)):
-        _say("managed Convoy Runtime failed its cryptography/TLS integrity "
-             "check -- use Install or Update to repair it")
-        return 1
-    expected_crypto = str(runtime.get("cryptography_version") or "")
-    if (not expected_crypto
-            or runtime_receipt.get("cryptography_version") != expected_crypto
-            or getattr(cryptography, "__version__", "") != expected_crypto):
-        _say("managed Convoy Runtime cryptography version changed after "
-             "installation -- refusing to start; use Install or Update")
-        return 1
+    if venv_runtime:
+        # No bundle to be "inside", so prove the capability itself: real
+        # cryptography and real TLS 1.3, or refuse to start.
+        if (not convoy_hostkeys.cryptography_available()
+                or not getattr(ssl, "HAS_TLSv1_3", False)):
+            _say("Convoy runtime failed its cryptography/TLS check -- the "
+                 "venv is missing cryptography or TLS 1.3")
+            return 1
+    else:
+        crypto_file = getattr(cryptography, "__file__", "")
+        try:
+            crypto_inside = (os.path.commonpath([
+                os.path.normcase(os.path.realpath(runtime_root)),
+                os.path.normcase(os.path.realpath(crypto_file)),
+            ]) == os.path.normcase(os.path.realpath(runtime_root)))
+        except (OSError, ValueError):
+            crypto_inside = False
+        if (not convoy_hostkeys.cryptography_available() or not crypto_inside
+                or not getattr(ssl, "HAS_TLSv1_3", False)):
+            _say("managed Convoy Runtime failed its cryptography/TLS "
+                 "integrity check -- use Install or Update to repair it")
+            return 1
+        expected_crypto = str(runtime.get("cryptography_version") or "")
+        if (not expected_crypto
+                or runtime_receipt.get("cryptography_version") != expected_crypto
+                or getattr(cryptography, "__version__", "") != expected_crypto):
+            _say("managed Convoy Runtime cryptography version changed after "
+                 "installation -- refusing to start; use Install or Update")
+            return 1
     import convoy_hostapp
     _say("starting Convoy host app %%s (drain interval %%ss)"
          %% (version, interval))
@@ -3554,7 +3596,17 @@ def install(data_dir, version, modules, interpreter, platform=None,
             "installed_at": (now or time.time)(),
             "installed_by": str(installed_by or ""),
             "files": manifest.get("files", []),
-            "runtime": {
+            "format": "convoy-install/1",
+        }
+        # A managed runtime carries a receipt the launcher re-verifies (hash
+        # of the bundle, of its interpreter, crypto loaded from inside it).
+        # The venv runtime has no bundle, so it records no receipt at all and
+        # is marked explicitly -- the launcher then proves the recorded
+        # interpreter is the one executing plus a live crypto/TLS check. The
+        # two shapes are mutually exclusive by construction: a record can
+        # never claim managed verification it did not get.
+        if runtime_check.get("runtime_id"):
+            record["runtime"] = {
                 "format": runtime_check.get("receipt_format",
                                             RUNTIME_RECEIPT_FORMAT),
                 "runtime_id": runtime_check.get("runtime_id"),
@@ -3566,9 +3618,9 @@ def install(data_dir, version, modules, interpreter, platform=None,
                     "cryptography_version"),
                 "source_revision": runtime_check.get("source_revision"),
                 "archive_sha256": runtime_check.get("archive_sha256"),
-            },
-            "format": "convoy-install/1",
-        }
+            }
+        else:
+            record["venv_runtime"] = True
         write_installed(data_dir, record, platform)      # LAST
         steps.append("installed.json")
         return _ok(version=version, supervisor=kind, registered=registered,
