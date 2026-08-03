@@ -1500,10 +1500,18 @@ class TestTickHygiene(ConvoyExtBase):
 
 
 class TestFirstEnableConfirmation(ConvoyExtBase):
-    """A-13: one confirmation, per project, on the first EXPLICIT enable."""
+    """A-13: ONE confirmation, the first time this INSTALL enables Convoy.
+
+    The dialog is gated on an install-level marker, not the project, so these
+    tests pin it False -- otherwise they would pass or fail depending on
+    whether the developer running them had ever enabled Convoy on this
+    machine. The skip path has its own test below.
+    """
 
     def setUp(self):
         super().setUp()
+        self._patch(self.convoy, '_installConsentGiven', lambda: False)
+        self._patch(self.convoy, 'RecordInstallConsent', lambda: True)
         self.embody_target = self.embody.ext.Embody
         self.entry = {}
         self.dialogs = []
@@ -1531,6 +1539,19 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
         self.assertEqual(self.convoy.CONSENT_SCOPE, CONSENT_SCOPE,
                          'the LAN build must never inherit the older '
                          'loopback-only grant')
+
+    def test_a_second_project_on_a_consented_install_is_never_asked_again(self):
+        """The trusted-LAN explanation is answered ONCE per install. A new
+        project on the same machine mints its id silently -- re-asking turned
+        a one-time explanation into a recurring modal. The Setup Wizard's
+        Convoy step records the same marker, which is why enabling there is
+        never followed by the dialog."""
+        self._patch(self.convoy, '_installConsentGiven', lambda: True)
+        assert self.convoy._ensureConsent() is True
+        self.assertEqual(self.dialogs, [],
+                         'an install that already consented must not be asked')
+        self.assertLen(self.recorded, 1, 'the project id is still recorded')
+        self.assertEqual(self.recorded[0][1], self.convoy.CONSENT_SCOPE)
 
     def test_confirm_mints_and_records_the_scope(self):
         self.choice = 1

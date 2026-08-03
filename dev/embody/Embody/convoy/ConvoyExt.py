@@ -775,6 +775,19 @@ class ConvoyExt:
         """Apply one worker-fetched directory without erasing good stale data."""
         rows = self._nodeStatusRows(result)
         if rows is not None:
+            # Keep the RAW ages plus the moment they were true, so the tick
+            # can age the "Last Seen" column between fetches. Without this the
+            # column is a relative time frozen at write time: the directory is
+            # only fetched on the 30s heartbeat, so a user reading the page in
+            # between sees a number that is minutes old but says "15s ago".
+            try:
+                self._node_ages = [
+                    (n.get('last_seen_age_s'), bool(n.get('online')))
+                    for n in (result.get('nodes') or ())
+                    if isinstance(n, dict)]
+                self._node_ages_at = time.time()
+            except Exception:
+                self._node_ages = None
             detail = ('No enabled nodes in this Convoy' if not rows
                       else 'No nodes discovered')
             self._projectNodeRows(rows, detail)
@@ -787,6 +800,38 @@ class ConvoyExt:
                          (result or {}).get('detail') or
                          'status unavailable')[:160]
             self._projectNodeRows([], 'Status unavailable: %s' % reason)
+
+    def _refreshLastSeen(self):
+        """Age the Last Seen column between directory fetches. MAIN THREAD.
+
+        Cheap and bounded: it writes only the one column, only when the text
+        actually changes, and only for blocks that already exist. Everything
+        else on the page still redraws on the digest, so this cannot cause
+        the per-frame parameter churn the digest exists to prevent.
+        """
+        ages = getattr(self, '_node_ages', None)
+        if not ages:
+            return
+        seq = self._sequenceByName(self._embody, 'Convoynodes')
+        if seq is None or not seq.numBlocks:
+            return
+        elapsed = max(0.0, time.time() - getattr(self, '_node_ages_at', 0.0))
+        try:
+            blocks = list(seq.blocks)
+        except Exception:
+            return
+        for index, (age, online) in enumerate(ages):
+            if index >= len(blocks):
+                break
+            aged = None if age is None else float(age) + elapsed
+            text = self._lastSeenText(aged, online)
+            par = self._sequenceBlockPar(
+                self._embody, seq, blocks[index], index + 1, 'Lastseen')
+            try:
+                if par is not None and str(par.eval()) != text:
+                    self._setPar(par, text)
+            except Exception:
+                continue
 
     def _enabled(self):
         par = getattr(self._embody.par, 'Convoyenable', None)
@@ -1368,6 +1413,14 @@ class ConvoyExt:
         MAIN THREAD ONLY. Never raises out of the ordinary paths -- the tick
         wraps it, but every branch here is meant to be total.
         """
+        # Age the Last Seen column first, on EVERY tick, including the ticks
+        # that issue no network call at all (steady state is deliberately
+        # call-free). Otherwise the column only moves when the directory
+        # happens to be refetched.
+        try:
+            self._refreshLastSeen()
+        except Exception:
+            pass
         if self._busy:
             # A call is already in flight; its poll owns the next schedule.
             self._tick_ms = self.TICK_MIN_MS
@@ -3586,16 +3639,66 @@ class ConvoyExt:
     # Consent (A-13): the first EXPLICIT enable
     # ==================================================================
 
+    # Install-level consent marker, beside the per-user Convoy state. The
+    # trusted-LAN explanation is answered ONCE per install -- not once per
+    # project -- because it describes what Convoy does on THIS MACHINE, and
+    # re-asking on every new project is noise the user has already read.
+    CONSENT_MARKER = 'consent.json'
+
+    def _installConsentPath(self):
+        try:
+            return os.path.join(self._client().data_dir(), self.CONSENT_MARKER)
+        except Exception:
+            return None
+
+    def _installConsentGiven(self):
+        """Has this install already accepted the trusted-LAN explanation?"""
+        path = self._installConsentPath()
+        if not path:
+            return False
+        try:
+            with open(path, 'r', encoding='utf-8') as handle:
+                return str(json.load(handle).get('scope') or '') == \
+                    self.CONSENT_SCOPE
+        except Exception:
+            return False
+
+    def RecordInstallConsent(self):
+        """Remember that the user accepted Convoy on this install.
+
+        Called by the Setup Wizard's Convoy step and by the first-enable
+        dialog. Both are the same grant; the wizard simply asks it in its own
+        words, so raising the long modal afterwards would ask twice. Failure
+        to persist is not fatal -- worst case the dialog appears once more.
+        """
+        path = self._installConsentPath()
+        if not path:
+            return False
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w', encoding='utf-8') as handle:
+                json.dump({'scope': self.CONSENT_SCOPE,
+                           'recorded_unix': time.time()}, handle)
+            return True
+        except Exception as e:
+            self._log('could not record Convoy consent: %s' % (e,), 'DEBUG')
+            return False
+
     def _ensureConsent(self):
         """True to proceed with registration; False when the user declined.
 
-        Consent is recorded per PROJECT, in the COMMITTED
-        .embody/project.json, not per session. The confirmation fires on the
-        first explicit trusted-LAN enable and again only when a narrower old
-        consent scope must be upgraded. It never fires on a tick or project
-        open -- no modal during startup, ever. The provisional id is a
-        genesis candidate; the host may later converge an uncommitted fresh
-        LAN onto the established automatic Convoy realm.
+        TWO records, deliberately. The per-PROJECT entry in the committed
+        .embody/project.json carries the convoy id and the granted scope --
+        that is what a clone inherits. The per-INSTALL marker records that
+        THIS USER, on THIS MACHINE, has read and accepted the trusted-LAN
+        explanation. The modal is tied to the second: it fires the first time
+        ever, and never again on this install (a new project silently mints
+        its id). The Setup Wizard's Convoy step records the same marker, so a
+        user who enabled Convoy there is never asked twice.
+
+        It never fires on a tick or project open -- no modal during startup,
+        ever. The provisional id is a genesis candidate; the host may later
+        converge an uncommitted fresh LAN onto the established realm.
         """
         embody = self._embody.ext.Embody
         entry = {}
@@ -3622,6 +3725,34 @@ class ConvoyExt:
 
         candidate = existing_id or embody._mintConvoyId()
         widening = bool(existing_id)
+
+        # ALREADY ANSWERED ON THIS INSTALL -- do not ask again. The user has
+        # read the trusted-LAN explanation once (here, or as the Setup
+        # Wizard's Convoy step, which records the same marker). Asking per
+        # PROJECT turned a one-time explanation into a recurring modal that
+        # new users read as nagging. A new project silently mints its id and
+        # records the same scope; the dangerous gates (TD Python, Full Shell)
+        # are untouched by this and stay local, per-node and default-off.
+        if self._installConsentGiven():
+            try:
+                recorded = embody._ensureConvoyId(
+                    candidate, self.CONSENT_SCOPE,
+                    ('established' if existing_id else 'candidate'))
+            except Exception as e:
+                recorded = None
+                self._log('recording the convoy id failed: %s' % (e,),
+                          'WARNING')
+            if not recorded:
+                self._log('could not record the convoy id in '
+                          '.embody/project.json -- Convoy stays off', 'WARNING')
+                self._setEnabled(False)
+                self._apply({'state': 'disabled'}, self._safeClient())
+                return False
+            self._publishId(recorded)
+            self._log('enabled for this project: convoy %s (consent already '
+                      'given on this install)' % (recorded,), 'SUCCESS')
+            return True
+
         choice = embody._messageBox(
             ('Embody - Upgrade Convoy Access' if widening
              else 'Embody - Enable Convoy'),
@@ -3681,6 +3812,8 @@ class ConvoyExt:
             return False
 
         self._publishId(recorded)
+        # The one and only time this install asks.
+        self.RecordInstallConsent()
         self._log('enabled for this project: convoy %s, consent scope %r '
                   '(recorded in .embody/project.json)'
                   % (recorded, self.CONSENT_SCOPE), 'SUCCESS')

@@ -1549,6 +1549,18 @@ class EmbodyExt:
         #     Installing/starting the per-user host app is a SEPARATE explicit
         #     pulse (ConvoyExt.InstallHost); the wizard only sets the flag.
         if convoy in ('enable', 'disable'):
+            # The wizard's Convoy step IS the consent: it names the trusted
+            # LAN, what enabling permits, and the background app. Record that
+            # BEFORE flipping the toggle so ConvoyExt's first-enable path sees
+            # it and does not raise its own long modal on top -- asking the
+            # same question twice is what made this confusing.
+            if convoy == 'enable':
+                try:
+                    comp = self.my.op('convoy')
+                    if comp:
+                        comp.ext.ConvoyExt.RecordInstallConsent()
+                except Exception as e:
+                    self.Log(f'Convoy consent not recorded: {e}', 'DEBUG')
             self.my.par.Convoyenable = (convoy == 'enable')
 
         # 4. Tool-permissions posture. Persist BEFORE enabling so the deferred

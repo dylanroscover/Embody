@@ -407,6 +407,62 @@ def test_unregister_of_unknown_node_is_a_named_404(server):
 
 # -- Forget Stale Node (advanced local recovery, plan 7.5) --------------
 
+# -- supersession: a re-identified node retires its own old record ------
+
+def test_registering_retires_the_superseded_record_for_the_same_project(server):
+    """Node identity includes the project file, so a Save As / rename mints a
+    new node and the old one used to linger offline for ever -- the duplicate
+    rows users see. Same host + project root + COMP path IS the same logical
+    node, so registering the new one retires the idle old one."""
+    # A Save As changes the node discriminator -- that is what mints a new
+    # id for the same project+COMP, and what leaves the duplicate behind.
+    _, old = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "node_discriminator": "nd_" + "1" * 32})
+    server.call("/unregister", {"node_id": old["node_id"]})   # goes idle
+    _, new = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9982, "runtime_id": "rt_new",
+        "node_discriminator": "nd_" + "2" * 32})
+    assert new["node_id"] != old["node_id"]
+    _, listing = server.call("/nodes")
+    ids = [n["node_id"] for n in listing["nodes"]]
+    assert new["node_id"] in ids
+    assert old["node_id"] not in ids, "the superseded record must be retired"
+
+
+def test_supersession_never_touches_a_different_project_on_the_same_host(server):
+    """The tempting rule -- same IP and offline -- would delete a real node.
+    Two projects on one machine share an IP; only the SAME project root and
+    COMP path mean the same node."""
+    _, other = server.call("/register", {
+        "project_root": "/Work/other", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "node_discriminator": "nd_" + "1" * 32})
+    server.call("/unregister", {"node_id": other["node_id"]})
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9982, "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    assert other["node_id"] in [n["node_id"] for n in listing["nodes"]],         "a different project must survive -- it is still remotely launchable"
+
+
+def test_supersession_spares_a_record_that_still_owns_work(server):
+    """Retiring a node with an uncollected result would strand it."""
+    _, old = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "node_discriminator": "nd_" + "1" * 32})
+    code, _job = server.call("/jobs", {
+        "idempotency_key": "keep", "node_id": old["node_id"],
+        "operation": "query_network", "arguments": {}})
+    assert code == 200
+    server.call("/unregister", {"node_id": old["node_id"]})
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9982, "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    assert old["node_id"] in [n["node_id"] for n in listing["nodes"]],         "a node with unresolved work must not be auto-retired"
+
+
 def test_forget_node_deletes_a_stale_record(server):
     """/unregister keeps the node on purpose; forgetting is the explicit
     recovery for debris (e.g. a renamed .toe mints a new node_id and the

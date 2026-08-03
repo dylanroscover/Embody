@@ -2915,6 +2915,7 @@ class HostApp:
                 if self._realm_operation_refusal(record["convoy_id"]) is None:
                     self.db.ensure_convoy_psk(record["convoy_id"])
                 self.db.save_node(record)
+                superseded = self._retire_superseded_nodes_locked(record)
 
                 if launch_confirmation_required:
                     runtime_record = dict(record)
@@ -3020,6 +3021,78 @@ class HostApp:
                 "policy": self._policy_projection(record["node_id"]),
             }
 
+    def _retire_superseded_nodes_locked(self, live):
+        """Drop node records the just-registered node REPLACES. Lock held.
+
+        Node identity includes the project file, so every Save As, rename or
+        versioned save mints a NEW node and leaves the old one listed offline
+        for ever. Users read that as "Convoy is showing me duplicates", and
+        they are right -- it is one node wearing two names.
+
+        The match is deliberately narrow: same HOST, same project root, same
+        COMP path. Not "same IP and offline", which is the tempting rule and
+        the wrong one -- two genuinely different projects on one machine share
+        an IP, and retiring one of those would delete a real node that is
+        still remotely launchable. Same host + root + COMP is the same logical
+        node, re-identified.
+
+        A candidate is retired only when it is provably idle: no live Envoy
+        port, and no unresolved work (the /nodes/forget rule, so a superseded
+        record can never take a result nobody has collected with it).
+        """
+        retired = []
+        try:
+            root = str(live.get("project_root") or "")
+            comp = str(live.get("comp_path") or "")
+            if not root or not comp:
+                return retired
+            for record in list(self.directory.nodes()):
+                node_id = record.get("node_id")
+                if (node_id == live.get("node_id")
+                        or record.get("host_id") != live.get("host_id")
+                        or str(record.get("project_root") or "") != root
+                        or str(record.get("comp_path") or "") != comp
+                        or record.get("envoy_port")):
+                    continue
+                if self._node_has_unresolved_work(node_id):
+                    continue
+                self.directory.forget(node_id)
+                try:
+                    self.db.delete_node(node_id)
+                except Exception:
+                    continue
+                retired.append(node_id)
+            if retired:
+                self._invalidate_network_nodes_cache_locked()
+                self._audit_best_effort(
+                    "nodes_superseded",
+                    {"by": live.get("node_id"), "retired": retired[:8],
+                     "count": len(retired)})
+        except Exception as e:
+            # Never let tidying break a registration.
+            self._audit_best_effort(
+                "supersede_sweep_failed",
+                {"error": f"{type(e).__name__}: {e}"})
+        return retired
+
+    def _node_has_unresolved_work(self, node_id):
+        """True when a node still owns work, or the job store is unreadable.
+
+        Fail CLOSED: an unreadable store must never license a deletion.
+        """
+        try:
+            for job in self.db.jobs():
+                if (job or {}).get("node_id") != node_id:
+                    continue
+                state = str((job or {}).get("state") or "")
+                if state not in hoststore.TERMINAL_STATES:
+                    return True
+                if (job or {}).get("outcome_acknowledged_at") is None:
+                    return True
+        except Exception:
+            return True
+        return False
+
     def forget_node(self, body):
         """ADVANCED RECOVERY: delete a stale node record entirely.
 
@@ -3052,7 +3125,7 @@ class HostApp:
                     blocking.append(state or "unknown")
                 elif (job or {}).get("outcome_acknowledged_at") is None:
                     blocking.append("%s (unacknowledged)" % state)
-        except Exception:
+        except Exception:  # noqa: BLE001 - fail closed, see below
             # Never delete on an unreadable job store: fail closed.
             return self._refuse(
                 "forget_node", "job_state_unreadable",
