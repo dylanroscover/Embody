@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1070
-generator: Embody/6.0.187
+build: 1071
+generator: Embody/6.0.188
 td_build: 099.2025.33070
-source_file: Embody-6.188.toe
-exported_at: '2026-08-03T12:41:26Z'
+source_file: Embody-6.189.toe
+exported_at: '2026-08-03T12:49:08Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -829,7 +829,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.187
+    value: 6.0.188
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -918,6 +918,7 @@ sequences:
   - {}
   - {}
   Convoynodes:
+  - {}
   - {}
   - {}
   - {}
@@ -1079,7 +1080,7 @@ operators:
     git_missing: false
     ext_needed: true
     sel_mode: auto
-    step_id: convoy
+    step_id: assistant
     sel_client: ''
     sel_root: gitroot
     sel_permissions: all
