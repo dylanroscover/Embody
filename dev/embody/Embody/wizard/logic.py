@@ -4,7 +4,7 @@ TXT=(0.92,0.92,0.92); TXT_DIM=(0.34,0.35,0.34); NEXT_TXT=(0.97,0.99,0.97)
 GROUPS=['grp_mode','grp_assistant','grp_client','grp_permissions','grp_convoy','grp_git','grp_footprint','grp_externalize']
 DEFS={
  'mode':{'g':'grp_mode','sel':'sel_mode','title':'How should Embody manage your project?','hint':'Choose one, then Next.'},
- 'convoy':{'g':'grp_convoy','sel':'sel_convoy','title':'Enable Convoy?','hint':'Connects this Embody with other Convoy-enabled instances on the same trusted LAN, so they can discover and control each other. Enable only on a network you trust. Convoy installs a small background app so nodes stay reachable while TouchDesigner is closed.'},
+ 'convoy':{'g':'grp_convoy','sel':'sel_convoy','title':'Enable Convoy?','hint':'Connects this Embody with other Convoy-enabled instances on the same trusted LAN, so they can discover and control each other. Enable only on a network you trust. Convoy installs a small background app so nodes stay reachable while TouchDesigner is closed.','hintfn':'_convoyHint'},
  'externalize':{'g':'grp_externalize','sel':'sel_externalize','title':'Make your project AI-readable?','hint':'Write your network to diffable files git and AI tools can read.'},
  'assistant':{'g':'grp_assistant','sel':'sel_assistant','title':'Turn on the AI assistant (Envoy)?','hint':'It lets AI tools work in your network. Easy to remove later.'},
  'client':{'g':'grp_client','sel':'sel_client','title':'Pick your AI coding tool','hint':'Embody will generate its config.'},
@@ -67,7 +67,10 @@ def _recap():
 	if 'externalize' in spine():
 		g+={'full':' Externalize: whole project now, plus new work.','auto':' Externalize: new work from here on.','skip':' Externalize: skipped for now.'}.get(w.fetch('sel_externalize',''),'')
 	if 'convoy' in spine():
-		g+={'enable':' Convoy: enabled.','disable':' Convoy: off.'}.get(w.fetch('sel_convoy',''),'')
+		if w.fetch('sel_convoy','')=='enable' and not _projectSaved():
+			g+=' Convoy: SAVE THE PROJECT FIRST, then enable it on the Convoy page.'
+		else:
+			g+={'enable':' Convoy: enabled.','disable':' Convoy: off.'}.get(w.fetch('sel_convoy',''),'')
 	if a=='none': return 'Mode: %s. AI assistant: off.%s\nNothing has changed yet - click Set up Embody to apply.'%(m,g)
 	c=w.fetch('sel_client','') if a=='other' else ('Claude Code' if a=='claudecode' else a)
 	return 'Mode: %s. AI assistant: on (%s).%s\nNothing has changed yet - click Set up Embody to apply.'%(m, c or 'your tool', g)
@@ -80,6 +83,21 @@ def _permHint():
 			base+='\nA settings.local.json already exists -- Embody edits only its Envoy entries, keeping the rest.'
 	except Exception: pass
 	return base
+def _projectSaved():
+	"""A Convoy node is identified by its project folder, so an unsaved
+	project cannot become one -- enabling would flip itself back off."""
+	try:
+		import os
+		return bool(project.name) and os.path.isfile(
+			os.path.join(str(project.folder), str(project.name)))
+	except Exception:
+		return False
+def _convoyHint():
+	base=DEFS['convoy']['hint']
+	if _projectSaved(): return base
+	return ('SAVE YOUR PROJECT FIRST -- Convoy identifies a node by its project '
+		'folder, so it cannot enable on a project that has never been saved. '
+		'Save the project, then enable Convoy here or on the Convoy page. ')+base
 def _footprintHint():
 	w=_w()
 	if w.fetch('sel_assistant','')=='none' and w.fetch('sel_convoy','')=='enable':
@@ -95,7 +113,7 @@ def render():
 		g=w.op(gid)
 		if g: g.par.display = 1 if gid==d.get('g') else 0
 	w.op('title').par.text=d['title']
-	w.op('hint').par.text=_permHint() if cur=='permissions' else (_footprintHint() if cur=='footprint' else (_recap() if cur=='summary' else d['hint']))
+	w.op('hint').par.text=_permHint() if cur=='permissions' else (_footprintHint() if cur=='footprint' else (_convoyHint() if cur=='convoy' else (_recap() if cur=='summary' else d['hint'])))
 	w.op('hint').par.h = 60 if cur in ('footprint','summary','permissions','convoy') else 16
 	bb=_nav('back'); nb=_nav('next'); first=idx==0
 	if bb:

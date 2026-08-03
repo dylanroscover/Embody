@@ -603,6 +603,15 @@ class ConvoyExt:
     # A host-app state that BLOCKS Convoy (or is mid-flight) outranks the
     # node's own registration line, because it is the thing the user has to
     # act on. Anything else lets the node state show through.
+    # Node states the USER must resolve before anything else can help. These
+    # outrank even a blocking host-app line: installing a host app does not
+    # fix an unsaved project, and showing the host line there is a wrong
+    # signpost.
+    _ACTIONABLE_NODE_TEXTS = (
+        'Waiting for project save',
+        'Consent required',
+    )
+
     _BLOCKING_HOST_TEXTS = (
         'Not installed', 'Checking...', 'Installing...',
         'Installed -- starting...', 'Installed -- not running',
@@ -638,6 +647,13 @@ class ConvoyExt:
         text = node
         if host and host.startswith(self._BLOCKING_HOST_TEXTS):
             text = host
+        # ...unless the NODE is reporting something the user must act on
+        # first. "Not installed" outranking "Waiting for project save" sent a
+        # Mac user hunting for a host-app problem when the real answer was
+        # save the .toe (2026-08-03). Order by what unblocks the user, not by
+        # which subsystem produced the line.
+        if node and node.startswith(self._ACTIONABLE_NODE_TEXTS):
+            text = node
         self._setPar(par, (text or 'Disabled')[:160])
 
     @staticmethod
@@ -3719,6 +3735,23 @@ class ConvoyExt:
             self._log('save the project before enabling Convoy -- a node is '
                       'identified by its project folder, and an unsaved one '
                       'would mint a throwaway identity', 'WARNING')
+            # SAY IT, do not just log it. This silently flipped the toggle
+            # back off: the user enabled Convoy (in the wizard or on the
+            # page), watched it turn itself off, and the only explanation was
+            # a textport line they had no reason to have open (2026-08-03,
+            # macOS, fresh drag-and-drop into an unsaved network).
+            try:
+                self._embody.ext.Embody._messageBox(
+                    'Embody - Save the project first',
+                    'Convoy could not be enabled because this project has '
+                    'never been saved.\n\n'
+                    'A Convoy node is identified by its project folder, so an '
+                    'unsaved project would mint a throwaway identity that '
+                    'disappears the moment you save.\n\n'
+                    'Save the project, then turn Enable Convoy on again.',
+                    ['OK'])
+            except Exception:
+                pass
             self._setEnabled(False)
             self._apply({'state': 'unsaved'}, self._safeClient())
             return False

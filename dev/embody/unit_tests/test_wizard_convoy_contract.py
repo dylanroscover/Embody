@@ -72,6 +72,9 @@ def test_advanced_convoy_only_setup_discloses_internal_runtime_footprint():
 def test_none_assistant_recap_still_reports_convoy_choice():
     logic = _logic_with(sel_mode="auto", sel_assistant="none",
                         sel_convoy="enable")
+    # This asserts how the CHOICE is reported; the unsaved-project branch is
+    # covered separately. Off-TD there is no `project` global, so pin it.
+    logic._projectSaved = lambda: True
     recap = logic._recap()
     assert "AI assistant: off" in recap
     assert "Convoy: enabled" in recap
@@ -91,3 +94,48 @@ def test_none_option_copy_does_not_claim_convoy_has_no_server():
     assert "None - no AI assistant" in source
     assert "Convoy can still use its internal command service" in source
     assert "No .venv, server, or config" not in source
+
+# -- UNSAVED PROJECT: the failure a Mac user hit on a fresh install ----
+#
+# Dragged the .tox into a NEW network, chose Enable Convoy in the wizard, and
+# it silently turned itself back off. A node is identified by its project
+# folder, so an unsaved project cannot become one -- correct, but the only
+# explanation was a textport line, and the Status field showed "Not installed"
+# (the host-app line outranking the actionable one). All three are now fixed;
+# these pin them.
+
+def test_wizard_warns_when_the_project_has_never_been_saved():
+    logic = _load_logic()
+    logic._projectSaved = lambda: False
+    hint = logic._convoyHint()
+    assert "SAVE YOUR PROJECT FIRST" in hint
+    assert "has never been saved" in hint
+
+
+def test_wizard_hint_is_unchanged_on_a_saved_project():
+    logic = _load_logic()
+    logic._projectSaved = lambda: True
+    assert logic._convoyHint() == logic.DEFS["convoy"]["hint"]
+
+
+def test_an_actionable_node_state_outranks_the_host_app_line():
+    """"Not installed" must never hide "Waiting for project save": installing
+    a host app does not fix an unsaved project."""
+    src = (LOGIC.parents[1] / "convoy" / "ConvoyExt.py").read_text(
+        encoding="utf-8")
+    assert "_ACTIONABLE_NODE_TEXTS" in src
+    actionable = src.split("_ACTIONABLE_NODE_TEXTS = (", 1)[1].split(")", 1)[0]
+    assert "Waiting for project save" in actionable
+    # and it must be applied AFTER the host line, so it wins
+    assert src.index("_ACTIONABLE_NODE_TEXTS)") > src.index(
+        "_BLOCKING_HOST_TEXTS)")
+
+
+def test_recap_does_not_promise_convoy_on_an_unsaved_project():
+    """The summary said "Convoy: enabled" and then it silently was not."""
+    logic = _logic_with(sel_mode="auto", sel_assistant="none",
+                        sel_convoy="enable")
+    logic._projectSaved = lambda: False
+    recap = logic._recap()
+    assert "SAVE THE PROJECT FIRST" in recap
+    assert "Convoy: enabled" not in recap
