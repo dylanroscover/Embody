@@ -3020,6 +3020,61 @@ class HostApp:
                 "policy": self._policy_projection(record["node_id"]),
             }
 
+    def forget_node(self, body):
+        """ADVANCED RECOVERY: delete a stale node record entirely.
+
+        /unregister is the ordinary shutdown path and deliberately KEEPS the
+        node -- node_id is the durable address approvals attach to, and a
+        closed TD must stay listed as remotely launchable. That leaves genuine
+        debris behind though: a renamed or moved .toe mints a new node_id, so
+        the old row lingers offline forever with no way to clear it (the plan's
+        "Forget Stale Node" action, section 7.5).
+
+        Refuses while the node still has work, because forgetting it would
+        strand jobs whose results nobody can collect: any non-terminal
+        delivery, or a terminal one still waiting to be acknowledged. Force is
+        deliberately NOT offered here -- clear or cancel the work first.
+        """
+        try:
+            node_id = text_field(body, "node_id")
+        except Malformed as e:
+            return self._refuse("forget_node", "malformed", e.detail, 400)
+        record = self.directory.lookup(node_id)
+        if record is None:
+            return self._refuse("forget_node", "unknown_node", node_id, 404)
+        blocking = []
+        try:
+            for job in self.db.jobs():
+                if (job or {}).get("node_id") != node_id:
+                    continue
+                state = str((job or {}).get("state") or "")
+                if state not in hoststore.TERMINAL_STATES:
+                    blocking.append(state or "unknown")
+                elif (job or {}).get("outcome_acknowledged_at") is None:
+                    blocking.append("%s (unacknowledged)" % state)
+        except Exception:
+            # Never delete on an unreadable job store: fail closed.
+            return self._refuse(
+                "forget_node", "job_state_unreadable",
+                "the durable job records could not be read; not forgetting",
+                503)
+        if blocking:
+            return self._refuse(
+                "forget_node", "node_has_work",
+                "this node still has %d job(s) to resolve (%s); cancel or "
+                "acknowledge them first"
+                % (len(blocking), ", ".join(sorted(set(blocking))[:4])),
+                409)
+        self.directory.forget(node_id)
+        try:
+            self.db.delete_node(node_id)
+        except Exception as e:
+            return self._refuse("forget_node", "forget_failed",
+                                "%s: %s" % (type(e).__name__, e), 500)
+        self._invalidate_network_nodes_cache_locked()
+        self._audit_best_effort("node_forgotten", {"node_id": node_id})
+        return 200, {"ok": True, "forgotten": True, "node_id": node_id}
+
     def unregister_node(self, body):
         """Clear a node's live Envoy port -- it is shutting down cleanly.
 
@@ -11422,6 +11477,11 @@ def make_handler(app):
             with app.lock:
                 if self.path == "/unregister":
                     return app.unregister_node(body)
+                if self.path == "/nodes/forget":
+                    # Advanced LOCAL recovery ("Forget Stale Node", 7.5).
+                    # Loopback-only by construction: the LAN peer server is a
+                    # separate class with its own table.
+                    return app.forget_node(body)
                 if self.path == "/remint":
                     return app.remint_node(body)
                 if self.path == "/jobs":

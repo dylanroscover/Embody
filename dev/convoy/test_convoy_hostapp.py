@@ -405,6 +405,38 @@ def test_unregister_of_unknown_node_is_a_named_404(server):
     assert code == 404 and body["reason"] == "unknown_node"
 
 
+# -- Forget Stale Node (advanced local recovery, plan 7.5) --------------
+
+def test_forget_node_deletes_a_stale_record(server):
+    """/unregister keeps the node on purpose; forgetting is the explicit
+    recovery for debris (e.g. a renamed .toe mints a new node_id and the
+    old row lingers offline forever)."""
+    _, node = _register(server, port=9981)
+    code, body = server.call("/nodes/forget", {"node_id": node["node_id"]})
+    assert code == 200 and body["forgotten"] is True
+    _, listing = server.call("/nodes")
+    assert node["node_id"] not in [n["node_id"] for n in listing["nodes"]]
+
+
+def test_forget_node_refuses_while_the_node_still_has_work(server):
+    """Forgetting a node with live work would strand jobs whose results
+    nobody can collect."""
+    _, node = _register(server, port=9981)
+    code, _job = server.call("/jobs", {
+        "idempotency_key": "keep-me", "node_id": node["node_id"],
+        "operation": "query_network", "arguments": {}})
+    assert code == 200
+    code, body = server.call("/nodes/forget", {"node_id": node["node_id"]})
+    assert code == 409 and body["reason"] == "node_has_work"
+    _, listing = server.call("/nodes")
+    assert node["node_id"] in [n["node_id"] for n in listing["nodes"]]
+
+
+def test_forget_of_unknown_node_is_a_named_404(server):
+    code, body = server.call("/nodes/forget", {"node_id": "ghost"})
+    assert code == 404 and body["reason"] == "unknown_node"
+
+
 def test_unregister_requires_the_token(server):
     code, body = server.call("/unregister", {"node_id": "n"}, token=None)
     assert code == 401 and body["reason"] == "unauthenticated"

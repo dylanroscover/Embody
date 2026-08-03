@@ -286,6 +286,7 @@ class ConvoyExt:
             # Until the first authenticated host response arrives, the only
             # truthful projection is the fail-closed/default state.
             self._resetUntrustedDangerProjections()
+            self._ensureNodeName()
             self._publishId(self._readConvoyId())
             if not self._enabled() and not self._performing():
                 self._status('Disabled')
@@ -1529,6 +1530,39 @@ class ConvoyExt:
         except Exception:
             value = ''
         return (value or automatic)[:512]
+
+    def _ensureNodeName(self):
+        """Fill Node Name with this machine's `hostname / toe-stem`.
+
+        Deliberately a RUNTIME fill, not a parameter expression: TouchDesigner
+        stores an expression's last evaluated result alongside the expression,
+        and _scrubTransientPars skips expression-mode pars (scrubbing one
+        would destroy the reference) -- so an expression baked this
+        developer's computer name into the released .tox (found 2026-08-03).
+        As a constant it is registered transient, exports empty, and each
+        machine refills its own. A user edit is a persistent override that
+        this never clobbers. Idempotent.
+        """
+        par = getattr(self._embody.par, 'Convoynodename', None)
+        if par is None:
+            return
+        try:
+            if par.mode != ParMode.CONSTANT or str(par.eval() or '').strip():
+                return
+        except Exception:
+            return
+        try:
+            hostname = str(socket.gethostname() or '').strip() or 'localhost'
+        except Exception:
+            hostname = 'localhost'
+        try:
+            toe_stem = str(project.name or '').rsplit('.', 1)[0] or 'Untitled'
+        except Exception:
+            toe_stem = 'Untitled'
+        try:
+            par.val = ('%s / %s' % (hostname, toe_stem))[:512]
+        except Exception:
+            pass
 
     @staticmethod
     def _advertisedWakeEndpoint(remote_wake, perform_mode, endpoint):

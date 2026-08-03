@@ -2713,7 +2713,7 @@ def render_task_xml(interpreter, launcher, user, author="Embody",
       NORMALIZED, AND THE TWO UserId VALUES DIFFERENTLY FROM EACH OTHER:
         the LogonTrigger's UserId is stored as a SID
         (S-1-5-21-...-1000), while the Principal's is stored as the
-        account name (TEC-A4D\\admin). So "the stored trigger UserId
+        account name (COMPUTER\\user). So "the stored trigger UserId
         equals the account we submitted" is FALSE, and "trigger and
         principal name the same string" is true ONLY of the submitted
         document. Both are still the same account -- one is just spelled

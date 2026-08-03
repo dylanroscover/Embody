@@ -975,11 +975,16 @@ class TestTransientParScrub(EmbodyTestCase):
                 'for reset-to-default; got %r' % (name, resting))
             if resting is None and not is_sequence:
                 par = getattr(self.embody.par, name, None)
-                self.assertEqual(
-                    par.default, '',
+                # None means "reset to the par's own default". That is the
+                # right registration for an IDENTIFIER or display name (rests
+                # empty) AND for a CONSENT toggle (rests Off) -- neither has a
+                # truthy state string to name. What stays banned is a literal
+                # '' resting, which would claim empty is a state.
+                self.assertIn(
+                    par.default, ('', False, 0),
                     'reset-to-default resting only makes sense for a par '
-                    'whose default is the empty resting state; %r has '
-                    'default %r' % (name, par.default))
+                    'whose default IS its resting state (empty or off); %r '
+                    'has default %r' % (name, par.default))
         for name in sorted(self._orig_omit['Embody']):
             self.assertIsNotNone(
                 getattr(self.embody.par, name, None),

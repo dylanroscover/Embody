@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 950
-generator: Embody/6.0.182
+build: 953
+generator: Embody/6.0.185
 td_build: 099.2025.33070
-source_file: Embody-6.183.toe
-exported_at: '2026-08-03T11:22:31Z'
+source_file: Embody-6.186.toe
+exported_at: '2026-08-03T12:30:48Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -465,7 +465,6 @@ operators:
       style: Toggle
       label: Enable Convoy
       help: Joins this Embody node to other Convoy-enabled nodes on the same trusted LAN and lets those nodes discover, inspect, and control it -- queries, test runs, project saves, and more -- through Envoy. Enabling this opens an authenticated LAN listener and starts automatic discovery and reconnect. Only enable it on a network you trust; never on guest, public, or mixed-trust networks. Arbitrary TD Python and full shell stay OFF until you enable them locally on this machine. The first enable creates this project's convoy identity and asks for confirmation.
-      value: true
     - name: Convoyid
       style: Str
       label: Convoy ID
@@ -508,7 +507,6 @@ operators:
       label: Node Name
       startSection: true
       help: Display name for this node in Convoy. Defaults to '<hostname> / <toe filename>'. Editing it sets a persistent override; routing always uses the stable node identity, never this name.
-      value: =__import__('socket').gethostname() + ' / ' + project.name.rsplit('.', 1)[0]
     - name: Convoyremotewake
       style: Toggle
       label: Remote Wake
@@ -856,7 +854,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.182
+      value: 6.0.185
     - name: Touchbuild
       style: Str
       label: Touch Build

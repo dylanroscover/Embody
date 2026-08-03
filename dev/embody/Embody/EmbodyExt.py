@@ -3981,6 +3981,18 @@ class EmbodyExt:
             # convoy id into git and into every user's download. Exactly
             # the A-50 leak class (value: Testing, v6.0.169).
             'Convoystatus': 'Disabled',  # 'Registered <node8> (host <host8>)'
+            # CONSENT, not state: a released .tox that ships Convoyenable On
+            # would enable Convoy -- and its LAN listener -- on every machine
+            # that installs it, without anyone opting in. The user's own
+            # choice is NOT lost by scrubbing: Convoyenable is in the
+            # config.json prefs whitelist above, which is what restores it
+            # across restarts and upgrades. Reset to its default (Off).
+            'Convoyenable': None,
+            # The node's display name. It is auto-derived per machine at
+            # runtime (hostname / .toe stem), so a baked value ships one
+            # developer's COMPUTER NAME to every download -- the A-50 leak
+            # class. Rests empty; ConvoyExt refills it on load.
+            'Convoynodename': None,
             # Read-only network status rows. Sequence registration scrubs
             # every runtime-populated block back to its template defaults
             # while preserving the block count, so another machine's names,
@@ -4107,6 +4119,45 @@ class EmbodyExt:
             # hand back the partial snapshot for restore.
             self.Log(f'Transient scrub aborted mid-walk: {e}', 'WARNING')
         return snapshot
+
+    def _scrubLogBuffers(self, root) -> list:
+        """Empty every log-display DAT on `root` and its descendants; return a
+        [(dat, text)] snapshot so the live session gets its log back.
+
+        The Log() ring writes to a FIFO DAT for on-screen display, and a DAT's
+        rows are saved WITH the component -- so an exported .tox carried this
+        machine's session log (host/convoy identifiers, local paths) into every
+        download. Same A-50 rule as the status pars, applied to content rather
+        than values. Never raises: whatever was cleared before a failure is
+        still returned so the caller's restore can undo partial progress.
+        """
+        snapshot = []
+        try:
+            comps = [root] + root.findChildren(type=COMP)
+        except Exception:
+            comps = [root]
+        for comp in comps:
+            # Scoped by op shortcut exactly like _transientParNames, so a
+            # user's own FIFO DAT is never touched.
+            if not self._transientParNames(comp):
+                continue
+            for dat in comp.findChildren(type=DAT, depth=1):
+                try:
+                    if dat.name != 'fifo1' or not dat.numRows:
+                        continue
+                    snapshot.append((dat, dat.text))
+                    dat.clear()
+                except Exception as e:
+                    self.Log(f'Log scrub skipped {comp.path}: {e}', 'WARNING')
+        return snapshot
+
+    def _restoreLogBuffers(self, snapshot) -> None:
+        """Put the display log rows back (always runs, success or failure)."""
+        for dat, text in snapshot:
+            try:
+                dat.text = text
+            except Exception:
+                pass
 
     def _restoreTransientPars(self, snapshot) -> None:
         """Reapply the values _scrubTransientPars captured (always runs,
@@ -4365,6 +4416,15 @@ class EmbodyExt:
             # released artifact. Snapshot taken; Phase 4 always restores.
             transient_snapshot = self._scrubTransientPars(target)
 
+            # Phase 2d: Empty the log buffer DATs (A-50, same rule). The FIFO
+            # the Log() ring writes to is a RUNTIME DISPLAY buffer, but its
+            # rows are saved with the component -- so a released .tox shipped
+            # whatever this developer's session happened to log, including
+            # host/convoy identifiers and local paths (found 2026-08-03 by
+            # expanding the release .tox). The file log and the ring buffer
+            # remain the real record; Phase 4 puts the rows back.
+            log_snapshot = self._scrubLogBuffers(target)
+
             # Phase 3: Save the .tox.
             target.save(str(save_path))
             try:
@@ -4411,6 +4471,7 @@ class EmbodyExt:
         # Restore runtime-status readouts (always -- live-mode exports run
         # on the session's real comp and must hand its status back).
         self._restoreTransientPars(transient_snapshot)
+        self._restoreLogBuffers(log_snapshot)
 
         # Phase 5: Author's post_release hook -- the reset half of the
         # set/reset contract. Runs whenever pre_release did not abort,
