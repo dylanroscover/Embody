@@ -681,6 +681,29 @@ class TestNetworkStatusProjection(ConvoyExtBase):
                       {'state': 'host_error'}):
             self.assertIsNone(self.convoy._nodeStatusRows(value))
 
+    def test_last_seen_ages_between_directory_fetches(self):
+        """The column is a RELATIVE time, but the directory is only refetched
+        on the 30s heartbeat -- so writing it once and leaving it made the page
+        show "15s ago" minutes later. The tick must age it with no new data."""
+        import time as _t
+        self.convoy._node_ages = [(5.0, True), (None, False)]
+        self.convoy._node_ages_at = _t.time() - 120.0   # data is 2 min old
+        self.convoy._projectNodeRows([
+            {'Nodename': 'a', 'Ipaddress': '1', 'Nodestatus': 'Online',
+             'Lastseen': '5s ago'},
+            {'Nodename': 'b', 'Ipaddress': '2', 'Nodestatus': 'Offline',
+             'Lastseen': 'Unavailable'}])
+        self.convoy._refreshLastSeen()
+        seq = self.convoy._sequenceByName(self.embody, 'Convoynodes')
+        if seq is None or not seq.numBlocks:
+            self.skipTest('the Convoy Nodes sequence is not on this build')
+        first = self.convoy._sequenceBlockPar(
+            self.embody, seq, list(seq.blocks)[0], 1, 'Lastseen')
+        self.assertIsNotNone(first)
+        self.assertEqual(
+            first.eval(), '2m ago',
+            'a 5s age captured 2 minutes ago must now read 2m ago, not 5s')
+
     def test_node_status_rows_are_bounded_plain_values(self):
         rows = self.convoy._nodeStatusRows({
             'state': 'nodes',

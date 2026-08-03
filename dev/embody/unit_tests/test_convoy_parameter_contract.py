@@ -254,3 +254,62 @@ def test_lan_scope_requires_a_new_explicit_consent_marker():
     source = CONVOY_EXT.read_text(encoding="utf-8")
     assert "local host app only" in source  # legacy migration marker/prose
     assert "convoy_scope_upgrade_required" in source
+
+# -- RELEASE GATE: nothing machine-specific may ship -------------------
+#
+# This is the test that would have caught v6.0.183, which shipped this
+# developer's computer name, host id and convoy id, AND shipped Convoy
+# switched ON -- enabling a LAN listener on every machine that installed it
+# without anyone opting in. It was found by hand, by expanding the released
+# .tox. Never again by hand: Embody.tdn is the tracked source every release
+# .tox is built from, so asserting on it is the same guarantee, and it runs
+# anywhere without TouchDesigner.
+
+_MACHINE_MARKERS = ("192.168.", "10.0.", "TEC-", "cv_", "cvfp1-",
+                    "C:/Users/", r"C:\Users")
+
+
+def test_release_source_carries_no_machine_identity():
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    for name, row in rows.items():
+        value = row.get("value")
+        if not isinstance(value, str):
+            continue
+        for marker in _MACHINE_MARKERS:
+            assert marker not in value, (
+                "%s ships %r -- a hostname, address, convoy/host id or local "
+                "path must never bake into the release" % (name, value))
+
+
+def test_release_source_ships_convoy_disabled():
+    """Consent, not state. A released .tox that arrives with Convoy ON opens
+    a trusted-LAN listener on a stranger's machine before they have agreed to
+    anything. Absent (TD omits its own default) or an explicit off both pass."""
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    enable = rows["Convoyenable"]
+    assert enable.get("value") in (None, False, 0),         "Convoyenable must ship OFF"
+    assert enable.get("default") in (None, False, 0)
+
+
+def test_release_source_ships_an_empty_node_name_and_status():
+    """Node Name auto-fills per machine at load; a baked value ships one
+    developer's computer name. Status is a live readout, not a shipped fact."""
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    assert rows["Convoynodename"].get("value") in (None, "")
+    assert rows["Convoystatus"].get("value") in (None, "Disabled")
+
+
+def test_release_source_ships_no_node_rows():
+    """The Convoy Nodes sequence is a runtime projection. Shipping rows would
+    leak another machine's names, addresses and presence."""
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    for name in ("Nodename", "Ipaddress", "Nodestatus", "Lastseen"):
+        assert rows[name].get("value") in (None, ""),             "%s must ship empty" % name
+
+
+def test_release_source_keeps_the_danger_gates_off():
+    """A stale On in a saved project or a clone must never grant these."""
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    for name in ("Convoyallowtdpython", "Convoyallowfullshell"):
+        assert rows[name].get("value") in (None, False, 0)
+        assert rows[name].get("default", False) in (None, False, 0)
