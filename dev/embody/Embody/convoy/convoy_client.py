@@ -49,14 +49,18 @@ them. Two consequences are load-bearing here:
     holding it.
 """
 
+import hashlib
 import json
+import math
 import ntpath
 import os
 import posixpath
 import random
 import secrets
 import sys
+import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 # Must match convoy_platform: the same files, in the same place.
@@ -86,6 +90,11 @@ STATE_UNREACHABLE = "unreachable"
 # retried and a policy refusal must not.
 STATE_HOST_ERROR = "host_error"
 STATE_ERROR = "error"
+# Result discriminator for the directory read.  It is intentionally not a
+# STATE_* value: status_text() owns the scalar registration-state vocabulary,
+# while this payload is projected into the separate Convoy Status sequence.
+NETWORK_NODES_RESULT = "nodes"
+POLICY_RESULT = "policy"
 
 # Transport failures on /register back off 5 s -> 60 s, jittered.
 BACKOFF_BASE_S = 5.0
@@ -96,7 +105,8 @@ BACKOFF_JITTER = 0.25
 # they arrive with: the request never left this process, or the answer
 # was not an answer. Both are Errors, not Refusals -- "Refused:
 # host_bad_response" would read as a decision the host made about us.
-NOT_A_REFUSAL = ("unserializable_request", "host_bad_response")
+NOT_A_REFUSAL = ("unserializable_request", "host_bad_response",
+                 "host_response_too_large")
 
 # -- the Convoy Host readout's vocabulary ------------------------------
 #
@@ -131,6 +141,47 @@ REGISTER_TIMEOUT_S = 10.0
 # short one. A shutting-down session must never block on a host app that
 # is itself going away.
 UNREGISTER_TIMEOUT_S = 1.0
+NETWORK_TIMEOUT_S = 5.0
+MAX_HOST_RESPONSE_BYTES = 1024 * 1024
+MAX_SIBLING_REQUEST_BYTES = MAX_HOST_RESPONSE_BYTES - 64 * 1024
+# A Convoy is expected to contain dozens of nodes, not thousands.  Keep the
+# TD sequence projection bounded even if a damaged or future host answers
+# with a much larger directory.
+MAX_STATUS_NODES = 256
+
+# TouchDesigner-originated sibling calls.  These names deliberately do not
+# use the STATE_* prefix: status_text's registration vocabulary is pinned and
+# independent from an asynchronous relay request's lifecycle.
+SIBLING_ACCEPTED = "accepted"
+SIBLING_JOB = "job"
+SIBLING_CANCEL = "cancel"
+SIBLING_TERMINAL_STATES = (
+    "succeeded", "failed", "indeterminate", "refused")
+SIBLING_TIMEOUT_MAX_S = 3600.0
+SIBLING_TEXT_MAX = 256
+SIBLING_OPERATION_MAX = 128
+SIBLING_POLL_INITIAL_S = 0.10
+SIBLING_POLL_MAX_S = 0.75
+
+NODE_DISCRIMINATOR_PREFIX = "nd_"
+UNREGISTER_REASONS = ("disabled", "shutdown")
+WAKE_TOKEN_MIN_CHARS = 32
+WAKE_TOKEN_MAX_CHARS = 128
+WAKE_GRACE_MAX_S = 3600
+
+# Registration metadata is descriptive, never identity or authority. Keep
+# the allowlist small so a caller cannot accidentally relay an arbitrary TD
+# object graph or private state merely because json.dumps happens to accept
+# part of it.
+REGISTRATION_METADATA_FIELDS = (
+    "toe_path",
+    "toe_name",
+    "node_name",
+    "hostname",
+    "process_id",
+    "embody_version",
+    "touchdesigner_version",
+)
 
 
 # -- the three per-machine facts (mirrors convoy_platform) -------------
@@ -435,8 +486,10 @@ def host_post(handle, path, body, timeout=REGISTER_TIMEOUT_S, opener=None):
     """
     opener = opener or urllib.request.urlopen
     try:
-        data = None if body is None else json.dumps(body).encode("utf-8")
-    except (TypeError, ValueError) as e:
+        data = (None if body is None else
+                json.dumps(body, allow_nan=False,
+                           ensure_ascii=False).encode("utf-8"))
+    except (TypeError, ValueError, OverflowError, UnicodeError) as e:
         # An unserializable payload is OUR bug, not a transport failure,
         # and it must not read as absence. Status 0 = "never left this
         # process".
@@ -449,20 +502,42 @@ def host_post(handle, path, body, timeout=REGISTER_TIMEOUT_S, opener=None):
     try:
         with opener(req, timeout=timeout) as resp:
             status = getattr(resp, "status", None) or 200
-            raw = resp.read()
+            try:
+                raw = resp.read(MAX_HOST_RESPONSE_BYTES + 1)
+            except TypeError:
+                raw = resp.read()
     except urllib.error.HTTPError as e:
         # A structured refusal (400/401/404/409) is a real answer, not a
         # transport failure -- surface its body so the caller can act.
         try:
-            return e.code, json.loads(e.read().decode("utf-8"))
-        except (ValueError, OSError):
+            try:
+                raw = e.read(MAX_HOST_RESPONSE_BYTES + 1)
+            except TypeError:
+                raw = e.read()
+            if len(raw) > MAX_HOST_RESPONSE_BYTES:
+                return e.code, {
+                    "ok": False, "reason": "host_response_too_large",
+                    "detail": "response from %s exceeded %d bytes"
+                              % (path, MAX_HOST_RESPONSE_BYTES),
+                }
+            answer = json.loads(raw.decode("utf-8"))
+            return e.code, answer
+        except (ValueError, OSError, AttributeError, TypeError):
             return e.code, {"ok": False, "reason": "host_http_error",
                             "detail": "HTTP %s" % (e.code,)}
     except (urllib.error.URLError, OSError):
         return None, None       # transport gone -> caller backs off
+    if len(raw) > MAX_HOST_RESPONSE_BYTES:
+        return status, {
+            "ok": False,
+            "reason": "host_response_too_large",
+            "detail": "response from %s exceeded %d bytes"
+                      % (path, MAX_HOST_RESPONSE_BYTES),
+        }
     try:
-        return status, json.loads(raw.decode("utf-8"))
-    except (ValueError, AttributeError):
+        answer = json.loads(raw.decode("utf-8"))
+        return status, answer
+    except (ValueError, AttributeError, UnicodeError):
         # A host that answered 200 with a body we cannot parse IS up and
         # reachable. Reporting that as absence would hide a live, broken
         # host behind "No Convoy host app" and hand it the transport
@@ -471,8 +546,689 @@ def host_post(handle, path, body, timeout=REGISTER_TIMEOUT_S, opener=None):
                         "detail": "unparseable body from %s" % (path,)}
 
 
+def host_get(handle, path, query=None, timeout=NETWORK_TIMEOUT_S,
+             opener=None):
+    """Authenticated bounded GET. Returns ``(status, object)``; never raises.
+
+    This is intentionally separate from the unauthenticated health probe.
+    The handle has already been identity-confirmed before it reaches this
+    function, so the per-user IPC token is sent only to literal loopback.
+    """
+    opener = opener or urllib.request.urlopen
+    url = handle.base_url + path
+    if query:
+        try:
+            encoded = urllib.parse.urlencode(query)
+        except (TypeError, ValueError) as e:
+            return 0, {"ok": False, "reason": "unserializable_request",
+                       "detail": "%s: %s" % (type(e).__name__, e)}
+        url += "?" + encoded
+    req = urllib.request.Request(
+        url, method="GET", headers={TOKEN_HEADER: handle.token})
+    try:
+        with opener(req, timeout=timeout) as resp:
+            status = getattr(resp, "status", None) or 200
+            try:
+                raw = resp.read(MAX_HOST_RESPONSE_BYTES + 1)
+            except TypeError:
+                # Minimal test doubles and some file-like adapters expose
+                # read() without a size argument.  The post-read bound still
+                # applies, so this does not weaken the production contract.
+                raw = resp.read()
+    except urllib.error.HTTPError as e:
+        try:
+            try:
+                raw = e.read(MAX_HOST_RESPONSE_BYTES + 1)
+            except TypeError:
+                raw = e.read()
+            if len(raw) > MAX_HOST_RESPONSE_BYTES:
+                raise ValueError("oversized")
+            answer = json.loads(raw.decode("utf-8"))
+            return e.code, answer
+        except (ValueError, OSError, AttributeError):
+            return e.code, {"ok": False, "reason": "host_http_error",
+                            "detail": "HTTP %s" % (e.code,)}
+    except (urllib.error.URLError, OSError):
+        return None, None
+    if len(raw) > MAX_HOST_RESPONSE_BYTES:
+        return status, {
+            "ok": False,
+            "reason": "host_response_too_large",
+            "detail": "response from %s exceeded %d bytes"
+                      % (path, MAX_HOST_RESPONSE_BYTES),
+        }
+    try:
+        answer = json.loads(raw.decode("utf-8"))
+    except (ValueError, AttributeError, UnicodeError):
+        return status, {"ok": False, "reason": "host_bad_response",
+                        "detail": "unparseable body from %s" % (path,)}
+    if not isinstance(answer, dict):
+        return status, {"ok": False, "reason": "host_bad_response",
+                        "detail": "non-object body from %s" % (path,)}
+    return status, answer
+
+
+def _status_text_field(value, limit):
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if any(ord(char) < 32 or ord(char) == 127 for char in text):
+        return ""
+    return text[:limit]
+
+
+def _clean_status_node(row):
+    """Detach and bound one host-authored status row for TD projection."""
+    if not isinstance(row, dict):
+        return None
+    controller_count = row.get("controller_count")
+    if (isinstance(controller_count, bool)
+            or not isinstance(controller_count, int)
+            or controller_count < 0):
+        controller_count = None
+    last_seen_age_s = row.get("last_seen_age_s")
+    if isinstance(last_seen_age_s, bool):
+        last_seen_age_s = None
+    else:
+        try:
+            last_seen_age_s = float(last_seen_age_s)
+            if (not math.isfinite(last_seen_age_s)
+                    or last_seen_age_s < 0):
+                last_seen_age_s = None
+        except (TypeError, ValueError, OverflowError):
+            last_seen_age_s = None
+    clean = {
+        "node_id": _status_text_field(row.get("node_id"), 128),
+        "host_id": _status_text_field(row.get("host_id"), 128),
+        "convoy_id": _status_text_field(row.get("convoy_id"), 128),
+        "runtime_id": _status_text_field(row.get("runtime_id"), 128),
+        "node_name": _status_text_field(row.get("node_name"), 512),
+        "hostname": _status_text_field(row.get("hostname"), 255),
+        "toe_name": _status_text_field(row.get("toe_name"), 512),
+        "embody_version": _status_text_field(
+            row.get("embody_version"), 128),
+        "touchdesigner_version": _status_text_field(
+            row.get("touchdesigner_version"), 128),
+        "ip": _status_text_field(row.get("ip"), 255),
+        "status": _status_text_field(row.get("status"), 64),
+        "online": bool(row.get("online")),
+        "enabled": bool(row.get("enabled", True)),
+        "perform_mode": row.get("perform_mode") is True,
+        "wake_active": row.get("wake_active") is True,
+        "sleeping": row.get("sleeping") is True,
+        # Optional coalesced display data. Older hosts omit both; retaining
+        # them here costs no extra request and avoids per-node mesh fan-out.
+        "controller_count": controller_count,
+        "last_seen_age_s": last_seen_age_s,
+    }
+    # Identity is required for deterministic sequence rows and routing.
+    if not clean["node_id"] or not clean["host_id"]:
+        return None
+    return clean
+
+
+def network_nodes(handle, convoy_id, opener=None,
+                  timeout=NETWORK_TIMEOUT_S):
+    """Fetch this node's Convoy directory from the local host app.
+
+    Returns a total result dict suitable for a worker thread.  The result is
+    deliberately compact and detached: no host-private paths, approvals, or
+    unbounded peer payloads can cross into TouchDesigner.
+    """
+    if not isinstance(convoy_id, str) or not convoy_id \
+            or convoy_id != convoy_id.strip():
+        return {"state": STATE_ERROR, "reason": "malformed_convoy_id",
+                "detail": "convoy_id must be non-empty canonical text"}
+    try:
+        raw_id = convoy_id.encode("utf-8")
+    except UnicodeEncodeError:
+        raw_id = b""
+    if (not raw_id or len(raw_id) > 128
+            or any(byte < 0x20 or byte == 0x7f for byte in raw_id)):
+        return {"state": STATE_ERROR, "reason": "malformed_convoy_id",
+                "detail": "convoy_id must be bounded printable text"}
+    status, answer = host_get(
+        handle, "/network/nodes", {"convoy_id": convoy_id},
+        timeout=timeout, opener=opener)
+    result = _answer_state(status, answer)
+    if result is not None:
+        return result
+    raw_nodes = answer.get("nodes")
+    if not isinstance(raw_nodes, list):
+        return {"state": STATE_HOST_ERROR, "http_status": status,
+                "reason": "host_bad_response",
+                "detail": "network node response omitted its node list"}
+    nodes = []
+    for row in raw_nodes[:MAX_STATUS_NODES]:
+        clean = _clean_status_node(row)
+        if clean is not None and clean["convoy_id"] == convoy_id:
+            nodes.append(clean)
+    return {
+        "state": NETWORK_NODES_RESULT,
+        "http_status": status,
+        "convoy_id": convoy_id,
+        "nodes": nodes,
+        "truncated": bool(answer.get("truncated"))
+                     or len(raw_nodes) > MAX_STATUS_NODES,
+        "remote_nodes_available": bool(answer.get(
+            "remote_nodes_available", True)),
+    }
+
+
+# -- TouchDesigner-originated sibling relay --------------------------
+
+def _sibling_error(reason, detail):
+    return {"state": STATE_ERROR, "ok": False,
+            "reason": reason, "detail": detail}
+
+
+def _sibling_text(value, name, limit=SIBLING_TEXT_MAX):
+    if (not isinstance(value, str) or not value
+            or value != value.strip() or len(value) > limit
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)):
+        raise ValueError("%s must be bounded non-empty printable text" % name)
+    return value
+
+
+def _sibling_timeout(value):
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or not 0.1 <= float(value) <= SIBLING_TIMEOUT_MAX_S):
+        raise ValueError("timeout_s must be within [0.1, 3600]")
+    return float(value)
+
+
+def _sibling_object(value, name):
+    if not isinstance(value, dict):
+        raise ValueError("%s must be an object" % name)
+    try:
+        encoded = json.dumps(
+            value, allow_nan=False, ensure_ascii=False,
+            separators=(",", ":")).encode("utf-8")
+    except (TypeError, ValueError, OverflowError, UnicodeError):
+        raise ValueError("%s must contain only JSON data" % name)
+    if len(encoded) > MAX_SIBLING_REQUEST_BYTES:
+        raise ValueError("%s exceeds the %d-byte request limit"
+                         % (name, MAX_SIBLING_REQUEST_BYTES))
+    return json.loads(encoded.decode("utf-8"))
+
+
+def _sibling_target(target_host_id, convoy_id, target_node_id):
+    host_id = _sibling_text(target_host_id, "target_host_id")
+    node_id = _sibling_text(target_node_id, "target_node_id")
+    convoy_id = _sibling_text(convoy_id, "convoy_id", 128)
+    try:
+        encoded = convoy_id.encode("utf-8")
+    except UnicodeEncodeError:
+        encoded = b""
+    if not encoded or len(encoded) > 128:
+        raise ValueError("convoy_id must fit within 128 UTF-8 bytes")
+    return host_id, convoy_id, node_id
+
+
+def _clean_sibling_job(value):
+    """Bounded public job projection; never echo stored request arguments."""
+    if not isinstance(value, dict):
+        return None
+    delivery_id = value.get("delivery_id")
+    state = value.get("state")
+    if not isinstance(delivery_id, str) or not delivery_id \
+            or not isinstance(state, str) or not state:
+        return None
+    names = (
+        "delivery_id", "state", "operation", "node_id", "node_job_id",
+        "verdict_source", "result", "created", "updated", "terminal_at",
+        "outcome_acknowledged_at", "attempts", "last_attempt",
+    )
+    return {name: value.get(name) for name in names if name in value}
+
+
+def submit_sibling_call(handle, target_host_id, convoy_id, target_node_id,
+                        controller_id, operation, arguments=None,
+                        expected_runtime_id=None, idempotency_key=None,
+                        timeout_s=30.0, opener=None, monotonic=None):
+    """Submit one exact local-or-remote durable call through the host.
+
+    Both same-host siblings and remote peers use /relay. The host handles the
+    local case without a LAN round trip and atomically verifies the requested
+    Convoy before creating the job; using /nodes then /jobs would leave a
+    namespace-change race between those two requests. There is never a
+    fallback route. The result is the durable acknowledgement; callers that
+    want a terminal verdict use ``wait_sibling_job`` or ``get_sibling_job``.
+    """
+    try:
+        target_host_id, convoy_id, target_node_id = _sibling_target(
+            target_host_id, convoy_id, target_node_id)
+        controller_id = _sibling_text(controller_id, "controller_id")
+        operation = _sibling_text(
+            operation, "operation", SIBLING_OPERATION_MAX)
+        timeout_s = _sibling_timeout(timeout_s)
+        if arguments is None:
+            arguments = {}
+        arguments = _sibling_object(arguments, "arguments")
+        if expected_runtime_id is not None:
+            expected_runtime_id = _sibling_text(
+                expected_runtime_id, "expected_runtime_id")
+        if idempotency_key is None:
+            idempotency_key = secrets.token_hex(16)
+        else:
+            idempotency_key = _sibling_text(
+                idempotency_key, "idempotency_key")
+    except (TypeError, ValueError) as exc:
+        return _sibling_error("invalid_arguments", str(exc))
+
+    local = target_host_id == handle.host_id
+    path = "/relay"
+    body = {
+        "target_host_id": target_host_id,
+        "convoy_id": convoy_id,
+        "target_node_id": target_node_id,
+        "controller_id": controller_id,
+        "operation": operation,
+        "arguments": arguments,
+        "timeout_s": timeout_s,
+        "idempotency_key": idempotency_key,
+    }
+    if expected_runtime_id is not None:
+        body["expected_runtime_id"] = expected_runtime_id
+
+    clock = monotonic or time.monotonic
+    deadline = clock() + timeout_s
+    remaining = deadline - clock()
+    if remaining < 0.1:
+        return {
+            "state": STATE_UNREACHABLE, "ok": False,
+            "reason": "request_timeout",
+            "detail": "the sibling submission deadline elapsed locally",
+            "target_host_id": target_host_id, "convoy_id": convoy_id,
+            "target_node_id": target_node_id, "operation": operation,
+            "idempotency_key": idempotency_key,
+        }
+    status, answer = host_post(
+        handle, path, body, timeout=remaining, opener=opener)
+    result = _answer_state(status, answer)
+    if result is not None:
+        result.update({"target_host_id": target_host_id,
+                       "convoy_id": convoy_id,
+                       "target_node_id": target_node_id,
+                       "operation": operation,
+                       "idempotency_key": idempotency_key})
+        return result
+    job = _clean_sibling_job(answer.get("job"))
+    if job is None:
+        return {
+            "state": STATE_HOST_ERROR, "ok": False,
+            "http_status": status, "reason": "host_bad_response",
+            "detail": "call acknowledgement omitted a durable job",
+            "target_host_id": target_host_id, "convoy_id": convoy_id,
+            "target_node_id": target_node_id, "operation": operation,
+            "idempotency_key": idempotency_key,
+        }
+    return {
+        "state": SIBLING_ACCEPTED, "ok": True, "http_status": status,
+        "target_host_id": target_host_id, "convoy_id": convoy_id,
+        "target_node_id": target_node_id, "operation": operation,
+        "idempotency_key": (answer.get("idempotency_key")
+                            or idempotency_key),
+        "request_id": answer.get("request_id"),
+        "created": bool(answer.get("created", True)),
+        "local_target": local,
+        "job": job,
+    }
+
+
+def get_sibling_job(handle, target_host_id, convoy_id, delivery_id,
+                    since=None, opener=None, timeout=NETWORK_TIMEOUT_S):
+    """Read one durable job from its explicit owner host without waking TD."""
+    try:
+        target_host_id = _sibling_text(target_host_id, "target_host_id")
+        convoy_id = _sibling_text(convoy_id, "convoy_id", 128)
+        delivery_id = _sibling_text(delivery_id, "delivery_id")
+        timeout = _sibling_timeout(timeout)
+        if since is not None and (
+                isinstance(since, bool) or not isinstance(since, (int, float))):
+            raise ValueError("since must be a finite number")
+        if since is not None and not float("-inf") < float(since) < float("inf"):
+            raise ValueError("since must be a finite number")
+    except (TypeError, ValueError) as exc:
+        return _sibling_error("invalid_arguments", str(exc))
+
+    local = target_host_id == handle.host_id
+    if local:
+        status, answer = host_get(
+            handle, "/jobs/" + urllib.parse.quote(delivery_id, safe=""),
+            timeout=timeout, opener=opener)
+    else:
+        body = {"target_host_id": target_host_id,
+                "convoy_id": convoy_id, "delivery_id": delivery_id}
+        if since is not None:
+            body["since"] = float(since)
+        status, answer = host_post(
+            handle, "/relay/job", body, timeout=timeout, opener=opener)
+    result = _answer_state(status, answer)
+    if result is not None:
+        result.update({"target_host_id": target_host_id,
+                       "convoy_id": convoy_id,
+                       "delivery_id": delivery_id})
+        return result
+    if answer.get("changed") is False:
+        return {"state": SIBLING_JOB, "ok": True,
+                "http_status": status, "changed": False,
+                "cursor": answer.get("cursor"),
+                "target_host_id": target_host_id,
+                "convoy_id": convoy_id, "delivery_id": delivery_id,
+                "local_target": local}
+    job = _clean_sibling_job(answer.get("job"))
+    if job is None:
+        return {"state": STATE_HOST_ERROR, "ok": False,
+                "http_status": status, "reason": "host_bad_response",
+                "detail": "job response omitted a durable job",
+                "target_host_id": target_host_id,
+                "convoy_id": convoy_id, "delivery_id": delivery_id}
+    # A local job view is host-private and includes its namespace; enforce it
+    # before returning anything. The peer-safe remote view is already scoped
+    # by the signed/mTLS request and intentionally omits convoy_id.
+    raw_job = answer.get("job")
+    if local and raw_job.get("convoy_id") != convoy_id:
+        return {"state": STATE_REFUSED, "ok": False,
+                "reason": "job_namespace_mismatch",
+                "detail": "the local delivery belongs to another Convoy",
+                "target_host_id": target_host_id,
+                "convoy_id": convoy_id, "delivery_id": delivery_id}
+    return {"state": SIBLING_JOB, "ok": True,
+            "http_status": status, "changed": True,
+            "cursor": answer.get("cursor", job.get("updated")),
+            "target_host_id": target_host_id,
+            "convoy_id": convoy_id, "delivery_id": delivery_id,
+            "local_target": local, "job": job}
+
+
+def cancel_sibling_job(handle, target_host_id, convoy_id, delivery_id,
+                       opener=None, timeout=NETWORK_TIMEOUT_S):
+    """Cancel a delivery through its exact local-or-remote owner host.
+
+    The federated host route enforces namespace and origin ownership on both
+    same-host and peer-host deliveries. It is a management-plane operation
+    and never wakes TouchDesigner.
+    """
+    try:
+        target_host_id = _sibling_text(target_host_id, "target_host_id")
+        convoy_id = _sibling_text(convoy_id, "convoy_id", 128)
+        delivery_id = _sibling_text(delivery_id, "delivery_id")
+        timeout = _sibling_timeout(timeout)
+    except (TypeError, ValueError) as exc:
+        return _sibling_error("invalid_arguments", str(exc))
+    base = {"target_host_id": target_host_id, "convoy_id": convoy_id,
+            "delivery_id": delivery_id, "scope": "owner_host",
+            "remote_supported": True,
+            "local_target": target_host_id == handle.host_id,
+            "wakes_touchdesigner": False}
+    status, answer = host_post(
+        handle, "/relay/cancel", {
+            "target_host_id": target_host_id,
+            "convoy_id": convoy_id,
+            "delivery_id": delivery_id,
+        },
+        timeout=timeout, opener=opener)
+    result = _answer_state(status, answer)
+    if result is not None:
+        result.update(base)
+        return result
+    out = dict(answer)
+    out.update(base)
+    out["state"] = SIBLING_CANCEL
+    out["http_status"] = status
+    return out
+
+
+def wait_sibling_job(handle, target_host_id, convoy_id, delivery_id,
+                     initial=None, timeout_s=30.0, progress=None,
+                     opener=None, sleep=None, monotonic=None):
+    """Worker-only bounded poll loop with optional plain progress sink."""
+    try:
+        timeout_s = _sibling_timeout(timeout_s)
+    except ValueError as exc:
+        return _sibling_error("invalid_arguments", str(exc))
+    sleep = sleep or time.sleep
+    monotonic = monotonic or time.monotonic
+    deadline = monotonic() + timeout_s
+    latest = dict(initial) if isinstance(initial, dict) else None
+    interval = SIBLING_POLL_INITIAL_S
+    cursor = None
+    if latest:
+        job = latest.get("job")
+        if isinstance(job, dict):
+            if job.get("state") in SIBLING_TERMINAL_STATES:
+                return latest
+            cursor = job.get("updated")
+    while monotonic() < deadline:
+        current = get_sibling_job(
+            handle, target_host_id, convoy_id, delivery_id,
+            since=cursor, opener=opener,
+            timeout=max(0.1, min(NETWORK_TIMEOUT_S,
+                                 deadline - monotonic())))
+        if current.get("ok"):
+            if current.get("changed") is not False:
+                latest = current
+                job = current.get("job")
+                if callable(progress):
+                    progress(dict(current))
+                if isinstance(job, dict):
+                    cursor = current.get("cursor", job.get("updated"))
+                    if job.get("state") in SIBLING_TERMINAL_STATES:
+                        return current
+            interval = min(SIBLING_POLL_MAX_S, interval * 1.5)
+        else:
+            # An explicit refusal is definitive. Transport loss is returned
+            # with the durable identity so the caller can reconcile later;
+            # never resubmit from this loop.
+            current["delivery_id"] = delivery_id
+            return current
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            break
+        sleep(min(interval, remaining))
+    out = dict(latest or {})
+    out.setdefault("state", SIBLING_JOB)
+    out.setdefault("ok", True)
+    out.update({"wait_timed_out": True,
+                "target_host_id": target_host_id,
+                "convoy_id": convoy_id, "delivery_id": delivery_id})
+    return out
+
+
+def _clean_policy(value):
+    if not isinstance(value, dict):
+        return None
+    generation = value.get("generation")
+    quota = value.get("artifact_quota_mb")
+    if (isinstance(generation, bool) or not isinstance(generation, int)
+            or generation < 0 or isinstance(quota, bool)
+            or not isinstance(quota, int) or not 0 <= quota <= 1024 * 1024
+            or type(value.get("allow_td_python")) is not bool
+            or type(value.get("allow_full_shell")) is not bool):
+        return None
+    return {
+        "generation": generation,
+        "allow_td_python": value["allow_td_python"],
+        "allow_full_shell": value["allow_full_shell"],
+        "artifact_quota_mb": quota,
+    }
+
+
+def get_policy(handle, node_id=None, opener=None,
+               timeout=NETWORK_TIMEOUT_S):
+    query = {"node_id": node_id} if node_id else None
+    status, answer = host_get(
+        handle, "/policy", query, timeout=timeout, opener=opener)
+    result = _answer_state(status, answer)
+    if result is not None:
+        return result
+    clean = _clean_policy(answer.get("policy"))
+    if clean is None:
+        return {"state": STATE_HOST_ERROR, "http_status": status,
+                "reason": "host_bad_response",
+                "detail": "policy response was missing or malformed"}
+    return {"state": POLICY_RESULT, "http_status": status,
+            "policy": clean}
+
+
+def begin_policy_challenge(handle, setting, expected_generation,
+                           node_id=None, opener=None,
+                           timeout=REGISTER_TIMEOUT_S):
+    body = {"setting": setting,
+            "expected_generation": expected_generation}
+    if node_id:
+        body["node_id"] = node_id
+    status, answer = host_post(
+        handle, "/policy/challenge", body, timeout=timeout, opener=opener)
+    result = _answer_state(status, answer)
+    if result is not None:
+        return result
+    challenge = answer.get("challenge")
+    if not isinstance(challenge, dict):
+        return {"state": STATE_HOST_ERROR, "http_status": status,
+                "reason": "host_bad_response",
+                "detail": "policy challenge response was malformed"}
+    required = ("challenge_id", "confirmation", "setting", "generation")
+    if (any(key not in challenge for key in required)
+            or not isinstance(challenge.get("challenge_id"), str)
+            or not isinstance(challenge.get("confirmation"), str)
+            or not isinstance(challenge.get("setting"), str)
+            or isinstance(challenge.get("generation"), bool)
+            or not isinstance(challenge.get("generation"), int)):
+        return {"state": STATE_HOST_ERROR, "http_status": status,
+                "reason": "host_bad_response",
+                "detail": "policy challenge fields were malformed"}
+    return {"state": "challenge", "http_status": status,
+            "challenge": dict(challenge)}
+
+
+def confirm_policy_challenge(handle, challenge_id, confirmation,
+                             expected_generation, opener=None,
+                             timeout=REGISTER_TIMEOUT_S):
+    status, answer = host_post(
+        handle, "/policy/confirm", {
+            "challenge_id": challenge_id,
+            "confirmation": confirmation,
+            "expected_generation": expected_generation,
+        }, timeout=timeout, opener=opener)
+    result = _answer_state(status, answer)
+    if result is not None:
+        return result
+    return {"state": POLICY_RESULT, "http_status": status,
+            "ok": True}
+
+
+def decline_policy_challenge(handle, challenge_id, opener=None,
+                             timeout=REGISTER_TIMEOUT_S):
+    status, answer = host_post(
+        handle, "/policy/decline", {"challenge_id": challenge_id},
+        timeout=timeout, opener=opener)
+    result = _answer_state(status, answer)
+    return result or {"state": POLICY_RESULT, "http_status": status,
+                      "ok": True}
+
+
+def disable_policy(handle, setting, node_id=None, opener=None,
+                   timeout=REGISTER_TIMEOUT_S):
+    body = {"setting": setting}
+    if node_id:
+        body["node_id"] = node_id
+    status, answer = host_post(
+        handle, "/policy/disable", body, timeout=timeout, opener=opener)
+    result = _answer_state(status, answer)
+    if result is not None:
+        return result
+    clean = _clean_policy(answer.get("policy"))
+    return {"state": POLICY_RESULT, "http_status": status,
+            "policy": clean, "ok": clean is not None}
+
+
+def set_artifact_quota(handle, quota_mb, expected_generation, opener=None,
+                       timeout=REGISTER_TIMEOUT_S):
+    status, answer = host_post(
+        handle, "/policy/artifact-quota", {
+            "artifact_quota_mb": quota_mb,
+            "expected_generation": expected_generation,
+        }, timeout=timeout, opener=opener)
+    result = _answer_state(status, answer)
+    if result is not None:
+        return result
+    clean = _clean_policy(answer.get("policy"))
+    return {"state": POLICY_RESULT, "http_status": status,
+            "policy": clean, "ok": clean is not None}
+
+
+def normalize_toe_path(toe_path, platform=None):
+    """Canonical saved-.toe path used only to derive stable node identity.
+
+    Different .toe files inside one repository must not collapse into one
+    host-side node merely because their Embody COMPs have the same operator
+    path. Windows spelling and case variants collapse; POSIX case remains
+    significant. The caller supplies the already-saved absolute path from
+    TD's main thread.
+    """
+    if not isinstance(toe_path, str) or not toe_path.strip():
+        raise ValueError("toe_path must be a non-empty absolute path")
+    platform = platform or sys.platform
+    if platform == "win32":
+        text = ntpath.normpath(toe_path.replace("/", "\\"))
+        if not ntpath.isabs(text):
+            raise ValueError("toe_path must be absolute")
+        return ntpath.normcase(text)
+    text = posixpath.normpath(toe_path.replace("\\", "/"))
+    if not posixpath.isabs(text):
+        raise ValueError("toe_path must be absolute")
+    return text
+
+
+def stable_node_discriminator(toe_path, platform=None):
+    """Opaque stable discriminator for one saved .toe launch profile.
+
+    It is deterministic across restarts and deliberately independent of
+    runtime_id, which remains fresh for every TD process. The host combines
+    it with canonical project_root and comp_path; this value alone is not a
+    node identity and carries no authority.
+    """
+    canonical = normalize_toe_path(toe_path, platform=platform)
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
+    return NODE_DISCRIMINATOR_PREFIX + digest
+
+
+def _clean_registration_metadata(metadata):
+    if metadata is None:
+        return None
+    if not isinstance(metadata, dict):
+        raise ValueError("registration metadata must be an object")
+    unknown = set(metadata) - set(REGISTRATION_METADATA_FIELDS)
+    if unknown:
+        raise ValueError("unknown registration metadata field(s): %s"
+                         % (", ".join(sorted(str(k) for k in unknown)),))
+    clean = {}
+    for key in REGISTRATION_METADATA_FIELDS:
+        if key not in metadata or metadata[key] is None:
+            continue
+        value = metadata[key]
+        if key == "process_id":
+            if isinstance(value, bool):
+                raise ValueError("process_id must be a positive integer")
+            value = int(value)
+            if value <= 0:
+                raise ValueError("process_id must be a positive integer")
+        else:
+            value = str(value)
+        clean[key] = value
+    return clean
+
+
 def registration_payload(project_root, comp_path, convoy_id,
-                         runtime_id, envoy_port=None):
+                         runtime_id, envoy_port=None,
+                         node_discriminator=None, metadata=None,
+                         envoy_ready=None, wake_port=None, wake_token=None,
+                         remote_wake=None, perform_mode=None,
+                         wake_active=None, wake_grace_s=None,
+                         binding_state=None, td_executable=None,
+                         launch_token=None, launch_reservation_id=None):
     """The /register body, built from values ALREADY resolved on the
     main thread.
 
@@ -492,7 +1248,7 @@ def registration_payload(project_root, comp_path, convoy_id,
     refusal-shaped status instead of the pending path. Clearing is
     /unregister's job alone.
 
-    The three identity fields are str()-coerced because they arrive from
+    The identity fields are str()-coerced because they arrive from
     the main thread as whatever TD handed over -- a pathlib.Path project
     root, or any object with a __str__ -- and an unserializable value
     would otherwise surface as a request that never leaves the process.
@@ -503,8 +1259,105 @@ def registration_payload(project_root, comp_path, convoy_id,
         "convoy_id": str(convoy_id),
         "runtime_id": str(runtime_id),
     }
+    if binding_state is not None:
+        if binding_state not in ("candidate", "established"):
+            raise ValueError("binding_state must be candidate or established")
+        payload["binding_state"] = binding_state
+    if td_executable is not None:
+        executable = str(td_executable).strip()
+        if (not executable or len(executable.encode("utf-8")) > 4096
+                or any(ord(char) < 32 or ord(char) == 127
+                       for char in executable)):
+            raise ValueError("td_executable must be a bounded path")
+        payload["td_executable"] = executable
+    launch_present = (launch_token is not None
+                      or launch_reservation_id is not None)
+    if launch_present:
+        if launch_token is None or launch_reservation_id is None:
+            raise ValueError(
+                "launch_token and launch_reservation_id must be paired")
+        token = str(launch_token)
+        reservation = str(launch_reservation_id)
+        alphabet = (
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+        if (not 32 <= len(token) <= 256
+                or any(char not in alphabet for char in token)):
+            raise ValueError("launch_token must be bounded URL-safe text")
+        if (not reservation or len(reservation.encode("utf-8")) > 256
+                or any(ord(char) < 32 or ord(char) == 127
+                       for char in reservation)):
+            raise ValueError("launch_reservation_id must be bounded text")
+        payload["launch_token"] = token
+        payload["launch_reservation_id"] = reservation
+    if node_discriminator is not None:
+        value = str(node_discriminator)
+        if (not value.startswith(NODE_DISCRIMINATOR_PREFIX)
+                or len(value) != len(NODE_DISCRIMINATOR_PREFIX) + 32
+                or any(c not in "0123456789abcdef"
+                       for c in value[len(NODE_DISCRIMINATOR_PREFIX):])):
+            raise ValueError("malformed node_discriminator")
+        payload["node_discriminator"] = value
+    clean_metadata = _clean_registration_metadata(metadata)
+    if clean_metadata:
+        payload["metadata"] = clean_metadata
     if envoy_port:
         payload["envoy_port"] = int(envoy_port)
+    # New runtimes send an explicit readiness bit.  Legacy callers omit it,
+    # preserving the old "an absent port does not clear a known endpoint"
+    # rule.  ConvoyExt always supplies it, so entering Perform Mode can
+    # retire Envoy's old port without abusing port 0 as a sentinel.
+    if envoy_ready is not None:
+        if not isinstance(envoy_ready, bool):
+            raise ValueError("envoy_ready must be boolean")
+        if envoy_ready and not payload.get("envoy_port"):
+            raise ValueError("envoy_ready requires envoy_port")
+        payload["envoy_ready"] = envoy_ready
+
+    pair_present = wake_port is not None or wake_token is not None
+    if pair_present:
+        if wake_port is None or wake_token is None:
+            raise ValueError("wake_port and wake_token must be supplied together")
+        if isinstance(wake_port, bool):
+            raise ValueError("wake_port must be an integer 1..65535")
+        try:
+            clean_port = int(wake_port)
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError("wake_port must be an integer 1..65535")
+        if clean_port < 1 or clean_port > 65535:
+            raise ValueError("wake_port must be an integer 1..65535")
+        clean_token = str(wake_token)
+        if (not WAKE_TOKEN_MIN_CHARS <= len(clean_token)
+                <= WAKE_TOKEN_MAX_CHARS
+                or any(ch not in
+                       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+                       for ch in clean_token)):
+            raise ValueError("wake_token must be bounded URL-safe text")
+        payload["wake_port"] = clean_port
+        payload["wake_token"] = clean_token
+
+    for name, value in (("remote_wake", remote_wake),
+                        ("perform_mode", perform_mode),
+                        ("wake_active", wake_active)):
+        if value is None:
+            continue
+        if not isinstance(value, bool):
+            raise ValueError("%s must be boolean" % name)
+        payload[name] = value
+    if wake_grace_s is not None:
+        if isinstance(wake_grace_s, bool):
+            raise ValueError("wake_grace_s must be an integer")
+        try:
+            clean_grace = int(wake_grace_s)
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError("wake_grace_s must be an integer")
+        if (clean_grace != wake_grace_s or clean_grace < 0
+                or clean_grace > WAKE_GRACE_MAX_S):
+            raise ValueError("wake_grace_s is outside the supported range")
+        payload["wake_grace_s"] = clean_grace
+    if remote_wake is True and not pair_present:
+        # Listener startup is asynchronous; advertising intent before the
+        # endpoint is ready is valid and lets status explain the transition.
+        payload["wake_pending"] = True
     return payload
 
 
@@ -516,17 +1369,44 @@ def register(handle, payload, opener=None, timeout=REGISTER_TIMEOUT_S):
     result = _answer_state(status, answer)
     if result is not None:
         return result
+    authoritative_id = answer.get("convoy_id", payload.get("convoy_id"))
+    if (not isinstance(authoritative_id, str) or not authoritative_id
+            or authoritative_id != authoritative_id.strip()):
+        return {"state": STATE_HOST_ERROR, "http_status": status,
+                "reason": "host_bad_response",
+                "detail": "registration response has an invalid convoy_id"}
+    try:
+        raw_id = authoritative_id.encode("utf-8")
+    except UnicodeEncodeError:
+        raw_id = b""
+    if (not raw_id or len(raw_id) > 128
+            or any(byte < 0x20 or byte == 0x7f for byte in raw_id)):
+        return {"state": STATE_HOST_ERROR, "http_status": status,
+                "reason": "host_bad_response",
+                "detail": "registration response has an invalid convoy_id"}
+    realm_state = answer.get(
+        "realm_state", payload.get("binding_state", "established"))
+    if realm_state not in ("candidate", "established"):
+        return {"state": STATE_HOST_ERROR, "http_status": status,
+                "reason": "host_bad_response",
+                "detail": "registration response has an invalid realm_state"}
     return {"state": STATE_REGISTERED,
             "http_status": status,
             "node_id": answer.get("node_id"),
             "host_id": answer.get("host_id") or handle.host_id,
+            "convoy_id": authoritative_id,
+            "realm_state": realm_state,
             "runtime_id": answer.get("runtime_id"),
             "envoy_port": answer.get("envoy_port"),
-            "td_python_approved": bool(answer.get("td_python_approved"))}
+            "perform_mode": answer.get("perform_mode") is True,
+            "wake_active": answer.get("wake_active") is True,
+            "wake_ready": answer.get("wake_ready") is True,
+            "td_python_approved": bool(answer.get("td_python_approved")),
+            "policy": _clean_policy(answer.get("policy"))}
 
 
-def unregister(handle, node_id, runtime_id=None, opener=None,
-               timeout=UNREGISTER_TIMEOUT_S):
+def unregister(handle, node_id, runtime_id=None, reason="disabled",
+               opener=None, timeout=UNREGISTER_TIMEOUT_S):
     """POST /unregister -- clear this node's Envoy port on the way out.
 
     Best-effort by contract: one attempt, short timeout, every outcome a
@@ -538,8 +1418,20 @@ def unregister(handle, node_id, runtime_id=None, opener=None,
     TD sessions on ONE project folder share a node_id, so without it a
     departing instance zeroes a SURVIVING instance's live port. The host
     no-ops when it does not match.
+
+    reason is an intent, not prose. ``disabled`` withdraws this node's
+    membership; ``shutdown`` only clears the current runtime while keeping
+    its enabled membership intent for normal offline/reconnect behavior.
+    Anything else is refused locally before a token or request leaves TD.
     """
-    body = {"node_id": node_id}
+    if reason not in UNREGISTER_REASONS:
+        return {
+            "state": STATE_ERROR,
+            "reason": "invalid_unregister_reason",
+            "detail": "reason must be one of: %s"
+                      % (", ".join(UNREGISTER_REASONS),),
+        }
+    body = {"node_id": node_id, "reason": reason}
     if runtime_id:
         body["runtime_id"] = runtime_id
     status, answer = host_post(handle, "/unregister", body,

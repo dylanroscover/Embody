@@ -16,8 +16,8 @@ class FakeResp:
     def __init__(self, body):
         self._body = body.encode("utf-8")
 
-    def read(self):
-        return self._body
+    def read(self, size=-1):
+        return self._body if size is None or size < 0 else self._body[:size]
 
     def __enter__(self):
         return self
@@ -52,6 +52,24 @@ def test_plain_json_body_also_parses():
     body = json.dumps(tool_response({"v": 1}))
     out = mc.forward(9872, "op", {}, opener=opener_returning(body))
     assert out == {"ok": True, "result": {"v": 1}}
+
+
+def test_multiple_content_blocks_are_preserved():
+    body = sse({"jsonrpc": "2.0", "id": 1,
+                "result": {"content": [
+                    {"type": "text", "text": "image follows"},
+                    {"type": "image", "data": "YWJj", "mimeType": "image/png"}
+                ], "isError": False}})
+    out = mc.forward(9872, "capture_top", {}, opener=opener_returning(body))
+    assert out["ok"] is True
+    assert len(out["result"]["content"]) == 2
+    assert out["result"]["content"][1]["type"] == "image"
+
+
+def test_oversized_response_is_bounded_and_indeterminate(monkeypatch):
+    monkeypatch.setattr(mc, "MAX_MCP_RESPONSE_BYTES", 8)
+    out = mc.forward(9872, "op", {}, opener=opener_returning("x" * 32))
+    assert out is None
 
 
 def test_tool_error_is_ok_false():

@@ -113,8 +113,9 @@ REASON_BLOCKED = "peer_blocked"
 REASON_UNKNOWN = "peer_unknown"
 REASON_PIN_MISMATCH = "pin_mismatch"
 REASON_OBSERVE_ONLY = "peer_observe_only"
+REASON_NAMESPACE = "namespace_not_admitted"
 PEER_REASONS = (REASON_BLOCKED, REASON_UNKNOWN, REASON_PIN_MISMATCH,
-                REASON_OBSERVE_ONLY)
+                REASON_OBSERVE_ONLY, REASON_NAMESPACE)
 
 # Domain-separated digest of the PIN itself -- the (host_id, fingerprint)
 # binding, not either half. Audit lines carry it so a re-admission (either
@@ -867,8 +868,16 @@ class PeerStore:
 
     # -- THE decision -------------------------------------------------
 
-    def authorize_peer(self, host_id, fingerprint):
+    def authorize_peer(self, host_id, fingerprint, convoy_id=None):
         """May this peer be heard, and how much of it?
+
+        ``convoy_id`` is optional only for the host-level TLS/session
+        check.  Any operation that names or reveals namespace-owned state
+        MUST pass it.  A host admission is not a wildcard namespace grant:
+        the requested Convoy must be present in the peer record's explicit
+        ``convoy_ids`` set.  Keeping the host-level and namespace-level
+        checks in this one predicate prevents a new peer route from
+        accidentally authorizing by certificate alone.
 
         THE ORDER IS THE INVARIANT (plan 1.4), and this function owns the
         first two steps of it:
@@ -987,6 +996,21 @@ class PeerStore:
             return self._refusal(
                 REASON_BLOCKED,
                 f"host {key} is blocked on this host", key, pin, state=state)
+
+        if convoy_id is not None:
+            try:
+                namespace = identity.normalize_convoy_id(convoy_id)
+            except identity.IdentityError:
+                return self._refusal(
+                    REASON_NAMESPACE,
+                    "the request did not name a valid Convoy namespace",
+                    key, pin, state=state)
+            allowed_namespaces = record.get("convoy_ids") or ()
+            if namespace not in allowed_namespaces:
+                return self._refusal(
+                    REASON_NAMESPACE,
+                    f"host {key} is not admitted to Convoy {namespace!r}",
+                    key, pin, state=state)
         if state == PEER_OBSERVE_ONLY:
             # ALLOWED, and still carrying a reason: the caller must refuse
             # anything past X0 and name WHY. The admission lineage rides
@@ -1233,7 +1257,7 @@ class PeerStore:
         if endpoints is not None:
             record["endpoints"] = _clean_list(endpoints, MAX_ENDPOINTS)
         if convoy_ids is not None:
-            record["convoy_ids"] = _clean_list(convoy_ids, MAX_CONVOY_IDS)
+            record["convoy_ids"] = _clean_convoy_ids(convoy_ids)
         if clock_offset_s is not None:
             record["clock_offset_s"] = _clean_number(clock_offset_s)
         # THE ADMISSION LINEAGE. admission_id names the CURRENT unbroken
@@ -1341,6 +1365,25 @@ def _clean_list(values, limit):
     return out
 
 
+def _clean_convoy_ids(values):
+    """Validate namespace grants with the canonical cross-layer policy."""
+    if isinstance(values, str) or not isinstance(values, (list, tuple)):
+        raise PeerError("malformed_list", "expected a list of strings")
+    if len(values) > MAX_CONVOY_IDS:
+        raise PeerError("malformed_list",
+                        f"at most {MAX_CONVOY_IDS} entries allowed, got "
+                        f"{len(values)}")
+    out = []
+    for item in values:
+        try:
+            namespace = identity.normalize_convoy_id(item)
+        except identity.IdentityError as e:
+            raise PeerError("malformed_list", e.detail or repr(item))
+        if namespace not in out:
+            out.append(namespace)
+    return out
+
+
 def _bounded_text(value, what):
     if value is None:
         return ""
@@ -1431,7 +1474,9 @@ def _coerce_record(host_id, record):
                          ("convoy_ids", MAX_CONVOY_IDS)):
         if field in record:
             try:
-                clean[field] = _clean_list(record[field], limit)
+                clean[field] = (_clean_convoy_ids(record[field])
+                                if field == "convoy_ids"
+                                else _clean_list(record[field], limit))
             except PeerError as e:
                 raise PeerError("malformed_record",
                                 f"peer {key} {field}: {e.detail}")

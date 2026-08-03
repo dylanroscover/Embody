@@ -6,14 +6,20 @@ MCP transport, A-46) is injected here so the ORCHESTRATION is tested
 without a live node.
 """
 
+import json
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
 import convoy_hostapp as ha
+import convoy_hostkeys as _hostkeys
 import convoy_hoststore as hs
 import convoy_mcpclient as mcpclient
+import convoy_sessions as _sessions
+import convoy_ws as _ws
+from conftest import approve_td_python
 from test_convoy_hostapp import Server
 
 
@@ -108,6 +114,27 @@ def test_dispatch_mirrors_a_successful_node_result(server):
                     "arguments": {"parent_path": "/"}}
 
 
+def test_override_is_stripped_from_every_relayed_operation(server):
+    # SECURITY: `override` bypasses the NODE's own multi-session destructive
+    # gate and must NEVER ride the relay (CONVOY_PHASE3_PLAN section 6). The
+    # host strips it from a gated op's arguments before the wire.
+    node = register(server)
+    job = enqueue(server, node, operation="query_network",
+                  arguments={"parent_path": "/", "override": True})
+    seen = {}
+
+    def forwarder(port, operation, arguments):
+        seen.update(arguments=arguments)
+        return {"ok": True, "result": {"ops": []}}
+
+    server.app.forwarder = forwarder
+    code, body = server.call("/dispatch", {"delivery_id": job["delivery_id"]})
+    assert code == 200 and body["dispatched"] is True
+    assert "override" not in seen["arguments"], \
+        "override must never reach the node over the relay"
+    assert seen["arguments"].get("parent_path") == "/"
+
+
 def test_dispatch_mirrors_a_node_error(server):
     node = register(server)
     job = enqueue(server, node)
@@ -195,6 +222,25 @@ def test_dispatch_without_a_known_port_leaves_the_job_queued(server):
     # the job is untouched -- still queued, ready to dispatch once known
     _, fetched = server.call(f"/jobs/{job['delivery_id']}")
     assert fetched["job"]["state"] == "queued"
+
+
+def test_convoy_ping_is_host_native_and_needs_no_envoy_port(server):
+    _, node = server.call("/register", {
+        "project_root": "/Work/p", "convoy_id": CONVOY,
+        "comp_path": "/Embody"})
+    job = enqueue(server, node, operation="convoy_ping")
+
+    def must_not_forward(*_args):
+        raise AssertionError("convoy_ping must not be forwarded to Envoy")
+
+    server.app.forwarder = must_not_forward
+    code, body = server.call("/dispatch",
+                             {"delivery_id": job["delivery_id"]})
+    assert code == 200
+    assert body["job"]["state"] == "succeeded"
+    assert body["job"]["result"]["pong"] is True
+    assert body["job"]["result"]["node_id"] == node["node_id"]
+    assert body["job"]["result"]["online"] is False
 
 
 def test_dispatch_unknown_job_is_404(server):
@@ -1111,11 +1157,15 @@ def test_a_landed_reap_is_counted_even_if_its_audit_fails(server,
 
 def register_rt(server, envoy_port=9800, comp="/RT", runtime_id="rt1"):
     """A node with a runtime -- the async operations are
-    runtime_required, so a job for one must name the run it addressed."""
+    runtime_required, so a job for one must name the run it addressed.
+    This async-dispatch fixture explicitly opts into TD Python because its
+    primary operation is run_tests, which executes repository test code."""
     code, node = server.call("/register", {
         "project_root": "/Work/p", "convoy_id": CONVOY, "comp_path": comp,
         "envoy_port": envoy_port, "runtime_id": runtime_id})
     assert code == 200
+    with server.app.lock:
+        approve_td_python(server.app, node["node_id"])
     return node
 
 
@@ -1393,12 +1443,11 @@ def test_the_async_registry_entries_are_honestly_gated(server):
     is refused without the A-22 precondition, exactly like any other
     stale-state-sensitive operation.
 
-    They are also the two operations that are NOT remotely exposed --
-    run_tests because TestRunnerExt execs every test file it finds on
-    disk (so "the project's own code" is a loopback assumption), and
-    save_project because it blocks TD's main thread for 15+ seconds
-    while show protection is still Phase 4 work. Both stay fully
-    available LOCALLY; only a future remote peer is refused.
+    NEITHER is remotely exposed (A-1/R-2): run_tests exec_module's every
+    test file it finds on disk, and save_project blocks TD's main thread
+    15+s before A-30/A-31 show protection exists. run_tests is additionally
+    classified arbitrary-code so its LOCAL path still needs the node's
+    explicit TD-Python approval; save_project does not execute caller code.
     """
     node = register_rt(server)
     code, body = server.call("/jobs", {
@@ -1407,10 +1456,11 @@ def test_the_async_registry_entries_are_honestly_gated(server):
     assert code == 400 and body["reason"] == "runtime_id_required"
     for name in ("run_tests", "save_project"):
         entry = ha.PHASE1_OPERATIONS[name]
-        assert ha.gating_of(entry) == {"executes_arbitrary_code": False,
-                                       "mutating": True,
-                                       "runtime_required": True,
-                                       "remote_exposed": False}
+        assert ha.gating_of(entry) == {
+            "executes_arbitrary_code": name == "run_tests",
+            "mutating": True,
+            "runtime_required": True,
+            "remote_exposed": False}
         assert entry["async_job"]["key_arg"] == "idempotency_key"
 
 
@@ -1460,12 +1510,17 @@ def test_a_legacy_non_dict_arguments_record_never_wedges_a_claim(server):
     resolve as a NAMED refusal that releases the claim, never a raise
     that leaks the flight marker and hides the job from every route."""
     node = register_rt(server)
-    # Written straight to the store: the enqueue gate would refuse it,
-    # so this is the only way such a record can exist at all.
+    # Create a valid record, then rewrite its durable payload to model a
+    # legacy build/hand edit.  HostStore now correctly rejects malformed
+    # arguments at its own admission boundary too.
     with server.app.lock:
         job, _ = server.app.db.create_job(
-            "legacy-args", node["node_id"], "run_tests", ["not", "a", "dict"],
+            "legacy-args", node["node_id"], "run_tests", {},
             convoy_id=CONVOY, expected_runtime_id=node["runtime_id"])
+        job["arguments"] = ["not", "a", "dict"]
+        hs.platform_mod._write_private(
+            server.app.db._job_path(job["delivery_id"]),
+            json.dumps(job, indent=1, sort_keys=True) + "\n")
     did = job["delivery_id"]
     assert job["arguments"] == ["not", "a", "dict"]
     calls = {"n": 0}
@@ -1490,8 +1545,12 @@ def test_a_legacy_non_dict_arguments_record_never_wedges_a_claim(server):
     # and the SYNC path refuses identically -- one authority, not two
     with server.app.lock:
         sync_job, _ = server.app.db.create_job(
-            "legacy-sync", node["node_id"], "query_network", ["x"],
+            "legacy-sync", node["node_id"], "query_network", {},
             convoy_id=CONVOY)
+        sync_job["arguments"] = ["x"]
+        hs.platform_mod._write_private(
+            server.app.db._job_path(sync_job["delivery_id"]),
+            json.dumps(sync_job, indent=1, sort_keys=True) + "\n")
     code, body = server.call("/dispatch",
                              {"delivery_id": sync_job["delivery_id"]})
     assert code == 409 and body["reason"] == "malformed_arguments"
@@ -1759,3 +1818,171 @@ def test_a_mid_pass_addition_survives_the_lock_free_prune(server,
     assert not any(k.startswith("cj_dead")
                    for k in server.app._drain_backoff), (
         "the examined-dead ghosts must still be reaped")
+
+
+# =====================================================================
+# Panel regressions (2026-08-02): the passive read path, the pre-send
+# WSS window, and scheduled artifact maintenance.
+# =====================================================================
+
+def _admit_session_peer(app, tmp_path, number=7):
+    identity = _hostkeys.load_or_create(str(tmp_path / ("sess-peer-%d" % number)))
+    host_id = "%032x" % number
+    with app.lock:
+        app.peers.admit(host_id, identity.fingerprint,
+                        cert_pem=identity.certificate_pem,
+                        endpoints=["10.0.0.%d:47600" % number],
+                        convoy_ids=[CONVOY])
+    return host_id, identity
+
+
+class _RaisingSessionManager:
+    """A CONNECTED session manager whose call() raises a chosen error, used
+    to exercise _session_call_if_connected's pre-send vs post-send split."""
+
+    def __init__(self, exc):
+        self.is_stopped = False
+        self._exc = exc
+        self.calls = 0
+
+    def peer_info(self, peer_host_id):
+        return SimpleNamespace(
+            state="connected", remote_capability_summary={},
+            authorized_namespaces={CONVOY})
+
+    def connected_with_authentication_context(self, peer_host_id, ctx):
+        return True
+
+    def call(self, peer_host_id, convoy_id, method, payload, timeout_s):
+        self.calls += 1
+        raise self._exc
+
+
+@pytest.mark.parametrize("exc", [
+    _ws.MessageTooLarge("outbound frame exceeds the configured limit"),
+    _sessions.PeerUnavailable("no connected candidate before send"),
+    _sessions.NamespaceNotAuthorized("namespace not authorized before send"),
+])
+def test_provably_presend_wss_failures_allow_the_http_fallback(tmp_path, exc):
+    """A WSS failure raised BEFORE any byte reaches the socket is reported as
+    'not established' (False, None) so the caller runs the HTTPS compatibility
+    fallback -- never collapsed into (True, None), which would suppress the
+    fallback and report a 202 delivery_indeterminate for a request that never
+    left the process."""
+    app = ha.HostApp(str(tmp_path / "presend"))
+    try:
+        host_id, _identity = _admit_session_peer(app, tmp_path)
+        app.session_manager = _RaisingSessionManager(exc)
+        used_session, result = app._session_call_if_connected(
+            host_id, CONVOY, "peer.nodes", {}, 2.0)
+        assert used_session is False
+        assert result is None
+    finally:
+        app.db.close()
+
+
+def test_ambiguous_postsend_wss_failure_forbids_the_http_fallback(tmp_path):
+    """The genuine post-send window stays (True, None): a mid-send
+    ConnectionClosed may already have put bytes on the wire, so replaying over
+    HTTPS could double-execute. The fallback is refused and the caller reports
+    the ambiguous 202."""
+    app = ha.HostApp(str(tmp_path / "postsend"))
+    try:
+        host_id, _identity = _admit_session_peer(app, tmp_path)
+        app.session_manager = _RaisingSessionManager(
+            _ws.ConnectionClosed("socket closed while writing"))
+        used_session, result = app._session_call_if_connected(
+            host_id, CONVOY, "peer.nodes", {}, 2.0)
+        assert used_session is True
+        assert result is None
+    finally:
+        app.db.close()
+
+
+def test_read_path_reconcile_is_ttl_bounded(tmp_path):
+    """A passive read must not do one durable job-file read per live claim on
+    every call: the read-path reconcile fires at most once per the TTL, while
+    mutation/dispatch paths still reconcile eagerly."""
+    clock = [1000.0]
+    app = ha.HostApp(str(tmp_path / "ttl"), now=lambda: clock[0])
+    try:
+        calls = {"n": 0}
+        real = app._reconcile_operation_claims_locked
+
+        def counting():
+            calls["n"] += 1
+            return real()
+
+        app._reconcile_operation_claims_locked = counting
+        with app.lock:
+            app._reconcile_operation_claims_if_stale_locked()
+            app._reconcile_operation_claims_if_stale_locked()
+        assert calls["n"] == 1, "the TTL did not suppress the second read"
+        clock[0] += ha.OPERATION_CLAIM_READ_RECONCILE_TTL_S + 0.01
+        with app.lock:
+            app._reconcile_operation_claims_if_stale_locked()
+        assert calls["n"] == 2, "the reconcile did not resume after the TTL"
+    finally:
+        app.db.close()
+
+
+def test_passive_directory_read_reconciles_at_most_once_per_ttl(tmp_path):
+    """The peer directory read path (peer_nodes_view -> _controller_counts_
+    locked) now uses the TTL-bounded reconcile: two rapid reads trigger the
+    per-claim reconcile once, not once each."""
+    clock = [1000.0]
+    app = ha.HostApp(str(tmp_path / "passivettl"), now=lambda: clock[0])
+    try:
+        code, _node = app.register_node({
+            "project_root": "/Work/p", "convoy_id": CONVOY,
+            "comp_path": "/Embody", "runtime_id": "rt_ttl"})
+        assert code == 200
+        host_id, identity = _admit_session_peer(app, tmp_path)
+        calls = {"n": 0}
+        real = app._reconcile_operation_claims_locked
+
+        def counting():
+            calls["n"] += 1
+            return real()
+
+        app._reconcile_operation_claims_locked = counting
+        for _ in range(2):
+            code, _view = app.peer_nodes_view(
+                host_id, CONVOY, identity.fingerprint)
+            assert code == 200
+        assert calls["n"] == 1
+        clock[0] += ha.OPERATION_CLAIM_READ_RECONCILE_TTL_S + 0.01
+        code, _view = app.peer_nodes_view(
+            host_id, CONVOY, identity.fingerprint)
+        assert code == 200
+        assert calls["n"] == 2
+    finally:
+        app.db.close()
+
+
+def test_maybe_reap_schedules_artifact_cleanup(tmp_path):
+    """ArtifactStore maintenance (TTL expiry, capability pruning, stale-partial
+    recovery) runs only from cleanup(); _maybe_reap must schedule it on its
+    cadence so the index cannot grow unbounded for the life of the process."""
+    clock = [1000.0]
+    app = ha.HostApp(str(tmp_path / "reap"), now=lambda: clock[0])
+    try:
+        calls = {"n": 0}
+        real = app.artifacts.cleanup
+
+        def spy():
+            calls["n"] += 1
+            return real()
+
+        app.artifacts.cleanup = spy
+        clock[0] += app.reap_interval_s + 1.0
+        app._maybe_reap()
+        assert calls["n"] == 1, "artifact cleanup was never scheduled"
+        # Cadence-gated: an immediate second pass does not reap/clean again.
+        app._maybe_reap()
+        assert calls["n"] == 1
+        clock[0] += app.reap_interval_s + 1.0
+        app._maybe_reap()
+        assert calls["n"] == 2
+    finally:
+        app.db.close()

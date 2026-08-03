@@ -14,6 +14,7 @@ payloads -- protects that one honesty property from the obvious
 "symmetry" refactor.
 """
 
+import json
 import threading
 import time
 
@@ -21,6 +22,7 @@ import pytest
 
 import convoy_hostapp as ha
 import convoy_mcpclient as mcpclient
+from conftest import approve_td_python
 from test_convoy_hostapp import Server
 
 CONVOY = "studio"
@@ -67,12 +69,14 @@ def app(tmp_path, clock):
 # -- helpers ----------------------------------------------------------
 
 def register(app, envoy_port=9800, comp="/Embody", runtime_id="rt1"):
-    with app.lock:
-        code, node = app.register_node({
-            "project_root": "/Work/p", "convoy_id": CONVOY,
-            "comp_path": comp, "envoy_port": envoy_port,
-            "runtime_id": runtime_id})
+    code, node = app.register_node({
+        "project_root": "/Work/p", "convoy_id": CONVOY,
+        "comp_path": comp, "envoy_port": envoy_port,
+        "runtime_id": runtime_id})
     assert code == 200, node
+    # This polling suite exercises run_tests handles. Opt in explicitly so
+    # its transport/state assertions do not bypass the production code gate.
+    approve_td_python(app, node["node_id"])
     return node
 
 
@@ -523,9 +527,11 @@ def test_a_failed_verdict_write_during_a_poll_leaves_the_job_running(
 
 
 def test_the_poll_result_body_is_bounded(server):
-    """C31: a node payload rides into a durable file and out of every
-    /jobs response. An oversized one is truncated with an honest note --
-    and the VERDICT survives regardless."""
+    """C31: a large node verdict is preserved as a private artifact.
+
+    The delivery record and every /jobs response stay bounded without
+    destroying the full node-authored result.
+    """
     node = register(server.app)
     job = handoff(server.app, enqueue(server.app, node))
     server.app.forwarder = lambda p, o, a: node_record(
@@ -534,9 +540,19 @@ def test_the_poll_result_body_is_bounded(server):
     assert code == 200 and body["job"]["state"] == "succeeded"
     assert body["job"]["verdict_source"] == "node_poll"
     result = body["job"]["result"]
-    assert result["truncated"] is True
-    assert result["bytes"] > ha.MAX_RESULT_BYTES
-    assert "truncated" in result["detail"]
+    assert result["spilled"] is True
+    assert result["result_bytes"] > ha.MAX_RESULT_BYTES
+    assert len(json.dumps(result)) < 4096
+    reference = result["artifact"]
+    code, payload, lease, _headers = server.app.artifact_open_local_download(
+        reference["convoy_id"], reference["artifact_id"])
+    assert code == 200 and payload is None
+    try:
+        restored = json.loads(b"".join(lease).decode("utf-8"))
+    finally:
+        lease.close()
+    assert restored["result"]["log"] == "x" * (
+        ha.MAX_RESULT_BYTES + 4096)
 
 
 # =====================================================================

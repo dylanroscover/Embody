@@ -89,6 +89,51 @@ operators:
     parameters:
       file: embody/Embody/convoy/host/convoy_peerclient.py
     position: [400, -1200]
+  - name: convoy_artifact_http
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_artifact_http.py
+    position: [800, -1200]
+  - name: convoy_artifacts
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_artifacts.py
+    position: [1200, -1200]
+  - name: convoy_discovery
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_discovery.py
+    position: [0, -1600]
+  - name: convoy_policy
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_policy.py
+    position: [400, -1600]
+  - name: convoy_realm
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_realm.py
+    position: [800, -1600]
+  - name: convoy_wake
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_wake.py
+    position: [1200, -1600]
+  - name: convoy_hostops
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_hostops.py
+    position: [0, -2000]
+  - name: convoy_lifecycle
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_lifecycle.py
+    position: [400, -2000]
+  - name: convoy_owlette
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_owlette.py
+    position: [800, -2000]
   - name: convoy_peerserver
     type: textDAT
     parameters:
@@ -103,6 +148,16 @@ operators:
     type: textDAT
     parameters:
       file: embody/Embody/convoy/host/convoy_capabilities.py
+  - name: convoy_sessions
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_sessions.py
+    position: [800, -2400]
+  - name: convoy_ws
+    type: textDAT
+    parameters:
+      file: embody/Embody/convoy/host/convoy_ws.py
+    position: [1200, -2400]
   annotations:
   - name: annotate1
     mode: annotate
@@ -119,8 +174,8 @@ operators:
       The daemon is TD-free and never imported in TouchDesigner -- it is inert text here.
       On install, ConvoyExt reads each DAT's .text on the main thread and a worker writes
       it to the per-user data dir.
-    position: [-70, -870]
-    size: [1470, 1130]
+    position: [-70, -2470]
+    size: [1470, 2730]
     color: [0.45, 0.45, 0.45]
 - name: ConvoyExt
   type: textDAT

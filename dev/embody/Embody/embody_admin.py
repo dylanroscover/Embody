@@ -14,8 +14,9 @@ ext-diet WP7c + WP7d clusters C5 + C9). Holds:
         defer_save_settings / restore_settings / show_tdn_migration_nudge.
         Plus the project.json 'convoy' key steward (Convoy Phase 2):
         mint_convoy_id / read_convoy_entry / read_convoy_id /
-        ensure_convoy_id, which own that ONE key with the same key-level
-        discipline write_project_json applies to td_build.
+        read_convoy_binding_state / ensure_convoy_id / adopt_convoy_id,
+        which own that ONE key with the same key-level discipline
+        write_project_json applies to td_build.
 
 EmbodyExt keeps a thin delegating stub for every function here (identical
 signatures; promoted names stay UpperCamelCase). No module-level TD access --
@@ -621,7 +622,11 @@ def _write_json_atomic(path: Path, data: dict) -> None:
     try:
         for attempt in range(3):
             try:
-                tmp.write_text(content, encoding='utf-8', newline='\n')
+                # pathlib.Path.write_text gained ``newline`` only in newer
+                # Python releases. TouchDesigner/Convoy still support Python
+                # 3.9 runtimes, so use the cross-version text-open API.
+                with open(tmp, 'w', encoding='utf-8', newline='\n') as f:
+                    f.write(content)
                 os.replace(str(tmp), str(path))
                 return
             except PermissionError:
@@ -774,7 +779,8 @@ def write_project_json(ext) -> None:
 #
 #     "convoy": {
 #       "id": "cv_<16 lowercase hex>",
-#       "consent_scope": "local host app only",
+#       "binding_state": "candidate" | "established",
+#       "consent_scope": "trusted LAN Convoy mesh",
 #       "granted_at": "2026-08-01T09:12:33Z"
 #     }
 #
@@ -782,7 +788,13 @@ def write_project_json(ext) -> None:
 # convoy, which is safe because a convoy id is an IDENTIFIER, not a
 # credential -- the group PSK is host-private and never leaves the host app.
 CONVOY_KEY = 'convoy'
+# Retained as the migration marker written by pre-LAN builds.
 CONVOY_SCOPE_LOCAL = 'local host app only'
+CONVOY_SCOPE_LAN = 'trusted LAN Convoy mesh'
+CONVOY_BINDING_CANDIDATE = 'candidate'
+CONVOY_BINDING_ESTABLISHED = 'established'
+CONVOY_BINDING_STATES = frozenset((CONVOY_BINDING_CANDIDATE,
+                                   CONVOY_BINDING_ESTABLISHED))
 
 
 def mint_convoy_id() -> str:
@@ -794,6 +806,39 @@ def mint_convoy_id() -> str:
     """
     import secrets
     return 'cv_' + secrets.token_hex(8)
+
+
+def _clean_convoy_id(value) -> str:
+    """Canonical bounded project-facing Convoy identifier, or ``''``.
+
+    This mirrors the host's public identity boundary without importing a
+    separately installed host module into TouchDesigner.  Convoy IDs are
+    identifiers, not credentials, but invisible/ambiguous text still must not
+    enter tracked project metadata.
+    """
+    if not isinstance(value, str) or not value or value != value.strip():
+        return ''
+    try:
+        raw = value.encode('utf-8')
+    except UnicodeEncodeError:
+        return ''
+    if (len(raw) > 128
+            or any(byte < 0x20 or byte == 0x7f for byte in raw)):
+        return ''
+    return value
+
+
+def _entry_binding_state(entry: dict) -> str:
+    """Safe rolling interpretation: an old persisted binding is established."""
+    if not isinstance(entry, dict) or not _clean_convoy_id(entry.get('id')):
+        return ''
+    state = entry.get('binding_state')
+    if state in CONVOY_BINDING_STATES:
+        return state
+    # Builds before automatic genesis persisted durable project IDs. Treating
+    # those as fresh candidates could silently merge a moved/established
+    # project into another LAN, so the only safe migration is established.
+    return CONVOY_BINDING_ESTABLISHED
 
 
 def _load_project_json(ext, purpose: str):
@@ -860,11 +905,17 @@ def read_convoy_entry(ext) -> dict:
 
 def read_convoy_id(ext) -> str:
     """This project's convoy id, or '' when none is recorded."""
-    return str(read_convoy_entry(ext).get('id') or '')
+    return _clean_convoy_id(read_convoy_entry(ext).get('id'))
+
+
+def read_convoy_binding_state(ext) -> str:
+    """``candidate``/``established`` for a recorded binding, else ``''``."""
+    return _entry_binding_state(read_convoy_entry(ext))
 
 
 def ensure_convoy_id(ext, convoy_id=None,
-                     consent_scope=CONVOY_SCOPE_LOCAL) -> str:
+                     consent_scope=CONVOY_SCOPE_LAN,
+                     binding_state=CONVOY_BINDING_CANDIDATE) -> str:
     """Record the convoy key; return the id now in force, or '' on failure.
 
     KEY-LEVEL OWNERSHIP, exactly as write_project_json: this function owns
@@ -873,11 +924,11 @@ def ensure_convoy_id(ext, convoy_id=None,
     (never overwritten with {}), and a missing file is created with an
     EXCLUSIVE create so a co-writer that lands it first is not clobbered.
 
-    IDEMPOTENT: an already-recorded id wins and comes back unchanged. A
-    second enable never re-mints, never re-stamps granted_at, and never
-    silently widens a recorded consent scope -- Phase 3's LAN widening is a
-    deliberate separate write with its own confirmation, which is the whole
-    point of storing the scope beside the id.
+    IDEMPOTENT FOR ONE SCOPE: an already-recorded id wins and is never
+    re-minted.  A different requested scope updates only consent metadata on
+    that same id.  The caller is responsible for obtaining explicit local
+    confirmation before requesting that migration; reconcile ticks only read
+    this file and never call this writer.
 
     Called ONLY from the explicit-enable path (ConvoyExt._ensureConsent),
     never from a tick and never on project open: minting diffs a tracked
@@ -888,17 +939,47 @@ def ensure_convoy_id(ext, convoy_id=None,
     if not readable:
         return ''
 
+    from datetime import datetime, timezone
+    scope = str(consent_scope or CONVOY_SCOPE_LAN).strip()
+    if not scope or len(scope) > 128:
+        ext.Log('Refused to record an invalid Convoy consent scope',
+                'WARNING')
+        return ''
+    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    requested_id = _clean_convoy_id(convoy_id) if convoy_id is not None else ''
+    if convoy_id is not None and not requested_id:
+        ext.Log('Refused to record an invalid Convoy id', 'WARNING')
+        return ''
+    if binding_state not in CONVOY_BINDING_STATES:
+        ext.Log('Refused to record an invalid Convoy binding state', 'WARNING')
+        return ''
+
     existing = data.get(CONVOY_KEY)
     if isinstance(existing, dict) and existing.get('id'):
-        return str(existing['id'])
-
-    from datetime import datetime, timezone
-    entry = {
-        'id': str(convoy_id or mint_convoy_id()),
-        'consent_scope': str(consent_scope or CONVOY_SCOPE_LOCAL),
-        'granted_at': datetime.now(timezone.utc).strftime(
-            '%Y-%m-%dT%H:%M:%SZ'),
-    }
+        existing_id = _clean_convoy_id(existing.get('id'))
+        if not existing_id:
+            ext.Log('Refused to update a malformed existing Convoy id',
+                    'WARNING')
+            return ''
+        existing_state = _entry_binding_state(existing)
+        if (str(existing.get('consent_scope') or '') == scope
+                and existing.get('binding_state') == existing_state):
+            return existing_id
+        entry = dict(existing)
+        entry['id'] = existing_id
+        # Consent maintenance must never demote a durable/legacy binding back
+        # into genesis merely because ensure_convoy_id's new-entry default is
+        # candidate.
+        entry['binding_state'] = existing_state
+        entry['consent_scope'] = scope
+        entry['granted_at'] = now
+    else:
+        entry = {
+            'id': requested_id or mint_convoy_id(),
+            'binding_state': binding_state,
+            'consent_scope': scope,
+            'granted_at': now,
+        }
     data[CONVOY_KEY] = entry
     try:
         if path.is_file():
@@ -919,10 +1000,20 @@ def ensure_convoy_id(ext, convoy_id=None,
                     return ''
                 theirs = merged.get(CONVOY_KEY)
                 if isinstance(theirs, dict) and theirs.get('id'):
-                    ext.Log(
-                        '.embody/project.json gained a convoy id from a '
-                        'co-writer mid-create -- keeping theirs', 'DEBUG')
-                    return str(theirs['id'])
+                    # Their id wins, but this call follows a local consent
+                    # confirmation, so apply the requested scope to that id
+                    # instead of silently preserving an obsolete narrower
+                    # grant or replacing the co-writer's identity.
+                    theirs_id = _clean_convoy_id(theirs.get('id'))
+                    if not theirs_id:
+                        ext.Log('Refused to merge a malformed Convoy id',
+                                'WARNING')
+                        return ''
+                    entry = dict(theirs)
+                    entry['id'] = theirs_id
+                    entry['binding_state'] = _entry_binding_state(theirs)
+                    entry['consent_scope'] = scope
+                    entry['granted_at'] = now
                 merged[CONVOY_KEY] = entry
                 _write_json_atomic(path, merged)
     except Exception as e:
@@ -934,6 +1025,65 @@ def ensure_convoy_id(ext, convoy_id=None,
         f'(consent scope: {entry["consent_scope"]}). It is a TRACKED file, '
         f'so every clone of this repo shares the convoy.', 'INFO')
     return entry['id']
+
+
+def adopt_convoy_id(ext, convoy_id, expected_id,
+                    binding_state=CONVOY_BINDING_ESTABLISHED) -> str:
+    """CAS-rebind this project's automatic realm; return the ID or ``''``.
+
+    The authenticated local host app is the realm-convergence authority, but
+    only the TD main thread owns tracked project metadata.  ``expected_id``
+    prevents a stale registration response from overwriting a newer project
+    binding after an extension reinit or a concurrent project writer.  Every
+    non-Convoy key and all consent metadata are preserved.
+    """
+    new_id = _clean_convoy_id(convoy_id)
+    expected = _clean_convoy_id(expected_id)
+    if (not new_id or not expected
+            or binding_state not in CONVOY_BINDING_STATES):
+        ext.Log('Refused an invalid Convoy realm adoption', 'WARNING')
+        return ''
+    path = project_json_path(ext)
+    data, readable = _load_project_json(ext, 'adopting the automatic Convoy')
+    if not readable:
+        return ''
+    current = data.get(CONVOY_KEY)
+    if not isinstance(current, dict) or _clean_convoy_id(
+            current.get('id')) != expected:
+        ext.Log('Skipped a stale Convoy realm adoption because the project '
+                'binding changed', 'WARNING')
+        return ''
+    current_state = _entry_binding_state(current)
+    if (current_state == CONVOY_BINDING_ESTABLISHED
+            and new_id != expected):
+        # An established project must enter the host's explicit conflict/reset
+        # path, never silently follow a routine heartbeat to another realm.
+        ext.Log('Refused to replace an established Convoy binding without '
+                'an explicit local reset', 'WARNING')
+        return ''
+    if (current_state == CONVOY_BINDING_ESTABLISHED
+            and binding_state == CONVOY_BINDING_CANDIDATE):
+        ext.Log('Refused to demote an established Convoy binding', 'WARNING')
+        return ''
+
+    if new_id == expected and current.get('binding_state') == binding_state:
+        return new_id
+    from datetime import datetime, timezone
+    entry = dict(current)
+    entry['id'] = new_id
+    entry['binding_state'] = binding_state
+    entry['bound_at'] = datetime.now(timezone.utc).strftime(
+        '%Y-%m-%dT%H:%M:%SZ')
+    data[CONVOY_KEY] = entry
+    try:
+        _write_json_atomic(path, data)
+    except Exception as e:
+        ext.Log(f'Failed to adopt the automatic Convoy realm: {e}',
+                'WARNING')
+        return ''
+    ext.Log(f'Adopted automatic Convoy realm {new_id} '
+            f'({binding_state}) in .embody/project.json', 'INFO')
+    return new_id
 
 
 def save_settings(ext) -> None:

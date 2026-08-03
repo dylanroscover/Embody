@@ -1,0 +1,29 @@
+{
+ "format": "embody-convoy-runtime-catalog/1",
+ "artifacts": [],
+ "artifact_contract": {
+  "builder_output_status": "candidate",
+  "published_status": "published",
+  "one_current_artifact_per_target": true,
+  "windows_signature": "authenticode-verified",
+  "macos_signature": "developer-id-notarized-verified"
+ },
+ "policy": {
+  "network_install": false,
+  "release_sha256_required": true,
+  "windows_signing": "Authenticode required before publication",
+  "macos_signing": "Developer ID and notarization required before publication"
+ },
+ "required_targets": [
+  {
+   "platform": "win32",
+   "architecture": "x86_64",
+   "status": "release-asset-not-built"
+  },
+  {
+   "platform": "darwin",
+   "architecture": "arm64",
+   "status": "release-asset-not-built"
+  }
+ ]
+}

@@ -1734,6 +1734,20 @@ class TestBridgeMetaTools(EmbodyTestCase):
         result = bridge.handle_get_td_status(state)
         self.assertEqual(result['restart_attempts_remaining'], 0)
 
+    def test_get_td_status_surfaces_active_convoy_pin(self):
+        # A local status report must reveal that ordinary tools are relayed to
+        # a pinned remote node, so an agent never assumes a local mutation.
+        pin = {'target_host_id': 'host-remote', 'convoy_id': 'studio',
+               'target_node_id': 'node-remote', 'expected_runtime_id': 'rt-7'}
+        state = self._make_state(convoy_target=dict(pin))
+        result = bridge.handle_get_td_status(state)
+        self.assertEqual(result['convoy_pin'], pin)
+
+    def test_get_td_status_omits_convoy_pin_when_local(self):
+        state = self._make_state()
+        result = bridge.handle_get_td_status(state)
+        self.assertNotIn('convoy_pin', result)
+
     def test_launch_td_no_executable(self):
         """No configured exe AND no discoverable install -> a clear error.
 
@@ -2086,6 +2100,35 @@ class TestBridgeToolListAugmentation(EmbodyTestCase):
         names = {t['name'] for t in response['result']['tools']}
         self.assertIn('get_td_status', names)
         self.assertIn('launch_td', names)
+
+    def test_disk_cache_is_augmented_with_current_convoy_tools(self):
+        # Regression: a cache written by an older bridge (no convoy_* tools,
+        # and a stale get_convoy_status description) was served verbatim,
+        # hiding every convoy_* tool for a whole TD-closed session.
+        stale = [
+            {'name': 'create_op', 'description': 'create'},
+            {'name': 'get_convoy_status', 'description': 'OLD stale routing'},
+        ]
+        with patch.object(bridge, 'load_tools_cache', return_value=stale):
+            response = bridge.best_available_tools_list(7, '/fake/envoy.json')
+        self.assertEqual(response['id'], 7)
+        tools = response['result']['tools']
+        names = [t['name'] for t in tools]
+        self.assertIn('create_op', names)          # TD tool preserved
+        self.assertIn('convoy_call', names)         # convoy_* now present
+        self.assertIn('convoy_select_node', names)
+        self.assertIn('get_td_status', names)
+        # A stale copy of a bridge meta-tool is replaced by the current one.
+        self.assertEqual(names.count('get_convoy_status'), 1)
+        current = next(t for t in tools if t['name'] == 'get_convoy_status')
+        self.assertNotEqual(current.get('description'), 'OLD stale routing')
+
+    def test_disk_cache_absent_falls_back_to_bridge_only(self):
+        with patch.object(bridge, 'load_tools_cache', return_value=None):
+            response = bridge.best_available_tools_list(9, '/fake/envoy.json')
+        names = {t['name'] for t in response['result']['tools']}
+        self.assertIn('get_td_status', names)
+        self.assertNotIn('create_op', names)
 
     def test_tools_list_augmented_in_main_loop(self):
         """tools/list response from TD gets bridge tools appended."""
@@ -3305,6 +3348,47 @@ class TestBridgeInstancePinning(EmbodyTestCase):
         self.assertEqual(result.get('pinned_instance'), 'A')
         self.assertEqual(writes, [])
 
+    def _pinned_state(self):
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', config=dict(self.REG),
+            config_path='/fake/envoy.json', active_name='A',
+            pinned_instance='A', seen_epoch=0)
+        state.convoy_target = {
+            'target_host_id': 'host-remote', 'convoy_id': 'studio',
+            'target_node_id': 'node-remote'}
+        return state
+
+    def test_switch_instance_clears_active_convoy_pin(self):
+        # Regression: switch_instance returned success while the ordinary-tool
+        # relay branch still routed to the pinned REMOTE node, so a follow-up
+        # delete_op / import_network executed on the remote machine.
+        state = self._pinned_state()
+        with patch.object(bridge, 'load_config', return_value=dict(self.REG)), \
+             patch.object(bridge, 'ping_envoy_port', return_value=True), \
+             patch.object(bridge, 'is_td_process_alive', return_value=True), \
+             patch.object(bridge, 'notify_stdout', lambda *a, **k: None), \
+             patch.object(bridge, '_publish_convoy_controller',
+                          return_value={'ok': True}) as release:
+            result = bridge.handle_switch_instance({'instance': 'B'}, state)
+        self.assertEqual(result.get('status'), 'success')
+        self.assertIsNone(state.convoy_target)
+        self.assertEqual(result['cleared_convoy_pin']['target_node_id'],
+                         'node-remote')
+        self.assertIn('Cleared the active Convoy pin', result['message'])
+        release.assert_called_once()
+        self.assertEqual(release.call_args.args[0]['target_host_id'],
+                         'host-remote')
+        self.assertTrue(release.call_args.kwargs.get('clear_selected'))
+
+    def test_switch_list_mode_leaves_convoy_pin_intact(self):
+        state = self._pinned_state()
+        with patch.object(bridge, 'load_config', return_value=dict(self.REG)), \
+             patch.object(bridge, 'ping_envoy_port', return_value=True), \
+             patch.object(bridge, 'is_td_process_alive', return_value=True):
+            result = bridge.handle_switch_instance({}, state)
+        self.assertEqual(result.get('status'), 'list')
+        self.assertIsNotNone(state.convoy_target)
+
 
 class TestRegistryAdoptIfVacant(EmbodyTestCase):
     """envoy_setup.write_envoy_config must not steal 'active' from a
@@ -4231,8 +4315,9 @@ class TestConvoyProbe(EmbodyTestCase):
         self.assertEqual(r['convoy'], 'running')
         self.assertEqual(r['host_id'], 'abc123')
         self.assertEqual(r['port'], 59991)
-        # honest about Phase 1: routing is still direct
-        self.assertIn('direct to local Envoy', r['detail'])
+        self.assertTrue(r['identity_confirmed'])
+        self.assertIn('Explicit convoy_* tools', r['detail'])
+        self.assertIn('ordinary Envoy tools retain', r['detail'])
 
     def test_running_when_portfile_has_no_host_id(self):
         """A portfile without a host_id cannot be identity-checked; the
@@ -4248,6 +4333,8 @@ class TestConvoyProbe(EmbodyTestCase):
             r = bridge.probe_convoy_host()
         self.assertEqual(r['convoy'], 'running')
         self.assertEqual(r['host_id'], 'whatever-it-reports')
+        self.assertFalse(r['identity_confirmed'])
+        self.assertIn('legacy portfile', r['detail'])
 
     def test_non_integer_pid_is_stale_not_a_probe_error(self):
         with patch.object(bridge, '_read_convoy_portfile',
@@ -4315,6 +4402,1504 @@ class TestConvoyProbe(EmbodyTestCase):
         names = {t['name'] for t in response['result']['tools']}
         self.assertIn('get_convoy_status', names)
         self.assertIn('get_td_status', names, 'existing meta-tools intact')
+
+
+class _ConvoyResponse:
+    """Small urllib response double that records the requested read cap."""
+
+    def __init__(self, payload, status=200):
+        self.payload = (payload if isinstance(payload, bytes)
+                        else json.dumps(payload).encode('utf-8'))
+        self.status = status
+        self.read_limits = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self, limit=-1):
+        self.read_limits.append(limit)
+        return self.payload
+
+
+class _ConvoyArtifactResponse:
+    def __init__(self, data, reference, status=200):
+        self.status = status
+        self._stream = io.BytesIO(data)
+        self._headers = {
+            'Content-Length': str(len(data)),
+            'X-Convoy-Artifact-ID': reference['artifact_id'],
+            'X-Convoy-Content-SHA256': reference['sha256'],
+        }
+
+    def getheader(self, name):
+        return self._headers.get(name)
+
+    def read(self, size=-1):
+        return self._stream.read(size)
+
+
+class _ConvoyArtifactConnection:
+    def __init__(self, response):
+        self.response = response
+        self.requests = []
+        self.sock = MagicMock()
+        self.closed = False
+
+    def request(self, method, path, headers=None):
+        self.requests.append((method, path, dict(headers or {})))
+
+    def getresponse(self):
+        return self.response
+
+    def close(self):
+        self.closed = True
+
+
+class TestConvoyBridgeHostClient(EmbodyTestCase):
+    """The bridge -> local host trust boundary.
+
+    These tests pin the order that matters: health identity first, numeric
+    port + literal IPv4 loopback next, token read last. They also prove both
+    unauthenticated health and authenticated host responses are bounded.
+    """
+
+    def _running(self, **overrides):
+        result = {
+            'convoy': 'running', 'host_id': 'host-local',
+            'port': 54321, 'data_dir': 'convoy-state',
+            'identity_confirmed': True,
+        }
+        result.update(overrides)
+        return result
+
+    def test_health_probe_is_literal_loopback_token_free_and_bounded(self):
+        response = _ConvoyResponse({'ok': True, 'host_id': 'host-local'})
+        seen = []
+
+        def open_(request, timeout):
+            seen.append((request, timeout))
+            return response
+
+        with patch.object(bridge.urllib.request, 'urlopen', side_effect=open_):
+            host_id = bridge._convoy_health_host_id(54321)
+
+        self.assertEqual(host_id, 'host-local')
+        self.assertEqual(seen[0][0].full_url,
+                         'http://127.0.0.1:54321/health')
+        headers = {k.lower(): v for k, v in seen[0][0].header_items()}
+        self.assertNotIn('x-convoy-host-token', headers)
+        self.assertEqual(response.read_limits,
+                         [bridge.CONVOY_HEALTH_MAX_BODY_BYTES + 1])
+
+    def test_oversized_health_is_not_an_identity(self):
+        response = _ConvoyResponse(
+            b'x' * (bridge.CONVOY_HEALTH_MAX_BODY_BYTES + 1))
+        with patch.object(bridge.urllib.request, 'urlopen',
+                          return_value=response):
+            self.assertIsNone(bridge._convoy_health_host_id(54321))
+
+    def test_stale_probe_never_reads_or_sends_token(self):
+        with patch.object(bridge, 'probe_convoy_host', return_value={
+                'convoy': 'stale', 'detail': 'identity mismatch'}), \
+             patch.object(bridge, '_read_convoy_token') as read_token, \
+             patch.object(bridge.urllib.request, 'urlopen') as open_:
+            result = bridge.convoy_host_call('GET', '/network/nodes')
+        self.assertEqual(result['reason'], 'convoy_host_stale')
+        read_token.assert_not_called()
+        open_.assert_not_called()
+
+    def test_unpinned_legacy_probe_never_reads_or_sends_token(self):
+        with patch.object(bridge, 'probe_convoy_host',
+                          return_value=self._running(
+                              identity_confirmed=False)), \
+             patch.object(bridge, '_read_convoy_token') as read_token, \
+             patch.object(bridge.urllib.request, 'urlopen') as open_:
+            result = bridge.convoy_host_call('GET', '/network/nodes')
+        self.assertEqual(result['reason'],
+                         'convoy_host_identity_unverified')
+        read_token.assert_not_called()
+        open_.assert_not_called()
+
+    def test_invalid_port_never_reads_or_sends_token(self):
+        with patch.object(bridge, 'probe_convoy_host',
+                          return_value=self._running(port='bad')), \
+             patch.object(bridge, '_read_convoy_token') as read_token, \
+             patch.object(bridge.urllib.request, 'urlopen') as open_:
+            result = bridge.convoy_host_call('GET', '/network/nodes')
+        self.assertEqual(result['reason'], 'convoy_host_error')
+        read_token.assert_not_called()
+        open_.assert_not_called()
+
+    def test_authority_shaped_path_is_rejected_before_probe_or_token(self):
+        for path in ('//attacker.invalid/steal', '@attacker.invalid/steal',
+                     '/safe#https://attacker.invalid'):
+            with self.subTest(path=path), \
+                 patch.object(bridge, 'probe_convoy_host') as probe, \
+                 patch.object(bridge, '_read_convoy_token') as read_token, \
+                 patch.object(bridge.urllib.request, 'urlopen') as open_:
+                result = bridge.convoy_host_call('GET', path)
+            self.assertEqual(result['reason'],
+                             'convoy_bridge_invalid_request')
+            probe.assert_not_called()
+            read_token.assert_not_called()
+            open_.assert_not_called()
+
+    def test_authenticated_call_can_only_send_token_to_literal_loopback(self):
+        response = _ConvoyResponse({'ok': True, 'nodes': []})
+        seen = []
+
+        def open_(request, timeout):
+            seen.append((request, timeout))
+            return response
+
+        with patch.object(bridge, 'probe_convoy_host',
+                          return_value=self._running()), \
+             patch.object(bridge, '_read_convoy_token',
+                          return_value='ab' * 32), \
+             patch.object(bridge.urllib.request, 'urlopen', side_effect=open_):
+            result = bridge.convoy_host_call(
+                'POST', '/relay', {'operation': 'convoy_ping'}, timeout=2.5)
+
+        self.assertTrue(result['ok'])
+        request, timeout = seen[0]
+        parsed = bridge.urllib.parse.urlsplit(request.full_url)
+        self.assertEqual(parsed.scheme, 'http')
+        self.assertEqual(parsed.hostname, '127.0.0.1')
+        self.assertEqual(parsed.port, 54321)
+        self.assertEqual(parsed.path, '/relay')
+        self.assertEqual(timeout, 2.5)
+        headers = {k.lower(): v for k, v in request.header_items()}
+        self.assertEqual(headers['x-convoy-host-token'], 'ab' * 32)
+        self.assertEqual(json.loads(request.data.decode('utf-8')),
+                         {'operation': 'convoy_ping'})
+        self.assertEqual(response.read_limits,
+                         [bridge.CONVOY_HOST_MAX_BODY_BYTES + 1])
+
+    def test_authenticated_response_is_bounded(self):
+        response = _ConvoyResponse(
+            b'x' * (bridge.CONVOY_HOST_MAX_BODY_BYTES + 1))
+        with patch.object(bridge, 'probe_convoy_host',
+                          return_value=self._running()), \
+             patch.object(bridge, '_read_convoy_token',
+                          return_value='ab' * 32), \
+             patch.object(bridge.urllib.request, 'urlopen',
+                          return_value=response):
+            result = bridge.convoy_host_call('GET', '/network/nodes')
+        self.assertEqual(result['reason'], 'convoy_host_response_too_large')
+        self.assertEqual(response.read_limits,
+                         [bridge.CONVOY_HOST_MAX_BODY_BYTES + 1])
+
+    def test_token_reader_is_bounded_and_rejects_trailing_data(self):
+        token_file = MagicMock()
+        token_file.__enter__.return_value = token_file
+        token_file.read.return_value = 'ab' * 32 + '\n'
+        with patch('builtins.open', return_value=token_file):
+            self.assertEqual(bridge._read_convoy_token('state'), 'ab' * 32)
+        token_file.read.assert_called_once_with(66)
+        token_file.read.reset_mock()
+        token_file.read.return_value = 'ab' * 33
+        with patch('builtins.open', return_value=token_file):
+            self.assertIsNone(bridge._read_convoy_token('state'))
+        token_file.read.assert_called_once_with(66)
+
+    def test_non_object_or_malformed_response_is_named_host_error(self):
+        for payload in (b'[]', b'not-json', b'{"value": NaN}'):
+            with self.subTest(payload=payload), \
+                 patch.object(bridge, 'probe_convoy_host',
+                              return_value=self._running()), \
+                 patch.object(bridge, '_read_convoy_token',
+                              return_value='ab' * 32), \
+                 patch.object(bridge.urllib.request, 'urlopen',
+                              return_value=_ConvoyResponse(payload)):
+                result = bridge.convoy_host_call('GET', '/network/nodes')
+            self.assertFalse(result['ok'])
+            self.assertEqual(result['reason'], 'convoy_host_error')
+
+    def test_wire_status_overrides_any_status_claim_in_body(self):
+        response = _ConvoyResponse(
+            {'ok': False, 'http_status': 200, 'reason': 'blocked'},
+            status=403)
+        with patch.object(bridge, 'probe_convoy_host',
+                          return_value=self._running()), \
+             patch.object(bridge, '_read_convoy_token',
+                          return_value='ab' * 32), \
+             patch.object(bridge.urllib.request, 'urlopen',
+                          return_value=response):
+            result = bridge.convoy_host_call('GET', '/network/nodes')
+        self.assertEqual(result['http_status'], 403)
+
+
+class TestConvoyBridgePublicTools(EmbodyTestCase):
+    """Public Convoy MCP semantics, with the host transport mocked."""
+
+    def _call_args(self, **overrides):
+        result = {
+            'target_host_id': 'host-remote',
+            'convoy_id': 'studio',
+            'target_node_id': 'node-remote',
+            'operation': 'convoy_ping',
+            'arguments': {},
+            'timeout_s': 2.0,
+        }
+        result.update(overrides)
+        return result
+
+    def _accepted(self, state='queued', updated=10.0):
+        return {'ok': True, 'created': True, 'job': {
+            'delivery_id': 'cj_123', 'state': state, 'updated': updated}}
+
+    def test_all_public_tools_are_registered_advertised_and_dispatched(self):
+        names = {'get_convoy_status', 'convoy_list_nodes',
+                 'convoy_select_node', 'convoy_owlette',
+                 'convoy_list_controllers',
+                 'convoy_ping', 'convoy_start_node',
+                 'convoy_restart_node', 'convoy_call', 'convoy_batch',
+                 'convoy_get_job', 'convoy_ack_job', 'convoy_get_artifact',
+                 'convoy_save_artifact',
+                 'convoy_cancel_job'}
+        self.assertTrue(names.issubset(bridge.BRIDGE_TOOL_NAMES))
+        response = {'result': {'tools': []}}
+        bridge.augment_tools_list(response)
+        advertised = {t['name'] for t in response['result']['tools']}
+        self.assertTrue(names.issubset(advertised))
+        with patch.object(bridge, 'handle_convoy_list_nodes',
+                          return_value={'ok': True, 'sentinel': 1}):
+            content = bridge.handle_bridge_tool(
+                'convoy_list_nodes', {'convoy_id': 'studio'}, None)
+        self.assertEqual(json.loads(content[0]['text'])['sentinel'], 1)
+
+        handlers = (
+            ('convoy_select_node', 'handle_convoy_select_node'),
+            ('convoy_owlette', 'handle_convoy_owlette'),
+            ('convoy_list_controllers', 'handle_convoy_list_controllers'),
+            ('convoy_ping', 'handle_convoy_ping'),
+            ('convoy_start_node', 'handle_convoy_start_node'),
+            ('convoy_restart_node', 'handle_convoy_restart_node'),
+            ('convoy_batch', 'handle_convoy_batch'),
+            ('convoy_ack_job', 'handle_convoy_ack_job'),
+            ('convoy_get_artifact', 'handle_convoy_get_artifact'),
+            ('convoy_save_artifact', 'handle_convoy_save_artifact'),
+            ('convoy_cancel_job', 'handle_convoy_cancel_job'),
+        )
+        for tool_name, handler_name in handlers:
+            with self.subTest(tool_name=tool_name), \
+                 patch.object(bridge, handler_name,
+                              return_value={'ok': True, 'sentinel': tool_name}):
+                content = bridge.handle_bridge_tool(tool_name, {}, None)
+            self.assertEqual(
+                json.loads(content[0]['text'])['sentinel'], tool_name)
+
+    def test_surface_does_not_duplicate_structured_host_operations(self):
+        for redundant in ('convoy_git', 'convoy_gh', 'convoy_shell'):
+            self.assertNotIn(redundant, bridge.BRIDGE_TOOL_NAMES)
+
+    def _state(self):
+        return bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', active_name='local-show')
+
+    def test_select_node_queries_sets_reports_and_clears_session_pin(self):
+        state = self._state()
+        local = bridge.handle_convoy_select_node({}, state)
+        self.assertEqual(local['routing'], 'direct_local')
+        self.assertEqual(local['local_instance'], 'local-show')
+
+        row = {
+            'host_id': 'host-remote', 'convoy_id': 'studio',
+            'node_id': 'node-remote', 'runtime_id': 'rt-7',
+            'node_name': 'render', 'hostname': 'machine',
+            'status': 'online', 'online': True,
+        }
+        with patch.object(bridge, 'handle_convoy_list_nodes', return_value={
+                'ok': True, 'nodes': [row]}) as list_:
+            selected = bridge.handle_convoy_select_node({
+                'target_host_id': 'host-remote', 'convoy_id': 'studio',
+                'target_node_id': 'node-remote'}, state)
+        list_.assert_called_once_with({'convoy_id': 'studio'})
+        self.assertEqual(selected['routing'], 'convoy')
+        self.assertEqual(selected['selected_node']['expected_runtime_id'],
+                         'rt-7')
+        self.assertEqual(state.convoy_target['target_node_id'], 'node-remote')
+
+        cleared = bridge.handle_convoy_select_node({'clear': True}, state)
+        self.assertEqual(cleared['routing'], 'direct_local')
+        self.assertEqual(cleared['previous_node']['target_node_id'],
+                         'node-remote')
+        self.assertIsNone(state.convoy_target)
+
+    def test_select_node_refusal_never_changes_existing_pin(self):
+        state = self._state()
+        state.convoy_target = {
+            'target_host_id': 'old-host', 'convoy_id': 'old-convoy',
+            'target_node_id': 'old-node', 'expected_runtime_id': 'old-rt'}
+        with patch.object(bridge, 'handle_convoy_list_nodes', return_value={
+                'ok': True, 'nodes': []}):
+            missing = bridge.handle_convoy_select_node({
+                'target_host_id': 'new-host', 'convoy_id': 'studio',
+                'target_node_id': 'new-node'}, state)
+        self.assertEqual(missing['reason'], 'target_not_found')
+        self.assertTrue(missing['selection_unchanged'])
+        self.assertEqual(state.convoy_target['target_host_id'], 'old-host')
+
+        with patch.object(bridge, 'handle_convoy_list_nodes', return_value={
+                'ok': True, 'nodes': [{
+                    'host_id': 'new-host', 'convoy_id': 'studio',
+                    'node_id': 'new-node', 'runtime_id': 'rt-new'}]}):
+            stale = bridge.handle_convoy_select_node({
+                'target_host_id': 'new-host', 'convoy_id': 'studio',
+                'target_node_id': 'new-node',
+                'expected_runtime_id': 'rt-old'}, state)
+        self.assertEqual(stale['reason'], 'runtime_changed')
+        self.assertEqual(state.convoy_target['target_host_id'], 'old-host')
+
+    def test_select_node_rejects_partial_and_ambiguous_clear(self):
+        state = self._state()
+        for params in (
+                {'target_host_id': 'host'},
+                {'clear': 'yes'},
+                {'clear': True, 'convoy_id': 'studio'}):
+            with self.subTest(params=params), \
+                 patch.object(bridge, 'handle_convoy_list_nodes') as list_:
+                result = bridge.handle_convoy_select_node(params, state)
+            self.assertEqual(result['reason'], 'invalid_arguments')
+            list_.assert_not_called()
+
+    def test_selected_tool_returns_exact_provenance_and_runtime_guard(self):
+        state = self._state()
+        state.convoy_target = {
+            'target_host_id': 'remote-host', 'convoy_id': 'studio',
+            'target_node_id': 'remote-node',
+            'expected_runtime_id': 'rt-9'}
+        relay = {'ok': True, 'delivery_id': 'cj-9', 'job': {
+            'state': 'succeeded', 'result': {'ops': ['/a']}}}
+        with patch.object(bridge, 'handle_convoy_call',
+                          return_value=relay) as call_:
+            result = bridge.handle_convoy_selected_tool(
+                'query_network', {'parent_path': '/'}, state)
+        sent = call_.call_args.args[0]
+        self.assertEqual(sent['target_host_id'], 'remote-host')
+        self.assertEqual(sent['target_node_id'], 'remote-node')
+        self.assertEqual(sent['expected_runtime_id'], 'rt-9')
+        self.assertEqual(sent['operation'], 'query_network')
+        self.assertFalse(result['isError'])
+        payload = json.loads(result['content'][0]['text'])
+        self.assertEqual(payload['convoy_target']['delivery_id'], 'cj-9')
+        self.assertEqual(payload['convoy_target']['target_node_id'],
+                         'remote-node')
+        self.assertEqual(payload['result']['ops'], ['/a'])
+
+    def test_selected_tool_preserves_multiblock_images_and_never_falls_back(self):
+        state = self._state()
+        state.convoy_target = {
+            'target_host_id': 'remote-host', 'convoy_id': 'studio',
+            'target_node_id': 'remote-node'}
+        blocks = [
+            {'type': 'text', 'text': 'capture'},
+            {'type': 'image', 'data': 'AAAA', 'mimeType': 'image/png'},
+        ]
+        with patch.object(bridge, 'handle_convoy_call', return_value={
+                'ok': True, 'delivery_id': 'cj-image', 'job': {
+                    'state': 'succeeded',
+                    'result': {'content': blocks}}}):
+            result = bridge.handle_convoy_selected_tool(
+                'capture_top', {'op_path': '/out1'}, state)
+        self.assertFalse(result['isError'])
+        self.assertEqual(result['content'][1:], blocks)
+        self.assertEqual(json.loads(result['content'][0]['text'])[
+            'convoy_target']['target_host_id'], 'remote-host')
+
+        with patch.object(bridge, 'handle_convoy_call', return_value={
+                'ok': False, 'reason': 'peer_unreachable'}):
+            failed = bridge.handle_convoy_selected_tool(
+                'query_network', {}, state)
+        self.assertTrue(failed['isError'])
+        failure = json.loads(failed['content'][0]['text'])
+        self.assertEqual(failure['relay']['reason'], 'peer_unreachable')
+        self.assertEqual(state.convoy_target['target_host_id'], 'remote-host')
+
+    def test_batch_fanout_preserves_target_order_and_partial_results(self):
+        params = {
+            'targets': [
+                {'target_host_id': 'host-a', 'convoy_id': 'studio',
+                 'target_node_id': 'node-a', 'expected_runtime_id': 'rt-a'},
+                {'target_host_id': 'host-b', 'convoy_id': 'studio',
+                 'target_node_id': 'node-b'},
+            ],
+            'operations': [
+                {'tool': 'query_network', 'params': {'parent_path': '/'}},
+                {'tool': 'get_op', 'params': {'op_path': '/a'}},
+            ],
+            'override': False, 'timeout_s': 2, 'wait': True,
+        }
+
+        def relay(call_params):
+            # A real terminal success carries the native batch_operations
+            # payload; the fail-closed classifier refuses to count a bare
+            # {'state': 'succeeded'} shell as a native batch success.
+            if call_params['target_host_id'] == 'host-a':
+                return {'ok': True, 'job': {'state': 'succeeded', 'result': {
+                    'success': True, 'count': 2,
+                    'results': [{'tool': 'query_network'},
+                                {'tool': 'get_op'}]}}}
+            return {'ok': False, 'reason': 'peer_unreachable'}
+
+        with patch.object(bridge, 'handle_convoy_call', side_effect=relay) as call_:
+            result = bridge.handle_convoy_batch(params)
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['accepted_count'], 1)
+        self.assertEqual(result['terminal_success_count'], 1)
+        self.assertFalse(result['atomic'])
+        self.assertEqual([row['target']['target_host_id']
+                          for row in result['results']], ['host-a', 'host-b'])
+        calls = [item.args[0] for item in call_.call_args_list]
+        self.assertEqual({item['operation'] for item in calls},
+                         {'batch_operations'})
+        self.assertTrue(all(item['arguments']['operations'] ==
+                            params['operations'] for item in calls))
+        self.assertEqual(next(item for item in calls
+                              if item['target_host_id'] == 'host-a')[
+                                  'expected_runtime_id'], 'rt-a')
+
+    def test_batch_queueing_spends_one_cumulative_deadline(self):
+        params = {
+            'targets': [
+                {'target_host_id': 'host-%02d' % index,
+                 'convoy_id': 'studio',
+                 'target_node_id': 'node-%02d' % index}
+                for index in range(9)
+            ],
+            'operations': [{'tool': 'query_network', 'params': {}}],
+            'timeout_s': 0.15, 'wait': True,
+        }
+        release = threading.Event()
+        visited = []
+        guard = threading.Lock()
+
+        def relay(call_params):
+            with guard:
+                visited.append(call_params['target_host_id'])
+            release.wait(1.0)
+            return {'ok': True, 'job': {'state': 'succeeded'}}
+
+        timer = threading.Timer(0.11, release.set)
+        timer.start()
+        try:
+            with patch.object(
+                    bridge, 'handle_convoy_call', side_effect=relay):
+                result = bridge.handle_convoy_batch(params)
+        finally:
+            release.set()
+            timer.join(1.0)
+
+        # Eight targets occupied the hard fanout cap.  The ninth did not
+        # receive a fresh 150 ms after that queue wait; it expired under the
+        # original batch deadline and never opened another relay request.
+        self.assertEqual(len(visited), 8)
+        self.assertEqual(result['results'][8]['relay']['reason'],
+                         'convoy_batch_timeout')
+        self.assertTrue(result['results'][8]['relay']['wait_timed_out'])
+        self.assertEqual([row['target']['target_host_id']
+                          for row in result['results']],
+                         ['host-%02d' % index for index in range(9)])
+
+    def test_batch_rejects_malformed_or_duplicate_work_before_relay(self):
+        base = {
+            'targets': [{'target_host_id': 'h', 'convoy_id': 'c',
+                         'target_node_id': 'n'}],
+            'operations': [{'tool': 'query_network', 'params': {}}],
+        }
+        cases = (
+            {**base, 'targets': []},
+            {**base, 'operations': []},
+            {**base, 'operations': [{'tool': 'batch_operations'}]},
+            {**base, 'operations': [{'tool': 'x', 'params': []}]},
+            {**base, 'targets': base['targets'] * 2},
+            {**base, 'timeout_s': float('nan')},
+        )
+        for params in cases:
+            with self.subTest(params=params), \
+                 patch.object(bridge, 'handle_convoy_call') as relay:
+                result = bridge.handle_convoy_batch(params)
+            self.assertEqual(result['reason'], 'invalid_arguments')
+            relay.assert_not_called()
+
+    def test_status_enriches_running_probe_without_waking_touchdesigner(self):
+        probe = {'convoy': 'running', 'host_id': 'host-local',
+                 'port': 1234, 'identity_confirmed': True}
+        host = {'ok': True, 'realm': {'state': 'established'},
+                'jobs_queued': 2}
+        with patch.object(bridge, 'probe_convoy_host', return_value=probe), \
+             patch.object(bridge, 'convoy_host_call', return_value=host) as call_:
+            result = bridge.handle_convoy_status({})
+        call_.assert_called_once_with('GET', '/status')
+        self.assertEqual(result['convoy'], 'running')
+        self.assertEqual(result['host_status'], host)
+        self.assertEqual(result['scope'], 'local_host')
+        self.assertFalse(result['wakes_touchdesigner'])
+
+    def test_status_absent_is_a_non_waking_probe_without_host_call(self):
+        probe = {'convoy': 'absent', 'detail': 'not installed'}
+        with patch.object(bridge, 'probe_convoy_host', return_value=probe), \
+             patch.object(bridge, 'convoy_host_call') as call_:
+            result = bridge.handle_convoy_status({})
+        call_.assert_not_called()
+        self.assertEqual(result['convoy'], 'absent')
+        self.assertFalse(result['wakes_touchdesigner'])
+
+    def test_list_nodes_percent_encodes_namespace_and_never_falls_back(self):
+        with patch.object(bridge, 'convoy_host_call', return_value={
+                'ok': False, 'reason': 'not_found', 'http_status': 404}) as call_:
+            result = bridge.handle_convoy_list_nodes({'convoy_id': 'A/B + C'})
+        self.assertEqual(result['reason'], 'not_found')
+        call_.assert_called_once_with(
+            'GET', '/network/nodes?convoy_id=A%2FB%20%2B%20C')
+
+    def test_list_nodes_rejects_bad_namespace_without_network(self):
+        for value in ('', 1, True):
+            with self.subTest(value=value), \
+                 patch.object(bridge, 'convoy_host_call') as call_:
+                result = bridge.handle_convoy_list_nodes(
+                    {'convoy_id': value})
+            self.assertEqual(result['reason'], 'invalid_arguments')
+            call_.assert_not_called()
+
+    def test_list_controllers_uses_the_federated_non_waking_view(self):
+        network_view = {'ok': True, 'convoy_id': 'studio',
+                        'controller_count': 2, 'controllers': [
+            {'controller_id': 'ctl-a', 'selected_node_id': 'node-1'},
+            {'controller_id': 'ctl-b', 'selected_node_id': 'node-2'},
+        ]}
+        with patch.object(bridge, 'convoy_host_call',
+                          return_value=network_view) as call_:
+            result = bridge.handle_convoy_list_controllers({})
+        call_.assert_called_once_with('GET', '/network/controllers')
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['convoy_id'], 'studio')
+        self.assertFalse(result['wakes_touchdesigner'])
+        self.assertEqual(result['controller_count'], 2)
+        self.assertEqual([row['controller_id'] for row in
+                          result['controllers']], ['ctl-a', 'ctl-b'])
+
+    def test_list_controllers_encodes_network_filters(self):
+        response = {'ok': True, 'controllers': []}
+        with patch.object(bridge, 'convoy_host_call',
+                          return_value=response) as call_:
+            result = bridge.handle_convoy_list_controllers({
+                'convoy_id': 'A/B', 'host_id': 'host-remote',
+                'node_id': 'node-2'})
+        call_.assert_called_once_with(
+            'GET',
+            '/network/controllers?convoy_id=A%2FB&host_id=host-remote&node_id=node-2')
+        self.assertTrue(result['ok'])
+        self.assertFalse(result['wakes_touchdesigner'])
+
+    def test_list_controllers_rejects_bad_filters_before_probe(self):
+        for params in ({'convoy_id': ''}, {'host_id': ''}, {'node_id': 1}, []):
+            with self.subTest(params=params), \
+                 patch.object(bridge, 'probe_convoy_host') as probe:
+                result = bridge.handle_convoy_list_controllers(params)
+            self.assertEqual(result['reason'], 'invalid_arguments')
+            probe.assert_not_called()
+
+    def test_owlette_capabilities_use_only_the_authenticated_local_host(self):
+        response = {'ok': True, 'action': 'capabilities',
+                    'capabilities': {'machine_inventory': True}}
+        with patch.object(bridge, 'convoy_host_call',
+                          return_value=response) as call_:
+            result = bridge.handle_convoy_owlette({})
+        call_.assert_called_once_with(
+            'POST', '/owlette', {'action': 'capabilities'}, timeout=35.0)
+        self.assertTrue(result['ok'])
+        self.assertFalse(result['wakes_touchdesigner'])
+
+    def test_owlette_submit_forwards_only_bounded_published_fields(self):
+        params = {
+            'action': 'submit_command', 'site_id': 'site',
+            'machine_id': 'machine', 'command_type': 'capture_screenshot',
+            'idempotency_key': 'stable', 'params': {'display': 1},
+            'timeout_seconds': 45, 'ignored': 'never-forwarded',
+        }
+        with patch.object(bridge, 'convoy_host_call', return_value={
+                'ok': True, 'command': {'commandId': 'cmd'}}) as call_:
+            result = bridge.handle_convoy_owlette(params)
+        call_.assert_called_once_with('POST', '/owlette', {
+            'action': 'submit_command', 'site_id': 'site',
+            'machine_id': 'machine', 'command_type': 'capture_screenshot',
+            'idempotency_key': 'stable', 'params': {'display': 1},
+            'timeout_seconds': 45,
+        }, timeout=35.0)
+        self.assertTrue(result['ok'])
+
+    def test_owlette_refuses_malformed_and_tunnel_calls_before_host(self):
+        cases = (
+            {'action': 'get_machine', 'site_id': 'site'},
+            {'action': 'command_status', 'site_id': 'site',
+             'machine_id': 'machine'},
+            {'action': 'submit_command', 'site_id': 'site',
+             'machine_id': 'machine', 'command_type': 'capture_screenshot'},
+            {'action': 'submit_command', 'site_id': 'site',
+             'machine_id': 'machine', 'command_type': 'mcp_tool_call',
+             'idempotency_key': 'stable'},
+            {'action': 'submit_command', 'site_id': 'site',
+             'machine_id': 'machine', 'command_type': 'capture_screenshot',
+             'idempotency_key': 'stable', 'params': []},
+            {'action': 'not-public'},
+        )
+        for params in cases:
+            with self.subTest(params=params), \
+                 patch.object(bridge, 'convoy_host_call') as call_:
+                result = bridge.handle_convoy_owlette(params)
+            self.assertFalse(result['ok'])
+            call_.assert_not_called()
+
+    def test_call_requires_an_explicit_complete_target_without_network(self):
+        for missing in ('target_host_id', 'convoy_id', 'target_node_id',
+                        'operation'):
+            args = self._call_args()
+            del args[missing]
+            with self.subTest(missing=missing), \
+                 patch.object(bridge, 'convoy_host_call') as call_:
+                result = bridge.handle_convoy_call(args)
+            self.assertEqual(result['reason'], 'invalid_arguments')
+            call_.assert_not_called()
+
+    def test_ping_is_a_fixed_host_native_non_waking_call(self):
+        captured = []
+
+        def relay(params):
+            captured.append(dict(params))
+            return {'ok': True, 'job': {'state': 'succeeded',
+                                        'result': {'pong': True}}}
+
+        fake_time = MagicMock()
+        fake_time.monotonic.side_effect = (10.0, 10.025)
+        with patch.object(bridge, 'handle_convoy_call', side_effect=relay), \
+             patch.object(bridge, 'time', fake_time):
+            result = bridge.handle_convoy_ping({
+                'target_host_id': 'host-remote', 'convoy_id': 'studio',
+                'target_node_id': 'node-remote',
+                'idempotency_key': 'stable', 'timeout_s': 2})
+        self.assertEqual(captured, [{
+            'target_host_id': 'host-remote', 'convoy_id': 'studio',
+            'target_node_id': 'node-remote',
+            'idempotency_key': 'stable', 'timeout_s': 2,
+            'operation': 'convoy_ping', 'arguments': {}, 'wait': True,
+        }])
+        self.assertEqual(result['round_trip_ms'], 25.0)
+        self.assertFalse(result['wakes_touchdesigner'])
+
+    def test_ping_rejects_incomplete_target_without_relay(self):
+        with patch.object(bridge, 'handle_convoy_call') as relay:
+            result = bridge.handle_convoy_ping({
+                'target_host_id': 'host', 'convoy_id': 'studio'})
+        self.assertEqual(result['reason'], 'invalid_arguments')
+        relay.assert_not_called()
+
+    def test_lifecycle_wrappers_pin_operations_and_never_accept_paths(self):
+        captured = []
+
+        def relay(params):
+            captured.append(dict(params))
+            return {'ok': True, 'job': {'state': 'succeeded'}}
+
+        common = {'target_host_id': 'host-remote', 'convoy_id': 'studio',
+                  'target_node_id': 'node-remote',
+                  'idempotency_key': 'stable', 'timeout_s': 30,
+                  'wait': False}
+        with patch.object(bridge, 'handle_convoy_call', side_effect=relay):
+            started = bridge.handle_convoy_start_node(dict(common))
+            restarted = bridge.handle_convoy_restart_node(dict(
+                common, expected_runtime_id='rt-1',
+                policy='save_then_restart'))
+        self.assertTrue(started['starts_touchdesigner'])
+        self.assertTrue(restarted['restarts_touchdesigner'])
+        self.assertEqual(captured[0]['operation'], 'convoy_start_node')
+        self.assertEqual(captured[0]['arguments'], {'timeout_s': 30.0})
+        self.assertNotIn('expected_runtime_id', captured[0])
+        self.assertEqual(captured[1]['operation'], 'convoy_restart_node')
+        self.assertEqual(captured[1]['expected_runtime_id'], 'rt-1')
+        self.assertEqual(captured[1]['arguments'], {
+            'timeout_s': 30.0, 'policy': 'save_then_restart'})
+        for sent in captured:
+            self.assertNotIn('executable', sent)
+            self.assertNotIn('toe_path', sent)
+            self.assertNotIn('operation_id', sent['arguments'])
+
+    def test_lifecycle_wrappers_reject_unsafe_shapes_before_relay(self):
+        cases = (
+            ('start', {'target_host_id': 'h', 'convoy_id': 'c',
+                       'target_node_id': 'n', 'timeout_s': 901}),
+            ('start', {'target_host_id': 'h', 'convoy_id': 'c',
+                       'target_node_id': 'n', 'wait': 'yes'}),
+            ('restart', {'target_host_id': 'h', 'convoy_id': 'c',
+                         'target_node_id': 'n'}),
+            ('restart', {'target_host_id': 'h', 'convoy_id': 'c',
+                         'target_node_id': 'n',
+                         'expected_runtime_id': 'rt', 'policy': 'guess'}),
+            ('restart', {'target_host_id': 'h', 'convoy_id': 'c',
+                         'target_node_id': 'n',
+                         'expected_runtime_id': 'rt',
+                         'policy': 'discard_and_restart'}),
+            ('restart', {'target_host_id': 'h', 'convoy_id': 'c',
+                         'target_node_id': 'n',
+                         'expected_runtime_id': 'rt', 'policy': 'force'}),
+        )
+        for kind, params in cases:
+            handler = (bridge.handle_convoy_start_node if kind == 'start'
+                       else bridge.handle_convoy_restart_node)
+            with self.subTest(kind=kind, params=params), \
+                 patch.object(bridge, 'handle_convoy_call') as relay:
+                result = handler(params)
+            self.assertEqual(result['reason'], 'invalid_arguments')
+            relay.assert_not_called()
+
+    def test_call_rejects_unsafe_shapes_before_network(self):
+        bad = (
+            {'arguments': []}, {'wait': 'yes'}, {'timeout_s': True},
+            {'timeout_s': float('nan')}, {'timeout_s': 0.01},
+            {'idempotency_key': ''}, {'expected_runtime_id': ''},
+        )
+        for override in bad:
+            with self.subTest(override=override), \
+                 patch.object(bridge, 'convoy_host_call') as call_:
+                result = bridge.handle_convoy_call(
+                    self._call_args(**override))
+            self.assertEqual(result['reason'], 'invalid_arguments')
+            call_.assert_not_called()
+
+    def test_generated_idempotency_key_survives_indeterminate_submit(self):
+        captured = []
+
+        def call_(method, path, payload, timeout=None):
+            captured.append((method, path, dict(payload), timeout))
+            return {'ok': False, 'reason': 'convoy_host_error'}
+
+        with patch.object(bridge, 'convoy_host_call', side_effect=call_):
+            result = bridge.handle_convoy_call(self._call_args())
+        key = captured[0][2]['idempotency_key']
+        self.assertRegex(key, r'^[0-9a-f]{32}$')
+        self.assertEqual(result['idempotency_key'], key)
+        self.assertEqual(result['reconcile_with_idempotency_key'], key)
+        self.assertEqual(result['target_host_id'], 'host-remote')
+        self.assertEqual(result['target_node_id'], 'node-remote')
+        self.assertEqual(result['operation'], 'convoy_ping')
+
+    def test_provided_idempotency_key_and_controller_are_sent_unchanged(self):
+        seen = []
+
+        def call_(method, path, payload, timeout=None):
+            seen.append(dict(payload))
+            return self._accepted(state='succeeded')
+
+        with patch.object(bridge, 'convoy_host_call', side_effect=call_):
+            result = bridge.handle_convoy_call(self._call_args(
+                idempotency_key='stable-key', expected_runtime_id='rt_1'))
+        self.assertEqual(seen[0]['idempotency_key'], 'stable-key')
+        self.assertEqual(seen[0]['controller_id'],
+                         bridge._CONVOY_CONTROLLER_ID)
+        self.assertEqual(seen[0]['expected_runtime_id'], 'rt_1')
+        self.assertEqual(result['idempotency_key'], 'stable-key')
+        self.assertEqual(result['controller_id'],
+                         bridge._CONVOY_CONTROLLER_ID)
+        self.assertEqual(result['delivery_id'], 'cj_123')
+
+    def test_wait_false_returns_durable_ack_without_polling(self):
+        with patch.object(bridge, 'convoy_host_call',
+                          return_value=self._accepted()) as call_:
+            result = bridge.handle_convoy_call(
+                self._call_args(wait=False, idempotency_key='stable'))
+        self.assertEqual(call_.call_count, 1)
+        self.assertEqual(result['job']['state'], 'queued')
+        self.assertEqual(result['delivery_id'], 'cj_123')
+
+    def test_accepted_response_without_delivery_id_is_not_success(self):
+        with patch.object(bridge, 'convoy_host_call', return_value={
+                'ok': True, 'job': {'state': 'queued'}}):
+            result = bridge.handle_convoy_call(
+                self._call_args(idempotency_key='stable'))
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['reason'], 'convoy_host_bad_response')
+        self.assertEqual(result['reconcile_with_idempotency_key'], 'stable')
+
+    def test_poll_uses_cursor_and_stops_only_on_terminal_job(self):
+        responses = [
+            self._accepted(),
+            {'ok': True, 'changed': False, 'cursor': 10.0,
+             'state': 'queued'},
+            {'ok': True, 'changed': True, 'cursor': 11.0, 'job': {
+                'delivery_id': 'cj_123', 'state': 'succeeded',
+                'updated': 11.0, 'result': {'pong': True}}},
+        ]
+        with patch.object(bridge, 'convoy_host_call',
+                          side_effect=responses) as call_, \
+             patch.object(bridge.time, 'sleep'):
+            result = bridge.handle_convoy_call(
+                self._call_args(idempotency_key='stable'))
+        self.assertEqual(result['job']['state'], 'succeeded')
+        self.assertTrue(result['job']['result']['pong'])
+        first_poll = call_.call_args_list[1].args[2]
+        second_poll = call_.call_args_list[2].args[2]
+        self.assertEqual(first_poll['since'], 10.0)
+        self.assertEqual(second_poll['since'], 10.0)
+        self.assertEqual(call_.call_count, 3)
+
+    def test_transient_poll_dropout_reconciles_without_resubmission(self):
+        responses = [
+            self._accepted(),
+            {'ok': False, 'reason': 'peer_unreachable'},
+            {'ok': True, 'changed': True, 'cursor': 12.0, 'job': {
+                'delivery_id': 'cj_123', 'state': 'failed',
+                'updated': 12.0, 'result': {'message': 'remote failure'}}},
+        ]
+        with patch.object(bridge, 'convoy_host_call',
+                          side_effect=responses) as call_, \
+             patch.object(bridge.time, 'sleep'):
+            result = bridge.handle_convoy_call(
+                self._call_args(idempotency_key='stable'))
+        self.assertEqual(result['job']['state'], 'failed')
+        self.assertEqual(call_.call_args_list[0].args[1], '/relay')
+        self.assertEqual(call_.call_args_list[1].args[1], '/relay/job')
+        self.assertEqual(call_.call_args_list[2].args[1], '/relay/job')
+
+    def test_permanent_poll_refusal_preserves_accepted_delivery(self):
+        responses = [self._accepted(),
+                     {'ok': False, 'reason': 'namespace_not_admitted'}]
+        with patch.object(bridge, 'convoy_host_call', side_effect=responses), \
+             patch.object(bridge.time, 'sleep'):
+            result = bridge.handle_convoy_call(
+                self._call_args(idempotency_key='stable'))
+        self.assertTrue(result['ok'], 'the durable ACK remains true')
+        self.assertTrue(result['wait_interrupted'])
+        self.assertEqual(result['poll_error']['reason'],
+                         'namespace_not_admitted')
+        self.assertEqual(result['delivery_id'], 'cj_123')
+
+    def test_wait_timeout_does_not_claim_non_execution(self):
+        def call_(method, path, payload, timeout=None):
+            if path == '/relay':
+                return self._accepted()
+            return {'ok': True, 'changed': False, 'cursor': 10.0,
+                    'state': 'queued'}
+
+        with patch.object(bridge, 'convoy_host_call', side_effect=call_), \
+             patch.object(bridge, 'CONVOY_POLL_INITIAL_S', 0.02), \
+             patch.object(bridge, 'CONVOY_POLL_MAX_S', 0.02):
+            result = bridge.handle_convoy_call(self._call_args(
+                timeout_s=0.1, idempotency_key='stable'))
+        self.assertTrue(result['ok'])
+        self.assertTrue(result['wait_timed_out'])
+        self.assertEqual(result['delivery_id'], 'cj_123')
+        self.assertIn('remains durable', result['detail'])
+        self.assertNotIn('did not execute', result['detail'])
+
+    def test_get_job_requires_explicit_owner_and_preserves_provenance(self):
+        params = {'target_host_id': 'host-remote', 'convoy_id': 'studio',
+                  'delivery_id': 'cj_123', 'since': 12.5}
+        with patch.object(bridge, 'convoy_host_call',
+                          return_value={'ok': True, 'changed': False}) as call_:
+            result = bridge.handle_convoy_get_job(params)
+        call_.assert_called_once_with('POST', '/relay/job', params)
+        self.assertEqual(result['target_host_id'], 'host-remote')
+        self.assertEqual(result['convoy_id'], 'studio')
+        self.assertEqual(result['delivery_id'], 'cj_123')
+        self.assertFalse(result['wakes_touchdesigner'])
+
+    def test_get_job_rejects_missing_target_and_non_finite_cursor(self):
+        cases = (
+            {'convoy_id': 'studio', 'delivery_id': 'cj_123'},
+            {'target_host_id': 'h', 'convoy_id': 'studio',
+             'delivery_id': 'cj_123', 'since': float('inf')},
+        )
+        for params in cases:
+            with self.subTest(params=params), \
+                 patch.object(bridge, 'convoy_host_call') as call_:
+                result = bridge.handle_convoy_get_job(params)
+            self.assertEqual(result['reason'], 'invalid_arguments')
+            call_.assert_not_called()
+
+    @staticmethod
+    def _artifact_reference(data=b'image-bytes', mime_type='image/png'):
+        digest = bridge.hashlib.sha256(data).hexdigest()
+        return {
+            'kind': 'convoy_artifact', 'convoy_id': 'studio',
+            'artifact_id': 'art_' + digest, 'sha256': digest,
+            'size': len(data), 'mime_type': mime_type,
+            'filename_hint': 'capture.png',
+            'host_id': 'host-remote', 'node_id': 'node-remote',
+            'controller_id': 'controller', 'job_id': 'cj_123',
+        }
+
+    def test_get_artifact_uses_one_deadline_and_fixed_controller(self):
+        reference = self._artifact_reference()
+        local_reference = dict(reference)
+        materialized = {'ok': True, 'artifact': local_reference,
+                        'transfer': {'attempts': 1}}
+        downloaded = {'ok': True, 'artifact': local_reference,
+                      'local_path': 'capture.png', 'verified': True}
+        params = {'target_host_id': 'host-remote', 'convoy_id': 'studio',
+                  'target_node_id': 'node-remote', 'artifact': reference,
+                  'timeout_s': 10.0}
+        with patch.object(bridge, 'convoy_host_call', side_effect=(
+                materialized, {'ok': True, 'already_acknowledged': False}
+        )) as host_call, \
+             patch.object(bridge, 'convoy_host_download_artifact',
+                          return_value=downloaded) as download, \
+             patch.object(bridge.time, 'monotonic',
+                          side_effect=(100.0, 102.5)):
+            result = bridge.handle_convoy_get_artifact(params)
+        sent = host_call.call_args_list[0].args[2]
+        self.assertEqual(host_call.call_args_list[0].args[:2],
+                         ('POST', '/relay/artifact'))
+        self.assertEqual(host_call.call_args_list[0].kwargs['timeout'], 10.0)
+        self.assertEqual(sent['controller_id'],
+                         bridge._CONVOY_CONTROLLER_ID)
+        self.assertEqual(sent['artifact'], reference)
+        download.assert_called_once_with(local_reference, 'studio', 7.5)
+        self.assertTrue(result['verified'])
+        self.assertEqual(result['transfer'], {'attempts': 1})
+        self.assertTrue(result['acknowledgement']['ok'])
+        self.assertEqual(host_call.call_args_list[1].args, (
+            'POST', '/relay/ack', {
+                'target_host_id': 'host-remote', 'convoy_id': 'studio',
+                'delivery_id': 'cj_123'}))
+        self.assertFalse(result['wakes_touchdesigner'])
+
+    def test_get_artifact_releases_materialization_after_verified_copy(self):
+        reference = self._artifact_reference(b'protected', 'text/plain')
+        materialized = {
+            'ok': True, 'artifact': reference,
+            'relay_protection_id': 'relay:' + ('a' * 32),
+            'transfer': {'attempts': 1},
+        }
+        downloaded = {
+            'ok': True, 'artifact': reference,
+            'local_path': 'verified.bin', 'verified': True,
+        }
+        params = {
+            'target_host_id': 'host-remote', 'convoy_id': 'studio',
+            'target_node_id': 'node-remote', 'artifact': reference,
+            'timeout_s': 10.0,
+        }
+        with patch.object(bridge, 'convoy_host_call', side_effect=(
+                materialized,
+                {'ok': True, 'already_acknowledged': False},
+                {'ok': True, 'released': True},
+        )) as host_call, patch.object(
+                bridge, 'convoy_host_download_artifact',
+                return_value=downloaded), patch.object(
+                bridge.time, 'monotonic', side_effect=(100.0, 101.0)):
+            result = bridge.handle_convoy_get_artifact(params)
+        self.assertTrue(result['ok'])
+        self.assertEqual(host_call.call_args_list[2].args, (
+            'POST', '/relay/artifact/release', {
+                'convoy_id': 'studio',
+                'artifact_id': reference['artifact_id'],
+                'relay_protection_id': 'relay:' + ('a' * 32),
+            }))
+        self.assertNotIn('relay_protection_id', result)
+
+    def test_get_artifact_releases_materialization_after_copy_failure(self):
+        reference = self._artifact_reference(b'protected', 'text/plain')
+        materialized = {
+            'ok': True, 'artifact': reference,
+            'relay_protection_id': 'relay:' + ('b' * 32),
+        }
+        params = {
+            'target_host_id': 'host-remote', 'convoy_id': 'studio',
+            'target_node_id': 'node-remote', 'artifact': reference,
+        }
+        with patch.object(bridge, 'convoy_host_call', side_effect=(
+                materialized, {'ok': True, 'released': True},
+        )) as host_call, patch.object(
+                bridge, 'convoy_host_download_artifact', return_value={
+                    'ok': False, 'reason': 'artifact_corrupt'}):
+            result = bridge.handle_convoy_get_artifact(params)
+        self.assertEqual(result['reason'], 'artifact_corrupt')
+        self.assertEqual(host_call.call_args_list[-1].args[:2],
+                         ('POST', '/relay/artifact/release'))
+        self.assertFalse(any(
+            call.args[1] == '/relay/ack'
+            for call in host_call.call_args_list))
+
+    def test_ack_job_routes_to_exact_owner_and_is_safe_to_retry(self):
+        params = {'target_host_id': 'host-remote', 'convoy_id': 'studio',
+                  'delivery_id': 'cj_123'}
+        with patch.object(bridge, 'convoy_host_call', return_value={
+                'ok': True, 'already_acknowledged': True}) as call_:
+            result = bridge.handle_convoy_ack_job(params)
+        call_.assert_called_once_with('POST', '/relay/ack', params)
+        self.assertTrue(result['already_acknowledged'])
+        self.assertFalse(result['wakes_touchdesigner'])
+
+    def test_get_artifact_rejects_forged_metadata_before_network(self):
+        valid = self._artifact_reference()
+        cases = (
+            dict(valid, convoy_id='other'),
+            dict(valid, artifact_id='art_' + ('0' * 64)),
+            dict(valid, size=bridge.CONVOY_ARTIFACT_MAX_BYTES + 1),
+            dict(valid, mime_type='image/png\r\nInjected: yes'),
+        )
+        for reference in cases:
+            with self.subTest(reference=reference), \
+                 patch.object(bridge, 'convoy_host_call') as host_call:
+                result = bridge.handle_convoy_get_artifact({
+                    'target_host_id': 'host-remote', 'convoy_id': 'studio',
+                    'target_node_id': 'node-remote', 'artifact': reference})
+            self.assertEqual(result['reason'], 'invalid_arguments')
+            host_call.assert_not_called()
+
+    def _artifact_project_state(self):
+        root = tempfile.mkdtemp(prefix='convoy-save-project-')
+        self.addCleanup(shutil.rmtree, root, True)
+        embody_dir = os.path.join(root, '.embody')
+        os.makedirs(embody_dir)
+        config_path = os.path.join(embody_dir, 'envoy.json')
+        with open(config_path, 'w', encoding='utf-8') as output:
+            json.dump({}, output)
+        return root, bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', config_path=config_path)
+
+    def test_save_artifact_verifies_then_exports_to_own_project_and_cleans(self):
+        reference = self._artifact_reference(b'saved', 'text/plain')
+        root, state = self._artifact_project_state()
+        descriptor, local_path = tempfile.mkstemp(
+            prefix='convoy-save-verified-', suffix='.txt')
+        os.close(descriptor)
+        with open(local_path, 'wb') as output:
+            output.write(b'saved')
+        bridge._convoy_track_temp(local_path)
+        events = []
+
+        def materialize(_params, acknowledge=True,
+                        release_protection=True):
+            self.assertFalse(acknowledge)
+            self.assertFalse(release_protection)
+            events.append('verify')
+            return {'ok': True, 'artifact': reference,
+                    'local_path': local_path, 'verified': True}
+
+        def export(method, path, body, timeout=None):
+            if path == '/artifact/export':
+                events.append('export')
+                self.assertEqual(method, 'POST')
+                self.assertEqual(body['project_root'], os.path.realpath(root))
+                self.assertEqual(body['target_host_id'], 'host-remote')
+                self.assertEqual(body['target_node_id'], 'node-remote')
+                self.assertEqual(body['artifact'], reference)
+                self.assertEqual(body['filename'], 'kept.txt')
+                self.assertTrue(body['overwrite'])
+                self.assertAlmostEqual(timeout, 57.5)
+                return {'ok': True,
+                        'saved_path': os.path.join(root, 'kept.txt')}
+            self.assertEqual((method, path), ('POST', '/relay/ack'))
+            events.append('ack')
+            self.assertEqual(body['delivery_id'], 'cj_123')
+            return {'ok': True, 'already_acknowledged': False}
+
+        params = {'target_host_id': 'host-remote', 'convoy_id': 'studio',
+                  'target_node_id': 'node-remote', 'artifact': reference,
+                  'filename': 'kept.txt', 'overwrite': True,
+                  'timeout_s': 60.0}
+        with patch.object(bridge, 'handle_convoy_get_artifact',
+                          side_effect=materialize), \
+             patch.object(bridge, 'convoy_host_call',
+                          side_effect=export), \
+             patch.object(bridge.time, 'monotonic',
+                          side_effect=(100.0, 102.5)):
+            result = bridge.handle_convoy_save_artifact(params, state)
+        self.assertTrue(result['ok'])
+        self.assertTrue(result['acknowledgement']['ok'])
+        self.assertEqual(events, ['verify', 'export', 'ack'])
+        self.assertFalse(os.path.exists(local_path))
+        self.assertNotIn(local_path, bridge._CONVOY_ARTIFACT_TEMP_PATHS)
+
+    def test_save_artifact_cleans_verified_temp_when_export_is_refused(self):
+        reference = self._artifact_reference(b'saved', 'text/plain')
+        _root, state = self._artifact_project_state()
+        descriptor, local_path = tempfile.mkstemp(
+            prefix='convoy-save-refused-', suffix='.txt')
+        os.close(descriptor)
+        bridge._convoy_track_temp(local_path)
+        materialized = {'ok': True, 'artifact': reference,
+                        'local_path': local_path, 'verified': True}
+        with patch.object(bridge, 'handle_convoy_get_artifact',
+                          return_value=materialized), \
+             patch.object(bridge, 'convoy_host_call', return_value={
+                 'ok': False, 'reason': 'artifact_exists'}), \
+             patch.object(bridge.time, 'monotonic',
+                          side_effect=(20.0, 20.1)):
+            result = bridge.handle_convoy_save_artifact({
+                'target_host_id': 'host-remote', 'convoy_id': 'studio',
+                'target_node_id': 'node-remote', 'artifact': reference}, state)
+        self.assertEqual(result['reason'], 'artifact_exists')
+        self.assertFalse(os.path.exists(local_path))
+
+    def test_save_artifact_fails_closed_when_config_is_not_under_embody(self):
+        reference = self._artifact_reference(b'saved', 'text/plain')
+        root = tempfile.mkdtemp(prefix='convoy-save-no-embody-')
+        self.addCleanup(shutil.rmtree, root, True)
+        config_path = os.path.join(root, 'envoy.json')
+        with open(config_path, 'w', encoding='utf-8') as output:
+            json.dump({}, output)
+        state = bridge.BridgeState(
+            url='http://127.0.0.1:9870/mcp', config_path=config_path)
+        with patch.object(bridge, 'handle_convoy_get_artifact') as materialize, \
+             patch.object(bridge, 'convoy_host_call') as export:
+            result = bridge.handle_convoy_save_artifact({
+                'target_host_id': 'host-remote', 'convoy_id': 'studio',
+                'target_node_id': 'node-remote', 'artifact': reference}, state)
+        self.assertEqual(result['reason'], 'convoy_project_unavailable')
+        materialize.assert_not_called()
+        export.assert_not_called()
+
+    def test_artifact_renderer_returns_native_verified_image_content(self):
+        data = b'\x89PNG\r\n\x1a\nsmall-image'
+        reference = self._artifact_reference(data)
+        descriptor, path = tempfile.mkstemp(suffix='.png')
+        os.close(descriptor)
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
+        with open(path, 'wb') as output:
+            output.write(data)
+        content = bridge.convoy_artifact_mcp_content({
+            'ok': True, 'convoy_id': 'studio', 'artifact': reference,
+            'local_path': path, 'verified': True})
+        self.assertEqual([block['type'] for block in content],
+                         ['text', 'image'])
+        self.assertEqual(content[1]['mimeType'], 'image/png')
+        self.assertEqual(bridge.base64.b64decode(content[1]['data']), data)
+        payload = json.loads(content[0]['text'])
+        self.assertNotIn('data', payload)
+        self.assertNotIn('local_path', payload)
+        self.assertTrue(payload['image_inline'])
+        self.assertFalse(os.path.exists(path))
+
+    def test_artifact_renderer_keeps_non_image_lazy_and_path_based(self):
+        data = b'large-ish command output'
+        reference = self._artifact_reference(data, 'text/plain')
+        content = bridge.convoy_artifact_mcp_content({
+            'ok': True, 'convoy_id': 'studio', 'artifact': reference,
+            'local_path': 'verified-output.txt', 'verified': True})
+        self.assertEqual(len(content), 1)
+        payload = json.loads(content[0]['text'])
+        self.assertEqual(payload['local_path'], 'verified-output.txt')
+
+    def test_artifact_renderer_does_not_inline_mime_spoofed_image(self):
+        data = b'not actually a png'
+        reference = self._artifact_reference(data, 'image/png')
+        descriptor, path = tempfile.mkstemp(suffix='.png')
+        os.close(descriptor)
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
+        with open(path, 'wb') as output:
+            output.write(data)
+        content = bridge.convoy_artifact_mcp_content({
+            'ok': True, 'convoy_id': 'studio', 'artifact': reference,
+            'local_path': path, 'verified': True})
+        self.assertEqual([block['type'] for block in content], ['text'])
+        payload = json.loads(content[0]['text'])
+        self.assertEqual(payload['inline_image_error'], 'ValueError')
+        self.assertEqual(payload['local_path'], path)
+
+    def test_bridge_exit_cleanup_removes_tracked_lazy_artifacts(self):
+        descriptor, path = tempfile.mkstemp(suffix='.json')
+        os.close(descriptor)
+        bridge._convoy_track_temp(path)
+        bridge._cleanup_convoy_artifact_temps()
+        self.assertFalse(os.path.exists(path))
+        self.assertNotIn(path, bridge._CONVOY_ARTIFACT_TEMP_PATHS)
+
+    def test_handle_bridge_tool_renders_artifact_image_blocks(self):
+        data = b'\x89PNG\r\n\x1a\nimage'
+        reference = self._artifact_reference(data)
+        descriptor, path = tempfile.mkstemp(suffix='.png')
+        os.close(descriptor)
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
+        with open(path, 'wb') as output:
+            output.write(data)
+        with patch.object(bridge, 'handle_convoy_get_artifact', return_value={
+                'ok': True, 'convoy_id': 'studio', 'artifact': reference,
+                'local_path': path, 'verified': True}):
+            content = bridge.handle_bridge_tool(
+                'convoy_get_artifact', {}, None)
+        self.assertEqual([block['type'] for block in content],
+                         ['text', 'image'])
+
+    def test_convoy_call_transparently_materializes_terminal_image(self):
+        data = b'\x89PNG\r\n\x1a\ncaptured-image'
+        reference = self._artifact_reference(data)
+        descriptor, path = tempfile.mkstemp(suffix='.png')
+        os.close(descriptor)
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
+        with open(path, 'wb') as output:
+            output.write(data)
+        relay = {'ok': True, 'job': {'state': 'succeeded', 'result': {
+            'capture': True, 'artifact': reference}}}
+        local = {'ok': True, 'target_host_id': 'host-remote',
+                 'convoy_id': 'studio', 'target_node_id': 'node-remote',
+                 'artifact': reference, 'local_path': path,
+                 'verified': True}
+        params = self._call_args(operation='capture_top')
+        with patch.object(bridge, 'handle_convoy_call',
+                          return_value=relay), \
+             patch.object(bridge, 'handle_convoy_get_artifact',
+                          return_value=local) as get_artifact:
+            content = bridge.handle_bridge_tool('convoy_call', params, None)
+        self.assertEqual([block['type'] for block in content],
+                         ['text', 'image'])
+        requested = get_artifact.call_args.args[0]
+        self.assertEqual(requested['target_host_id'], 'host-remote')
+        self.assertEqual(requested['target_node_id'], 'node-remote')
+        self.assertEqual(requested['artifact'], reference)
+
+    def test_selected_remote_capture_returns_native_image_content(self):
+        data = b'\x89PNG\r\n\x1a\nselected-capture'
+        reference = self._artifact_reference(data)
+        descriptor, path = tempfile.mkstemp(suffix='.png')
+        os.close(descriptor)
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
+        with open(path, 'wb') as output:
+            output.write(data)
+        state = self._state()
+        state.convoy_target = {
+            'target_host_id': 'host-remote', 'convoy_id': 'studio',
+            'target_node_id': 'node-remote'}
+        relay = {'ok': True, 'delivery_id': 'cj_123', 'job': {
+            'state': 'succeeded', 'result': {
+                'capture': True, 'artifact': reference}}}
+        local = {'ok': True, 'target_host_id': 'host-remote',
+                 'convoy_id': 'studio', 'target_node_id': 'node-remote',
+                 'artifact': reference, 'local_path': path,
+                 'verified': True}
+        with patch.object(bridge, 'handle_convoy_call',
+                          return_value=relay), \
+             patch.object(bridge, 'handle_convoy_get_artifact',
+                          return_value=local):
+            result = bridge.handle_convoy_selected_tool(
+                'capture_top', {'op_path': '/out'}, state)
+        self.assertFalse(result['isError'])
+        self.assertEqual([block['type'] for block in result['content']],
+                         ['text', 'image'])
+        self.assertEqual(bridge.base64.b64decode(
+            result['content'][1]['data']), data)
+
+    def test_non_image_artifact_remains_lazy_until_explicit_get(self):
+        reference = self._artifact_reference(b'json', 'application/json')
+        relay = {'ok': True, 'job': {'state': 'succeeded', 'result': {
+            'spilled': True, 'artifact': reference}}}
+        with patch.object(bridge, 'handle_convoy_call',
+                          return_value=relay), \
+             patch.object(bridge, 'handle_convoy_get_artifact') as get_artifact:
+            content = bridge.handle_bridge_tool(
+                'convoy_call', self._call_args(), None)
+        self.assertEqual([block['type'] for block in content], ['text'])
+        get_artifact.assert_not_called()
+
+    def test_convoy_call_summary_never_reports_deleted_local_path(self):
+        # Regression: the composite convoy_call summary used to embed the
+        # pre-unlink materialization dict, advertising a verified local_path
+        # for a tempfile the bridge had just deleted.
+        data = b'\x89PNG\r\n\x1a\ncaptured-image'
+        reference = self._artifact_reference(data)
+        descriptor, path = tempfile.mkstemp(suffix='.png')
+        os.close(descriptor)
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
+        with open(path, 'wb') as output:
+            output.write(data)
+        relay = {'ok': True, 'job': {'state': 'succeeded', 'result': {
+            'capture': True, 'artifact': reference}}}
+        local = {'ok': True, 'target_host_id': 'host-remote',
+                 'convoy_id': 'studio', 'target_node_id': 'node-remote',
+                 'artifact': reference, 'local_path': path, 'verified': True}
+        with patch.object(bridge, 'handle_convoy_call', return_value=relay), \
+             patch.object(bridge, 'handle_convoy_get_artifact',
+                          return_value=local):
+            content = bridge.handle_bridge_tool(
+                'convoy_call', self._call_args(operation='capture_top'), None)
+        summary = json.loads(content[0]['text'])
+        materialization = summary['artifact_materialization']
+        self.assertNotIn('local_path', materialization)
+        self.assertTrue(materialization['image_inline'])
+        self.assertFalse(os.path.exists(path))
+
+    def test_selected_capture_summary_never_reports_deleted_local_path(self):
+        data = b'\x89PNG\r\n\x1a\nselected-capture'
+        reference = self._artifact_reference(data)
+        descriptor, path = tempfile.mkstemp(suffix='.png')
+        os.close(descriptor)
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
+        with open(path, 'wb') as output:
+            output.write(data)
+        state = self._state()
+        state.convoy_target = {
+            'target_host_id': 'host-remote', 'convoy_id': 'studio',
+            'target_node_id': 'node-remote'}
+        relay = {'ok': True, 'delivery_id': 'cj_123', 'job': {
+            'state': 'succeeded', 'result': {
+                'capture': True, 'artifact': reference}}}
+        local = {'ok': True, 'target_host_id': 'host-remote',
+                 'convoy_id': 'studio', 'target_node_id': 'node-remote',
+                 'artifact': reference, 'local_path': path, 'verified': True}
+        with patch.object(bridge, 'handle_convoy_call', return_value=relay), \
+             patch.object(bridge, 'handle_convoy_get_artifact',
+                          return_value=local):
+            result = bridge.handle_convoy_selected_tool(
+                'capture_top', {'op_path': '/out'}, state)
+        summary = json.loads(result['content'][0]['text'])
+        materialization = summary['artifact_materialization']
+        self.assertNotIn('local_path', materialization)
+        self.assertTrue(materialization['image_inline'])
+        self.assertFalse(os.path.exists(path))
+
+    def test_selected_tool_uses_deterministic_idempotency_key(self):
+        # Regression: an ordinary pinned tool used to mint a fresh uuid4 per
+        # call, so a retried mutating relay double-executed.  The key must be a
+        # pure function of (selection, tool name, canonical arguments).
+        state = self._state()
+        state.convoy_target = {
+            'target_host_id': 'host-remote', 'convoy_id': 'studio',
+            'target_node_id': 'node-remote', 'expected_runtime_id': 'rt-7'}
+        relay = {'ok': True, 'delivery_id': 'cj-1', 'job': {
+            'state': 'succeeded', 'result': {'ok': True}}}
+        keys = []
+
+        def call_(call_params):
+            keys.append(call_params.get('idempotency_key'))
+            return relay
+
+        with patch.object(bridge, 'handle_convoy_call', side_effect=call_):
+            bridge.handle_convoy_selected_tool(
+                'import_network', {'clear_first': True, 'network': {}}, state)
+            bridge.handle_convoy_selected_tool(
+                'import_network', {'clear_first': True, 'network': {}}, state)
+            bridge.handle_convoy_selected_tool(
+                'import_network', {'clear_first': False, 'network': {}}, state)
+        self.assertIsNotNone(keys[0])
+        self.assertEqual(keys[0], keys[1], 'identical retry reuses the key')
+        self.assertNotEqual(keys[0], keys[2], 'different work digests apart')
+        expected = bridge._convoy_selected_call_key(
+            state.convoy_target, 'import_network',
+            {'clear_first': True, 'network': {}})
+        self.assertEqual(keys[0], expected)
+
+    def test_inline_wait_is_capped_and_returns_durable_delivery_id(self):
+        # Regression: the poll loop parked the stdio thread for the whole
+        # caller budget (up to 3600s), so MCP ping / convoy_cancel_job / every
+        # local tool were unreachable.  The in-loop wait is now short-capped
+        # and the durable delivery_id handed back for convoy_get_job.
+        def call_(method, path, payload, timeout=None):
+            if path == '/relay':
+                self.assertEqual(timeout, 10.0)  # submit keeps caller budget
+                return self._accepted()
+            return {'ok': True, 'changed': False, 'cursor': 10.0,
+                    'state': 'queued'}
+
+        with patch.object(bridge, 'convoy_host_call', side_effect=call_), \
+             patch.object(bridge, 'CONVOY_INLINE_WAIT_MAX_S', 0.05), \
+             patch.object(bridge, 'CONVOY_POLL_INITIAL_S', 0.02), \
+             patch.object(bridge, 'CONVOY_POLL_MAX_S', 0.02):
+            result = bridge.handle_convoy_call(self._call_args(
+                timeout_s=10.0, idempotency_key='stable'))
+        self.assertTrue(result['ok'])
+        self.assertTrue(result['wait_timed_out'])
+        self.assertTrue(result['wait_capped'])
+        self.assertEqual(result['delivery_id'], 'cj_123')
+        self.assertIn('convoy_get_job', result['detail'])
+
+    def test_loopback_artifact_download_streams_and_verifies_exact_bytes(self):
+        data = b'verified artifact bytes'
+        reference = self._artifact_reference(data, 'text/plain')
+        response = _ConvoyArtifactResponse(data, reference)
+        connection = _ConvoyArtifactConnection(response)
+        running = {'convoy': 'running', 'identity_confirmed': True,
+                   'port': 54321, 'data_dir': 'state'}
+        with patch.object(bridge, 'probe_convoy_host',
+                          return_value=running), \
+             patch.object(bridge, '_read_convoy_token',
+                          return_value='ab' * 32), \
+             patch.object(bridge.http.client, 'HTTPConnection',
+                          return_value=connection):
+            result = bridge.convoy_host_download_artifact(
+                reference, 'studio', 5.0)
+        self.addCleanup(lambda: os.path.exists(result.get('local_path', ''))
+                        and os.unlink(result['local_path']))
+        self.assertTrue(result['verified'])
+        with open(result['local_path'], 'rb') as source:
+            self.assertEqual(source.read(), data)
+        method, path, headers = connection.requests[0]
+        self.assertEqual(method, 'GET')
+        self.assertEqual(path, '/artifacts/c3R1ZGlv/'
+                         + reference['artifact_id'])
+        self.assertEqual(headers['X-Convoy-Host-Token'], 'ab' * 32)
+        self.assertTrue(connection.closed)
+
+    def test_loopback_artifact_download_deletes_hash_mismatch(self):
+        expected = b'expected bytes'
+        reference = self._artifact_reference(expected, 'text/plain')
+        response = _ConvoyArtifactResponse(b'tampered bytes', reference)
+        # Keep the declared length coherent with the signed metadata so the
+        # content hash, rather than a cheap size mismatch, catches this case.
+        response._headers['Content-Length'] = str(len(expected))
+        response._stream = io.BytesIO(b'x' * len(expected))
+        connection = _ConvoyArtifactConnection(response)
+        descriptor, path = tempfile.mkstemp(suffix='.txt')
+        os.close(descriptor)
+        descriptor = os.open(path, os.O_WRONLY | os.O_TRUNC)
+        running = {'convoy': 'running', 'identity_confirmed': True,
+                   'port': 54321, 'data_dir': 'state'}
+        with patch.object(bridge, 'probe_convoy_host',
+                          return_value=running), \
+             patch.object(bridge, '_read_convoy_token',
+                          return_value='ab' * 32), \
+             patch.object(bridge.http.client, 'HTTPConnection',
+                          return_value=connection), \
+             patch.object(bridge.tempfile, 'mkstemp',
+                          return_value=(descriptor, path)):
+            result = bridge.convoy_host_download_artifact(
+                reference, 'studio', 5.0)
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['reason'], 'artifact_download_failed')
+        self.assertFalse(os.path.exists(path))
+
+    def test_cancel_job_routes_to_the_remote_delivery_owner(self):
+        params = {'target_host_id': 'host-remote', 'convoy_id': 'studio',
+                  'delivery_id': 'cj_123'}
+        response = {'ok': True, 'cancel_requested': True,
+                    'definitive': False}
+        with patch.object(bridge, 'convoy_host_call',
+                          return_value=response) as call_:
+            result = bridge.handle_convoy_cancel_job(params)
+        call_.assert_called_once_with('POST', '/relay/cancel', params)
+        self.assertTrue(result['cancel_requested'])
+        self.assertEqual(result['target_host_id'], 'host-remote')
+        self.assertEqual(result['convoy_id'], 'studio')
+        self.assertEqual(result['delivery_id'], 'cj_123')
+        self.assertFalse(result['wakes_touchdesigner'])
+
+    def test_cancel_job_routes_local_ownership_through_the_same_endpoint(self):
+        params = {'target_host_id': 'host-local', 'convoy_id': 'studio',
+                  'delivery_id': 'cj_123'}
+        with patch.object(bridge, 'convoy_host_call', return_value={
+                'ok': True, 'cancel_requested': True,
+                'definitive': False}) as call_:
+            result = bridge.handle_convoy_cancel_job(params)
+        call_.assert_called_once_with('POST', '/relay/cancel', params)
+        self.assertTrue(result['cancel_requested'])
+        self.assertEqual(result['target_host_id'], 'host-local')
+        self.assertEqual(result['delivery_id'], 'cj_123')
+
+    def test_cancel_job_preserves_a_host_namespace_failure(self):
+        params = {'target_host_id': 'host-local', 'convoy_id': 'studio',
+                  'delivery_id': 'cj_123'}
+        with patch.object(bridge, 'convoy_host_call', return_value={
+                'ok': False, 'reason': 'job_namespace_mismatch',
+                'http_status': 404}) as call_:
+            result = bridge.handle_convoy_cancel_job(params)
+        call_.assert_called_once_with('POST', '/relay/cancel', params)
+        self.assertEqual(result['reason'], 'job_namespace_mismatch')
+        self.assertEqual(result['target_host_id'], 'host-local')
+        self.assertEqual(result['convoy_id'], 'studio')
+        self.assertFalse(result['wakes_touchdesigner'])
 
 
 # =====================================================================

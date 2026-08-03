@@ -82,6 +82,12 @@ def admit(server, host_id=PEER, fingerprint=PEER_FP, **kw):
     # deliberate mismatch still behave as before.
     if "cert_pem" not in kw and fingerprint in _KEYS_BY_FP:
         kw["cert_pem"] = _KEYS_BY_FP[fingerprint].certificate_pem
+    # Namespace membership is explicit and fail-closed.  Most revocation
+    # tests predate that invariant and exercise admission lineage rather
+    # than namespace selection, so give their shared fixture the Convoy it
+    # actually submits work for.  Individual namespace tests can still
+    # override this value.
+    kw.setdefault("convoy_ids", [CONVOY])
     code, body = server.call("/peers/admit",
                              {"host_id": host_id,
                               "fingerprint": fingerprint, **kw})
@@ -685,7 +691,8 @@ def test_observe_drops_writer_leases_and_keeps_reader_leases(server):
     assert server.call("/leases")[1]["leases"] == []
 
     # a SHARED (read) hold survives the same narrowing
-    server.call("/peers/admit", {"host_id": PEER, "fingerprint": PEER_FP})
+    server.call("/peers/admit", {"host_id": PEER, "fingerprint": PEER_FP,
+                                  "convoy_ids": [CONVOY]})
     server.call("/leases", {"controller_id": held_as,
                             "node_id": node["node_id"], "mode": "shared"})
     server.call("/peers/observe", {"host_id": PEER})
@@ -1083,7 +1090,8 @@ def test_block_observe_readmit_does_not_resurrect_unreachable_work(server):
         assert server.app.db.claim_for_dispatch(job["delivery_id"]) is not None
     server.call("/peers/block", {"host_id": PEER})       # mints the epoch
     server.call("/peers/observe", {"host_id": PEER})     # launder the state
-    server.call("/peers/admit", {"host_id": PEER, "fingerprint": PEER_FP})
+    server.call("/peers/admit", {"host_id": PEER, "fingerprint": PEER_FP,
+                                  "convoy_ids": [CONVOY]})
     with server.app.lock:
         assert server.app.db.release_claim(job["delivery_id"]) is not None
     code, body = server.call("/dispatch", {"delivery_id": job["delivery_id"]})
@@ -1110,7 +1118,8 @@ def test_a_legacy_lineage_peer_survives_a_benign_readmit(server):
     assert server.app.db.get_job(job["delivery_id"])["origin_admission_id"] \
         is None
     # a routine re-affirm must NOT strand it
-    server.call("/peers/admit", {"host_id": PEER, "fingerprint": PEER_FP})
+    server.call("/peers/admit", {"host_id": PEER, "fingerprint": PEER_FP,
+                                  "convoy_ids": [CONVOY]})
     server.app.forwarder = lambda p, o, a: {"ok": True, "result": {}}
     code, body = server.call("/dispatch", {"delivery_id": job["delivery_id"]})
     assert code == 200 and body["job"]["state"] == "succeeded", (

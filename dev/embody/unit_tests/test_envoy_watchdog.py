@@ -704,17 +704,16 @@ class TestPerformModeAuthority(EnvoyWatchdogBase):
     the EnvoyExt -> EmbodyExt._performMode chain (a property rename, a broken
     ext ref) would return False forever -- reintroducing the shipped bug while
     the whole suite stays green (panel finding). These pin the two contracts:
-    the helper reads the live authority, and errors read as False (self-healing
-    is never disabled by a broken reference). Read-only: the live Performmode
-    par is never toggled.
+    the helper reads the narrow Envoy authority, and errors read as False
+    (self-healing is never disabled by a broken reference). Read-only: the
+    live Performmode par is never toggled.
     """
 
     def test_helper_matches_live_authority(self):
         self.assertEqual(
             self.envoy._performModeActive(),
-            bool(self.embody.ext.Embody._performMode),
-            '_performModeActive must read the same live authority as '
-            'EmbodyExt._performMode')
+            bool(self.embody.ext.Embody._envoyPerformMode),
+            '_performModeActive must read EmbodyExt._envoyPerformMode')
 
     def test_helper_exception_reads_false(self):
         """A broken Embody ext / property must read False -- the watchdog
@@ -725,7 +724,7 @@ class TestPerformModeAuthority(EnvoyWatchdogBase):
         def _raiser(_self):
             raise RuntimeError('simulated broken _performMode wire')
 
-        self._patch(embody_cls, '_performMode', property(_raiser))
+        self._patch(embody_cls, '_envoyPerformMode', property(_raiser))
 
         self.assertFalse(
             self.envoy._performModeActive(),

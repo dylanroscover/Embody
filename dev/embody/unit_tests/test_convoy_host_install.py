@@ -136,8 +136,18 @@ class StubInstaller:
         self._real = real
         self.calls = []
         self.installed = None            # what read_installed reports
+        # A COMPLETE managed runtime: choose_interpreter now selects only
+        # candidates carrying managed=True (the self-contained signed
+        # CPython bundle), never TD's bundled Python or a system/venv
+        # interpreter. find_interpreters is stubbed to return these, so a
+        # missing managed flag here would make every install short-circuit
+        # at the interpreter gate. The fail-closed "no managed runtime"
+        # path is proven separately by
+        # test_no_interpreter_refuses_before_the_dialog.
         self.interpreters = [{'path': FAKE_INTERPRETER,
-                              'build': (2025, 33070), 'windowless': True}]
+                              'build': (2025, 33070), 'windowless': True,
+                              'managed': True,
+                              'runtime_id': 'rt_fake_managed'}]
         self.install_result = {'ok': True, 'version': VERSION,
                                'supervisor': 'scheduled_task',
                                'registered': True, 'steps': ['payload']}
@@ -405,7 +415,8 @@ class ConvoyHostBase(EmbodyTestCase):
 
         self._patch(self.convoy, '_client', lambda: self.client)
         self._patch(self.convoy, '_installer', lambda: self.installer)
-        self._patch(self.convoy, '_runInWorker', lambda fn: fn())
+        self._patch(self.convoy, '_runInWorker',
+                    lambda fn: (fn(), True)[1])
         self._patch(self.convoy_mod, 'run', self._fakeRun)
         self._patch(self.convoy, '_log',
                     lambda msg, level='INFO': self._logs.append((msg, level)))
@@ -502,9 +513,16 @@ class TestInstallOrchestration(ConvoyHostBase):
         self.assertLen(self.dialogs, 1)
         _title, message, buttons = self.dialogs[0]
         self.assertEqual(buttons[0], 'Cancel', 'the safe answer is button 0')
-        for sentence in ('WHETHER OR NOT', '127.0.0.1',
-                         'NOT CODE-SIGNED', 'CAN READ', 'administrator',
-                         'Scheduled Task'):
+        # The dialog names the real consequences of the LAN-intended build: it
+        # runs whenever logged in, opens an authenticated peer listener on the
+        # trusted LAN (it does NOT expose Envoy), any same-user process can read
+        # its token, it never asks for administrator, and it registers a
+        # supervisor. It no longer claims loopback-only or "unsigned" -- the
+        # runtime is a managed build whose signing status is in the release
+        # notes (review 2026-08-03).
+        for sentence in ('WHETHER OR NOT', 'trusted LAN', 'peer listener',
+                         'never exposes Envoy', 'CAN READ', 'administrator',
+                         'Scheduled Task', 'do NOT enable Convoy on a guest'):
             self.assertIn(sentence, message,
                           'the install dialog must state %r (plan 1.6)'
                           % (sentence,))
@@ -604,7 +622,7 @@ class TestInstallOrchestration(ConvoyHostBase):
         result = self.convoy.InstallHost()
         self.assertEqual(result['state'], 'error')
         self.assertEqual(self.dialogs, [],
-                         'a machine with no TouchDesigner Python must refuse '
+                         'a machine with no managed Convoy runtime must refuse '
                          'BEFORE asking the user to grant anything')
         self.assertEqual(self.installer.count('install'), 0)
 

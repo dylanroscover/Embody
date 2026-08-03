@@ -40,32 +40,73 @@ rather than amending them.
 """
 
 import argparse
+import base64
+import collections
+import concurrent.futures
 import copy
+import hashlib
 import hmac
 import json
 import math
 import os
 import re
+import secrets
 import signal
+import socket
+import ssl
+import stat
 import sys
+import tempfile
 import threading
 import time
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import convoy_capabilities as capabilities
 import convoy_controllers as controllers
+import convoy_artifacts as artifacts_mod
+import convoy_artifact_http as artifact_http
+import convoy_discovery as discovery_mod
 import convoy_hostkeys as hostkeys
+import convoy_hostops as hostops_mod
 import convoy_hoststore as hoststore
 import convoy_identity as identity
 import convoy_lan as lan_mod
+import convoy_lifecycle as lifecycle_mod
 import convoy_mcpclient as mcpclient
+import convoy_owlette as owlette_mod
+import convoy_peerclient as peerclient
 import convoy_peers as peers_mod
 import convoy_peerserver as peerserver
 import convoy_platform as platform_mod
+import convoy_policy as policy_mod
 import convoy_protocol as protocol
+import convoy_realm as realm_mod
+import convoy_sessions as sessions_mod
+import convoy_wake as wake_mod
+import convoy_ws as ws_mod
 
 MAX_BODY_BYTES = 1 * 1024 * 1024
 TOKEN_HEADER = "X-Convoy-Host-Token"
+
+
+class _PeerProjectionTarget:
+    """Trust-owned display identity when a live WSS peer has no dial URI."""
+
+    __slots__ = ("host_id", "address")
+
+    def __init__(self, host_id, address=""):
+        self.host_id = host_id
+        self.address = address
+OWLETTE_COMMAND_OPT_IN_ENV = "EMBODY_CONVOY_ALLOW_OWLETTE_COMMANDS"
+OWLETTE_TUNNEL_COMMAND = "mcp_tool_call"
+# Owlette command types that can take a show machine down with no unsaved-work
+# check (adopted review A-35).  These escalate past every other Owlette action,
+# so -- like Full Shell -- they require a DURABLE policy opt-in, not merely the
+# benign-command env flag.  Default-deny until that opt-in exists.
+OWLETTE_MACHINE_AFFECTING_COMMANDS = frozenset({
+    "reboot_machine", "shutdown_machine", "restart_process", "kill_process",
+})
 
 # ONE condition, ONE machine-readable code, on every surface: /status's
 # identity_reason, /identity's and /identity/rotate's refusal reason,
@@ -96,6 +137,9 @@ NODE_JOB_STATUSES = tuple(hoststore._NODE_STATUS_TO_STATE)
 # /jobs response. A test-run summary is small; a pathological one is
 # not, and nothing else bounds it.
 MAX_RESULT_BYTES = 64 * 1024
+MAX_CAPTURE_ARTIFACT_BYTES = 64 * 1024 * 1024
+_ENVOY_CAPTURE_NAME_RE = re.compile(
+    r"^envoy_capture_[0-9a-f]{8}\.(?:jpg|png)$", re.IGNORECASE)
 # Before a poll may conclude the node FORGOT a job (which terminalises
 # it as indeterminate), the unknown answer must repeat and outlast a
 # grace window. A node restarting between flushes, the 24h retention,
@@ -118,134 +162,433 @@ _NODE_UNKNOWN_JOB_RE = re.compile(r"no job with id", re.IGNORECASE)
 # reads observed_at for a decision, and a real change (state, handle,
 # stale, terminal) always writes immediately.
 POLL_MIRROR_REFRESH_S = 300.0
+# A successful fire-and-forget wake gets a quick durable-drain retry.  The TD
+# main-thread poll runs every 250 ms and Envoy normally binds within a second;
+# this stays bounded without making every sleeping operation wait the ordinary
+# 30-second unavailable-node backoff.
+WAKE_RETRY_S = 1.0
+# A wake lease has a hard TTL in the TD process.  Long lifecycle calls must
+# refresh it while they are actually running; otherwise Perform Mode can close
+# Envoy in the middle of an exact-node restart.  Tests lower this constant,
+# while production also caps the interval to one third of the advertised TTL.
+WAKE_REFRESH_MAX_S = 10.0
+LIFECYCLE_RECOVERY_INTERVAL_S = 5.0
 
-# The Phase 1 SEED of the operation registry. The canonical registry --
-# every Envoy operation audited for executability -- is later work (A-1);
-# until it lands, this host app relays NOTHING that is not explicitly
-# entered here. The seed is the three operations the Phase 0.5 tracer
-# proved end to end, plus one benign mutation so the lease gate is
-# exercised on the live path.
-#
-# EVERY gating field is read with a STRICT default (see _GATING_DEFAULTS):
-# an entry that omits one is treated as unaudited, which A-1 defines as
-# executes_arbitrary_code=True -- i.e. refused. Absence from the registry
-# and absence of a field must fail the same way; reading a missing field
-# as False would invert A-1 for exactly the entries nobody audited.
-#
-# Field meanings:
-#   schema       -- digest material for A-23 (shape documentation; not
-#                   yet enforced argument validation),
-#   mutating     -- drives the lease reader/writer gate (A-17),
-#   executes_arbitrary_code -- A-1; True is REFUSED outright in Phase 1
-#                   because the TD-Python gate does not exist yet,
-#   runtime_required -- A-22's expected_runtime_id-mandatory classes
-#                   (restart, read-modify-write, exclusive batch, wake).
-PHASE1_OPERATIONS = {
-    "convoy_ping": {
-        "schema": {},
-        "mutating": False,
-        "executes_arbitrary_code": False,
-        "remote_exposed": True,    # X0 liveness
-        "runtime_required": False,
-        "side_effects": {},
-    },
-    "query_network": {
-        "schema": {"parent_path": "string", "recursive": "bool?"},
-        "mutating": False,
-        "executes_arbitrary_code": False,
-        "remote_exposed": True,    # X0 read
-        "runtime_required": False,
-        "side_effects": {},
-    },
-    "capture_top": {
-        "schema": {"op_path": "string", "format": "string?"},
-        "mutating": False,
-        "executes_arbitrary_code": False,
-        "remote_exposed": True,    # X0 read (confidentiality, not executability)
-        "runtime_required": False,
-        "side_effects": {"cooks": True},
-    },
-    "set_op_position": {
-        "schema": {"op_path": "string", "x": "number?", "y": "number?"},
-        "mutating": True,
-        "executes_arbitrary_code": False,
-        "remote_exposed": True,    # X5 layout nudge -- refused under observe-only
-        "runtime_required": False,
-        "side_effects": {"layout": True},
-    },
-    # The two ASYNC entries. `async_job` is what tells the dispatcher
-    # this operation answers with a HANDLE rather than a result:
-    #   kind     -- the node job kind, for the audit trail,
-    #   key_arg  -- the argument carrying our idempotency key, which is
-    #               the anchor the node's own idempotency index (16.5)
-    #               uses to hand a retry back the ORIGINAL run,
-    #   inject   -- arguments host policy forces, overriding the caller.
-    "run_tests": {
-        "schema": {"suite_name": "string?", "test_name": "string?"},
-        # Not "runs a pure read": a run flips Embody's Status and
-        # Filecleanup, creates and destroys sandbox operators, writes
-        # dev/logs, and can restart the Envoy server under itself.
-        "mutating": True,
-        # A-1, stated precisely, because the earlier wording here was
-        # WRONG and a LAN listener would have made it dangerous: this is
-        # not caller-supplied code, but it is not "the code already in
-        # the project" either. TestRunnerExt._discoverTestSuites scans
-        # unit_tests/ and exec_module's every test_*.py AND test_*.txt it
-        # FINDS ON DISK. That is only equivalent to project-own code
-        # while nothing can put a file there -- a LOOPBACK assumption.
-        # It holds today (loopback + a 0600 IPC token means "remote
-        # caller" does not exist) and it dissolves the moment a socket
-        # binds off-box. So the flag stays False (the LOCAL path must
-        # keep working -- it is the owner running their own tests), and
-        # the boundary is drawn by remote_exposed below instead.
-        "executes_arbitrary_code": False,
-        # A-1 / R-2: NEVER relayable to a remote peer. Phase 3 reads
-        # this; nothing reads it today, which is exactly why it is being
-        # written now -- the data is correct before the code that could
-        # arm it exists.
-        "remote_exposed": False,
-        "runtime_required": True,       # A-22 exclusive-batch class
-        "side_effects": {"runs_tests": True, "writes_logs": True,
-                         "may_restart_server": True},
-        "async_job": {"kind": "run_tests", "key_arg": "idempotency_key",
-                      # The caller fields run_tests actually accepts;
-                      # anything else is dropped rather than forwarded
-                      # for the node to reject.
-                      "caller_args": ("suite_name", "test_name"),
-                      # background True is not optional: False would
-                      # block the forward for the whole run and
-                      # manufacture an indeterminate out of a healthy
-                      # test pass. override False is fail-closed -- the
-                      # host must never bypass the NODE's own
-                      # multi-session destructive gate.
-                      "inject": {"background": True, "override": False}},
-    },
-    "save_project": {
-        "schema": {},
-        "mutating": True,               # writes the .toe + release .tox
-        "executes_arbitrary_code": False,
-        # NOT relayable to a remote peer: it blocks TD's main thread for
-        # 15+ seconds and restarts the Envoy server under itself. A-30's
-        # performance guard and A-31's per-node remote-work policy -- the
-        # machinery whose whole job is to stop a remote peer wrecking a
-        # live output -- are Phase 4. Letting a peer freeze a show
-        # machine before show protection exists is precisely what A-30
-        # was written to prevent. Returns to the remote surface in Phase
-        # 4, gated, never ungated.
-        "remote_exposed": False,
-        "runtime_required": True,       # read-modify-write
-        "side_effects": {"writes_toe": True, "blocks_main_thread": True,
-                         "restarts_server": True},
-        # save_project's MCP signature accepts idempotency_key ONLY, so
-        # any extra argument is a validation error at the node -- a
-        # failure the host would have invented. An empty `inject`
-        # overrides nothing, so the empty `caller_args` is what actually
-        # delivers that: NO caller argument rides, and the key is the
-        # only thing on the wire.
-        "async_job": {"kind": "save_project", "key_arg": "idempotency_key",
-                      "caller_args": (), "inject": {}},
-    },
+# The complete Convoy operation registry.  Every Envoy MCP tool that can be
+# meaningfully attributed to a Convoy controller is classified here; absence
+# is a refusal.  This is intentionally data rather than a permissive fallback:
+# the AST drift test fails whenever Envoy grows a tool without an explicit
+# registry entry or an explicit, justified exclusion.
+def _operation(schema, *, mutating, executes_arbitrary_code,
+               remote_exposed, runtime_required, batch_eligible,
+               side_effects=None, **extra):
+    """Build one fully classified registry entry.
+
+    All policy arguments are required keyword-only values.  The resulting
+    dict always contains every gating field, so a reviewer can distinguish a
+    deliberate False from an omitted/unaudited field.  `gating_of` remains
+    strict for injected/future sparse entries.
+    """
+    entry = {
+        "schema": dict(schema or {}),
+        "mutating": bool(mutating),
+        "executes_arbitrary_code": bool(executes_arbitrary_code),
+        "remote_exposed": bool(remote_exposed),
+        "runtime_required": bool(runtime_required),
+        "batch_eligible": bool(batch_eligible),
+        "side_effects": dict(side_effects or {}),
+    }
+    entry.update(extra)
+    return entry
+
+
+# These tools are genuine Envoy MCP tools, but not Convoy node operations.
+# They deliberately stay out of the registry rather than being silently
+# omitted.  Docs/guidance are bridge-facing content lookups; session/scope/
+# task calls depend on the originating Envoy bridge session, whereas all host
+# forwards necessarily share the `convoy-dispatch` Envoy session.  Relaying
+# them would merge unrelated remote controllers into one false identity and
+# create a second lease/task authority beside Convoy's own.
+ENVOY_TOOL_EXCLUSIONS = {
+    "get_docs": "bridge-side documentation lookup, not a node operation",
+    "get_guidance": "bridge-side project guidance lookup, not a node operation",
+    "get_sessions": "Envoy-local session identity is not preserved by relay",
+    "claim_scope": "Envoy-local session lease; Convoy leases are authoritative",
+    "release_scope": "Envoy-local session lease; Convoy leases are authoritative",
+    "announce_task": "Envoy-local task attribution is not preserved by relay",
+    "update_task": "Envoy-local task attribution is not preserved by relay",
+    "preflight_landing": "bridge worktree workflow, not a TD node operation",
+    "convoy_lifecycle_state":
+        "host-private exact-runtime helper, session-gated and not relayable",
+    "convoy_lifecycle_quit":
+        "host-private exact-runtime helper, session-gated and not relayable",
 }
+
+
+PHASE1_OPERATIONS = {
+    # Host-native liveness (not an Envoy tool).
+    "convoy_ping": _operation(
+        {}, mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=False),
+
+    # Host-native repository/CLI work.  These deliberately use the same
+    # durable delivery path as TD operations while never crossing Envoy or
+    # waking TouchDesigner.  `convoy_git` is call-shape-sensitive: inspection
+    # is read-only, while fetch/pull/push acquire the normal writer lease.
+    "convoy_git": _operation(
+        {"operation": "status|remotes|branches|current_branch|revision|"
+                      "upstream|divergence|fetch|pull_ff_only|push_branch",
+         "arguments": "object?", "timeout_s": "number?",
+         "output_limit": "int?"},
+        mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=False,
+        side_effects={"execution_locus": "host_subprocess",
+                      "mutating_when": "fetch_or_pull_or_push",
+                      "capability": hostops_mod.HOST_GIT_CAPABILITY}),
+    "convoy_gh": _operation(
+        {"operation": "auth_status|repo_view|pr_list|pr_view|pr_checks|"
+                      "workflow_list|run_list|run_view",
+         "arguments": "object?", "timeout_s": "number?",
+         "output_limit": "int?"},
+        mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=False,
+        side_effects={"execution_locus": "host_subprocess",
+                      "capability": hostops_mod.HOST_GH_CAPABILITY}),
+    "convoy_shell": _operation(
+        {"command": "string", "cwd": "relative-directory?",
+         "env_additions": "object?", "redact_values": "list?",
+         "timeout_s": "number?", "output_limit": "int?"},
+        mutating=True, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=False,
+        side_effects={"execution_locus": "host_subprocess",
+                      "executes_full_shell": True,
+                      "required_local_policy": "full_shell",
+                      "capability": hostops_mod.HOST_SHELL_CAPABILITY}),
+    "convoy_start_node": _operation(
+        {"timeout_s": "number?"},
+        mutating=True, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=False,
+        side_effects={"execution_locus": "host_lifecycle",
+                      "starts_touchdesigner": True,
+                      "full_shell_required": False,
+                      "capability":
+                      lifecycle_mod.HOST_LIFECYCLE_CAPABILITY}),
+    "convoy_restart_node": _operation(
+        {"policy": "require_clean|save_then_restart?",
+         "timeout_s": "number?"},
+        mutating=True, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=True, batch_eligible=False,
+        side_effects={"execution_locus": "host_lifecycle",
+                      "restarts_touchdesigner": True,
+                      "full_shell_required": False,
+                      "capability":
+                      lifecycle_mod.HOST_LIFECYCLE_CAPABILITY}),
+
+    # Operator creation / wiring / inspection.
+    "create_op": _operation(
+        {"parent_path": "string", "op_type": "string", "name": "string?"},
+        mutating=True, executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True,
+        side_effects={"creates_operator": True}),
+    "delete_op": _operation(
+        {"op_path": "string", "override": "bool?"}, mutating=True,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=True, batch_eligible=True,
+        side_effects={"deletes_operator": True}),
+    "get_op": _operation(
+        {"op_path": "string", "include_defaults": "bool?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "set_parameter": _operation(
+        {"op_path": "string", "par_name": "string", "value": "any?",
+         "mode": "constant|expression|export|bind?", "expr": "string?",
+         "bind_expr": "string?"}, mutating=True,
+        # Dynamic: constants/exports stay available; expressions and binds
+        # are promoted to arbitrary-code by effective_operation_gating().
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True,
+        side_effects={"arbitrary_code_when": "expression_or_bind"}),
+    "get_parameter": _operation(
+        {"op_path": "string", "par_name": "string?", "search": "string?",
+         "search_in": "string?", "depth": "int?", "max_results": "int?",
+         "details": "bool?"}, mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True),
+    "connect_ops": _operation(
+        {"source_path": "string", "dest_path": "string",
+         "source_index": "int?", "dest_index": "int?", "comp": "bool?"},
+        mutating=True, executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "disconnect_op": _operation(
+        {"op_path": "string", "input_index": "int?", "comp": "bool?"},
+        mutating=True, executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "query_network": _operation(
+        {"parent_path": "string?", "recursive": "bool?", "op_type": "string?",
+         "include_utility": "bool?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "copy_op": _operation(
+        {"source_path": "string", "dest_parent": "string",
+         "new_name": "string?"}, mutating=True, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True),
+    "get_connections": _operation(
+        {"op_path": "string"}, mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True),
+
+    # Immediate caller-controlled execution.  These are exposed only because
+    # the host-private policy store (policy.allow_td_python, local
+    # confirmation required, fail-closed) is checked at admission and again
+    # under the app lock immediately before dispatch.  The directory's
+    # td_python_approved field is a display projection, never the authority.
+    # Residual window, accepted under best-effort cancellation: a disable
+    # landing after the dispatch check cannot recall the one already-
+    # forwarded operation.
+    "execute_python": _operation(
+        {"code": "string"}, mutating=True, executes_arbitrary_code=True,
+        remote_exposed=True, runtime_required=True, batch_eligible=True,
+        side_effects={"executes_python": True}),
+    "exec_op_method": _operation(
+        {"op_path": "string", "method": "string", "args": "list?",
+         "kwargs": "dict?"}, mutating=True, executes_arbitrary_code=True,
+        remote_exposed=True, runtime_required=True, batch_eligible=True,
+        side_effects={"dynamic_method_dispatch": True}),
+
+    # Introspection and diagnostics.
+    "get_td_info": _operation(
+        {}, mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True),
+    "get_focus": _operation(
+        {}, mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True),
+    "get_op_errors": _operation(
+        {"op_path": "string", "recurse": "bool?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True,
+        side_effects={"may_cook": True}),
+    "get_td_classes": _operation(
+        {}, mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True),
+    "get_td_class_details": _operation(
+        {"class_name": "string"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "get_module_help": _operation(
+        {"module_name": "string"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+
+    # DAT content.  Writing a DAT can immediately reinitialize an extension
+    # or fire an Execute/Callback DAT, so both write forms use the same
+    # explicit TD-Python approval as execute_python.
+    "get_dat_content": _operation(
+        {"op_path": "string", "format": "string?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "set_dat_content": _operation(
+        {"op_path": "string", "text": "string?", "rows": "list?",
+         "clear": "bool?", "confirm_wipe": "bool?"}, mutating=True,
+        executes_arbitrary_code=True, remote_exposed=True,
+        runtime_required=True, batch_eligible=True,
+        side_effects={"writes_dat": True, "may_execute_dat": True}),
+    "edit_dat_content": _operation(
+        {"op_path": "string", "old_string": "string",
+         "new_string": "string", "replace_all": "bool?",
+         "confirm_wipe": "bool?"}, mutating=True,
+        executes_arbitrary_code=True, remote_exposed=True,
+        runtime_required=True, batch_eligible=True,
+        side_effects={"writes_dat": True, "may_execute_dat": True}),
+
+    # Flags, layout, annotations and extended operator operations.
+    "get_op_flags": _operation(
+        {"op_path": "string"}, mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True),
+    "set_op_flags": _operation(
+        {"op_path": "string", "bypass": "bool?", "lock": "bool?",
+         "display": "bool?", "render": "bool?", "viewer": "bool?",
+         "current": "bool?", "expose": "bool?", "allowCooking": "bool?",
+         "selected": "bool?"}, mutating=True, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True),
+    "get_op_position": _operation(
+        {"op_path": "string"}, mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True),
+    "get_network_layout": _operation(
+        {"comp_path": "string", "include_annotations": "bool?"},
+        mutating=False, executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "set_op_position": _operation(
+        {"op_path": "string", "x": "number?", "y": "number?",
+         "width": "number?", "height": "number?", "color": "list?",
+         "comment": "string?"}, mutating=True, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True,
+        side_effects={"layout": True}),
+    "layout_children": _operation(
+        {"op_path": "string"}, mutating=True, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True,
+        side_effects={"layout": True}),
+    "create_annotation": _operation(
+        {"parent_path": "string", "mode": "string?", "text": "string?",
+         "title": "string?", "x": "number?", "y": "number?",
+         "width": "number?", "height": "number?", "color": "list?",
+         "opacity": "number?", "name": "string?"}, mutating=True,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "get_annotations": _operation(
+        {"parent_path": "string"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "set_annotation": _operation(
+        {"op_path": "string", "text": "string?", "title": "string?",
+         "color": "list?", "opacity": "number?", "width": "number?",
+         "height": "number?", "x": "number?", "y": "number?"},
+        mutating=True, executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "get_enclosed_ops": _operation(
+        {"op_path": "string"}, mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True),
+    "rename_op": _operation(
+        {"op_path": "string", "new_name": "string"}, mutating=True,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "cook_op": _operation(
+        {"op_path": "string", "force": "bool?", "recurse": "bool?"},
+        mutating=True, executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=True, batch_eligible=True,
+        side_effects={"cooks": True}),
+    "find_children": _operation(
+        {"op_path": "string", "name": "string?", "type": "string?",
+         "depth": "int?", "tags": "list?", "text": "string?",
+         "comment": "string?", "include_utility": "bool?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "get_op_performance": _operation(
+        {"op_path": "string", "include_children": "bool?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "get_project_performance": _operation(
+        {"include_hotspots": "int?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+
+    # Embody externalization and TDN network operations.
+    "externalize_op": _operation(
+        {"op_path": "string", "tag_type": "string?"}, mutating=True,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=True, batch_eligible=True,
+        side_effects={"writes_project_files": True}),
+    "remove_externalization_tag": _operation(
+        {"op_path": "string", "delete_file": "bool?"}, mutating=True,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=True, batch_eligible=True,
+        side_effects={"may_delete_project_file": True}),
+    "get_externalizations": _operation(
+        {}, mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True),
+    "save_externalization": _operation(
+        {"op_path": "string"}, mutating=True, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=True, batch_eligible=True,
+        side_effects={"writes_project_files": True}),
+    "get_externalization_status": _operation(
+        {"op_path": "string"}, mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True),
+    "create_extension": _operation(
+        {"parent_path": "string", "class_name": "string", "name": "string?",
+         "code": "string?", "promote": "bool?", "ext_name": "string?",
+         "ext_index": "int?", "existing_comp": "bool?"}, mutating=True,
+        executes_arbitrary_code=True, remote_exposed=True,
+        runtime_required=True, batch_eligible=True,
+        side_effects={"creates_extension": True, "executes_python": True}),
+    "export_network": _operation(
+        {"root_path": "string?", "include_dat_content": "bool?",
+         "output_file": "string?", "max_depth": "int?", "embed_all": "bool?"},
+        # output_file makes this a filesystem write even though the ordinary
+        # in-memory form is a read. Static conservative classification keeps
+        # observe-only peers from gaining an arbitrary write path.
+        mutating=True, executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=True, batch_eligible=True,
+        side_effects={"may_write_output_file": True}),
+    "import_network": _operation(
+        {"target_path": "string", "tdn": "dict", "clear_first": "bool?",
+         "override": "bool?"}, mutating=True, executes_arbitrary_code=True,
+        remote_exposed=True, runtime_required=True, batch_eligible=True,
+        side_effects={"imports_code_and_expressions": True,
+                      "may_delete_operators": True}),
+    "read_tdn": _operation(
+        {"comp_path": "string?", "include_dat_content": "bool?",
+         "max_depth": "int?", "embed_all": "bool?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+    "diff_tdn": _operation(
+        {"target": "string?", "max_changed_ops": "int?", "max_bytes": "int?"},
+        mutating=False, executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True),
+
+    # Visuals, logs and node-side background jobs.
+    "capture_top": _operation(
+        {"op_path": "string", "format": "jpeg|png?", "quality": "number?",
+         "max_resolution": "int?", "inline": "bool?", "sample_grid": "int?"},
+        mutating=False, executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True,
+        side_effects={"cooks": True, "writes_temp_image": True}),
+    "get_logs": _operation(
+        {"level": "string?", "count": "int?", "since_id": "int?",
+         "source": "string?"}, mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=True),
+    # A-1 / R-2: NEVER relayable to a remote peer. TestRunnerExt discovers
+    # suites by SCANNING DISK (every test_*.py AND test_*.txt it finds), so
+    # "the code already in the project" is only a loopback assumption -- it
+    # dissolves the moment a socket binds off-box. It also stays classified
+    # arbitrary-code so the local path still demands TD-Python approval.
+    # Returns to the remote surface only behind A-30/A-31, never ungated.
+    "run_tests": _operation(
+        {"suite_name": "string?", "test_name": "string?"}, mutating=True,
+        executes_arbitrary_code=True, remote_exposed=False,
+        runtime_required=True, batch_eligible=False,
+        side_effects={"runs_tests": True, "writes_logs": True,
+                      "may_restart_server": True, "executes_project_code": True},
+        async_job={"kind": "run_tests", "key_arg": "idempotency_key",
+                   "caller_args": ("suite_name", "test_name"),
+                   "inject": {"background": True, "override": False}}),
+    # Worker-side, but explicitly relayable because controllers need it to
+    # poll handles returned by run_tests/save_project.
+    "get_job_status": _operation(
+        {"job_id": "string?"}, mutating=False, executes_arbitrary_code=False,
+        remote_exposed=True, runtime_required=False, batch_eligible=False),
+    # NOT relayable to a remote peer: it blocks TD's main thread 15+ seconds
+    # and restarts the Envoy server under itself. A-30's performance guard
+    # and A-31's per-node remote-work policy -- the machinery whose whole job
+    # is to stop a remote peer wrecking a live output -- are Phase 4. Returns
+    # to the remote surface in Phase 4, gated, never ungated.
+    "save_project": _operation(
+        {}, mutating=True, executes_arbitrary_code=False, remote_exposed=False,
+        runtime_required=True, batch_eligible=False,
+        side_effects={"writes_toe": True, "blocks_main_thread": True,
+                      "restarts_server": True},
+        async_job={"kind": "save_project", "key_arg": "idempotency_key",
+                   "caller_args": (), "inject": {}}),
+    # A batch is a neutral container. Its effective gates are the union of
+    # every validated child, computed recursively before admission and again
+    # before dispatch. Envoy itself rejects nested batches, so the host does
+    # too rather than advertising a shape the target cannot execute.
+    "batch_operations": _operation(
+        {"operations": "list", "override": "bool?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=False,
+        side_effects={"gating": "union_of_children"}),
+}
+
+# These operations terminate on the host itself.  They still traverse the
+# durable admission/lease/idempotency state machine, but they must never be
+# mistaken for an Envoy tool: no Envoy port, TD heartbeat, runtime precondition,
+# or Perform wake is relevant to them.
+HOST_SUBPROCESS_OPERATIONS = frozenset(
+    {"convoy_git", "convoy_gh", "convoy_shell"})
+HOST_LIFECYCLE_OPERATIONS = frozenset(
+    {"convoy_start_node", "convoy_restart_node"})
+HOST_NATIVE_OPERATIONS = frozenset(
+    set(HOST_SUBPROCESS_OPERATIONS) | set(HOST_LIFECYCLE_OPERATIONS)
+    | {"convoy_ping"})
+HOST_CANCELABLE_OPERATIONS = frozenset(
+    set(HOST_SUBPROCESS_OPERATIONS) | set(HOST_LIFECYCLE_OPERATIONS))
 
 # The strict reading of a registry entry: anything a registry entry does
 # not say is assumed to be the most dangerous answer. `executes_arbitrary
@@ -270,6 +613,245 @@ def gating_of(entry):
             for field, default in _GATING_DEFAULTS.items()}
 
 
+# `executes_arbitrary_code` is the irreducible A-1 audit bit: if it is not
+# stated, approval cannot make the operation safe because nobody classified
+# it. The other missing fields retain gating_of's strict defaults (mutating,
+# runtime-bound, and not remotely exposed), preserving the useful fail-closed
+# behaviour for tests/extensions that install a local-only registry entry.
+_REQUIRED_GATING_FIELDS = frozenset({"executes_arbitrary_code"})
+_BATCH_OPERATION_LIMIT = 512
+
+# Remote calls must not turn off Convoy, enable a more dangerous permission,
+# or otherwise rewrite the control plane that authorizes the call itself.
+# Embody's Convoy custom parameters are prefixed `Convoy`; the unprefixed
+# names cover the user-facing names planned for standalone/subcomponent UIs.
+_RESERVED_CONVOY_PARAMETER_NAMES = frozenset({
+    "remotewake", "allowtdpython", "allowexecutetdpython",
+    "allowfullshell", "artifactquota", "convoyenable",
+})
+
+
+class OperationRegistryError(Exception):
+    """A request cannot be represented safely by the operation registry."""
+
+    def __init__(self, reason, detail, code=403):
+        super().__init__(detail)
+        self.reason = reason
+        self.detail = detail
+        self.code = code
+
+
+def _normalized_parameter_name(value):
+    if not isinstance(value, str):
+        return ""
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+def _parameter_executes_code(arguments):
+    """Whether set_parameter activates caller-controlled Python semantics."""
+    if not isinstance(arguments, dict):
+        return False
+    mode = arguments.get("mode")
+    mode = mode.lower() if isinstance(mode, str) else ""
+    return (mode in ("expression", "bind")
+            or arguments.get("expr") is not None
+            or arguments.get("bind_expr") is not None)
+
+
+def _validate_host_operation_arguments(operation, arguments):
+    """Validate the host-operation wrapper and return its catalog action.
+
+    The subprocess facade validates every typed action argument again.  This
+    first door exists so unknown wrapper fields/actions are refused before a
+    durable job is accepted, and so dynamic Git mutation gating cannot be
+    tricked by a malformed shape.
+    """
+    if not isinstance(arguments, dict):
+        raise OperationRegistryError(
+            "malformed", f"{operation} arguments must be an object", 400)
+    common = {"timeout_s", "output_limit"}
+    if operation in ("convoy_git", "convoy_gh"):
+        allowed = common | {"operation", "arguments"}
+        unknown = sorted(set(arguments) - allowed)
+        if unknown:
+            raise OperationRegistryError(
+                "malformed",
+                f"{operation} has unknown field {unknown[0]!r}", 400)
+        action = arguments.get("operation")
+        catalog = (hostops_mod.GIT_CATALOG if operation == "convoy_git"
+                   else hostops_mod.GH_CATALOG)
+        if not isinstance(action, str) or action not in catalog:
+            raise OperationRegistryError(
+                "host_operation_not_exposed",
+                f"{action!r} is not in {operation}'s reviewed catalog", 403)
+        nested = arguments.get("arguments", {})
+        if not isinstance(nested, dict):
+            raise OperationRegistryError(
+                "malformed", f"{operation}.arguments must be an object", 400)
+        return action
+    if operation == "convoy_shell":
+        allowed = common | {
+            "command", "cwd", "env_additions", "redact_values"}
+        unknown = sorted(set(arguments) - allowed)
+        if unknown:
+            raise OperationRegistryError(
+                "malformed",
+                f"convoy_shell has unknown field {unknown[0]!r}", 400)
+        command = arguments.get("command")
+        if not isinstance(command, str) or not command.strip():
+            raise OperationRegistryError(
+                "malformed", "convoy_shell.command must be non-empty text",
+                400)
+        return "execute"
+    raise OperationRegistryError(
+        "operation_not_exposed",
+        f"{operation!r} is not a host subprocess operation")
+
+
+def _validate_lifecycle_operation_arguments(operation, arguments):
+    """Validate the small exact-node lifecycle surface before admission.
+
+    The durable delivery id is the lifecycle idempotency key; callers may
+    not inject a second operation id, executable, project path, environment,
+    or argv.  Those launch facts come only from a locally verified profile.
+    """
+    if not isinstance(arguments, dict):
+        raise OperationRegistryError(
+            "malformed", f"{operation} arguments must be an object", 400)
+    allowed = {"timeout_s"}
+    if operation == "convoy_restart_node":
+        allowed.add("policy")
+    unknown = sorted(set(arguments) - allowed)
+    if unknown:
+        raise OperationRegistryError(
+            "malformed",
+            f"{operation} has unknown field {unknown[0]!r}", 400)
+    timeout_s = arguments.get("timeout_s")
+    if timeout_s is not None and (
+            isinstance(timeout_s, bool)
+            or not isinstance(timeout_s, (int, float))
+            or not math.isfinite(float(timeout_s))
+            or not lifecycle_mod.MIN_TIMEOUT_S <= float(timeout_s)
+            <= lifecycle_mod.MAX_TIMEOUT_S):
+        raise OperationRegistryError(
+            "malformed", "lifecycle timeout_s is outside the allowed range",
+            400)
+    if operation == "convoy_restart_node":
+        policy = arguments.get("policy", "require_clean")
+        # Destructive policies exist in the internal lifecycle engine for
+        # future locally-approved recovery tooling, but Convoy v1 exposes no
+        # local approval UX.  Do not advertise or accept a policy that every
+        # shipped host must subsequently refuse.
+        if policy not in {"require_clean", "save_then_restart"}:
+            raise OperationRegistryError(
+                "malformed", "restart policy is not supported", 400)
+
+
+def effective_operation_gating(registry, operation, arguments=None,
+                               *, _in_batch=False):
+    """Return the gates for this exact call, validating batch children.
+
+    Registry entries are static capability declarations. Two call shapes need
+    a stricter dynamic answer: set_parameter only becomes arbitrary-code for
+    expression/bind forms, and batch_operations inherits the union of every
+    child. Unknown, sparse, malformed, nested, or non-batchable children are
+    refused here -- before enqueue -- so batching can never bypass the same
+    policy applied to a top-level call.
+    """
+    entry = registry.get(operation)
+    if entry is None:
+        raise OperationRegistryError(
+            "operation_not_exposed",
+            f"{operation!r} is not in this host's operation registry")
+    if not isinstance(entry, dict) or not _REQUIRED_GATING_FIELDS.issubset(entry):
+        raise OperationRegistryError(
+            "operation_not_relayable",
+            f"{operation!r} has no complete audited gate classification")
+    if _in_batch and operation == "batch_operations":
+        raise OperationRegistryError(
+            "nested_batch_not_allowed",
+            "nested batch_operations is not supported")
+    if _in_batch and not bool(entry.get("batch_eligible", False)):
+        raise OperationRegistryError(
+            "operation_not_batchable",
+            f"{operation!r} cannot execute inside batch_operations")
+
+    gating = gating_of(entry)
+    if operation == "set_parameter":
+        par_name = _normalized_parameter_name(
+            arguments.get("par_name") if isinstance(arguments, dict) else None)
+        if par_name.startswith("convoy") or par_name in _RESERVED_CONVOY_PARAMETER_NAMES:
+            raise OperationRegistryError(
+                "reserved_parameter",
+                "Convoy control parameters cannot be changed through Convoy")
+        if _parameter_executes_code(arguments):
+            gating["executes_arbitrary_code"] = True
+
+    if operation in HOST_SUBPROCESS_OPERATIONS:
+        action = _validate_host_operation_arguments(operation, arguments)
+        if operation == "convoy_git":
+            gating["mutating"] = bool(
+                hostops_mod.GIT_CATALOG[action]["mutating"])
+    elif operation in HOST_LIFECYCLE_OPERATIONS:
+        _validate_lifecycle_operation_arguments(operation, arguments)
+
+    if operation != "batch_operations":
+        return gating
+    if not isinstance(arguments, dict):
+        raise OperationRegistryError(
+            "malformed", "batch_operations arguments must be an object", 400)
+    children = arguments.get("operations")
+    if not isinstance(children, list):
+        raise OperationRegistryError(
+            "malformed", "batch_operations.operations must be a list", 400)
+    if len(children) > _BATCH_OPERATION_LIMIT:
+        raise OperationRegistryError(
+            "malformed",
+            f"batch_operations exceeds {_BATCH_OPERATION_LIMIT} operations", 400)
+
+    combined = dict(gating)
+    for index, child in enumerate(children):
+        if not isinstance(child, dict):
+            raise OperationRegistryError(
+                "malformed", f"batch operation {index} must be an object", 400)
+        child_name = child.get("tool")
+        child_arguments = child.get("params", {})
+        if not isinstance(child_name, str) or not child_name:
+            raise OperationRegistryError(
+                "malformed", f"batch operation {index} needs a tool name", 400)
+        if not isinstance(child_arguments, dict):
+            raise OperationRegistryError(
+                "malformed", f"batch operation {index} params must be an object", 400)
+        child_gating = effective_operation_gating(
+            registry, child_name, child_arguments, _in_batch=True)
+        combined["mutating"] = (combined["mutating"]
+                                or child_gating["mutating"])
+        combined["executes_arbitrary_code"] = (
+            combined["executes_arbitrary_code"]
+            or child_gating["executes_arbitrary_code"])
+        combined["runtime_required"] = (
+            combined["runtime_required"]
+            or child_gating["runtime_required"])
+        combined["remote_exposed"] = (
+            combined["remote_exposed"]
+            and child_gating["remote_exposed"])
+    return combined
+
+
+def operation_capability_side_effects(entry):
+    """Digest material beyond the four top-level gate booleans.
+
+    Batch eligibility changes whether the same named tool can execute in a
+    batch and async-ness changes result into handle semantics; both are wire
+    compatibility, not cosmetic registry metadata.
+    """
+    side_effects = dict(entry.get("side_effects") or {})
+    side_effects["batch_eligible"] = bool(entry.get("batch_eligible", False))
+    if entry.get("async_job"):
+        side_effects["async_job"] = True
+    return side_effects
+
+
 # HTTP status per EnvelopeRejected/LeaseError reason. The STRUCTURED
 # reason is the contract; the HTTP code is a coarse class: 4xx malformed,
 # 403 authentication/namespace, 409 state conflict, 410 expired.
@@ -284,6 +866,8 @@ _REFUSAL_HTTP = {
     "runtime_changed": 409,
     "runtime_unverifiable": 409,
     "hop_limit_exceeded": 409,
+    "deadline_mismatch": 400,
+    "timestamp_out_of_window": 410,
     "node_leased": 409,
     "shared_lease_no_mutation": 409,
     "deadline_exceeded": 410,
@@ -293,6 +877,7 @@ _REFUSAL_HTTP = {
     peers_mod.REASON_UNKNOWN: 403,
     peers_mod.REASON_PIN_MISMATCH: 403,
     peers_mod.REASON_OBSERVE_ONLY: 403,
+    peers_mod.REASON_NAMESPACE: 403,
     # Peer TRANSPORT (Phase 3 slice 3). Channel binding and an unusable
     # pinned key are both "this host will not hear you" refusals.
     "source_mismatch": 403,
@@ -303,6 +888,49 @@ _REFUSAL_HTTP = {
 # controller-chosen labels; nothing legitimate approaches these.
 MAX_ID_CHARS = 128
 MAX_OPERATION_CHARS = 128
+# One host can run many TD processes, but a few-dozen-machine Convoy is the
+# product ceiling today.  Bound both the peer-facing directory and the local
+# aggregation so a faulty admitted host cannot turn a status refresh into an
+# unbounded memory/JSON operation.
+MAX_PUBLIC_NODES_PER_HOST = 256
+MAX_NETWORK_NODE_ROWS = 4096
+MAX_PUBLIC_CONTROLLERS_PER_HOST = 512
+MAX_ACTIVE_JOBS_PER_CONTROLLER = 128
+MAX_NETWORK_CONTROLLER_ROWS = 4096
+NETWORK_QUERY_TIMEOUT_S = 2.0
+# A status client often asks for the same directory several times while it
+# renders one view.  Keep that hot result briefly; membership mutations clear
+# it immediately, and the monotonic TTL prevents clock changes extending it.
+NETWORK_NODE_CACHE_TTL_S = 2.0
+# A coalesced caller waits a little longer than the peer socket budget so the
+# leader has time to collect and project completed futures without causing a
+# second fanout wave.
+NETWORK_NODE_FLIGHT_WAIT_S = NETWORK_QUERY_TIMEOUT_S + 1.0
+# A directory read that observes a membership mutation landing DURING its
+# refresh recomputes rather than return a projection that predates the caller's
+# own write.  Bounded so sustained churn returns a stale-marked projection
+# instead of looping forever.
+NETWORK_NODE_MAX_REFRESH_ATTEMPTS = 3
+# The passive directory/status reads must not do one durable job-file read per
+# live operation claim under the app lock on every call: a 1 Hz /status poller
+# once drove /peers to hundreds of times its normal latency that way.  The
+# mutation/dispatch paths reconcile eagerly; the read paths reconcile at most
+# once per this interval so a burst of readers cannot multiply the file I/O.
+OPERATION_CLAIM_READ_RECONCILE_TTL_S = 1.0
+MANIFEST_PREFLIGHT_TIMEOUT_S = 2.0
+MAX_PEER_MANIFEST_CACHE = 128
+MAX_PEER_MANIFEST_OPERATIONS = 1024
+_MANIFEST_DIGEST_RE = re.compile(r"^mf1-[0-9a-f]{24}$")
+_OPERATION_DIGEST_RE = re.compile(r"^op1-[0-9a-f]{24}$")
+# One wave across every sibling at the supported 30-host ceiling.  The calls
+# use separate per-target connection locks; this does not permit concurrent
+# requests to squat on one peer channel.
+NETWORK_QUERY_WORKERS = 32
+# TD re-registers every ~30 seconds. Two missed beats is the agreed grace:
+# enough for ordinary frame stalls, finite enough that a hard-killed process
+# does not remain "online" forever because its old Envoy port was retained.
+NODE_HEARTBEAT_GRACE_S = 60.0
+
 # Cap on the in-memory (peer -> controller) map, matching the drain and
 # poll maps: nothing prunes it on a host whose peers churn, and an
 # unbounded map fed by remote input is a slow memory leak with a caller.
@@ -319,6 +947,10 @@ MAX_PEER_CONTROLLERS = 2048
 # window). The floor keeps the maps bounded on a loop-off host where no
 # pass ever runs to scale them.
 DRAIN_MAP_FLOOR = 2048
+# Poll and dispatch passes overlap independent nodes, but never queue an
+# unbounded future per job. One rolling slot per target prevents eight queued
+# calls to a hung TouchDesigner instance from starving every healthy node.
+PASS_MAX_WORKERS = 8
 
 
 class _LoopbackOrigin:
@@ -345,6 +977,9 @@ LOOPBACK_ORIGIN = _LoopbackOrigin()
 # what happened. Anything not named here is counted as an error on
 # purpose -- an unbucketed reason is a bug, and it must be visible.
 _DRAIN_BUCKET = {
+    "node_disabled": "refused",
+    "namespace_mismatch": "refused",
+    "full_shell_not_approved": "refused",
     "node_unreachable": "unreachable",
     "claim_lost": "unreachable",
     "no_node_job_handle": "no_handle",
@@ -352,6 +987,7 @@ _DRAIN_BUCKET = {
     # summary must show rather than bury in 'deferred'.
     "malformed_arguments": "errors",
     "node_endpoint_unknown": "deferred",
+    "node_endpoint_stale": "deferred",
     "runtime_changed": "deferred",
     "operation_not_exposed": "deferred",
     "operation_not_relayable": "deferred",
@@ -456,6 +1092,22 @@ def dict_field(body, name):
     return value
 
 
+def _loopback_port_open(port, timeout=0.15):
+    """Whether something is still accepting connections on a node port.
+
+    Used only to arbitrate two runtimes claiming one stable saved-`.toe`
+    identity.  It sends no bytes and is intentionally short; uncertainty
+    fails toward preserving the existing live claim, never silently stealing
+    it.  Call without HostApp.lock held.
+    """
+    try:
+        with socket.create_connection(("127.0.0.1", int(port)),
+                                      timeout=timeout):
+            return True
+    except (OSError, TypeError, ValueError):
+        return False
+
+
 def _json_safe(value):
     """The value itself if it survives strict JSON, else an honest
     substitute. A node result rides into the durable job file and back
@@ -537,6 +1189,329 @@ def _node_job_handle(payload):
     return job_id, status
 
 
+class _HostLifecycleRuntime:
+    """Bind LifecycleManager to HostApp's exact local node directory.
+
+    The adapter accepts no executable, project path, environment, or argv
+    from a remote request. It resolves the pinned node, calls only reviewed
+    session-gated Envoy helpers, and closes the live directory-to-Popen race
+    with an exact launch-unit reservation.
+    """
+
+    MAX_RESERVATIONS = 512
+    SAVE_POLL_S = 0.2
+
+    def __init__(self, app):
+        self.app = app
+        self._reservation_lock = threading.Lock()
+        self._reservations = {}
+        # Lifecycle operations execute concurrently for different nodes.  A
+        # thread-local binds a save attempt to its durable delivery id without
+        # changing the frozen runtime-adapter method signatures.
+        self._operation_context = threading.local()
+
+    @staticmethod
+    def _runtime_snapshot(record):
+        if not isinstance(record, dict) or not record.get("runtime_id"):
+            return None
+        snapshot = dict(record)
+        snapshot["metadata"] = dict(record.get("metadata") or {})
+        pid = snapshot["metadata"].get("process_id")
+        if pid is not None:
+            snapshot["process_id"] = pid
+        return snapshot
+
+    def current(self, node_id):
+        with self.app.lock:
+            record = self._runtime_snapshot(
+                self.app.directory.lookup(node_id))
+        if record is None:
+            return None
+
+        # A hard-killed TD process cannot unregister itself.  Treat only exact
+        # process-death proof (or proven PID reuse) as permission to clear its
+        # transient directory presence; unknown inspection remains fail-closed.
+        lifecycle = self.app.lifecycle
+        profile = (lifecycle.store.get_profile(node_id)
+                   if lifecycle is not None else None)
+        last = profile.get("last_runtime") if isinstance(profile, dict) else None
+        process = last.get("process") if isinstance(last, dict) else None
+        runtime_id = record.get("runtime_id")
+        pid = record.get("process_id")
+        if (not isinstance(last, dict) or last.get("runtime_id") != runtime_id
+                or not isinstance(process, dict)
+                or process.get("pid") != pid):
+            return record
+        try:
+            status = lifecycle.inspector.inspect_status(pid)
+        except Exception:
+            return record
+        definitively_gone = (
+            isinstance(status, dict) and (
+                status.get("status") == "dead"
+                or (status.get("status") == "alive"
+                    and not lifecycle_mod._process_same(
+                        status.get("process"), process))))
+        if not definitively_gone:
+            return record
+
+        # Compare-and-clear under the directory lock.  A new registration may
+        # have arrived during process inspection and must never be erased.
+        cleared = False
+        with self.app.lock:
+            current = self.app.directory.lookup(node_id)
+            current_pid = ((current.get("metadata") or {}).get("process_id")
+                           if isinstance(current, dict) else None)
+            if (isinstance(current, dict)
+                    and current.get("runtime_id") == runtime_id
+                    and current_pid == pid):
+                self.app.directory.clear_envoy_port(node_id)
+                self.app._audit_best_effort(
+                    "stale_runtime_reconciled",
+                    {"node_id": node_id, "runtime_id": runtime_id})
+                cleared = True
+                current = None
+            else:
+                current = self._runtime_snapshot(current)
+        if cleared:
+            # Classify an unstable confirmed launch for crash-loop fencing.
+            # This must remain outside app.lock because lifecycle persistence
+            # and callbacks have their own synchronization.
+            try:
+                lifecycle.record_runtime_exit(node_id, runtime_id)
+            except Exception:
+                pass
+            return None
+        return current
+
+    def begin_operation(self, operation_id):
+        self._operation_context.operation_id = operation_id
+
+    def end_operation(self):
+        try:
+            del self._operation_context.operation_id
+        except AttributeError:
+            pass
+
+    def _endpoint(self, node_id, runtime_id):
+        with self.app.lock:
+            record = self.app.directory.lookup(node_id)
+            if (record is None or record.get("host_id") != self.app.host_id
+                    or record.get("runtime_id") != runtime_id
+                    or record.get("enabled", True) is not True):
+                return None
+            port = record.get("envoy_port")
+            if isinstance(port, bool) or not isinstance(port, int):
+                return None
+            return port if 1 <= port <= 65535 else None
+
+    @staticmethod
+    def _payload(outcome):
+        if (not isinstance(outcome, dict)
+                or outcome.get("ok") is not True
+                or not isinstance(outcome.get("result"), dict)):
+            return {"ok": False}
+        return dict(outcome["result"])
+
+    @staticmethod
+    def _cancelled(cancel_event):
+        return cancel_event is not None and cancel_event.is_set()
+
+    def _call(self, node_id, runtime_id, operation, arguments, timeout_s,
+              cancel_event):
+        if self._cancelled(cancel_event):
+            return {"ok": False, "code": "cancelled"}
+        port = self._endpoint(node_id, runtime_id)
+        if port is None:
+            return {"ok": False, "code": "runtime_changed"}
+        outcome = mcpclient.forward(
+            port, operation, arguments,
+            # The public lifecycle timeout is validated at >=100 ms, but by
+            # the time lock/dirty/save phases consume it the remaining slice
+            # can be smaller.  Re-expanding that slice to 100 ms here breaks
+            # the manager's absolute deadline guarantee.
+            timeout=max(0.001,
+                        min(float(timeout_s), mcpclient.DEFAULT_TIMEOUT_S)),
+            session="convoy-lifecycle")
+        payload = self._payload(outcome)
+        # A response from an endpoint whose ownership changed while the call
+        # was in flight is not evidence about the addressed runtime.
+        if self._endpoint(node_id, runtime_id) != port:
+            return {"ok": False, "code": "runtime_changed"}
+        return payload
+
+    def dirty(self, node_id, runtime_id, timeout_s, cancel_event):
+        return self._call(
+            node_id, runtime_id, "convoy_lifecycle_state", {}, timeout_s,
+            cancel_event)
+
+    def save(self, node_id, runtime_id, timeout_s, cancel_event):
+        deadline = time.monotonic() + float(timeout_s)
+        job_id = None
+        operation_id = getattr(self._operation_context, "operation_id", None)
+        if not isinstance(operation_id, str) or not operation_id:
+            return {"ok": False, "code": "internal_error"}
+        # Stable within ONE lifecycle operation: retries reconcile to that
+        # save, while a later restart of the same runtime receives a fresh key.
+        material = (node_id + "\0" + runtime_id + "\0" + operation_id).encode(
+            "utf-8", "strict")
+        key = "convoy-lifecycle-save:" + hashlib.sha256(material).hexdigest()
+        while time.monotonic() < deadline and job_id is None:
+            if self._cancelled(cancel_event):
+                return {"ok": False, "code": "cancelled"}
+            remaining = deadline - time.monotonic()
+            result = self._call(
+                node_id, runtime_id, "save_project",
+                {"idempotency_key": key}, remaining, cancel_event)
+            candidate = result.get("job_id") if isinstance(result, dict) else None
+            if (isinstance(candidate, str)
+                    and NODE_JOB_ID_RE.fullmatch(candidate)):
+                job_id = candidate
+                break
+            time.sleep(min(self.SAVE_POLL_S, max(0.0, remaining)))
+        while time.monotonic() < deadline and job_id is not None:
+            if self._cancelled(cancel_event):
+                return {"ok": False, "code": "cancelled", "job_id": job_id,
+                        "save_may_have_run": True}
+            remaining = deadline - time.monotonic()
+            result = self._call(
+                node_id, runtime_id, POLL_OPERATION, {"job_id": job_id},
+                remaining, cancel_event)
+            status = result.get("status") if isinstance(result, dict) else None
+            if status == "done":
+                return {"ok": True, "job_id": job_id,
+                        "result": result.get("result")}
+            if status == "error":
+                return {"ok": False, "code": "save_failed",
+                        "job_id": job_id}
+            time.sleep(min(self.SAVE_POLL_S, max(0.0, remaining)))
+        result = {"ok": False, "code": "save_failed"}
+        if job_id is not None:
+            result.update({"job_id": job_id, "save_may_have_run": True})
+        return result
+
+    def quit(self, node_id, runtime_id, timeout_s, cancel_event, *, discard,
+             expected_dirty_revision=None):
+        return self._call(
+            node_id, runtime_id, "convoy_lifecycle_quit",
+            {"expected_dirty_revision": expected_dirty_revision,
+             "discard": bool(discard)}, timeout_s, cancel_event)
+
+    def reservation_for_node(self, node_id):
+        """Return a detached live reservation used by /register preflight."""
+        with self._reservation_lock:
+            for value in self._reservations.values():
+                if value.get("node_id") == node_id:
+                    return dict(value)
+        return None
+
+    def restore_launch_reservations(self, reservations):
+        """Atomically rebuild live fences from the validated durable ledger."""
+        if not isinstance(reservations, list):
+            return {"ok": False, "code": "invalid_reservations"}
+        rebuilt = {}
+        seen_nodes = set()
+        for value in reservations:
+            if not isinstance(value, dict) or set(value) != {
+                    "node_id", "launch_unit_id", "operation_id",
+                    "reservation_id"}:
+                return {"ok": False, "code": "invalid_reservations"}
+            node_id = value.get("node_id")
+            launch_unit_id = value.get("launch_unit_id")
+            operation_id = value.get("operation_id")
+            reservation_id = value.get("reservation_id")
+            if (not identity.is_valid_id(node_id)
+                    or not isinstance(launch_unit_id, str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", launch_unit_id)
+                    or not isinstance(operation_id, str)
+                    or not re.fullmatch(
+                        r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}",
+                        operation_id)
+                    or not isinstance(reservation_id, str)
+                    or not reservation_id
+                    or len(reservation_id.encode("utf-8")) > 256
+                    or any(ord(char) < 32 or ord(char) == 127
+                           for char in reservation_id)
+                    or node_id in seen_nodes
+                    or launch_unit_id in rebuilt):
+                return {"ok": False, "code": "invalid_reservations"}
+            seen_nodes.add(node_id)
+            rebuilt[launch_unit_id] = {
+                "node_id": node_id,
+                "launch_unit_id": launch_unit_id,
+                "operation_id": operation_id,
+                "reservation_id": reservation_id,
+            }
+        with self._reservation_lock:
+            if self._reservations and self._reservations != rebuilt:
+                return {"ok": False, "code": "reservation_conflict"}
+            self._reservations = rebuilt
+        return {"ok": True, "restored": len(rebuilt)}
+
+    def reserve_launch(self, node_id, launch_unit_id, operation_id,
+                       timeout_s, cancel_event):
+        if self._cancelled(cancel_event):
+            return {"ok": False, "code": "cancelled"}
+        with self.app.lock:
+            record = self.app.directory.lookup(node_id)
+            if (record is None or record.get("host_id") != self.app.host_id
+                    or record.get("enabled", True) is not True
+                    or record.get("runtime_id") is not None):
+                return {"ok": False, "code": "occupied"}
+            with self._reservation_lock:
+                existing = self._reservations.get(launch_unit_id)
+                if existing is not None:
+                    if (existing.get("node_id") == node_id
+                            and existing.get("operation_id") == operation_id):
+                        return {"ok": True,
+                                "reservation_id": existing["reservation_id"]}
+                    return {"ok": False, "code": "busy"}
+                if len(self._reservations) >= self.MAX_RESERVATIONS:
+                    return {"ok": False, "code": "capacity"}
+                reservation_id = "lr_" + secrets.token_urlsafe(24)
+                self._reservations[launch_unit_id] = {
+                    "node_id": node_id,
+                    "launch_unit_id": launch_unit_id,
+                    "operation_id": operation_id,
+                    "reservation_id": reservation_id,
+                }
+                return {"ok": True, "reservation_id": reservation_id}
+
+    def confirm_launch_reservation(self, node_id, launch_unit_id,
+                                   operation_id, reservation_id, runtime_id):
+        # LifecycleManager calls this while register_node holds app.lock.
+        # This is validation only: consuming the fence before the attempt
+        # ledger commits creates an unrecoverable store-failure gap. The
+        # manager calls release_launch_reservation after its atomic commit.
+        # The separate reservation lock keeps HostApp's coordination lock
+        # deliberately non-reentrant.
+        with self._reservation_lock:
+            expected = self._reservations.get(launch_unit_id)
+            if expected != {
+                    "node_id": node_id,
+                    "launch_unit_id": launch_unit_id,
+                    "operation_id": operation_id,
+                    "reservation_id": reservation_id}:
+                return {"ok": False, "code": "reservation_mismatch"}
+            record = self.app.directory.lookup(node_id)
+            if (record is None or record.get("host_id") != self.app.host_id
+                    or record.get("runtime_id") != runtime_id
+                    or record.get("enabled", True) is not True):
+                return {"ok": False, "code": "runtime_changed"}
+            return {"ok": True}
+
+    def release_launch_reservation(self, node_id, launch_unit_id,
+                                   operation_id, reservation_id, outcome):
+        with self._reservation_lock:
+            expected = self._reservations.get(launch_unit_id)
+            if (expected is not None
+                    and expected.get("node_id") == node_id
+                    and expected.get("operation_id") == operation_id
+                    and expected.get("reservation_id") == reservation_id):
+                del self._reservations[launch_unit_id]
+        return {"ok": True}
+
+
 class HostApp:
     """All state behind one lock: a host app is coordination, not
     throughput. Every handler acquires it around the whole request --
@@ -545,14 +1520,50 @@ class HostApp:
     call those from inside `with app.lock:` -- threading.Lock is not
     reentrant, and the double-acquire deadlocks the handler thread."""
 
-    def __init__(self, directory_path, now=None, forwarder=None):
+    def __init__(self, directory_path, now=None, forwarder=None, waker=None,
+                 artifact_cache_path=None, realm_path=None,
+                 realm_settle_delay_s=realm_mod.DEFAULT_SETTLE_DELAY_S,
+                 owlette_client=None, owlette_command_policy=None,
+                 lifecycle_manager=None, lifecycle_local_policy=None):
         self.data_dir = directory_path
         self._now = now or time.time
         self.started = self._now()
         self.token = platform_mod.ensure_ipc_token(directory_path)
+        # Safety authority is host-private and fail-closed.  Project/TDN
+        # values are projections only; a corrupt or too-new policy file must
+        # stop the daemon rather than silently restoring dangerous defaults.
+        self.policy = policy_mod.PolicyStore(directory_path, now=now)
+        self.artifacts = artifacts_mod.ArtifactStore(
+            (artifact_cache_path if artifact_cache_path is not None
+             else artifacts_mod.default_cache_root()),
+            quota_mb=self.policy.artifact_quota_mb(),
+            clock=(now or time.time))
+        # One bound shared by loopback and LAN transfers.  The peer listener
+        # also bounds connections, but local IPC uses ThreadingHTTPServer and
+        # therefore needs an artifact-specific ceiling of its own.
+        self.artifact_transfer_slots = threading.BoundedSemaphore(
+            artifact_http.DEFAULT_MAX_TRANSFERS)
         self.db = hoststore.HostStore(directory_path, now=now)
         self.host_id = self.db.host_id()
         self.directory, self.quarantined = self.db.load_directory()
+        self.realm = realm_mod.RealmStore(
+            (realm_path if realm_path is not None
+             else os.path.join(directory_path, realm_mod.REALM_FILE)),
+            now=self._now, settle_delay_s=realm_settle_delay_s)
+        self._hostop_context = threading.local()
+        self.host_operations = hostops_mod.HostOperations(
+            self._resolve_host_worktree,
+            full_shell_policy=self._allow_host_shell,
+            safe_state_dir=os.path.join(directory_path, "hostops"),
+            audit_callback=self._audit_host_operation)
+        # Optional public-API consumer.  Construct lazily so an installation
+        # with no Owlette account pays no TLS/context startup cost and Convoy
+        # never depends on Internet availability.  The injected seams keep
+        # tests and future OS credential-store adapters deterministic.
+        self._owlette_client = owlette_client
+        self._owlette_lock = threading.Lock()
+        self._owlette_command_policy = (
+            owlette_command_policy or self._allow_owlette_commands)
         # The node SEAM: how the host executes a queued job against a
         # node's Envoy. Signature (port, operation, arguments) -> a dict
         # {"ok": bool, "result"/"error": ...} for an observed node result,
@@ -571,6 +1582,11 @@ class HostApp:
         # only an async operation ever reaches 'running', and only a
         # running job is ever polled.
         self.forwarder = forwarder or mcpclient.forward
+        # Fire-and-forget LOOPBACK UDP.  It is safe inside the short phase-a
+        # lock because it never waits for a response; the durable drain retries
+        # a dropped datagram and node leases have a hard TTL.  Tests inject a
+        # recorder through this seam.
+        self.waker = waker or wake_mod.send
         # DEEP copy per instance: a shallow one shares the nested schema
         # and side_effects dicts with the module constant, so mutating
         # one in a test would silently change every other instance's
@@ -599,11 +1615,89 @@ class HostApp:
         # scan of the durable job records, which is what survives a
         # restart.
         self._peer_controllers = {}
+        # Last peer-safe node directory received for each
+        # (peer_host_id, convoy_id).  A temporary LAN dropout must not make
+        # every node vanish from the operator's Status sequence: cached rows
+        # remain visible and are marked offline/error by network_nodes().
+        # This cache contains only the already-sanitized public projection --
+        # never project_root, toe_path, Envoy's loopback port, or credentials.
+        self._peer_node_cache = {}
+        # Host-wide remote manifests, guarded by self.lock.  The key binds a
+        # manifest to the exact trust lineage and the digest advertised by
+        # the authenticated WSS hello.  HTTP-only peers are fetched on every
+        # submission because they provide no separate current-digest signal.
+        self._peer_manifest_cache = collections.OrderedDict()
         self.lock = threading.Lock()
+        # One host-wide, fixed-size network query pool.  A new executor per
+        # request lets simultaneous status clients multiply the 32-worker
+        # bound; this pool makes the bound true for the whole process.  The
+        # network_nodes single-flight layer below removes duplicate waves for
+        # one namespace before work reaches this executor.
+        self._network_query_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=NETWORK_QUERY_WORKERS,
+            thread_name_prefix="convoy-network")
+        # The injected test clock drives cache expiry exactly like every
+        # other store's ``now`` seam; production (now=None) keeps a
+        # monotonic clock so a wall-clock change can never extend a TTL.
+        self._network_nodes_cache_clock = now or time.monotonic
+        self._network_nodes_result_cache = {}
+        self._network_nodes_flights = {}
+        self._network_nodes_cache_generation = 0
+        self._network_query_metrics = {
+            "refreshes": 0,
+            "cache_hits": 0,
+            "coalesced": 0,
+            "wait_timeouts": 0,
+        }
+        self._unreadable_operation_jobs = set()
+        self._operation_job_scan_failed = False
+        # Operation claims are normally in-memory coordination, but a job
+        # already running at daemon restart is durable evidence of a writer.
+        # Rebuild those exact claims before any listener can admit new work.
+        self._restore_operation_claims_at_boot()
+        self.lifecycle_runtime = _HostLifecycleRuntime(self)
+        self.lifecycle_unavailable_reason = ""
+        if lifecycle_manager is not None:
+            self.lifecycle = lifecycle_manager
+        else:
+            try:
+                lifecycle_store = lifecycle_mod.LaunchProfileStore(
+                    os.path.join(directory_path, "lifecycle"), clock=now)
+                self.lifecycle = lifecycle_mod.LifecycleManager(
+                    lifecycle_store, self.lifecycle_runtime,
+                    local_policy=(lifecycle_local_policy
+                                  or (lambda node_id, policy: False)),
+                    audit_callback=self._audit_lifecycle,
+                    clock=now)
+                # Rebuild every unresolved launch fence before any listener
+                # can accept a manual or token-bearing registration. The
+                # durable attempt ledger, not process memory, is authoritative
+                # across supervisor restarts.
+                self.lifecycle.restore_launch_reservations()
+            except lifecycle_mod.LifecycleError as exc:
+                # Unsupported OS/session or unreadable lifecycle state must
+                # not take the whole Convoy host down. The two lifecycle
+                # operations remain registered but fail closed by name.
+                self.lifecycle = None
+                self.lifecycle_unavailable_reason = exc.code
+            except Exception:
+                self.lifecycle = None
+                self.lifecycle_unavailable_reason = "store_unavailable"
+        # Exact-node restart recovery is independent of queue draining and
+        # LAN exposure. main() starts this loop unconditionally: an operator
+        # may disable both features while a durable restart commit still
+        # obliges the host to restore the TouchDesigner process.
+        self._lifecycle_recovery_thread = None
+        self._lifecycle_recovery_stop = None
+        self._lifecycle_recovery_done = set()
         # The autonomous dispatcher (start_drain_loop). Off by default:
         # dispatch stays a per-call affair until someone opts in.
         self._drain_thread = None
         self._drain_stop = None
+        # Test-injectable downward, hard-capped by PASS_MAX_WORKERS in the
+        # scheduler. A per-pass executor is short-lived and never owns more
+        # futures than active worker slots.
+        self.pass_max_workers = PASS_MAX_WORKERS
         # Dispatch bookkeeping, all guarded by self.lock:
         #   _in_flight     delivery_id -> ATTEMPT token for forwards in
         #                  progress in THIS process -- what separates a
@@ -626,6 +1720,11 @@ class HostApp:
         #                  on every tick (unbounded audit growth).
         self._in_flight = {}
         self._flight_counter = 0
+        # delivery_id -> threading.Event for a currently executing host-side
+        # subprocess.  The map is guarded by self.lock and is deliberately
+        # process-local: after host exit, HostStore's dispatching sweep records
+        # the only honest outcome (indeterminate) rather than re-running work.
+        self._hostop_cancel_events = {}
         self._drain_backoff = {}
         self._drain_noted = {}
         # The maps' effective size cap: max(DRAIN_MAP_FLOOR, 2x the live
@@ -682,6 +1781,10 @@ class HostApp:
         self.job_retention_s = 24 * 3600.0
         self.reap_interval_s = 300.0
         self._last_reap = 0.0
+        # Last time a PASSIVE read path reconciled operation claims. Mutation
+        # and dispatch paths still reconcile eagerly; this only bounds the
+        # per-claim file I/O the read paths would otherwise do on every call.
+        self._last_claim_read_reconcile = 0.0
         # HOST IDENTITY (Phase 3 slice 1). The Ed25519 keypair that signs
         # envelopes and, from slice 3, backs the TLS certificate.
         #
@@ -702,6 +1805,14 @@ class HostApp:
             self.hostkeys = hostkeys.load_or_create(directory_path)
         except hostkeys.CryptographyMissing as e:
             self.identity_detail = e.detail
+        self.peer_pool = (peerclient.PeerConnectionPool(self.hostkeys)
+                          if self.hostkeys is not None else None)
+        # Persistent WSS control plane.  It exists only while the LAN
+        # listener is exposed; HTTPS remains the artifact plane and a
+        # compatibility fallback for peers that have not established WSS.
+        self.session_manager = None
+        self._session_manager_lock = threading.Lock()
+        self._session_hello_signature = None
         # THE LAN LISTENER (Phase 3 slice 3). None until main() binds it,
         # and it binds ONLY when lan.json enables it (convoy_lan;
         # `absent = NO LAN SOCKET EVER`). These describe its state for
@@ -712,19 +1823,195 @@ class HostApp:
         self.lan_thread = None
         self.lan_address = None
         self.lan_port = None
+        self.discovery_service = None
         # Why the LAN listener is not up, when it is not: 'disabled' (no
         # lan.json), a convoy_lan reason, a bind refusal, or 'no_identity'.
         # Surfaced on /lan/status so "off" is never indistinguishable from
         # "broken".
         self.lan_reason = "disabled"
+        # The LAN surface follows durable enabled-node membership.  Socket
+        # start/stop never runs under the request lock: registrations merely
+        # set this Event and the host lifecycle thread reconciles state.
+        self._lan_refresh = threading.Event()
+        self._lan_lifecycle_stop = threading.Event()
+        self._lan_lifecycle_thread = None
+        self._lan_retry_s = 5.0
         # How /shutdown stops the server. Set by main() to EXACTLY the
         # callable the SIGTERM handler uses -- one shutdown path, not
         # two. None until then, so an embedded HostApp (every test that
         # builds one without serve()) refuses the route instead of
         # pretending it stopped something.
         self._shutdown_hook = None
+        self._initialize_realm_from_directory()
         self.db.audit("hostapp", "started", {"host_id": self.host_id})
         self._auditIdentityAtBoot()
+
+    @staticmethod
+    def _allow_owlette_commands():
+        value = os.environ.get(OWLETTE_COMMAND_OPT_IN_ENV, "")
+        return value.strip().lower() in ("1", "true", "yes", "on")
+
+    def _allow_owlette_machine_commands(self):
+        """Durable opt-in for machine-affecting Owlette commands.
+
+        reboot/shutdown/restart-process/kill-process escalate past every other
+        Owlette action, so they must not ride the single benign env flag.  Like
+        Full Shell (``_allow_host_shell`` -> ``self.policy``), they require a
+        DURABLE PolicyStore approval.  PolicyStore does not yet expose this
+        field, so this reads it defensively (a dedicated reader if one is added,
+        else the snapshot) and DEFAULT-DENIES until the durable opt-in and its
+        challenge/confirm flow land in convoy_policy.py (cross-file follow-up).
+        """
+        reader = getattr(self.policy, "allow_owlette_machine_commands", None)
+        if callable(reader):
+            try:
+                return reader() is True
+            except Exception:
+                return False
+        try:
+            snapshot = self.policy.snapshot()
+        except Exception:
+            return False
+        return bool(isinstance(snapshot, dict)
+                    and snapshot.get("allow_owlette_machine_commands") is True)
+
+    def _get_owlette_client(self):
+        client = self._owlette_client
+        if client is not None:
+            return client
+        with self._owlette_lock:
+            if self._owlette_client is None:
+                self._owlette_client = owlette_mod.client_from_env()
+            return self._owlette_client
+
+    @staticmethod
+    def _owlette_error_response(exc):
+        payload = exc.as_dict()
+        status = getattr(exc, "status", None)
+        if isinstance(exc, owlette_mod.OwletteValidationError):
+            code = 400
+        elif isinstance(exc, (owlette_mod.OwletteConfigError,
+                              owlette_mod.OwletteCredentialUnavailable)):
+            code = 503
+        elif isinstance(exc, owlette_mod.OwletteApiError) \
+                and isinstance(status, int) and 400 <= status <= 599:
+            code = status
+        else:
+            code = 502
+        payload.update({"integration": "owlette-public-api",
+                        "wakes_touchdesigner": False})
+        return code, payload
+
+    def owlette_action(self, body):
+        """Consume one bounded public Owlette API action from loopback.
+
+        This is deliberately not a Convoy transport and is never exposed by
+        the peer HTTPS server.  Inventory/status are read-only.  Command
+        submission additionally requires a host-local environment opt-in;
+        the generic mcp_tool_call command remains forbidden so Owlette cannot
+        become an undocumented Convoy or unrestricted shell tunnel.
+        """
+        if not isinstance(body, dict):
+            return 400, {"ok": False, "reason": "malformed"}
+        action = body.get("action", "capabilities")
+        if not isinstance(action, str) or not action:
+            return 400, {"ok": False, "reason": "malformed",
+                         "detail": "action must be non-empty text"}
+        read_actions = {
+            "capabilities", "list_sites", "get_site", "list_machines",
+            "get_machine", "command_status",
+        }
+        if action not in read_actions | {"submit_command"}:
+            return 400, {"ok": False, "reason": "unsupported_action",
+                         "detail": "the requested Owlette action is not published"}
+        try:
+            client = self._get_owlette_client()
+            if action == "capabilities":
+                result = {
+                    "capabilities": owlette_mod.public_capabilities(),
+                    "base_url": client.config.base_url,
+                    "default_site_id": client.config.default_site_id,
+                    "credential_configured": bool(
+                        os.environ.get(owlette_mod.ENV_API_KEY)
+                        or os.environ.get(owlette_mod.ENV_API_KEY_SECRET)),
+                }
+            elif action == "list_sites":
+                result = {"sites": client.list_sites()}
+            elif action == "get_site":
+                result = {"site": client.get_site(body.get("site_id"))}
+            elif action == "list_machines":
+                result = {"machines": client.list_machines(
+                    body.get("site_id"))}
+            elif action == "get_machine":
+                result = {"machine": client.get_machine(
+                    body.get("site_id"), body.get("machine_id"))}
+            elif action == "command_status":
+                result = {"command": client.get_command_status(
+                    body.get("site_id"), body.get("machine_id"),
+                    body.get("command_id"))}
+            else:
+                command_type = body.get("command_type")
+                if not bool(self._owlette_command_policy()):
+                    return 403, {
+                        "ok": False,
+                        "reason": "owlette_commands_not_approved",
+                        "detail": "set %s locally on the Convoy host to "
+                                  "enable reviewed Owlette commands" %
+                                  OWLETTE_COMMAND_OPT_IN_ENV,
+                        "wakes_touchdesigner": False,
+                    }
+                if command_type == OWLETTE_TUNNEL_COMMAND:
+                    return 403, {
+                        "ok": False,
+                        "reason": "owlette_tunnel_forbidden",
+                        "detail": "mcp_tool_call is not an approved Convoy/Owlette bridge",
+                        "wakes_touchdesigner": False,
+                    }
+                if (command_type in OWLETTE_MACHINE_AFFECTING_COMMANDS
+                        and not self._allow_owlette_machine_commands()):
+                    # A-35: reboot/shutdown/process-kill can take a show
+                    # machine down with no unsaved-work check, so the benign
+                    # command opt-in above is not enough -- they need the
+                    # durable policy approval and default-deny until it exists.
+                    return 403, {
+                        "ok": False,
+                        "reason": "owlette_machine_command_not_approved",
+                        "detail": "reboot/shutdown/process-kill Owlette "
+                                  "commands require a durable Convoy policy "
+                                  "opt-in that is not enabled",
+                        "command_type": str(command_type or "")[:128],
+                        "wakes_touchdesigner": False,
+                    }
+                result = {"command": client.submit_command(
+                    body.get("site_id"), body.get("machine_id"),
+                    command_type,
+                    idempotency_key=body.get("idempotency_key"),
+                    params=body.get("params"),
+                    timeout_seconds=body.get("timeout_seconds", 60))}
+                self.db.audit("owlette", "command_submitted", {
+                    "site_id": str(body.get("site_id") or "")[:128],
+                    "machine_id": str(body.get("machine_id") or "")[:128],
+                    "command_type": str(command_type or "")[:128],
+                })
+        except owlette_mod.OwletteError as exc:
+            return self._owlette_error_response(exc)
+        except Exception as exc:
+            # Third-party credential readers/transports can raise arbitrary
+            # exceptions.  Do not reflect their text: it may contain account
+            # or secret material.
+            return 502, {
+                "ok": False, "reason": "owlette_integration_error",
+                "detail": type(exc).__name__,
+                "integration": "owlette-public-api",
+                "wakes_touchdesigner": False,
+            }
+        return 200, {
+            "ok": True, "action": action,
+            "integration": "owlette-public-api",
+            "openapi_version": owlette_mod.OPENAPI_VERSION,
+            "wakes_touchdesigner": False,
+            **result,
+        }
 
     def _auditIdentityAtBoot(self):
         """Record THIS boot's fingerprint, and shout if it moved.
@@ -759,6 +2046,281 @@ class HostApp:
                       {"fingerprint": current,
                        "certificate": self.hostkeys.certificate_pem is not None,
                        "certificate_reason": self.hostkeys.cert_reason})
+
+    # -- automatic LAN realm (ADR-003) ---------------------------------
+
+    @staticmethod
+    def _realm_public(snapshot):
+        """Bounded, secret-free realm status for loopback projections."""
+        if not isinstance(snapshot, dict):
+            return {"state": "unbound", "convoy_id": None,
+                    "conflict_ids": [], "generation": None}
+        return {
+            "state": snapshot.get("state"),
+            "convoy_id": snapshot.get("convoy_id"),
+            "conflict_ids": list(snapshot.get("conflict_ids") or ())[:32],
+            "generation": snapshot.get("generation"),
+        }
+
+    def _realm_projection_locked(self):
+        return self._realm_public(self.realm.snapshot())
+
+    def _invalidate_network_nodes_cache_locked(self):
+        """Invalidate directory projections while ``self.lock`` is held.
+
+        The generation also fences an already-running refresh: that caller
+        may finish from its valid snapshot, but it cannot republish the old
+        projection into the cache after membership changed underneath it.
+        """
+        self._network_nodes_cache_generation += 1
+        self._network_nodes_result_cache.clear()
+
+    def _apply_realm_observations_locked(self, *, candidate_ids=(),
+                                         established_ids=()):
+        """Reconcile signed/local observations and persist candidate rebases.
+
+        CALLED WITH ``self.lock`` held. RealmStore writes its own private
+        record before publishing state; HostStore then atomically projects an
+        authoritative ID/state across every provisional local node. An
+        established node is never selected by that projection.
+        """
+        candidate_ids = tuple(candidate_ids or ())
+        established_ids = tuple(established_ids or ())
+        before = self.realm.snapshot()
+        if before is None and not established_ids and candidate_ids:
+            self.realm.begin_candidate(min(candidate_ids))
+        after = self.realm.reconcile(
+            candidate_ids=candidate_ids,
+            established_ids=established_ids)
+        if after is not None and after.get("state") in (
+                realm_mod.CANDIDATE, realm_mod.ESTABLISHED):
+            changed_nodes = self.db.rebind_candidates(
+                self.directory, after["convoy_id"],
+                binding_state=after["state"])
+            if after["state"] == realm_mod.ESTABLISHED:
+                self.db.ensure_convoy_psk(after["convoy_id"])
+        else:
+            changed_nodes = []
+
+        changed = before != after or bool(changed_nodes)
+        if changed:
+            self._invalidate_network_nodes_cache_locked()
+        if changed and after is not None:
+            event = "realm_" + str(after.get("state") or "changed")
+            self._audit_best_effort(event, {
+                "convoy_id": after.get("convoy_id"),
+                "conflict_ids": list(after.get("conflict_ids") or ())[:16],
+                "generation": after.get("generation"),
+                "local_nodes_rebound": len(changed_nodes),
+            })
+        return after, changed
+
+    def _initialize_realm_from_directory(self):
+        """Recover one host realm from durable node bindings at startup."""
+        with self.lock:
+            enabled = [record for record in self.directory.nodes()
+                       if bool(record.get("enabled", True))]
+            if not enabled:
+                return
+            candidate_ids = {
+                record.get("convoy_id") for record in enabled
+                if record.get("binding_state") == realm_mod.CANDIDATE
+            }
+            established_ids = {
+                record.get("convoy_id") for record in enabled
+                if record.get("binding_state", realm_mod.ESTABLISHED)
+                == realm_mod.ESTABLISHED
+            }
+            self._apply_realm_observations_locked(
+                candidate_ids=candidate_ids,
+                established_ids=established_ids)
+
+    def reset_realm(self, body):
+        """Advanced LOCAL recovery: clear a realm binding/conflict and re-run
+        genesis. Loopback-only (routed through _post_locked).
+
+        A split-realm CONFLICT never self-clears -- that is deliberate. This
+        is the plan's required local reset/rejoin action (section 9.1). It
+        clears the durable realm record, then re-derives a clean
+        candidate/established binding from the still-registered local nodes so
+        the host escapes the conflict without a restart. The announcements
+        that caused the conflict are now gated by the killswitch/denylist, so
+        an operator blocks the offending sender (or engages the killswitch)
+        first, then resets.
+        """
+        before = self.realm.snapshot()
+        self.realm.reset()
+        enabled = [record for record in self.directory.nodes()
+                   if bool(record.get("enabled", True))]
+        candidate_ids = {
+            record.get("convoy_id") for record in enabled
+            if record.get("binding_state") == realm_mod.CANDIDATE
+            and record.get("convoy_id")}
+        established_ids = {
+            record.get("convoy_id") for record in enabled
+            if record.get("binding_state", realm_mod.ESTABLISHED)
+            == realm_mod.ESTABLISHED and record.get("convoy_id")}
+        if candidate_ids or established_ids:
+            self._apply_realm_observations_locked(
+                candidate_ids=candidate_ids, established_ids=established_ids)
+        else:
+            self._invalidate_network_nodes_cache_locked()
+        after = self.realm.snapshot()
+        self._audit_best_effort("realm_reset", {
+            "previous_state": (before or {}).get("state"),
+            "previous_convoy_id": (before or {}).get("convoy_id"),
+            "new_state": (after or {}).get("state"),
+        })
+        return 200, {"ok": True,
+                     "previous": self._realm_public(before),
+                     "realm": self._realm_public(after)}
+
+    def _accept_registration_realm_locked(self, convoy_id, binding_state,
+                                          current=None):
+        """Return the host-authoritative (id, state), or a conflict refusal."""
+        candidates = ((convoy_id,) if binding_state == realm_mod.CANDIDATE
+                      else ())
+        established = ((convoy_id,)
+                       if binding_state == realm_mod.ESTABLISHED else ())
+        snapshot, _changed = self._apply_realm_observations_locked(
+            candidate_ids=candidates, established_ids=established)
+        if snapshot is None:
+            return None, (503, "realm_unbound",
+                          "the automatic Convoy realm is not ready")
+        if snapshot.get("state") == realm_mod.CONFLICT:
+            preserved = snapshot.get("convoy_id")
+            if (current is not None and preserved
+                    and current.get("convoy_id") == preserved
+                    and current.get("binding_state") ==
+                    realm_mod.ESTABLISHED
+                    and convoy_id == preserved
+                    and binding_state == realm_mod.ESTABLISHED):
+                # Existing authenticated work inside the preserved realm
+                # remains operational while the operator resolves the split.
+                return (preserved, realm_mod.ESTABLISHED), None
+            return None, (
+                409, "local_realm_conflict",
+                "multiple established Convoys were found on this LAN; "
+                "this project was not joined automatically")
+        return (snapshot["convoy_id"], snapshot["state"]), None
+
+    def _realm_operation_refusal(self, convoy_id):
+        """None when this realm may execute, else (reason, detail)."""
+        snapshot = self.realm.snapshot()
+        if snapshot is None:
+            return "realm_unbound", "the automatic Convoy realm is unbound"
+        state = snapshot.get("state")
+        authoritative = snapshot.get("convoy_id")
+        if (state == realm_mod.ESTABLISHED
+                and authoritative == convoy_id):
+            return None
+        if (state == realm_mod.CONFLICT and authoritative
+                and authoritative == convoy_id):
+            return None
+        if state == realm_mod.CANDIDATE:
+            return ("realm_not_established",
+                    "automatic Convoy genesis is still settling")
+        if state == realm_mod.CONFLICT:
+            return ("realm_conflict",
+                    "multiple established Convoys were found on this LAN")
+        return ("realm_namespace_mismatch",
+                "the target node is not bound to this host's Convoy realm")
+
+    def active_realm_states(self):
+        """One atomic discovery projection: {realm_id: wire state}."""
+        with self.lock:
+            if not any(bool(record.get("enabled", True))
+                       for record in self.directory.nodes()):
+                return {}
+            snapshot = self.realm.snapshot()
+            if not snapshot or not snapshot.get("convoy_id"):
+                return {}
+            state = snapshot.get("state")
+            if state in (realm_mod.CANDIDATE, realm_mod.ESTABLISHED):
+                return {snapshot["convoy_id"]: state}
+            if state == realm_mod.CONFLICT:
+                # Keep the pre-existing realm alive, but never advertise the
+                # conflicting realm(s) as if this host had merged them.
+                return {snapshot["convoy_id"]: realm_mod.ESTABLISHED}
+            return {}
+
+    def _observe_realm_announcement(self, announcement):
+        """Discovery callback; announcement is already signature-verified."""
+        states = announcement.get("realm_states")
+        if not isinstance(states, dict):
+            return
+        candidates = [realm_id for realm_id, state in states.items()
+                      if state == realm_mod.CANDIDATE]
+        established = [realm_id for realm_id, state in states.items()
+                       if state == realm_mod.ESTABLISHED]
+        with self.lock:
+            _snapshot, changed = self._apply_realm_observations_locked(
+                candidate_ids=candidates, established_ids=established)
+        if changed:
+            self.request_lan_refresh()
+
+    def _tick_realm(self):
+        with self.lock:
+            _snapshot, changed = self._apply_realm_observations_locked()
+        if changed:
+            self.request_lan_refresh()
+        return changed
+
+    def _resolve_host_worktree(self, node_id):
+        """Resolve only an enabled local node to its registered project root.
+
+        HostOperations canonicalizes and revalidates the returned path before
+        every spawn.  This resolver supplies the other half of that contract:
+        callers name a stable node, never an arbitrary filesystem path, and a
+        disabled/forgotten node immediately loses host-operation authority.
+        """
+        record = self.directory.lookup(node_id)
+        if (record is None or record.get("host_id") != self.host_id
+                or record.get("enabled", True) is not True
+                or self._realm_operation_refusal(
+                    record.get("convoy_id")) is not None):
+            return None
+        expected_convoy = getattr(
+            self._hostop_context, "expected_convoy_id", None)
+        if (expected_convoy is not None
+                and record.get("convoy_id") != expected_convoy):
+            return None
+        root = record.get("project_root")
+        return root if isinstance(root, str) and root else None
+
+    def _allow_host_shell(self, node_id):
+        """The literal host-private Full Shell decision for one live member."""
+        return (self._resolve_host_worktree(node_id) is not None
+                and self.policy.allow_full_shell() is True)
+
+    def _audit_host_operation(self, payload):
+        """Append a deliberately narrow, secret-safe host-operation audit.
+
+        HostOperations itself never supplies argv, command text, environment,
+        stdout or stderr.  The whitelist here is a second boundary so a future
+        facade change cannot silently turn the durable audit into a secret or
+        Full Shell command log.
+        """
+        if not isinstance(payload, dict):
+            return
+        event = payload.get("event")
+        if not isinstance(event, str) or not event.startswith(
+                "host_operation_"):
+            return
+        allowed = {
+            "capability", "operation", "target_id", "mutating", "code",
+            "exit_code", "truncated", "duration_ms", "cwd"}
+        detail = {key: payload[key] for key in allowed if key in payload}
+        # Structured Git/GH arguments are reviewed enum fields.  Full Shell
+        # never gets this exception, even if a future caller accidentally
+        # supplies an `arguments` member.
+        if (payload.get("capability") != hostops_mod.HOST_SHELL_CAPABILITY
+                and isinstance(payload.get("arguments"), dict)):
+            detail["arguments"] = payload["arguments"]
+        try:
+            self.db.audit("hostops", event, detail)
+        except Exception:
+            pass
 
     def set_shutdown_hook(self, hook):
         """Wire /shutdown to the server-stopping callable main() already
@@ -800,6 +2362,7 @@ class HostApp:
             "protocol": "convoy-host/1",
             "host_id": self.host_id,
             "nodes": len(self.directory.nodes()),
+            "realm": self._realm_projection_locked(),
             "jobs_queued": counts.get("queued", 0),
             # Node jobs the host handed off and is polling: work in
             # flight ON THE NODE, invisible in jobs_queued.
@@ -848,6 +2411,12 @@ class HostApp:
             "peers_reason": self.peers.unreadable,
             "denylist_fail_closed": bool(
                 self.peers.denylist.snapshot()["fail_closed"]),
+            "lifecycle_available": self.lifecycle is not None,
+            "lifecycle_capability":
+                lifecycle_mod.HOST_LIFECYCLE_CAPABILITY,
+            "lifecycle_reason": (None if self.lifecycle is not None
+                                 else self.lifecycle_unavailable_reason
+                                 or "lifecycle_unavailable"),
             "uptime_s": round(self._now() - self.started, 1),
         }
 
@@ -946,7 +2515,9 @@ class HostApp:
                          "previous_fingerprint": previous,
                          "fingerprint": landed}
         self.hostkeys = fresh
+        self._reset_peer_pool()
         self.identity_detail = ""
+        self._refresh_discovery_identity()
         # GRANT RESET HOOK (A-12's precedent: remint resets
         # td_python_approved, because a new identity inherits no
         # privileges). Rotation resets every grant attached to the
@@ -974,9 +2545,44 @@ class HostApp:
         """
         try:
             self.hostkeys = hostkeys.load_or_create(self.data_dir)
+            self._reset_peer_pool()
+            self._refresh_discovery_identity()
             return self.hostkeys.fingerprint
         except Exception:
             return None
+
+    def _reset_peer_pool(self):
+        self._stop_peer_session_manager(timeout_s=1.0)
+        old = getattr(self, "peer_pool", None)
+        if old is not None:
+            old.close()
+        self.peer_pool = (peerclient.PeerConnectionPool(self.hostkeys)
+                          if self.hostkeys is not None else None)
+        self.request_lan_refresh()
+
+    def _refresh_discovery_identity(self):
+        """Publish a live identity replacement without touching TD state."""
+        service = self.discovery_service
+        if service is None:
+            return
+        if self.hostkeys is None or not self.hostkeys.certificate_pem:
+            try:
+                service.stop()
+            finally:
+                self.discovery_service = None
+            return
+        try:
+            service.replace_identity(self.hostkeys)
+        except Exception as exc:
+            try:
+                service.stop()
+            finally:
+                self.discovery_service = None
+            self._audit_best_effort(
+                "discovery_identity_refresh_failed",
+                {"error": f"{type(exc).__name__}: {exc}"})
+            self.request_lan_refresh()
+
     def request_shutdown(self, body=None):
         """Stop the host app cleanly, on request. Authenticated (every
         POST is) and audited.
@@ -1011,76 +2617,408 @@ class HostApp:
         return 200, {"ok": True, "host_id": self.host_id, "stopping": True}
 
     def register_node(self, body):
-        project_root = body.get("project_root")
-        convoy_id = body.get("convoy_id")
-        comp_path = body.get("comp_path") or ""
-        # Per-launch, supplied by the TD side and never stored. Absent is
-        # fine (the host mints one); what matters is that it CHANGES on
-        # every TD start so a stale request can be caught.
-        runtime_id = body.get("runtime_id")
-        # Where the node's local Envoy listens, so the host can dispatch a
-        # job back to it (loopback, Phase 1). Optional and per-launch.
+        """Register one live TD runtime and enable its Convoy membership.
+
+        SELF-LOCKING: stable-identity collision probing performs one bounded
+        loopback connect without the app lock; all directory/store mutations
+        then occur atomically under it.  Route handlers must call this method
+        outside their own lock block.
+        """
+        try:
+            project_root = text_field(body, "project_root", limit=4096)
+            convoy_id = identity.normalize_convoy_id(
+                text_field(body, "convoy_id", limit=MAX_ID_CHARS))
+            # Pre-genesis callers omitted this field and persisted durable
+            # IDs, so rolling compatibility must treat omission as
+            # established, never as a fresh/rebindable candidate.
+            binding_state = identity.normalize_binding_state(
+                body.get("binding_state", realm_mod.ESTABLISHED))
+            comp_path = text_field(body, "comp_path", limit=512)
+            runtime_id = text_field(
+                body, "runtime_id", required=False, limit=128) or None
+            raw_discriminator = body.get("node_discriminator")
+            discriminator = identity.normalize_node_discriminator(
+                raw_discriminator)
+            metadata_present = "metadata" in body
+            clean_metadata = (identity.sanitize_node_metadata(
+                body.get("metadata")) if metadata_present else None)
+            td_executable = (text_field(
+                body, "td_executable", required=False, limit=4096) or None)
+            launch_token = (text_field(
+                body, "launch_token", required=False, limit=256) or None)
+            launch_reservation_id = (text_field(
+                body, "launch_reservation_id", required=False,
+                limit=256) or None)
+        except (Malformed, identity.IdentityError) as e:
+            reason = getattr(e, "reason", "malformed")
+            detail = getattr(e, "detail", str(e))
+            self._audit_best_effort("register_refused",
+                                    {"reason": reason, "detail": detail})
+            return 400, {"ok": False, "reason": reason, "detail": detail}
+
+        if (launch_token is None) != (launch_reservation_id is None):
+            return self._refuse(
+                "register", "malformed",
+                "launch_token and launch_reservation_id must be paired", 400)
+        if (launch_token is not None
+                and not re.fullmatch(r"[A-Za-z0-9_-]{32,256}",
+                                     launch_token)):
+            return self._refuse(
+                "register", "malformed",
+                "launch_token must be bounded URL-safe text", 400)
+
+        # Where the node's local Envoy listens. Optional and per-launch.
         envoy_port = body.get("envoy_port")
-        if (not comp_path or not isinstance(comp_path, str)
-                or len(comp_path) > 512):
-            self.db.audit("hostapp", "register_refused",
-                          {"reason": "malformed", "detail": "comp_path"})
-            return 400, {"ok": False, "reason": "malformed",
-                         "detail": "comp_path is required (1..512 chars) "
-                                   "-- omitting it would mint a new identity"}
         if envoy_port is not None and (
                 isinstance(envoy_port, bool)
                 or not isinstance(envoy_port, int)
                 or not (1 <= envoy_port <= 65535)):
-            self.db.audit("hostapp", "register_refused",
-                          {"reason": "malformed", "detail": "envoy_port"})
+            self._audit_best_effort(
+                "register_refused",
+                {"reason": "malformed", "detail": "envoy_port"})
             return 400, {"ok": False, "reason": "malformed",
                          "detail": "envoy_port must be an integer 1..65535"}
-        known_before = {r["node_id"] for r in self.directory.nodes()}
+
+        # Explicit endpoint readiness lets Perform Mode retire a previously
+        # registered Envoy port without overloading port 0/null.  Legacy
+        # callers omit the bit and retain the historical preserve-on-omit
+        # behavior.
+        envoy_ready = body.get("envoy_ready")
+        if envoy_ready is not None and not isinstance(envoy_ready, bool):
+            return self._refuse("register", "malformed",
+                                "envoy_ready must be boolean", 400)
+        if envoy_ready is True and envoy_port is None:
+            return self._refuse("register", "malformed",
+                                "envoy_ready requires envoy_port", 400)
+        if envoy_ready is False and envoy_port is not None:
+            return self._refuse("register", "malformed",
+                                "envoy_port conflicts with envoy_ready=false",
+                                400)
+
+        live_bools = {}
+        for field in ("remote_wake", "perform_mode", "wake_active"):
+            value = body.get(field, False)
+            if not isinstance(value, bool):
+                return self._refuse("register", "malformed",
+                                    f"{field} must be boolean", 400)
+            live_bools[field] = value
+        wake_pending = body.get("wake_pending", False)
+        if not isinstance(wake_pending, bool):
+            return self._refuse("register", "malformed",
+                                "wake_pending must be boolean", 400)
+        wake_port = body.get("wake_port")
+        wake_token = body.get("wake_token")
+        if (wake_port is None) != (wake_token is None):
+            return self._refuse(
+                "register", "malformed",
+                "wake_port and wake_token must be supplied together", 400)
+        if wake_port is not None:
+            if (isinstance(wake_port, bool)
+                    or not isinstance(wake_port, int)
+                    or not (1 <= wake_port <= 65535)):
+                return self._refuse(
+                    "register", "malformed",
+                    "wake_port must be an integer 1..65535", 400)
+            if (not isinstance(wake_token, str)
+                    or not re.fullmatch(r"[A-Za-z0-9_-]{32,128}",
+                                        wake_token)):
+                return self._refuse(
+                    "register", "malformed",
+                    "wake_token must be bounded URL-safe text", 400)
+            if not live_bools["remote_wake"]:
+                return self._refuse(
+                    "register", "malformed",
+                    "a wake endpoint requires remote_wake=true", 400)
+        if live_bools["wake_active"] and not live_bools["perform_mode"]:
+            return self._refuse(
+                "register", "malformed",
+                "wake_active requires perform_mode=true", 400)
+        if (live_bools["perform_mode"] and not live_bools["wake_active"]
+                and envoy_ready is True):
+            return self._refuse(
+                "register", "malformed",
+                "a sleeping Perform node cannot advertise Envoy ready", 400)
+        wake_grace_s = body.get("wake_grace_s", 60)
+        if (isinstance(wake_grace_s, bool)
+                or not isinstance(wake_grace_s, int)
+                or wake_grace_s < 0 or wake_grace_s > 3600):
+            return self._refuse(
+                "register", "malformed",
+                "wake_grace_s must be an integer from 0 through 3600", 400)
+
+        # Snapshot a possible incumbent, then test its old port without
+        # holding the coordination lock.  Same port is a normal process
+        # restart (the old process could not still own it); different live
+        # ports mean two processes are claiming one stable saved-.toe node.
         try:
-            record = self.directory.register(
-                project_root, comp_path, convoy_id, runtime_id=runtime_id,
-                envoy_port=envoy_port)
+            with self.lock:
+                incumbent = self.directory.lookup_location(
+                    project_root, comp_path,
+                    node_discriminator=(discriminator or None))
         except identity.IdentityError as e:
-            # A-39: refusals are AUDITED, not silent -- with no admission
-            # control yet, visibility is the compensating control.
-            self.db.audit("hostapp", "register_refused",
-                          {"reason": e.reason, "detail": e.detail})
-            code = 400 if e.reason.startswith("malformed") else 409
-            return code, {"ok": False, "reason": e.reason,
-                          "detail": e.detail}
-        newly_minted = record["node_id"] not in known_before
-        # PERSIST FIRST, then keep the in-memory directory. The reverse
-        # order left a node that existed in memory (and accepted jobs)
-        # but vanished on restart if the write failed. The convoy PSK is
-        # minted in the same failure domain: a node whose group key could
-        # not persist must not register (the envelope path would refuse
-        # every request against a key nobody was ever handed).
-        try:
-            self.db.ensure_convoy_psk(record["convoy_id"])
-            self.db.save_node(record)
-        except Exception as e:
-            # Roll back ONLY a registration this call minted. On a
-            # RE-registration the record was already persisted by an
-            # earlier call, and forgetting it here would evict a healthy
-            # node from memory -- leaving it unknown to every route while
-            # it still sits on disk, until a restart reloaded it.
-            if newly_minted:
-                self.directory.forget(record["node_id"])
-            self.db.audit("hostapp", "register_failed",
-                          {"error": f"{type(e).__name__}: {e}",
-                           "rolled_back": newly_minted})
-            return 500, {"ok": False, "reason": "persist_failed",
-                         "detail": f"{type(e).__name__}: {e}"}
-        self.db.audit("hostapp", "node_registered",
-                      {"node_id": record["node_id"],
-                       "comp_path": comp_path})
-        return 200, {"ok": True,
-                     "node_id": record["node_id"],
-                     "runtime_id": record["runtime_id"],
-                     "host_id": self.host_id,
-                     "envoy_port": record.get("envoy_port"),
-                     "td_python_approved": record["td_python_approved"]}
+            return self._refuse("register", e.reason, e.detail, 400)
+        # An omitted runtime id is a legacy heartbeat, not a new claimant:
+        # preserve the incumbent runtime rather than minting a different one
+        # on every heartbeat. New nodes still mint in NodeDirectory.
+        if incumbent is not None and runtime_id is None:
+            runtime_id = incumbent.get("runtime_id")
+
+        # An exact-node launch reservation fences the gap between the
+        # lifecycle worker's final offline check and Popen. A normal/manual
+        # claimant may not steal that target while the reservation is live.
+        incumbent_reservation = (
+            self.lifecycle_runtime.reservation_for_node(
+                incumbent.get("node_id")) if incumbent is not None else None)
+        if incumbent_reservation is not None:
+            if self.lifecycle is None:
+                return self._refuse(
+                    "register", "lifecycle_unavailable",
+                    self.lifecycle_unavailable_reason
+                    or "exact-node lifecycle is unavailable", 503)
+            if (launch_token is None
+                    or launch_reservation_id !=
+                    incumbent_reservation.get("reservation_id")):
+                return self._refuse(
+                    "register", "launch_reservation_mismatch",
+                    "an exact lifecycle launch currently owns this node",
+                    409, node=incumbent)
+
+        runtime_changed = bool(
+            incumbent and incumbent.get("runtime_id") and runtime_id
+            and incumbent.get("runtime_id") != runtime_id)
+        incumbent_pid = ((incumbent.get("metadata") or {}).get("process_id")
+                         if incumbent else None)
+        claimant_pid = ((clean_metadata or {}).get("process_id")
+                        if metadata_present else None)
+        ownership_checked = False
+        incumbent_alive = False
+        if runtime_changed:
+            if incumbent_pid and claimant_pid and incumbent_pid == claimant_pid:
+                # Extension reinitialization inside the same TD process.
+                ownership_checked = True
+                incumbent_alive = False
+            elif incumbent_pid:
+                ownership_checked = True
+                incumbent_alive = platform_mod.pid_is_alive(incumbent_pid)
+            elif incumbent.get("envoy_port"):
+                ownership_checked = True
+                incumbent_alive = _loopback_port_open(
+                    incumbent.get("envoy_port"))
+            else:
+                # A legacy/no-port incumbent cannot prove it went away. The
+                # safe answer is to preserve its claim until clean unregister
+                # or host restart, not silently redirect its stable address.
+                ownership_checked = True
+                incumbent_alive = True
+
+        with self.lock:
+            try:
+                current = self.directory.lookup_location(
+                    project_root, comp_path,
+                    node_discriminator=(discriminator or None))
+            except identity.IdentityError as e:
+                return self._refuse("register", e.reason, e.detail, 400)
+
+            current_reservation = (
+                self.lifecycle_runtime.reservation_for_node(
+                    current.get("node_id")) if current is not None else None)
+            if current_reservation is not None and self.lifecycle is None:
+                return self._refuse(
+                    "register", "lifecycle_unavailable",
+                    self.lifecycle_unavailable_reason
+                    or "exact-node lifecycle is unavailable", 503,
+                    node=current)
+            if current_reservation is not None and (
+                    launch_token is None
+                    or launch_reservation_id !=
+                    current_reservation.get("reservation_id")):
+                return self._refuse(
+                    "register", "launch_reservation_mismatch",
+                    "an exact lifecycle launch currently owns this node",
+                    409, node=current)
+            launch_confirmation_required = current_reservation is not None
+            conflict = (current and current.get("runtime_id") and runtime_id
+                        and current.get("runtime_id") != runtime_id)
+            if conflict:
+                same_snapshot = (incumbent is not None
+                                 and incumbent.get("node_id") ==
+                                 current.get("node_id")
+                                 and incumbent.get("runtime_id") ==
+                                 current.get("runtime_id")
+                                 and incumbent.get("envoy_port") ==
+                                 current.get("envoy_port")
+                                 and incumbent.get("wake_port") ==
+                                 current.get("wake_port"))
+                if not same_snapshot or not ownership_checked or incumbent_alive:
+                    return self._refuse(
+                        "register", "node_runtime_conflict",
+                        "another live runtime already owns this saved .toe "
+                        "node; give each live .toe its own saved path or "
+                        "close the existing runtime", 409,
+                        node=current)
+            if (current is not None
+                    and current.get("binding_state") ==
+                    realm_mod.ESTABLISHED
+                    and current.get("convoy_id") != convoy_id
+                    and binding_state == realm_mod.ESTABLISHED):
+                return self._refuse(
+                    "register", "node_identity_conflict",
+                    "this saved TouchDesigner node is already bound to "
+                    f"Convoy {current.get('convoy_id')!r}", 409,
+                    node=current)
+
+            authority, realm_refusal = self._accept_registration_realm_locked(
+                convoy_id, binding_state, current=current)
+            if realm_refusal is not None:
+                code, reason, detail = realm_refusal
+                return self._refuse(
+                    "register", reason, detail, code, node=current,
+                    extra={"convoy_id": convoy_id,
+                           "binding_state": binding_state})
+            authoritative_id, authoritative_state = authority
+            # Candidate adoption may have rebound this incumbent while the
+            # lock was held. Snapshot it again so persistence rollback can
+            # never restore the pre-convergence binding.
+            try:
+                current = self.directory.lookup_location(
+                    project_root, comp_path,
+                    node_discriminator=(discriminator or None))
+            except identity.IdentityError as e:
+                return self._refuse("register", e.reason, e.detail, 400)
+
+            known_before = {r["node_id"] for r in self.directory.nodes()}
+            previous = dict(current) if current else None
+            if previous and isinstance(previous.get("metadata"), dict):
+                previous["metadata"] = dict(previous["metadata"])
+            try:
+                record = self.directory.register(
+                    project_root, comp_path, authoritative_id,
+                    runtime_id=runtime_id, envoy_port=envoy_port,
+                    node_discriminator=(discriminator or None),
+                    binding_state=authoritative_state)
+                newly_minted = record["node_id"] not in known_before
+                self.directory.set_live_state(
+                    record["node_id"], envoy_ready=envoy_ready,
+                    wake_port=wake_port, wake_token=wake_token,
+                    remote_wake=live_bools["remote_wake"],
+                    perform_mode=live_bools["perform_mode"],
+                    wake_active=live_bools["wake_active"],
+                    wake_grace_s=wake_grace_s)
+                self.directory.set_enabled(record["node_id"], True)
+                if metadata_present:
+                    self.directory.set_metadata(record["node_id"],
+                                                clean_metadata)
+                record = self.directory.lookup(record["node_id"])
+                record["last_heartbeat_unix"] = self._now()
+                # Persist before acknowledging. The PSK and membership
+                # intent share this failure domain.
+                if self._realm_operation_refusal(record["convoy_id"]) is None:
+                    self.db.ensure_convoy_psk(record["convoy_id"])
+                self.db.save_node(record)
+
+                if launch_confirmation_required:
+                    runtime_record = dict(record)
+                    runtime_record["metadata"] = dict(
+                        record.get("metadata") or {})
+                    runtime_record["process_id"] = runtime_record[
+                        "metadata"].get("process_id")
+                    runtime_record["launch_reservation_id"] = \
+                        launch_reservation_id
+                    confirmation = self.lifecycle.confirm_registration(
+                        record["node_id"], record["convoy_id"],
+                        launch_token, runtime_record)
+                    if not isinstance(confirmation, dict) \
+                            or confirmation.get("ok") is not True:
+                        if newly_minted:
+                            self.directory.forget(record["node_id"])
+                            try:
+                                self.db.delete_node(record["node_id"])
+                            except Exception:
+                                pass
+                        elif previous is not None:
+                            live = self.directory.lookup(record["node_id"])
+                            live.clear()
+                            live.update(previous)
+                            try:
+                                self.db.save_node(previous)
+                            except Exception:
+                                pass
+                        reason = (confirmation.get("code")
+                                  if isinstance(confirmation, dict)
+                                  else "launch_unconfirmed")
+                        self._audit_best_effort(
+                            "launch_registration_refused",
+                            {"node_id": record["node_id"],
+                             "reason": str(reason)[:64]})
+                        return 409, {
+                            "ok": False,
+                            "reason": reason or "launch_unconfirmed",
+                            "detail": "the exact lifecycle launch could not "
+                                      "yet be confirmed; registration was "
+                                      "not accepted",
+                        }
+                elif self.lifecycle is not None and td_executable:
+                    try:
+                        self.lifecycle.record_registration(
+                            record, td_executable, launch_eligible=True)
+                        self.lifecycle.set_enabled(
+                            record["node_id"], record["convoy_id"], True,
+                            launch_eligible=True)
+                    except lifecycle_mod.LifecycleError as exc:
+                        # Convoy routing remains usable if this particular TD
+                        # process cannot be proven launchable. Lifecycle calls
+                        # then fail closed with unknown_profile/profile state.
+                        self._audit_best_effort(
+                            "lifecycle_profile_unavailable",
+                            {"node_id": record["node_id"],
+                             "reason": exc.code})
+                    except Exception:
+                        self._audit_best_effort(
+                            "lifecycle_profile_unavailable",
+                            {"node_id": record["node_id"],
+                             "reason": "internal_error"})
+            except identity.IdentityError as e:
+                return self._refuse(
+                    "register", e.reason, e.detail,
+                    400 if e.reason.startswith("malformed") else 409)
+            except Exception as e:
+                if 'record' in locals() and record is not None:
+                    if record["node_id"] not in known_before:
+                        self.directory.forget(record["node_id"])
+                    elif previous is not None:
+                        live = self.directory.lookup(record["node_id"])
+                        live.clear()
+                        live.update(previous)
+                self._audit_best_effort(
+                    "register_failed",
+                    {"error": f"{type(e).__name__}: {e}",
+                     "rolled_back": True})
+                return 500, {"ok": False, "reason": "persist_failed",
+                             "detail": f"{type(e).__name__}: {e}"}
+            self._audit_best_effort(
+                "node_registered",
+                {"node_id": record["node_id"], "comp_path": comp_path,
+                 "node_discriminator": record.get("node_discriminator")})
+            self._invalidate_network_nodes_cache_locked()
+            self.request_lan_refresh()
+            return 200, {
+                "ok": True,
+                "node_id": record["node_id"],
+                "runtime_id": record["runtime_id"],
+                "host_id": self.host_id,
+                "convoy_id": authoritative_id,
+                "realm_state": authoritative_state,
+                "envoy_port": record.get("envoy_port"),
+                "perform_mode": bool(record.get("perform_mode")),
+                "wake_active": bool(record.get("wake_active")),
+                "wake_ready": bool(record.get("remote_wake")
+                                   and record.get("wake_port")
+                                   and record.get("wake_token")),
+                "enabled": bool(record.get("enabled", True)),
+                "td_python_approved": self.policy.allow_td_python(
+                    record["node_id"]),
+                "policy": self._policy_projection(record["node_id"]),
+            }
 
     def unregister_node(self, body):
         """Clear a node's live Envoy port -- it is shutting down cleanly.
@@ -1112,8 +3050,18 @@ class HostApp:
         try:
             node_id = text_field(body, "node_id")
             runtime_id = text_field(body, "runtime_id", required=False)
+            # Missing is the pre-intent wire shape used by older builds;
+            # those calls meant "this process is closing", not "withdraw
+            # this durable node from Convoy", so rolling upgrades map it to
+            # the safe shutdown semantics.
+            reason = (text_field(body, "reason", required=False,
+                                 limit=16) or "shutdown")
         except Malformed as e:
             return self._refuse("unregister", "malformed", e.detail, 400)
+        if reason not in ("disabled", "shutdown"):
+            return self._refuse(
+                "unregister", "invalid_unregister_reason",
+                "reason must be disabled or shutdown", 400)
         record = self.directory.lookup(node_id)
         if record is None:
             return self._refuse("unregister", "unknown_node", node_id, 404)
@@ -1129,9 +3077,25 @@ class HostApp:
                          "node_id": record["node_id"],
                          "host_id": self.host_id,
                          "envoy_port": record.get("envoy_port"),
-                         "td_python_approved":
-                             record["td_python_approved"]}
+                         "enabled": bool(record.get("enabled", True)),
+                         "td_python_approved": self.policy.allow_td_python(
+                             record["node_id"]),
+                         "policy": self._policy_projection(
+                             record["node_id"])}
         self.directory.clear_envoy_port(node_id)
+        record["last_heartbeat_unix"] = self._now()
+        if reason == "disabled":
+            self.directory.set_enabled(node_id, False)
+            if self.lifecycle is not None:
+                try:
+                    self.lifecycle.set_enabled(
+                        node_id, record["convoy_id"], False,
+                        launch_eligible=False)
+                except Exception:
+                    self._audit_best_effort(
+                        "lifecycle_disable_failed",
+                        {"node_id": node_id,
+                         "reason": "profile_unavailable"})
         # Unlike register there is NOTHING to roll back: envoy_port is
         # per-launch and hoststore.save_node does not persist it, so the
         # clear is already complete in the only place it lives. This write
@@ -1146,13 +3110,22 @@ class HostApp:
                                      "error": f"{type(e).__name__}: {e}"})
         self._audit_best_effort("node_unregistered",
                                 {"node_id": record["node_id"],
-                                 "comp_path": record["comp_path"]})
+                                 "comp_path": record["comp_path"],
+                                 "reason": reason,
+                                 "enabled": bool(record.get("enabled", True))})
+        self._record_lifecycle_exit(node_id, runtime_id or current)
+        self._invalidate_network_nodes_cache_locked()
+        self.request_lan_refresh()
         return 200, {"ok": True,
                      "cleared": True,
                      "node_id": record["node_id"],
                      "host_id": self.host_id,
                      "envoy_port": record.get("envoy_port"),
-                     "td_python_approved": record["td_python_approved"]}
+                     "enabled": bool(record.get("enabled", True)),
+                     "reason": reason,
+                     "td_python_approved": self.policy.allow_td_python(
+                         record["node_id"]),
+                     "policy": self._policy_projection(record["node_id"])}
 
     def _audit_best_effort(self, event, detail):
         """Audit without letting the trail's failure fail the request.
@@ -1166,8 +3139,70 @@ class HostApp:
         except Exception:
             pass
 
+    def _audit_lifecycle(self, detail):
+        """LifecycleManager's already-redacted audit sink."""
+        if not isinstance(detail, dict):
+            return
+        event = str(detail.get("event") or "lifecycle_event")[:64]
+        payload = {key: value for key, value in detail.items()
+                   if key != "event" and isinstance(
+                       value, (str, int, float, bool))}
+        self._audit_best_effort(event, payload)
+
+    def _record_lifecycle_exit(self, node_id, runtime_id):
+        """Classify a confirmed launch's early exit without blocking IPC."""
+        if self.lifecycle is None or not runtime_id:
+            return
+        try:
+            first = self.lifecycle.record_runtime_exit(node_id, runtime_id)
+        except Exception:
+            return
+        if (not isinstance(first, dict)
+                or first.get("code") != "runtime_unverifiable"):
+            return
+
+        lifecycle = self.lifecycle
+
+        def _wait_for_exact_exit():
+            deadline = time.monotonic() + \
+                lifecycle_mod.LAUNCH_STABILITY_WINDOW_S
+            while time.monotonic() < deadline:
+                time.sleep(0.25)
+                try:
+                    result = lifecycle.record_runtime_exit(
+                        node_id, runtime_id)
+                except Exception:
+                    return
+                if (isinstance(result, dict)
+                        and result.get("code") != "runtime_unverifiable"):
+                    return
+
+        threading.Thread(
+            target=_wait_for_exact_exit,
+            name="ConvoyLifecycleExit-" + str(node_id)[:8],
+            daemon=True).start()
+
     def remint_node(self, body):
         node_id = body.get("node_id") or ""
+        if self.directory.lookup(node_id) is None:
+            return 404, {"ok": False, "reason": "unknown_node",
+                         "detail": node_id}
+        old_node = self.directory.lookup(node_id)
+        if self.lifecycle is not None:
+            try:
+                self.lifecycle.set_enabled(
+                    node_id, old_node["convoy_id"], False,
+                    launch_eligible=False)
+            except Exception:
+                pass
+        # A new stable identity inherits no code-execution authority.  Revoke
+        # the old identity first; a later persistence error can only become
+        # more restrictive, never preserve a stale dangerous grant.
+        try:
+            self.policy.disable_td_python(node_id)
+        except policy_mod.PolicyValidationError as e:
+            return 400, {"ok": False, "reason": e.reason,
+                         "detail": e.detail}
         try:
             fresh = self.directory.remint(node_id)
         except identity.IdentityError as e:
@@ -1177,12 +3212,1743 @@ class HostApp:
         self.db.audit("hostapp", "node_reminted",
                       {"old_node_id": node_id,
                        "new_node_id": fresh["node_id"]})
+        self._invalidate_network_nodes_cache_locked()
+        self.request_lan_refresh()
         return 200, {"ok": True, "node_id": fresh["node_id"],
-                     "td_python_approved": fresh["td_python_approved"]}
+                     "td_python_approved": False,
+                     "policy": self._policy_projection(fresh["node_id"])}
 
     def list_nodes(self):
+        rows = []
+        for record in self.directory.nodes():
+            row = dict(record)
+            row["metadata"] = dict(record.get("metadata") or {})
+            row["td_python_approved"] = self.policy.allow_td_python(
+                record["node_id"])
+            rows.append(row)
         return {"ok": True, "host_id": self.host_id,
-                "nodes": self.directory.nodes()}
+                "nodes": rows}
+
+    # -- host-private safety policy (loopback only) ---------------------
+
+    def _policy_projection(self, node_id=None):
+        """Return only the policy projection relevant to one local node.
+
+        The persisted list of every TD-Python-approved identity is host-
+        private implementation state, not a status payload.  A node learns
+        its own grant plus the host-wide shell/quota values and generation.
+        """
+        state = self.policy.snapshot()
+        return {
+            "generation": state["generation"],
+            "allow_td_python": bool(
+                node_id and self.policy.allow_td_python(node_id)),
+            "allow_full_shell": state["allow_full_shell"],
+            "artifact_quota_mb": state["artifact_quota_mb"],
+        }
+
+    @staticmethod
+    def _policy_error(exc):
+        if isinstance(exc, policy_mod.PolicyValidationError):
+            code = 400
+        elif isinstance(exc, policy_mod.ChallengeInvalid):
+            code = 403
+        elif isinstance(exc, policy_mod.ChallengeNotFound):
+            code = 404
+        elif isinstance(exc, policy_mod.ChallengeExpired):
+            code = 410
+        elif isinstance(exc, (policy_mod.PolicyConflict,
+                              policy_mod.ChallengeStale,
+                              policy_mod.PolicyAlreadyEnabled)):
+            code = 409
+        elif isinstance(exc, policy_mod.PolicyUnreadable):
+            code = 503
+        else:
+            code = 500
+        payload = {"ok": False, "reason": exc.reason,
+                   "detail": exc.detail}
+        current = getattr(exc, "current", None)
+        if current is None:
+            current = getattr(exc, "current_generation", None)
+        if current is not None:
+            payload["current_generation"] = current
+        return code, payload
+
+    def get_policy(self, node_id=None):
+        if node_id is not None:
+            try:
+                node_id = text_field({"node_id": node_id}, "node_id")
+            except Malformed as exc:
+                return 400, {"ok": False, "reason": "malformed",
+                             "detail": exc.detail}
+            if self.directory.lookup(node_id) is None:
+                return 404, {"ok": False, "reason": "unknown_node",
+                             "detail": node_id}
+        return 200, {"ok": True, "host_id": self.host_id,
+                     "policy": self._policy_projection(node_id)}
+
+    def begin_policy_challenge(self, body):
+        try:
+            setting = text_field(body, "setting", limit=32)
+            generation = body.get("expected_generation")
+            if setting == policy_mod.TD_PYTHON:
+                node_id = text_field(body, "node_id")
+                node = self.directory.lookup(node_id)
+                if node is None:
+                    return 404, {"ok": False, "reason": "unknown_node",
+                                 "detail": node_id}
+                challenge = self.policy.begin_enable_td_python(
+                    node_id, expected_generation=generation)
+            elif setting == policy_mod.FULL_SHELL:
+                challenge = self.policy.begin_enable_full_shell(
+                    expected_generation=generation)
+            else:
+                raise policy_mod.PolicyValidationError(
+                    "setting must be td_python or full_shell")
+        except Malformed as exc:
+            return 400, {"ok": False, "reason": "malformed",
+                         "detail": exc.detail}
+        except policy_mod.PolicyError as exc:
+            return self._policy_error(exc)
+        self._audit_best_effort(
+            "policy_challenge_started",
+            {"setting": challenge["setting"],
+             "node_id": challenge.get("node_id"),
+             "generation": challenge["generation"]})
+        # Loopback/authenticated only.  The confirmation phrase is returned
+        # to the local TD modal and is deliberately never written to audit.
+        return 200, {"ok": True, "challenge": challenge}
+
+    def confirm_policy_challenge(self, body):
+        try:
+            challenge_id = text_field(body, "challenge_id", limit=256)
+            confirmation = text_field(body, "confirmation", limit=512)
+            state = self.policy.confirm_enable(
+                challenge_id, confirmation,
+                expected_generation=body.get("expected_generation"))
+        except Malformed as exc:
+            return 400, {"ok": False, "reason": "malformed",
+                         "detail": exc.detail}
+        except policy_mod.PolicyError as exc:
+            self._audit_best_effort(
+                "policy_challenge_refused", {"reason": exc.reason})
+            return self._policy_error(exc)
+        self._audit_best_effort(
+            "policy_enabled", {"generation": state["generation"]})
+        return 200, {"ok": True, "policy": self._policy_projection()}
+
+    def decline_policy_challenge(self, body):
+        try:
+            state = self.policy.decline_challenge(
+                text_field(body, "challenge_id", limit=256))
+        except Malformed as exc:
+            return 400, {"ok": False, "reason": "malformed",
+                         "detail": exc.detail}
+        except policy_mod.PolicyError as exc:
+            return self._policy_error(exc)
+        self._audit_best_effort(
+            "policy_challenge_declined", {"generation": state["generation"]})
+        return 200, {"ok": True, "policy": self._policy_projection()}
+
+    def disable_policy(self, body):
+        try:
+            setting = text_field(body, "setting", limit=32)
+            if setting == policy_mod.TD_PYTHON:
+                node_id = text_field(body, "node_id")
+                state = self.policy.disable_td_python(node_id)
+            elif setting == policy_mod.FULL_SHELL:
+                node_id = text_field(
+                    body, "node_id", required=False) or None
+                if node_id is not None and self.directory.lookup(node_id) is None:
+                    return 404, {"ok": False, "reason": "unknown_node",
+                                 "detail": node_id}
+                state = self.policy.disable_full_shell()
+            else:
+                raise policy_mod.PolicyValidationError(
+                    "setting must be td_python or full_shell")
+        except Malformed as exc:
+            return 400, {"ok": False, "reason": "malformed",
+                         "detail": exc.detail}
+        except policy_mod.PolicyError as exc:
+            return self._policy_error(exc)
+        self._audit_best_effort(
+            "policy_disabled", {"setting": setting, "node_id": node_id,
+                                "generation": state["generation"]})
+        return 200, {"ok": True,
+                     "policy": self._policy_projection(node_id)}
+
+    def set_artifact_quota(self, body):
+        try:
+            state = self.policy.set_artifact_quota_mb(
+                body.get("artifact_quota_mb"),
+                expected_generation=body.get("expected_generation"))
+            artifact_status = self.artifacts.set_quota_mb(
+                state["artifact_quota_mb"])
+        except policy_mod.PolicyError as exc:
+            return self._policy_error(exc)
+        except artifacts_mod.ArtifactError as exc:
+            # The persisted policy remains authoritative and is applied on
+            # restart.  Report the partial reconcile explicitly; never claim
+            # that a committed host-private setting was rolled back.
+            return 500, {"ok": False,
+                         "reason": "artifact_quota_reconcile_failed",
+                         "detail": exc.detail,
+                         "policy": self._policy_projection()}
+        self._audit_best_effort(
+            "artifact_quota_changed",
+            {"generation": state["generation"],
+             "artifact_quota_mb": state["artifact_quota_mb"]})
+        return 200, {"ok": True, "policy": self._policy_projection(),
+                     "artifacts": artifact_status}
+
+    # -- artifact byte transport ----------------------------------------
+
+    @staticmethod
+    def _artifact_error(exc):
+        """Map store errors without exposing cache paths or exception text."""
+        if isinstance(exc, artifacts_mod.ArtifactNotFound):
+            code = 404
+        elif isinstance(exc, (artifacts_mod.ArtifactQuotaExceeded,
+                              artifacts_mod.ArtifactOwnerClaimsExceeded)):
+            code = 507
+        elif isinstance(exc, artifacts_mod.ArtifactUnauthorized):
+            code = 403
+        elif isinstance(exc, (artifacts_mod.ArtifactProtected,
+                              artifacts_mod.ArtifactExists)):
+            code = 409
+        elif isinstance(exc, artifacts_mod.ArtifactCorrupt):
+            code = 422
+        elif isinstance(exc, artifacts_mod.ArtifactValidationError):
+            code = 400
+        else:
+            code = 500
+        payload = {"ok": False, "reason": exc.reason}
+        if exc.detail:
+            payload["detail"] = exc.detail[:256]
+        return code, payload
+
+    def export_artifact_to_project(self, body):
+        """Explicitly copy one verified cache object into a local project.
+
+        This is a loopback-only convenience boundary.  The caller cannot name
+        an arbitrary destination: its real project root must exactly match an
+        enabled local node already registered in the requested Convoy.  The
+        store remains the sole authority for filename, symlink, overwrite,
+        atomic-write, and final content-verification behavior.
+        """
+        try:
+            target_host_id = text_field(body, "target_host_id")
+            target_node_id = text_field(body, "target_node_id")
+            convoy_id = identity.normalize_convoy_id(
+                text_field(body, "convoy_id"))
+            project_root = text_field(body, "project_root", limit=4096)
+            reference = dict_field(body, "artifact")
+            filename = body.get("filename")
+            if filename is not None and (
+                    not isinstance(filename, str) or not filename
+                    or len(filename.encode("utf-8", "strict")) > 255):
+                raise Malformed("filename must be bounded non-empty text")
+            overwrite = body.get("overwrite", False)
+            if not isinstance(overwrite, bool):
+                raise Malformed("overwrite must be boolean")
+            if (not os.path.isabs(project_root)
+                    or any(ord(char) < 32 or ord(char) == 127
+                           for char in project_root)):
+                raise Malformed("project_root must be an absolute local path")
+            requested_root = os.path.realpath(os.path.abspath(project_root))
+            if not os.path.isdir(requested_root):
+                raise Malformed("project_root is not a local directory")
+        except (Malformed, identity.IdentityError, OSError, ValueError) as exc:
+            detail = getattr(exc, "detail", str(exc))
+            return self._refuse(
+                "artifact_export", "malformed", detail, 400)
+
+        # Snapshot the registered roots under the coordination lock, then do
+        # every realpath/filesystem operation outside it.
+        with self.lock:
+            registered_roots = [
+                record.get("project_root") for record in self.directory.nodes()
+                if (record.get("host_id") == self.host_id
+                    and record.get("convoy_id") == convoy_id
+                    and record.get("enabled", True) is True
+                    and isinstance(record.get("project_root"), str))
+            ]
+        requested_key = os.path.normcase(requested_root)
+        matched = False
+        for registered_root in registered_roots:
+            try:
+                registered_real = os.path.realpath(
+                    os.path.abspath(registered_root))
+            except (OSError, TypeError, ValueError):
+                continue
+            if os.path.normcase(registered_real) == requested_key:
+                matched = True
+                break
+        if not matched:
+            return self._refuse(
+                "artifact_export", "artifact_project_unregistered",
+                "project_root is not an enabled local project in this Convoy",
+                403, extra={"convoy_id": convoy_id})
+
+        if (reference.get("kind") != "convoy_artifact"
+                or reference.get("convoy_id") != convoy_id
+                or reference.get("node_id") != target_node_id):
+            return self._refuse(
+                "artifact_export", "artifact_invalid",
+                "artifact reference does not match the requested Convoy/node",
+                400, extra={"convoy_id": convoy_id})
+        owner = {}
+        for name in ("host_id", "node_id", "controller_id", "job_id"):
+            value = reference.get(name)
+            if value is not None:
+                owner[name] = value
+        if not all(isinstance(owner.get(name), str) and owner[name]
+                   for name in ("host_id", "node_id", "controller_id")):
+            return self._refuse(
+                "artifact_export", "artifact_invalid",
+                "artifact reference omits its exact owner",
+                400, extra={"convoy_id": convoy_id})
+
+        try:
+            cached = self.artifacts.describe_for_owner(
+                convoy_id, reference.get("artifact_id"), owner,
+                verify=True, touch=True)
+        except artifacts_mod.ArtifactError as exc:
+            return self._artifact_error(exc)
+        for name in ("artifact_id", "sha256", "size", "mime_type"):
+            if (type(reference.get(name)) is not type(cached.get(name))
+                    or reference.get(name) != cached.get(name)):
+                return 422, {
+                    "ok": False, "reason": "artifact_corrupt",
+                    "detail": "artifact reference metadata does not match "
+                              "the verified local cache",
+                }
+
+        if not self.begin_artifact_transfer():
+            return 429, {"ok": False, "reason": "artifact_transfer_busy",
+                         "wakes_touchdesigner": False}
+        try:
+            saved = self.artifacts.export_to_project(
+                requested_root, convoy_id, cached["artifact_id"],
+                filename=filename, overwrite=overwrite)
+        except artifacts_mod.ArtifactError as exc:
+            return self._artifact_error(exc)
+        finally:
+            self.end_artifact_transfer()
+        self._audit_best_effort(
+            "artifact_exported",
+            {"convoy_id": convoy_id, "artifact_id": cached["artifact_id"],
+             "size": cached["size"], "overwrite": overwrite})
+        return 200, {
+            "ok": True, "artifact": saved,
+            "target_host_id": target_host_id,
+            "target_node_id": target_node_id,
+            "convoy_id": convoy_id,
+            "wakes_touchdesigner": False,
+        }
+
+    def begin_artifact_transfer(self):
+        """Non-blocking shared loopback/LAN transfer admission."""
+        return self.artifact_transfer_slots.acquire(blocking=False)
+
+    def end_artifact_transfer(self):
+        self.artifact_transfer_slots.release()
+
+    def _artifact_subject(self, convoy_id, node_id, controller_id, *,
+                          peer_host_id=None, peer_fingerprint=None,
+                          mutating=False):
+        """Resolve the exact namespace/node/controller authorization.
+
+        This is a second authorization inside HostApp, after the LAN handler's
+        request gate, so a concurrent block/re-pin cannot win a check/use race.
+        It self-locks and must not be called while ``self.lock`` is held.
+        """
+        try:
+            convoy_id = identity.normalize_convoy_id(convoy_id)
+            node_id = text_field({"node_id": node_id}, "node_id")
+            controller_id = text_field(
+                {"controller_id": controller_id}, "controller_id")
+        except (identity.IdentityError, Malformed) as exc:
+            detail = getattr(exc, "detail", str(exc))
+            return None, (400, {"ok": False, "reason": "artifact_invalid",
+                                "detail": detail[:256]})
+        with self.lock:
+            if peer_host_id is not None:
+                decision = self.peers.authorize_peer(
+                    peer_host_id, peer_fingerprint, convoy_id=convoy_id)
+                if not decision.allowed or mutating and not decision.may_mutate:
+                    return None, (403, {
+                        "ok": False,
+                        "reason": decision.reason or "peer_not_authorized",
+                        "detail": decision.detail,
+                    })
+            node = self.directory.lookup(node_id)
+            if (node is None or node.get("convoy_id") != convoy_id
+                    or not bool(node.get("enabled", True))):
+                # A peer gets one non-oracular answer for absent, disabled and
+                # cross-namespace nodes.  A content hash plus node guessing is
+                # not an inventory API.
+                reason = ("artifact_scope_not_found" if peer_host_id
+                          is not None else "artifact_node_unavailable")
+                return None, (404, {"ok": False, "reason": reason})
+            realm_refusal = self._realm_operation_refusal(convoy_id)
+            if realm_refusal is not None:
+                reason, detail = realm_refusal
+                return None, (409, {"ok": False, "reason": reason,
+                                    "detail": detail})
+            if peer_host_id is not None:
+                controller_id = peers_mod.namespaced_controller(
+                    peer_host_id, controller_id)
+                self._note_peer_controller(peer_host_id, controller_id)
+                owner_host_id = peer_host_id
+            else:
+                owner_host_id = self.host_id
+            return {
+                "convoy_id": convoy_id,
+                "node_id": node_id,
+                "controller_id": controller_id,
+                "host_id": owner_host_id,
+            }, None
+
+    def artifact_upload(self, convoy_id, stream, metadata, *,
+                        peer_host_id=None, peer_fingerprint=None):
+        """Consume and hash one already-bounded raw HTTP request body."""
+        subject, refusal = self._artifact_subject(
+            convoy_id, metadata.get("node_id"),
+            metadata.get("controller_id"), peer_host_id=peer_host_id,
+            peer_fingerprint=peer_fingerprint,
+            mutating=peer_host_id is not None)
+        if refusal is not None:
+            return refusal
+        try:
+            reference = self.artifacts.put_stream(
+                subject["convoy_id"], stream,
+                expected_size=metadata.get("expected_size"),
+                expected_sha256=metadata.get("expected_sha256"),
+                mime_type=metadata.get("mime_type")
+                or "application/octet-stream",
+                filename_hint=metadata.get("filename_hint"),
+                owner={"host_id": subject["host_id"],
+                       "node_id": subject["node_id"],
+                       "controller_id": subject["controller_id"]},
+                # Never trust a network claim merely because its digest is
+                # already cached; consume and verify duplicate bodies too.
+                verify_existing_stream=True)
+        except artifacts_mod.ArtifactError as exc:
+            return self._artifact_error(exc)
+        self._audit_best_effort(
+            "artifact_uploaded",
+            {"artifact_id": reference["artifact_id"],
+             "convoy_id": subject["convoy_id"],
+             "node_id": subject["node_id"],
+             "origin_host_id": subject["host_id"],
+             "size": reference["size"]})
+        return 200, {"ok": True, "artifact": reference}
+
+    def artifact_local_grant(self, convoy_id, artifact_id, body):
+        """IPC-only: explicitly grant one admitted peer a one-shot read."""
+        try:
+            peer_host_id = text_field(body, "peer_host_id")
+            node_id = text_field(body, "node_id")
+            controller_id = text_field(body, "controller_id")
+        except Malformed as exc:
+            return 400, {"ok": False, "reason": "artifact_invalid",
+                         "detail": exc.detail}
+        with self.lock:
+            fingerprint = self.peers.pinned_fingerprint(peer_host_id)
+        subject, refusal = self._artifact_subject(
+            convoy_id, node_id, controller_id,
+            peer_host_id=peer_host_id, peer_fingerprint=fingerprint)
+        if refusal is not None:
+            return refusal
+        audience = artifact_http.peer_audience(
+            peer_host_id, subject["convoy_id"], subject["node_id"],
+            subject["controller_id"])
+        try:
+            kwargs = {"audience": audience}
+            if "ttl_s" in body:
+                kwargs["ttl_s"] = body.get("ttl_s")
+            capability = self.artifacts.issue_download_capability(
+                subject["convoy_id"], artifact_id, **kwargs)
+        except artifacts_mod.ArtifactError as exc:
+            return self._artifact_error(exc)
+        self._audit_best_effort(
+            "artifact_capability_issued",
+            {"artifact_id": artifact_id, "convoy_id": subject["convoy_id"],
+             "peer_host_id": peer_host_id, "node_id": subject["node_id"]})
+        return 200, {"ok": True, "capability": capability}
+
+    def artifact_peer_grant(self, convoy_id, artifact_id, body, *,
+                            peer_host_id, peer_fingerprint):
+        """Let a peer re-mint a resume token only for its exact artifact."""
+        try:
+            node_id = text_field(body, "node_id")
+            controller_id = text_field(body, "controller_id")
+            job_id = text_field(body, "job_id", required=False)
+        except Malformed as exc:
+            return 400, {"ok": False, "reason": "artifact_invalid",
+                         "detail": exc.detail}
+        subject, refusal = self._artifact_subject(
+            convoy_id, node_id, controller_id,
+            peer_host_id=peer_host_id, peer_fingerprint=peer_fingerprint)
+        if refusal is not None:
+            return refusal
+        expected_owner = {
+            "host_id": peer_host_id,
+            "node_id": subject["node_id"],
+            "controller_id": subject["controller_id"],
+        }
+        if job_id:
+            expected_owner["job_id"] = job_id
+        try:
+            # Exact claim lookup is both authorization and non-disclosure:
+            # no other peer/job claim is projected or iterated here.
+            self.artifacts.describe_for_owner(
+                subject["convoy_id"], artifact_id, expected_owner)
+        except artifacts_mod.ArtifactNotFound:
+            return 404, {"ok": False, "reason": "artifact_scope_not_found"}
+        except artifacts_mod.ArtifactError as exc:
+            return self._artifact_error(exc)
+        audience = artifact_http.peer_audience(
+            peer_host_id, subject["convoy_id"], subject["node_id"],
+            subject["controller_id"])
+        try:
+            kwargs = {"audience": audience}
+            if "ttl_s" in body:
+                kwargs["ttl_s"] = body.get("ttl_s")
+            capability = self.artifacts.issue_download_capability(
+                subject["convoy_id"], artifact_id, **kwargs)
+        except artifacts_mod.ArtifactError as exc:
+            return self._artifact_error(exc)
+        self._audit_best_effort(
+            "artifact_capability_issued",
+            {"artifact_id": artifact_id, "convoy_id": subject["convoy_id"],
+             "peer_host_id": peer_host_id, "node_id": subject["node_id"]})
+        return 200, {"ok": True, "capability": capability}
+
+    @staticmethod
+    def _artifact_download_headers(lease, partial):
+        try:
+            mime_type = lease.mime_type.encode("ascii").decode("ascii")
+        except (AttributeError, UnicodeEncodeError):
+            mime_type = "application/octet-stream"
+        headers = {
+            "Content-Type": mime_type,
+            "Content-Length": str(lease.length),
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+            "ETag": '"sha256-%s"' % lease.sha256,
+            "X-Convoy-Artifact-ID": lease.artifact_id,
+            "X-Convoy-Content-SHA256": lease.sha256,
+        }
+        if partial:
+            end = lease.offset + lease.length - 1
+            headers["Content-Range"] = (
+                f"bytes {lease.offset}-{end}/{lease.total_size}")
+        return headers
+
+    def artifact_open_local_download(self, convoy_id, artifact_id,
+                                     range_header=None):
+        """Open a token-authenticated loopback download."""
+        try:
+            reference = self.artifacts.describe(convoy_id, artifact_id)
+            offset, length, partial = artifact_http.parse_range(
+                range_header, reference["size"])
+            audience = "artifact-local-v1-" + self.host_id
+            capability = self.artifacts.issue_download_capability(
+                convoy_id, artifact_id, audience=audience)
+            lease = self.artifacts.open_download(
+                convoy_id, artifact_id, token=capability["token"],
+                audience=audience, offset=offset, length=length)
+        except artifact_http.ArtifactHTTPError as exc:
+            return exc.status, exc.payload(), None, exc.headers
+        except artifacts_mod.ArtifactError as exc:
+            code, payload = self._artifact_error(exc)
+            return code, payload, None, {}
+        return ((206 if partial else 200), None, lease,
+                self._artifact_download_headers(lease, partial))
+
+    def artifact_open_peer_download(self, convoy_id, artifact_id, token,
+                                    node_id, controller_id, range_header=None,
+                                    *, peer_host_id, peer_fingerprint):
+        """Open an mTLS + namespace + node + controller + token download."""
+        subject, refusal = self._artifact_subject(
+            convoy_id, node_id, controller_id,
+            peer_host_id=peer_host_id, peer_fingerprint=peer_fingerprint)
+        if refusal is not None:
+            return refusal[0], refusal[1], None, {}
+        audience = artifact_http.peer_audience(
+            peer_host_id, subject["convoy_id"], subject["node_id"],
+            subject["controller_id"])
+        try:
+            reference = self.artifacts.describe_download(
+                subject["convoy_id"], artifact_id, token=token,
+                audience=audience)
+            offset, length, partial = artifact_http.parse_range(
+                range_header, reference["size"])
+            lease = self.artifacts.open_download(
+                subject["convoy_id"], artifact_id, token=token,
+                audience=audience, offset=offset, length=length)
+        except artifact_http.ArtifactHTTPError as exc:
+            return exc.status, exc.payload(), None, exc.headers
+        except artifacts_mod.ArtifactError as exc:
+            code, payload = self._artifact_error(exc)
+            return code, payload, None, {}
+        return ((206 if partial else 200), None, lease,
+                self._artifact_download_headers(lease, partial))
+
+    @staticmethod
+    def _public_text(value, limit):
+        """Return bounded descriptive text, never an arbitrary object."""
+        if not isinstance(value, str):
+            return ""
+        return value[:limit]
+
+    def _node_is_online(self, record):
+        routable = bool(record.get("envoy_port")) or bool(
+            record.get("remote_wake") and record.get("wake_port")
+            and record.get("wake_token"))
+        if not routable or not record.get("runtime_id"):
+            return False
+        try:
+            age = float(self._now()) - float(record["last_heartbeat_unix"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        return (math.isfinite(age) and 0.0 <= age
+                and age <= NODE_HEARTBEAT_GRACE_S)
+
+    def _public_node_row(self, record, address=None, status=None,
+                         controller_count=0):
+        """The only node projection permitted across the LAN boundary.
+
+        Identity/routing fields and useful display/version metadata are
+        included.  Host-private paths, the local Envoy port, capability
+        approvals, and every unknown future field are deliberately omitted.
+        """
+        metadata = record.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+        online = self._node_is_online(record)
+        status = status or ("online" if online else "offline")
+        try:
+            last_seen_age_s = max(
+                0.0, float(self._now())
+                - float(record["last_heartbeat_unix"]))
+            if not math.isfinite(last_seen_age_s):
+                last_seen_age_s = None
+        except (KeyError, TypeError, ValueError, OverflowError):
+            last_seen_age_s = None
+        if (isinstance(controller_count, bool)
+                or not isinstance(controller_count, int)
+                or controller_count < 0):
+            controller_count = 0
+        launchable = False
+        if self.lifecycle is not None:
+            try:
+                profile = self.lifecycle.store.get_profile(
+                    record.get("node_id"))
+                launchable = bool(
+                    profile and profile.get("enabled") is True
+                    and profile.get("launch_eligible") is True)
+            except Exception:
+                launchable = False
+        return {
+            "node_id": record.get("node_id"),
+            "host_id": self.host_id,
+            "convoy_id": record.get("convoy_id"),
+            "runtime_id": self._public_text(record.get("runtime_id"), 128),
+            "node_name": self._public_text(metadata.get("node_name"), 256),
+            "hostname": self._public_text(metadata.get("hostname"), 255),
+            "toe_name": self._public_text(metadata.get("toe_name"), 256),
+            "embody_version": self._public_text(
+                metadata.get("embody_version"), 64),
+            "touchdesigner_version": self._public_text(
+                metadata.get("touchdesigner_version"), 64),
+            "ip": self._public_text(address, 255),
+            "status": status,
+            "online": online if status == "online" else False,
+            "enabled": bool(record.get("enabled", True)),
+            "perform_mode": bool(record.get("perform_mode")),
+            "wake_active": bool(record.get("wake_active")),
+            "sleeping": bool(record.get("perform_mode")
+                             and not record.get("wake_active")),
+            "remotely_launchable": launchable,
+            "last_seen_age_s": last_seen_age_s,
+            "controller_count": min(
+                controller_count, MAX_PUBLIC_CONTROLLERS_PER_HOST),
+        }
+
+    def _controller_counts_locked(self, convoy_id=None):
+        """Coalesce live controller counts without per-node I/O.
+
+        A passive read: it reconciles claims only behind the read TTL so a
+        burst of directory/status callers cannot each drive one durable
+        job-file read per live claim under the app lock.
+        """
+        self._reconcile_operation_claims_if_stale_locked()
+        allowed = {
+            row.get("node_id") for row in self.directory.nodes()
+            if bool(row.get("enabled", True))
+            and (convoy_id is None or row.get("convoy_id") == convoy_id)
+        }
+        counts = {node_id: set() for node_id in allowed if node_id}
+        for controller in self.leases.live_controllers(self._now()):
+            controller_id = controller.get("controller_id")
+            if not isinstance(controller_id, str):
+                continue
+            node_ids = set(controller.get("node_ids") or ())
+            selected = controller.get("selected_node_id")
+            if isinstance(selected, str):
+                node_ids.add(selected)
+            for node_id in node_ids.intersection(allowed):
+                counts[node_id].add(controller_id)
+        return {node_id: len(controllers_) for node_id, controllers_
+                in counts.items()}
+
+    @staticmethod
+    def _sanitize_peer_node(row, target, convoy_id, fallback_status=None):
+        """Validate one untrusted peer row and override its trust anchors.
+
+        A peer may describe its node, but it may not claim another host,
+        namespace or network address.  Those three values come exclusively
+        from this host's pinned admission record and the request namespace.
+        """
+        if not isinstance(row, dict):
+            return None
+        node_id = row.get("node_id")
+        if not identity.is_valid_id(node_id):
+            return None
+        raw_status = row.get("status")
+        status = (raw_status if raw_status in ("online", "offline", "error")
+                  else fallback_status or "error")
+
+        def clean(name, limit):
+            value = row.get(name)
+            return value[:limit] if isinstance(value, str) else ""
+
+        controller_count = row.get("controller_count", 0)
+        if (isinstance(controller_count, bool)
+                or not isinstance(controller_count, int)
+                or not 0 <= controller_count
+                <= MAX_PUBLIC_CONTROLLERS_PER_HOST):
+            controller_count = 0
+        last_seen_age_s = row.get("last_seen_age_s")
+        if (isinstance(last_seen_age_s, bool)
+                or not isinstance(last_seen_age_s, (int, float))
+                or not math.isfinite(float(last_seen_age_s))
+                or float(last_seen_age_s) < 0):
+            last_seen_age_s = None
+        elif last_seen_age_s is not None:
+            last_seen_age_s = float(last_seen_age_s)
+
+        return {
+            "node_id": node_id,
+            "host_id": target.host_id,
+            "convoy_id": convoy_id,
+            "runtime_id": clean("runtime_id", 128),
+            "node_name": clean("node_name", 256),
+            "hostname": clean("hostname", 255),
+            "toe_name": clean("toe_name", 256),
+            "embody_version": clean("embody_version", 64),
+            "touchdesigner_version": clean("touchdesigner_version", 64),
+            "ip": str(target.address)[:255],
+            "status": status,
+            "online": bool(row.get("online")) and status == "online",
+            "perform_mode": row.get("perform_mode") is True,
+            "wake_active": row.get("wake_active") is True,
+            "sleeping": row.get("sleeping") is True,
+            "remotely_launchable": row.get("remotely_launchable") is True,
+            # A peer endpoint publishes only participating nodes.  Do not
+            # let an untrusted row invert that local policy bit.
+            "enabled": True,
+            "controller_count": controller_count,
+            "last_seen_age_s": last_seen_age_s,
+        }
+
+    def peer_nodes_view(self, origin_host_id, convoy_id,
+                        authenticated_fingerprint=None):
+        """Peer-safe directory for exactly one admitted namespace.
+
+        Called by convoy_peerserver after mutual-TLS authentication, without
+        the app lock.  Re-authorizing here closes the small race in which an
+        operator revokes a peer between the handler's check and this snapshot.
+        """
+        try:
+            convoy_id = identity.normalize_convoy_id(convoy_id)
+        except identity.IdentityError:
+            return 400, {"ok": False, "reason": "malformed"}
+        with self.lock:
+            record = self.peers.get(origin_host_id)
+            decision = self.peers.authorize_peer(
+                origin_host_id,
+                # Re-check the key that authenticated THIS connection, not
+                # the current stored pin.  If the operator re-pins between
+                # the peer handler's gate and this snapshot, an old TLS
+                # connection must not be laundered through the new pin.
+                authenticated_fingerprint,
+                convoy_id=convoy_id)
+            if not decision.allowed:
+                return _REFUSAL_HTTP.get(decision.reason, 403), {
+                    "ok": False, "reason": decision.reason,
+                    "detail": decision.detail,
+                }
+            realm_refusal = self._realm_operation_refusal(convoy_id)
+            if realm_refusal is not None:
+                reason, detail = realm_refusal
+                return 409, {"ok": False, "reason": reason,
+                             "detail": detail}
+            address = self.lan_address or ""
+            controller_counts = self._controller_counts_locked(convoy_id)
+            rows = [
+                self._public_node_row(
+                    node, address=address,
+                    controller_count=controller_counts.get(
+                        node.get("node_id"), 0))
+                for node in self.directory.nodes()
+                if node.get("convoy_id") == convoy_id
+                and bool(node.get("enabled", True))
+            ]
+        if len(rows) > MAX_PUBLIC_NODES_PER_HOST:
+            return 503, {
+                "ok": False,
+                "reason": "node_directory_too_large",
+                "detail": "peer directory exceeds %d nodes"
+                          % MAX_PUBLIC_NODES_PER_HOST,
+            }
+        return 200, {"ok": True, "host_id": self.host_id,
+                     "convoy_id": convoy_id, "nodes": rows}
+
+    def network_nodes(self, convoy_id=None):
+        """Return a cached/coalesced local-and-peer node directory.
+
+        Exactly one caller per namespace performs a refresh.  Followers share
+        its result, while unrelated namespaces still make progress through a
+        single host-wide bounded executor.  This keeps sixteen UI/tool callers
+        from turning one 29-peer status wave into 464 simultaneous requests.
+
+        The generation fence is applied to the RETURNED result, not only to
+        the cache write: a membership mutation (a /register) that lands during
+        a flight supersedes that flight's projection, so leader and followers
+        recompute rather than hand back a directory that predates the caller's
+        own write.  This is read-your-own-write for ConvoyExt, which registers
+        and then immediately reads the directory in the same worker turn.
+        """
+        if convoy_id is not None:
+            try:
+                convoy_id = identity.normalize_convoy_id(convoy_id)
+            except identity.IdentityError:
+                return 400, {"ok": False, "reason": "malformed",
+                             "detail": "convoy_id must be canonical bounded text"}
+
+        cache_key = convoy_id
+        for _attempt in range(NETWORK_NODE_MAX_REFRESH_ATTEMPTS):
+            now = self._network_nodes_cache_clock()
+            with self.lock:
+                cached = self._network_nodes_result_cache.get(cache_key)
+                if (cached is not None
+                        and now - cached[0] < NETWORK_NODE_CACHE_TTL_S):
+                    self._network_query_metrics["cache_hits"] += 1
+                    return copy.deepcopy(cached[1])
+
+                flight = self._network_nodes_flights.get(cache_key)
+                if flight is None:
+                    flight = {
+                        "event": threading.Event(),
+                        "generation": self._network_nodes_cache_generation,
+                        "result": None,
+                    }
+                    self._network_nodes_flights[cache_key] = flight
+                    self._network_query_metrics["refreshes"] += 1
+                    leader = True
+                else:
+                    self._network_query_metrics["coalesced"] += 1
+                    leader = False
+
+            if not leader:
+                if flight["event"].wait(NETWORK_NODE_FLIGHT_WAIT_S):
+                    result = flight.get("result")
+                    if result is not None:
+                        with self.lock:
+                            superseded = (
+                                result[0] == 200
+                                and flight["generation"]
+                                != self._network_nodes_cache_generation)
+                        if not superseded:
+                            return copy.deepcopy(result)
+                        # A membership mutation landed during this flight; its
+                        # projection predates the caller's own write.  Retry
+                        # for a fresh read rather than return a stale directory.
+                        continue
+                with self.lock:
+                    self._network_query_metrics["wait_timeouts"] += 1
+                    stale = self._network_nodes_result_cache.get(cache_key)
+                if stale is not None:
+                    result = copy.deepcopy(stale[1])
+                    if result[0] == 200 and isinstance(result[1], dict):
+                        result[1]["stale"] = True
+                        result[1]["refresh_in_progress"] = True
+                    return result
+                return 503, {
+                    "ok": False,
+                    "reason": "network_query_busy",
+                    "detail": "another directory refresh exceeded its bounded "
+                              "wait; retry without starting a duplicate fanout",
+                    "wakes_touchdesigner": False,
+                }
+
+            try:
+                result = self._network_nodes_uncached(convoy_id)
+            except Exception:
+                result = (503, {
+                    "ok": False,
+                    "reason": "network_query_failed",
+                    "detail": "the shared directory refresh failed",
+                    "wakes_touchdesigner": False,
+                })
+                with self.lock:
+                    flight["result"] = copy.deepcopy(result)
+                    if self._network_nodes_flights.get(cache_key) is flight:
+                        del self._network_nodes_flights[cache_key]
+                    flight["event"].set()
+                raise
+
+            with self.lock:
+                superseded = (
+                    result[0] == 200
+                    and flight["generation"]
+                    != self._network_nodes_cache_generation)
+                flight["result"] = copy.deepcopy(result)
+                # Only a projection that still matches the live generation may
+                # be published as authoritative -- to the cache OR to callers.
+                if result[0] == 200 and not superseded:
+                    self._network_nodes_result_cache[cache_key] = (
+                        self._network_nodes_cache_clock(),
+                        copy.deepcopy(result))
+                if self._network_nodes_flights.get(cache_key) is flight:
+                    del self._network_nodes_flights[cache_key]
+                flight["event"].set()
+            if not superseded:
+                return result
+            # The leader's own projection predates a mutation that landed
+            # mid-flight; recompute rather than return it as authoritative.
+            continue
+
+        # Sustained membership churn outlasted the bounded retries: return the
+        # freshest projection available, marked stale, rather than loop.
+        with self.lock:
+            stale = self._network_nodes_result_cache.get(cache_key)
+        if stale is not None:
+            result = copy.deepcopy(stale[1])
+            if result[0] == 200 and isinstance(result[1], dict):
+                result[1]["stale"] = True
+            return result
+        return 503, {
+            "ok": False,
+            "reason": "network_query_busy",
+            "detail": "the directory kept changing under repeated refreshes; "
+                      "retry",
+            "wakes_touchdesigner": False,
+        }
+
+    def _network_nodes_uncached(self, convoy_id=None):
+        """Aggregate local and reachable peer nodes for the loopback API.
+
+        The mutable registry is snapshotted under the lock; all mutual-TLS
+        I/O runs concurrently after releasing it.  At 30 hosts this keeps a
+        status refresh near one network timeout rather than thirty stacked
+        timeouts, and leaves registration/dispatch responsive throughout.
+        """
+        if convoy_id is not None:
+            try:
+                convoy_id = identity.normalize_convoy_id(convoy_id)
+            except identity.IdentityError:
+                return 400, {"ok": False, "reason": "malformed",
+                             "detail": "convoy_id must be canonical bounded text"}
+
+        with self.lock:
+            local_records = list(self.directory.nodes())
+            peer_records = list(self.peers.peers())
+            keys = self.hostkeys
+            local_address = self.lan_address or "127.0.0.1"
+            active_namespaces = set(self._active_convoy_ids_locked())
+            if convoy_id is not None and convoy_id not in active_namespaces:
+                # This is authenticated loopback status, not LAN exposure.
+                # A disabled/offline final node still needs to project its
+                # retained profile. Refuse only a different known realm;
+                # an entirely unbound host returns an honest empty view.
+                snapshot = self.realm.snapshot()
+                if (snapshot and snapshot.get("convoy_id")
+                        and snapshot.get("convoy_id") != convoy_id):
+                    return 409, {
+                        "ok": False,
+                        "reason": "realm_namespace_mismatch",
+                        "detail": "the requested Convoy is not this host's "
+                                  "automatic realm",
+                    }
+            namespaces = ({convoy_id} if convoy_id is not None
+                          else active_namespaces)
+
+            controller_counts = self._controller_counts_locked(convoy_id)
+
+            local_rows = [
+                self._public_node_row(
+                    row, address=local_address,
+                    controller_count=controller_counts.get(
+                        row.get("node_id"), 0))
+                for row in local_records
+                if bool(row.get("enabled", True))
+                and (convoy_id is None or row.get("convoy_id") == convoy_id)
+            ]
+            for row in local_rows:
+                row["compatibility"] = "compatible"
+            queries = []
+            refused = []
+            for peer in peer_records:
+                peer_host_id = peer.get("host_id")
+                for namespace in sorted(namespaces):
+                    decision = self.peers.authorize_peer(
+                        peer_host_id, peer.get("fingerprint"),
+                        convoy_id=namespace)
+                    if not decision.allowed:
+                        # Only report records that actually claim this
+                        # namespace; an unrelated peer is not an error.
+                        if namespace in (peer.get("convoy_ids") or ()):
+                            refused.append({
+                                "host_id": peer_host_id,
+                                "convoy_id": namespace,
+                                "status": "error",
+                                "reason": decision.reason,
+                            })
+                        continue
+                    targets, error = self._peer_targets_from_record(peer)
+                    projection = (targets[0] if targets else
+                                  _PeerProjectionTarget(peer_host_id))
+                    # An inbound-established WSS link is fully routable even
+                    # when discovery has not supplied a dial endpoint.  Keep
+                    # that peer in the query set and decide fallback only
+                    # after the WSS preflight below.
+                    queries.append((projection, targets, namespace, error))
+            cached_peer_rows = {key: [dict(row) for row in rows]
+                                for key, rows in
+                                self._peer_node_cache.items()}
+
+        peer_status = [{"host_id": self.host_id,
+                        "convoy_id": convoy_id,
+                        "status": "online", "ip": local_address,
+                        "local": True, "compatibility": "compatible"}]
+        peer_status.extend(refused)
+        remote_rows = []
+        cache_updates = {}
+
+        def fetch(item):
+            projection, targets, namespace, target_error = item
+            used_session, session_result = self._session_call_if_connected(
+                projection.host_id, namespace,
+                peerserver.SESSION_RPC_NODES, {},
+                NETWORK_QUERY_TIMEOUT_S)
+            if used_session:
+                return (projection, namespace), session_result
+            if not targets:
+                return (projection, namespace), {
+                    "ok": False, "reason": "peer_endpoint_unknown",
+                    "detail": target_error,
+                }
+            if keys is None:
+                return (projection, namespace), None
+            self._audit_http_compat_fallback(
+                projection.host_id, peerserver.SESSION_RPC_NODES)
+            target, result = self._call_peer_targets(
+                targets,
+                lambda candidate, remaining: peerclient.get_peer_nodes(
+                    candidate, keys, namespace, timeout=remaining,
+                    pool=self.peer_pool),
+                NETWORK_QUERY_TIMEOUT_S,
+                retry_ambiguous=True)
+            return (target, namespace), result
+
+        outcomes = self._fanout(
+            queries, fetch,
+            on_error=lambda item: ((item[0], item[2]), None))
+
+        for (target, namespace), result in outcomes:
+            cache_key = (target.host_id, namespace)
+            compatibility = self._peer_compatibility_projection(
+                target.host_id)
+            if result is peerclient.UNREACHABLE:
+                status, reason = "offline", "peer_unreachable"
+            elif isinstance(result, peerclient._PinMismatch):
+                status, reason = "error", "pin_mismatch"
+            elif result is None:
+                status = "error"
+                reason = ("identity_unavailable" if keys is None
+                          else "peer_bad_response")
+            elif not isinstance(result, dict) or not result.get("ok"):
+                status, reason = "error", (
+                    result.get("reason", "peer_refused")
+                    if isinstance(result, dict) else "peer_bad_response")
+            else:
+                status, reason = "online", None
+
+            entry = {"host_id": target.host_id, "convoy_id": namespace,
+                     "status": status, "ip": str(target.address)[:255]}
+            if reason:
+                entry["reason"] = reason
+            if compatibility is not None:
+                entry["compatibility"] = compatibility
+            peer_status.append(entry)
+
+            if status == "online":
+                clean_rows = []
+                if (result.get("convoy_id") == namespace
+                        and isinstance(result.get("nodes"), list)):
+                    for row in result["nodes"][:MAX_PUBLIC_NODES_PER_HOST]:
+                        clean = self._sanitize_peer_node(
+                            row, target, namespace)
+                        if clean is not None:
+                            if compatibility is not None:
+                                clean["compatibility"] = compatibility
+                            clean_rows.append(clean)
+                cached_rows = []
+                cached_at = self._now()
+                for clean in clean_rows:
+                    cached_row = dict(clean)
+                    cached_row["_cached_at"] = cached_at
+                    cached_rows.append(cached_row)
+                cache_updates[cache_key] = cached_rows
+                remote_rows.extend(clean_rows)
+            else:
+                for row in cached_peer_rows.get(cache_key, ()):
+                    stale = dict(row)
+                    cached_at = stale.pop("_cached_at", None)
+                    age = stale.get("last_seen_age_s")
+                    try:
+                        elapsed = max(0.0, self._now() - float(cached_at))
+                        if age is not None:
+                            stale["last_seen_age_s"] = float(age) + elapsed
+                    except (TypeError, ValueError, OverflowError):
+                        stale["last_seen_age_s"] = None
+                    stale["status"] = status
+                    stale["online"] = False
+                    stale.pop("compatibility", None)
+                    remote_rows.append(stale)
+
+        if cache_updates:
+            with self.lock:
+                self._peer_node_cache.update(cache_updates)
+
+        # A node is uniquely addressed by (host_id, node_id).  Keep local
+        # rows first, then one deterministic remote row per address.
+        deduped = {}
+        for row in local_rows + remote_rows:
+            key = (row.get("host_id"), row.get("node_id"))
+            if key not in deduped:
+                deduped[key] = row
+            if len(deduped) >= MAX_NETWORK_NODE_ROWS:
+                break
+        rows = sorted(deduped.values(), key=lambda row: (
+            row.get("node_name") or row.get("hostname") or "",
+            row.get("host_id") or "", row.get("node_id") or ""))
+        return 200, {
+            "ok": True,
+            "host_id": self.host_id,
+            "convoy_id": convoy_id,
+            "nodes": rows,
+            "peers": peer_status,
+            "remote_nodes_available": keys is not None,
+            "truncated": len(deduped) >= MAX_NETWORK_NODE_ROWS,
+        }
+
+    def shutdown_network_queries(self, wait=True):
+        """Release the process-wide directory workers during final teardown."""
+        executor = getattr(self, "_network_query_executor", None)
+        if executor is not None:
+            executor.shutdown(wait=bool(wait), cancel_futures=not bool(wait))
+
+    def _fanout(self, queries, fetch, on_error):
+        """Run peer fetches on the ONE host-wide bounded query pool.
+
+        Both passive network directory reads (``network_nodes`` and
+        ``network_controllers``) funnel their fanout through here.  A new
+        ``ThreadPoolExecutor`` per request would let simultaneous status
+        callers multiply the NETWORK_QUERY_WORKERS bound and stack N*peers
+        concurrent peer TLS calls; the shared executor makes that bound true
+        for the whole process.  ``on_error`` maps one query item to the
+        outcome recorded when its future raises, so each caller keeps its
+        own outcome shape.
+        """
+        outcomes = []
+        if not queries:
+            return outcomes
+        future_map = {self._network_query_executor.submit(fetch, item): item
+                      for item in queries}
+        for future, item in list(future_map.items()):
+            try:
+                outcomes.append(future.result())
+            except Exception:
+                outcomes.append(on_error(item))
+        return outcomes
+
+    def _local_controller_view(self, convoy_id, node_id=None):
+        """Build this host's bounded, non-waking controller projection.
+
+        Mutable lease state is snapshotted under the app lock. Durable jobs
+        are scanned after releasing it so a large retained job directory can
+        never stall registration or dispatch. Only active job summaries are
+        exposed; arguments and results remain private.
+        """
+        with self.lock:
+            now = self._now()
+            # Passive read: reconcile behind the TTL, never one job-file read
+            # per claim on every call (the slice-2 status/peers regression).
+            self._reconcile_operation_claims_if_stale_locked()
+            allowed_nodes = {
+                row["node_id"] for row in self.directory.nodes()
+                if row.get("convoy_id") == convoy_id
+                and bool(row.get("enabled", True))
+            }
+            raw_controllers = [dict(row) for row in
+                               self.leases.live_controllers(now)]
+        if node_id is not None:
+            allowed_nodes.intersection_update({node_id})
+        try:
+            jobs, unreadable = self.db.scan_jobs()
+        except Exception:
+            jobs, unreadable = [], 1
+
+        grouped = {}
+        for raw in raw_controllers[:MAX_PUBLIC_CONTROLLERS_PER_HOST]:
+            controller_id = raw.get("controller_id")
+            if not isinstance(controller_id, str) or not controller_id:
+                continue
+            selected = raw.get("selected_node_id")
+            leases = [dict(lease) for lease in (raw.get("leases") or ())
+                      if isinstance(lease, dict)
+                      and lease.get("node_id") in allowed_nodes]
+            if selected not in allowed_nodes:
+                selected = None
+            if not leases and selected is None:
+                continue
+            last_seen = raw.get("last_seen")
+            try:
+                age = max(0.0, now - float(last_seen))
+            except (TypeError, ValueError):
+                age = None
+            grouped[controller_id] = {
+                "controller_id": controller_id[:MAX_ID_CHARS],
+                "label": str(raw.get("label") or "")[:128],
+                "selected_node_id": selected,
+                "last_seen_age_s": age,
+                "leases": leases[:MAX_PUBLIC_NODES_PER_HOST],
+                "node_ids": sorted({
+                    lease.get("node_id") for lease in leases
+                    if lease.get("node_id")
+                } | ({selected} if selected else set())),
+                "active_jobs": [],
+                "origin_host_ids": [],
+            }
+
+        for job in jobs:
+            if (not isinstance(job, dict)
+                    or job.get("convoy_id") != convoy_id
+                    or job.get("state") in hoststore.TERMINAL_STATES
+                    or job.get("node_id") not in allowed_nodes):
+                continue
+            controller_id = job.get("controller_id")
+            if not isinstance(controller_id, str) or not controller_id:
+                continue
+            row = grouped.setdefault(controller_id, {
+                "controller_id": controller_id[:MAX_ID_CHARS],
+                "label": "", "selected_node_id": job.get("node_id"),
+                "last_seen_age_s": None, "leases": [],
+                "node_ids": [], "active_jobs": [],
+                "origin_host_ids": [],
+            })
+            if len(row["active_jobs"]) < MAX_ACTIVE_JOBS_PER_CONTROLLER:
+                row["active_jobs"].append({
+                    "delivery_id": str(job.get("delivery_id") or "")[:128],
+                    "node_id": str(job.get("node_id") or "")[:MAX_ID_CHARS],
+                    "operation": str(job.get("operation") or "")[:128],
+                    "state": str(job.get("state") or "")[:32],
+                })
+            if job.get("node_id") and job["node_id"] not in row["node_ids"]:
+                row["node_ids"].append(job["node_id"])
+            origin = job.get("origin_host_id")
+            if (isinstance(origin, str) and origin
+                    and origin not in row["origin_host_ids"]):
+                row["origin_host_ids"].append(origin[:MAX_ID_CHARS])
+
+        rows = []
+        for controller_id in sorted(grouped):
+            row = grouped[controller_id]
+            row["host_id"] = self.host_id
+            row["convoy_id"] = convoy_id
+            row["node_ids"] = sorted(set(row["node_ids"]))
+            row["origin_host_ids"] = sorted(set(row["origin_host_ids"]))
+            row["active_jobs"].sort(key=lambda item: (
+                item.get("node_id") or "", item.get("delivery_id") or ""))
+            rows.append(row)
+            if len(rows) >= MAX_PUBLIC_CONTROLLERS_PER_HOST:
+                break
+        return {
+            "ok": True, "host_id": self.host_id, "convoy_id": convoy_id,
+            "controllers": rows, "controller_count": len(rows),
+            "jobs_unreadable": int(unreadable or 0),
+            "wakes_touchdesigner": False,
+        }
+
+    def peer_controllers_view(self, origin_host_id, convoy_id,
+                              authenticated_fingerprint=None):
+        """Peer-safe controller view with authorization on both sides of I/O."""
+        try:
+            convoy_id = identity.normalize_convoy_id(convoy_id)
+        except identity.IdentityError:
+            return 400, {"ok": False, "reason": "malformed"}
+
+        def authorize():
+            with self.lock:
+                record = self.peers.get(origin_host_id)
+                decision = self.peers.authorize_peer(
+                    origin_host_id, authenticated_fingerprint,
+                    convoy_id=convoy_id)
+                if not decision.allowed:
+                    return _REFUSAL_HTTP.get(decision.reason, 403), {
+                        "ok": False, "reason": decision.reason,
+                        "detail": decision.detail,
+                    }
+                realm_refusal = self._realm_operation_refusal(convoy_id)
+                if realm_refusal is not None:
+                    reason, detail = realm_refusal
+                    return 409, {"ok": False, "reason": reason,
+                                 "detail": detail}
+            return None
+
+        refusal = authorize()
+        if refusal is not None:
+            return refusal
+        payload = self._local_controller_view(convoy_id)
+        refusal = authorize()
+        if refusal is not None:
+            return refusal
+        return 200, payload
+
+    @staticmethod
+    def _sanitize_peer_controller(row, target, convoy_id, node_id=None):
+        if not isinstance(row, dict):
+            return None
+        controller_id = row.get("controller_id")
+        if not isinstance(controller_id, str) or not controller_id:
+            return None
+        raw_leases = row.get("leases")
+        if not isinstance(raw_leases, list):
+            raw_leases = []
+        leases = []
+        for lease in raw_leases[:MAX_PUBLIC_NODES_PER_HOST]:
+            if not isinstance(lease, dict):
+                continue
+            lease_node = lease.get("node_id")
+            if (not isinstance(lease_node, str) or not lease_node
+                    or (node_id is not None and lease_node != node_id)):
+                continue
+            leases.append({
+                "node_id": lease_node[:MAX_ID_CHARS],
+                "controller_id": controller_id[:MAX_ID_CHARS],
+                "mode": str(lease.get("mode") or "")[:32],
+                "expires": lease.get("expires"),
+            })
+        selected = row.get("selected_node_id")
+        if not isinstance(selected, str) or (node_id and selected != node_id):
+            selected = None
+        raw_jobs = row.get("active_jobs")
+        if not isinstance(raw_jobs, list):
+            raw_jobs = []
+        jobs = []
+        for job in raw_jobs[:MAX_ACTIVE_JOBS_PER_CONTROLLER]:
+            if not isinstance(job, dict):
+                continue
+            job_node = job.get("node_id")
+            if node_id is not None and job_node != node_id:
+                continue
+            jobs.append({
+                "delivery_id": str(job.get("delivery_id") or "")[:128],
+                "node_id": str(job_node or "")[:MAX_ID_CHARS],
+                "operation": str(job.get("operation") or "")[:128],
+                "state": str(job.get("state") or "")[:32],
+            })
+        if node_id is not None and not leases and not jobs and selected is None:
+            return None
+        node_ids = sorted({item["node_id"] for item in leases + jobs
+                           if item.get("node_id")}
+                          | ({selected} if selected else set()))
+        raw_origins = row.get("origin_host_ids")
+        if not isinstance(raw_origins, list):
+            raw_origins = []
+        return {
+            "host_id": target.host_id,
+            "convoy_id": convoy_id,
+            "controller_id": controller_id[:MAX_ID_CHARS],
+            "label": str(row.get("label") or "")[:128],
+            "selected_node_id": selected,
+            "last_seen_age_s": row.get("last_seen_age_s"),
+            "leases": leases, "node_ids": node_ids,
+            "active_jobs": jobs,
+            "origin_host_ids": [str(value)[:MAX_ID_CHARS]
+                                for value in raw_origins
+                                if isinstance(value, str)][:64],
+        }
+
+    def network_controllers(self, convoy_id=None, host_id=None, node_id=None):
+        """Aggregate live controller state from reachable sibling hosts."""
+        try:
+            if convoy_id is not None:
+                convoy_id = identity.normalize_convoy_id(convoy_id)
+            if host_id is not None and not identity.is_valid_id(host_id):
+                raise identity.IdentityError("malformed_host_id", host_id)
+            if node_id is not None and not identity.is_valid_id(node_id):
+                raise identity.IdentityError("malformed_node_id", node_id)
+        except identity.IdentityError as exc:
+            return 400, {"ok": False, "reason": "malformed",
+                         "detail": str(exc)[:256]}
+
+        with self.lock:
+            active = sorted(self._active_convoy_ids_locked())
+            if convoy_id is None:
+                convoy_id = active[0] if len(active) == 1 else None
+            if convoy_id is None:
+                return 200, {"ok": True, "host_id": self.host_id,
+                             "convoy_id": None, "controllers": [],
+                             "peers": [], "controller_count": 0,
+                             "wakes_touchdesigner": False}
+            if convoy_id not in active:
+                snapshot = self.realm.snapshot()
+                if (snapshot and snapshot.get("convoy_id")
+                        and snapshot.get("convoy_id") != convoy_id):
+                    return 409, {
+                        "ok": False, "reason": "realm_namespace_mismatch",
+                        "detail": "the requested Convoy is not this host's "
+                                  "automatic realm"}
+            keys = self.hostkeys
+            peer_records = list(self.peers.peers())
+            queries = []
+            peer_status = []
+            for peer in peer_records:
+                peer_host_id = peer.get("host_id")
+                if host_id is not None and peer_host_id != host_id:
+                    continue
+                decision = self.peers.authorize_peer(
+                    peer_host_id, peer.get("fingerprint"),
+                    convoy_id=convoy_id)
+                if not decision.allowed:
+                    continue
+                targets, error = self._peer_targets_from_record(peer)
+                projection = (targets[0] if targets else
+                              _PeerProjectionTarget(peer_host_id))
+                queries.append((projection, targets, error))
+
+        local_rows = []
+        if host_id is None or host_id == self.host_id:
+            local_rows = self._local_controller_view(
+                convoy_id, node_id=node_id)["controllers"]
+            peer_status.append({"host_id": self.host_id, "status": "online",
+                                "local": True,
+                                "compatibility": "compatible"})
+
+        def fetch(item):
+            projection, targets, target_error = item
+            used_session, session_result = self._session_call_if_connected(
+                projection.host_id, convoy_id,
+                peerserver.SESSION_RPC_CONTROLLERS, {},
+                NETWORK_QUERY_TIMEOUT_S)
+            if used_session:
+                return projection, session_result
+            if not targets:
+                return projection, {
+                    "ok": False, "reason": "peer_endpoint_unknown",
+                    "detail": target_error,
+                }
+            if keys is None:
+                return projection, None
+            self._audit_http_compat_fallback(
+                projection.host_id, peerserver.SESSION_RPC_CONTROLLERS)
+            return self._call_peer_targets(
+                targets,
+                lambda candidate, remaining:
+                    peerclient.get_peer_controllers(
+                        candidate, keys, convoy_id, timeout=remaining,
+                        pool=self.peer_pool),
+                NETWORK_QUERY_TIMEOUT_S,
+                retry_ambiguous=True)
+
+        outcomes = self._fanout(
+            queries, fetch, on_error=lambda item: (item[0], None))
+
+        remote_rows = []
+        for target, result in outcomes:
+            compatibility = self._peer_compatibility_projection(
+                target.host_id)
+            if result is peerclient.UNREACHABLE:
+                status, reason = "offline", "peer_unreachable"
+            elif isinstance(result, peerclient._PinMismatch):
+                status, reason = "error", "pin_mismatch"
+            elif not isinstance(result, dict) or not result.get("ok"):
+                status, reason = "error", (
+                    result.get("reason", "peer_bad_response")
+                    if isinstance(result, dict) else "peer_bad_response")
+            else:
+                status, reason = "online", None
+                for row in result.get("controllers", ())[
+                        :MAX_PUBLIC_CONTROLLERS_PER_HOST]:
+                    clean = self._sanitize_peer_controller(
+                        row, target, convoy_id, node_id=node_id)
+                    if clean is not None:
+                        remote_rows.append(clean)
+            entry = {"host_id": target.host_id, "status": status}
+            if reason:
+                entry["reason"] = reason
+            if compatibility is not None:
+                entry["compatibility"] = compatibility
+            peer_status.append(entry)
+
+        rows = sorted((local_rows + remote_rows)[
+                      :MAX_NETWORK_CONTROLLER_ROWS], key=lambda row: (
+                          row.get("host_id") or "",
+                          row.get("controller_id") or ""))
+        return 200, {
+            "ok": True, "host_id": self.host_id,
+            "convoy_id": convoy_id, "controllers": rows,
+            "controller_count": len(rows), "peers": peer_status,
+            "truncated": len(local_rows) + len(remote_rows)
+                         > MAX_NETWORK_CONTROLLER_ROWS,
+            "wakes_touchdesigner": False,
+        }
+
+    def _release_operation_claim_locked(self, job):
+        """Release exactly this delivery's implicit writer claim."""
+        if not isinstance(job, dict):
+            return False
+        node_id = job.get("node_id")
+        delivery_id = job.get("delivery_id")
+        if not isinstance(node_id, str) or not isinstance(delivery_id, str):
+            return False
+        return self.leases.release_operation(node_id, delivery_id)
+
+    def _restore_operation_claims_at_boot(self):
+        """Rebuild writer exclusion for durable in-flight mutations."""
+        try:
+            jobs, unreadable = self.db.scan_jobs()
+        except Exception:
+            self._operation_job_scan_failed = True
+            return 0
+        self._unreadable_operation_jobs.update(
+            delivery_id for delivery_id in (unreadable or ())
+            if isinstance(delivery_id, str) and delivery_id)
+        restored = 0
+        for job in sorted(jobs, key=lambda row: (
+                row.get("created", 0), row.get("delivery_id", ""))):
+            if job.get("state") not in ("dispatching", "running"):
+                continue
+            node_id = job.get("node_id")
+            controller_id = job.get("controller_id")
+            delivery_id = job.get("delivery_id")
+            if not all(isinstance(value, str) and value for value in (
+                    node_id, controller_id, delivery_id)):
+                continue
+            try:
+                gating = effective_operation_gating(
+                    self.operations, job.get("operation"),
+                    job.get("arguments"))
+                if not gating["mutating"]:
+                    continue
+                self.leases.restore_operation(
+                    node_id, controller_id, delivery_id, self._now())
+                restored += 1
+            except (OperationRegistryError, controllers.LeaseError):
+                # A corrupt/legacy conflict is kept visible in durable job
+                # state and must not prevent the host from starting.  The
+                # first valid claim wins deterministically by creation time.
+                self._unreadable_operation_jobs.add(delivery_id)
+                continue
+        return restored
+
+    def _refresh_unreadable_operation_fence_locked(self):
+        """Recover unreadable boot records or retain a global writer fence.
+
+        Without a parseable job record the host cannot know which node may
+        already have a mutation in flight. Reads remain available, but new
+        mutations fail closed until the record is repaired or explicitly
+        removed.
+        """
+        if self._operation_job_scan_failed:
+            try:
+                jobs, unreadable = self.db.scan_jobs()
+            except Exception:
+                return True
+            self._operation_job_scan_failed = False
+            self._unreadable_operation_jobs.update(
+                delivery_id for delivery_id in (unreadable or ())
+                if isinstance(delivery_id, str) and delivery_id)
+            for job in jobs:
+                if job.get("state") not in ("dispatching", "running"):
+                    continue
+                delivery_id = job.get("delivery_id")
+                try:
+                    gating = effective_operation_gating(
+                        self.operations, job.get("operation"),
+                        job.get("arguments"))
+                    if gating["mutating"]:
+                        self.leases.restore_operation(
+                            job.get("node_id"), job.get("controller_id"),
+                            delivery_id, self._now())
+                except (OperationRegistryError, controllers.LeaseError):
+                    if isinstance(delivery_id, str):
+                        self._unreadable_operation_jobs.add(delivery_id)
+
+        for delivery_id in list(self._unreadable_operation_jobs):
+            job = self.db.get_job(delivery_id)
+            if job is None:
+                if not self.db.job_file_exists(delivery_id):
+                    self._unreadable_operation_jobs.discard(delivery_id)
+                continue
+            if job.get("state") in ("dispatching", "running"):
+                try:
+                    gating = effective_operation_gating(
+                        self.operations, job.get("operation"),
+                        job.get("arguments"))
+                    if gating["mutating"]:
+                        self.leases.restore_operation(
+                            job.get("node_id"), job.get("controller_id"),
+                            delivery_id, self._now())
+                except (OperationRegistryError, controllers.LeaseError):
+                    continue
+            self._unreadable_operation_jobs.discard(delivery_id)
+        return bool(self._unreadable_operation_jobs
+                    or self._operation_job_scan_failed)
+
+    def _reconcile_operation_claims_if_stale_locked(self):
+        """Reconcile claims on a read path at most once per TTL.
+
+        ``_reconcile_operation_claims_locked`` does one durable job-file read
+        per live claim while holding the app lock.  On the passive
+        directory/status reads that is exactly the cost the slice-2 fix
+        removed, so those callers use THIS wrapper: mutation/dispatch paths
+        keep reconciling eagerly, but a burst of readers can trigger the
+        per-claim file I/O only once per interval.  Returns the released
+        count, or 0 when the TTL suppressed the pass.
+        """
+        now = self._now()
+        try:
+            elapsed = float(now) - float(self._last_claim_read_reconcile)
+        except (TypeError, ValueError):
+            elapsed = OPERATION_CLAIM_READ_RECONCILE_TTL_S
+        if 0.0 <= elapsed < OPERATION_CLAIM_READ_RECONCILE_TTL_S:
+            return 0
+        self._last_claim_read_reconcile = now
+        return self._reconcile_operation_claims_locked()
+
+    def _reconcile_operation_claims_locked(self):
+        """Drop terminal/missing claims before making a lease decision."""
+        now = self._now()
+        released = 0
+        # Inspect even expired claims before reap: a durable in-flight job
+        # renews its exclusion after OS sleep; a dead controller's QUEUED job
+        # releases promptly so it cannot wedge the node.
+        for lease in self.leases.operation_claims():
+            delivery_id = lease.get("delivery_id")
+            job = self.db.get_job(delivery_id)
+            if job is None and self.db.job_file_exists(delivery_id):
+                # HostStore deliberately collapses unreadable and absent to
+                # None.  An unreadable durable job may be running, so retain
+                # its writer fence (fail closed) until the record is readable
+                # or an operator removes the corrupt state explicitly.
+                self.leases.renew_operation(
+                    lease.get("node_id"), delivery_id, now, detach=True)
+            elif job is None or job.get("state") in hoststore.TERMINAL_STATES:
+                if self.leases.release_operation(
+                        lease.get("node_id"), delivery_id):
+                    released += 1
+            elif job.get("state") == "queued" and not \
+                    self.leases.controller_alive(
+                        lease.get("controller_id"), now):
+                if self.leases.release_operation(
+                        lease.get("node_id"), delivery_id):
+                    released += 1
+            elif job.get("state") in ("dispatching", "running"):
+                self.leases.renew_operation(
+                    lease.get("node_id"), delivery_id, now, detach=True)
+        self.leases.reap(now)
+        # Any full reconcile (eager or read-path) resets the read TTL, so a
+        # passive read right after a mutation reconcile does not repeat it.
+        self._last_claim_read_reconcile = now
+        return released
+
+    def _refresh_job_controller_locked(self, job):
+        """Treat an owned status poll as the controller's idle heartbeat."""
+        if not isinstance(job, dict):
+            return
+        if job.get("state") in hoststore.TERMINAL_STATES:
+            self._release_operation_claim_locked(job)
+            return
+        controller_id = job.get("controller_id")
+        node_id = job.get("node_id")
+        if not isinstance(controller_id, str) or not controller_id:
+            return
+        try:
+            self.leases.heartbeat(
+                controller_id, self._now(), selected_node_id=node_id)
+        except controllers.LeaseError:
+            return
+        try:
+            gating = effective_operation_gating(
+                self.operations, job.get("operation"), job.get("arguments"))
+            if gating["mutating"]:
+                # Same-controller renewal is idempotent.  A stale queued job
+                # that lost ownership to another controller stays queued and
+                # cannot steal that controller's live claim back merely by
+                # being polled.
+                self.leases.claim_operation(
+                    node_id, controller_id, job.get("delivery_id"),
+                    self._now())
+        except (OperationRegistryError, controllers.LeaseError):
+            pass
+
+    def _ensure_operation_claim_locked(self, job, source):
+        """Acquire/renew a queued/running mutation's exact writer claim."""
+        if not isinstance(job, dict):
+            return None
+        if job.get("state") in hoststore.TERMINAL_STATES:
+            self._release_operation_claim_locked(job)
+            return None
+        controller_id = job.get("controller_id")
+        if not isinstance(controller_id, str) or not controller_id:
+            # Legacy/local jobs may predate controller attribution.  New
+            # Convoy bridge and peer submissions always carry one.
+            return None
+        try:
+            gating = effective_operation_gating(
+                self.operations, job.get("operation"), job.get("arguments"))
+        except OperationRegistryError:
+            return None
+        if not gating["mutating"]:
+            self._release_operation_claim_locked(job)
+            return None
+        try:
+            self.leases.claim_operation(
+                job.get("node_id"), controller_id,
+                job.get("delivery_id"), self._now())
+        except controllers.LeaseError as exc:
+            code, payload = self._refuse(
+                source, exc.reason, exc.detail,
+                _REFUSAL_HTTP.get(exc.reason, 409),
+                self.directory.lookup(job.get("node_id")), {
+                    "operation": str(job.get("operation") or "")[
+                        :MAX_OPERATION_CHARS],
+                    "controller_id": controller_id[:MAX_ID_CHARS],
+                    "delivery_id": str(job.get("delivery_id") or "")[:128],
+                })
+            payload["holder"] = exc.holder
+            payload["delivery_id"] = job.get("delivery_id")
+            return code, payload
+        return None
 
     def create_job(self, body):
         """The LOCAL job path: token-authenticated, loopback-only, no
@@ -1209,7 +4975,8 @@ class HostApp:
             return self._refuse("jobs", "unknown_node", node_id, 404)
         refusal = self._gate_operation(
             node, operation, controller_id, source="jobs",
-            expected_runtime_id=expected_runtime_id)
+            expected_runtime_id=expected_runtime_id,
+            arguments=arguments)
         if refusal is not None:
             return refusal
         # convoy_id comes from the REGISTERED node, never from the
@@ -1230,6 +4997,9 @@ class HostApp:
             # A peer already holds this key. Say so, rather than handing
             # the local caller a record it does not own and cannot keep.
             return self._refuse("jobs", e.reason, str(e), 409, node)
+        claim_refusal = self._ensure_operation_claim_locked(job, "jobs")
+        if claim_refusal is not None:
+            return claim_refusal
         return 200, {"ok": True, "created": created, "job": job}
 
     def get_job(self, delivery_id):
@@ -1237,7 +5007,165 @@ class HostApp:
         if job is None:
             return 404, {"ok": False, "reason": "unknown_job",
                          "detail": delivery_id}
+        self._refresh_job_controller_locked(job)
         return 200, {"ok": True, "job": job}
+
+    @staticmethod
+    def _job_artifact_reference(job):
+        result = job.get("result") if isinstance(job, dict) else None
+        reference = result.get("artifact") if isinstance(result, dict) else None
+        return reference if isinstance(reference, dict) else None
+
+    def _release_acknowledged_job_artifact(self, job):
+        reference = self._job_artifact_reference(job)
+        if reference is None:
+            return False
+        released = False
+        try:
+            self.artifacts.release(
+                job["convoy_id"], reference["artifact_id"],
+                self._artifact_protection_for_job(job))
+            released = True
+        except (artifacts_mod.ArtifactError, KeyError, TypeError, ValueError):
+            # A missing/expired cache object must not make the durable job
+            # outcome impossible to acknowledge. The audit/result still says
+            # whether a protection was actually released.
+            pass
+        try:
+            # Ownership is authorization history, not a permanent retention
+            # mechanism.  Once the exact terminal outcome is acknowledged (or
+            # its durable job reaped), retire only that job's claim so repeated
+            # identical screenshots cannot exhaust the deduplicated object's
+            # bounded owner table.
+            self.artifacts.release_owner(
+                job["convoy_id"], reference["artifact_id"],
+                self._artifact_owner_for_job(job))
+        except (artifacts_mod.ArtifactError, KeyError, TypeError, ValueError):
+            pass
+        return released
+
+    def _acknowledge_job_locked(self, delivery_id):
+        job = self.db.get_job(delivery_id)
+        if job is None:
+            return 404, {"ok": False, "reason": "unknown_job",
+                         "detail": str(delivery_id)[:128]}
+        if job.get("state") not in hoststore.TERMINAL_STATES:
+            return 409, {"ok": False, "reason": "job_not_terminal",
+                         "delivery_id": job.get("delivery_id"),
+                         "state": job.get("state")}
+        self._release_operation_claim_locked(job)
+        already = job.get("outcome_acknowledged_at") is not None
+        try:
+            acknowledged = self.db.acknowledge_outcome(delivery_id)
+        except (KeyError, ValueError, OSError):
+            return 500, {"ok": False, "reason": "job_acknowledge_failed",
+                         "delivery_id": str(delivery_id)[:128]}
+        released = self._release_acknowledged_job_artifact(acknowledged)
+        return 200, {
+            "ok": True, "delivery_id": acknowledged["delivery_id"],
+            "state": acknowledged.get("state"),
+            "acknowledged_at": acknowledged.get("outcome_acknowledged_at"),
+            "already_acknowledged": already,
+            "artifact_protection_released": released,
+            "wakes_touchdesigner": False,
+        }
+
+    def acknowledge_job(self, body):
+        """IPC-only acknowledgement of an observed terminal outcome."""
+        try:
+            delivery_id = text_field(body, "delivery_id")
+        except Malformed as exc:
+            return self._refuse("jobs", "malformed", exc.detail, 400)
+        with self.lock:
+            return self._acknowledge_job_locked(delivery_id)
+
+    def peer_acknowledge_job(self, origin_host_id, convoy_id, delivery_id,
+                             authenticated_fingerprint=None):
+        """Acknowledge only a terminal job owned by this exact peer."""
+        try:
+            convoy_id = identity.normalize_convoy_id(convoy_id)
+        except identity.IdentityError:
+            return 400, {"ok": False, "reason": "malformed"}
+        with self.lock:
+            decision = self.peers.authorize_peer(
+                origin_host_id, authenticated_fingerprint,
+                convoy_id=convoy_id)
+            if not decision.allowed:
+                return _REFUSAL_HTTP.get(decision.reason, 403), {
+                    "ok": False, "reason": decision.reason,
+                    "detail": decision.detail,
+                }
+            job = self.db.get_job(delivery_id)
+            if (job is None or job.get("convoy_id") != convoy_id
+                    or job.get("origin_host_id") != origin_host_id):
+                return 404, {"ok": False, "reason": "unknown_job",
+                             "detail": str(delivery_id)[:128]}
+            return self._acknowledge_job_locked(delivery_id)
+
+    def _send_node_wake(self, node, action, lease_id):
+        """Send one secret-safe, fire-and-forget loopback wake command.
+
+        The caller may hold ``self.lock``: convoy_wake uses one UDP send and
+        never waits for a response.  The random token and port are transient
+        node-record fields and are never audited or returned by this method.
+        """
+        port = node.get("wake_port")
+        token = node.get("wake_token")
+        if (not node.get("remote_wake") or not port or not token):
+            return {"ok": False, "reason": "remote_wake_disabled",
+                    "detail": "the node has no active remote-wake endpoint"}
+        ttl_s = self._node_wake_ttl(node)
+        try:
+            result = self.waker(port, token, action, lease_id, ttl_s)
+        except Exception as exc:
+            safe_detail = str(exc).replace(str(token), "[redacted]")[:160]
+            result = {"ok": False, "reason": "wake_sender_failed",
+                      "detail": f"{type(exc).__name__}: {safe_detail}"}
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            reason = (result.get("reason") if isinstance(result, dict)
+                      else "wake_sender_bad_response")
+            return {"ok": False, "reason": str(reason)[:64],
+                    "detail": "the local wake datagram could not be sent"}
+        return {"ok": True, "action": action, "lease_id": lease_id}
+
+    @staticmethod
+    def _node_wake_ttl(node):
+        return min(wake_mod.TTL_MAX_S, max(
+            wake_mod.TTL_DEFAULT_S,
+            int(node.get("wake_grace_s") or 0) + 30))
+
+    def _start_wake_refresher(self, node, lease_id):
+        """Refresh one active TD wake lease until the caller stops it."""
+        stop = threading.Event()
+        interval = max(0.05, min(
+            WAKE_REFRESH_MAX_S, self._node_wake_ttl(node) / 3.0))
+
+        def _refresh():
+            while not stop.wait(interval):
+                self._send_node_wake(node, "touch", lease_id)
+
+        thread = threading.Thread(
+            target=_refresh,
+            name="ConvoyWakeRefresh-" + str(lease_id)[:12], daemon=True)
+        thread.start()
+        return stop, thread
+
+    @staticmethod
+    def _stop_wake_refresher(refresher):
+        if refresher is None:
+            return True
+        stop, thread = refresher
+        stop.set()
+        thread.join(timeout=1.0)
+        return not thread.is_alive()
+
+    @staticmethod
+    def _wake_result_running(response):
+        """Whether a HostApp (status, payload) keeps the wake lease open."""
+        try:
+            return response[1]["job"]["state"] == "running"
+        except (KeyError, IndexError, TypeError):
+            return False
 
     # -- dispatch: execute a queued job against the node (Phase 4 slice 1)
 
@@ -1277,6 +5205,8 @@ class HostApp:
         unchanged (dispatched=False), so a double dispatch cannot re-run
         the work.
         """
+        wake_lease = False
+        wake_refresher = None
         # -- phase a: read, gate, claim -- under the lock ---------------
         with self.lock:
             if (not delivery_id or not isinstance(delivery_id, str)
@@ -1313,7 +5243,8 @@ class HostApp:
             # by a hand edit to denylist.json while its work sat queued
             # must stop dispatching with no API call and no restart, and
             # this is the caller that notices the mtime change.
-            decision = self._authorize_origin(job.get("origin_host_id"))
+            decision = self._authorize_origin(
+                job.get("origin_host_id"), job.get("convoy_id"))
             denied = None if decision is None or decision.allowed else decision
             if denied is not None:
                 return self._refuse_origin(job, denied)
@@ -1352,6 +5283,60 @@ class HostApp:
                                         self._now() + self.drain_backoff_s)
                 return 404, {"ok": False, "reason": "unknown_node",
                              "detail": job["node_id"]}
+            if not bool(node.get("enabled", True)):
+                # Disable is a durable membership decision, not a temporary
+                # outage.  Burn work accepted before the switch so toggling
+                # Convoy back on cannot resurrect a stale mutation minutes or
+                # days later.  A job already running remains pollable because
+                # the node may already have executed it; this branch is only
+                # reachable for still-queued, definitely-undelivered work.
+                detail = {
+                    "reason": "node_disabled",
+                    "detail": "the target withdrew from Convoy before this "
+                              "job was delivered; it did not run",
+                    "operation": job.get("operation"),
+                    "at": self._now(),
+                }
+                try:
+                    refused = self.db.mark_refused(delivery_id, detail)
+                except Exception:
+                    refused = None
+                self._note_dispatch_event(
+                    delivery_id, "dispatch_refused",
+                    {"reason": "node_disabled", "terminal": True})
+                payload = {
+                    "ok": False, "reason": "node_disabled",
+                    "detail": detail["detail"],
+                }
+                if refused is not None:
+                    self._release_operation_claim_locked(refused)
+                    payload["job"] = refused
+                return 409, payload
+            if (job.get("convoy_id") != node.get("convoy_id")
+                    or node.get("host_id") != self.host_id):
+                # A durable job is namespace-bound at admission.  A corrupt
+                # or hand-edited record must never use a still-valid node id
+                # to execute in a different Convoy (especially host shell).
+                detail = {
+                    "reason": "namespace_mismatch",
+                    "detail": "the durable delivery no longer belongs to "
+                              "the target node's local Convoy namespace",
+                    "operation": job.get("operation"),
+                    "at": self._now(),
+                }
+                try:
+                    refused = self.db.mark_refused(delivery_id, detail)
+                except Exception:
+                    refused = None
+                self._note_dispatch_event(
+                    delivery_id, "dispatch_refused",
+                    {"reason": "namespace_mismatch", "terminal": True})
+                payload = {"ok": False, "reason": "namespace_mismatch",
+                           "detail": detail["detail"]}
+                if refused is not None:
+                    self._release_operation_claim_locked(refused)
+                    payload["job"] = refused
+                return 403, payload
             # Re-gate against the registry AS OF NOW, not as of enqueue:
             # the entry may have been tightened or removed while the job
             # sat queued. The runtime re-check below is HONESTLY BOUNDED:
@@ -1363,21 +5348,98 @@ class HostApp:
             # the node itself to verify expected_runtime_id (Phase 2
             # ConvoyExt + the A-46 transport); named deferral, not an
             # oversight.
-            entry = self.operations.get(job["operation"])
-            gating = gating_of(entry) if entry else None
-            if gating is None or gating["executes_arbitrary_code"]:
-                reason = ("operation_not_exposed" if gating is None
-                          else "operation_not_relayable")
+            try:
+                gating = effective_operation_gating(
+                    self.operations, job["operation"], job.get("arguments"))
+            except OperationRegistryError as e:
+                # This queued job can never execute under the registry that
+                # now governs the host.  It is still provably undelivered, so
+                # terminal `refused` is honest; leaving it queued would let a
+                # later permissive edit resurrect stale work unexpectedly.
+                detail = {"reason": e.reason, "detail": e.detail,
+                          "operation": job.get("operation"),
+                          "at": self._now()}
+                try:
+                    refused = self.db.mark_refused(delivery_id, detail)
+                except Exception:
+                    refused = None
                 self._note_dispatch_event(
                     delivery_id, "dispatch_refused",
-                    {"reason": reason,
+                    {"reason": e.reason, "terminal": True,
                      "operation": job["operation"][:MAX_OPERATION_CHARS]})
-                self._set_drain_backoff(delivery_id,
-                                        self._now() + self.drain_backoff_s)
-                return 409, {"ok": False, "reason": reason,
-                             "detail": "the operation is no longer "
-                                       "relayable under the current "
-                                       "registry; the job stays queued"}
+                payload = {"ok": False, "reason": e.reason,
+                           "detail": e.detail}
+                if refused is not None:
+                    self._release_operation_claim_locked(refused)
+                    payload["job"] = refused
+                return e.code, payload
+            # The helper proved the entry exists and is classified. Keep the
+            # concrete entry for the async argument-injection contract below.
+            entry = self.operations[job["operation"]]
+            self._reconcile_operation_claims_locked()
+            if (gating["mutating"]
+                    and self._refresh_unreadable_operation_fence_locked()):
+                self._note_dispatch_event(
+                    delivery_id, "dispatch_deferred",
+                    {"reason": "operation_state_unreadable"})
+                self._set_drain_backoff(
+                    delivery_id, self._now() + self.drain_backoff_s)
+                return 503, {
+                    "ok": False,
+                    "reason": "operation_state_unreadable",
+                    "detail": "durable job state is unreadable; the host "
+                              "cannot prove another mutation is not in "
+                              "flight, so this job stays queued",
+                }
+            if (gating["executes_arbitrary_code"]
+                    and not self.policy.allow_td_python(node["node_id"])):
+                # Permission withdrawal is a durable authority change, like
+                # disabling the node. Burn still-queued work so switching the
+                # permission back on cannot resurrect code accepted earlier.
+                detail = {
+                    "reason": "td_python_not_approved",
+                    "detail": "TD Python permission was withdrawn before "
+                              "this job was delivered; it did not run",
+                    "operation": job.get("operation"),
+                    "at": self._now(),
+                }
+                try:
+                    refused = self.db.mark_refused(delivery_id, detail)
+                except Exception:
+                    refused = None
+                self._note_dispatch_event(
+                    delivery_id, "dispatch_refused",
+                    {"reason": "td_python_not_approved", "terminal": True})
+                payload = {"ok": False,
+                           "reason": "td_python_not_approved",
+                           "detail": detail["detail"]}
+                if refused is not None:
+                    self._release_operation_claim_locked(refused)
+                    payload["job"] = refused
+                return 403, payload
+            if (job["operation"] == "convoy_shell"
+                    and self.policy.allow_full_shell() is not True):
+                detail = {
+                    "reason": "full_shell_not_approved",
+                    "detail": "Allow Full Shell was withdrawn before this "
+                              "host command was dispatched; it did not run",
+                    "operation": job.get("operation"),
+                    "at": self._now(),
+                }
+                try:
+                    refused = self.db.mark_refused(delivery_id, detail)
+                except Exception:
+                    refused = None
+                self._note_dispatch_event(
+                    delivery_id, "dispatch_refused",
+                    {"reason": "full_shell_not_approved", "terminal": True})
+                payload = {"ok": False,
+                           "reason": "full_shell_not_approved",
+                           "detail": detail["detail"]}
+                if refused is not None:
+                    self._release_operation_claim_locked(refused)
+                    payload["job"] = refused
+                return 403, payload
             # THE REMOTE SURFACE, and the OBSERVE-ONLY narrowing, re-asked
             # HERE -- not only at submission. The queue outlives both: a
             # peer narrowed to observe-only while its mutation was in
@@ -1415,8 +5477,68 @@ class HostApp:
                                   f"{expected!r} but the node is now "
                                   f"{current!r}; refusing to dispatch "
                                   f"into a different runtime (A-22)"}
+            controller_id = job.get("controller_id")
+            if (gating["mutating"] and isinstance(controller_id, str)
+                    and controller_id):
+                if not self.leases.controller_alive(
+                        controller_id, self._now()):
+                    self._note_dispatch_event(
+                        delivery_id, "dispatch_deferred",
+                        {"reason": "controller_heartbeat_required"})
+                    self._set_drain_backoff(
+                        delivery_id, self._now() + self.drain_backoff_s)
+                    return 409, {
+                        "ok": False,
+                        "reason": "controller_heartbeat_required",
+                        "detail": "the mutating delivery's controller is "
+                                  "not live; it stays queued until the "
+                                  "controller reconnects",
+                    }
+                claim_refusal = self._ensure_operation_claim_locked(
+                    job, "dispatch")
+                if claim_refusal is not None:
+                    self._set_drain_backoff(
+                        delivery_id, self._now() + self.drain_backoff_s)
+                    return claim_refusal
             port = node.get("envoy_port")
-            if not port:
+            needs_td_endpoint = (
+                job["operation"] not in HOST_NATIVE_OPERATIONS
+                or job["operation"] == "convoy_restart_node")
+            if (needs_td_endpoint
+                    and node.get("perform_mode")):
+                if not node.get("wake_active") or not port:
+                    wake = self._send_node_wake(
+                        node, "acquire", delivery_id)
+                    if not wake.get("ok"):
+                        reason = wake.get("reason") or \
+                            "remote_wake_unavailable"
+                        self._note_dispatch_event(
+                            delivery_id, "dispatch_deferred",
+                            {"reason": reason})
+                        self._set_drain_backoff(
+                            delivery_id, self._now() + self.drain_backoff_s)
+                        return 409, {
+                            "ok": False, "reason": reason,
+                            "detail": "the target is in Perform Mode and "
+                                      "cannot be remotely awakened; the job "
+                                      "stays queued",
+                        }
+                    self._note_dispatch_event(
+                        delivery_id, "node_wake_requested",
+                        {"reason": "perform_mode"})
+                    self._set_drain_backoff(
+                        delivery_id, self._now() + WAKE_RETRY_S)
+                    return 409, {
+                        "ok": False, "reason": "node_waking",
+                        "detail": "the target accepted a Perform wake; the "
+                                  "job stays queued until Envoy re-registers",
+                    }
+                # Already awake for this or another delivery.  Refresh this
+                # delivery's hard TTL before forwarding; release below starts
+                # the user-configured idle grace for terminal sync results.
+                self._send_node_wake(node, "touch", delivery_id)
+                wake_lease = True
+            if not port and needs_td_endpoint:
                 # No endpoint yet -- the node has not registered its live
                 # Envoy port. Leave the job queued (unclaimed) to dispatch
                 # once it does; this is a not-yet, not a failure.
@@ -1428,6 +5550,18 @@ class HostApp:
                 return 409, {"ok": False, "reason": "node_endpoint_unknown",
                              "detail": "the node has not registered its "
                                        "Envoy port; the job stays queued"}
+            if needs_td_endpoint and not self._node_is_online(node):
+                self._note_dispatch_event(
+                    delivery_id, "dispatch_deferred",
+                    {"reason": "node_endpoint_stale"})
+                self._set_drain_backoff(delivery_id,
+                                        self._now() + self.drain_backoff_s)
+                return 409, {
+                    "ok": False, "reason": "node_endpoint_stale",
+                    "detail": "the node missed its 60-second heartbeat "
+                              "grace; the job stays queued until it "
+                              "re-registers",
+                }
             try:
                 claimed = self.db.claim_for_dispatch(delivery_id)
             except Exception as e:
@@ -1451,6 +5585,14 @@ class HostApp:
                 # safe answer to a lost claim.
                 job = self.db.get_job(delivery_id) or job
                 return 200, {"ok": True, "dispatched": False, "job": job}
+            if gating["mutating"]:
+                # The durable job has crossed queued -> dispatching.  Its
+                # writer exclusion now follows the in-flight job rather than
+                # controller heartbeat, so a dropped client cannot admit a
+                # concurrent mutation while this operation may be running.
+                self.leases.renew_operation(
+                    job.get("node_id"), delivery_id, self._now(),
+                    detach=True)
             # Capture everything the rest of the dispatch needs BEFORE
             # the marker goes up, so that nothing at all sits between
             # the marker and the try/finally below.
@@ -1461,6 +5603,10 @@ class HostApp:
             self._flight_counter += 1
             attempt = self._flight_counter
             self._in_flight[delivery_id] = attempt
+            cancel_event = None
+            if operation in HOST_CANCELABLE_OPERATIONS:
+                cancel_event = threading.Event()
+                self._hostop_cancel_events[delivery_id] = cancel_event
 
         # FROM HERE the claim is durable and the marker is up, so the
         # claim and its cleanup share ONE failure domain. They did not:
@@ -1515,13 +5661,51 @@ class HostApp:
                     # marker is set -- the forward proceeds.
                     pass
 
+            if wake_lease:
+                wake_refresher = self._start_wake_refresher(
+                    node, delivery_id)
+
             # -- phase b: the forward, OUTSIDE the lock -----------------
             detail = ""
-            try:
-                outcome = self.forwarder(port, operation, arguments)
-            except Exception as e:  # a forwarder must not crash dispatch
-                outcome = None
-                detail = f"{type(e).__name__}: {e}"
+            host_outcome = None
+            if operation == "convoy_ping":
+                # Host-native liveness.  Advertising convoy_ping while
+                # forwarding it to Envoy made every real ping fail as an
+                # unknown MCP tool.  It intentionally still traverses the
+                # normal durable job, authorization, deadline and dispatch
+                # state machine; only the final execution is host-local.
+                outcome = {"ok": True,
+                    "pong": True,
+                    "host_id": self.host_id,
+                    "node_id": node.get("node_id"),
+                    "runtime_id": node.get("runtime_id"),
+                    "online": self._node_is_online(node),
+                }
+                host_outcome = outcome
+            elif operation in HOST_SUBPROCESS_OPERATIONS:
+                # Host-native execution is intentionally on this branch,
+                # before the Envoy forward.  It never consults the node's
+                # loopback port and therefore cannot wake or touch TD.
+                host_outcome = self._execute_host_operation(
+                    operation, node.get("node_id"), job.get("convoy_id"),
+                    arguments, cancel_event)
+                host_outcome = self._materialize_host_operation_result(
+                    host_outcome, job)
+                outcome = host_outcome
+            elif operation in HOST_LIFECYCLE_OPERATIONS:
+                host_outcome = self._execute_lifecycle_operation(
+                    operation, node.get("node_id"), job.get("convoy_id"),
+                    job.get("expected_runtime_id"), delivery_id, arguments,
+                    cancel_event)
+                host_outcome = self._materialize_host_operation_result(
+                    host_outcome, job)
+                outcome = host_outcome
+            else:
+                try:
+                    outcome = self.forwarder(port, operation, arguments)
+                except Exception as e:  # a forwarder must not crash dispatch
+                    outcome = None
+                    detail = f"{type(e).__name__}: {e}"
             if (outcome is not None
                     and outcome is not mcpclient.UNREACHABLE
                     and not (isinstance(outcome, dict)
@@ -1536,16 +5720,40 @@ class HostApp:
                 outcome = None
             observed = self._now()
 
+            # No refresh may race the terminal release below.  Stop it before
+            # durable resolution; a crash before here is still bounded by the
+            # TD-side hard TTL.
+            wake_release_safe = self._stop_wake_refresher(wake_refresher)
+            wake_refresher = None
+
             # -- phase c: resolve the claim, under the lock -------------
             try:
                 with self.lock:
-                    return self._resolve_dispatch(delivery_id, operation,
-                                                  outcome, observed,
-                                                  detail, async_spec)
+                    if host_outcome is not None:
+                        response = self._resolve_host_dispatch(
+                            delivery_id, operation, host_outcome, observed,
+                            job)
+                    else:
+                        response = self._resolve_dispatch(
+                            delivery_id, operation, outcome, observed,
+                            detail, async_spec, job)
             except Exception as e:
-                return self._downgrade_failed_recording(delivery_id,
-                                                        operation, e)
+                response = self._downgrade_failed_recording(
+                    delivery_id, operation, e)
+            if wake_lease and not self._wake_result_running(response):
+                if wake_release_safe:
+                    self._send_node_wake(node, "release", delivery_id)
+                else:
+                    # A pathological injected/blocking sender may wake again
+                    # after a release.  Do not race it; the TD-side hard TTL is
+                    # the fail-safe and this condition is visible in audit.
+                    self._audit_best_effort(
+                        "wake_refresh_stop_timeout",
+                        {"delivery_id": delivery_id,
+                         "node_id": node.get("node_id")})
+            return response
         finally:
+            self._stop_wake_refresher(wake_refresher)
             with self.lock:
                 # Remove ONLY this attempt's marker. After a release back
                 # to queued, another attempt may already have re-claimed
@@ -1559,6 +5767,531 @@ class HostApp:
                         and delivery_id not in self._pending_handoff
                         and self._in_flight.get(delivery_id) == attempt):
                     del self._in_flight[delivery_id]
+                if (cancel_event is not None
+                        and self._hostop_cancel_events.get(delivery_id)
+                        is cancel_event):
+                    del self._hostop_cancel_events[delivery_id]
+
+    def _execute_host_operation(self, operation, node_id, convoy_id,
+                                arguments, cancel_event):
+        """Run one reviewed host operation with namespace bound to the resolver.
+
+        Called only after the durable job is claimed and outside ``self.lock``.
+        The thread-local namespace is consulted by every HostOperations target
+        revalidation, including the one adjacent to process spawn.
+        """
+        try:
+            _validate_host_operation_arguments(operation, arguments)
+        except OperationRegistryError:
+            return {"ok": False, "code": "invalid_arguments",
+                    "detail": "host operation arguments are invalid",
+                    "operation": operation, "target_id": node_id}
+        with self.lock:
+            current = self.directory.lookup(node_id)
+            target_ok = bool(
+                current is not None
+                and current.get("host_id") == self.host_id
+                and current.get("convoy_id") == convoy_id
+                and current.get("enabled", True) is True)
+        if not target_ok:
+            return {"ok": False, "code": "target_changed",
+                    "detail": "target registration changed before execution",
+                    "operation": operation, "target_id": node_id}
+
+        self._hostop_context.expected_convoy_id = convoy_id
+        try:
+            timeout_s = arguments.get("timeout_s")
+            output_limit = arguments.get("output_limit")
+            if operation == "convoy_git":
+                return self.host_operations.run_git(
+                    node_id, arguments.get("operation"),
+                    arguments.get("arguments", {}), timeout_s=timeout_s,
+                    output_limit=output_limit, cancel_event=cancel_event)
+            if operation == "convoy_gh":
+                return self.host_operations.run_gh(
+                    node_id, arguments.get("operation"),
+                    arguments.get("arguments", {}), timeout_s=timeout_s,
+                    output_limit=output_limit, cancel_event=cancel_event)
+            return self.host_operations.run_shell(
+                node_id, arguments.get("command"), cwd=arguments.get("cwd"),
+                env_additions=arguments.get("env_additions"),
+                timeout_s=timeout_s, output_limit=output_limit,
+                cancel_event=cancel_event,
+                redact_values=arguments.get("redact_values", ()))
+        except Exception:
+            # The facade promises not to raise, but this composition boundary
+            # still returns a static, secret-free result if that contract is
+            # ever broken.  The command/argv/environment are never reflected.
+            return {"ok": False, "code": "internal_error",
+                    "detail": "host operation failed safely",
+                    "operation": operation, "target_id": node_id}
+        finally:
+            try:
+                del self._hostop_context.expected_convoy_id
+            except AttributeError:
+                pass
+
+    def _execute_lifecycle_operation(self, operation, node_id, convoy_id,
+                                     expected_runtime_id, operation_id,
+                                     arguments, cancel_event):
+        """Run one exact, profile-pinned TD lifecycle operation."""
+        try:
+            _validate_lifecycle_operation_arguments(operation, arguments)
+        except OperationRegistryError:
+            return {"ok": False, "code": "invalid_arguments",
+                    "detail": "lifecycle arguments are invalid",
+                    "operation": operation, "target_id": node_id}
+        if self.lifecycle is None:
+            return {
+                "ok": False,
+                "code": "lifecycle_unavailable",
+                "detail": self.lifecycle_unavailable_reason
+                or "exact-node lifecycle is unavailable",
+                "operation": operation,
+                "target_id": node_id,
+            }
+        with self.lock:
+            current = self.directory.lookup(node_id)
+            target_ok = bool(
+                current is not None
+                and current.get("host_id") == self.host_id
+                and current.get("convoy_id") == convoy_id
+                and current.get("enabled", True) is True)
+        if not target_ok:
+            return {"ok": False, "code": "target_changed",
+                    "detail": "target registration changed before execution",
+                    "operation": operation, "target_id": node_id}
+        timing = self.db.job_timing(operation_id)
+        execution_timeout_s = None
+        if timing.get("bounded"):
+            if timing.get("expired"):
+                return {
+                    "ok": False, "code": "deadline_exceeded",
+                    "detail": "the accepted delivery budget expired before "
+                              "lifecycle execution",
+                    "operation": operation, "target_id": node_id,
+                }
+            execution_timeout_s = timing.get("remaining_s")
+        self.lifecycle_runtime.begin_operation(operation_id)
+        try:
+            if operation == "convoy_start_node":
+                return self.lifecycle.start_node(
+                    node_id, convoy_id, operation_id,
+                    timeout_s=arguments.get("timeout_s"),
+                    execution_timeout_s=execution_timeout_s,
+                    cancel_event=cancel_event)
+            return self.lifecycle.restart_node(
+                node_id, convoy_id, operation_id, expected_runtime_id,
+                policy=arguments.get("policy", "require_clean"),
+                timeout_s=arguments.get("timeout_s"),
+                execution_timeout_s=execution_timeout_s,
+                cancel_event=cancel_event)
+        except Exception:
+            return {"ok": False, "code": "internal_error",
+                    "detail": "lifecycle operation failed safely",
+                    "operation": operation, "target_id": node_id}
+        finally:
+            self.lifecycle_runtime.end_operation()
+
+    def _artifact_owner_for_job(self, job):
+        owner = {
+            "host_id": (job.get("origin_host_id") or self.host_id),
+            "node_id": job.get("node_id"),
+            "controller_id": job.get("controller_id"),
+            "job_id": job.get("delivery_id"),
+        }
+        return {key: value for key, value in owner.items()
+                if isinstance(value, str) and value}
+
+    @staticmethod
+    def _artifact_protection_for_job(job):
+        delivery_id = job.get("delivery_id")
+        if not isinstance(delivery_id, str) or not delivery_id:
+            raise ValueError("job artifact requires a delivery id")
+        return "job:%s:result" % delivery_id
+
+    @staticmethod
+    def _capture_parts(value):
+        """Return (safe description, generated path, inline image block)."""
+        texts = []
+        image = None
+        if isinstance(value, str):
+            texts.append(value)
+        elif isinstance(value, dict) and isinstance(value.get("content"), list):
+            for block in value["content"]:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text" and isinstance(
+                        block.get("text"), str):
+                    texts.append(block["text"])
+                elif block.get("type") == "image" and image is None:
+                    image = block
+        path = None
+        cleaned = []
+        for text in texts:
+            for line in text.splitlines():
+                if line.startswith("Saved to: "):
+                    candidate = line[len("Saved to: "):].strip()
+                    if candidate and path is None:
+                        path = candidate
+                    continue
+                if line.startswith("(Use Read tool on the file path"):
+                    continue
+                cleaned.append(line)
+        description = "\n".join(cleaned).strip()[:8192]
+        return description, path, image
+
+    @staticmethod
+    def _capture_mime_and_extension(value):
+        value = str(value or "").strip().lower()
+        if value in ("jpeg", "jpg", "image/jpeg"):
+            return "image/jpeg", ".jpg"
+        if value in ("png", "image/png"):
+            return "image/png", ".png"
+        raise ValueError("capture image type is unsupported")
+
+    @staticmethod
+    def _capture_bytes_valid(value, mime_type):
+        if mime_type == "image/png":
+            return value.startswith(b"\x89PNG\r\n\x1a\n")
+        return (len(value) >= 4 and value.startswith(b"\xff\xd8")
+                and value.endswith(b"\xff\xd9"))
+
+    @staticmethod
+    def _safe_capture_path(path):
+        if not isinstance(path, str) or not path:
+            raise ValueError("capture path is missing")
+        candidate = os.path.abspath(path)
+        name = os.path.basename(candidate)
+        if not _ENVOY_CAPTURE_NAME_RE.fullmatch(name):
+            raise ValueError("capture path does not use Envoy's filename")
+        temp_root = os.path.normcase(os.path.realpath(tempfile.gettempdir()))
+        parent = os.path.normcase(os.path.realpath(os.path.dirname(candidate)))
+        if parent != temp_root or os.path.islink(candidate):
+            raise ValueError("capture path is outside the local temp root")
+        return candidate
+
+    @staticmethod
+    def _unlink_same_capture(path, original_stat):
+        try:
+            current = os.stat(path, follow_symlinks=False)
+            if (stat.S_ISREG(current.st_mode)
+                    and os.path.samestat(original_stat, current)):
+                os.unlink(path)
+        except (FileNotFoundError, OSError):
+            pass
+
+    def _capture_artifact_from_path(self, convoy_id, path, owner,
+                                    protection_id):
+        candidate = self._safe_capture_path(path)
+        mime_type, extension = self._capture_mime_and_extension(
+            os.path.splitext(candidate)[1].lstrip("."))
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(candidate, flags)
+        original = None
+        try:
+            original = os.fstat(descriptor)
+            if (not stat.S_ISREG(original.st_mode)
+                    or original.st_size < 1
+                    or original.st_size > MAX_CAPTURE_ARTIFACT_BYTES
+                    or original.st_size > self.artifacts.max_artifact_bytes):
+                raise ValueError("capture size is outside the artifact limit")
+            with os.fdopen(descriptor, "rb") as source:
+                descriptor = -1
+                head = source.read(8)
+                source.seek(max(0, original.st_size - 2), os.SEEK_SET)
+                tail = source.read(2)
+                source.seek(0)
+                sample = head if mime_type == "image/png" else head + tail
+                valid = (sample.startswith(b"\x89PNG\r\n\x1a\n")
+                         if mime_type == "image/png"
+                         else (head.startswith(b"\xff\xd8")
+                               and tail == b"\xff\xd9"))
+                if not valid:
+                    raise ValueError("capture bytes do not match image type")
+                return self.artifacts.put_stream(
+                    convoy_id, source, expected_size=original.st_size,
+                    mime_type=mime_type,
+                    filename_hint="capture" + extension, owner=owner,
+                    protection_id=protection_id,
+                    protection_kind="unacknowledged_job")
+        finally:
+            if descriptor >= 0:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+            if original is not None:
+                self._unlink_same_capture(candidate, original)
+
+    def _capture_artifact_from_inline(self, convoy_id, block, owner,
+                                      protection_id):
+        if not isinstance(block, dict):
+            raise ValueError("capture image content is missing")
+        encoded = block.get("data")
+        if not isinstance(encoded, str) or len(encoded) > (
+                (MAX_CAPTURE_ARTIFACT_BYTES * 4 // 3) + 8):
+            raise ValueError("capture image content is outside the limit")
+        mime_value = (block.get("mimeType") or block.get("mime_type")
+                      or block.get("format"))
+        mime_type, extension = self._capture_mime_and_extension(mime_value)
+        try:
+            raw = base64.b64decode(encoded.encode("ascii"), validate=True)
+        except (UnicodeEncodeError, ValueError) as exc:
+            raise ValueError("capture image base64 is invalid") from exc
+        if (not raw or len(raw) > MAX_CAPTURE_ARTIFACT_BYTES
+                or len(raw) > self.artifacts.max_artifact_bytes
+                or not self._capture_bytes_valid(raw, mime_type)):
+            raise ValueError("capture image bytes are invalid")
+        return self.artifacts.put_bytes(
+            convoy_id, raw, mime_type=mime_type,
+            filename_hint="capture" + extension, owner=owner,
+            protection_id=protection_id,
+            protection_kind="unacknowledged_job")
+
+    def _materialize_capture_result(self, value, job):
+        description, path, image = self._capture_parts(value)
+        # sample_grid mode and ordinary capture errors contain neither a
+        # generated image path nor an image content block; leave those as the
+        # normal structured result rather than inventing an artifact failure.
+        if path is None and image is None:
+            return None
+        owner = self._artifact_owner_for_job(job)
+        protection_id = self._artifact_protection_for_job(job)
+        reference = None
+        failure = None
+        try:
+            if path is not None:
+                reference = self._capture_artifact_from_path(
+                    job["convoy_id"], path, owner, protection_id)
+            else:
+                reference = self._capture_artifact_from_inline(
+                    job["convoy_id"], image, owner, protection_id)
+        except (artifacts_mod.ArtifactError, OSError, ValueError,
+                TypeError) as exc:
+            failure = getattr(exc, "reason", type(exc).__name__)
+            # If the generated path was unavailable but Envoy also supplied a
+            # small inline image, use that independently verified copy.
+            if image is not None and path is not None:
+                try:
+                    reference = self._capture_artifact_from_inline(
+                        job["convoy_id"], image, owner, protection_id)
+                    failure = None
+                except (artifacts_mod.ArtifactError, OSError, ValueError,
+                        TypeError) as fallback_exc:
+                    failure = getattr(
+                        fallback_exc, "reason", type(fallback_exc).__name__)
+        if reference is None:
+            return {
+                "detail": description or "TOP capture completed",
+                "capture": True, "artifact_unavailable": True,
+                "artifact_reason": failure or "artifact_unavailable",
+            }
+        return {
+            "detail": description or "TOP capture materialized",
+            "capture": True, "spilled": True, "artifact": reference,
+            "result_bytes": reference["size"],
+        }
+
+    def _materialize_node_result(self, result, job):
+        """Persist terminal TD results without leaking remote paths/bytes."""
+        if job.get("operation") == "capture_top":
+            capture = self._materialize_capture_result(result, job)
+            if capture is not None:
+                return capture
+        result = _json_safe(result)
+        try:
+            blob = json.dumps(
+                result, sort_keys=True, allow_nan=False,
+                separators=(",", ":")).encode("utf-8")
+        except (TypeError, ValueError):
+            return _bounded_result(result)
+        if len(blob) <= 56 * 1024:
+            return result
+        try:
+            reference = self.artifacts.put_bytes(
+                job["convoy_id"], blob, mime_type="application/json",
+                filename_hint=(str(job.get("operation") or "envoy")
+                               + "-result.json"),
+                owner=self._artifact_owner_for_job(job),
+                protection_id=self._artifact_protection_for_job(job),
+                protection_kind="unacknowledged_job")
+        except (artifacts_mod.ArtifactError, OSError, ValueError, TypeError):
+            reference = None
+        if reference is not None:
+            return {
+                "detail": "full Envoy result is stored as a private "
+                          "Convoy artifact",
+                "spilled": True, "result_bytes": len(blob),
+                "artifact": reference,
+            }
+        return _bounded_result(result)
+
+    def _materialize_host_operation_result(self, result, job):
+        """Keep a durable result under 64 KiB, spilling full JSON when clean.
+
+        The artifact is private, quota-managed and path-free.  If quota is
+        disabled/full, a bounded summary replaces the body rather than letting
+        a subprocess inflate every job/status/peer response.
+        """
+        if not isinstance(result, dict) or not isinstance(
+                result.get("ok"), bool):
+            result = {"ok": False, "code": "internal_error",
+                      "detail": "host operation failed safely"}
+        result = _json_safe(result)
+        try:
+            blob = json.dumps(
+                result, sort_keys=True, allow_nan=False,
+                separators=(",", ":")).encode("utf-8")
+        except (TypeError, ValueError):
+            return {"ok": False, "code": "internal_error",
+                    "detail": "host operation returned invalid data"}
+        # Leave headroom for the delivery record and JSON escaping on the
+        # peer/loopback response.  The product contract is under 64 KiB, not
+        # merely "stdout was configured for 64 KiB".
+        if len(blob) <= 56 * 1024:
+            return result
+
+        reference = None
+        try:
+            reference = self.artifacts.put_bytes(
+                job["convoy_id"], blob,
+                mime_type="application/json",
+                filename_hint=(str(job.get("operation") or "host-operation")
+                               + "-result.json"),
+                owner=self._artifact_owner_for_job(job),
+                protection_id=self._artifact_protection_for_job(job),
+                protection_kind="unacknowledged_job")
+        except (artifacts_mod.ArtifactError, OSError, ValueError, TypeError):
+            reference = None
+
+        summary = {key: result.get(key) for key in (
+            "ok", "code", "detail", "capability", "operation", "target_id",
+            "exit_code", "truncated", "observed_bytes", "duration_ms", "cwd")
+                   if key in result}
+        summary["result_bytes"] = len(blob)
+        if reference is not None:
+            summary.update({
+                "spilled": True,
+                "artifact": reference,
+                "detail": "full host-operation output is stored as a "
+                          "private Convoy artifact",
+            })
+            return summary
+        summary.update({
+            "truncated": True,
+            "spill_failed": True,
+            "detail": "host-operation output exceeded the inline limit and "
+                      "artifact storage was unavailable",
+            "head": blob[:2048].decode("utf-8", "replace"),
+        })
+        return summary
+
+    def _resolve_host_dispatch(self, delivery_id, operation, outcome,
+                               observed, job):
+        """Persist a host-executor verdict.  Called with ``self.lock`` held."""
+        ok = outcome.get("ok") is True
+        updated = self.db.record_host_result(
+            delivery_id, ok, observed, result=outcome)
+        try:
+            self.db.audit(
+                "hostapp", "host_operation_dispatched",
+                {"delivery_id": delivery_id, "operation": operation,
+                 "node_id": job.get("node_id"),
+                 "convoy_id": job.get("convoy_id"), "ok": ok,
+                 "code": outcome.get("code"),
+                 "spilled": outcome.get("spilled") is True})
+        except Exception:
+            pass
+        self._drain_noted.pop(delivery_id, None)
+        self._drain_backoff.pop(delivery_id, None)
+        if updated.get("state") in hoststore.TERMINAL_STATES:
+            self._release_operation_claim_locked(updated)
+        return 200, {"ok": True, "dispatched": True, "job": updated}
+
+    def _cancel_job_locked(self, delivery_id, *, expected_convoy_id=None,
+                           expected_origin_host_id=None):
+        """Cancel one owned delivery. CALLED WITH ``self.lock`` held.
+
+        Namespace/origin mismatches deliberately collapse to ``unknown_job``:
+        the caller must not learn that another Convoy or peer owns an ID.
+        Queued work of every locus is cancellable because no execution has
+        begun. Once TD work crosses the dispatch boundary there is no honest
+        cancellation primitive yet, so that case is refused rather than
+        pretending that dropping a host record stopped TouchDesigner.
+        """
+        job = self.db.get_job(delivery_id)
+        if (job is None
+                or (expected_convoy_id is not None
+                    and job.get("convoy_id") != expected_convoy_id)
+                or (expected_origin_host_id is not None
+                    and job.get("origin_host_id") !=
+                    expected_origin_host_id)):
+            return 404, {"ok": False, "reason": "unknown_job",
+                         "detail": delivery_id}
+        state = job.get("state")
+        if state == "queued":
+            evidence = {
+                "reason": "cancelled_before_dispatch",
+                "detail": "the operation was cancelled before it started "
+                          "and did not run",
+                "operation": job.get("operation"), "at": self._now()}
+            updated = self.db.mark_refused(delivery_id, evidence)
+            self._release_operation_claim_locked(updated)
+            # A prior dispatch pass may already have sent `acquire` and left
+            # the job queued while Envoy re-registered.  Release that exact
+            # lease after the cancellation is durable instead of holding TD
+            # awake until its hard TTL expires.
+            node = self.directory.lookup(job.get("node_id"))
+            if isinstance(node, dict):
+                self._send_node_wake(node, "release", delivery_id)
+            return 200, {"ok": True, "cancelled": True,
+                         "definitive": True, "job": updated}
+        if (state == "dispatching"
+                and job.get("operation") in HOST_CANCELABLE_OPERATIONS):
+            event = self._hostop_cancel_events.get(delivery_id)
+            if event is None:
+                return 409, {"ok": False,
+                             "reason": "cancellation_race",
+                             "detail": "the host operation is claimed but "
+                                       "no live cancellation handle is "
+                                       "available"}
+            event.set()
+            return 202, {"ok": True, "cancel_requested": True,
+                         "definitive": False,
+                         "delivery_id": delivery_id}
+        if state in hoststore.TERMINAL_STATES:
+            return 200, {"ok": True, "cancelled": False,
+                         "definitive": True, "job": job}
+        return 409, {
+            "ok": False, "reason": "cancellation_not_supported",
+            "detail": "this TouchDesigner delivery has crossed its "
+                      "cancellable host boundary; query the job for its "
+                      "definitive outcome",
+            "delivery_id": delivery_id, "state": state,
+        }
+
+    def cancel_host_job(self, body):
+        """Cancel owned local work without waking TouchDesigner.
+
+        Optional namespace/origin fields are defense-in-depth for callers that
+        already resolved a job. The authenticated peer route always supplies
+        both; legacy loopback callers may continue supplying only delivery_id.
+        """
+        try:
+            delivery_id = text_field(body, "delivery_id")
+            convoy_id = (text_field(
+                body, "convoy_id", required=False) or None)
+            origin_host_id = (text_field(
+                body, "origin_host_id", required=False) or None)
+        except Malformed as exc:
+            return self._refuse("cancel", "malformed", exc.detail, 400)
+        with self.lock:
+            return self._cancel_job_locked(
+                delivery_id, expected_convoy_id=convoy_id,
+                expected_origin_host_id=origin_host_id)
 
     def _merged_arguments(self, raw_arguments, idempotency_key, async_spec):
         """The arguments actually put on the wire: (arguments, injected,
@@ -1591,11 +6324,23 @@ class HostApp:
         if not isinstance(raw_arguments, dict):
             raise Malformed(f"arguments must be an object, got "
                             f"{type(raw_arguments).__name__}")
+        # SECURITY: `override` bypasses the NODE's own multi-session
+        # destructive gate (EnvoyExt._checkDestructiveGate short-circuits on
+        # a truthy override). It is a LOCAL-only escape hatch and must NEVER
+        # ride the Convoy relay -- CONVOY_PHASE3_PLAN section 6 lists "No
+        # override=True over the relay" under WHAT MUST NOT BE BUILT. Strip a
+        # caller-supplied override from EVERY relayed operation, sync or
+        # async, so the target always applies its own gate. The async
+        # `inject` contract may still force override=False deliberately.
         if not async_spec:
-            return dict(raw_arguments), [], []
+            base = dict(raw_arguments)
+            dropped = ["override"] if base.pop("override", None) is not None \
+                else []
+            return base, [], dropped
         allowed = async_spec.get("caller_args")
         dropped = []
         base = dict(raw_arguments)
+        override_present = base.pop("override", None) is not None
         if allowed is not None:
             dropped = sorted(k for k in base if k not in allowed)
             base = {k: v for k, v in base.items() if k in allowed}
@@ -1603,6 +6348,8 @@ class HostApp:
         key_arg = async_spec.get("key_arg", "idempotency_key")
         base[key_arg] = idempotency_key
         injected = sorted(set(async_spec.get("inject") or {}) | {key_arg})
+        if override_present:
+            dropped = sorted(set(dropped) | {"override"})
         return base, injected, dropped
 
     def _note_dispatch_event(self, delivery_id, event, detail):
@@ -1740,8 +6487,13 @@ class HostApp:
         return 409, {"ok": False, "reason": reason, "detail": detail}
 
     def _resolve_dispatch(self, delivery_id, operation, outcome, observed,
-                          detail, async_spec=None):
+                          detail, async_spec=None, job=None):
         """Phase c of dispatch_job -- called WITH self.lock held."""
+        if job is None:
+            job = self.db.get_job(delivery_id) or {
+                "delivery_id": delivery_id, "operation": operation,
+                "convoy_id": "unavailable",
+            }
         if outcome is mcpclient.UNREACHABLE:
             # The node refused the connection: the request was never
             # delivered, so the op did NOT run. Release the claim -- the
@@ -1813,6 +6565,7 @@ class HostApp:
                 "reason": "no_response",
                 "detail": detail or "no response from the node's Envoy",
                 "operation": operation})
+            self._release_operation_claim_locked(updated)
             try:
                 self.db.audit("hostapp", "dispatch_indeterminate",
                               {"delivery_id": delivery_id,
@@ -1887,14 +6640,17 @@ class HostApp:
                                        f"be written ({failure}); the drain "
                                        f"loop will retry the mirror"}
             started = updated.get("state") == "running"
+            if updated.get("state") in hoststore.TERMINAL_STATES:
+                self._release_operation_claim_locked(updated)
             return 200, {"ok": True, "dispatched": True, "started": started,
                          "job": updated}
         ok = outcome.get("ok")      # a real bool -- phase b enforced it
         result = outcome.get("result") if ok else {
             "error": outcome.get("error")}
-        result = _json_safe(result)
+        result = self._materialize_node_result(result, job)
         updated = self.db.record_sync_result(delivery_id, ok, observed,
                                              result=result)
+        self._release_operation_claim_locked(updated)
         try:
             self.db.audit("hostapp", "dispatched",
                           {"delivery_id": delivery_id, "ok": ok,
@@ -1966,9 +6722,10 @@ class HostApp:
                     return 500, {"ok": False,
                                  "reason": "recording_failed",
                                  "detail": detail}
-                self.db.mark_indeterminate(delivery_id, {
+                updated = self.db.mark_indeterminate(delivery_id, {
                     "reason": "verdict_recording_failed",
                     "detail": detail, "operation": operation})
+                self._release_operation_claim_locked(updated)
                 try:
                     self.db.audit("hostapp", "dispatch_recording_failed",
                                   {"delivery_id": delivery_id,
@@ -2011,6 +6768,7 @@ class HostApp:
             calls exactly one hardcoded read-only operation, with a
             shape-validated id the node itself minted.
         """
+        wake_lease = False
         # -- phase a: read the job, node and port -- under the lock -----
         with self.lock:
             if (not delivery_id or not isinstance(delivery_id, str)
@@ -2062,6 +6820,35 @@ class HostApp:
                 return 404, {"ok": False, "reason": "unknown_node",
                              "detail": job["node_id"]}
             port = node.get("envoy_port")
+            if node.get("perform_mode"):
+                if not node.get("wake_active") or not port:
+                    wake = self._send_node_wake(
+                        node, "acquire", delivery_id)
+                    if not wake.get("ok"):
+                        reason = wake.get("reason") or \
+                            "remote_wake_unavailable"
+                        self._note_poll_event(
+                            delivery_id, "poll_deferred",
+                            {"reason": reason})
+                        self._set_poll_backoff(
+                            delivery_id, self._now() + self.poll_backoff_s)
+                        return 409, {
+                            "ok": False, "reason": reason,
+                            "detail": "the running job's node is in Perform "
+                                      "Mode and cannot be remotely awakened",
+                        }
+                    self._note_poll_event(
+                        delivery_id, "node_wake_requested",
+                        {"reason": "perform_mode"})
+                    self._set_poll_backoff(
+                        delivery_id, self._now() + WAKE_RETRY_S)
+                    return 409, {
+                        "ok": False, "reason": "node_waking",
+                        "detail": "the target accepted a Perform wake; the "
+                                  "running job remains unchanged",
+                    }
+                self._send_node_wake(node, "touch", delivery_id)
+                wake_lease = True
             if not port:
                 # envoy_port is PER-LAUNCH and never persisted, so after
                 # a host restart every poll defers here until the node
@@ -2099,8 +6886,8 @@ class HostApp:
             # -- phase c: mirror the answer, under the lock -------------
             try:
                 with self.lock:
-                    return self._resolve_poll(delivery_id, node_job_id,
-                                              outcome, observed, detail)
+                    response = self._resolve_poll(
+                        delivery_id, node_job_id, outcome, observed, detail)
             except Exception as e:
                 # Contrast _downgrade_failed_recording: a dispatch holds
                 # a CLAIM, so a failed phase-c write must resolve it or
@@ -2115,10 +6902,14 @@ class HostApp:
                                        "detail": failure[:256]})
                 except Exception:
                     pass
-                return 500, {"ok": False, "reason": "poll_recording_failed",
-                             "detail": f"the node's answer could not be "
-                                       f"recorded ({failure}); the job is "
-                                       f"unchanged and stays running"}
+                response = (500, {
+                    "ok": False, "reason": "poll_recording_failed",
+                    "detail": f"the node's answer could not be recorded "
+                              f"({failure}); the job is unchanged and stays "
+                              "running"})
+            if wake_lease and not self._wake_result_running(response):
+                self._send_node_wake(node, "release", delivery_id)
+            return response
         finally:
             with self.lock:
                 # ATTEMPT-scoped, like _in_flight: a slow poll finishing
@@ -2264,6 +7055,7 @@ class HostApp:
                               "lifetime); the outcome is unobservable",
                     "node_job_id": node_job_id,
                     "node_record": _bounded_result(payload)})
+                self._release_operation_claim_locked(updated)
                 self._forget_poll(delivery_id)
                 try:
                     self.db.audit("hostapp", "poll_stale_indeterminate",
@@ -2315,9 +7107,17 @@ class HostApp:
         # done / error: the node's verdict on its own run. The terminal
         # payload is COPIED in -- the node's fetch-by-id window closes
         # at 24h, so the host's record is what survives.
+        terminal_job = self.db.get_job(delivery_id) or {
+            "delivery_id": delivery_id,
+            "convoy_id": "unavailable",
+            "operation": POLL_OPERATION,
+        }
+        terminal_result = self._materialize_node_result(
+            payload, terminal_job)
         updated = self.db.record_node_verdict(
             delivery_id, node_status, node_job_id=node_job_id,
-            observed_at=observed, result=_bounded_result(payload))
+            observed_at=observed, result=terminal_result)
+        self._release_operation_claim_locked(updated)
         self._forget_poll(delivery_id)
         try:
             self.db.audit("hostapp", "poll_finished",
@@ -2411,6 +7211,7 @@ class HostApp:
                 "node_message": entry["message"],
                 "first_unknown_at": entry["first"],
                 "observations": entry["count"]})
+            self._release_operation_claim_locked(updated)
             self._forget_poll(delivery_id)
             try:
                 self.db.audit("hostapp", "poll_node_forgot_job",
@@ -2429,6 +7230,90 @@ class HostApp:
             f"({entry['count']} of {POLL_UNKNOWN_MIN_OBSERVATIONS} "
             f"observations); the job stays running")
 
+    @staticmethod
+    def _pass_target_key(task):
+        """One rolling lane per node; corrupt/missing ids isolate by job."""
+        delivery_id, node_id = task
+        if isinstance(node_id, str) and node_id:
+            return "node:" + node_id
+        return "job:" + str(delivery_id)
+
+    def _run_rolling_pass(self, tasks, worker, account, *, stop, kind):
+        """Run a bounded, target-fair rolling set of futures.
+
+        Only active calls are submitted: pending work remains ordinary Python
+        data, never an executor's unbounded queue. At most one call per node is
+        active, so one hung target consumes one slot while healthy targets keep
+        replenishing the other slots. A stop prevents every later submission;
+        already-submitted calls are allowed to finish so their CAS/result
+        reconciliation remains authoritative.
+        """
+        try:
+            configured = int(self.pass_max_workers)
+        except (TypeError, ValueError, OverflowError):
+            configured = PASS_MAX_WORKERS
+        workers = max(1, min(PASS_MAX_WORKERS, configured))
+
+        queues = {}
+        ready = collections.deque()
+        for ordinal, task in enumerate(tasks):
+            key = self._pass_target_key(task)
+            queue = queues.get(key)
+            if queue is None:
+                queue = collections.deque()
+                queues[key] = queue
+                ready.append(key)
+            queue.append((ordinal, task))
+
+        active = {}
+        aborted = False
+
+        def stopping():
+            return stop is not None and stop.is_set()
+
+        with concurrent.futures.ThreadPoolExecutor(
+                max_workers=workers,
+                thread_name_prefix="convoy-%s" % kind) as executor:
+            def replenish():
+                nonlocal aborted
+                while ready and len(active) < workers:
+                    if stopping():
+                        aborted = True
+                        return
+                    key = ready.popleft()
+                    ordinal, task = queues[key].popleft()
+                    future = executor.submit(worker, task[0])
+                    active[future] = (ordinal, task, key)
+
+            replenish()
+            while active:
+                done, _pending = concurrent.futures.wait(
+                    tuple(active),
+                    return_when=concurrent.futures.FIRST_COMPLETED)
+                completed = []
+                for future in done:
+                    completed.append((*active.pop(future), future))
+                # A simultaneous completion wave accounts and replenishes in
+                # snapshot order, keeping tests/audits stable despite thread
+                # scheduling order.
+                completed.sort(key=lambda row: row[0])
+                for _ordinal, task, key, future in completed:
+                    try:
+                        outcome = future.result()
+                    except Exception as exc:
+                        account(task[0], None, exc)
+                    else:
+                        account(task[0], outcome, None)
+                    if queues[key]:
+                        ready.append(key)
+                if stopping():
+                    aborted = True
+                else:
+                    replenish()
+        if stopping():
+            aborted = True
+        return aborted
+
     def poll_once(self, stop=None):
         """Poll every currently-running node job once. Synchronous and
         directly testable; the background loop runs this before each
@@ -2440,43 +7325,60 @@ class HostApp:
         re-reads under the lock, and a job that settled in the window is
         just a skip.
 
-        stop: optional threading.Event checked between jobs, so a
-        shutdown aborts the pass after the CURRENT poll.
+        stop: optional threading.Event checked before every rolling
+        submission. Shutdown starts no new polls; the bounded active wave
+        finishes and reconciles its read results before the pass returns.
         """
-        running = [j["delivery_id"] for j in self.db.jobs(state="running")]
+        running_jobs = self.db.jobs(state="running")
+        running = [j["delivery_id"] for j in running_jobs]
         summary = {"examined": len(running), "finished": 0, "failed": 0,
                    "running": 0, "indeterminate": 0, "unreachable": 0,
                    "deferred": 0, "skipped": 0, "errors": 0, "backoff": 0,
                    "aborted": False}
         now = self._now()
-        for delivery_id in running:
+        eligible = []
+        for job in running_jobs:
             if stop is not None and stop.is_set():
                 summary["aborted"] = True
                 break
+            delivery_id = job["delivery_id"]
             with self.lock:
                 held_until = self._poll_backoff.get(delivery_id)
             if held_until is not None and held_until > now:
                 summary["backoff"] += 1
                 continue
-            try:
-                code, payload = self.poll_job(delivery_id)
-            except Exception:
+            eligible.append((delivery_id, job.get("node_id")))
+
+        def account_poll(_delivery_id, outcome, error):
+            if error is not None:
                 # One job's failure costs ONE job, never the rest of the
                 # pass (drain_once learned this the hard way).
                 summary["errors"] += 1
-                continue
-            if payload.get("polled"):
-                bucket = _POLL_STATE_BUCKET.get(
-                    payload.get("job", {}).get("state"))
-                summary[bucket if bucket else "errors"] += 1
-            else:
-                bucket = _POLL_BUCKET.get(payload.get("reason"))
-                if bucket is not None:
-                    summary[bucket] += 1
-                elif code == 200:
-                    summary["skipped"] += 1   # settled in the window
+                return
+            try:
+                code, payload = outcome
+                if payload.get("polled"):
+                    bucket = _POLL_STATE_BUCKET.get(
+                        payload.get("job", {}).get("state"))
+                    summary[bucket if bucket else "errors"] += 1
                 else:
-                    summary["errors"] += 1
+                    bucket = _POLL_BUCKET.get(payload.get("reason"))
+                    if bucket is not None:
+                        summary[bucket] += 1
+                    elif code == 200:
+                        summary["skipped"] += 1   # settled in the window
+                    else:
+                        summary["errors"] += 1
+            except Exception:
+                summary["errors"] += 1
+
+        if eligible:
+            summary["aborted"] = (
+                self._run_rolling_pass(
+                    eligible, self.poll_job, account_poll,
+                    stop=stop, kind="poll") or summary["aborted"])
+        elif stop is not None and stop.is_set():
+            summary["aborted"] = True
         # Prune against THIS pass's own snapshot -- never the drain
         # maps' queued view, which would wipe every poll entry. Same
         # conservative rule: keep anything still live, and keep an
@@ -2513,10 +7415,16 @@ class HostApp:
         because dispatch_job re-reads and CASes under the lock -- a job
         that resolved or got claimed in the window is just a skip.
 
-        stop: optional threading.Event checked between jobs, so a
-        shutdown aborts the pass after the CURRENT forward rather than
-        after the whole queue.
+        stop: optional threading.Event checked before every rolling
+        submission. Shutdown starts no new dispatches; already-submitted
+        calls finish so their claim/verdict reconciliation is never abandoned.
         """
+        # Reconcile controller operation claims before taking a queue
+        # snapshot.  This frees dead-controller queued work and preserves
+        # running writer exclusion across long sleeps.
+        with self.lock:
+            self._reconcile_operation_claims_locked()
+
         # Reap claims stranded by a failed phase-c write: 'dispatching'
         # on disk with no forward in flight in THIS process can never
         # resolve on its own -- without this, such a job is invisible to
@@ -2601,12 +7509,13 @@ class HostApp:
                         or current.get("state") != "dispatching"):
                     continue        # resolved in the window -- fine
                 try:
-                    self.db.mark_indeterminate(did, {
+                    updated = self.db.mark_indeterminate(did, {
                         "reason": "claim_stranded",
                         "detail": "claimed for dispatch but no forward "
                                   "is in flight in this process; a "
                                   "recording failure likely orphaned it",
                         "operation": current.get("operation")})
+                    self._release_operation_claim_locked(updated)
                 except Exception:
                     continue        # still unwritable; next pass retries
                 stranded += 1       # the reap LANDED -- count it even
@@ -2616,8 +7525,8 @@ class HostApp:
                 except Exception:
                     pass
 
-        queued = [j["delivery_id"] for j in snapshot
-                  if j.get("state") == "queued"]
+        queued_jobs = [j for j in snapshot if j.get("state") == "queued"]
+        queued = [j["delivery_id"] for j in queued_jobs]
         with self.lock:
             # Rescale the bookkeeping caps BEFORE the per-job loop: the
             # maps must be able to hold one entry per queued job within
@@ -2632,44 +7541,59 @@ class HostApp:
                    "refused": 0, "stranded": stranded, "requeued": requeued,
                    "handoffs": handoffs, "aborted": False}
         now = self._now()
-        for delivery_id in queued:
+        eligible = []
+        for job in queued_jobs:
             if stop is not None and stop.is_set():
                 summary["aborted"] = True
                 break
+            delivery_id = job["delivery_id"]
             with self.lock:
                 held_until = self._drain_backoff.get(delivery_id)
             if held_until is not None and held_until > now:
                 summary["backoff"] += 1
                 continue
-            try:
-                code, payload = self.dispatch_job(delivery_id)
-            except Exception:
+            eligible.append((delivery_id, job.get("node_id")))
+
+        def account_dispatch(_delivery_id, outcome, error):
+            if error is not None:
                 # One job's failure must cost ONE job, never the rest of
                 # the pass (a leading bad job would wedge the whole
                 # queue every pass -- round-4 panel).
                 summary["errors"] += 1
-                continue
-            if payload.get("dispatched"):
-                summary["dispatched"] += 1
-                state = payload.get("job", {}).get("state")
-                if state == "indeterminate":
-                    # Surfaced separately: 16.4 says a may-have-run must
-                    # never be lost from view, a plain 'dispatched' count
-                    # would hide it.
-                    summary["indeterminate"] += 1
-                elif state == "running":
-                    # An async HANDOFF, not a completed operation: the
-                    # work is now running on the node and the poll pass
-                    # owns its outcome.
-                    summary["started"] += 1
-            else:
-                bucket = _DRAIN_BUCKET.get(payload.get("reason"))
-                if bucket is not None:
-                    summary[bucket] += 1
-                elif code == 200:
-                    summary["skipped"] += 1   # raced: claimed or terminal
+                return
+            try:
+                code, payload = outcome
+                if payload.get("dispatched"):
+                    summary["dispatched"] += 1
+                    state = payload.get("job", {}).get("state")
+                    if state == "indeterminate":
+                        # Surfaced separately: 16.4 says a may-have-run must
+                        # never be lost from view, a plain 'dispatched' count
+                        # would hide it.
+                        summary["indeterminate"] += 1
+                    elif state == "running":
+                        # An async HANDOFF, not a completed operation: the
+                        # work is now running on the node and the poll pass
+                        # owns its outcome.
+                        summary["started"] += 1
                 else:
-                    summary["errors"] += 1    # unknown_job / unknown_node
+                    bucket = _DRAIN_BUCKET.get(payload.get("reason"))
+                    if bucket is not None:
+                        summary[bucket] += 1
+                    elif code == 200:
+                        summary["skipped"] += 1  # raced: claimed or terminal
+                    else:
+                        summary["errors"] += 1   # unknown_job / unknown_node
+            except Exception:
+                summary["errors"] += 1
+
+        if eligible:
+            summary["aborted"] = (
+                self._run_rolling_pass(
+                    eligible, self.dispatch_job, account_dispatch,
+                    stop=stop, kind="drain") or summary["aborted"])
+        elif stop is not None and stop.is_set():
+            summary["aborted"] = True
         # Keep the per-job maps from outliving their jobs -- but never
         # drop an entry whose job is still LIVE. The snapshot is a
         # start-of-pass view: an entry set mid-pass (a manual /dispatch,
@@ -2796,9 +7720,179 @@ class HostApp:
         if now - self._last_reap < self.reap_interval_s:
             return
         self._last_reap = now
-        result = self.db.reap(self.job_retention_s, now=now)
+        result = self.db.reap(
+            self.job_retention_s, now=now,
+            on_reap=self._release_reaped_job_artifact)
         if result.get("jobs") or result.get("markers"):
             self._audit_pass("reap", result)
+        # The ArtifactStore has its own maintenance -- TTL expiry, consumed/
+        # expired capability pruning, stale-partial recovery -- that runs
+        # ONLY from cleanup().  Nothing else schedules it, so without this the
+        # index grows unbounded toward MAX_STATE_BYTES for the life of the
+        # process.  cleanup() takes its own store lock (never the app lock),
+        # and a failure here must not end the reap cadence.
+        try:
+            self.artifacts.cleanup()
+        except Exception as e:
+            try:
+                with self.lock:
+                    self.db.audit("hostapp", "artifact_cleanup_error", {
+                        "error": f"{type(e).__name__}: {e}"})
+            except Exception:
+                pass
+
+    def _release_reaped_job_artifact(self, job):
+        """Drop the durable cache hold after its owning job is reaped."""
+        self._release_acknowledged_job_artifact(job)
+
+    def _record_lifecycle_recovery_result(self, attempt, result):
+        """Reconcile one private-ledger verdict into its HostStore delivery.
+
+        Called by the recovery worker.  A live dispatch keeps its in-memory
+        marker until it records the result itself; touching it here would race
+        phase C.  After a host restart no marker survives, and HostStore's
+        conservative boot sweep has changed the claim to indeterminate, so
+        the lifecycle-specific reconciliation door is then authoritative.
+        """
+        operation_id = attempt.get("operation_id")
+        if not isinstance(operation_id, str) or not isinstance(result, dict):
+            return False
+        with self.lock:
+            if operation_id in self._in_flight:
+                return False
+            job = self.db.get_job(operation_id)
+            if job is None:
+                return True
+            if job.get("operation") != "convoy_restart_node":
+                return False
+            if (attempt.get("node_id") != job.get("node_id")
+                    or attempt.get("convoy_id") != job.get("convoy_id")
+                    or attempt.get("old_runtime_id")
+                    != job.get("expected_runtime_id")):
+                return False
+            state = job.get("state")
+            try:
+                if state == "dispatching":
+                    updated = self.db.record_host_result(
+                        operation_id, result.get("ok") is True,
+                        self._now(), result=result)
+                elif state == "indeterminate":
+                    updated = self.db.reconcile_lifecycle_result(
+                        operation_id, result.get("ok") is True,
+                        self._now(), result=result)
+                elif state in ("succeeded", "failed"):
+                    desired = "succeeded" if result.get("ok") is True \
+                        else "failed"
+                    if (state != desired or job.get("result") != result
+                            or job.get("verdict_source") not in (
+                                "host_operation",
+                                "host_operation_recovery")):
+                        return False
+                    updated = job
+                else:
+                    return False
+                if updated.get("state") in hoststore.TERMINAL_STATES:
+                    self._release_operation_claim_locked(updated)
+                self.db.audit("hostapp", "lifecycle_recovery_recorded", {
+                    "delivery_id": operation_id,
+                    "state": updated.get("state"),
+                    "code": result.get("code")})
+                return True
+            except Exception as exc:
+                self._audit_best_effort(
+                    "lifecycle_recovery_record_failed", {
+                        "delivery_id": operation_id,
+                        "error": type(exc).__name__})
+                return False
+
+    def recover_lifecycle_once(self):
+        """Run one independently testable durable restart recovery pass."""
+        lifecycle = self.lifecycle
+        recover = getattr(lifecycle, "recover_committed_restarts", None)
+        if not callable(recover):
+            return {"available": False, "examined": 0, "recovered": 0,
+                    "reconciled": 0, "busy": 0, "errors": 0,
+                    "results": []}
+
+        def record(attempt, result):
+            operation_id = attempt.get("operation_id")
+            with self.lock:
+                if operation_id in self._lifecycle_recovery_done:
+                    return
+            if self._record_lifecycle_recovery_result(attempt, result):
+                with self.lock:
+                    self._lifecycle_recovery_done.add(operation_id)
+
+        summary = recover(result_callback=record)
+        if not isinstance(summary, dict):
+            raise RuntimeError("lifecycle recovery returned invalid summary")
+        visible = {
+            item.get("operation_id") for item in summary.get("results", [])
+            if isinstance(item, dict)
+            and isinstance(item.get("operation_id"), str)}
+        with self.lock:
+            self._lifecycle_recovery_done.intersection_update(visible)
+        return dict(summary, available=True)
+
+    def _lifecycle_recovery_loop(self, stop, interval_s):
+        while True:
+            try:
+                self.recover_lifecycle_once()
+            except Exception as exc:
+                self._audit_best_effort(
+                    "lifecycle_recovery_loop_error", {
+                        "error": type(exc).__name__})
+            if stop.wait(interval_s):
+                return
+
+    def start_lifecycle_recovery_loop(
+            self, interval_s=LIFECYCLE_RECOVERY_INTERVAL_S):
+        """Start immediate startup recovery plus bounded interval retries."""
+        try:
+            interval_s = float(interval_s)
+        except (TypeError, ValueError):
+            return False
+        if not math.isfinite(interval_s) or interval_s <= 0.0:
+            return False
+        if not callable(getattr(
+                self.lifecycle, "recover_committed_restarts", None)):
+            return False
+        with self.lock:
+            if (self._lifecycle_recovery_thread is not None
+                    and self._lifecycle_recovery_thread.is_alive()):
+                return False
+            stop = threading.Event()
+            thread = threading.Thread(
+                target=self._lifecycle_recovery_loop,
+                args=(stop, interval_s), daemon=True,
+                name="convoy-lifecycle-recovery")
+            thread.start()
+            self._lifecycle_recovery_stop = stop
+            self._lifecycle_recovery_thread = thread
+        return True
+
+    def stop_lifecycle_recovery_loop(self, timeout_s=None):
+        """Stop recovery without pretending a safety restoration vanished."""
+        with self.lock:
+            thread = self._lifecycle_recovery_thread
+            if self._lifecycle_recovery_stop is not None:
+                self._lifecycle_recovery_stop.set()
+        if thread is None:
+            return True
+        if timeout_s is None:
+            timeout_s = (lifecycle_mod.DEFAULT_RESTART_RECOVERY_TIMEOUT_S
+                         + 5.0)
+        thread.join(timeout=max(0.0, float(timeout_s)))
+        if thread.is_alive():
+            self._audit_best_effort(
+                "lifecycle_recovery_stop_timeout", {
+                    "timeout_s": timeout_s})
+            return False
+        with self.lock:
+            if self._lifecycle_recovery_thread is thread:
+                self._lifecycle_recovery_thread = None
+                self._lifecycle_recovery_stop = None
+        return True
 
     def start_drain_loop(self, interval_s=2.0):
         """Start the autonomous dispatcher: a daemon thread draining the
@@ -2842,10 +7936,9 @@ class HostApp:
         On False the handles are KEPT: status() keeps reporting the live
         loop and start_drain_loop keeps refusing, instead of lying that
         the loop is gone and letting a second one start over it. The
-        default bound covers one full forward (drain_once checks the
-        stop event between jobs, so a stopping pass aborts after the
-        CURRENT forward, never the whole queue). Safe to call when no
-        loop is running."""
+        default bound covers the bounded active poll and drain waves. A stop
+        prevents rolling replenishment but lets already-submitted calls finish
+        their CAS/reconciliation. Safe to call when no loop is running."""
         with self.lock:
             thread = self._drain_thread
             if self._drain_stop is not None:
@@ -2853,10 +7946,9 @@ class HostApp:
         if thread is None:
             return True
         if timeout_s is None:
-            # TWO forwards, not one: a tick can be inside a poll forward
-            # AND then a dispatch forward, and each pass only checks the
-            # stop event BETWEEN jobs. Bounding to a single timeout made
-            # a healthy stop report failure.
+            # TWO pass waves, not one: a tick can be inside active poll calls
+            # and then active dispatch calls. Bounding to a single timeout
+            # made a healthy stop report failure.
             timeout_s = 2 * mcpclient.DEFAULT_TIMEOUT_S + 5.0
         thread.join(timeout=timeout_s)
         if thread.is_alive():
@@ -2891,7 +7983,7 @@ class HostApp:
         return code, payload
 
     def _gate_operation(self, node, operation, controller_id, source,
-                        expected_runtime_id=None, peer=None):
+                        expected_runtime_id=None, peer=None, arguments=None):
         """Registry gate (A-1), runtime precondition (A-22), and lease
         gate (A-17) -- shared by BOTH job-creating paths, so /jobs and
         /envelope can never diverge into two authorities. Returns None
@@ -2904,18 +7996,41 @@ class HostApp:
         reason the two create paths share this one: two authorities on
         what may be invoked is how they drift apart.
         """
-        entry = self.operations.get(operation)
-        if entry is None:
+        # The node's own Enable Convoy parameter is the authoritative
+        # participation gate.  A disabled node may remain in the durable
+        # directory for identity/history, but no new or queued operation may
+        # cross into it.  Re-checked here at both admission and dispatch.
+        if not bool(node.get("enabled", True)):
             return self._refuse(
-                source, "operation_not_exposed",
-                f"{operation!r} is not in this host's operation registry",
+                source, "node_disabled",
+                "the target node has disabled Convoy participation",
+                409, node, {"operation": operation[:MAX_OPERATION_CHARS]})
+        realm_refusal = self._realm_operation_refusal(node.get("convoy_id"))
+        if realm_refusal is not None:
+            reason, detail = realm_refusal
+            return self._refuse(
+                source, reason, detail, 409, node,
+                {"operation": operation[:MAX_OPERATION_CHARS]})
+        try:
+            gating = effective_operation_gating(
+                self.operations, operation, arguments)
+        except OperationRegistryError as e:
+            return self._refuse(
+                source, e.reason, e.detail, e.code, node,
+                {"operation": operation[:MAX_OPERATION_CHARS]})
+        if (gating["executes_arbitrary_code"]
+                and not self.policy.allow_td_python(node["node_id"])):
+            return self._refuse(
+                source, "td_python_not_approved",
+                f"{operation!r} can execute Python; enable Allow Execute "
+                f"TD Python on the target node before relaying it",
                 403, node, {"operation": operation[:MAX_OPERATION_CHARS]})
-        gating = gating_of(entry)
-        if gating["executes_arbitrary_code"]:
+        if (operation == "convoy_shell"
+                and self.policy.allow_full_shell() is not True):
             return self._refuse(
-                source, "operation_not_relayable",
-                f"{operation!r} executes arbitrary code; refused until "
-                f"the TD-Python gate exists (A-1)",
+                source, "full_shell_not_approved",
+                "convoy_shell requires Allow Full Shell to be enabled "
+                "locally on the target host",
                 403, node, {"operation": operation[:MAX_OPERATION_CHARS]})
         if peer is not None and not gating["remote_exposed"]:
             # A-1 / R-2, ENFORCED. This flag was written a slice before
@@ -2975,13 +8090,21 @@ class HostApp:
                     f"now {current!r}",
                     409, node)
         now = self._now()
-        if controller_id and gating["mutating"]:
-            # Issuing a MUTATION proves the controller is alive. Reads
-            # deliberately do not: a read needs no lease, so heartbeating
-            # on one would let any caller keep a dead controller's lease
-            # standing by naming it (controller_id is self-asserted).
-            # A read-only controller keeps itself alive via /heartbeat.
-            self.leases.heartbeat(controller_id, now)
+        self._reconcile_operation_claims_locked()
+        if (gating["mutating"]
+                and self._refresh_unreadable_operation_fence_locked()):
+            return self._refuse(
+                source, "operation_state_unreadable",
+                "one or more durable Convoy jobs are unreadable, so the "
+                "host cannot prove that no mutation is already in flight; "
+                "reads remain available but new mutations fail closed",
+                503, node, {"operation": operation[:MAX_OPERATION_CHARS],
+                            "unreadable_jobs": len(
+                                self._unreadable_operation_jobs)})
+        # Operation bodies do not refresh controller liveness. The explicit
+        # authenticated heartbeat route owns that authority; otherwise a
+        # caller could name a dead controller on a harmless read and keep its
+        # exclusive lease alive indefinitely.
         try:
             self.leases.authorize(node["node_id"], controller_id,
                                   gating["mutating"], now)
@@ -3041,8 +8164,9 @@ class HostApp:
             except Malformed as e:
                 return self._refuse("peer", peers_mod.REASON_UNKNOWN,
                                     e.detail, 403)
-            peer_decision = self.peers.authorize_peer(peer_host,
-                                                      peer_fingerprint)
+            peer_decision = self.peers.authorize_peer(
+                peer_host, peer_fingerprint,
+                convoy_id=envelope.get("convoy_id"))
             if not peer_decision.allowed:
                 return self._refuse(
                     "peer", peer_decision.reason, peer_decision.detail,
@@ -3125,22 +8249,23 @@ class HostApp:
             # healing here can only produce a refusal, never an acceptance.
             signer = protocol.HmacSigner(
                 self.db.ensure_convoy_psk(node["convoy_id"]))
-        entry = self.operations.get(operation)
-        gating = gating_of(entry) if entry else None
+        try:
+            gating = effective_operation_gating(
+                self.operations, operation, envelope.get("arguments"))
+        except OperationRegistryError:
+            gating = None
         # The A-22 precondition is asked of RELAYABLE operations only.
         # An unaudited or unknown operation is refused outright by the
         # registry gate below, and demanding expected_runtime_id first
         # would answer "you forgot a field" to a request whose real
         # problem is that it may never run here at all.
-        runtime_required = bool(gating
-                                and not gating["executes_arbitrary_code"]
-                                and gating["runtime_required"])
+        runtime_required = bool(gating and gating["runtime_required"])
         try:
             # my_node_id is the record we looked up BY the envelope's
             # target id, so wrong_target cannot fire here -- it becomes
             # meaningful when a node verifies for itself (Phase 2+). The
             # real unknown-target protection is the lookup refusal above.
-            protocol.verify_envelope(
+            accepted_timing = protocol.verify_envelope(
                 envelope, signer, node["convoy_id"], node["node_id"],
                 my_runtime_id=node.get("runtime_id"), now=self._now(),
                 runtime_required=runtime_required)
@@ -3182,7 +8307,7 @@ class HostApp:
         refusal = self._gate_operation(
             node, operation, controller_id, source="envelope",
             expected_runtime_id=envelope.get("expected_runtime_id"),
-            peer=peer_decision)
+            peer=peer_decision, arguments=arguments)
         if refusal is not None:
             return refusal
         try:
@@ -3196,11 +8321,15 @@ class HostApp:
                 # dispatch (stale_admission). None on the loopback path.
                 origin_admission_id=(peer_decision.admission_id
                                      if peer_decision is not None
-                                     else None))
+                                     else None),
+                accepted_timing=accepted_timing)
         except hoststore.IdempotencyOriginConflict as e:
             return self._refuse(
                 "envelope", e.reason, str(e), 409, node,
                 {"operation": operation[:MAX_OPERATION_CHARS]})
+        claim_refusal = self._ensure_operation_claim_locked(job, "envelope")
+        if claim_refusal is not None:
+            return claim_refusal
         # The ack carries the HOST's delivery_id (cj_...), the id of the
         # routing record -- NOT A-22's target-minted job_id, which is the
         # node's own job_<8hex> and does not exist until a node accepts
@@ -3224,9 +8353,7 @@ class HostApp:
             # talking to a host it does not understand. Folded in only
             # when set, so the operations that predate the async slice
             # keep their existing digests byte-identical.
-            side_effects = dict(entry.get("side_effects") or {})
-            if entry.get("async_job"):
-                side_effects["async_job"] = True
+            side_effects = operation_capability_side_effects(entry)
             # gating_of, not entry.get: the digest must describe the
             # gating that is actually ENFORCED, defaults included, or a
             # controller could match digests with a host that treats the
@@ -3247,27 +8374,22 @@ class HostApp:
                      "manifest": manifest.to_dict()}
 
     def build_remote_manifest(self):
-        """The manifest a PEER sees -- FILTERED to remote_exposed
-        operations only.
+        """The manifest a peer sees, filtered by explicit remote exposure.
 
-        A peer must never even see run_tests or save_project (they are
-        remote_exposed False), so refuse-before-send is honest: a
-        controller reads this and never tries to relay something the host
-        would refuse. This is a VIEW filter, not slice 6's digest break:
-        each operation's digest is byte-identical to build_manifest's, so
-        no cross-version compatibility changes here. Slice 6 folds
-        remote_exposed INTO the digest (the deliberate one-time break)
-        along with the full A-5 boundary suite; until then, hiding the
-        non-exposed rows is the strictly-safer subset.
+        The reviewed registry exposes every node operation EXCEPT the two
+        worker-only escalation operations (run_tests, save_project), which a
+        peer must never even see (remote_exposed False). The filter also stays
+        fail-closed for future/local-only entries and sparse extensions.
+        Per-node code approval is deliberately not baked into this host-wide
+        manifest -- it is mutable node policy checked at admission and
+        dispatch, while operation compatibility is stable.
         """
         manifest = capabilities.CapabilityManifest(protocol.PROTOCOL, None)
         for name in sorted(self.operations):
             entry = self.operations[name]
             if not gating_of(entry)["remote_exposed"]:
                 continue
-            side_effects = dict(entry.get("side_effects") or {})
-            if entry.get("async_job"):
-                side_effects["async_job"] = True
+            side_effects = operation_capability_side_effects(entry)
             manifest.add(name, capabilities.operation_digest(
                 name,
                 schema=entry.get("schema"),
@@ -3312,13 +8434,11 @@ class HostApp:
         monotonic integer sequence with SSE push is the A-46 upgrade,
         deferred.
 
-        LOCK-FREE: it reads only self.db.get_job, a pure atomic read of a
-        job file (OSError/ValueError -> None), exactly the pattern
-        status() uses off the lock. The peer handler has already
-        authorized the peer; this adds per-peer OWNERSHIP (the job's
-        origin must be this peer). Any future enrichment from lock-guarded
-        in-memory state MUST take self.lock -- the peer GET path holds
-        none.
+        The durable record read stays lock-free.  After ownership is proven,
+        one short lock section refreshes the submitting controller and its
+        exact operation claim.  Polling is therefore the idle heartbeat for
+        a long-running call, without holding the host lock across disk or LAN
+        I/O.
         """
         job = self.db.get_job(delivery_id) if delivery_id else None
         # NOT FOUND covers three cases a peer must not be able to tell
@@ -3328,6 +8448,8 @@ class HostApp:
         if job is None or (job.get("origin_host_id") or None) != host_id:
             return 404, {"ok": False, "reason": "not_found",
                          "delivery_id": str(delivery_id)[:64]}
+        with self.lock:
+            self._refresh_job_controller_locked(job)
         updated = job.get("updated")
         try:
             updated_f = float(updated)
@@ -3356,7 +8478,801 @@ class HostApp:
         return 200, {"ok": True, "changed": True, "cursor": updated_f,
                      "job": view}
 
+    def peer_cancel_job(self, origin_host_id, convoy_id, delivery_id,
+                        authenticated_fingerprint=None):
+        """Cancel only a delivery owned by this authenticated peer/realm."""
+        try:
+            convoy_id = identity.normalize_convoy_id(convoy_id)
+        except identity.IdentityError:
+            return 400, {"ok": False, "reason": "malformed"}
+        with self.lock:
+            decision = self.peers.authorize_peer(
+                origin_host_id, authenticated_fingerprint,
+                convoy_id=convoy_id)
+            if not decision.allowed:
+                return _REFUSAL_HTTP.get(decision.reason, 403), {
+                    "ok": False, "reason": decision.reason,
+                    "detail": decision.detail,
+                }
+            # Ownership is checked before realm diagnostics so an admitted
+            # peer cannot use cancellation as an existence oracle for another
+            # origin's job on an unbound/conflicted target.
+            job = self.db.get_job(delivery_id)
+            if (job is None or job.get("convoy_id") != convoy_id
+                    or job.get("origin_host_id") != origin_host_id):
+                return 404, {"ok": False, "reason": "unknown_job",
+                             "detail": delivery_id}
+            realm_refusal = self._realm_operation_refusal(convoy_id)
+            if realm_refusal is not None:
+                reason, detail = realm_refusal
+                return 409, {"ok": False, "reason": reason,
+                             "detail": detail}
+            return self._cancel_job_locked(
+                delivery_id, expected_convoy_id=convoy_id,
+                expected_origin_host_id=origin_host_id)
+
     # -- LAN transport (Phase 3 slice 3) ---------------------------------
+
+    @staticmethod
+    def _session_auth_context(record):
+        """Return the exact immutable (fingerprint, SPKI) pin for a peer."""
+        if not isinstance(record, dict):
+            return None
+        fingerprint = record.get("fingerprint")
+        cert_pem = record.get("cert_pem")
+        if not fingerprint or not cert_pem:
+            return None
+        try:
+            certificate_der = ssl.PEM_cert_to_DER_cert(cert_pem)
+            public_der = hostkeys.public_der_from_certificate(certificate_der)
+        except (ValueError, TypeError, ssl.SSLError,
+                hostkeys.HostKeyError):
+            return None
+        if hostkeys.fingerprint(public_der) != fingerprint:
+            return None
+        return fingerprint, bytes(public_der)
+
+    def _session_peer_config(self, record):
+        context = self._session_auth_context(record)
+        if context is None:
+            return None
+        targets, _error = self._peer_targets_from_record(record)
+        endpoints = tuple(sessions_mod.PeerEndpoint(
+            target.address, target.port, server_name=target.address)
+            for target in targets)
+        return record.get("host_id"), endpoints, context
+
+    def _session_configs(self):
+        """Snapshot only peers authorized for a currently active namespace."""
+        with self.lock:
+            namespaces = tuple(self._active_convoy_ids_locked())
+            records = list(self.peers.peers())
+            configs = []
+            for record in records:
+                host_id = record.get("host_id")
+                if not host_id or not any(
+                        self.peers.authorize_peer(
+                            host_id, record.get("fingerprint"),
+                            convoy_id=namespace).allowed
+                        for namespace in namespaces):
+                    continue
+                config = self._session_peer_config(record)
+                if config is not None:
+                    configs.append(config)
+        return namespaces, configs
+
+    def _session_hello_profile(self):
+        namespaces = self.active_convoy_ids()
+        manifest = self.build_remote_manifest().to_dict()
+        return sessions_mod.HelloProfile(namespaces, {
+            "peer_protocol": "convoy-peer/1",
+            "envelope_protocol": protocol.PROTOCOL,
+            "manifest_digest": manifest.get("manifest_digest"),
+            "max_frame_bytes": ws_mod.MAX_FRAME_BYTES,
+            "artifact_transport": "https",
+            "control_transport": "wss",
+        })
+
+    def _session_hello_sig(self):
+        profile = self._session_hello_profile()
+        material = json.dumps(
+            {"namespaces": profile.namespaces,
+             "capabilities": profile.capability_summary},
+            sort_keys=True, separators=(",", ":"), allow_nan=False)
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+    def _dial_peer_session(self, peer_host_id, endpoint, timeout_s):
+        """Return a pinned mTLS socket without sending any request bytes."""
+        with self.lock:
+            record = self.peers.get(peer_host_id)
+            if record is None:
+                raise peerclient.PeerSocketUnavailable("peer is unknown")
+            namespaces = self._active_convoy_ids_locked()
+            if not any(self.peers.authorize_peer(
+                    peer_host_id, record.get("fingerprint"),
+                    convoy_id=namespace).allowed
+                    for namespace in namespaces):
+                raise peerclient.PeerSocketUnavailable(
+                    "peer is not currently authorized")
+            targets, error = self._peer_targets_from_record(record)
+            target = next((candidate for candidate in targets
+                           if candidate.address == endpoint.address
+                           and candidate.port == endpoint.port), None)
+            keys = self.hostkeys
+        if target is None or keys is None:
+            raise peerclient.PeerSocketUnavailable(
+                error or "peer endpoint is no longer configured")
+        return peerclient.open_authenticated_socket(
+            target, keys, timeout=timeout_s)
+
+    def _start_peer_session_manager(self):
+        if self.hostkeys is None or not self.active_convoy_ids():
+            return None
+        with self._session_manager_lock:
+            manager = self.session_manager
+            if manager is not None and not manager.is_stopped:
+                return manager
+            manager = sessions_mod.HostPairSessionManager(
+                self.host_id, self._dial_peer_session,
+                self._session_hello_profile, self._handle_session_rpc,
+                websocket_path=peerserver.ROUTE_SESSION,
+                max_peers=peerserver.DEFAULT_MAX_CONNECTIONS,
+                dial_workers=8,
+                session_options={
+                    "max_pending": 128,
+                    "max_inbound_queue": 128,
+                    "handler_workers": 4,
+                    "ping_interval_s": 15.0,
+                    "idle_timeout_s": 45.0,
+                },
+                name=f"ConvoyWSS-{self.host_id}")
+            namespaces, configs = self._session_configs()
+            for host_id, endpoints, context in configs:
+                manager.configure_peer(
+                    host_id, endpoints,
+                    authentication_context=context)
+            manager.start()
+            self.session_manager = manager
+            self._session_hello_signature = self._session_hello_sig()
+        self._audit_best_effort(
+            "peer_sessions_started",
+            {"namespaces": list(namespaces), "peers": len(configs)})
+        return manager
+
+    def _stop_peer_session_manager(self, timeout_s=2.0):
+        lock = getattr(self, "_session_manager_lock", None)
+        if lock is None:
+            return
+        with lock:
+            manager = getattr(self, "session_manager", None)
+            self.session_manager = None
+            self._session_hello_signature = None
+        if manager is not None:
+            try:
+                manager.stop(timeout_s=max(0.01, float(timeout_s)))
+            except Exception:
+                pass
+
+    def reconcile_peer_sessions(self):
+        """Converge WSS trust/endpoints without holding HostApp's lock."""
+        manager = self.session_manager
+        if manager is None or manager.is_stopped:
+            return self._start_peer_session_manager()
+        namespaces, configs = self._session_configs()
+        if not namespaces:
+            self._stop_peer_session_manager()
+            return None
+        desired = {config[0] for config in configs}
+        try:
+            current = {item.peer_host_id for item in manager.snapshot()}
+        except sessions_mod.PairSessionError:
+            return None
+        for host_id in current.difference(desired):
+            try:
+                manager.revoke_peer(host_id)
+            except sessions_mod.PairSessionError:
+                pass
+        for host_id, endpoints, context in configs:
+            try:
+                manager.configure_peer(
+                    host_id, endpoints,
+                    authentication_context=context)
+            except sessions_mod.PeerRevoked:
+                manager.restore_peer(
+                    host_id, endpoints,
+                    authentication_context=context)
+            except sessions_mod.PairSessionError:
+                continue
+        signature = self._session_hello_sig()
+        if signature != self._session_hello_signature:
+            try:
+                manager.refresh_hello()
+                self._session_hello_signature = signature
+            except sessions_mod.PairSessionError:
+                pass
+        return manager
+
+    def prepare_peer_session(self, host_id, fingerprint, public_der):
+        """Authorize/configure the exact certificate before WSS hello."""
+        public_der = bytes(public_der)
+        if hostkeys.fingerprint(public_der) != fingerprint:
+            raise sessions_mod.PeerRevoked("peer certificate changed")
+        with self.lock:
+            record = self.peers.get(host_id)
+            namespaces = self._active_convoy_ids_locked()
+            if record is None or not any(self.peers.authorize_peer(
+                    host_id, fingerprint, convoy_id=namespace).allowed
+                    for namespace in namespaces):
+                raise sessions_mod.PeerRevoked(
+                    "peer is not authorized for an active namespace")
+            config = self._session_peer_config(record)
+        if config is None or config[2] != (fingerprint, public_der):
+            raise sessions_mod.PeerRevoked(
+                "authenticated certificate does not match current pin")
+        manager = self.session_manager
+        if manager is None or manager.is_stopped:
+            manager = self._start_peer_session_manager()
+        if manager is None:
+            raise sessions_mod.PeerUnavailable(
+                "Convoy WSS manager is not active")
+        try:
+            manager.configure_peer(
+                host_id, config[1], authentication_context=config[2])
+        except sessions_mod.PeerRevoked:
+            manager.restore_peer(
+                host_id, config[1], authentication_context=config[2])
+        return manager
+
+    @staticmethod
+    def _session_payload(code, payload):
+        result = dict(payload) if isinstance(payload, dict) else {
+            "ok": False, "reason": "invalid_peer_response"}
+        result.setdefault("http_status", int(code))
+        return result
+
+    def _handle_session_rpc(self, origin_host_id, convoy_id, method,
+                            payload, authentication_context):
+        """Map one WSS RPC onto the existing peer route authorities."""
+        if (not isinstance(authentication_context, (tuple, list))
+                or len(authentication_context) != 2
+                or not isinstance(authentication_context[0], str)
+                or not isinstance(authentication_context[1], bytes)):
+            raise ws_mod.RemoteError(
+                "peer_identity_invalid", "authenticated context is absent")
+        fingerprint, public_der = authentication_context
+        if hostkeys.fingerprint(public_der) != fingerprint:
+            raise ws_mod.RemoteError(
+                "peer_identity_invalid", "authenticated key does not match")
+        with self.lock:
+            decision = self.peers.authorize_peer(
+                origin_host_id, fingerprint, convoy_id=convoy_id)
+        if not decision.allowed:
+            raise ws_mod.RemoteError(
+                decision.reason, decision.detail,
+                {"ok": False, "reason": decision.reason,
+                 "detail": decision.detail,
+                 "http_status": _REFUSAL_HTTP.get(decision.reason, 403)})
+        body = payload if isinstance(payload, dict) else {}
+
+        if method == peerserver.SESSION_RPC_HEALTH:
+            return {"ok": True, "protocol": "convoy-peer/1",
+                    "host_id": self.host_id, "http_status": 200}
+        if method == peerserver.SESSION_RPC_MANIFEST:
+            return self._session_payload(*self.get_peer_manifest(
+                origin_host_id))
+        if method == peerserver.SESSION_RPC_NODES:
+            return self._session_payload(*self.peer_nodes_view(
+                origin_host_id, convoy_id, fingerprint))
+        if method == peerserver.SESSION_RPC_CONTROLLERS:
+            return self._session_payload(*self.peer_controllers_view(
+                origin_host_id, convoy_id, fingerprint))
+        if method == peerserver.SESSION_RPC_CONTROLLER_HEARTBEAT:
+            return self._session_payload(*self.peer_heartbeat_controller(
+                origin_host_id, convoy_id, body, fingerprint))
+        if method == peerserver.SESSION_RPC_ENVELOPE:
+            if not isinstance(payload, dict) or not isinstance(
+                    payload.get("envelope"), dict):
+                return {"ok": False, "reason": "malformed",
+                        "http_status": 400}
+            origin = {"host_id": origin_host_id,
+                      "fingerprint": fingerprint,
+                      "public_der": public_der}
+            with self.lock:
+                code, result = self.submit_envelope(payload, origin)
+            return self._session_payload(code, result)
+        if method == peerserver.SESSION_RPC_JOB:
+            delivery_id = body.get("delivery_id")
+            since = body.get("since")
+            if (not isinstance(delivery_id, str) or not delivery_id
+                    or len(delivery_id) > 128
+                    or any(not (char.isalnum() or char in "_-")
+                           for char in delivery_id)
+                    or (since is not None and (
+                        isinstance(since, bool)
+                        or not isinstance(since, (int, float))
+                        or not math.isfinite(float(since))))):
+                return {"ok": False, "reason": "malformed",
+                        "http_status": 400}
+            return self._session_payload(*self.peer_job_view(
+                origin_host_id, delivery_id, since))
+        if method == peerserver.SESSION_RPC_CANCEL:
+            delivery_id = body.get("delivery_id")
+            if (not isinstance(delivery_id, str) or not delivery_id
+                    or len(delivery_id) > 128
+                    or any(not (char.isalnum() or char in "_-")
+                           for char in delivery_id)):
+                return {"ok": False, "reason": "malformed",
+                        "http_status": 400}
+            return self._session_payload(*self.peer_cancel_job(
+                origin_host_id, convoy_id, delivery_id, fingerprint))
+        if method == peerserver.SESSION_RPC_ACK:
+            delivery_id = body.get("delivery_id")
+            if (not isinstance(delivery_id, str) or not delivery_id
+                    or len(delivery_id) > 128
+                    or any(not (char.isalnum() or char in "_-")
+                           for char in delivery_id)):
+                return {"ok": False, "reason": "malformed",
+                        "http_status": 400}
+            return self._session_payload(*self.peer_acknowledge_job(
+                origin_host_id, convoy_id, delivery_id, fingerprint))
+        raise ws_mod.RemoteError(
+            "method_not_found", f"unknown peer RPC method {method!r}")
+
+    def _session_call_if_connected(self, peer_host_id, convoy_id, method,
+                                   payload, timeout_s):
+        """Return ``(established_before_send, result)`` without replay."""
+        manager = self.session_manager
+        if manager is None or manager.is_stopped:
+            return False, None
+        try:
+            info = manager.peer_info(peer_host_id)
+        except sessions_mod.PairSessionError:
+            return False, None
+        if info.state != "connected":
+            return False, None
+        summary = info.remote_capability_summary
+        advertised_digest = (summary.get("manifest_digest")
+                             if isinstance(summary, dict) else None)
+        with self.lock:
+            record = self.peers.get(peer_host_id)
+            authentication_context = self._session_auth_context(record)
+            cache_key = self._peer_manifest_cache_key(
+                record, advertised_digest)
+            self._prune_peer_manifest_cache_locked(
+                peer_host_id, keep_key=cache_key)
+        if (authentication_context is None
+                or not manager.connected_with_authentication_context(
+                    peer_host_id, authentication_context)):
+            return False, None
+        if convoy_id not in info.authorized_namespaces:
+            return True, {"ok": False, "reason": "namespace_forbidden",
+                          "http_status": 403}
+        try:
+            return True, manager.call(
+                peer_host_id, convoy_id, method, payload,
+                timeout_s=max(0.001, float(timeout_s)))
+        except ws_mod.RemoteError as exc:
+            if isinstance(exc.data, dict):
+                return True, dict(exc.data)
+            return True, {"ok": False, "reason": exc.remote_code,
+                          "detail": exc.detail, "http_status": 409}
+        except ws_mod.SessionBusy as exc:
+            return True, {"ok": False, "reason": "peer_session_busy",
+                          "detail": str(exc), "http_status": 429}
+        except (sessions_mod.PeerUnavailable,
+                sessions_mod.NamespaceNotAuthorized,
+                ws_mod.MessageTooLarge):
+            # PROVABLY PRE-SEND: nothing was written to the socket, so the
+            # HTTPS compatibility path is safe to run (it is NOT a possible
+            # double-execute).  PeerUnavailable / NamespaceNotAuthorized are
+            # raised by HostPairSessionManager.call BEFORE candidate.session
+            # .call, and MessageTooLarge is send_json's outbound size check
+            # BEFORE any byte reaches send_frame.  Return "not established"
+            # so the caller runs the HTTP fallback instead of reporting a
+            # 202 delivery_indeterminate for a request that never left.
+            return False, None
+        except (sessions_mod.PairSessionError,
+                ws_mod.ConvoyWebSocketError, ValueError):
+            # A selected session existed and bytes may already be on the
+            # wire -- a mid-send ConnectionClosed/WebSocketTimeout is
+            # genuinely ambiguous -- so HTTP compatibility replay is
+            # forbidden.  CROSS-FILE follow-up: only a "bytes entered
+            # _send_all" marker (a PreSendRefused) in convoy_ws.Session.call
+            # / convoy_sessions can safely move the pre-send ConnectionClosed
+            # state-checks ("session is closed") into the class above.
+            return True, None
+
+    def _audit_http_compat_fallback(self, peer_host_id, method):
+        self._audit_best_effort("peer_http_compat_fallback", {
+            "peer_host_id": peer_host_id, "method": method})
+
+    @staticmethod
+    def _peer_manifest_cache_key(record, advertised_digest):
+        if (not isinstance(record, dict)
+                or not isinstance(advertised_digest, str)
+                or not _MANIFEST_DIGEST_RE.fullmatch(advertised_digest)):
+            return None
+        host_id = record.get("host_id")
+        fingerprint = record.get("fingerprint")
+        admission_id = record.get("admission_id")
+        if (not isinstance(host_id, str) or not host_id
+                or not isinstance(fingerprint, str) or not fingerprint
+                or not isinstance(admission_id, str) or not admission_id):
+            return None
+        return host_id, fingerprint, admission_id, advertised_digest
+
+    def _prune_peer_manifest_cache_locked(self, host_id, keep_key=None):
+        """Drop stale trust/digest lineages while self.lock is held."""
+        for key in list(self._peer_manifest_cache):
+            if key[0] == host_id and key != keep_key:
+                self._peer_manifest_cache.pop(key, None)
+
+    def _invalidate_peer_manifest_cache(self, host_id=None):
+        with self.lock:
+            if host_id is None:
+                self._peer_manifest_cache.clear()
+            else:
+                self._prune_peer_manifest_cache_locked(host_id)
+
+    def _cached_peer_manifest(self, record, advertised_digest):
+        host_id = record.get("host_id") if isinstance(record, dict) else None
+        with self.lock:
+            current = self.peers.get(host_id) if host_id else None
+            key = self._peer_manifest_cache_key(
+                current, advertised_digest)
+            if host_id:
+                # A new pin, admission lineage, or WSS-advertised digest may
+                # never leave the old manifest reachable, even transiently.
+                self._prune_peer_manifest_cache_locked(host_id, keep_key=key)
+            if key is None:
+                return None
+            raw = self._peer_manifest_cache.get(key)
+            if raw is None:
+                return None
+            self._peer_manifest_cache.move_to_end(key)
+            return capabilities.CapabilityManifest.from_dict(copy.deepcopy(raw))
+
+    def _store_peer_manifest(self, record, advertised_digest, manifest):
+        key = self._peer_manifest_cache_key(record, advertised_digest)
+        if key is None:
+            return
+        raw = manifest.to_dict()
+        with self.lock:
+            current = self.peers.get(key[0])
+            current_key = self._peer_manifest_cache_key(
+                current, advertised_digest)
+            self._prune_peer_manifest_cache_locked(
+                key[0], keep_key=current_key)
+            if current_key != key:
+                return
+            self._peer_manifest_cache[key] = copy.deepcopy(raw)
+            self._peer_manifest_cache.move_to_end(key)
+            while len(self._peer_manifest_cache) > MAX_PEER_MANIFEST_CACHE:
+                self._peer_manifest_cache.popitem(last=False)
+
+    def _compatibility_refusal(self, peer_host_id, operation, reason,
+                               detail, code=409, **fields):
+        code, payload = self._refuse(
+            "relay", reason, detail, code,
+            extra={"target_host_id": peer_host_id,
+                   "operation": str(operation)[:MAX_OPERATION_CHARS],
+                   **fields})
+        payload.update({"target_host_id": peer_host_id,
+                        "operation": operation})
+        payload.update(fields)
+        return code, payload
+
+    def _validate_peer_manifest(self, peer_host_id, operation, result,
+                                advertised_digest=None):
+        """Validate one untrusted manifest response and its WSS advert."""
+        if (not isinstance(result, dict) or result.get("ok") is not True
+                or result.get("host_id") != peer_host_id):
+            return None, self._compatibility_refusal(
+                peer_host_id, operation, "peer_bad_manifest",
+                "the peer returned no authenticated host manifest", 502)
+        raw = result.get("manifest")
+        if not isinstance(raw, dict):
+            return None, self._compatibility_refusal(
+                peer_host_id, operation, "peer_bad_manifest",
+                "the peer manifest is not an object", 502)
+        remote_protocol = raw.get("protocol")
+        operations = raw.get("operations")
+        claimed_digest = raw.get("manifest_digest")
+        if (not isinstance(operations, dict)
+                or len(operations) > MAX_PEER_MANIFEST_OPERATIONS
+                or raw.get("node_id") is not None
+                or not isinstance(claimed_digest, str)
+                or not _MANIFEST_DIGEST_RE.fullmatch(claimed_digest)):
+            return None, self._compatibility_refusal(
+                peer_host_id, operation, "peer_bad_manifest",
+                "the peer manifest has an invalid bounded shape", 502)
+        for name, digest in operations.items():
+            if (not isinstance(name, str) or not name
+                    or len(name) > MAX_OPERATION_CHARS
+                    or any(ord(char) < 0x20 or ord(char) == 0x7f
+                           for char in name)
+                    or not isinstance(digest, str)
+                    or not _OPERATION_DIGEST_RE.fullmatch(digest)):
+                return None, self._compatibility_refusal(
+                    peer_host_id, operation, "peer_bad_manifest",
+                    "the peer manifest contains an invalid operation entry",
+                    502)
+        manifest = capabilities.CapabilityManifest(
+            remote_protocol, None, operations)
+        computed_digest = manifest.manifest_digest()
+        if computed_digest != claimed_digest:
+            return None, self._compatibility_refusal(
+                peer_host_id, operation, "manifest_digest_mismatch",
+                "the peer manifest does not match its claimed digest", 409,
+                advertised_manifest_digest=advertised_digest,
+                received_manifest_digest=claimed_digest)
+        if (advertised_digest is not None
+                and advertised_digest != computed_digest):
+            self._invalidate_peer_manifest_cache(peer_host_id)
+            return None, self._compatibility_refusal(
+                peer_host_id, operation, "manifest_digest_mismatch",
+                "the fetched manifest changed from this session's "
+                "authenticated hello advertisement", 409,
+                advertised_manifest_digest=advertised_digest,
+                received_manifest_digest=computed_digest)
+        if remote_protocol != protocol.PROTOCOL:
+            return None, self._compatibility_refusal(
+                peer_host_id, operation, "protocol_mismatch",
+                f"controller requires {protocol.PROTOCOL!r}, peer advertises "
+                f"{remote_protocol!r}", 409,
+                expected_protocol=protocol.PROTOCOL,
+                peer_protocol=remote_protocol)
+        return manifest, None
+
+    def _check_manifest_operation(self, peer_host_id, operation,
+                                  expected_digest, manifest):
+        try:
+            capabilities.check_compatible(
+                expected_digest, manifest, operation)
+        except capabilities.CompatibilityError as exc:
+            return self._compatibility_refusal(
+                peer_host_id, operation, exc.reason, exc.detail,
+                403 if exc.reason == "operation_not_exposed" else 409,
+                expected_operation_digest=expected_digest,
+                peer_operation_digest=manifest.operations.get(operation))
+        return None
+
+    def _peer_manifest_preflight(self, peer_host_id, convoy_id, operation,
+                                 record, targets, keys):
+        """Prove operation compatibility before any envelope is sent."""
+        local_manifest = self.build_remote_manifest()
+        expected_digest = local_manifest.operations.get(operation)
+        if expected_digest is None:
+            return self._compatibility_refusal(
+                peer_host_id, operation, "operation_not_exposed",
+                "this controller has no remote-exposed compatibility "
+                f"contract for {operation!r}", 403)
+
+        advertised_digest = None
+        advertised_protocol = None
+        manager = self.session_manager
+        if manager is not None and not manager.is_stopped:
+            try:
+                info = manager.peer_info(peer_host_id)
+            except sessions_mod.PairSessionError:
+                info = None
+            if (info is not None and info.state == "connected"
+                    and convoy_id in info.authorized_namespaces):
+                summary = info.remote_capability_summary
+                if isinstance(summary, dict):
+                    advertised_digest = summary.get("manifest_digest")
+                    advertised_protocol = summary.get("envelope_protocol")
+                if (advertised_protocol is not None
+                        and advertised_protocol != protocol.PROTOCOL):
+                    self._invalidate_peer_manifest_cache(peer_host_id)
+                    return self._compatibility_refusal(
+                        peer_host_id, operation, "protocol_mismatch",
+                        f"controller requires {protocol.PROTOCOL!r}, peer "
+                        f"session advertises {advertised_protocol!r}", 409,
+                        expected_protocol=protocol.PROTOCOL,
+                        peer_protocol=advertised_protocol)
+                cached = self._cached_peer_manifest(
+                    record, advertised_digest)
+                if cached is not None:
+                    return self._check_manifest_operation(
+                        peer_host_id, operation, expected_digest, cached)
+
+        used_session, result = self._session_call_if_connected(
+            peer_host_id, convoy_id, peerserver.SESSION_RPC_MANIFEST, {},
+            MANIFEST_PREFLIGHT_TIMEOUT_S)
+        if not used_session:
+            # Without a separate authenticated digest advertisement, an HTTP
+            # peer is fetched every submission.  Reusing its old cache would
+            # let an operation/schema change remain invisible indefinitely.
+            self._invalidate_peer_manifest_cache(peer_host_id)
+            advertised_digest = None
+            if not targets:
+                return self._compatibility_refusal(
+                    peer_host_id, operation, "peer_endpoint_unknown",
+                    "the peer has no WSS session or usable HTTPS endpoint",
+                    409)
+            if keys is None:
+                return self._compatibility_refusal(
+                    peer_host_id, operation, "identity_unavailable",
+                    "this host has no usable mutual-TLS identity", 503)
+            self._audit_http_compat_fallback(
+                peer_host_id, peerserver.SESSION_RPC_MANIFEST)
+            _target, result = self._call_peer_targets(
+                targets,
+                lambda candidate, remaining: peerclient.get_peer_manifest(
+                    candidate, keys, timeout=remaining,
+                    pool=self.peer_pool),
+                MANIFEST_PREFLIGHT_TIMEOUT_S,
+                retry_ambiguous=True)
+
+        if result is peerclient.UNREACHABLE:
+            return self._compatibility_refusal(
+                peer_host_id, operation, "peer_unreachable",
+                "the peer manifest could not be reached", 503)
+        if isinstance(result, peerclient._PinMismatch):
+            self._invalidate_peer_manifest_cache(peer_host_id)
+            payload = result.as_dict()
+            payload.update({"operation": operation,
+                            "target_host_id": peer_host_id})
+            return 409, payload
+        if result is None:
+            return self._compatibility_refusal(
+                peer_host_id, operation, "peer_manifest_unavailable",
+                "the peer manifest response was ambiguous or invalid", 502)
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            if isinstance(result, dict):
+                payload = dict(result)
+                payload.setdefault("target_host_id", peer_host_id)
+                payload.setdefault("operation", operation)
+                return int(payload.get("http_status") or 409), payload
+            return self._compatibility_refusal(
+                peer_host_id, operation, "peer_bad_manifest",
+                "the peer manifest response was not an object", 502)
+
+        manifest, refusal = self._validate_peer_manifest(
+            peer_host_id, operation, result,
+            advertised_digest=advertised_digest)
+        if refusal is not None:
+            return refusal
+        digest = manifest.manifest_digest()
+        self._store_peer_manifest(record, digest, manifest)
+        return self._check_manifest_operation(
+            peer_host_id, operation, expected_digest, manifest)
+
+    def _peer_compatibility_projection(self, peer_host_id):
+        """Host-wide compatibility label requiring no per-node request."""
+        manager = self.session_manager
+        if manager is None or manager.is_stopped:
+            return None
+        try:
+            info = manager.peer_info(peer_host_id)
+        except sessions_mod.PairSessionError:
+            return None
+        if info.state != "connected":
+            return None
+        summary = info.remote_capability_summary
+        if not isinstance(summary, dict):
+            return None
+        remote_protocol = summary.get("envelope_protocol")
+        advertised_digest = summary.get("manifest_digest")
+        if (remote_protocol is not None
+                and remote_protocol != protocol.PROTOCOL):
+            return "incompatible"
+        local = self.build_remote_manifest()
+        if advertised_digest == local.manifest_digest():
+            return "compatible"
+        with self.lock:
+            record = self.peers.get(peer_host_id)
+        cached = self._cached_peer_manifest(record, advertised_digest)
+        if cached is None or cached.protocol != protocol.PROTOCOL:
+            return None
+        matches = set(local.operations.items()).intersection(
+            cached.operations.items())
+        if cached.operations == local.operations:
+            return "compatible"
+        return "limited" if matches else "incompatible"
+
+    def _active_convoy_ids_locked(self):
+        if not any(bool(record.get("enabled", True))
+                   for record in self.directory.nodes()):
+            return ()
+        snapshot = self.realm.snapshot()
+        return ((snapshot["convoy_id"],)
+                if snapshot and snapshot.get("convoy_id") else ())
+
+    def active_convoy_ids(self):
+        """Enabled local namespaces, detached and safe for discovery."""
+        with self.lock:
+            return self._active_convoy_ids_locked()
+
+    def request_lan_refresh(self):
+        """Signal membership/interface reconciliation without socket I/O."""
+        self._lan_refresh.set()
+        service = self.discovery_service
+        if service is not None:
+            service.wake()
+
+    def start_lan_lifecycle(self, log=None):
+        """Start the one host-side LAN membership reconciler.
+
+        This is external host Python, not a TouchDesigner thread.  The first
+        pass is immediate, so durable enabled launch profiles resume exposure
+        after a daemon restart even while their TD process is offline.
+        """
+        thread = self._lan_lifecycle_thread
+        if thread is not None and thread.is_alive():
+            return False
+        self._lan_lifecycle_stop.clear()
+        self._lan_refresh.set()
+        thread = threading.Thread(
+            target=self._lan_lifecycle_loop, args=(log,),
+            name="ConvoyLanLifecycle", daemon=True)
+        self._lan_lifecycle_thread = thread
+        thread.start()
+        return True
+
+    def stop_lan_lifecycle(self, timeout_s=5.0):
+        self._lan_lifecycle_stop.set()
+        self._lan_refresh.set()
+        thread = self._lan_lifecycle_thread
+        if thread is not None and thread is not threading.current_thread():
+            try:
+                thread.join(max(0.0, float(timeout_s)))
+            except Exception:
+                pass
+        self._lan_lifecycle_thread = None
+        self.stop_lan_server(timeout_s=timeout_s)
+
+    def _lan_lifecycle_loop(self, log=None):
+        while not self._lan_lifecycle_stop.is_set():
+            self._lan_refresh.wait(self._lan_retry_s)
+            self._lan_refresh.clear()
+            if self._lan_lifecycle_stop.is_set():
+                break
+            try:
+                if self.active_convoy_ids():
+                    self._tick_realm()
+                self._reconcile_lan_once(log=log)
+            except Exception as exc:
+                self.lan_reason = "lifecycle_error"
+                self._audit_best_effort(
+                    "lan_lifecycle_error",
+                    {"error": f"{type(exc).__name__}: {exc}"})
+        self.stop_lan_server()
+
+    def _reconcile_lan_once(self, log=None):
+        """Reconcile membership, config, and the currently routed interface."""
+        active = bool(self.active_convoy_ids())
+        if not active:
+            if self.lan_server is not None:
+                self.stop_lan_server()
+            self.lan_reason = "no_enabled_nodes"
+            return
+        if self.lan_server is None:
+            start_lan_if_configured(self, log=log)
+            return
+        try:
+            address, port = desired_lan_endpoint(self)
+        except lan_mod.LanConfigError as exc:
+            self.stop_lan_server()
+            self.lan_reason = exc.reason
+            return
+        if address != self.lan_address or int(port) != int(self.lan_port):
+            previous = f"{self.lan_address}:{self.lan_port}"
+            self.stop_lan_server()
+            self._audit_best_effort(
+                "lan_endpoint_changed",
+                {"previous": previous, "current": f"{address}:{port}"})
+            start_lan_if_configured(self, log=log)
+            return
+        if self.discovery_service is None:
+            # A rotated/unavailable discovery identity or a failed discovery
+            # construction is repaired by rebuilding both endpoint owners.
+            self.stop_lan_server()
+            start_lan_if_configured(self, log=log)
+        else:
+            self.reconcile_peer_sessions()
+            self.discovery_service.wake()
 
     def lan_trust_material(self):
         """(signature, [cert_pem, ...]) for the LAN server's TLS trust
@@ -3394,6 +9310,18 @@ class HostApp:
         (/lan/status): an operator asks their OWN host, never a peer."""
         bound = self.lan_server is not None
         peers_material = self.lan_trust_material()[1]
+        discovery = (self.discovery_service.status()
+                     if self.discovery_service is not None else {
+                         "active": False, "candidates": [],
+                         "last_error": None,
+                         "last_announcement_unix": None,
+                     })
+        session_stats = (self.session_manager.stats()
+                         if self.session_manager is not None
+                         and not self.session_manager.is_stopped else {
+                             "configured_peers": 0,
+                             "connected_peers": 0,
+                         })
         return 200, {
             "ok": True,
             "host_id": self.host_id,
@@ -3409,6 +9337,10 @@ class HostApp:
                                      if self.hostkeys else None),
             "identity_certificate": bool(
                 self.hostkeys and self.hostkeys.certificate_pem),
+            "active_convoy_ids": list(self._active_convoy_ids_locked()),
+            "realm": self._realm_projection_locked(),
+            "discovery": discovery,
+            "peer_sessions": session_stats,
         }
 
     def set_lan_server(self, server, thread, address, port):
@@ -3420,24 +9352,59 @@ class HostApp:
         self.lan_address = address
         self.lan_port = port
         self.lan_reason = None
+        try:
+            self._start_peer_session_manager()
+        except Exception as exc:
+            self._audit_best_effort(
+                "peer_sessions_start_failed",
+                {"error": f"{type(exc).__name__}: {exc}"})
+        try:
+            coordinator = discovery_mod.DiscoveryCoordinator(
+                self.host_id, self.peers, self.active_convoy_ids,
+                admission_lock=self.lock, now=self._now,
+                active_realm_states=self.active_realm_states,
+                realm_observer=self._observe_realm_announcement)
+            service = discovery_mod.DiscoveryService(
+                coordinator, self.hostkeys,
+                listener_endpoint=lambda: (
+                    (self.lan_address, self.lan_port)
+                    if self.lan_server is not None else None),
+                local_address=address)
+            self.discovery_service = service
+            service.start()
+        except Exception as exc:
+            self.discovery_service = None
+            self._audit_best_effort(
+                "discovery_start_failed",
+                {"error": f"{type(exc).__name__}: {exc}"})
 
     def stop_lan_server(self, timeout_s=5.0):
         """Stop the LAN listener FIRST and unconditionally (A-46 point 4:
         stop accepting peer connections -> stop_drain_loop ->
         clear_portfile). Idempotent and never raises -- shutdown hygiene
         must not depend on it, exactly like stop_drain_loop."""
+        service = self.discovery_service
+        self.discovery_service = None
+        if service is not None:
+            try:
+                service.stop(timeout=min(2.0, max(0.0, float(timeout_s))))
+            except Exception:
+                pass
         server = self.lan_server
-        if server is None:
-            return
         self.lan_server = None
-        try:
-            server.shutdown()
-        except Exception:
-            pass
-        try:
-            server.server_close()
-        except Exception:
-            pass
+        if server is not None:
+            try:
+                server.shutdown()
+            except Exception:
+                pass
+            try:
+                server.server_close()
+            except Exception:
+                pass
+        self._stop_peer_session_manager(
+            timeout_s=min(2.0, max(0.01, float(timeout_s))))
+        if self.peer_pool is not None:
+            self.peer_pool.close()
         thread = self.lan_thread
         if thread is not None:
             try:
@@ -3464,7 +9431,17 @@ class HostApp:
             return self._refuse("psk", "malformed", e.detail, 400)
         psk = self.db.convoy_psk(convoy_id)
         if not psk:
+            snapshot = self.realm.snapshot()
+            if (snapshot and snapshot.get("convoy_id") == convoy_id
+                    and snapshot.get("state") == realm_mod.CANDIDATE):
+                return self._refuse(
+                    "psk", "realm_not_established",
+                    "automatic Convoy genesis is still settling", 409)
             return self._refuse("psk", "unknown_convoy", convoy_id, 404)
+        realm_refusal = self._realm_operation_refusal(convoy_id)
+        if realm_refusal is not None:
+            reason, detail = realm_refusal
+            return self._refuse("psk", reason, detail, 409)
         self.db.audit("hostapp", "convoy_psk_issued",
                       {"convoy_id": convoy_id})
         return 200, {"ok": True, "convoy_id": convoy_id, "psk": psk}
@@ -3476,20 +9453,90 @@ class HostApp:
         try:
             controller_id = text_field(body, "controller_id")
             label = text_field(body, "label", required=False, limit=128)
+            selected_node_id = (text_field(
+                body, "selected_node_id", required=False) or None)
         except Malformed as e:
             return self._refuse("heartbeat", "malformed", e.detail, 400)
+        clear_selected = body.get("clear_selected", False)
+        if (not isinstance(clear_selected, bool)
+                or (clear_selected and selected_node_id is not None)):
+            return self._refuse(
+                "heartbeat", "malformed",
+                "clear_selected must be boolean and cannot accompany a node",
+                400)
+        if (selected_node_id is not None
+                and self.directory.lookup(selected_node_id) is None):
+            return self._refuse(
+                "heartbeat", "unknown_node", selected_node_id, 404)
         try:
-            self.leases.heartbeat(controller_id, now, label=label)
+            self.leases.heartbeat(
+                controller_id, now, label=label,
+                selected_node_id=selected_node_id,
+                clear_selection=clear_selected)
         except controllers.LeaseError as e:
             return self._refuse("heartbeat", e.reason, e.detail, 400)
-        # Reap on a WRITE path too. reap() ran only on GET /leases, so a
-        # caller that never listed leases could grow the controller table
-        # without bound; the cost is one pass over a handful of entries.
-        self.leases.reap(now)
+        # Reap through the durable-aware reconciler. A raw TTL reap could
+        # erase a running writer claim after a long sleep.
+        self._reconcile_operation_claims_locked()
         return 200, {"ok": True}
+
+    def peer_heartbeat_controller(self, origin_host_id, convoy_id, body,
+                                  authenticated_fingerprint=None):
+        """Refresh an idle/active peer controller on the selected host.
+
+        The free-text controller id is namespaced by the authenticated host
+        before it reaches lease state, exactly like envelope submission.
+        """
+        try:
+            convoy_id = identity.normalize_convoy_id(convoy_id)
+            controller_id = text_field(body, "controller_id")
+            label = text_field(body, "label", required=False, limit=128)
+            selected_node_id = (text_field(
+                body, "selected_node_id", required=False) or None)
+        except (identity.IdentityError, Malformed) as exc:
+            detail = getattr(exc, "detail", str(exc))
+            return self._refuse("heartbeat", "malformed", detail, 400)
+        clear_selected = body.get("clear_selected", False)
+        if (not isinstance(clear_selected, bool)
+                or (clear_selected and selected_node_id is not None)):
+            return self._refuse(
+                "heartbeat", "malformed",
+                "clear_selected must be boolean and cannot accompany a node",
+                400)
+        with self.lock:
+            decision = self.peers.authorize_peer(
+                origin_host_id, authenticated_fingerprint,
+                convoy_id=convoy_id)
+            if not decision.allowed:
+                return _REFUSAL_HTTP.get(decision.reason, 403), {
+                    "ok": False, "reason": decision.reason,
+                    "detail": decision.detail,
+                }
+            if selected_node_id is not None:
+                node = self.directory.lookup(selected_node_id)
+                if (node is None or node.get("convoy_id") != convoy_id
+                        or not bool(node.get("enabled", True))):
+                    return self._refuse(
+                        "heartbeat", "unknown_node", selected_node_id, 404)
+            namespaced = peers_mod.namespaced_controller(
+                origin_host_id, controller_id)
+            self._note_peer_controller(origin_host_id, namespaced)
+            try:
+                self.leases.heartbeat(
+                    namespaced, self._now(), label=label,
+                    selected_node_id=selected_node_id,
+                    clear_selection=clear_selected)
+                self._reconcile_operation_claims_locked()
+            except controllers.LeaseError as exc:
+                return self._refuse(
+                    "heartbeat", exc.reason, exc.detail, 400)
+        return 200, {"ok": True, "controller_id": namespaced,
+                     "selected_node_id": selected_node_id,
+                     "wakes_touchdesigner": False}
 
     def acquire_lease(self, body):
         now = self._now()
+        self._reconcile_operation_claims_locked()
         try:
             controller_id = text_field(body, "controller_id")
             node_id = text_field(body, "node_id")
@@ -3510,10 +9557,22 @@ class HostApp:
             return self._refuse("lease", "malformed",
                                 "ttl_s must be a positive finite number",
                                 400)
-        if self.directory.lookup(node_id) is None:
+        node = self.directory.lookup(node_id)
+        if node is None:
             # A lease names a real node -- a typo must not mint a
             # phantom lease that blocks nobody and reassures its holder.
             return self._refuse("lease", "unknown_node", node_id, 404)
+        realm_refusal = self._realm_operation_refusal(node.get("convoy_id"))
+        if realm_refusal is not None:
+            reason, detail = realm_refusal
+            return self._refuse("lease", reason, detail, 409, node)
+        if (mode == controllers.LEASE_EXCLUSIVE
+                and self._refresh_unreadable_operation_fence_locked()):
+            return self._refuse(
+                "lease", "operation_state_unreadable",
+                "durable job state is unreadable, so an exclusive writer "
+                "lease cannot be granted safely",
+                503, node, {"controller_id": controller_id[:MAX_ID_CHARS]})
         try:
             lease = self.leases.acquire(node_id, controller_id, mode, now,
                                         ttl_s=ttl_s)
@@ -3529,7 +9588,7 @@ class HostApp:
         self.db.audit("hostapp", "lease_acquired",
                       {"node_id": node_id, "mode": lease["mode"],
                        "controller_id": controller_id[:MAX_ID_CHARS]})
-        self.leases.reap(now)
+        self._reconcile_operation_claims_locked()
         return 200, {"ok": True, "lease": lease}
 
     def release_lease(self, body):
@@ -3549,7 +9608,7 @@ class HostApp:
 
     def list_leases(self):
         now = self._now()
-        self.leases.reap(now)          # opportunistic GC, not correctness
+        self._reconcile_operation_claims_locked()
         return 200, {"ok": True, "leases": self.leases.live_leases(now)}
 
     # -- peers (Phase 3 slice 2, A-7) ------------------------------------
@@ -3597,6 +9656,20 @@ class HostApp:
         the emergency paths scan the job store exactly ONCE.
         """
         found = set(self._peer_controllers.get(host_id) or ())
+        # Operation claims survive independently of controller heartbeats.
+        # After a host restart the advisory _peer_controllers map is empty,
+        # and a failing durable-job scan cannot reconstruct ownership from
+        # disk.  The peer namespace is therefore the last trustworthy link
+        # between an in-memory claim and its origin.  Include it so emergency
+        # revocation paths can preserve (never accidentally drop) an
+        # in-flight writer claim while durable state is unreadable.
+        prefix = peers_mod.namespaced_controller(host_id, "")
+        found.update(
+            claim.get("controller_id")
+            for claim in self.leases.operation_claims()
+            if isinstance(claim.get("controller_id"), str)
+            and claim["controller_id"].startswith(prefix)
+        )
         if records is None:
             try:
                 records, _ = self.db.scan_jobs()
@@ -3608,7 +9681,7 @@ class HostApp:
                 found.add(job["controller_id"])
         return found
 
-    def _authorize_origin(self, origin_host_id):
+    def _authorize_origin(self, origin_host_id, convoy_id=None):
         """Re-ask THE decision for a stored job's origin.
 
         Returns None for LOCAL work, or the FULL PeerDecision otherwise --
@@ -3632,7 +9705,8 @@ class HostApp:
             # could have created it.
             return None
         return self.peers.authorize_peer(
-            origin_host_id, self.peers.pinned_fingerprint(origin_host_id))
+            origin_host_id, self.peers.pinned_fingerprint(origin_host_id),
+            convoy_id=convoy_id)
 
     def _refuse_origin(self, job, decision, reason=None, detail=None,
                        terminal=None):
@@ -3709,6 +9783,7 @@ class HostApp:
             except Exception:
                 refused = None
             if refused is not None:
+                self._release_operation_claim_locked(refused)
                 return 403, {"ok": False, "reason": "origin_revoked",
                              "detail": detail, "peer_reason": reason,
                              "job": refused}
@@ -3727,6 +9802,781 @@ class HostApp:
                      "peers_unreadable": self.peers.unreadable,
                      "killswitch": killswitch,
                      "denylist": self.peers.denylist.snapshot()}
+
+    # -- outbound peer relay (loopback controller surface) -------------
+
+    @staticmethod
+    def _peer_targets_from_record(record):
+        """Build every usable pinned target from one peer admission.
+
+        Endpoints are untrusted persisted text.  Parsing happens locally
+        and never falls back to plaintext or an unpinned certificate.
+        Discovery places its newest observation first and retains bounded
+        older/manual endpoints as fallbacks.  Callers try those fallbacks
+        only after a definitely-before-send ``UNREACHABLE`` outcome (or for
+        read-only GETs); a pin mismatch is always terminal.
+        """
+        if not isinstance(record, dict):
+            return (), "peer record is missing"
+        cert_pem = record.get("cert_pem")
+        fingerprint = record.get("fingerprint")
+        host_id = record.get("host_id")
+        if not cert_pem or not fingerprint or not host_id:
+            return (), "peer has no complete pinned TLS identity"
+        targets = []
+        seen = set()
+        for raw in record.get("endpoints") or ():
+            if not isinstance(raw, str) or len(raw) > 256:
+                continue
+            try:
+                address, port_text = raw.rsplit(":", 1)
+                port = int(port_text)
+            except (ValueError, TypeError):
+                continue
+            address = address.strip()
+            if (not address or not (1 <= port <= 65535)
+                    or any(ch in address for ch in "/\\?#@")):
+                continue
+            endpoint = (address, port)
+            if endpoint in seen:
+                continue
+            seen.add(endpoint)
+            targets.append(peerclient.PeerTarget(
+                host_id=host_id, address=address, port=port,
+                pinned_cert_pem=cert_pem,
+                expected_fingerprint=fingerprint))
+        if targets:
+            return tuple(targets), None
+        return (), "peer has no usable host:port endpoint"
+
+    @staticmethod
+    def _peer_target_from_record(record):
+        """Compatibility projection for callers that need one target."""
+        targets, error = HostApp._peer_targets_from_record(record)
+        return (targets[0] if targets else None), error
+
+    @staticmethod
+    def _call_peer_targets(targets, call, timeout_s, retry_ambiguous=False):
+        """Try persisted endpoints within one cumulative monotonic budget.
+
+        ``call(target, remaining_s)`` follows peerclient's outcome contract.
+        Mutations may move to the next address only after ``UNREACHABLE``,
+        which proves no request byte was sent.  Read-only callers may also
+        retry an ambiguous/bad response because repeating a GET cannot run a
+        mutation.  A pin mismatch never falls through to another address.
+        """
+        targets = tuple(targets or ())
+        if not targets:
+            return None, peerclient.UNREACHABLE
+        try:
+            timeout_s = float(timeout_s)
+        except (TypeError, ValueError):
+            timeout_s = 0.0
+        if not math.isfinite(timeout_s) or timeout_s <= 0:
+            return targets[0], peerclient.UNREACHABLE
+        deadline = time.monotonic() + timeout_s
+        last_target = targets[0]
+        last_result = peerclient.UNREACHABLE
+        for index, target in enumerate(targets):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            # One black-holed endpoint (SYN into the void burns its whole
+            # timeout in the CONNECT phase) must not starve the untried
+            # rest of the list: an attempt may spend at most its even
+            # share of what remains, and the final target keeps
+            # everything still left.  A stale-first endpoint list is the
+            # normal post-DHCP-change shape, not a corner case.
+            untried = len(targets) - index
+            attempt_s = remaining if untried == 1 else remaining / untried
+            last_target = target
+            result = call(target, attempt_s)
+            last_result = result
+            if isinstance(result, peerclient._PinMismatch):
+                return target, result
+            if result is peerclient.UNREACHABLE:
+                continue
+            if result is None and retry_ambiguous:
+                continue
+            return target, result
+        return last_target, last_result
+
+    def relay_submit(self, body):
+        """Originate one signed request on behalf of a LOCAL controller.
+
+        SELF-LOCKING: route handlers call this outside the app lock because
+        the mutual-TLS request may block.  All mutable admission/identity
+        state is validated and snapshotted first; the receiving host then
+        re-authorizes independently before it persists anything.
+        """
+        try:
+            peer_host_id = text_field(body, "target_host_id")
+            convoy_id = text_field(body, "convoy_id")
+            target_node_id = text_field(body, "target_node_id")
+            controller_id = text_field(body, "controller_id")
+            operation = text_field(body, "operation",
+                                   limit=MAX_OPERATION_CHARS)
+            arguments = (dict_field(body, "arguments")
+                         if "arguments" in body else {})
+            idempotency_key = text_field(
+                body, "idempotency_key", required=False) or None
+            expected_runtime_id = text_field(
+                body, "expected_runtime_id", required=False) or None
+        except Malformed as e:
+            return self._refuse("relay", "malformed", e.detail, 400)
+        timeout_s = body.get("timeout_s", 30.0)
+        if (isinstance(timeout_s, bool)
+                or not isinstance(timeout_s, (int, float))
+                or not math.isfinite(float(timeout_s))
+                or float(timeout_s) <= 0
+                or float(timeout_s) > protocol.MAX_DEADLINE_HORIZON_S):
+            return self._refuse(
+                "relay", "malformed",
+                f"timeout_s must be within (0, "
+                f"{protocol.MAX_DEADLINE_HORIZON_S:.0f}]", 400)
+
+        # Several TD/Embody nodes may share this machine and therefore this
+        # host_id.  Sending such a call through the peer table would require
+        # admitting our own certificate as a peer and would make same-IP
+        # routing fail whenever the LAN listener is quiescent.  Use the exact
+        # same local durable-job gate instead; there is still no direct Envoy
+        # shortcut and therefore no semantic split between local siblings and
+        # remote siblings.
+        if peer_host_id == self.host_id:
+            with self.lock:
+                node = self.directory.lookup(target_node_id)
+                if (node is None or node.get("convoy_id") != convoy_id):
+                    return self._refuse(
+                        "relay", "unknown_node",
+                        "the target node is not in the requested Convoy",
+                        404)
+                local_body = {
+                    "idempotency_key": (idempotency_key
+                                        or identity.mint_id()),
+                    "node_id": target_node_id,
+                    "controller_id": controller_id,
+                    "operation": operation,
+                    "arguments": arguments,
+                }
+                if expected_runtime_id is not None:
+                    local_body["expected_runtime_id"] = expected_runtime_id
+                code, result = self.create_job(local_body)
+            result = dict(result)
+            result.setdefault("target_host_id", self.host_id)
+            result.setdefault("convoy_id", convoy_id)
+            result.setdefault("local_sibling", True)
+            return code, result
+
+        with self.lock:
+            if self.hostkeys is None:
+                return self._identity_unavailable()
+            record = self.peers.get(peer_host_id)
+            decision = self.peers.authorize_peer(
+                peer_host_id,
+                record.get("fingerprint") if record else None,
+                convoy_id=convoy_id)
+            if not decision.allowed:
+                return self._refuse(
+                    "relay", decision.reason, decision.detail,
+                    _REFUSAL_HTTP.get(decision.reason, 403),
+                    extra={"peer_digest": decision.digest})
+            targets, target_error = self._peer_targets_from_record(record)
+            keys = self.hostkeys
+            signer = keys.signer()
+
+        compatibility_refusal = self._peer_manifest_preflight(
+            peer_host_id, convoy_id, operation, record, targets,
+            keys)
+        if compatibility_refusal is not None:
+            return compatibility_refusal
+
+        try:
+            envelope = protocol.build_envelope(
+                convoy_id, self.host_id, controller_id, target_node_id,
+                operation, signer, arguments=arguments,
+                timeout_s=float(timeout_s),
+                expected_runtime_id=expected_runtime_id,
+                idempotency_key=idempotency_key)
+        except (ValueError, TypeError, hostkeys.HostKeyError) as e:
+            return self._refuse(
+                "relay", "envelope_build_failed",
+                f"{type(e).__name__}: {e}", 400)
+
+        send_budget = min(
+            peerclient.DEFAULT_PEER_TIMEOUT_S,
+            protocol.remaining_budget(envelope))
+        used_session, result = self._session_call_if_connected(
+            peer_host_id, convoy_id, peerserver.SESSION_RPC_ENVELOPE,
+            {"envelope": envelope}, send_budget)
+        if not used_session:
+            if not targets:
+                return self._refuse("relay", "peer_endpoint_unknown",
+                                    target_error, 409)
+            self._audit_http_compat_fallback(
+                peer_host_id, peerserver.SESSION_RPC_ENVELOPE)
+            _target, result = self._call_peer_targets(
+                targets,
+                lambda candidate, remaining: peerclient.send_envelope(
+                    candidate, keys, envelope, timeout=remaining,
+                    pool=self.peer_pool),
+                send_budget)
+        if result is peerclient.UNREACHABLE:
+            return 503, {"ok": False, "reason": "peer_unreachable",
+                         "target_host_id": peer_host_id,
+                         "idempotency_key": envelope["idempotency_key"]}
+        if isinstance(result, peerclient._PinMismatch):
+            return 409, result.as_dict()
+        if result is None:
+            # The peer may have persisted the job.  Never blind-retry with
+            # a different key; expose the signed request identity for the
+            # reconciliation API.
+            return 202, {
+                "ok": False, "reason": "delivery_indeterminate",
+                "detail": "the request may have reached the peer; reconcile "
+                          "using the same idempotency key",
+                "target_host_id": peer_host_id,
+                "request_id": envelope["request_id"],
+                "idempotency_key": envelope["idempotency_key"],
+            }
+        code = 200 if result.get("ok") else int(
+            result.get("http_status") or 409)
+        result = dict(result)
+        result.setdefault("target_host_id", peer_host_id)
+        result.setdefault("convoy_id", convoy_id)
+        result.setdefault("request_id", envelope["request_id"])
+        result.setdefault("idempotency_key", envelope["idempotency_key"])
+        return code, result
+
+    def relay_job(self, body):
+        """Poll one remote delivery through its pinned peer connection."""
+        try:
+            peer_host_id = text_field(body, "target_host_id")
+            convoy_id = text_field(body, "convoy_id")
+            delivery_id = text_field(body, "delivery_id")
+        except Malformed as e:
+            return self._refuse("relay", "malformed", e.detail, 400)
+        since = body.get("since")
+        if since is not None and (isinstance(since, bool)
+                                  or not isinstance(since, (int, float))
+                                  or not math.isfinite(float(since))):
+            return self._refuse("relay", "malformed",
+                                "since must be a finite number", 400)
+
+        if peer_host_id == self.host_id:
+            stored = self.db.get_job(delivery_id)
+            if (stored is None or stored.get("convoy_id") != convoy_id
+                    or stored.get("origin_host_id") != self.host_id):
+                return 404, {"ok": False, "reason": "not_found",
+                             "delivery_id": delivery_id}
+            code, result = self.peer_job_view(
+                self.host_id, delivery_id, since)
+            if code == 200 and result.get("ok"):
+                result = dict(result)
+                result.setdefault("target_host_id", self.host_id)
+                result.setdefault("convoy_id", convoy_id)
+                result.setdefault("local_sibling", True)
+            return code, result
+        with self.lock:
+            record = self.peers.get(peer_host_id)
+            decision = self.peers.authorize_peer(
+                peer_host_id,
+                record.get("fingerprint") if record else None,
+                convoy_id=convoy_id)
+            if not decision.allowed:
+                return self._refuse(
+                    "relay", decision.reason, decision.detail,
+                    _REFUSAL_HTTP.get(decision.reason, 403))
+            targets, target_error = self._peer_targets_from_record(record)
+            keys = self.hostkeys
+        if keys is None:
+            return self._identity_unavailable()
+        used_session, result = self._session_call_if_connected(
+            peer_host_id, convoy_id, peerserver.SESSION_RPC_JOB,
+            {"delivery_id": delivery_id, "since": since},
+            peerclient.DEFAULT_PEER_TIMEOUT_S)
+        if not used_session:
+            if not targets:
+                return self._refuse("relay", "peer_endpoint_unknown",
+                                    target_error, 409)
+            self._audit_http_compat_fallback(
+                peer_host_id, peerserver.SESSION_RPC_JOB)
+            _target, result = self._call_peer_targets(
+                targets,
+                lambda candidate, remaining: peerclient.get_peer_job(
+                    candidate, keys, delivery_id, since=since,
+                    timeout=remaining, pool=self.peer_pool),
+                peerclient.DEFAULT_PEER_TIMEOUT_S,
+                retry_ambiguous=True)
+        if result is peerclient.UNREACHABLE:
+            return 503, {"ok": False, "reason": "peer_unreachable"}
+        if isinstance(result, peerclient._PinMismatch):
+            return 409, result.as_dict()
+        if result is None:
+            return 502, {"ok": False, "reason": "peer_bad_response"}
+        return (200 if result.get("ok") else 404), result
+
+    def relay_acknowledge(self, body):
+        """Acknowledge one observed terminal sibling outcome.
+
+        This is an explicit, idempotent mutation rather than a polling side
+        effect.  A controller can therefore retry an unanswered ACK without
+        risking command replay, while the target keeps terminal evidence and
+        any result artifact protected until an ACK actually arrives.
+        """
+        try:
+            peer_host_id = text_field(body, "target_host_id")
+            convoy_id = identity.normalize_convoy_id(
+                text_field(body, "convoy_id"))
+            delivery_id = text_field(body, "delivery_id")
+        except (Malformed, identity.IdentityError) as exc:
+            detail = getattr(exc, "detail", str(exc))
+            return self._refuse("relay", "malformed", detail, 400)
+
+        if peer_host_id == self.host_id:
+            with self.lock:
+                job = self.db.get_job(delivery_id)
+                if (job is None or job.get("convoy_id") != convoy_id
+                        or job.get("origin_host_id") != self.host_id):
+                    return 404, {"ok": False, "reason": "unknown_job",
+                                 "delivery_id": delivery_id}
+                code, result = self._acknowledge_job_locked(delivery_id)
+            result = dict(result)
+            result.setdefault("target_host_id", self.host_id)
+            result.setdefault("convoy_id", convoy_id)
+            result.setdefault("local_sibling", True)
+            return code, result
+
+        with self.lock:
+            record = self.peers.get(peer_host_id)
+            decision = self.peers.authorize_peer(
+                peer_host_id,
+                record.get("fingerprint") if record else None,
+                convoy_id=convoy_id)
+            if not decision.allowed:
+                return self._refuse(
+                    "relay", decision.reason, decision.detail,
+                    _REFUSAL_HTTP.get(decision.reason, 403))
+            targets, target_error = self._peer_targets_from_record(record)
+            keys = self.hostkeys
+        if keys is None:
+            return self._identity_unavailable()
+
+        used_session, result = self._session_call_if_connected(
+            peer_host_id, convoy_id, peerserver.SESSION_RPC_ACK,
+            {"delivery_id": delivery_id},
+            peerclient.DEFAULT_PEER_TIMEOUT_S)
+        if not used_session:
+            if not targets:
+                return self._refuse("relay", "peer_endpoint_unknown",
+                                    target_error, 409)
+            self._audit_http_compat_fallback(
+                peer_host_id, peerserver.SESSION_RPC_ACK)
+            _target, result = self._call_peer_targets(
+                targets,
+                lambda candidate, remaining:
+                    peerclient.acknowledge_peer_job(
+                        candidate, keys, convoy_id, delivery_id,
+                        timeout=remaining, pool=self.peer_pool),
+                peerclient.DEFAULT_PEER_TIMEOUT_S)
+        if result is peerclient.UNREACHABLE:
+            return 503, {"ok": False, "reason": "peer_unreachable",
+                         "target_host_id": peer_host_id,
+                         "delivery_id": delivery_id}
+        if isinstance(result, peerclient._PinMismatch):
+            return 409, result.as_dict()
+        if result is None:
+            # ACK is idempotent, so unlike command submission an ambiguous
+            # reply is safe for the caller to retry with this delivery id.
+            return 503, {
+                "ok": False, "reason": "acknowledgement_indeterminate",
+                "detail": "the acknowledgement may have reached the peer; "
+                          "retry with the same delivery_id",
+                "target_host_id": peer_host_id,
+                "delivery_id": delivery_id,
+            }
+        code = 200 if result.get("ok") else int(
+            result.get("http_status") or 409)
+        result = dict(result)
+        result.setdefault("target_host_id", peer_host_id)
+        result.setdefault("convoy_id", convoy_id)
+        result.setdefault("delivery_id", delivery_id)
+        return code, result
+
+    def relay_heartbeat(self, body):
+        """Publish this local bridge controller to one exact sibling host."""
+        try:
+            peer_host_id = text_field(body, "target_host_id")
+            convoy_id = identity.normalize_convoy_id(
+                text_field(body, "convoy_id"))
+            controller_id = text_field(body, "controller_id")
+            selected_node_id = (text_field(
+                body, "selected_node_id", required=False) or None)
+            label = text_field(body, "label", required=False, limit=128)
+        except (Malformed, identity.IdentityError) as exc:
+            detail = getattr(exc, "detail", str(exc))
+            return self._refuse("relay", "malformed", detail, 400)
+        clear_selected = body.get("clear_selected", False)
+        if (not isinstance(clear_selected, bool)
+                or (clear_selected and selected_node_id is not None)):
+            return self._refuse("relay", "malformed",
+                                "invalid selection heartbeat", 400)
+        heartbeat = {
+            "controller_id": controller_id, "label": label,
+            "clear_selected": clear_selected,
+        }
+        if selected_node_id is not None:
+            heartbeat["selected_node_id"] = selected_node_id
+
+        if peer_host_id == self.host_id:
+            with self.lock:
+                if convoy_id not in self._active_convoy_ids_locked():
+                    return self._refuse(
+                        "relay", "unknown_convoy", convoy_id, 404)
+                if selected_node_id is not None:
+                    node = self.directory.lookup(selected_node_id)
+                    if (node is None or node.get("convoy_id") != convoy_id
+                            or not bool(node.get("enabled", True))):
+                        return self._refuse(
+                            "relay", "unknown_node", selected_node_id, 404)
+                code, result = self.heartbeat_controller(heartbeat)
+            result = dict(result)
+            result.setdefault("target_host_id", self.host_id)
+            result.setdefault("convoy_id", convoy_id)
+            result.setdefault("local_sibling", True)
+            return code, result
+
+        with self.lock:
+            record = self.peers.get(peer_host_id)
+            decision = self.peers.authorize_peer(
+                peer_host_id,
+                record.get("fingerprint") if record else None,
+                convoy_id=convoy_id)
+            if not decision.allowed:
+                return self._refuse(
+                    "relay", decision.reason, decision.detail,
+                    _REFUSAL_HTTP.get(decision.reason, 403))
+            targets, target_error = self._peer_targets_from_record(record)
+            keys = self.hostkeys
+        if keys is None:
+            return self._identity_unavailable()
+        used_session, result = self._session_call_if_connected(
+            peer_host_id, convoy_id,
+            peerserver.SESSION_RPC_CONTROLLER_HEARTBEAT, heartbeat,
+            peerclient.DEFAULT_PEER_TIMEOUT_S)
+        if not used_session:
+            if not targets:
+                return self._refuse("relay", "peer_endpoint_unknown",
+                                    target_error, 409)
+            self._audit_http_compat_fallback(
+                peer_host_id,
+                peerserver.SESSION_RPC_CONTROLLER_HEARTBEAT)
+            _target, result = self._call_peer_targets(
+                targets,
+                lambda candidate, remaining:
+                    peerclient.heartbeat_peer_controller(
+                        candidate, keys, convoy_id, controller_id,
+                        selected_node_id,
+                        clear_selected=clear_selected, label=label,
+                        timeout=remaining, pool=self.peer_pool),
+                peerclient.DEFAULT_PEER_TIMEOUT_S)
+        if result is peerclient.UNREACHABLE:
+            return 503, {"ok": False, "reason": "peer_unreachable"}
+        if isinstance(result, peerclient._PinMismatch):
+            return 409, result.as_dict()
+        if result is None:
+            return 503, {"ok": False,
+                         "reason": "heartbeat_indeterminate"}
+        code = 200 if result.get("ok") else int(
+            result.get("http_status") or 409)
+        result = dict(result)
+        result.setdefault("target_host_id", peer_host_id)
+        result.setdefault("convoy_id", convoy_id)
+        result.setdefault("wakes_touchdesigner", False)
+        return code, result
+
+    @staticmethod
+    def _artifact_relay_status(result):
+        reason = result.get("reason") if isinstance(result, dict) else None
+        return {
+            "artifact_invalid": 400,
+            "artifact_scope_not_found": 404,
+            "artifact_not_found": 404,
+            "artifact_unauthorized": 403,
+            "artifact_transfer_busy": 429,
+            "deadline_exceeded": 504,
+            "artifact_deadline_exceeded": 504,
+            "artifact_quota_exceeded": 507,
+            "artifact_owner_claims_exceeded": 507,
+            "artifact_corrupt": 422,
+            "artifact_local_io": 500,
+        }.get(reason, 502)
+
+    def relay_artifact(self, body):
+        """Materialize one exact peer artifact into this host's cache.
+
+        The loopback bridge never treats a remote path as local.  It passes
+        the small artifact reference returned by the durable job here; this
+        host then uses the peer's pinned mTLS identity, one cumulative
+        transfer deadline, a private partial file, and exact size/SHA-256
+        verification before exposing a local reference.  Reads may fail over
+        to another persisted endpoint because replaying an artifact GET cannot
+        execute a command.
+        """
+        try:
+            peer_host_id = text_field(body, "target_host_id")
+            convoy_id = identity.normalize_convoy_id(
+                text_field(body, "convoy_id"))
+            target_node_id = text_field(body, "target_node_id")
+            controller_id = text_field(body, "controller_id")
+            reference = dict_field(body, "artifact")
+        except (Malformed, identity.IdentityError) as exc:
+            detail = getattr(exc, "detail", str(exc))
+            return self._refuse("relay", "malformed", detail, 400)
+        timeout_s = body.get(
+            "timeout_s", peerclient.DEFAULT_ARTIFACT_TIMEOUT_S)
+        if (isinstance(timeout_s, bool)
+                or not isinstance(timeout_s, (int, float))
+                or not math.isfinite(float(timeout_s))
+                or not 0.1 <= float(timeout_s)
+                <= protocol.MAX_DEADLINE_HORIZON_S):
+            return self._refuse(
+                "relay", "malformed",
+                f"timeout_s must be within [0.1, "
+                f"{protocol.MAX_DEADLINE_HORIZON_S:.0f}]", 400)
+
+        # Keep the newly materialized cache entry non-evictable across the
+        # gap between this response and the bridge's authenticated loopback
+        # download/export.  The bridge releases this opaque handoff after it
+        # has a safe local owner; abandoned handoffs age out in ArtifactStore.
+        relay_protection_id = "relay:" + secrets.token_hex(16)
+        protected_artifact_id = reference.get("artifact_id")
+        protection_handed_off = False
+
+        if not self.begin_artifact_transfer():
+            return 429, {"ok": False,
+                         "reason": "artifact_transfer_busy",
+                         "wakes_touchdesigner": False}
+        try:
+            if peer_host_id == self.host_id:
+                with self.lock:
+                    node = self.directory.lookup(target_node_id)
+                    if (node is None or node.get("convoy_id") != convoy_id
+                            or not bool(node.get("enabled", True))):
+                        return 404, {"ok": False,
+                                     "reason": "artifact_node_unavailable"}
+                owner = {
+                    "host_id": self.host_id,
+                    "node_id": target_node_id,
+                    "controller_id": controller_id,
+                }
+                if isinstance(reference.get("job_id"), str):
+                    owner["job_id"] = reference["job_id"]
+                try:
+                    local_reference = self.artifacts.describe_for_owner(
+                        convoy_id, reference.get("artifact_id"), owner,
+                        verify=True, touch=True,
+                        protection_id=relay_protection_id,
+                        protection_kind="active_transfer")
+                except artifacts_mod.ArtifactError as exc:
+                    return self._artifact_error(exc)
+                if any(local_reference.get(name) != reference.get(name)
+                       for name in ("artifact_id", "sha256", "size",
+                                    "mime_type")):
+                    return 422, {"ok": False,
+                                 "reason": "artifact_corrupt",
+                                 "detail": "artifact reference metadata "
+                                           "does not match local content"}
+                protection_handed_off = True
+                return 200, {
+                    "ok": True, "artifact": local_reference,
+                    "relay_protection_id": relay_protection_id,
+                    "transfer": {"attempts": 0, "resumed": False,
+                                 "bytes": local_reference["size"]},
+                    "target_host_id": self.host_id,
+                    "convoy_id": convoy_id, "local_sibling": True,
+                    "wakes_touchdesigner": False,
+                }
+
+            with self.lock:
+                record = self.peers.get(peer_host_id)
+                decision = self.peers.authorize_peer(
+                    peer_host_id,
+                    record.get("fingerprint") if record else None,
+                    convoy_id=convoy_id)
+                if not decision.allowed:
+                    return self._refuse(
+                        "relay", decision.reason, decision.detail,
+                        _REFUSAL_HTTP.get(decision.reason, 403))
+                targets, target_error = self._peer_targets_from_record(record)
+                if not targets:
+                    return self._refuse(
+                        "relay", "peer_endpoint_unknown", target_error, 409)
+                keys = self.hostkeys
+            if keys is None:
+                return self._identity_unavailable()
+
+            _target, result = self._call_peer_targets(
+                targets,
+                lambda candidate, remaining: (
+                    peerclient.download_peer_artifact(
+                        candidate, keys, self.artifacts, convoy_id,
+                        target_node_id, controller_id, reference,
+                        timeout_s=remaining,
+                        protection_id=relay_protection_id,
+                        protection_kind="active_transfer")),
+                float(timeout_s), retry_ambiguous=True)
+            if result is peerclient.UNREACHABLE:
+                return 503, {"ok": False, "reason": "peer_unreachable",
+                             "target_host_id": peer_host_id,
+                             "wakes_touchdesigner": False}
+            if isinstance(result, peerclient._PinMismatch):
+                return 409, result.as_dict()
+            if result is None:
+                return 502, {"ok": False, "reason": "peer_bad_response",
+                             "target_host_id": peer_host_id,
+                             "wakes_touchdesigner": False}
+            result = dict(result)
+            result.setdefault("target_host_id", peer_host_id)
+            result.setdefault("convoy_id", convoy_id)
+            result.setdefault("target_node_id", target_node_id)
+            result.setdefault("wakes_touchdesigner", False)
+            if result.get("ok") is True:
+                artifact = result.get("artifact") or {}
+                if artifact.get("artifact_id") != protected_artifact_id:
+                    return 422, {
+                        "ok": False, "reason": "artifact_corrupt",
+                        "detail": "materialized artifact identity changed",
+                        "wakes_touchdesigner": False,
+                    }
+                result["relay_protection_id"] = relay_protection_id
+                self._audit_best_effort(
+                    "artifact_materialized_from_peer", {
+                        "peer_host_id": peer_host_id,
+                        "convoy_id": convoy_id,
+                        "node_id": target_node_id,
+                        "artifact_id": artifact.get("artifact_id"),
+                        "size": artifact.get("size"),
+                    })
+                protection_handed_off = True
+                return 200, result
+            return self._artifact_relay_status(result), result
+        finally:
+            self.end_artifact_transfer()
+            if (protected_artifact_id and not protection_handed_off):
+                try:
+                    self.artifacts.release(
+                        convoy_id, protected_artifact_id,
+                        relay_protection_id,
+                        expected_kind="active_transfer")
+                except artifacts_mod.ArtifactError:
+                    pass
+
+    def release_relay_artifact(self, body):
+        """Release one authenticated local relay handoff, idempotently."""
+        try:
+            convoy_id = identity.normalize_convoy_id(
+                text_field(body, "convoy_id"))
+            artifact_id = text_field(body, "artifact_id")
+            protection_id = text_field(body, "relay_protection_id")
+        except (Malformed, identity.IdentityError) as exc:
+            detail = getattr(exc, "detail", str(exc))
+            return self._refuse(
+                "artifact_release", "malformed", detail, 400)
+        if not re.fullmatch(r"relay:[0-9a-f]{32}", protection_id):
+            return self._refuse(
+                "artifact_release", "malformed",
+                "invalid relay protection id", 400)
+        try:
+            remaining = self.artifacts.release(
+                convoy_id, artifact_id, protection_id,
+                expected_kind="active_transfer")
+        except artifacts_mod.ArtifactNotFound:
+            remaining = 0
+        except artifacts_mod.ArtifactError as exc:
+            return self._artifact_error(exc)
+        return 200, {
+            "ok": True, "convoy_id": convoy_id,
+            "artifact_id": artifact_id,
+            "released": remaining == 0,
+            "wakes_touchdesigner": False,
+        }
+
+    def relay_cancel(self, body):
+        """Cancel a local-sibling or remote-peer delivery by exact owner."""
+        try:
+            peer_host_id = text_field(body, "target_host_id")
+            convoy_id = identity.normalize_convoy_id(
+                text_field(body, "convoy_id"))
+            delivery_id = text_field(body, "delivery_id")
+        except (Malformed, identity.IdentityError) as exc:
+            detail = getattr(exc, "detail", str(exc))
+            return self._refuse("relay", "malformed", detail, 400)
+
+        if peer_host_id == self.host_id:
+            with self.lock:
+                code, result = self._cancel_job_locked(
+                    delivery_id, expected_convoy_id=convoy_id,
+                    expected_origin_host_id=self.host_id)
+            result = dict(result)
+            result.setdefault("target_host_id", self.host_id)
+            result.setdefault("convoy_id", convoy_id)
+            result.setdefault("local_sibling", True)
+            result.setdefault("wakes_touchdesigner", False)
+            return code, result
+
+        with self.lock:
+            record = self.peers.get(peer_host_id)
+            decision = self.peers.authorize_peer(
+                peer_host_id,
+                record.get("fingerprint") if record else None,
+                convoy_id=convoy_id)
+            if not decision.allowed:
+                return self._refuse(
+                    "relay", decision.reason, decision.detail,
+                    _REFUSAL_HTTP.get(decision.reason, 403))
+            targets, target_error = self._peer_targets_from_record(record)
+            keys = self.hostkeys
+        if keys is None:
+            return self._identity_unavailable()
+        used_session, result = self._session_call_if_connected(
+            peer_host_id, convoy_id, peerserver.SESSION_RPC_CANCEL,
+            {"delivery_id": delivery_id},
+            peerclient.DEFAULT_PEER_TIMEOUT_S)
+        if not used_session:
+            if not targets:
+                return self._refuse("relay", "peer_endpoint_unknown",
+                                    target_error, 409)
+            self._audit_http_compat_fallback(
+                peer_host_id, peerserver.SESSION_RPC_CANCEL)
+            _target, result = self._call_peer_targets(
+                targets,
+                lambda candidate, remaining: peerclient.cancel_peer_job(
+                    candidate, keys, convoy_id, delivery_id,
+                    timeout=remaining, pool=self.peer_pool),
+                peerclient.DEFAULT_PEER_TIMEOUT_S)
+        if result is peerclient.UNREACHABLE:
+            return 503, {"ok": False, "reason": "peer_unreachable",
+                         "target_host_id": peer_host_id,
+                         "delivery_id": delivery_id}
+        if isinstance(result, peerclient._PinMismatch):
+            return 409, result.as_dict()
+        if result is None:
+            # The cancellation request may have arrived. Its outcome must be
+            # reconciled by polling the original delivery.
+            return 202, {
+                "ok": False, "reason": "cancellation_indeterminate",
+                "detail": "the peer may have accepted cancellation; query "
+                          "the delivery for its definitive state",
+                "target_host_id": peer_host_id,
+                "convoy_id": convoy_id, "delivery_id": delivery_id,
+            }
+        result = dict(result)
+        result.setdefault("target_host_id", peer_host_id)
+        result.setdefault("convoy_id", convoy_id)
+        result.setdefault("delivery_id", delivery_id)
+        result.setdefault("wakes_touchdesigner", False)
+        return (200 if result.get("ok") else int(
+            result.get("http_status") or 409)), result
 
     def admit_peer(self, body):
         """Admit a peer against an EXPLICIT fingerprint the operator has
@@ -3781,6 +10631,8 @@ class HostApp:
                     convoy_ids=body.get("convoy_ids"),
                     cert_pem=body.get("cert_pem"),
                     clock_offset_s=body.get("clock_offset_s"))
+                self._prune_peer_manifest_cache_locked(record["host_id"])
+                self._invalidate_network_nodes_cache_locked()
             except peers_mod.PeerError as e:
                 return self._refuse("peers", e.reason, e.detail,
                                     409 if e.reason == "peers_unreadable"
@@ -3791,6 +10643,7 @@ class HostApp:
                                      record["host_id"],
                                      record["fingerprint"]),
                                  "admitted_via": record["admitted_via"]})
+        self.reconcile_peer_sessions()
         # A RE-PIN REPUDIATES THE OLD KEY, so its queued work must burn.
         # The per-dispatch re-check re-derives the CURRENT pin, so without
         # this a job the old key submitted would be re-authorized under
@@ -3846,6 +10699,8 @@ class HostApp:
         with self.lock:
             try:
                 record = self.peers.observe(host_id)
+                self._prune_peer_manifest_cache_locked(record["host_id"])
+                self._invalidate_network_nodes_cache_locked()
             except peers_mod.PeerError as e:
                 return self._refuse(
                     "peers", e.reason, e.detail,
@@ -3853,6 +10708,7 @@ class HostApp:
         summary = self._revoke_peer_work(
             record["host_id"], cause="peer_observe_only",
             mutating_only=True, lease_modes=(controllers.LEASE_EXCLUSIVE,))
+        self.reconcile_peer_sessions()
         return 200, {"ok": True, "peer": record, "revocation": summary}
 
     def _revoke_route(self, body, outcome):
@@ -3873,10 +10729,21 @@ class HostApp:
                     record = self.peers.forget(host_id)
                 else:
                     record = self.peers.block(host_id)
+                self._prune_peer_manifest_cache_locked(record["host_id"])
+                self._invalidate_network_nodes_cache_locked()
             except peers_mod.PeerError as e:
                 return self._refuse(
                     "peers", e.reason, e.detail,
                     404 if e.reason == "unknown_peer" else 409)
+        manager = self.session_manager
+        if manager is not None:
+            try:
+                if outcome == "forgotten":
+                    manager.remove_peer(record["host_id"])
+                else:
+                    manager.revoke_peer(record["host_id"])
+            except sessions_mod.PairSessionError:
+                pass
         summary = self._revoke_peer_work(record["host_id"], cause=outcome)
         self._audit_best_effort(
             "peer_revoked",
@@ -3920,18 +10787,48 @@ class HostApp:
             except peers_mod.PeerError as e:
                 return self._refuse("peers", e.reason, e.detail, 409)
             hosts = [r["host_id"] for r in self.peers.peers()]
+            self._peer_manifest_cache.clear()
+            self._invalidate_network_nodes_cache_locked()
+        self.reconcile_peer_sessions()
         released = 0
         if engaged:
+            scan_failed = False
             try:
-                records, _unreadable = self.db.scan_jobs()
+                records, unreadable = self.db.scan_jobs()
             except Exception:
-                records = []        # the switch is already in force
+                scan_failed = True
+                records, unreadable = [], []  # switch already in force
+            preserve_claims = {
+                job.get("delivery_id") for job in records
+                if job.get("state") in ("dispatching", "running")
+                and isinstance(job.get("delivery_id"), str)
+            }
+            preserve_claims.update(
+                delivery_id for delivery_id in (unreadable or ())
+                if isinstance(delivery_id, str))
             with self.lock:
+                if scan_failed:
+                    # A total scan failure is strictly stronger than an
+                    # unreadable individual record: we do not know any of
+                    # the delivery ids that may already be executing.  Hold
+                    # the global mutation fence and preserve every affected
+                    # implicit claim until a later successful reconciliation
+                    # can prove which jobs are terminal.
+                    self._operation_job_scan_failed = True
                 for host_id in hosts:
-                    for controller_id in self._controllers_for_origin(
-                            host_id, records):
+                    controller_ids = self._controllers_for_origin(
+                        host_id, records)
+                    host_preserve_claims = set(preserve_claims)
+                    if scan_failed:
+                        host_preserve_claims.update(
+                            claim.get("delivery_id")
+                            for claim in self.leases.operation_claims()
+                            if claim.get("controller_id") in controller_ids
+                        )
+                    for controller_id in controller_ids:
                         released += self.leases.release_controller(
-                            controller_id)
+                            controller_id,
+                            preserve_claims=host_preserve_claims)
         self._audit_best_effort("lan_killswitch",
                                 {"engaged": engaged, "reason": reason,
                                  "leases_released": released})
@@ -3956,6 +10853,8 @@ class HostApp:
                 400)
         try:
             kept = self.peers.quarantine()
+            self._peer_manifest_cache.clear()
+            self._invalidate_network_nodes_cache_locked()
         except peers_mod.PeerError as e:
             return self._refuse("peers", e.reason, e.detail,
                                 409 if e.reason == "peers_readable" else 500)
@@ -3982,7 +10881,17 @@ class HostApp:
         for lease in self.leases.live_leases(now):
             cid = lease.get("controller_id", "")
             if cid.startswith(peers_mod.CONTROLLER_NAMESPACE):
-                self.leases.release_controller(cid)
+                # Quarantine runs under the app lock and cannot safely scan a
+                # large jobs directory here. Preserve implicit claims; the
+                # durable-aware reconciler later releases queued/terminal
+                # ones, while in-flight writers remain fenced.
+                preserved = {
+                    claim.get("delivery_id")
+                    for claim in self.leases.operation_claims()
+                    if claim.get("controller_id") == cid
+                }
+                self.leases.release_controller(
+                    cid, preserve_claims=preserved)
                 released += 1
         killswitch = self.peers.killswitch()
         self._audit_best_effort(
@@ -4041,6 +10950,7 @@ class HostApp:
         summary = {"refused": 0, "left_in_flight": 0, "left_running": 0,
                    "leases_released": 0, "errors": 0, "unreadable": 0,
                    "examined": 0}
+        scan_failed = False
         try:
             records, unreadable = self.db.scan_jobs()
         except Exception as e:
@@ -4051,6 +10961,7 @@ class HostApp:
                 "peer_revocation_incomplete",
                 {"origin_host_id": host_id, "detail": str(e)[:256],
                  "reason": "job_scan_failed"})
+            scan_failed = True
             records, unreadable = [], []
         if unreadable:
             # UNREADABLE IS NOT ABSENT. get_job returns None for both, so
@@ -4063,6 +10974,14 @@ class HostApp:
                 {"origin_host_id": host_id, "reason": "records_unreadable",
                  "count": len(unreadable), "delivery_ids": unreadable[:16]})
         mine = [j for j in records if j.get("origin_host_id") == host_id]
+        preserve_claims = {
+            job.get("delivery_id") for job in mine
+            if job.get("state") in ("dispatching", "running")
+            and isinstance(job.get("delivery_id"), str)
+        }
+        preserve_claims.update(
+            delivery_id for delivery_id in (unreadable or ())
+            if isinstance(delivery_id, str))
         summary["examined"] = len(mine)
         for job in mine:
             state = job.get("state")
@@ -4105,6 +11024,9 @@ class HostApp:
                     summary["errors"] += 1
                     continue
                 summary["refused"] += 1
+                with self.lock:
+                    if self._release_operation_claim_locked(refused):
+                        summary["leases_released"] += 1
                 self._audit_best_effort(
                     "peer_revocation_refused_job",
                     {"delivery_id": delivery_id, "origin_host_id": host_id})
@@ -4124,10 +11046,22 @@ class HostApp:
                      "detail": "the node owns this job and still holds its "
                                "verdict; polling continues to a terminal"})
         with self.lock:
-            for controller_id in self._controllers_for_origin(host_id,
-                                                              records):
+            controller_ids = self._controllers_for_origin(host_id, records)
+            if scan_failed:
+                # Do not translate "could not enumerate jobs" into "there
+                # are no jobs".  Preserve all claims attributable to this
+                # peer and make every new mutation fail closed until the job
+                # store can be scanned and reconciled successfully.
+                self._operation_job_scan_failed = True
+                preserve_claims.update(
+                    claim.get("delivery_id")
+                    for claim in self.leases.operation_claims()
+                    if claim.get("controller_id") in controller_ids
+                )
+            for controller_id in controller_ids:
                 summary["leases_released"] += self.leases.release_controller(
-                    controller_id, modes=lease_modes)
+                    controller_id, modes=lease_modes,
+                    preserve_claims=preserve_claims)
             if lease_modes is None:
                 self._peer_controllers.pop(host_id, None)
         return summary
@@ -4144,7 +11078,7 @@ def make_handler(app):
         def log_message(self, fmt, *args):
             pass
 
-        def _send(self, code, payload):
+        def _send(self, code, payload, extra_headers=None):
             try:
                 # allow_nan=False: Python's json emits BARE NaN /
                 # Infinity tokens, which are not JSON and which strict
@@ -4159,8 +11093,34 @@ def make_handler(app):
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
+            for name, value in (extra_headers or {}).items():
+                if name.lower() not in ("content-type", "content-length"):
+                    self.send_header(name, str(value))
+            if self.close_connection:
+                self.send_header("Connection", "close")
             self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.wfile.write(body)
+            except OSError:
+                pass
+
+        def _send_artifact_stream(self, code, lease, headers):
+            """Write verified bytes directly; never JSON/base64 content."""
+            try:
+                self.send_response(code)
+                for name, value in headers.items():
+                    self.send_header(name, str(value))
+                self.end_headers()
+                for block in lease:
+                    self.wfile.write(block)
+                self.wfile.flush()
+            except OSError:
+                # Client disconnected during a resumable transfer. Closing the
+                # lease releases active-transfer protection; a fresh one-shot
+                # capability can resume with Range.
+                self.close_connection = True
+            finally:
+                lease.close()
 
         def _authenticated(self):
             provided = self.headers.get(TOKEN_HEADER) or ""
@@ -4207,7 +11167,34 @@ def make_handler(app):
                 self._send(401, {"ok": False, "reason": "unauthenticated"})
                 return
             try:
-                if self.path == "/status":
+                artifact_route = artifact_http.parse_route(
+                    self.path, artifact_http.LOCAL_ROUTE_PREFIX)
+                if artifact_route is not None:
+                    action, convoy_id, artifact_id = artifact_route
+                    if action != "download":
+                        self._send(405, {"ok": False,
+                                         "reason": "method_not_allowed"})
+                        return
+                    if not app.begin_artifact_transfer():
+                        self._send(429, {"ok": False,
+                                         "reason": "artifact_transfer_busy"})
+                        return
+                    try:
+                        code, payload, lease, headers = (
+                            app.artifact_open_local_download(
+                                convoy_id, artifact_id,
+                                artifact_http.range_from_headers(
+                                    self.headers)))
+                        if lease is None:
+                            self._send(code, payload, headers)
+                        else:
+                            self._send_artifact_stream(code, lease, headers)
+                    finally:
+                        app.end_artifact_transfer()
+                    return
+                parsed_path = urllib.parse.urlsplit(self.path)
+                route = parsed_path.path
+                if route == "/status":
                     # OUTSIDE the lock: status() self-locks in phases so
                     # its jobs-dir scan does not starve every other route
                     # (see status()). Wrapping it in `with app.lock:`
@@ -4215,32 +11202,88 @@ def make_handler(app):
                     code, payload = 200, app.status()
                     self._send(code, payload)
                     return
+                if route == "/network/nodes":
+                    # SELF-LOCKING and performs bounded peer I/O after its
+                    # snapshot.  It must never run under app.lock.
+                    query = urllib.parse.parse_qs(
+                        parsed_path.query, keep_blank_values=True)
+                    if set(query) - {"convoy_id"} or len(
+                            query.get("convoy_id", [])) > 1:
+                        code, payload = 400, {
+                            "ok": False, "reason": "malformed",
+                            "detail": "only one convoy_id query is allowed",
+                        }
+                    else:
+                        values = query.get("convoy_id") or []
+                        selected = values[0] if values else None
+                        code, payload = app.network_nodes(selected)
+                    self._send(code, payload)
+                    return
+                if route == "/network/controllers":
+                    # SELF-LOCKING; peer fanout and job scans must run outside
+                    # the global host lock. This route is passive/non-waking.
+                    query = urllib.parse.parse_qs(
+                        parsed_path.query, keep_blank_values=True)
+                    allowed = {"convoy_id", "host_id", "node_id"}
+                    if (set(query) - allowed
+                            or any(len(query.get(name, [])) > 1
+                                   for name in allowed)):
+                        code, payload = 400, {
+                            "ok": False, "reason": "malformed",
+                            "detail": "convoy_id, host_id, and node_id may "
+                                      "each appear at most once",
+                        }
+                    else:
+                        def one(name):
+                            values = query.get(name) or []
+                            return values[0] if values else None
+                        code, payload = app.network_controllers(
+                            one("convoy_id"), one("host_id"), one("node_id"))
+                    self._send(code, payload)
+                    return
                 with app.lock:
-                    if self.path == "/nodes":
+                    if route == "/nodes":
                         code, payload = 200, app.list_nodes()
-                    elif self.path == "/manifest":
+                    elif route == "/policy":
+                        query = urllib.parse.parse_qs(
+                            parsed_path.query, keep_blank_values=True)
+                        if set(query) - {"node_id"} or len(
+                                query.get("node_id", [])) > 1:
+                            code, payload = 400, {
+                                "ok": False, "reason": "malformed",
+                                "detail": "only one node_id query is allowed",
+                            }
+                        else:
+                            values = query.get("node_id") or []
+                            code, payload = app.get_policy(
+                                values[0] if values else None)
+                    elif route == "/manifest":
                         code, payload = app.get_manifest()
-                    elif self.path.startswith("/manifest/"):
+                    elif route.startswith("/manifest/"):
                         code, payload = app.get_manifest(
-                            self.path[len("/manifest/"):])
-                    elif self.path == "/identity":
+                            route[len("/manifest/"):])
+                    elif route == "/identity":
                         code, payload = app.get_identity()
-                    elif self.path == "/lan/status":
+                    elif route == "/lan/status":
                         # LOOPBACK ONLY: an operator asks their OWN host
                         # whether the LAN listener is up. The peer leg has
                         # its own /peer/health; this is never in the LAN
                         # route table.
                         code, payload = app.lan_status()
-                    elif self.path == "/peers":
+                    elif route == "/peers":
                         code, payload = app.list_peers()
-                    elif self.path == "/leases":
+                    elif route == "/leases":
                         code, payload = app.list_leases()
-                    elif self.path.startswith("/jobs/"):
+                    elif route.startswith("/jobs/"):
                         code, payload = app.get_job(
-                            self.path[len("/jobs/"):])
+                            route[len("/jobs/"):])
                     else:
                         code, payload = 404, {"ok": False,
                                               "reason": "not_found"}
+            except artifact_http.ArtifactHTTPError as e:
+                code, payload = e.status, e.payload()
+                self._send(code, payload, e.headers)
+                return
             except Exception as e:
                 # LAST RESort, not the refusal mechanism: every expected
                 # bad input is a named, audited 4xx before it reaches
@@ -4258,6 +11301,42 @@ def make_handler(app):
             if not self._authenticated():
                 self._send(401, {"ok": False, "reason": "unauthenticated"})
                 return
+            try:
+                artifact_route = artifact_http.parse_route(
+                    self.path, artifact_http.LOCAL_ROUTE_PREFIX)
+            except artifact_http.ArtifactHTTPError as e:
+                self.close_connection = True
+                self._send(e.status, e.payload(), e.headers)
+                return
+            if artifact_route is not None and artifact_route[0] == "upload":
+                try:
+                    metadata = artifact_http.upload_metadata(
+                        self.headers, app.artifacts.max_artifact_bytes)
+                except artifact_http.ArtifactHTTPError as e:
+                    self.close_connection = True
+                    self._send(e.status, e.payload(), e.headers)
+                    return
+                if not app.begin_artifact_transfer():
+                    self.close_connection = True
+                    self._send(429, {"ok": False,
+                                     "reason": "artifact_transfer_busy"})
+                    return
+                reader = artifact_http.LimitedReader(
+                    self.rfile, metadata["expected_size"])
+                try:
+                    code, payload = app.artifact_upload(
+                        artifact_route[1], reader, metadata)
+                except (OSError, ConnectionError):
+                    self.close_connection = True
+                    return
+                finally:
+                    app.end_artifact_transfer()
+                # Raw uploads are one request per connection.  Even on
+                # success, bytes beyond the declared Content-Length must not
+                # be reinterpreted as a pipelined second request.
+                self.close_connection = True
+                self._send(code, payload)
+                return
             body = self._read_body()
             if not isinstance(body, dict):
                 self._send(400, {"ok": False, "reason": "malformed"})
@@ -4269,13 +11348,52 @@ def make_handler(app):
                 # -- wrapping these in `with app.lock:` would deadlock on
                 # the first claim. They still flow into the SINGLE _send
                 # below, like every other route.
-                if self.path == "/dispatch":
+                if (artifact_route is not None
+                        and artifact_route[0] == "capability"):
+                    code, payload = app.artifact_local_grant(
+                        artifact_route[1], artifact_route[2], body)
+                elif artifact_route is not None:
+                    code, payload = 405, {
+                        "ok": False, "reason": "method_not_allowed"}
+                elif self.path == "/dispatch":
                     code, payload = app.dispatch_job(
                         body.get("delivery_id"))
+                elif self.path == "/jobs/cancel":
+                    # Self-locking: an in-flight host subprocess owns its
+                    # cancellation Event under app.lock, then observes it
+                    # outside the lock in ProcessRunner.
+                    code, payload = app.cancel_host_job(body)
+                elif self.path == "/jobs/ack":
+                    code, payload = app.acknowledge_job(body)
+                elif self.path == "/register":
+                    # SELF-LOCKING: it may probe an incumbent runtime's
+                    # loopback port before mutating the registry.
+                    code, payload = app.register_node(body)
                 elif self.path == "/drain":
                     code, payload = app.drain()
                 elif self.path == "/poll":
                     code, payload = app.poll_job(body.get("delivery_id"))
+                elif self.path == "/relay":
+                    code, payload = app.relay_submit(body)
+                elif self.path == "/relay/job":
+                    code, payload = app.relay_job(body)
+                elif self.path == "/relay/ack":
+                    code, payload = app.relay_acknowledge(body)
+                elif self.path == "/relay/heartbeat":
+                    code, payload = app.relay_heartbeat(body)
+                elif self.path == "/relay/artifact":
+                    code, payload = app.relay_artifact(body)
+                elif self.path == "/relay/artifact/release":
+                    code, payload = app.release_relay_artifact(body)
+                elif self.path == "/artifact/export":
+                    code, payload = app.export_artifact_to_project(body)
+                elif self.path == "/relay/cancel":
+                    code, payload = app.relay_cancel(body)
+                elif self.path == "/owlette":
+                    # Public HTTPS consumer, not a peer route.  It performs
+                    # bounded Internet I/O and therefore must stay outside
+                    # the host's coordination lock.
+                    code, payload = app.owlette_action(body)
                 # The revocation routes self-lock in phases too: the
                 # membership change is O(1) under the lock, and the job
                 # sweep that follows runs lock-free. /lan/killswitch is
@@ -4302,8 +11420,6 @@ def make_handler(app):
 
         def _post_locked(self, body):
             with app.lock:
-                if self.path == "/register":
-                    return app.register_node(body)
                 if self.path == "/unregister":
                     return app.unregister_node(body)
                 if self.path == "/remint":
@@ -4325,12 +11441,27 @@ def make_handler(app):
                 # adding a branch to the wrong if-chain.
                 if self.path == "/peers/quarantine":
                     return app.quarantine_peers(body)
+                if self.path == "/realm/reset":
+                    # Advanced LOCAL recovery for a split-realm conflict.
+                    # Loopback-only by construction (this table is not on the
+                    # LAN peer server's class).
+                    return app.reset_realm(body)
                 if self.path == "/leases":
                     return app.acquire_lease(body)
                 if self.path == "/leases/release":
                     return app.release_lease(body)
                 if self.path == "/heartbeat":
                     return app.heartbeat_controller(body)
+                if self.path == "/policy/challenge":
+                    return app.begin_policy_challenge(body)
+                if self.path == "/policy/confirm":
+                    return app.confirm_policy_challenge(body)
+                if self.path == "/policy/decline":
+                    return app.decline_policy_challenge(body)
+                if self.path == "/policy/disable":
+                    return app.disable_policy(body)
+                if self.path == "/policy/artifact-quota":
+                    return app.set_artifact_quota(body)
                 if self.path == "/shutdown":
                     # Authenticated by do_POST like every other POST --
                     # an unauthenticated caller was already refused 401
@@ -4356,30 +11487,42 @@ def serve(app, port=0):
     return server, actual_port
 
 
+def desired_lan_endpoint(app):
+    """Return the currently configured concrete LAN endpoint.
+
+    Enabled Convoy membership is the exposure consent gate.  ``lan.json``
+    is therefore optional, but when present its emergency-disable and bind
+    overrides remain authoritative.  Keeping this resolution in one helper
+    lets the lifecycle loop detect DHCP/NIC changes without first creating a
+    second listener.
+    """
+    config = lan_mod.load_config(app.data_dir)
+    if config.present and not config.enabled:
+        raise lan_mod.LanConfigError(
+            "admin_disabled", "Convoy LAN is disabled by lan.json")
+    if not config.present:
+        config = lan_mod.LanConfig(
+            enabled=True, port=config.port, bind=config.bind, present=True)
+    return lan_mod.resolve_bind(config), int(config.port)
+
+
 def start_lan_if_configured(app, log=None):
-    """Bind and start the LAN listener IF AND ONLY IF lan.json enables it.
+    """Bind for enabled Convoy membership, with optional LAN overrides.
 
-    Returns True when the LAN listener is now serving, False otherwise --
-    and False is the ORDINARY, non-error outcome for every shipped build
-    (no lan.json = no LAN socket, ever). Every reason for not binding is
-    recorded on app.lan_reason so /lan/status can tell 'off' from
-    'broken', and NONE of them stops the loopback daemon: a host that
-    cannot serve peers is still fully usable locally.
+    ``Enable Convoy`` on at least one durable local node is the normal and
+    mandatory exposure gate.  Absent ``lan.json`` uses the safe automatic
+    interface and fixed discovery port; no hidden setup file is required.
+    A present ``lan.json`` may still explicitly disable networking as an
+    advanced host-admin emergency override or select an interface/port.
 
-    The gate is deliberately layered so no single check silently opens a
-    socket: (1) lan.json must exist AND enable it; (2) this host must have
-    a usable identity CERTIFICATE (no cert -> no TLS); (3) a routable
-    interface must resolve; (4) the port must be free.
+    Every refusal leaves loopback service alive and records a named reason.
+    No branch binds a wildcard address.
     """
     say = log or (lambda msg: sys.stderr.write(msg + "\n"))
-    try:
-        config = lan_mod.load_config(app.data_dir)
-    except lan_mod.LanConfigError as e:
-        app.lan_reason = e.reason
-        say(f"convoy LAN: {e}")
-        return False
-    if not config.should_bind:
-        app.lan_reason = "disabled"
+    if app.lan_server is not None:
+        return True
+    if not app.active_convoy_ids():
+        app.lan_reason = "no_enabled_nodes"
         return False
     # TLS needs the derived certificate, not just the signing key. No
     # cert -> the identity still signs envelopes locally, but no mutual
@@ -4395,13 +11538,14 @@ def start_lan_if_configured(app, log=None):
             f"certificate ({app.hostkeys.cert_reason or 'unknown'})")
         return False
     try:
-        address = lan_mod.resolve_bind(config)
+        address, configured_port = desired_lan_endpoint(app)
     except lan_mod.LanConfigError as e:
         app.lan_reason = e.reason
         say(f"convoy LAN: {e}")
         return False
     try:
-        server, port = peerserver.serve_lan(app, address, config.port)
+        server, port = peerserver.serve_lan(
+            app, address, configured_port)
     except peerserver.LanBindError as e:
         app.lan_reason = e.reason
         say(f"convoy LAN: {e}")
@@ -4485,11 +11629,14 @@ def main(argv=None):
         raise
     if args.drain_interval > 0:
         app.start_drain_loop(args.drain_interval)
-    # The LAN listener, IF lan.json enables it. A default build has none,
-    # so this is a no-op and the daemon is loopback-only, exactly as
-    # before this slice. A bind failure NEVER stops the loopback daemon
-    # (start_lan_if_configured returns False and records a reason).
-    start_lan_if_configured(app)
+    # Independent of autonomous job draining: a crash after the durable
+    # restart commit must restore the exact TouchDesigner node even when the
+    # ordinary queue is configured for manual dispatch only.
+    app.start_lifecycle_recovery_loop()
+    # Membership drives LAN exposure dynamically.  With no enabled node the
+    # lifecycle thread owns no socket; first registration binds/advertises,
+    # and disabling the final node withdraws both discovery and peer TLS.
+    app.start_lan_lifecycle()
     sys.stderr.write(
         f"embody-convoy host {app.host_id[:8]} on 127.0.0.1:{port} "
         f"(data: {directory})\n")
@@ -4508,7 +11655,7 @@ def main(argv=None):
     # peer work can arrive while the daemon is winding down.
     def _stop(signum=None, _frame=None):
         def _teardown():
-            app.stop_lan_server()
+            app.stop_lan_lifecycle()
             server.shutdown()
         threading.Thread(target=_teardown, daemon=True).start()
 
@@ -4534,7 +11681,7 @@ def main(argv=None):
         # order, so no peer connection is accepted after the daemon has
         # begun clearing its own state.
         try:
-            app.stop_lan_server()
+            app.stop_lan_lifecycle()
         except Exception:
             pass
         try:
@@ -4543,6 +11690,14 @@ def main(argv=None):
             # Shutdown hygiene must not depend on the loop stopping
             # cleanly: a raise here skipped clear_portfile and left a
             # portfile pointing at a dead port.
+            pass
+        try:
+            app.stop_lifecycle_recovery_loop()
+        except Exception:
+            pass
+        try:
+            app.shutdown_network_queries()
+        except Exception:
             pass
         platform_mod.clear_portfile(directory)
         app.db.audit("hostapp", "stopped", {})

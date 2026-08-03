@@ -36,6 +36,7 @@ BOM, or a stray lone \\r all still fail.
 """
 
 import os
+import re
 
 import pytest
 
@@ -95,6 +96,29 @@ def _first_difference(left, right):
 
 
 DAEMON_MODULES = _python_modules(DAEMON_DIR)
+
+
+def test_convoy_tdn_carries_one_text_dat_asset_for_every_daemon_module():
+    """Parity on disk is insufficient if the .tox has no DAT to carry it.
+
+    ConvoyExt reads children of ``convoy/host`` at install time.  The TDN is
+    the version-controlled network source, so its file parameters must name
+    every vendored module exactly once.  This catches the easy-to-miss state
+    where a developer copies a file into ``host/`` but never creates the
+    corresponding TouchDesigner text DAT.
+    """
+    tdn = os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody', 'convoy.tdn')
+    with open(tdn, 'r', encoding='utf-8') as f:
+        text = f.read()
+    refs = re.findall(
+        r'^\s+file:\s+embody/Embody/convoy/host/(convoy_[A-Za-z0-9_]+\.py)\s*$',
+        text, flags=re.MULTILINE)
+    duplicates = sorted(name for name in set(refs) if refs.count(name) != 1)
+    assert not duplicates, 'host module DAT references are duplicated: %r' % duplicates
+    assert set(refs) == set(DAEMON_MODULES), (
+        'convoy.tdn host DAT assets differ from daemon modules; missing=%r, '
+        'extra=%r' % (sorted(set(DAEMON_MODULES) - set(refs)),
+                      sorted(set(refs) - set(DAEMON_MODULES))))
 
 
 def test_the_daemon_source_glob_actually_found_something():

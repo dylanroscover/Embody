@@ -6,6 +6,7 @@ auto-updated, nested timeouts, and the reconciliation contract
 import ast
 import os
 import threading
+import time
 
 import pytest
 
@@ -56,7 +57,8 @@ class Mesh:
         self.b = ha.HostApp(str(tmp_path / "b"))
         with self.b.lock:
             self.b.peers.admit(self.a.host_id, self.a.hostkeys.fingerprint,
-                               cert_pem=self.a.hostkeys.certificate_pem)
+                               cert_pem=self.a.hostkeys.certificate_pem,
+                               convoy_ids=["studio"])
         self.server, self.port = ps.serve_lan(self.b, "127.0.0.1", 0)
         self.thread = threading.Thread(target=self.server.serve_forever,
                                        daemon=True)
@@ -71,10 +73,9 @@ class Mesh:
         return pc.PeerTarget(**kw)
 
     def node(self, convoy_id="studio"):
-        with self.b.lock:
-            code, body = self.b.register_node({
-                "project_root": "/W/p", "comp_path": "/E",
-                "convoy_id": convoy_id, "runtime_id": "rt-1"})
+        code, body = self.b.register_node({
+            "project_root": "/W/p", "comp_path": "/E",
+            "convoy_id": convoy_id, "runtime_id": "rt-1"})
         assert code == 200
         return body["node_id"], convoy_id
 
@@ -104,6 +105,118 @@ def mesh(tmp_path):
 def test_a_pinned_round_trip_reaches_the_peer(mesh):
     body = pc.get_peer_health(mesh.target(), mesh.a.hostkeys)
     assert body["ok"] is True and body["host_id"] == mesh.b.host_id
+
+
+def test_persistent_pool_reuses_one_tls_handshake_for_control_requests(mesh):
+    pool = pc.PeerConnectionPool(mesh.a.hostkeys, idle_s=60)
+    try:
+        first = pc.get_peer_health(
+            mesh.target(), mesh.a.hostkeys, pool=pool)
+        second = pc.get_peer_manifest(
+            mesh.target(), mesh.a.hostkeys, pool=pool)
+        assert first["ok"] is True and second["ok"] is True
+        assert pool.stats() == {"targets": 1, "handshakes": 1}
+    finally:
+        pool.close()
+
+
+def test_persistent_pool_reauthorizes_and_drops_a_blocked_peer(mesh):
+    pool = pc.PeerConnectionPool(mesh.a.hostkeys, idle_s=60)
+    try:
+        assert pc.get_peer_health(
+            mesh.target(), mesh.a.hostkeys, pool=pool)["ok"] is True
+        with mesh.b.lock:
+            mesh.b.peers.block(mesh.a.host_id)
+        refused = pc.get_peer_health(
+            mesh.target(), mesh.a.hostkeys, pool=pool)
+        assert refused["ok"] is False
+        assert refused["reason"] == "peer_blocked"
+    finally:
+        pool.close()
+
+
+def _contention_target():
+    return pc.PeerTarget(
+        "1" * 32, "127.0.0.1", 47600, "test-cert", "test-pin")
+
+
+def test_pool_contention_timeout_expires_before_any_bytes_are_sent():
+    pool = pc.PeerConnectionPool(object(), idle_s=60)
+    target = _contention_target()
+    entered = threading.Event()
+    release = threading.Event()
+    calls = []
+
+    def blocked_request(entry, request_target, method, path, body, timeout):
+        calls.append(timeout)
+        entered.set()
+        assert release.wait(timeout=2.0)
+        return {"ok": True}
+
+    pool._request_locked = blocked_request
+    first_result = []
+    first = threading.Thread(target=lambda: first_result.append(
+        pool.request(target, "GET", "/first", None, 1.0)))
+    try:
+        first.start()
+        assert entered.wait(timeout=1.0)
+        started = time.monotonic()
+        second = pool.request(target, "GET", "/second", None, 0.05)
+        elapsed = time.monotonic() - started
+
+        assert second is pc.UNREACHABLE
+        assert elapsed < 0.5
+        assert len(calls) == 1
+    finally:
+        release.set()
+        first.join(timeout=2.0)
+        pool.close()
+    assert first_result == [{"ok": True}]
+
+
+def test_pool_contention_passes_only_the_remaining_budget_to_transport():
+    pool = pc.PeerConnectionPool(object(), idle_s=60)
+    target = _contention_target()
+    entered = threading.Event()
+    release = threading.Event()
+    second_done = threading.Event()
+    calls = []
+
+    def recorded_request(entry, request_target, method, path, body, timeout):
+        calls.append((path, timeout))
+        if path == "/first":
+            entered.set()
+            assert release.wait(timeout=2.0)
+        return {"ok": True}
+
+    pool._request_locked = recorded_request
+    first = threading.Thread(target=lambda: pool.request(
+        target, "GET", "/first", None, 2.0))
+    second_result = []
+
+    def request_second():
+        second_result.append(pool.request(
+            target, "GET", "/second", None, 1.0))
+        second_done.set()
+
+    second = threading.Thread(target=request_second)
+    try:
+        first.start()
+        assert entered.wait(timeout=1.0)
+        second.start()
+        # Keep the second caller queued long enough that passing its original
+        # one-second timeout would be observably wrong, with ample CI slack.
+        time.sleep(0.15)
+        release.set()
+        assert second_done.wait(timeout=2.0)
+        remaining = dict(calls)["/second"]
+        assert 0.0 < remaining < 0.95
+        assert second_result == [{"ok": True}]
+    finally:
+        release.set()
+        first.join(timeout=2.0)
+        second.join(timeout=2.0)
+        pool.close()
 
 
 def test_send_envelope_over_the_pinned_channel(mesh):
@@ -197,11 +310,161 @@ def test_peer_timeout_is_zero_when_expired():
     assert pc.peer_timeout_for(env, now=2000.0) == 0.0
 
 
-def test_peer_timeout_has_a_floor_for_a_nearly_expired_envelope():
+def test_peer_timeout_never_exceeds_a_nearly_expired_envelope():
     env = protocol.build_envelope(
         "c", "h" * 32, "ctl", "n" * 32, "convoy_ping",
         protocol.HmacSigner("k" * 10), timeout_s=5.0, now=1000.0)
-    # 0.5s of budget left -> floored so a valid envelope still gets a
-    # real attempt, never a doomed 0.5s socket timeout.
+    # 0.5s of signed budget left means at most a 0.5s socket timeout. A
+    # convenience floor must never outlive the operation's authority.
     got = pc.peer_timeout_for(env, now=1004.5)
-    assert got == pc._MIN_PEER_TIMEOUT_S
+    assert got == pytest.approx(0.5)
+
+
+def test_an_explicit_timeout_is_still_clamped_to_the_signed_budget(
+        mesh, monkeypatch):
+    node_id, convoy_id = mesh.node()
+    env = mesh.envelope(node_id, convoy_id, timeout_s=5.0)
+    seen = []
+
+    def fake_request(target, keys, method, path, body, timeout):
+        seen.append(timeout)
+        return {"ok": True}
+
+    monkeypatch.setattr(pc, "_request", fake_request)
+    result = pc.send_envelope(mesh.target(), mesh.a.hostkeys, env,
+                              timeout=999.0, now=env["deadline_unix"] - 0.25)
+    assert result["ok"] is True
+    assert seen == [pytest.approx(0.25)]
+
+
+# -- namespace-bound peer node directory ------------------------------
+
+def test_get_peer_nodes_returns_the_real_namespace_filtered_view(mesh):
+    node_id, _ = mesh.node("studio")
+    body = pc.get_peer_nodes(mesh.target(), mesh.a.hostkeys, "studio")
+    assert body["ok"] is True
+    assert body["convoy_id"] == "studio"
+    assert [row["node_id"] for row in body["nodes"]] == [node_id]
+    assert all(row["convoy_id"] == "studio" for row in body["nodes"])
+
+
+def test_get_peer_nodes_uses_one_encoded_namespace_segment(mesh):
+    calls = []
+
+    def view(host_id, convoy_id, authenticated_fingerprint):
+        calls.append((host_id, convoy_id, authenticated_fingerprint))
+        return 200, {"ok": True, "convoy_id": convoy_id, "nodes": []}
+
+    mesh.b.peer_nodes_view = view
+    result = pc.get_peer_nodes(mesh.target(), mesh.a.hostkeys, "studio")
+    assert result == {"ok": True, "convoy_id": "studio", "nodes": []}
+    assert calls == [(mesh.a.host_id, "studio",
+                      mesh.a.hostkeys.fingerprint)]
+
+
+def test_get_peer_nodes_is_refused_outside_the_admitted_namespace(mesh):
+    mesh.b.peer_nodes_view = lambda *_: pytest.fail(
+        "unauthorized namespace reached the HostApp view")
+    result = pc.get_peer_nodes(mesh.target(), mesh.a.hostkeys, "other")
+    assert result["reason"] == "namespace_not_admitted"
+
+
+@pytest.mark.parametrize("bad", [None, "", " studio ", "x" * 129,
+                                  "舞" * 43, "bad\x00id"])
+def test_get_peer_nodes_rejects_bad_ids_before_network(mesh, bad,
+                                                       monkeypatch):
+    monkeypatch.setattr(pc, "_request", lambda *a, **k: pytest.fail(
+        "invalid namespace opened a network connection"))
+    result = pc.get_peer_nodes(mesh.target(), mesh.a.hostkeys, bad)
+    assert result["reason"] == "malformed"
+
+
+def test_convoy_id_limit_is_measured_in_utf8_bytes():
+    exact = ("舞" * 42) + "ab"       # 126 + 2 = 128 UTF-8 bytes
+    assert len(exact) < pc.MAX_CONVOY_ID_BYTES
+    segment = pc._encode_convoy_segment(exact)
+    assert segment is not None
+    assert ps._decode_convoy_segment(segment) == exact
+    assert pc._encode_convoy_segment(exact + "c") is None
+
+
+# -- bounded response reader ------------------------------------------
+
+class _FakeResponse:
+    def __init__(self, chunks, content_length=None):
+        self.chunks = list(chunks)
+        self.content_length = content_length
+        self.read_calls = 0
+
+    def getheader(self, name):
+        return self.content_length if name == "Content-Length" else None
+
+    def read(self, amount):
+        self.read_calls += 1
+        if not self.chunks:
+            return b""
+        chunk = self.chunks.pop(0)
+        if len(chunk) <= amount:
+            return chunk
+        self.chunks.insert(0, chunk[amount:])
+        return chunk[:amount]
+
+
+def test_declared_oversize_response_is_rejected_without_reading():
+    response = _FakeResponse([], str(pc.MAX_PEER_RESPONSE_BYTES + 1))
+    with pytest.raises(pc._ResponseLimitError):
+        pc._read_bounded_response(response)
+    assert response.read_calls == 0
+
+
+def test_chunked_or_lengthless_response_is_still_bounded():
+    response = _FakeResponse(
+        [b"x" * pc.MAX_PEER_RESPONSE_BYTES, b"y"], None)
+    with pytest.raises(pc._ResponseLimitError):
+        pc._read_bounded_response(response)
+
+
+def test_declared_response_length_must_match_the_bytes_received():
+    response = _FakeResponse([b"{}"], "3")
+    with pytest.raises(pc._ResponseLimitError):
+        pc._read_bounded_response(response)
+
+
+def test_oversize_post_response_preserves_may_have_run_semantics(monkeypatch):
+    response = _FakeResponse([], str(pc.MAX_PEER_RESPONSE_BYTES + 1))
+
+    class FakeConnection:
+        def __init__(self, *args, **kwargs):
+            self.sock = object()
+            self.requested = False
+            self.closed = False
+
+        def connect(self):
+            pass
+
+        def request(self, *args, **kwargs):
+            self.requested = True
+
+        def getresponse(self):
+            return response
+
+        def close(self):
+            self.closed = True
+
+    made = []
+
+    def connection(*args, **kwargs):
+        item = FakeConnection(*args, **kwargs)
+        made.append(item)
+        return item
+
+    expected = "cvfp1-" + "0000-" * 7 + "0000"
+    target = pc.PeerTarget("b" * 32, "127.0.0.1", 1, "pem", expected)
+    monkeypatch.setattr(pc, "build_client_ssl_context", lambda *a: object())
+    monkeypatch.setattr(pc.http.client, "HTTPSConnection", connection)
+    monkeypatch.setattr(pc, "_presented_fingerprint", lambda sock: expected)
+    result = pc._request(target, object(), "POST", pc.ROUTE_ENVELOPE,
+                         b"{}", 1.0)
+    assert result is None, "after POST, oversize is ambiguous, not unreachable"
+    assert made[0].requested is True and made[0].closed is True
+    assert response.read_calls == 0

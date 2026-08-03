@@ -142,7 +142,8 @@ class TwoHosts:
         self.b = ha.HostApp(str(tmp_path / "b"))
         with self.b.lock:
             self.b.peers.admit(self.a.host_id, self.a.hostkeys.fingerprint,
-                               cert_pem=self.a.hostkeys.certificate_pem)
+                               cert_pem=self.a.hostkeys.certificate_pem,
+                               convoy_ids=["studio"])
 
     def origin(self, host_id=None, fingerprint=None, public_der=...):
         return {
@@ -153,10 +154,9 @@ class TwoHosts:
         }
 
     def node(self, convoy_id="studio"):
-        with self.b.lock:
-            code, body = self.b.register_node({
-                "project_root": "/W/p", "comp_path": "/E",
-                "convoy_id": convoy_id, "runtime_id": "rt-1"})
+        code, body = self.b.register_node({
+            "project_root": "/W/p", "comp_path": "/E",
+            "convoy_id": convoy_id, "runtime_id": "rt-1"})
         assert code == 200
         return body["node_id"], convoy_id
 
@@ -225,22 +225,33 @@ def test_loopback_path_is_unchanged_and_uses_the_psk(two):
     assert code == 200 and resp["created"] is True
 
 
-def test_the_remote_manifest_hides_what_the_local_one_shows(two):
+def test_the_remote_manifest_excludes_the_worker_only_operations(two):
+    # run_tests and save_project are LOCAL-only (remote_exposed=False,
+    # finding 544): present in the local manifest, filtered from the remote
+    # one. convoy_ping and the rest remain on both.
     remote = two.b.build_remote_manifest().to_dict()["operations"]
     local = two.b.build_manifest().to_dict()["operations"]
     assert "run_tests" in local and "save_project" in local
     assert "run_tests" not in remote and "save_project" not in remote
     assert "convoy_ping" in remote
+    assert set(remote) == set(local) - {"run_tests", "save_project"}
 
 
-# -- start_lan_if_configured: the gate that keeps a build off-box ------
+# -- enabled-node-driven LAN lifecycle ---------------------------------
+
+def _enable_node(app):
+    code, node = app.register_node({
+        "project_root": "/Work/p", "convoy_id": "studio",
+        "comp_path": "/Embody", "runtime_id": "rt1"})
+    assert code == 200, node
+    return node
 
 def test_no_lan_json_means_no_socket(tmp_path):
     app = ha.HostApp(str(tmp_path / "host"))
     try:
         assert ha.start_lan_if_configured(app, log=lambda m: None) is False
         assert app.lan_server is None
-        assert app.lan_reason == "disabled"
+        assert app.lan_reason == "no_enabled_nodes"
     finally:
         app.db.close()
 
@@ -248,6 +259,7 @@ def test_no_lan_json_means_no_socket(tmp_path):
 def test_enabled_but_no_certificate_refuses_to_bind(tmp_path, monkeypatch):
     app = ha.HostApp(str(tmp_path / "host"))
     try:
+        _enable_node(app)
         # Simulate an identity with no TLS certificate (envelopes still
         # sign; TLS cannot serve).
         monkeypatch.setattr(app.hostkeys, "certificate_pem", None)
@@ -262,6 +274,7 @@ def test_enabled_but_no_certificate_refuses_to_bind(tmp_path, monkeypatch):
 def test_a_malformed_lan_json_refuses_and_keeps_loopback(tmp_path):
     app = ha.HostApp(str(tmp_path / "host"))
     try:
+        _enable_node(app)
         with open(os.path.join(app.data_dir, lan_mod.LAN_FILE), "w") as f:
             f.write("{not json")
         assert ha.start_lan_if_configured(app, log=lambda m: None) is False
@@ -273,6 +286,7 @@ def test_a_malformed_lan_json_refuses_and_keeps_loopback(tmp_path):
 def test_start_binds_and_stop_is_idempotent(tmp_path, monkeypatch):
     app = ha.HostApp(str(tmp_path / "host"))
     try:
+        _enable_node(app)
         port = _free_port()
         _write_lan(app.data_dir, {"enabled": True, "port": port})
         # Force a loopback bind for the test (a real interface would
@@ -290,6 +304,79 @@ def test_start_binds_and_stop_is_idempotent(tmp_path, monkeypatch):
         app.stop_lan_server()
         app.stop_lan_server()
         assert app.lan_server is None
+    finally:
+        app.db.close()
+
+
+def test_absent_lan_json_uses_automatic_membership_defaults(
+        tmp_path, monkeypatch):
+    app = ha.HostApp(str(tmp_path / "host"))
+    try:
+        _enable_node(app)
+        port = _free_port()
+        monkeypatch.setattr(
+            lan_mod, "load_config",
+            lambda _data: lan_mod.LanConfig(
+                enabled=False, port=port, bind="auto", present=False))
+        monkeypatch.setattr(lan_mod, "resolve_bind",
+                            lambda config, **k: "127.0.0.1")
+        assert ha.start_lan_if_configured(app, log=lambda m: None) is True
+        assert app.lan_port == port
+    finally:
+        app.stop_lan_server()
+        app.db.close()
+
+
+def test_desired_lan_endpoint_honors_admin_disable(tmp_path):
+    app = ha.HostApp(str(tmp_path / "host"))
+    try:
+        _enable_node(app)
+        _write_lan(app.data_dir, {"enabled": False})
+        with pytest.raises(lan_mod.LanConfigError) as refusal:
+            ha.desired_lan_endpoint(app)
+        assert refusal.value.reason == "admin_disabled"
+    finally:
+        app.db.close()
+
+
+def test_lan_reconciler_rebinds_after_routed_address_changes(
+        tmp_path, monkeypatch):
+    app = ha.HostApp(str(tmp_path / "host"))
+    try:
+        _enable_node(app)
+        app.lan_server = object()
+        app.discovery_service = object()
+        app.lan_address = "192.0.2.10"
+        app.lan_port = 47600
+        events = []
+
+        monkeypatch.setattr(
+            ha, "desired_lan_endpoint",
+            lambda _app: ("192.0.2.11", 47600))
+
+        def stop():
+            events.append(("stop", app.lan_address, app.lan_port))
+            app.lan_server = None
+            app.discovery_service = None
+
+        def start(_app, log=None):
+            events.append(("start", "192.0.2.11", 47600))
+            app.lan_server = object()
+            app.discovery_service = object()
+            app.lan_address = "192.0.2.11"
+            app.lan_port = 47600
+            return True
+
+        monkeypatch.setattr(app, "stop_lan_server", stop)
+        monkeypatch.setattr(ha, "start_lan_if_configured", start)
+
+        app._reconcile_lan_once()
+
+        assert events == [
+            ("stop", "192.0.2.10", 47600),
+            ("start", "192.0.2.11", 47600),
+        ]
+        assert app.lan_address == "192.0.2.11"
     finally:
         app.db.close()
 

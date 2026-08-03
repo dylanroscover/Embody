@@ -17,6 +17,10 @@ dev/embody/unit_tests/results.tsv
 dev/release_testing/*
 !dev/release_testing/smoke_bootstrap.py
 !dev/release_testing/smoke_template.toe
+!dev/release_testing/convoy_hardware_e2e.py
+!dev/release_testing/test_convoy_hardware_e2e.py
+!dev/release_testing/convoy_hardware_e2e.example.json
+!dev/release_testing/CONVOY_HARDWARE_E2E.md
 extglob.FullName
 
 # Embody / Envoy (auto-managed)
@@ -85,4 +89,3 @@ dev/embody/CONVOY_*.md
 
 # Convoy prototype code -- internal until Convoy is announced (same rationale as D-3)
 dev/convoy_tracer/
-

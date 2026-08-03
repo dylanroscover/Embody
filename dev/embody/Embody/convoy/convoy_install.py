@@ -12,17 +12,19 @@ imported by plain pytest with no TouchDesigner present (that is what puts
 it on the windows+macos CI matrix), and every long-running function is
 called from a WORKER THREAD, so it must never touch an operator, a
 parameter, or any other main-thread TD object. Nothing here does. The
-module contents (the nine host-app sources) arrive as PLAIN STRINGS the
+module contents (the host-app sources) arrive as PLAIN STRINGS the
 main thread already read off the DATs -- this module never looks one up.
 
 WHAT IS BEING INSTALLED, stated plainly because the code should not read
-softer than the dialog: a small Python program written into the per-user
-data dir, plus a PER-USER Scheduled Task (macOS: LaunchAgent) that starts
-it at login and restarts it within a minute. It runs whenever the user is
-logged in, whether or not TouchDesigner is open. It is by construction a
-persistence mechanism in a user-writable directory, and it is neither
-signed nor notarized. Loopback only -- nothing here opens a port to the
-network, and no firewall rule is created or needed.
+softer than the dialog: a small Python program and a separately released,
+self-contained Convoy CPython runtime in the per-user data dir, plus a
+PER-USER Scheduled Task (macOS: LaunchAgent) that starts it at login and
+restarts it within a minute. It runs whenever the user is logged in,
+whether or not TouchDesigner is open. The source payload is user-writable;
+the runtime archive is release-hash pinned, installed offline, and live-
+probed for cryptography before it is trusted. Packaging/signing/notarizing
+that platform asset belongs to the release build. This installer creates
+no firewall rule and never downloads a runtime.
 
 THE ONE-PER-USER RULE. The data dir, the task and the agent are all
 per-LOGGED-IN-USER, never per-machine. Every string in this module says
@@ -47,22 +49,26 @@ TWO SEAMS TO KNOW ABOUT BEFORE READING FURTHER.
      command. Tests always inject; the default really does register a
      Scheduled Task.
 
-macOS IS UNVERIFIED. Generated and unit-tested here, never run on a Mac:
-the interpreter path inside the .app bundle, launchctl bootstrap in a GUI
-login session, macOS 13+ Login Items gating, ProcessType/App Nap, and an
-unsigned script under a signed interpreter. Where a specific fact is
-guessed rather than known, the comment says UNVERIFIED. Do not quietly
-promote any of them.
+macOS SUPERVISION IS UNVERIFIED. Generated and unit-tested here, never run
+on a Mac: launchctl bootstrap in a GUI login session, macOS 13+ Login Items
+gating, and ProcessType/App Nap. The managed runtime target is Apple
+Silicon only and must be signed/notarized by the release build. Where a
+specific fact is guessed rather than known, the comment says UNVERIFIED.
+Do not quietly promote any of them.
 """
 
+import hashlib
 import json
 import ntpath
 import os
+import platform as platform_lib
 import posixpath
 import re
+import stat
 import subprocess
 import sys
 import time
+import zipfile
 from xml.sax.saxutils import escape as xml_escape
 
 # Layout under the per-user data dir (convoy_client.data_dir()). State
@@ -74,8 +80,9 @@ from xml.sax.saxutils import escape as xml_escape
 #                                     never removed. See RETAINED below.
 #   host.lock                      <- the singleton lock
 #   app/<version>/convoy_*.py + .complete    <- versioned, atomic
+#   runtime/<runtime-id>/... + .complete     <- offline managed CPython
 #   bin/convoy_host_launch.py                <- STABLE path, never moves
-#   installed.json                           <- version, interpreter, by whom
+#   installed.json                           <- app/runtime versions, by whom
 #   logs/host.log
 #
 # Versioned payload + a stable launcher path is what makes an Embody
@@ -84,8 +91,10 @@ from xml.sax.saxutils import escape as xml_escape
 APP_SUBDIR = "app"
 BIN_SUBDIR = "bin"
 LOGS_SUBDIR = "logs"
+RUNTIME_SUBDIR = "runtime"
 INSTALLED_FILE = "installed.json"
 COMPLETE_FILE = ".complete"
+RUNTIME_MANIFEST_FILE = "convoy-runtime.json"
 LAUNCHER_NAME = "convoy_host_launch.py"
 LOG_NAME = "host.log"
 TASK_XML_NAME = "convoy_host_task.xml"
@@ -145,6 +154,31 @@ HOST_MODULES = (
     "convoy_lan.py",
     "convoy_peerserver.py",
     "convoy_peerclient.py",
+    # Convoy's completed host-owned slices.  Every one is imported directly
+    # or transitively by convoy_hostapp at daemon startup; omitting even a
+    # seemingly optional helper makes the offline-installed payload fail at
+    # login before TouchDesigner is available to explain it.
+    "convoy_discovery.py",
+    "convoy_realm.py",
+    "convoy_policy.py",
+    "convoy_artifacts.py",
+    "convoy_artifact_http.py",
+    "convoy_wake.py",
+    "convoy_hostops.py",
+    # Optional public-API inventory/command-status consumer.  It is inert
+    # until the loopback bridge calls it and never makes Owlette a host-app
+    # dependency, but the daemon imports the module at startup so the offline
+    # payload must carry it.
+    "convoy_owlette.py",
+    # Host-native exact-process start/restart coordination.  This stays in
+    # the background app so a stopped TouchDesigner node can be launched
+    # without turning arbitrary shell access into a prerequisite.
+    "convoy_lifecycle.py",
+    # Full-duplex pinned mTLS control sessions. HTTPS remains the artifact
+    # plane and compatibility fallback, but the daemon imports both modules
+    # at startup even before a peer session is established.
+    "convoy_ws.py",
+    "convoy_sessions.py",
 )
 
 # Autonomous dispatch, ON for an installed host app: a supervised daemon
@@ -153,19 +187,42 @@ HOST_MODULES = (
 # re-registering the supervisor.
 DEFAULT_DRAIN_INTERVAL_S = 2.0
 
-# Log cap, AT LAUNCH ONLY. Not rotation (explicitly out of scope), and
-# NOT a bound on a running daemon: the launcher checks the size once, in
-# _open_log, before main() is entered. Under MultipleInstancesPolicy
-# IgnoreNew a HEALTHY daemon is never relaunched, so the process that
-# runs for months is precisely the one that never re-checks -- the cap
-# bites a daemon that keeps DYING (many launches, bounded log), not one
-# that keeps running. An in-run check belongs in the daemon's own
-# writer, not here, and is not in this slice.
-#
-# This comment used to claim "an unattended daemon running for months
-# cannot fill a user's disk", which is the inverse of what the mechanism
-# delivers. Do not restore that claim without also implementing it.
+# Hard cap for the launcher's process-lifetime bounded writer. stdout and
+# stderr share that writer, which checks the byte count under one lock before
+# every write and truncates/restarts the file when the next write would cross
+# the ceiling. This covers both crash loops and one healthy daemon running
+# for months; it is deliberately a cap, not archival log rotation.
 LOG_MAX_BYTES = 4 * 1024 * 1024
+
+# The daemon does NOT run under TouchDesigner or a project .venv. Its
+# interpreter is a separately versioned, self-contained CPython bundle in
+# the per-user Convoy data directory. A release process prepares one bundle
+# per supported target with cryptography already installed; installation is
+# deliberately offline and accepts only an archive whose SHA-256 came from
+# trusted release metadata. There is no downloader in this module.
+RUNTIME_BUNDLE_FORMAT = "embody-convoy-runtime/1"
+RUNTIME_RECEIPT_FORMAT = "embody-convoy-runtime-install/1"
+RUNTIME_PROBE_FORMAT = "embody-convoy-runtime-probe/1"
+RUNTIME_CATALOG_FORMAT = "embody-convoy-runtime-catalog/1"
+RUNTIME_RELEASE_FORMAT = "embody-convoy-runtime-release/1"
+RUNTIME_MANIFEST_MAX_BYTES = 256 * 1024
+RUNTIME_CATALOG_MAX_BYTES = 256 * 1024
+RUNTIME_MAX_FILES = 20000
+RUNTIME_MAX_UNCOMPRESSED_BYTES = 768 * 1024 * 1024
+# A valid ZIP can be slightly larger than the bytes it stores. This bound is
+# intentionally a little above the uncompressed ceiling, while still making
+# a accidentally selected multi-gigabyte file fail before Convoy hashes it.
+RUNTIME_MAX_ARCHIVE_BYTES = (RUNTIME_MAX_UNCOMPRESSED_BYTES
+                             + RUNTIME_MANIFEST_MAX_BYTES + 16 * 1024 * 1024)
+RUNTIME_PROBE_TIMEOUT_S = 15.0
+SUPPORTED_RUNTIME_TARGETS = frozenset((
+    ("win32", "x86_64"),
+    ("darwin", "arm64"),
+))
+RUNTIME_SIGNATURE_ATTESTATIONS = {
+    ("win32", "x86_64"): "authenticode-verified",
+    ("darwin", "arm64"): "developer-id-notarized-verified",
+}
 
 # Supervisor kinds recorded in installed.json.
 SUPERVISOR_TASK = "scheduled_task"      # win32
@@ -192,21 +249,7 @@ ACTION_CURRENT = "current"
 ACTION_REFUSE_DOWNGRADE = "refuse_downgrade"
 ACTION_EXTERNAL = "external"
 
-# TouchDesigner install roots, per platform. DRIFT CANARY: the win32 list
-# must match envoy_bridge._td_install_roots("win32"). It is deliberately
-# a COPY and not an import -- A-44 forbids importing the bridge, and the
-# bridge is answering a different question (which app can I LAUNCH, vs
-# which interpreter can I RUN A SCRIPT UNDER). A test pins them together
-# so the copy cannot silently drift.
-TD_INSTALL_ROOTS = {
-    "win32": [r"C:\Program Files\Derivative"],
-    "darwin": ["/Applications", "~/Applications"],
-    "linux": ["/opt/derivative"],
-}
-
 _VERSION_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
-
-
 # -- paths -------------------------------------------------------------
 
 def _join(platform=None):
@@ -227,8 +270,10 @@ def safe_version(version):
     value like '../../bin' would place the payload -- and later
     remove_payload's unlinks -- somewhere else entirely.
     """
-    text = str(version or "").strip()
-    if text in ("", ".", "..") or not _VERSION_OK.match(text):
+    raw = str(version or "")
+    text = raw.strip()
+    if (raw != text or text in ("", ".", "..")
+            or not _VERSION_OK.fullmatch(text)):
         raise ValueError("unusable version for a path segment: %r"
                          % (version,))
     return text
@@ -277,6 +322,57 @@ def log_path(data_dir, platform=None):
 def complete_path(data_dir, version, platform=None):
     return _join(platform)(app_dir(data_dir, version, platform),
                            COMPLETE_FILE)
+
+
+def runtime_dir(data_dir, runtime_id=None, platform=None):
+    """<root>/runtime, or one content-versioned managed runtime.
+
+    Runtime IDs obey the same one-segment rule as app versions. A runtime
+    is shared by every local Embody node and survives ordinary Embody app
+    upgrades; it is never project-scoped.
+    """
+    join = _join(platform)
+    base = join(install_root(data_dir), RUNTIME_SUBDIR)
+    if runtime_id is None:
+        return base
+    return join(base, safe_version(runtime_id))
+
+
+def runtime_complete_path(data_dir, runtime_id, platform=None):
+    return _join(platform)(runtime_dir(data_dir, runtime_id, platform),
+                           COMPLETE_FILE)
+
+
+def runtime_manifest_path(data_dir, runtime_id, platform=None):
+    return _join(platform)(runtime_dir(data_dir, runtime_id, platform),
+                           RUNTIME_MANIFEST_FILE)
+
+
+def _runtime_fs_dir(data_dir, runtime_id=None):
+    """Runtime path on THIS filesystem, for discovery/extraction I/O."""
+    base = os.path.join(install_root(data_dir), RUNTIME_SUBDIR)
+    if runtime_id is None:
+        return base
+    return os.path.join(base, safe_version(runtime_id))
+
+
+def default_data_dir(platform=None, env=None, home=None):
+    """Convoy's per-user data directory without importing convoy_client.
+
+    The installer is vendored independently and must stay importable before
+    the client module. This deliberately mirrors convoy_client.data_dir;
+    tests pin the literal paths so the two copies cannot drift unnoticed.
+    """
+    platform = platform or sys.platform
+    env = os.environ if env is None else env
+    home = home or env.get("HOME") or os.path.expanduser("~")
+    join = _join(platform)
+    if platform == "win32":
+        base = env.get("LOCALAPPDATA") or join(home, "AppData", "Local")
+        return join(base, "EmbodyConvoy")
+    if platform == "darwin":
+        return join(home, "Library", "Application Support", "EmbodyConvoy")
+    return join(home, ".local", "share", "EmbodyConvoy")
 
 
 def task_xml_path(data_dir, platform=None):
@@ -340,17 +436,43 @@ def _atomic_write(path, text):
     directory = os.path.dirname(path)
     if directory:
         os.makedirs(directory, exist_ok=True)
-    tmp = "%s.%s.tmp" % (path, os.getpid())
-    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        f.write(text)
+    tmp = None
     try:
-        os.replace(tmp, path)
-    except OSError:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+        for attempt in range(100):
+            candidate = "%s.%s-%s-%s.tmp" % (
+                path, os.getpid(), time.time_ns(), attempt)
+            try:
+                descriptor = os.open(
+                    candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                tmp = candidate
+                break
+            except FileExistsError:
+                continue
+        if tmp is None:
+            raise OSError("could not reserve a unique atomic-write temp file")
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        for replace_attempt in range(10):
+            try:
+                os.replace(tmp, path)
+                break
+            except PermissionError:
+                # Windows can transiently deny two same-process replacements
+                # of the same destination even after both source handles are
+                # closed. Keep the retry short and bounded; any persistent ACL
+                # or sharing violation still surfaces to the caller.
+                if replace_attempt == 9:
+                    raise
+                time.sleep(0.005 * (replace_attempt + 1))
+        tmp = None
+    finally:
+        if tmp is not None:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 
 # -- what an install should do -----------------------------------------
@@ -484,7 +606,7 @@ def _bare_name(name):
     prefix, '.', '..', and the empty string.
     """
     text = str(name or "")
-    if text in (".", "..") or not _BARE_NAME_OK.match(text):
+    if text in (".", "..") or not _BARE_NAME_OK.fullmatch(text):
         return None
     return text
 
@@ -502,6 +624,1368 @@ def _inside(directory, path, platform=None):
     sep = "\\" if platform == "win32" else "/"
     prefix = directory if directory.endswith(sep) else directory + sep
     return path.startswith(prefix)
+
+
+# -- the isolated managed runtime -------------------------------------
+
+def normalize_architecture(machine=None):
+    """Canonical runtime architecture, or a lowercase unknown value."""
+    value = str(machine or platform_lib.machine() or "").strip().lower()
+    aliases = {
+        "amd64": "x86_64",
+        "x64": "x86_64",
+        "x86-64": "x86_64",
+        "aarch64": "arm64",
+        "arm64e": "arm64",
+    }
+    return aliases.get(value, value)
+
+
+def _declared_architecture(value):
+    """Normalize metadata without treating a missing field as this machine."""
+    if value is None or not str(value).strip():
+        return ""
+    return normalize_architecture(value)
+
+
+def runtime_target_supported(platform=None, architecture=None):
+    platform = platform or sys.platform
+    architecture = normalize_architecture(architecture)
+    return (platform, architecture) in SUPPORTED_RUNTIME_TARGETS
+
+
+def _sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        while True:
+            chunk = stream.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _valid_sha256(value):
+    text = str(value or "").strip().lower()
+    return text if re.match(r"^[0-9a-f]{64}$", text) else None
+
+
+def _safe_runtime_relpath(value):
+    """A portable, nested path inside a runtime archive, or None.
+
+    Runtime bundles use POSIX separators on every platform. Every component
+    uses the same accept-list as payload names, which excludes absolute,
+    drive-relative, UNC, dot-dot, control-character and separator tricks by
+    construction rather than by a growing deny-list.
+    """
+    text = str(value or "")
+    if (not text or len(text) > 1024 or "\\" in text
+            or text.startswith("/") or text.endswith("/")
+            or "\x00" in text):
+        return None
+    parts = text.split("/")
+    if not parts or any(_portable_runtime_part(part) is None for part in parts):
+        return None
+    return "/".join(parts)
+
+
+_WINDOWS_RESERVED_RUNTIME_NAMES = frozenset(
+    ("con", "prn", "aux", "nul")
+    + tuple("com%d" % number for number in range(1, 10))
+    + tuple("lpt%d" % number for number in range(1, 10)))
+
+
+def _portable_runtime_part(value):
+    """One archive path component valid on every supported filesystem.
+
+    Runtime catalogs are shared by Windows and macOS release tooling. Reject
+    Windows device aliases and trailing dots everywhere, and compare paths
+    case-insensitively below, so an archive cannot be safe on the build host
+    yet overwrite a different member on the install host.
+    """
+    part = _bare_name(value)
+    if part is None or len(part) > 255 or part.endswith("."):
+        return None
+    stem = part.split(".", 1)[0].lower()
+    if stem in _WINDOWS_RESERVED_RUNTIME_NAMES:
+        return None
+    return part
+
+
+def _runtime_path_key(path):
+    """Portable collision key for supported case-insensitive volumes."""
+    return "/".join(part.lower() for part in str(path).split("/"))
+
+
+def _runtime_file_index(manifest):
+    """Validated {relative_path: file_record}, or (None, detail)."""
+    records = manifest.get("files") if isinstance(manifest, dict) else None
+    if not isinstance(records, list) or not records:
+        return None, "runtime manifest files must be a non-empty list"
+    if len(records) > RUNTIME_MAX_FILES:
+        return None, "runtime manifest names too many files"
+    indexed = {}
+    portable_paths = {}
+    total = 0
+    for item in records:
+        if not isinstance(item, dict):
+            return None, "runtime manifest contains a non-object file entry"
+        path = _safe_runtime_relpath(item.get("path"))
+        digest = _valid_sha256(item.get("sha256"))
+        size = item.get("size")
+        mode = item.get("mode", 0o644)
+        if path is None:
+            return None, "runtime manifest contains an unsafe file path"
+        if path in (COMPLETE_FILE, RUNTIME_MANIFEST_FILE):
+            return None, "runtime files may not replace installer control files"
+        if path in indexed:
+            return None, "runtime manifest contains duplicate path %s" % path
+        portable_key = _runtime_path_key(path)
+        if portable_key in portable_paths:
+            return None, ("runtime manifest paths collide on a supported "
+                          "filesystem: %s and %s"
+                          % (portable_paths[portable_key], path))
+        if digest is None:
+            return None, "runtime manifest has an invalid SHA-256 for %s" % path
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            return None, "runtime manifest has an invalid size for %s" % path
+        if (isinstance(mode, bool) or not isinstance(mode, int)
+                or mode < 0 or mode > 0o777):
+            return None, "runtime manifest has an invalid mode for %s" % path
+        total += size
+        if total > RUNTIME_MAX_UNCOMPRESSED_BYTES:
+            return None, "runtime bundle exceeds the uncompressed size limit"
+        indexed[path] = {"path": path, "sha256": digest,
+                         "size": size, "mode": mode}
+        portable_paths[portable_key] = path
+    portable_keys = set(portable_paths)
+    for key in sorted(portable_keys):
+        parts = key.split("/")
+        for end in range(1, len(parts)):
+            prefix = "/".join(parts[:end])
+            if prefix in portable_keys:
+                return None, ("runtime manifest uses %s as both a file and "
+                              "a parent directory" % portable_paths[prefix])
+    return indexed, ""
+
+
+def _validate_runtime_manifest(manifest, platform, architecture):
+    """Return a normalized manifest or a named, actionable refusal."""
+    if not isinstance(manifest, dict):
+        return _failed("runtime_manifest_invalid",
+                       "convoy-runtime.json must contain an object")
+    if manifest.get("format") != RUNTIME_BUNDLE_FORMAT:
+        return _failed("runtime_manifest_invalid",
+                       "unsupported runtime bundle format")
+    try:
+        runtime_id = safe_version(manifest.get("runtime_id"))
+    except ValueError as e:
+        return _failed("runtime_manifest_invalid", e)
+    target_platform = str(manifest.get("platform") or "")
+    target_arch = _declared_architecture(manifest.get("architecture"))
+    if (target_platform, target_arch) != (platform, architecture):
+        return _failed(
+            "runtime_target_mismatch",
+            "runtime targets %s/%s, this install needs %s/%s"
+            % (target_platform or "?", target_arch or "?",
+               platform, architecture))
+    if not runtime_target_supported(target_platform, target_arch):
+        return _failed(
+            "runtime_target_unsupported",
+            "Convoy currently supports managed runtimes for Windows x64 "
+            "and Apple Silicon only")
+    python_rel = _safe_runtime_relpath(manifest.get("python"))
+    probe_python_rel = _safe_runtime_relpath(manifest.get("probe_python"))
+    if python_rel is None:
+        return _failed("runtime_manifest_invalid",
+                       "runtime manifest has an unsafe Python path")
+    if probe_python_rel is None:
+        return _failed("runtime_manifest_invalid",
+                       "runtime manifest has an unsafe probe-Python path")
+    if target_platform == "win32":
+        if (posixpath.basename(python_rel).lower() != "pythonw.exe"
+                or posixpath.basename(probe_python_rel).lower()
+                   != "python.exe"):
+            return _failed(
+                "runtime_manifest_invalid",
+                "Windows runtimes must use pythonw.exe for the daemon and "
+                "python.exe for the captured capability probe")
+    python_version = str(manifest.get("python_version") or "").strip()
+    crypto_version = str(manifest.get("cryptography_version") or "").strip()
+    source_revision = str(manifest.get("source_revision") or "").strip()
+    if not python_version or not crypto_version or not source_revision:
+        return _failed(
+            "runtime_manifest_invalid",
+            "runtime manifest must name Python, cryptography, and source "
+            "revision provenance")
+    files, detail = _runtime_file_index(manifest)
+    if files is None:
+        return _failed("runtime_manifest_invalid", detail)
+    if python_rel not in files:
+        return _failed("runtime_manifest_invalid",
+                       "runtime Python is not listed in manifest files")
+    if probe_python_rel not in files:
+        return _failed("runtime_manifest_invalid",
+                       "runtime probe Python is not listed in manifest files")
+    if (target_platform == "darwin"
+            and (not files[python_rel]["mode"] & 0o111
+                 or not files[probe_python_rel]["mode"] & 0o111)):
+        return _failed("runtime_manifest_invalid",
+                       "Apple Silicon runtime Python must be executable")
+    normalized = dict(manifest)
+    normalized.update({
+        "runtime_id": runtime_id,
+        "platform": target_platform,
+        "architecture": target_arch,
+        "python": python_rel,
+        "probe_python": probe_python_rel,
+        "python_version": python_version,
+        "cryptography_version": crypto_version,
+        "source_revision": source_revision,
+        "files": [files[name] for name in sorted(files)],
+    })
+    return _ok(manifest=normalized, file_index=files)
+
+
+def _validate_runtime_receipt(receipt, runtime_id, platform, architecture):
+    """Validate the installed completion record before discovery trusts it."""
+    if not isinstance(receipt, dict):
+        return _failed("runtime_receipt_invalid",
+                       "managed runtime completion receipt is not an object")
+    if receipt.get("format") != RUNTIME_RECEIPT_FORMAT:
+        return _failed("runtime_receipt_invalid",
+                       "unsupported managed runtime receipt format")
+    if receipt.get("runtime_id") != runtime_id:
+        return _failed("runtime_receipt_invalid",
+                       "managed runtime receipt ID does not match its directory")
+    if (receipt.get("platform") != platform
+            or _declared_architecture(receipt.get("architecture"))
+               != architecture):
+        return _failed("runtime_receipt_target_mismatch",
+                       "managed runtime receipt targets another platform")
+    archive_sha256 = _valid_sha256(receipt.get("archive_sha256"))
+    if archive_sha256 is None:
+        return _failed("runtime_receipt_invalid",
+                       "managed runtime receipt has no release SHA-256")
+    python_rel = _safe_runtime_relpath(receipt.get("python"))
+    probe_python_rel = _safe_runtime_relpath(receipt.get("probe_python"))
+    if python_rel is None or probe_python_rel is None:
+        return _failed("runtime_receipt_invalid",
+                       "managed runtime receipt has an unsafe Python path")
+    if (platform == "win32"
+            and (posixpath.basename(python_rel).lower() != "pythonw.exe"
+                 or posixpath.basename(probe_python_rel).lower()
+                    != "python.exe")):
+        return _failed("runtime_receipt_invalid",
+                       "Windows runtime receipt must name pythonw.exe and "
+                       "python.exe")
+    python_version = str(receipt.get("python_version") or "").strip()
+    crypto_version = str(receipt.get("cryptography_version") or "").strip()
+    source_revision = str(receipt.get("source_revision") or "").strip()
+    if not python_version or not crypto_version or not source_revision:
+        return _failed("runtime_receipt_invalid",
+                       "managed runtime receipt lacks release provenance")
+    files, detail = _runtime_file_index(receipt)
+    if files is None:
+        return _failed("runtime_receipt_invalid", detail)
+    if python_rel not in files or probe_python_rel not in files:
+        return _failed("runtime_receipt_invalid",
+                       "managed runtime receipt does not inventory Python")
+    if (platform == "darwin"
+            and (not files[python_rel]["mode"] & 0o111
+                 or not files[probe_python_rel]["mode"] & 0o111)):
+        return _failed("runtime_receipt_invalid",
+                       "Apple Silicon runtime receipt lost executable modes")
+    return _ok(receipt=receipt, file_index=files, python=python_rel,
+               probe_python=probe_python_rel,
+               archive_sha256=archive_sha256,
+               python_version=python_version,
+               cryptography_version=crypto_version,
+               source_revision=source_revision)
+
+
+def _validate_runtime_release(record):
+    """Normalize one catalog artifact that release CI has attested."""
+    if not isinstance(record, dict):
+        return _failed("runtime_catalog_invalid",
+                       "runtime catalog artifact must be an object")
+    if record.get("format") != RUNTIME_RELEASE_FORMAT:
+        return _failed("runtime_catalog_invalid",
+                       "runtime catalog artifact has an unsupported format")
+    try:
+        runtime_id = safe_version(record.get("runtime_id"))
+    except ValueError as e:
+        return _failed("runtime_catalog_invalid", e)
+    target = (str(record.get("platform") or ""),
+              _declared_architecture(record.get("architecture")))
+    if target not in SUPPORTED_RUNTIME_TARGETS:
+        return _failed("runtime_catalog_invalid",
+                       "runtime catalog contains an unsupported target")
+    asset = _safe_runtime_relpath(record.get("asset"))
+    if asset is None:
+        return _failed("runtime_catalog_invalid",
+                       "runtime catalog artifact has an unsafe local path")
+    digest = _valid_sha256(record.get("sha256"))
+    if digest is None:
+        return _failed("runtime_catalog_invalid",
+                       "runtime catalog artifact has no valid SHA-256")
+    size = record.get("size")
+    if (isinstance(size, bool) or not isinstance(size, int) or size <= 0
+            or size > RUNTIME_MAX_ARCHIVE_BYTES):
+        return _failed("runtime_catalog_invalid",
+                       "runtime catalog artifact has an invalid archive size")
+    if record.get("status") != "published":
+        return _failed("runtime_catalog_invalid",
+                       "only published runtime artifacts belong in the catalog")
+    if not isinstance(record.get("current"), bool):
+        return _failed("runtime_catalog_invalid",
+                       "runtime catalog artifact must declare current true/false")
+    required_signature = RUNTIME_SIGNATURE_ATTESTATIONS[target]
+    if record.get("signature") != required_signature:
+        return _failed(
+            "runtime_catalog_invalid",
+            "runtime catalog lacks the required %s release attestation"
+            % required_signature)
+    python_version = str(record.get("python_version") or "").strip()
+    crypto_version = str(record.get("cryptography_version") or "").strip()
+    source_revision = str(record.get("source_revision") or "").strip()
+    if not python_version or not crypto_version or not source_revision:
+        return _failed("runtime_catalog_invalid",
+                       "runtime catalog artifact lacks release provenance")
+    normalized = dict(record)
+    normalized.update({
+        "runtime_id": runtime_id,
+        "platform": target[0],
+        "architecture": target[1],
+        "asset": asset,
+        "sha256": digest,
+        "size": size,
+        "python_version": python_version,
+        "cryptography_version": crypto_version,
+        "source_revision": source_revision,
+    })
+    return _ok(artifact=normalized)
+
+
+def validate_runtime_catalog(catalog):
+    """Validate trusted, release-shipped metadata without touching a network."""
+    if not isinstance(catalog, dict):
+        return _failed("runtime_catalog_invalid",
+                       "Convoy Runtime catalog must contain an object")
+    if catalog.get("format") != RUNTIME_CATALOG_FORMAT:
+        return _failed("runtime_catalog_invalid",
+                       "unsupported Convoy Runtime catalog format")
+    policy = catalog.get("policy")
+    if (not isinstance(policy, dict)
+            or policy.get("network_install") is not False
+            or policy.get("release_sha256_required") is not True):
+        return _failed("runtime_catalog_invalid",
+                       "runtime catalog must forbid network installation and "
+                       "require release SHA-256 metadata")
+    declared = catalog.get("required_targets")
+    if not isinstance(declared, list):
+        return _failed("runtime_catalog_invalid",
+                       "runtime catalog has no required-target declarations")
+    target_status = {}
+    for row in declared:
+        if not isinstance(row, dict):
+            return _failed("runtime_catalog_invalid",
+                           "runtime catalog target must be an object")
+        target = (str(row.get("platform") or ""),
+                  _declared_architecture(row.get("architecture")))
+        status = str(row.get("status") or "").strip()
+        if target not in SUPPORTED_RUNTIME_TARGETS or not status:
+            return _failed("runtime_catalog_invalid",
+                           "runtime catalog has an invalid target declaration")
+        if target in target_status:
+            return _failed("runtime_catalog_invalid",
+                           "runtime catalog repeats a target declaration")
+        target_status[target] = status
+    if set(target_status) != set(SUPPORTED_RUNTIME_TARGETS):
+        return _failed("runtime_catalog_invalid",
+                       "runtime catalog must declare Windows x64 and Apple "
+                       "Silicon release status")
+
+    records = catalog.get("artifacts")
+    if not isinstance(records, list) or len(records) > 32:
+        return _failed("runtime_catalog_invalid",
+                       "runtime catalog artifacts must be a bounded list")
+    artifacts = []
+    identities = set()
+    assets = set()
+    current_targets = set()
+    for record in records:
+        checked = _validate_runtime_release(record)
+        if not checked.get("ok"):
+            return checked
+        artifact = checked["artifact"]
+        identity = (artifact["platform"], artifact["architecture"],
+                    artifact["runtime_id"])
+        asset_key = _runtime_path_key(artifact["asset"])
+        if identity in identities or asset_key in assets:
+            return _failed("runtime_catalog_invalid",
+                           "runtime catalog repeats an artifact identity or path")
+        target = identity[:2]
+        if artifact["current"]:
+            if target in current_targets:
+                return _failed("runtime_catalog_invalid",
+                               "runtime catalog selects two current artifacts "
+                               "for one target")
+            current_targets.add(target)
+        identities.add(identity)
+        assets.add(asset_key)
+        artifacts.append(artifact)
+    for target, status in target_status.items():
+        has_current = target in current_targets
+        if has_current != (status == "published"):
+            return _failed(
+                "runtime_catalog_invalid",
+                "runtime target status and current published artifact disagree")
+    return _ok(catalog=dict(catalog), artifacts=artifacts,
+               target_status=target_status)
+
+
+def read_runtime_catalog(path):
+    """Read a bounded local catalog. URLs and implicit downloads do not exist."""
+    try:
+        if os.path.islink(path) or not os.path.isfile(path):
+            return _failed("runtime_catalog_unreadable",
+                           "runtime catalog is absent or is not an ordinary file")
+        with open(path, "rb") as stream:
+            raw = stream.read(RUNTIME_CATALOG_MAX_BYTES + 1)
+        if len(raw) > RUNTIME_CATALOG_MAX_BYTES:
+            return _failed("runtime_catalog_invalid",
+                           "runtime catalog is unexpectedly large")
+        catalog = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeError, ValueError) as e:
+        return _failed("runtime_catalog_unreadable",
+                       "%s: %s" % (type(e).__name__, e))
+    return validate_runtime_catalog(catalog)
+
+
+def select_runtime_artifact(catalog, platform=None, architecture=None):
+    """Select the one release-designated local bundle for this target."""
+    platform = platform or sys.platform
+    architecture = normalize_architecture(architecture)
+    target = (platform, architecture)
+    if target not in SUPPORTED_RUNTIME_TARGETS:
+        return _failed(
+            "runtime_target_unsupported",
+            "Convoy Runtime supports Windows x64 and Apple Silicon; this "
+            "machine reports %s/%s" % target)
+    checked = validate_runtime_catalog(catalog)
+    if not checked.get("ok"):
+        return checked
+    selected = [row for row in checked["artifacts"]
+                if (row["platform"], row["architecture"]) == target
+                and row["current"]]
+    if not selected:
+        status = checked["target_status"].get(target, "not-published")
+        return _failed(
+            "runtime_bundle_unavailable",
+            "no signed offline Convoy Runtime bundle is published for %s/%s "
+            "(release status: %s); TouchDesigner Python, system Python, and "
+            "network installation are not fallbacks"
+            % (platform, architecture, status), release_status=status,
+            platform=platform, architecture=architecture)
+    return _ok(artifact=selected[0], platform=platform,
+               architecture=architecture)
+
+
+def plan_runtime_from_catalog(catalog, asset_root=None, platform=None,
+                              architecture=None):
+    """Read-only preflight for one release-pinned local runtime bundle.
+
+    This deliberately stops before hashing, opening the ZIP, extracting, or
+    probing an interpreter.  ConvoyExt uses it on TouchDesigner's main thread
+    so its confirmation can name the exact offline package that will be used
+    and so a missing/empty release fails before a worker or supervisor action
+    starts.  ``provision_runtime_from_catalog`` repeats this entire check on
+    the worker; the preflight is for honest UX, never a security shortcut.
+    """
+    if isinstance(catalog, (str, os.PathLike)):
+        catalog_path = os.fspath(catalog)
+        checked = read_runtime_catalog(catalog_path)
+        if asset_root is None:
+            asset_root = os.path.dirname(os.path.abspath(catalog_path))
+    else:
+        checked = validate_runtime_catalog(catalog)
+    if not checked.get("ok"):
+        return checked
+    selected = select_runtime_artifact(
+        checked["catalog"], platform, architecture)
+    if not selected.get("ok"):
+        return selected
+    if not asset_root:
+        return _failed("runtime_asset_root_required",
+                       "parsed runtime catalogs require a local asset root")
+    artifact = selected["artifact"]
+    try:
+        root = os.path.realpath(os.fspath(asset_root))
+    except (TypeError, ValueError, OSError) as e:
+        return _failed("runtime_asset_root_invalid", e, artifact=artifact)
+    bundle = os.path.join(root, *artifact["asset"].split("/"))
+    try:
+        if (not _actual_inside(root, bundle) or os.path.islink(bundle)
+                or not stat.S_ISREG(os.stat(bundle).st_mode)):
+            return _failed("runtime_bundle_unavailable",
+                           "catalog runtime asset is absent or unsafe",
+                           artifact=artifact)
+        actual_size = os.path.getsize(bundle)
+    except OSError as e:
+        return _failed("runtime_bundle_unavailable", e, artifact=artifact)
+    if actual_size != artifact["size"]:
+        return _failed(
+            "runtime_bundle_size_mismatch",
+            "runtime archive size does not match trusted release metadata",
+            expected_size=artifact["size"], actual_size=actual_size,
+            artifact=artifact)
+    return _ok(artifact=artifact, bundle=bundle, asset_root=root,
+               platform=selected["platform"],
+               architecture=selected["architecture"])
+
+
+def provision_runtime_from_catalog(data_dir, catalog, asset_root=None,
+                                   platform=None, architecture=None,
+                                   runner=None, now=None):
+    """Select and install a catalog-pinned local artifact, entirely offline.
+
+    `catalog` is either an already parsed object or a local JSON filename. A
+    filename also supplies the default asset root. For an object, callers must
+    pass the directory containing the release assets explicitly. No URL parser,
+    downloader, package manager, or fallback interpreter is reachable here.
+    """
+    planned = plan_runtime_from_catalog(
+        catalog, asset_root=asset_root, platform=platform,
+        architecture=architecture)
+    if not planned.get("ok"):
+        return planned
+    artifact = planned["artifact"]
+    bundle = planned["bundle"]
+    result = provision_runtime_bundle(
+        data_dir, bundle, artifact["sha256"], artifact["platform"],
+        artifact["architecture"], runner=runner, now=now,
+        expected_runtime_id=artifact["runtime_id"],
+        expected_release=artifact)
+    result.setdefault("artifact", artifact)
+    return result
+
+
+_RUNTIME_PROBE_CODE = r'''\
+import json
+import platform
+import ssl
+import sys
+import sysconfig
+import cryptography
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
+
+key = ed25519.Ed25519PrivateKey.generate()
+key.private_bytes(serialization.Encoding.Raw,
+                  serialization.PrivateFormat.Raw,
+                  serialization.NoEncryption())
+print(json.dumps({
+    "format": "embody-convoy-runtime-probe/1",
+    "implementation": platform.python_implementation(),
+    "python": list(sys.version_info[:3]),
+    "platform": sys.platform,
+    "architecture": platform.machine(),
+    "executable": sys.executable,
+    "prefix": sys.prefix,
+    "base_prefix": sys.base_prefix,
+    "stdlib": sysconfig.get_path("stdlib"),
+    "platstdlib": sysconfig.get_path("platstdlib"),
+    "cryptography_version": getattr(cryptography, "__version__", ""),
+    "cryptography_file": getattr(cryptography, "__file__", ""),
+    "x509": bool(x509),
+    "ed25519": True,
+    "tls13": bool(getattr(ssl, "HAS_TLSv1_3", False)),
+}, sort_keys=True))
+'''
+
+
+def probe_runtime(interpreter, platform=None, architecture=None, runner=None):
+    """Run the candidate in isolated mode and prove Convoy's crypto floor.
+
+    This is a live capability probe, not a package-name check: it exercises
+    Ed25519, X.509 imports and TLS 1.3 in the exact executable the supervisor
+    will launch. It never raises and returns an actionable structured reason.
+    """
+    platform = platform or sys.platform
+    architecture = normalize_architecture(architecture)
+    run = runner or run_command
+    try:
+        code, out, err = run(
+            [str(interpreter), "-I", "-c", _RUNTIME_PROBE_CODE],
+            timeout_s=RUNTIME_PROBE_TIMEOUT_S)
+    except Exception as e:
+        return _failed("runtime_probe_failed",
+                       "%s: %s" % (type(e).__name__, e))
+    if code != 0:
+        return _failed(
+            "runtime_probe_failed",
+            (str(err or out or "managed runtime did not start").strip())[:500],
+            returncode=code)
+    lines = [line.strip() for line in str(out or "").splitlines()
+             if line.strip()]
+    try:
+        result = json.loads(lines[-1]) if lines else None
+    except (TypeError, ValueError):
+        result = None
+    if not isinstance(result, dict) or result.get("format") != RUNTIME_PROBE_FORMAT:
+        return _failed("runtime_probe_invalid",
+                       "managed runtime returned no valid capability record")
+    if result.get("implementation") != "CPython":
+        return _failed("runtime_probe_invalid",
+                       "managed runtime must use CPython")
+    version = result.get("python")
+    if (not isinstance(version, list) or len(version) < 2
+            or tuple(version[:2]) < (3, 11)):
+        return _failed("runtime_probe_invalid",
+                       "managed runtime requires CPython 3.11 or newer")
+    actual_platform = str(result.get("platform") or "")
+    actual_arch = _declared_architecture(result.get("architecture"))
+    if (actual_platform, actual_arch) != (platform, architecture):
+        return _failed(
+            "runtime_probe_target_mismatch",
+            "runtime reported %s/%s, expected %s/%s"
+            % (actual_platform or "?", actual_arch or "?",
+               platform, architecture))
+    if (not result.get("cryptography_version") or not result.get("x509")
+            or not result.get("ed25519") or not result.get("tls13")):
+        return _failed(
+            "runtime_crypto_unavailable",
+            "managed runtime must provide cryptography with X.509, Ed25519, "
+            "and TLS 1.3")
+    return _ok(probe=result)
+
+
+def read_runtime_receipt(data_dir, runtime_id, platform=None):
+    try:
+        with open(os.path.join(_runtime_fs_dir(data_dir, runtime_id),
+                               COMPLETE_FILE),
+                  "r", encoding="utf-8") as stream:
+            value = json.load(stream)
+    except (OSError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _runtime_candidates_from_root(root, platform, architecture):
+    found = []
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        return found
+    for name in names:
+        try:
+            runtime_id = safe_version(name)
+        except ValueError:
+            continue
+        # Discovery reads THIS machine's filesystem. Use os.path here,
+        # unlike the target-path renderers, so cross-platform fixture trees
+        # exercise the Windows and macOS receipt policy honestly.
+        target = os.path.join(root, runtime_id)
+        if os.path.islink(target) or not _actual_inside(root, target):
+            continue
+        try:
+            with open(os.path.join(target, COMPLETE_FILE),
+                      "r", encoding="utf-8") as stream:
+                receipt = json.load(stream)
+        except (OSError, ValueError):
+            continue
+        checked = _validate_runtime_receipt(
+            receipt, runtime_id, platform, architecture)
+        if not checked.get("ok"):
+            continue
+        python_rel = checked["python"]
+        probe_python_rel = checked["probe_python"]
+        interpreter = os.path.join(target, *python_rel.split("/"))
+        if not os.path.isfile(interpreter):
+            continue
+        found.append({
+            "path": interpreter,
+            "build": _version_key(receipt.get("python_version")) or (),
+            "windowless": True,
+            "managed": True,
+            "runtime_id": runtime_id,
+            "probe_python": os.path.join(
+                target, *probe_python_rel.split("/")),
+            "cryptography_version": receipt.get("cryptography_version"),
+            "receipt": receipt,
+        })
+    return found
+
+
+def find_interpreters(platform=None, roots=None, data_dir=None, env=None,
+                      home=None, architecture=None):
+    """Installed, complete Convoy managed runtimes on this machine.
+
+    The historical function name remains because ConvoyExt calls it, but
+    TouchDesigner, system Python and project .venv interpreters are no longer
+    candidates. `roots` is an injectable list of runtime directories for
+    tests; normally the single per-user <data>/runtime directory is scanned.
+    The expensive crypto capability probe runs later on the worker thread.
+    """
+    platform = platform or sys.platform
+    architecture = normalize_architecture(architecture)
+    if not runtime_target_supported(platform, architecture):
+        return []
+    if roots is None:
+        data_dir = data_dir or default_data_dir(platform, env, home)
+        roots = [runtime_dir(data_dir, platform=platform)]
+    found = []
+    for root in roots:
+        found.extend(_runtime_candidates_from_root(root, platform,
+                                                   architecture))
+    found.sort(key=lambda c: (c.get("build") or (), c.get("runtime_id") or ""),
+               reverse=True)
+    return found
+
+
+def choose_interpreter(candidates, prefer_windowless=True):
+    """Pick the newest complete MANAGED runtime, never another Python."""
+    usable = [c for c in (candidates or [])
+              if c.get("path") and c.get("managed") is True]
+    if not usable:
+        return None
+    if prefer_windowless:
+        windowless = [c for c in usable if c.get("windowless")]
+        if windowless:
+            usable = windowless
+    usable.sort(key=lambda c: (c.get("build") or (),
+                               c.get("runtime_id") or ""), reverse=True)
+    return usable[0]["path"]
+
+
+def _actual_inside(directory, path):
+    try:
+        directory = os.path.normcase(os.path.realpath(directory))
+        path = os.path.normcase(os.path.realpath(path))
+        return os.path.commonpath([directory, path]) == directory
+    except (OSError, ValueError):
+        return False
+
+
+def _probe_paths_inside_runtime(probe, target):
+    """Every dependency-bearing Python path must live in the bundle."""
+    for field in ("executable", "prefix", "base_prefix", "stdlib",
+                  "platstdlib", "cryptography_file"):
+        path = (probe or {}).get(field)
+        if not path or not _actual_inside(target, path):
+            return False, field
+    return True, ""
+
+
+def verify_managed_runtime(data_dir, interpreter, platform=None,
+                           architecture=None, runner=None):
+    """Prove an interpreter is one of our complete, live crypto runtimes."""
+    platform = platform or sys.platform
+    architecture = normalize_architecture(architecture)
+    if not runtime_target_supported(platform, architecture):
+        return _failed(
+            "runtime_target_unsupported",
+            "Convoy currently supports Windows x64 and Apple Silicon; "
+            "this machine reports %s/%s" % (platform, architecture))
+    base = _runtime_fs_dir(data_dir)
+    match = None
+    for candidate in _runtime_candidates_from_root(base, platform,
+                                                    architecture):
+        try:
+            same = (os.path.normcase(os.path.realpath(candidate["path"]))
+                    == os.path.normcase(os.path.realpath(str(interpreter))))
+        except OSError:
+            same = False
+        if same:
+            match = candidate
+            break
+    if match is None:
+        return _failed(
+            "runtime_not_managed",
+            "Convoy refuses TouchDesigner Python, system Python, and project "
+            ".venv interpreters. Install the signed offline Convoy Runtime "
+            "bundle for Windows x64 or Apple Silicon, then retry.")
+    receipt = match["receipt"]
+    checked = _validate_runtime_receipt(
+        receipt, match["runtime_id"], platform, architecture)
+    if not checked.get("ok"):
+        return checked
+    files = checked["file_index"]
+    target = _runtime_fs_dir(data_dir, match["runtime_id"])
+    # Hash the complete installed inventory, not just python.exe. Native
+    # cryptography libraries and stdlib modules are equally executable code.
+    # This runs only during Install/Repair, not on every status refresh.
+    for relative, record in files.items():
+        path = os.path.join(target, *relative.split("/"))
+        if (not _actual_inside(target, path) or os.path.islink(path)
+                or not os.path.isfile(path)):
+            return _failed(
+                "runtime_integrity_failed",
+                "managed runtime file is absent or unsafe: %s" % relative)
+        try:
+            if (os.path.getsize(path) != record["size"]
+                    or _sha256_file(path) != record["sha256"]):
+                return _failed(
+                    "runtime_integrity_failed",
+                    "managed runtime file changed after installation: %s"
+                    % relative)
+        except OSError as e:
+            return _failed("runtime_integrity_failed",
+                           "%s: %s" % (relative, e))
+    live = probe_runtime(match["probe_python"], platform, architecture,
+                         runner)
+    if not live.get("ok"):
+        return live
+    probe = live.get("probe") or {}
+    live_python = ".".join(str(v) for v in (probe.get("python") or []))
+    if (live_python != str(receipt.get("python_version") or "")
+            or probe.get("cryptography_version")
+               != receipt.get("cryptography_version")):
+        return _failed(
+            "runtime_version_changed",
+            "managed Python or cryptography changed after installation; "
+            "reinstall the signed offline Convoy Runtime bundle")
+    self_contained, outside_field = _probe_paths_inside_runtime(probe, target)
+    if not self_contained:
+        return _failed(
+            "runtime_dependency_outside_bundle",
+            "%s loaded outside the managed Convoy Runtime; reinstall the "
+            "signed offline runtime bundle" % outside_field)
+    return _ok(
+        runtime_id=match["runtime_id"],
+        platform=platform,
+        architecture=architecture,
+        python_version=receipt.get("python_version"),
+        cryptography_version=probe.get("cryptography_version"),
+        source_revision=receipt.get("source_revision"),
+        archive_sha256=receipt.get("archive_sha256"),
+        interpreter=match["path"],
+        receipt_format=RUNTIME_RECEIPT_FORMAT,
+        probe=live.get("probe"))
+
+
+def _write_runtime_member(archive, info, destination, expected, root=None):
+    """Extract one verified ordinary file through temp + replace."""
+    parent = os.path.dirname(destination)
+    root = root or parent
+    if not _actual_inside(root, destination):
+        raise ValueError("runtime member resolved outside the install root")
+    os.makedirs(parent, exist_ok=True)
+    # Recheck after directory creation: an existing junction/symlink in an
+    # interrupted repair must not redirect the temporary file outside root.
+    if not _actual_inside(root, destination):
+        raise ValueError("runtime member parent redirects outside install root")
+    temp = "%s.tmp-%s-%s" % (destination, os.getpid(), time.time_ns())
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        with archive.open(info, "r") as source, open(temp, "wb") as target:
+            while True:
+                chunk = source.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > expected["size"]:
+                    raise ValueError("runtime member exceeded declared size")
+                digest.update(chunk)
+                target.write(chunk)
+            target.flush()
+            os.fsync(target.fileno())
+        if size != expected["size"] or digest.hexdigest() != expected["sha256"]:
+            raise ValueError("runtime member digest or size mismatch")
+        os.chmod(temp, expected.get("mode", 0o644))
+        os.replace(temp, destination)
+    finally:
+        try:
+            os.unlink(temp)
+        except FileNotFoundError:
+            pass
+
+
+def _discard_runtime_stage(stage, files):
+    """Remove only files named by a trusted manifest from our staging dir."""
+    if not stage:
+        return
+    directories = {stage}
+    for relative in sorted(files or {}):
+        path = os.path.join(stage, *relative.split("/"))
+        if not _actual_inside(stage, path):
+            continue
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        parent = os.path.dirname(path)
+        while parent and parent != stage:
+            directories.add(parent)
+            parent = os.path.dirname(parent)
+    for name in (RUNTIME_MANIFEST_FILE, COMPLETE_FILE):
+        try:
+            os.unlink(os.path.join(stage, name))
+        except OSError:
+            pass
+    for directory in sorted(directories,
+                            key=lambda value: (value.count(os.sep), len(value)),
+                            reverse=True):
+        try:
+            os.rmdir(directory)
+        except OSError:
+            pass
+
+
+def provision_runtime_bundle(data_dir, bundle_path, expected_sha256,
+                             platform=None, architecture=None, runner=None,
+                             now=None, expected_runtime_id=None,
+                             expected_release=None):
+    """Install one release-pinned runtime archive, entirely offline.
+
+    `expected_sha256` is mandatory trusted release metadata. The archive's
+    own manifest is never allowed to bless itself. Files are hash-checked,
+    symlinks and extra members are refused, each file lands atomically, a
+    live isolated crypto probe must pass, and .complete is written LAST.
+    No network operation exists in this path.
+    """
+    platform = platform or sys.platform
+    architecture = normalize_architecture(architecture)
+    expected_sha256 = _valid_sha256(expected_sha256)
+    if expected_sha256 is None:
+        return _failed(
+            "runtime_digest_required",
+            "a trusted release SHA-256 is required; Convoy will not install "
+            "an unpinned runtime archive")
+    if not runtime_target_supported(platform, architecture):
+        return _failed(
+            "runtime_target_unsupported",
+            "Convoy currently supports managed runtimes for Windows x64 "
+            "and Apple Silicon only")
+    if expected_runtime_id is not None:
+        try:
+            expected_runtime_id = safe_version(expected_runtime_id)
+        except ValueError as e:
+            return _failed("runtime_catalog_invalid", e)
+    if expected_release is not None and not isinstance(expected_release, dict):
+        return _failed("runtime_catalog_invalid",
+                       "expected runtime release metadata must be an object")
+    bundle_stream = None
+    try:
+        if os.path.islink(bundle_path):
+            return _failed("runtime_bundle_unreadable",
+                           "runtime bundle must be an ordinary local file")
+        bundle_stream = open(bundle_path, "rb")
+        bundle_stat = os.fstat(bundle_stream.fileno())
+        if not stat.S_ISREG(bundle_stat.st_mode):
+            bundle_stream.close()
+            return _failed("runtime_bundle_unreadable",
+                           "runtime bundle must be an ordinary local file")
+        if bundle_stat.st_size <= 0 or bundle_stat.st_size > RUNTIME_MAX_ARCHIVE_BYTES:
+            bundle_stream.close()
+            return _failed("runtime_bundle_invalid",
+                           "runtime archive size is outside the release bound")
+        archive_digest = hashlib.sha256()
+        while True:
+            chunk = bundle_stream.read(1024 * 1024)
+            if not chunk:
+                break
+            archive_digest.update(chunk)
+        actual_sha256 = archive_digest.hexdigest()
+    except OSError as e:
+        if bundle_stream is not None:
+            bundle_stream.close()
+        return _failed("runtime_bundle_unreadable", e)
+    if actual_sha256 != expected_sha256:
+        bundle_stream.close()
+        return _failed(
+            "runtime_bundle_digest_mismatch",
+            "runtime archive does not match trusted release metadata",
+            expected_sha256=expected_sha256, actual_sha256=actual_sha256)
+    stage = None
+    staged_files = {}
+    try:
+        bundle_stream.seek(0)
+        with bundle_stream, zipfile.ZipFile(bundle_stream, "r") as archive:
+            infos = archive.infolist()
+            if len(infos) > RUNTIME_MAX_FILES + 1:
+                return _failed("runtime_bundle_invalid",
+                               "runtime archive contains too many members")
+            names = [info.filename for info in infos]
+            if len(names) != len(set(names)):
+                return _failed("runtime_bundle_invalid",
+                               "runtime archive contains duplicate members")
+            manifest_infos = [info for info in infos
+                              if info.filename == RUNTIME_MANIFEST_FILE]
+            if len(manifest_infos) != 1:
+                return _failed(
+                    "runtime_bundle_invalid",
+                    "runtime archive must contain one convoy-runtime.json")
+            manifest_mode = (manifest_infos[0].external_attr >> 16) & 0xFFFF
+            if manifest_infos[0].is_dir() or stat.S_ISLNK(manifest_mode):
+                return _failed("runtime_bundle_invalid",
+                               "runtime manifest must be an ordinary file")
+            if manifest_infos[0].file_size > RUNTIME_MANIFEST_MAX_BYTES:
+                return _failed("runtime_bundle_invalid",
+                               "runtime manifest is unexpectedly large")
+            raw_manifest = archive.read(manifest_infos[0])
+            manifest = json.loads(raw_manifest.decode("utf-8"))
+            checked = _validate_runtime_manifest(manifest, platform,
+                                                 architecture)
+            if not checked.get("ok"):
+                return checked
+            manifest = checked["manifest"]
+            files = checked["file_index"]
+            if (expected_runtime_id is not None
+                    and manifest["runtime_id"] != expected_runtime_id):
+                return _failed(
+                    "runtime_catalog_mismatch",
+                    "runtime archive ID does not match trusted catalog metadata",
+                    expected_runtime_id=expected_runtime_id,
+                    actual_runtime_id=manifest["runtime_id"])
+            if expected_release is not None:
+                release_fields = {
+                    "runtime_id": manifest["runtime_id"],
+                    "platform": manifest["platform"],
+                    "architecture": manifest["architecture"],
+                    "python_version": manifest["python_version"],
+                    "cryptography_version": manifest["cryptography_version"],
+                    "source_revision": manifest["source_revision"],
+                }
+                mismatched = [name for name, value in release_fields.items()
+                              if expected_release.get(name) != value]
+                if mismatched:
+                    return _failed(
+                        "runtime_catalog_mismatch",
+                        "runtime archive disagrees with trusted catalog fields: "
+                        + ", ".join(sorted(mismatched)))
+            expected_names = set(files) | {RUNTIME_MANIFEST_FILE}
+            if set(names) != expected_names:
+                return _failed(
+                    "runtime_bundle_invalid",
+                    "runtime archive members do not exactly match its manifest")
+            info_by_name = {info.filename: info for info in infos}
+            total = 0
+            for name, record in files.items():
+                info = info_by_name[name]
+                mode = (info.external_attr >> 16) & 0xFFFF
+                if stat.S_ISLNK(mode):
+                    return _failed("runtime_bundle_invalid",
+                                   "runtime archives may not contain symlinks")
+                if info.is_dir() or info.file_size != record["size"]:
+                    return _failed(
+                        "runtime_bundle_invalid",
+                        "runtime archive size disagrees for %s" % name)
+                total += info.file_size
+                if total > RUNTIME_MAX_UNCOMPRESSED_BYTES:
+                    return _failed(
+                        "runtime_bundle_invalid",
+                        "runtime archive exceeds the uncompressed size limit")
+
+            runtime_id = manifest["runtime_id"]
+            target = _runtime_fs_dir(data_dir, runtime_id)
+            runtime_root = _runtime_fs_dir(data_dir)
+            if (os.path.lexists(runtime_root)
+                    and (os.path.islink(runtime_root)
+                         or not _actual_inside(install_root(data_dir),
+                                               runtime_root))):
+                return _failed(
+                    "runtime_path_unsafe",
+                    "managed runtime root redirects outside Convoy data")
+            if (os.path.lexists(target)
+                    and (os.path.islink(target)
+                         or not _actual_inside(runtime_root, target))):
+                return _failed(
+                    "runtime_path_unsafe",
+                    "managed runtime directory redirects outside Convoy data")
+            existing = read_runtime_receipt(data_dir, runtime_id, platform)
+            if existing is not None:
+                receipt_check = _validate_runtime_receipt(
+                    existing, runtime_id, platform, architecture)
+                if not receipt_check.get("ok"):
+                    return receipt_check
+                if receipt_check["archive_sha256"] != expected_sha256:
+                    return _failed(
+                        "runtime_id_collision",
+                        "an installed runtime with this ID has different "
+                        "release bytes; use a new content-versioned runtime ID")
+                interpreter = os.path.join(
+                    _runtime_fs_dir(data_dir, runtime_id),
+                    *manifest["python"].split("/"))
+                verified = verify_managed_runtime(
+                    data_dir, interpreter, platform, architecture, runner)
+                if verified.get("ok"):
+                    verified.update({"current": True,
+                                     "archive_sha256": expected_sha256})
+                    return verified
+                # Same trusted archive, but the installed runtime no longer
+                # verifies. Remove ONLY the completion receipt before repair
+                # so a concurrent supervisor fails closed while files are
+                # replaced atomically. A different archive under the same ID
+                # was refused above and never reaches this branch.
+                try:
+                    os.unlink(os.path.join(
+                        _runtime_fs_dir(data_dir, runtime_id), COMPLETE_FILE))
+                except OSError as e:
+                    return _failed(
+                        "runtime_repair_blocked",
+                        "could not mark the damaged runtime incomplete: %s"
+                        % e)
+            elif os.path.lexists(target):
+                # A prior repair can legitimately have removed .complete and
+                # then lost power. Resume only when its on-disk manifest is
+                # byte-semantically the SAME trusted release manifest. Unknown
+                # files remain untouched; an absent/different manifest makes
+                # ownership unverifiable and is refused.
+                try:
+                    with open(os.path.join(target, RUNTIME_MANIFEST_FILE),
+                              "r", encoding="utf-8") as stream:
+                        interrupted_manifest = json.load(stream)
+                    interrupted_check = _validate_runtime_manifest(
+                        interrupted_manifest, platform, architecture)
+                    resumable = (interrupted_check.get("ok")
+                                 and interrupted_check["manifest"] == manifest)
+                except (OSError, ValueError, UnicodeError):
+                    resumable = False
+                if not resumable:
+                    return _failed(
+                        "runtime_incomplete_exists",
+                        "an incomplete or unrecognized runtime directory "
+                        "already uses this ID; Convoy will not overwrite "
+                        "unknown files")
+                existing = interrupted_manifest
+
+            if existing is None:
+                os.makedirs(runtime_root, exist_ok=True)
+                stage = os.path.join(
+                    runtime_root, ".install-%s-%s-%s"
+                    % (runtime_id, os.getpid(), time.time_ns()))
+                os.mkdir(stage)
+                install_target = stage
+            else:
+                # A valid receipt with the SAME release hash proved ownership
+                # above. Repair can safely replace its inventoried files; the
+                # removed .complete keeps it undiscoverable until verification.
+                install_target = target
+            staged_files = files
+            for name in sorted(files):
+                destination = os.path.join(install_target, *name.split("/"))
+                _write_runtime_member(archive, info_by_name[name],
+                                      destination, files[name], install_target)
+            _atomic_write(
+                os.path.join(install_target, RUNTIME_MANIFEST_FILE),
+                json.dumps(manifest, indent=1, sort_keys=True) + "\n")
+    except (OSError, ValueError, UnicodeError, zipfile.BadZipFile,
+            RuntimeError, NotImplementedError) as e:
+        if bundle_stream is not None and not bundle_stream.closed:
+            bundle_stream.close()
+        _discard_runtime_stage(stage, staged_files)
+        return _failed("runtime_bundle_invalid",
+                       "%s: %s" % (type(e).__name__, e))
+
+    interpreter = os.path.join(
+        install_target,
+        *manifest["python"].split("/"))
+    probe_interpreter = os.path.join(
+        install_target,
+        *manifest["probe_python"].split("/"))
+    live = probe_runtime(probe_interpreter, platform, architecture, runner)
+    if not live.get("ok"):
+        _discard_runtime_stage(stage, staged_files)
+        # No .complete: launcher and discovery refuse an in-place repair; a
+        # fresh install never appears at its final path at all.
+        return live
+    probe = live.get("probe") or {}
+    live_python = ".".join(str(v) for v in (probe.get("python") or []))
+    if (live_python != manifest["python_version"]
+            or probe.get("cryptography_version")
+               != manifest["cryptography_version"]):
+        _discard_runtime_stage(stage, staged_files)
+        return _failed(
+            "runtime_manifest_probe_mismatch",
+            "runtime capability versions do not match convoy-runtime.json")
+    self_contained, outside_field = _probe_paths_inside_runtime(
+        probe, install_target)
+    if not self_contained:
+        _discard_runtime_stage(stage, staged_files)
+        return _failed(
+            "runtime_dependency_outside_bundle",
+            "%s loaded outside the extracted Convoy Runtime"
+            % outside_field)
+    receipt = dict(manifest)
+    receipt.update({
+        "format": RUNTIME_RECEIPT_FORMAT,
+        "archive_sha256": expected_sha256,
+        "installed_at": (now or time.time)(),
+        "cryptography_version": probe.get("cryptography_version"),
+    })
+    try:
+        _atomic_write(os.path.join(install_target, COMPLETE_FILE),
+            json.dumps(receipt, indent=1, sort_keys=True) + "\n")
+        if stage is not None:
+            os.replace(stage, target)
+            stage = None
+    except OSError as e:
+        _discard_runtime_stage(stage, staged_files)
+        # Another Embody process may have atomically activated the identical
+        # content-addressed runtime between our absence check and rename. That
+        # is convergence, not failure, but only after full receipt/hash/probe
+        # verification against the same trusted archive digest.
+        winner = read_runtime_receipt(
+            data_dir, manifest["runtime_id"], platform)
+        if (isinstance(winner, dict)
+                and _valid_sha256(winner.get("archive_sha256"))
+                   == expected_sha256):
+            winner_interpreter = os.path.join(
+                target, *manifest["python"].split("/"))
+            verified = verify_managed_runtime(
+                data_dir, winner_interpreter, platform, architecture, runner)
+            if verified.get("ok"):
+                verified.update({"current": True,
+                                 "archive_sha256": expected_sha256})
+                return verified
+        return _failed("runtime_activation_failed",
+                       "could not atomically activate runtime: %s" % e)
+    interpreter = os.path.join(target, *manifest["python"].split("/"))
+    return _ok(
+        runtime_id=manifest["runtime_id"], interpreter=interpreter,
+        platform=platform, architecture=architecture,
+        python_version=manifest["python_version"],
+        cryptography_version=receipt["cryptography_version"],
+        source_revision=manifest["source_revision"],
+        archive_sha256=expected_sha256, current=False,
+        receipt=receipt, probe=live.get("probe"))
+
+
+def _runtime_installations(data_dir):
+    """(complete runtimes, incomplete paths, stray paths) on THIS disk."""
+    root = _runtime_fs_dir(data_dir)
+    complete, incomplete, stray = [], [], []
+    if (os.path.lexists(root)
+            and (os.path.islink(root)
+                 or not _actual_inside(install_root(data_dir), root))):
+        return complete, incomplete, [root]
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        return complete, incomplete, stray
+    for name in names:
+        target = os.path.join(root, name)
+        if not os.path.isdir(target):
+            stray.append(target)
+            continue
+        if os.path.islink(target) or not _actual_inside(root, target):
+            stray.append(target)
+            continue
+        try:
+            runtime_id = safe_version(name)
+        except ValueError:
+            stray.append(target)
+            continue
+        receipt = read_runtime_receipt(data_dir, runtime_id)
+        files, _ = _runtime_file_index(receipt)
+        if (receipt is None
+                or receipt.get("format") != RUNTIME_RECEIPT_FORMAT
+                or receipt.get("runtime_id") != runtime_id
+                or files is None):
+            incomplete.append(target)
+            continue
+        complete.append((runtime_id, target, receipt, files))
+    return complete, incomplete, stray
+
+
+def plan_runtime_uninstall(data_dir):
+    """Exact managed-runtime files/dirs removable without recursion."""
+    remove, remove_dirs = [], []
+    complete, incomplete, stray = _runtime_installations(data_dir)
+    for runtime_id, target, receipt, files in complete:
+        directories = {target}
+        for relative in sorted(files):
+            path = os.path.join(target, *relative.split("/"))
+            if _actual_inside(target, path):
+                remove.append(path)
+                parent = os.path.dirname(path)
+                while parent and parent != target:
+                    directories.add(parent)
+                    parent = os.path.dirname(parent)
+        remove.extend((os.path.join(target, RUNTIME_MANIFEST_FILE),
+                       os.path.join(target, COMPLETE_FILE)))
+        remove_dirs.extend(sorted(directories,
+                                  key=lambda p: (p.count(os.sep), len(p)),
+                                  reverse=True))
+    remove_dirs.append(_runtime_fs_dir(data_dir))
+    return {"remove": remove, "remove_dirs": remove_dirs,
+            "incomplete": incomplete, "stray": stray,
+            "runtime_ids": [row[0] for row in complete]}
+
+
+def remove_managed_runtime(data_dir, runtime_id):
+    """Remove exactly one receipt-listed runtime, never a whole tree."""
+    removed, kept, remaining = [], [], []
+    try:
+        runtime_id = safe_version(runtime_id)
+    except ValueError as e:
+        return {"removed": removed, "kept": [str(e)],
+                "remaining": remaining, "removed_dir": False}
+    target = _runtime_fs_dir(data_dir, runtime_id)
+    root = _runtime_fs_dir(data_dir)
+    if (os.path.islink(root) or not _actual_inside(install_root(data_dir), root)
+            or os.path.islink(target) or not _actual_inside(root, target)):
+        return {"removed": removed, "kept": [target],
+                "remaining": [target] if os.path.lexists(target) else [],
+                "removed_dir": False}
+    receipt = read_runtime_receipt(data_dir, runtime_id)
+    files, detail = _runtime_file_index(receipt)
+    if (receipt is None
+            or receipt.get("format") != RUNTIME_RECEIPT_FORMAT
+            or receipt.get("runtime_id") != runtime_id
+            or files is None):
+        kept.append(target)
+        if detail:
+            kept.append(detail)
+        return {"removed": removed, "kept": kept,
+                "remaining": [target] if os.path.exists(target) else [],
+                "removed_dir": False}
+
+    directories = {target}
+    for relative in sorted(files):
+        path = os.path.join(target, *relative.split("/"))
+        if not _actual_inside(target, path):
+            kept.append(path)
+            continue
+        parent = os.path.dirname(path)
+        while parent and parent != target:
+            directories.add(parent)
+            parent = os.path.dirname(parent)
+        try:
+            os.unlink(path)
+            removed.append(path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            kept.append(path)
+    for path in (os.path.join(target, RUNTIME_MANIFEST_FILE),
+                 os.path.join(target, COMPLETE_FILE)):
+        try:
+            os.unlink(path)
+            removed.append(path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            kept.append(path)
+    for directory in sorted(directories,
+                            key=lambda p: (p.count(os.sep), len(p)),
+                            reverse=True):
+        try:
+            os.rmdir(directory)
+        except OSError:
+            pass
+    if os.path.isdir(target):
+        try:
+            remaining.extend(os.path.join(target, name)
+                             for name in sorted(os.listdir(target)))
+        except OSError:
+            remaining.append(target)
+    return {"removed": removed, "kept": kept, "remaining": remaining,
+            "removed_dir": not os.path.exists(target)}
 
 
 def write_payload(data_dir, version, modules, platform=None, now=None):
@@ -708,11 +2192,11 @@ def render_launcher(platform, data_dir):
     file rewrite: the supervisor points at this path forever, and a new
     version needs no re-registration.
 
-    FOUR THINGS IT MUST DO, in this order:
+    SIX THINGS IT MUST DO, in this order:
 
     1. OPEN THE LOG AND REBIND sys.stdout/sys.stderr/sys.stdin BEFORE
-       importing or calling convoy_hostapp. Under pythonw.exe
-       `sys.stderr is None`, and convoy_hostapp.main() calls
+       importing or calling convoy_hostapp. A background supervisor may
+       provide no standard streams, and convoy_hostapp.main() calls
        sys.stderr.write(...) unconditionally at startup -- unhandled that
        is an AttributeError on EVERY launch, i.e. a silent 60-second
        death loop that looks exactly like healthy supervision (the task
@@ -727,13 +2211,15 @@ def render_launcher(platform, data_dir):
        lives exactly as long as this process. A launcher that spawned a
        child and returned would report "finished" immediately, and the
        next repetition would start a SECOND daemon.
-    4. CAP THE LOG, AT LAUNCH. Truncate-and-restart above LOG_MAX_BYTES
-       when the log is opened. Stated precisely because it is easy to
-       over-read: this bounds a daemon that keeps dying and relaunching,
-       NOT one long-running process, which never re-enters _open_log.
+    4. CAP THE LOG FOR THE PROCESS LIFETIME. stdout/stderr share one locked
+       writer that truncates-and-restarts before a write crosses
+       LOG_MAX_BYTES, including in one healthy months-long daemon.
     5. REFUSE A VERSION THAT IS NOT A PLAIN VERSION -- the same accept-
        list safe_version applies installer-side, re-applied here because
        this is where a version read back off disk becomes a path.
+    6. REFUSE A LEGACY/FOREIGN INTERPRETER OR MISSING CRYPTOGRAPHY. The
+       supervisor must be running the exact managed interpreter recorded
+       by install(), and cryptography must load from inside that runtime.
 
     EXIT CODES, deliberately asymmetric:
       0 -- ran, or declined because another instance holds the singleton
@@ -753,6 +2239,8 @@ def render_launcher(platform, data_dir):
         "logs_subdir": repr(LOGS_SUBDIR),
         "log_name": repr(LOG_NAME),
         "complete_file": repr(COMPLETE_FILE),
+        "runtime_subdir": repr(RUNTIME_SUBDIR),
+        "runtime_receipt_format": repr(RUNTIME_RECEIPT_FORMAT),
         "log_max_bytes": LOG_MAX_BYTES,
         "drain_interval": DEFAULT_DRAIN_INTERVAL_S,
     }
@@ -774,10 +2262,15 @@ this process. Spawning a child and exiting would break supervision --
 every repetition would start another daemon.
 """
 
+import hashlib
+import json
 import os
 import re
 import sys
+import threading
 import time
+
+sys.dont_write_bytecode = True
 
 DATA_DIR = %(data_dir)s
 LOG_MAX_BYTES = %(log_max_bytes)s
@@ -792,13 +2285,106 @@ LOG_MAX_BYTES = %(log_max_bytes)s
 # into a login-persistence primitive in the one component that runs
 # whether or not TouchDesigner is open.
 _VERSION_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
+_SHA256_OK = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _safe_segment(value):
+    value = str(value or "")
+    return value not in ("", ".", "..") and bool(_VERSION_OK.fullmatch(value))
+
+
+def _sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        while True:
+            chunk = stream.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+class _BoundedLog:
+    """Text writer whose on-disk byte count stays under LOG_MAX_BYTES."""
+
+    encoding = "utf-8"
+    errors = "replace"
+
+    def __init__(self, path):
+        self.path = path
+        self._lock = threading.RLock()
+        mode = "a"
+        try:
+            if os.path.getsize(path) > LOG_MAX_BYTES:
+                mode = "w"
+        except OSError:
+            pass
+        self._stream = self._open(mode)
+        try:
+            self._bytes = os.path.getsize(path)
+        except OSError:
+            self._bytes = 0
+        if mode == "w":
+            self._restart_marker()
+
+    def _open(self, mode):
+        return open(self.path, mode, buffering=1, encoding="utf-8",
+                    errors="replace", newline="\\n")
+
+    def _restart_marker(self):
+        marker = "--- log restarted (over %%d bytes) ---\\n" %% LOG_MAX_BYTES
+        self._stream.write(marker)
+        self._stream.flush()
+        self._bytes = len(marker.encode("utf-8"))
+
+    def write(self, value):
+        if not isinstance(value, str):
+            value = str(value)
+        encoded = value.encode("utf-8", "replace")
+        with self._lock:
+            if self._bytes + len(encoded) > LOG_MAX_BYTES:
+                try:
+                    self._stream.close()
+                finally:
+                    self._stream = self._open("w")
+                self._bytes = 0
+                self._restart_marker()
+            available = max(0, LOG_MAX_BYTES - self._bytes)
+            if len(encoded) > available:
+                encoded = encoded[:available]
+                value = encoded.decode("utf-8", "ignore")
+                encoded = value.encode("utf-8")
+            written = self._stream.write(value)
+            self._bytes += len(encoded)
+            return written
+
+    def flush(self):
+        with self._lock:
+            self._stream.flush()
+
+    def close(self):
+        with self._lock:
+            self._stream.close()
+
+    @property
+    def closed(self):
+        return self._stream.closed
+
+    def fileno(self):
+        return self._stream.fileno()
+
+    def isatty(self):
+        return False
+
+    def writable(self):
+        return True
 
 
 def _open_log():
     """Open logs/host.log and REBIND the std streams onto it.
 
-    THIS MUST HAPPEN BEFORE convoy_hostapp IS IMPORTED OR CALLED. Under
-    pythonw.exe sys.stdout/sys.stderr are None, and the daemon writes its
+    THIS MUST HAPPEN BEFORE convoy_hostapp IS IMPORTED OR CALLED. Under a
+    background supervisor sys.stdout/sys.stderr may be None, and the daemon
     startup banner to sys.stderr unconditionally -- without this the
     process would die with an AttributeError on every launch and the task
     would look perfectly healthy while nothing ever ran.
@@ -809,17 +2395,8 @@ def _open_log():
     except OSError:
         pass
     path = os.path.join(directory, %(log_name)s)
-    mode = "a"
     try:
-        if os.path.getsize(path) > LOG_MAX_BYTES:
-            # Truncate and restart. Not rotation (out of scope) -- just a
-            # cap, so an unattended daemon cannot fill the disk.
-            mode = "w"
-    except OSError:
-        pass
-    try:
-        log = open(path, mode, buffering=1, encoding="utf-8",
-                   errors="replace", newline="\\n")
+        log = _BoundedLog(path)
     except OSError:
         # A LOG WE CANNOT OPEN MUST NOT BECOME A DEAD DAEMON. Under
         # pythonw the streams are None, and the daemon writes to
@@ -837,9 +2414,6 @@ def _open_log():
         sys.stdin = open(os.devnull, "r")
     except OSError:
         pass
-    if mode == "w":
-        log.write("--- log restarted (over %%d bytes) ---\\n"
-                  %% (LOG_MAX_BYTES,))
     return log
 
 
@@ -858,7 +2432,6 @@ def _say(message):
 def _read_installed():
     path = os.path.join(DATA_DIR, %(installed_file)s)
     try:
-        import json
         with open(path, "r", encoding="utf-8") as f:
             record = json.load(f)
     except (OSError, ValueError):
@@ -874,10 +2447,82 @@ def main():
              "(no readable installed.json) -- nothing to run")
         return 1
     version = str(record["version"])
-    if not _VERSION_OK.match(version):
+    if not _safe_segment(version):
         # Refuse rather than join it into a path: see _VERSION_OK.
         _say("refusing an unusable version %%r from installed.json -- it "
              "must be a plain version like 6.0.171" %% (version,))
+        return 1
+    runtime = record.get("runtime")
+    if (not isinstance(runtime, dict)
+            or runtime.get("format") != %(runtime_receipt_format)s):
+        _say("installed host has no verified managed-runtime receipt -- "
+             "use Install or Update to install the signed offline Convoy "
+             "Runtime; TouchDesigner and project Python are refused")
+        return 1
+    runtime_id = str(runtime.get("runtime_id") or "")
+    if not _safe_segment(runtime_id):
+        _say("installed host names an unusable managed runtime -- use "
+             "Install or Update to repair it")
+        return 1
+    runtime_root = os.path.join(DATA_DIR, %(runtime_subdir)s, runtime_id)
+    try:
+        with open(os.path.join(runtime_root, %(complete_file)s), "r",
+                  encoding="utf-8") as f:
+            runtime_receipt = json.load(f)
+    except (OSError, ValueError):
+        runtime_receipt = None
+    archive_sha256 = str(runtime.get("archive_sha256") or "").lower()
+    if (not isinstance(runtime_receipt, dict)
+            or runtime_receipt.get("format") != %(runtime_receipt_format)s
+            or runtime_receipt.get("runtime_id") != runtime_id
+            or not _SHA256_OK.fullmatch(archive_sha256)
+            or runtime_receipt.get("archive_sha256") != archive_sha256):
+        _say("managed Convoy Runtime receipt is absent or changed -- use "
+             "Install or Update to repair the offline runtime bundle")
+        return 1
+    python_rel = str(runtime_receipt.get("python") or "")
+    python_parts = python_rel.split("/")
+    if (not python_parts or "\\\\" in python_rel
+            or any(not _safe_segment(part) for part in python_parts)):
+        _say("managed Convoy Runtime receipt has an unsafe Python path -- "
+             "use Install or Update to repair it")
+        return 1
+    receipt_interpreter = os.path.join(runtime_root, *python_parts)
+    configured = str(record.get("interpreter") or "")
+    try:
+        same_interpreter = (os.path.normcase(os.path.realpath(configured))
+                            == os.path.normcase(
+                                os.path.realpath(sys.executable))
+                            == os.path.normcase(
+                                os.path.realpath(receipt_interpreter)))
+    except (OSError, ValueError):
+        same_interpreter = False
+    if not configured or not same_interpreter:
+        _say("supervisor launched an interpreter other than the verified "
+             "Convoy Runtime -- refusing to start; use Install or Update")
+        return 1
+    files = runtime_receipt.get("files")
+    python_records = ([item for item in files
+                       if isinstance(item, dict)
+                       and item.get("path") == python_rel]
+                      if isinstance(files, list) else [])
+    try:
+        python_record = python_records[0] if len(python_records) == 1 else None
+        expected_python_sha = str(
+            (python_record or {}).get("sha256") or "").lower()
+        expected_python_size = (python_record or {}).get("size")
+        python_intact = (
+            python_record is not None
+            and _SHA256_OK.fullmatch(expected_python_sha)
+            and isinstance(expected_python_size, int)
+            and not isinstance(expected_python_size, bool)
+            and os.path.getsize(receipt_interpreter) == expected_python_size
+            and _sha256(receipt_interpreter) == expected_python_sha)
+    except OSError:
+        python_intact = False
+    if not python_intact:
+        _say("managed Convoy Runtime interpreter changed after installation "
+             "-- refusing to start; use Install or Update")
         return 1
     payload = os.path.join(DATA_DIR, %(app_subdir)s, version)
     if not os.path.isfile(os.path.join(payload, %(complete_file)s)):
@@ -895,6 +2540,35 @@ def main():
 
     if payload not in sys.path:
         sys.path.insert(0, payload)
+    try:
+        import ssl
+        import cryptography
+        import convoy_hostkeys
+    except Exception as exc:
+        _say("managed Convoy Runtime cannot import cryptography: %%s -- "
+             "use Install or Update to repair the offline runtime bundle"
+             %% (exc,))
+        return 1
+    crypto_file = getattr(cryptography, "__file__", "")
+    try:
+        crypto_inside = (os.path.commonpath([
+            os.path.normcase(os.path.realpath(runtime_root)),
+            os.path.normcase(os.path.realpath(crypto_file)),
+        ]) == os.path.normcase(os.path.realpath(runtime_root)))
+    except (OSError, ValueError):
+        crypto_inside = False
+    if (not convoy_hostkeys.cryptography_available() or not crypto_inside
+            or not getattr(ssl, "HAS_TLSv1_3", False)):
+        _say("managed Convoy Runtime failed its cryptography/TLS integrity "
+             "check -- use Install or Update to repair it")
+        return 1
+    expected_crypto = str(runtime.get("cryptography_version") or "")
+    if (not expected_crypto
+            or runtime_receipt.get("cryptography_version") != expected_crypto
+            or getattr(cryptography, "__version__", "") != expected_crypto):
+        _say("managed Convoy Runtime cryptography version changed after "
+             "installation -- refusing to start; use Install or Update")
+        return 1
     import convoy_hostapp
     _say("starting Convoy host app %%s (drain interval %%ss)"
          %% (version, interval))
@@ -1013,7 +2687,7 @@ def render_task_xml(interpreter, launcher, user, author="Embody",
             "which only an administrator may register")
     description = description or (
         "Runs the Embody Convoy host app for this user and restarts it "
-        "within a minute if it stops. Loopback only; never elevated.")
+        "within a minute if it stops. Per-user and never elevated.")
     command = xml_escape(str(interpreter))
     # The launcher path is quoted INSIDE the Arguments element: TD's
     # interpreter and the data dir both live under paths with spaces.
@@ -1440,126 +3114,6 @@ def _parse_launchctl(text, result):
     return result
 
 
-# -- which Python runs the daemon --------------------------------------
-
-def find_interpreters(platform=None, roots=None):
-    """TouchDesigner's bundled Python interpreters on THIS machine.
-
-    Returns [{"path", "build", "windowless"}], newest build first.
-
-    WHY TD'S PYTHON. Not the Envoy venv: that is project-scoped
-    (project.folder/.venv), Embody's Uninstall deletes it, and it is
-    rebuilt on an ABI change -- a machine-scoped daemon must not die
-    because someone deleted a project. Not "system Python": it may not
-    exist at all on Windows, and /usr/bin/python3 can trigger the Xcode
-    command-line-tools prompt. TD's is machine-scoped, version-stable,
-    and on macOS Derivative-signed.
-
-    A NEW, SMALL FUNCTION, not a copy of the bridge's find_td_installs:
-    A-44 forbids importing the bridge, and the bridge answers a different
-    question (which app can I LAUNCH). The shared fact -- where TD is
-    installed -- is pinned by a drift-canary test against
-    envoy_bridge._td_install_roots.
-
-    Reads a REAL disk, so it uses os.path throughout (seam 1 in the
-    module docstring): `roots` is injected against fixture trees, which
-    is how the darwin branch is exercised on Windows and vice versa.
-    """
-    platform = platform or sys.platform
-    if roots is None:
-        roots = [os.path.expanduser(r)
-                 for r in TD_INSTALL_ROOTS.get(platform, [])]
-    found = []
-    for root in roots:
-        try:
-            names = sorted(os.listdir(root))
-        except OSError:
-            continue
-        for name in names:
-            install = os.path.join(root, name)
-            if not os.path.isdir(install):
-                continue
-            build = _parse_build(name)
-            if platform == "win32":
-                if not name.lower().startswith("touchdesigner."):
-                    continue
-                # pythonw.exe FIRST: console python opens a window that
-                # stays up for the daemon's whole life.
-                for exe, windowless in (("pythonw.exe", True),
-                                        ("python.exe", False)):
-                    candidate = os.path.join(install, "bin", exe)
-                    if os.path.isfile(candidate):
-                        found.append({"path": candidate, "build": build,
-                                      "windowless": windowless})
-            elif platform == "darwin":
-                if not name.lower().startswith("touchdesigner"):
-                    continue
-                # UNVERIFIED: the interpreter's path inside the bundle is
-                # from Derivative's layout, not from a Mac we have run
-                # this on. Every plausible location is probed and the
-                # first that EXISTS wins, so being wrong about one of
-                # them is not fatal -- being wrong about all of them
-                # surfaces as "Needs repair -- Python not found".
-                for relative in _DARWIN_PYTHON_RELPATHS:
-                    candidate = os.path.join(install, *relative)
-                    if os.path.isfile(candidate):
-                        found.append({"path": candidate, "build": build,
-                                      "windowless": True})
-                        break
-            else:
-                candidate = os.path.join(install, "bin", "python")
-                if os.path.isfile(candidate):
-                    found.append({"path": candidate, "build": build,
-                                  "windowless": True})
-    found.sort(key=lambda c: (c["build"] or (), c["windowless"]),
-               reverse=True)
-    return found
-
-
-# UNVERIFIED, in probe order. A TouchDesigner.app carries a framework
-# build of Python; which of these is real has never been checked on a
-# Mac.
-_DARWIN_PYTHON_RELPATHS = (
-    ("Contents", "Frameworks", "Python.framework", "Versions", "Current",
-     "bin", "python3"),
-    ("Contents", "Frameworks", "Python.framework", "Versions", "3.11",
-     "bin", "python3.11"),
-    ("Contents", "MacOS", "python3"),
-    ("Contents", "Resources", "bin", "python3"),
-)
-
-
-def _parse_build(name):
-    """(year, number) out of 'TouchDesigner.2025.33070', or None.
-
-    None sorts LAST (never first): an unparseable directory name must not
-    be chosen over a known build just because it sorts high.
-    """
-    match = re.search(r"(\d{4})\.(\d+)", str(name or ""))
-    if not match:
-        return None
-    return int(match.group(1)), int(match.group(2))
-
-
-def choose_interpreter(candidates, prefer_windowless=True):
-    """Pick one interpreter from find_interpreters(), or None.
-
-    Newest build wins; within a build, pythonw.exe wins -- a console
-    python would leave a window on screen for as long as the daemon runs,
-    which on a show machine is not cosmetic.
-    """
-    usable = [c for c in (candidates or []) if c.get("path")]
-    if not usable:
-        return None
-    if prefer_windowless:
-        windowless = [c for c in usable if c.get("windowless")]
-        if windowless:
-            usable = windowless
-    usable.sort(key=lambda c: (c.get("build") or (0, 0),
-                               bool(c.get("windowless"))), reverse=True)
-    return usable[0]["path"]
-
-
 # -- THE status computation --------------------------------------------
 
 def host_state(installed=None, probe_status=None, supervisor=None,
@@ -1751,6 +3305,11 @@ def plan_host_uninstall(data_dir, platform=None, home=None):
         remove_dirs.append(target)
     remove_dirs.extend([app_dir(data_dir, None, platform),
                         bin_dir(data_dir, platform)])
+    runtime_plan = plan_runtime_uninstall(data_dir)
+    remove.extend(runtime_plan["remove"])
+    remove_dirs.extend(runtime_plan["remove_dirs"])
+    incomplete.extend(runtime_plan["incomplete"])
+    stray.extend(runtime_plan["stray"])
     if platform == "darwin" and home:
         remove.append(plist_path(home, platform))
 
@@ -1770,6 +3329,7 @@ def plan_host_uninstall(data_dir, platform=None, home=None):
             # under app/ that is not a version at all. Neither is
             # deleted; both used to be invisible.
             "incomplete": incomplete, "stray": stray,
+            "runtime_ids": runtime_plan["runtime_ids"],
             "jobs": jobs, "indeterminate": indeterminate}
 
 
@@ -1829,7 +3389,9 @@ def _failed(reason, detail="", **fields):
 
 def install(data_dir, version, modules, interpreter, platform=None,
             runner=None, home=None, drain_interval=None, installed_by=None,
-            supervisor=None, now=None, user=None, env=None, uid=None):
+            supervisor=None, now=None, user=None, env=None, uid=None,
+            runtime_verifier=None, runtime_runner=None, architecture=None,
+            runtime_catalog=None, runtime_asset_root=None):
     """Write the payload, write the launcher, register the supervisor,
     record the install. NEVER RAISES -- it is called from a worker.
 
@@ -1852,9 +3414,53 @@ def install(data_dir, version, modules, interpreter, platform=None,
         version = safe_version(version)
     except ValueError as e:
         return _failed("bad_version", e)
+    if not interpreter and runtime_catalog is not None:
+        try:
+            provisioned = provision_runtime_from_catalog(
+                data_dir, runtime_catalog, asset_root=runtime_asset_root,
+                platform=platform, architecture=architecture,
+                runner=runtime_runner, now=now)
+        except Exception as e:
+            return _failed("runtime_provision_failed",
+                           "%s: %s" % (type(e).__name__, e))
+        if not provisioned.get("ok"):
+            return _failed(
+                provisioned.get("reason") or "runtime_provision_failed",
+                provisioned.get("detail") or
+                "the signed offline Convoy Runtime could not be installed",
+                runtime=provisioned)
+        interpreter = provisioned.get("interpreter")
     if not interpreter:
-        return _failed("no_interpreter",
-                       "no TouchDesigner Python was found for this user")
+        return _failed(
+            "no_managed_runtime",
+            "no complete Convoy Runtime is installed for this user; install "
+            "the signed offline runtime bundle for Windows x64 or Apple "
+            "Silicon, then retry")
+
+    # FAIL CLOSED BEFORE WRITING A PAYLOAD OR SUPERVISOR. A Python path is
+    # not proof of an approved runtime: project venvs disappear, TD Python
+    # lacks cryptography, and a PATH interpreter is mutable outside Convoy's
+    # lifecycle. The default verifier requires our .complete receipt, checks
+    # the interpreter hash and runs a live isolated crypto probe. Tests inject
+    # a verifier because cross-platform CI must never execute target binaries.
+    verifier = runtime_verifier or verify_managed_runtime
+    try:
+        runtime_check = verifier(
+            data_dir, interpreter, platform=platform,
+            architecture=normalize_architecture(architecture),
+            runner=runtime_runner)
+    except Exception as e:
+        return _failed("runtime_verification_failed",
+                       "%s: %s" % (type(e).__name__, e))
+    if not isinstance(runtime_check, dict) or not runtime_check.get("ok"):
+        runtime_check = (runtime_check if isinstance(runtime_check, dict)
+                         else {"reason": "runtime_verification_failed",
+                               "detail": "runtime verifier returned no result"})
+        return _failed(
+            runtime_check.get("reason") or "runtime_verification_failed",
+            runtime_check.get("detail") or
+            "the managed Convoy Runtime did not pass verification",
+            runtime=runtime_check)
 
     kind = supervisor or (SUPERVISOR_TASK if platform == "win32"
                           else SUPERVISOR_AGENT)
@@ -1948,6 +3554,19 @@ def install(data_dir, version, modules, interpreter, platform=None,
             "installed_at": (now or time.time)(),
             "installed_by": str(installed_by or ""),
             "files": manifest.get("files", []),
+            "runtime": {
+                "format": runtime_check.get("receipt_format",
+                                            RUNTIME_RECEIPT_FORMAT),
+                "runtime_id": runtime_check.get("runtime_id"),
+                "platform": runtime_check.get("platform", platform),
+                "architecture": runtime_check.get(
+                    "architecture", normalize_architecture(architecture)),
+                "python_version": runtime_check.get("python_version"),
+                "cryptography_version": runtime_check.get(
+                    "cryptography_version"),
+                "source_revision": runtime_check.get("source_revision"),
+                "archive_sha256": runtime_check.get("archive_sha256"),
+            },
             "format": "convoy-install/1",
         }
         write_installed(data_dir, record, platform)      # LAST
@@ -2155,6 +3774,19 @@ def uninstall(data_dir, platform=None, runner=None, uid=None, home=None,
         # touched, always named -- they are not ours to delete.
         remaining.extend(stray)
 
+        runtimes, runtime_incomplete, runtime_stray = _runtime_installations(
+            data_dir)
+        for runtime_id, target, receipt, runtime_files in runtimes:
+            outcome = remove_managed_runtime(data_dir, runtime_id)
+            removed.extend(outcome["removed"])
+            kept.extend(outcome["kept"])
+            remaining.extend(outcome["remaining"])
+        # No .complete receipt means we cannot prove the directory's files
+        # are ours. Leave it and say so, exactly like an interrupted app
+        # payload; never turn uninstall into an unbounded recursive delete.
+        remaining.extend(runtime_incomplete)
+        remaining.extend(runtime_stray)
+
         files = [launcher_path(data_dir, platform),
                  task_xml_path(data_dir, platform),
                  installed_path(data_dir, platform)]
@@ -2170,7 +3802,8 @@ def uninstall(data_dir, platform=None, runner=None, uid=None, home=None,
                 kept.append(path)
 
         for directory in (app_dir(data_dir, None, platform),
-                          bin_dir(data_dir, platform)):
+                          bin_dir(data_dir, platform),
+                          _runtime_fs_dir(data_dir)):
             try:
                 os.rmdir(directory)
             except OSError:

@@ -17,6 +17,7 @@ import pytest
 import convoy_capabilities as capabilities
 import convoy_hostapp as ha
 import convoy_protocol as protocol
+from conftest import approve_td_python
 from test_convoy_hostapp import Server
 
 
@@ -123,37 +124,36 @@ def test_manifest_digest_material_is_the_registry_entry(server):
         schema=entry["schema"],
         gating={"mutating": True, "executes_arbitrary_code": False,
                 "runtime_required": False, "remote_exposed": True},
-        side_effects=entry["side_effects"])
+        side_effects=ha.operation_capability_side_effects(entry))
     assert body["manifest"]["operations"]["set_op_position"] == expected
 
 
-def test_the_remote_surface_is_a_strict_subset_and_excludes_the_exec_paths():
-    """A-1 / R-2, pinned in the DATA before the code that reads it exists.
+def test_the_reviewed_registry_is_the_complete_remote_operation_surface():
+    """The full Envoy node-operation surface is remotely addressable EXCEPT
+    the two worker-only escalation operations.
 
-    remote_exposed is inert today -- nothing consults it, because nothing
-    binds off-box. It is written now precisely so the boundary is already
-    correct when Phase 3's LAN listener lands, rather than being drawn
-    under time pressure next to a live socket.
-
-    run_tests is the one that matters: its entry says
-    executes_arbitrary_code False, and LOCALLY that is right -- it runs
-    the owner's own suites. But TestRunnerExt discovers suites by
-    SCANNING DISK (every test_*.py AND test_*.txt it finds), so "the code
-    already in the project" is only true while nothing can put a file
-    there. That is a loopback assumption, and this flag is where it stops
-    being one.
+    run_tests exec_module's every test file it finds on disk, and
+    save_project blocks TD's main thread 15+s before A-30/A-31 show
+    protection exists (R-2); both stay OFF the remote surface even though the
+    rest of the surface is exposed. Executability is otherwise
+    least-privilege: arbitrary-code entries require the node's separate
+    TD-Python approval, mutations remain lease-gated, and bridge/session-local
+    MCP tools are absent from this registry.
     """
     remote = {name for name, entry in ha.PHASE1_OPERATIONS.items()
               if ha.gating_of(entry)["remote_exposed"]}
-    assert remote == {"convoy_ping", "query_network", "capture_top",
-                      "set_op_position"}
+    assert remote == set(ha.PHASE1_OPERATIONS) - {"run_tests", "save_project"}
+    assert remote < set(ha.PHASE1_OPERATIONS), "must be a STRICT subset"
     assert "run_tests" not in remote, (
         "run_tests execs every test file it finds on disk -- never "
         "relayable to a remote peer (R-2)")
     assert "save_project" not in remote, (
         "save_project blocks TD's main thread 15+s; show protection "
         "(A-30/A-31) is Phase 4 -- not relayable before it exists")
-    assert remote < set(ha.PHASE1_OPERATIONS), "must be a STRICT subset"
+    assert ha.gating_of(ha.PHASE1_OPERATIONS["run_tests"])[
+        "executes_arbitrary_code"] is True
+    assert "get_sessions" not in remote
+    assert "claim_scope" not in remote
 
 
 def test_an_unaudited_operation_is_not_remotely_exposed():
@@ -210,10 +210,15 @@ def test_psk_is_minted_on_register_and_stable(server):
     assert first != server.app.token, "group key and IPC token differ"
 
 
-def test_each_convoy_gets_its_own_psk(server):
+def test_one_host_never_silently_joins_two_established_convoys(server):
     register(server)
-    register(server, root="/Work/other", convoy="other-convoy")
-    assert psk_for(server) != psk_for(server, "other-convoy")
+    code, body = server.call("/register", {
+        "project_root": "/Work/other", "convoy_id": "other-convoy",
+        "comp_path": "/Embody"})
+    assert code == 409
+    assert body["reason"] == "local_realm_conflict"
+    code, body = server.call("/psk", {"convoy_id": "other-convoy"})
+    assert code == 404 and body["reason"] == "unknown_convoy"
 
 
 def test_psk_for_unknown_convoy_is_404(server):
@@ -288,7 +293,12 @@ def test_unknown_target_node_is_refused_before_any_crypto(server):
 
 def test_expired_deadline_is_refused(server):
     node = register(server)
-    env = signed_envelope(server, node, psk_for(server), timeout_s=-1.0)
+    # Builders refuse nonsensical negative budgets.  Mint a valid signed
+    # request whose deadline plus the protocol's bounded clock-skew window
+    # is already behind the receiver instead.
+    env = signed_envelope(
+        server, node, psk_for(server), timeout_s=1.0,
+        now=(server.app._now() - protocol.MAX_CLOCK_SKEW_S - 2.0))
     code, body = server.call("/envelope", {"envelope": env})
     assert code == 410 and body["reason"] == "deadline_exceeded"
 
@@ -347,17 +357,15 @@ def test_missing_envelope_object_is_malformed(server):
 def test_unregistered_operation_is_not_exposed(server):
     node = register(server)
     env = signed_envelope(server, node, psk_for(server),
-                          operation="execute_python",
-                          arguments={"code": "1+1"})
+                          operation="definitely_not_an_envoy_tool")
     code, body = server.call("/envelope", {"envelope": env})
     assert code == 403 and body["reason"] == "operation_not_exposed"
     _, status = server.call("/status")
     assert status["jobs_queued"] == 0
 
 
-def test_code_executing_operation_is_refused_even_when_registered(server):
-    """A-1: `executes_arbitrary_code: True` is refused outright until
-    the TD-Python gate exists -- registration is not permission."""
+def test_code_executing_operation_requires_node_approval(server):
+    """A-1: registry classification is not itself code permission."""
     node = register(server)
     with server.app.lock:
         server.app.operations["dangerous_op"] = {
@@ -367,7 +375,11 @@ def test_code_executing_operation_is_refused_even_when_registered(server):
     env = signed_envelope(server, node, psk_for(server),
                           operation="dangerous_op")
     code, body = server.call("/envelope", {"envelope": env})
-    assert code == 403 and body["reason"] == "operation_not_relayable"
+    assert code == 403 and body["reason"] == "td_python_not_approved"
+
+    approve_td_python(server.app, node["node_id"])
+    code, body = server.call("/envelope", {"envelope": env})
+    assert code == 200, body
 
 
 def register_runtime_required_op(server, name="restart_node"):
@@ -471,14 +483,16 @@ def test_exclusive_lease_gates_mutations_but_not_reads(server):
     code, body = server.call("/envelope", {"envelope": env})
     assert code == 200 and body["created"] is True
 
-    # Reads coexist with any lease.
-    assert acquire(server, "ctl-a", nid, "exclusive")[0] == 200
-    env = signed_envelope(server, node, psk, controller_id="ctl-b")
+    # The accepted ctl-b mutation now owns an implicit writer claim. The same
+    # controller may layer an explicit lease over its own active work, while a
+    # different controller's reads still coexist with that writer ownership.
+    assert acquire(server, "ctl-b", nid, "exclusive")[0] == 200
+    env = signed_envelope(server, node, psk, controller_id="ctl-a")
     assert server.call("/envelope", {"envelope": env})[0] == 200
 
     # The exclusive holder itself may mutate.
     env = signed_envelope(server, node, psk, operation="set_op_position",
-                          controller_id="ctl-a",
+                          controller_id="ctl-b",
                           arguments={"op_path": "/x", "x": 1, "y": 1})
     assert server.call("/envelope", {"envelope": env})[0] == 200
 
@@ -550,7 +564,7 @@ def test_local_jobs_route_enforces_the_registry(server):
     node = register(server)
     code, body = server.call("/jobs", {"idempotency_key": "k",
                                        "node_id": node["node_id"],
-                                       "operation": "execute_python"})
+                                       "operation": "definitely_not_an_envoy_tool"})
     assert code == 403 and body["reason"] == "operation_not_exposed"
 
 
@@ -624,11 +638,16 @@ def test_dead_controller_loses_its_lease(tmp_path):
                                  "ttl_s": 3600})
     assert code == 200
     clock.t += 61            # past DEFAULT_CONTROLLER_TIMEOUT_S, no beats
-    code, _ = app.create_job({"idempotency_key": "k", "node_id": nid,
-                              "operation": "set_op_position",
-                              "controller_id": "ctl-b"})
+    code, created = app.create_job({
+        "idempotency_key": "k", "node_id": nid,
+        "operation": "set_op_position", "controller_id": "ctl-b"})
     assert code == 200
-    assert app.list_leases()[1]["leases"] == []
+    rows = app.list_leases()[1]["leases"]
+    assert len(rows) == 1
+    assert rows[0]["controller_id"] == "ctl-b"
+    assert rows[0]["implicit"] is True
+    assert rows[0]["delivery_id"] == created["job"]["delivery_id"]
+    assert all(row["controller_id"] != "ctl-gone" for row in rows)
 
 
 def test_deadline_check_uses_the_injected_clock(tmp_path):
@@ -657,7 +676,7 @@ def test_deadline_check_uses_the_injected_clock(tmp_path):
         "time.time() fallback would call it decades expired")
 
     env = envelope_at(clock.t, "b")
-    clock.t += 31
+    clock.t += 31 + protocol.MAX_CLOCK_SKEW_S
     code, body = app.submit_envelope({"envelope": env}, ha.LOOPBACK_ORIGIN)
     assert code == 410 and body["reason"] == "deadline_exceeded"
 
@@ -717,7 +736,7 @@ def test_manifest_digest_reflects_enforced_gating_not_raw_fields(server):
             "sparse", schema={},
             gating={"executes_arbitrary_code": True, "mutating": True,
                     "runtime_required": True, "remote_exposed": False},
-            side_effects=None))
+            side_effects={"batch_eligible": False}))
 
 
 def test_registry_entries_are_deep_copied_per_instance(tmp_path):
@@ -982,16 +1001,16 @@ def test_the_async_entries_declare_async_in_their_digest(server):
     assert body["manifest"]["operations"]["run_tests"] == (
         capabilities.operation_digest(
             "run_tests", schema=entry["schema"],
-            gating={"executes_arbitrary_code": False, "mutating": True,
+            gating={"executes_arbitrary_code": True, "mutating": True,
                     "runtime_required": True, "remote_exposed": False},
-            side_effects={**entry["side_effects"], "async_job": True}))
+            side_effects=ha.operation_capability_side_effects(entry)))
     sync = ha.PHASE1_OPERATIONS["query_network"]
     assert body["manifest"]["operations"]["query_network"] == (
         capabilities.operation_digest(
             "query_network", schema=sync["schema"],
             gating={"executes_arbitrary_code": False, "mutating": False,
                     "runtime_required": False, "remote_exposed": True},
-            side_effects=sync["side_effects"])), \
+            side_effects=ha.operation_capability_side_effects(sync))), \
         "an existing operation's digest moved"
 
 
@@ -1020,6 +1039,7 @@ def test_the_async_operations_are_lease_gated_on_both_create_paths(server):
     node = register(server)
     psk = psk_for(server)
     nid = node["node_id"]
+    approve_td_python(server.app, nid)
     assert acquire(server, "ctl-reader", nid, "shared")[0] == 200
 
     code, body = server.call("/jobs", {

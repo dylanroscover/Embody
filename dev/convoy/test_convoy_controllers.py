@@ -34,6 +34,46 @@ def test_empty_controller_id_refused():
         reg().heartbeat("", now=1.0)
 
 
+def test_live_controller_view_includes_label_selection_and_no_lease():
+    r = reg()
+    r.heartbeat(C1, now=1000.0, label="Cursor session",
+                selected_node_id=NODE)
+    assert r.live_controllers(now=1001.0) == [{
+        "controller_id": C1,
+        "label": "Cursor session",
+        "last_seen": 1000.0,
+        "selected_node_id": NODE,
+        "leases": [],
+        "node_ids": [],
+    }]
+
+
+def test_heartbeat_can_explicitly_clear_a_previous_selection():
+    r = reg()
+    r.heartbeat(C1, now=1000.0, selected_node_id=NODE)
+    r.heartbeat(C1, now=1001.0, clear_selection=True)
+    assert r.live_controllers(now=1002.0)[0]["selected_node_id"] is None
+
+
+def test_live_controller_view_groups_its_leases():
+    r = reg()
+    r.heartbeat(C1, now=1000.0, selected_node_id=NODE)
+    r.acquire(NODE, C1, cc.LEASE_EXCLUSIVE, now=1001.0)
+    row = r.live_controllers(now=1002.0)[0]
+    assert row["controller_id"] == C1
+    assert row["selected_node_id"] == NODE
+    assert row["node_ids"] == [NODE]
+    assert row["leases"][0]["mode"] == cc.LEASE_EXCLUSIVE
+
+
+def test_malformed_selected_node_is_refused_without_mutation():
+    r = reg()
+    with pytest.raises(cc.LeaseError) as error:
+        r.heartbeat(C1, now=1.0, selected_node_id="")
+    assert error.value.reason == "malformed_node"
+    assert r.live_controllers(now=1.0) == []
+
+
 # -- exclusive leases -----------------------------------------------
 
 def test_exclusive_blocks_another_controller():
@@ -149,6 +189,66 @@ def test_mutation_allowed_once_all_shared_readers_expire():
     r = reg()
     r.acquire(NODE, C1, cc.LEASE_SHARED, now=1000.0)
     assert r.authorize(NODE, C2, is_mutating=True, now=1200.0) is None
+
+
+# -- implicit per-operation writer claims ---------------------------
+
+def test_operation_claim_blocks_another_controller_but_not_its_owner():
+    r = reg()
+    claim = r.claim_operation(NODE, C1, "cj_one", now=1000.0)
+    assert claim["implicit"] is True
+    assert r.authorize(NODE, C1, is_mutating=True, now=1001.0) is None
+    with pytest.raises(cc.LeaseError) as error:
+        r.authorize(NODE, C2, is_mutating=True, now=1001.0)
+    assert error.value.reason == "node_leased"
+    assert error.value.holder == C1
+
+
+def test_same_controller_can_hold_multiple_exact_operation_claims():
+    r = reg()
+    r.claim_operation(NODE, C1, "cj_one", now=1000.0)
+    r.claim_operation(NODE, C1, "cj_two", now=1001.0)
+    rows = [row for row in r.live_leases(now=1002.0)
+            if row.get("implicit")]
+    assert {row["delivery_id"] for row in rows} == {"cj_one", "cj_two"}
+    assert r.release_operation(NODE, "cj_one") is True
+    with pytest.raises(cc.LeaseError):
+        r.authorize(NODE, C2, is_mutating=True, now=1002.0)
+    assert r.release_operation(NODE, "cj_two") is True
+    assert r.authorize(NODE, C2, is_mutating=True, now=1002.0) is None
+
+
+def test_operation_release_never_releases_an_explicit_lease():
+    r = reg()
+    r.acquire(NODE, C1, cc.LEASE_EXCLUSIVE, now=1000.0)
+    r.claim_operation(NODE, C1, "cj_one", now=1001.0)
+    assert r.release_operation(NODE, "cj_one") is True
+    with pytest.raises(cc.LeaseError):
+        r.authorize(NODE, C2, is_mutating=True, now=1002.0)
+
+
+def test_shared_reader_blocks_an_implicit_writer_claim():
+    r = reg()
+    r.acquire(NODE, C1, cc.LEASE_SHARED, now=1000.0)
+    with pytest.raises(cc.LeaseError) as error:
+        r.claim_operation(NODE, C2, "cj_one", now=1001.0)
+    assert error.value.reason == "node_leased"
+    assert error.value.holder == C1
+
+
+def test_dead_controller_reaps_its_operation_claim():
+    r = reg()
+    r.claim_operation(NODE, C1, "cj_one", now=1000.0)
+    assert r.reap(now=1061.0) == 1
+    assert r.live_leases(now=1061.0) == []
+
+
+def test_releasing_controller_drops_every_operation_claim():
+    r = reg()
+    r.claim_operation(NODE, C1, "cj_one", now=1000.0)
+    r.claim_operation(NODE, C1, "cj_two", now=1000.0)
+    assert r.release_controller(C1) == 2
+    assert r.live_leases(now=1001.0) == []
 
 
 # -- release, reap, ttl clamp ---------------------------------------

@@ -40,17 +40,23 @@ ABSENCE IS NOT AN ERROR. No host app on this machine is the normal state
 of almost every install: status reads 'No Convoy host app', ONE DEBUG line
 on the transition, and the tick slows down. Never an Error, never a dialog.
 
-THREADING (rung 4, UpdaterExt's shape verbatim)
+THREADING (TDResources ThreadManager)
 
 Resolve everything on the main thread -> daemon worker doing pure-Python
 urllib with ZERO TD access -> publish a generation-tagged plain dict to a
 plain attribute -> bounded main-thread run(delayFrames=15) poll chain with
-a stale-instance guard. Including, critically, the convoy_client MODULE
-ITSELF: a `mod.` reference is a live DAT lookup, i.e. a TD access that
-re-resolves on every attribute get, so binding the module inside the
-worker body would be a threading violation. It is captured in a local by
-_beginCall BEFORE the thread is created. See _client(), which holds the
-one and only such reference in this file.
+a stale-instance guard. Ordinary work is submitted to one lazy, long-lived,
+standalone TDTask owned by op.TDResources.ThreadManager. Multi-target batches
+keep that worker as their coordinator and use a small bounded set of
+short-lived ThreadManager TDTasks for parallel target I/O. Extension reinit
+signals the previous generation's Event and queue sentinel; old work may
+finish its current bounded call but can never accept work for the new
+generation. Including, critically, the convoy_client MODULE ITSELF: a
+`mod.` reference is a live DAT lookup, i.e. a TD access that re-resolves
+on every attribute get, so binding the module inside the worker body would
+be a threading violation. It is captured in a local by _beginCall BEFORE
+the task is queued. See _client(), which holds the one and only such
+reference in this file.
 
 STATE THAT MUST OUTLIVE A REINIT BUT NOT THE PROCESS
 
@@ -65,10 +71,18 @@ not do. sys attributes are the established channel here
 (sys._envoy_server_gen, sys._envoy_queues, sys._envoy_shutdown_events).
 """
 
+import hmac
+import json
+import math
 import os
 import re
+import secrets
+import socket
 import sys
 import time
+from collections import OrderedDict
+from queue import Empty, Full, Queue
+from threading import Event
 
 # A payload entry is a BARE FILENAME and nothing else. The accept-list
 # is convoy_install._BARE_NAME_OK's, deliberately duplicated at the READ
@@ -82,9 +96,10 @@ _BARE_MODULE_NAME = re.compile(r"^[A-Za-z0-9._+-]+\.py$")
 class ConvoyExt:
     """Node-side Convoy registration: reconcile, register, heartbeat."""
 
-    # Consent scope recorded beside the convoy id (A-13). Phase 3's LAN
-    # widening must ask again rather than inherit this grant.
-    CONSENT_SCOPE = 'local host app only'
+    # Consent scope recorded beside the convoy id (A-13).  Pre-LAN projects
+    # carry 'local host app only'; the reconciler refuses to expose those
+    # until an explicit local enable upgrades this marker.
+    CONSENT_SCOPE = 'trusted LAN Convoy mesh'
 
     # Cadences, in seconds, for the NEXT call. The tick wakes just often
     # enough to serve whichever one is pending (see _scheduleFrom).
@@ -111,6 +126,63 @@ class ConvoyExt:
     # worker's own subprocess timeouts are what actually end it.
     HOST_POLL_ATTEMPTS = 800
 
+    # At most one node call and one host-lifecycle call can be outstanding.
+    # The long-lived worker serializes them, so two slots are sufficient and
+    # a programming error cannot grow an unbounded queue inside TD.
+    WORKER_QUEUE_MAX = 2
+    WORKER_IDLE_S = 0.25
+
+    # TouchDesigner-originated sibling requests use the SAME long-lived
+    # ThreadManager worker as registration and host lifecycle work; a batch
+    # uses it as coordinator for a bounded short-lived fanout. The
+    # request/result registry is deliberately small: Convoy deployments are
+    # dozens of nodes, and retaining an unbounded history (especially image
+    # results) inside a .toe would be an easy way to exhaust TD's process.
+    # Progress and completion are separate queues so a chatty long-running
+    # job can never crowd its own terminal result out of the handoff channel.
+    API_REQUEST_MAX = 64
+    API_COMPLETION_MAX = 64
+    API_PROGRESS_MAX = 128
+    API_PROGRESS_PER_REQUEST_MAX = 32
+    API_EVENT_DRAIN_MAX = 128
+    API_POLL_FRAMES = 4
+    # The loopback host accepts a 1 MiB HTTP body. Reserve 64 KiB for routing
+    # identities and JSON envelope overhead instead of accepting a payload
+    # here that the next hop must deterministically refuse.
+    API_REQUEST_MAX_BYTES = 960 * 1024
+    API_RESULT_MAX_BYTES = 2 * 1024 * 1024
+    API_SNAPSHOT_MAX_BYTES = API_RESULT_MAX_BYTES + 64 * 1024
+    API_PROGRESS_VALUE_MAX_BYTES = 128 * 1024
+    API_BATCH_TARGET_MAX = 64
+    API_BATCH_OPERATION_MAX = 512
+    # A batch fans out through short-lived ThreadManager TDTasks, never raw
+    # Python threads.  Eight simultaneous target submissions are enough to
+    # keep a few-dozen-node LAN busy without letting one TD session create a
+    # thread per peer.  Every worker draws from one shared bounded queue, so
+    # this is a hard concurrency ceiling rather than a chunk size.
+    API_BATCH_WORKER_MAX = 8
+    # A wait occupies the same serial worker that heals registration. Keep
+    # every public turn below two heartbeat windows; longer operations return
+    # a durable delivery id and are reconciled through getJob() instead.
+    API_TIMEOUT_MAX_S = 60.0
+    API_TERMINAL_REQUEST_STATES = ('completed', 'failed')
+
+    # The wake listener is intentionally tiny and loopback-only.  It is a
+    # separate standalone TDTask so Perform Mode can stop Envoy and every
+    # ordinary Convoy call while this one bounded UDP socket remains asleep
+    # in recvfrom().  Commands are bearer-authenticated, schema-closed and
+    # handed to the TD main thread through a bounded Queue; the listener never
+    # imports or touches TD.
+    WAKE_PROTOCOL = 1
+    WAKE_PACKET_MAX = 1024
+    WAKE_QUEUE_MAX = 128
+    WAKE_SOCKET_TIMEOUT_S = 0.25
+    WAKE_POLL_MS = 250
+    WAKE_DRAIN_MAX = 32
+    WAKE_LEASE_MAX_CHARS = 128
+    WAKE_TTL_DEFAULT_S = 120
+    WAKE_TTL_MAX_S = 600
+
     # How long the install/start tail waits for the daemon to answer
     # /health before reporting what it actually sees. Without this the
     # readout would say 'Installed -- not running' for up to a minute
@@ -126,6 +198,7 @@ class ConvoyExt:
     HOST_INSTALLING = 'installing'
     HOST_STARTING = 'starting'
     HOST_INSTALL_FAILED = 'install_failed'
+    RUNTIME_CATALOG_FILENAME = 'convoy_runtime_catalog.json'
 
     # Status classes that deserve a WARNING on the transition INTO them.
     # 'unreachable' is here and 'absent'/'stale' are NOT, and the difference
@@ -139,6 +212,10 @@ class ConvoyExt:
 
     def __init__(self, ownerComp):
         self.ownerComp = ownerComp
+        # Resolve the system COMP on the main thread exactly once. The worker
+        # receives only Queue/Event/plain-callable objects and never touches
+        # this TD object.
+        self.ThreadManager = op.TDResources.ThreadManager
         # Worker handoff slot (a plain attribute -- never a TD object).
         # None = in flight; dict (with '_gen') = published result.
         self._result = None
@@ -153,9 +230,16 @@ class ConvoyExt:
         self._host_result = None
         self._host_gen = 0
         self._host_busy = False
+        self._policy_result = None
+        self._policy_gen = 0
+        self._policy_busy = False
+        self._projecting_policy = False
         self._post_init_done = False
         self._logged = ''        # last logged status class (transitions only)
         self._tick_ms = self.TICK_MIN_MS
+        self._network_rows_digest = None
+        self._wake_record = None
+        self._wake_poll_gen = 0
 
         # Arm the reconcile loop for THIS instance, tagged with a monotonic
         # generation stored on the COMP so it survives the reinit storm a
@@ -164,6 +248,8 @@ class ConvoyExt:
         # reasoning, as EnvoyExt's watchdog arming.
         gen = ownerComp.fetch('_convoy_gen', 0) + 1
         ownerComp.store('_convoy_gen', gen)
+        self._initWorker(gen)
+        self._initSiblingApi(gen)
         # Pending run() calls can outlive COMP replacement during upgrades,
         # so the scheduled string re-resolves the op and checks validity.
         run("o = op(%r)\nif o and o.valid: o.ext.ConvoyExt._convoyTick(%d)"
@@ -193,21 +279,30 @@ class ConvoyExt:
             return
         self._post_init_done = True
         try:
+            # These two parameters are projections of host-private approval,
+            # not project-authored configuration. A saved .toe/TDN/clone may
+            # therefore arrive with a stale On value, but that value must
+            # never become authority merely because TouchDesigner loaded it.
+            # Until the first authenticated host response arrives, the only
+            # truthful projection is the fail-closed/default state.
+            self._resetUntrustedDangerProjections()
             self._publishId(self._readConvoyId())
             if not self._enabled() and not self._performing():
                 self._status('Disabled')
+                self._projectNodeRows([], 'Convoy is disabled')
         except Exception as e:
             self._log('post-init readout failed: %s' % (e,), 'DEBUG')
 
     def onDestroyTD(self):
         """Called on the OLD instance before a reinit replaces it.
 
-        There is deliberately nothing to tear down and NOTHING to
-        unregister: a reinit is not a disable, and the registration state
-        that matters (runtime_id, node_id) lives in the per-process session
-        precisely so it survives this. Dropping the worker slot just stops
-        a superseded result from being read by the new instance; the poll
-        chain retires itself through _staleInstance.
+        There is deliberately NOTHING to unregister: a reinit is not a
+        disable, and the registration state that matters (runtime_id,
+        node_id) lives in the per-process session precisely so it survives.
+        The old ThreadManager task is signalled without joining; it may
+        finish its current bounded call but accepts no further work. Dropping
+        the result slots stops a superseded answer from being read by the new
+        instance, and the poll chain retires through _staleInstance.
         """
         try:
             # A host action in flight dies with this instance: its poll
@@ -227,8 +322,20 @@ class ConvoyExt:
             self._busy = False
             self._host_result = None
             self._host_busy = False
+            self._policy_result = None
+            self._policy_busy = False
+            self._projecting_policy = False
         except Exception:
             pass
+        finally:
+            try:
+                self._destroySiblingApi()
+            except Exception:
+                pass
+            try:
+                self._stopWorker()
+            except Exception:
+                pass
 
     # ==================================================================
     # Host access, logging, parameter readouts (MAIN THREAD ONLY)
@@ -290,6 +397,110 @@ class ConvoyExt:
             return self._installer()
         except Exception:
             return None
+
+    def _hostRuntimeRelease(self):
+        """Trusted local Convoy Runtime release context. MAIN THREAD ONLY.
+
+        A production package may carry an embedded
+        ``convoy_runtime_catalog`` Text DAT and keep its signed runtime ZIPs
+        beside the source .tox. A source checkout instead consumes the
+        checked-in ``dev/convoy/convoy_runtime_catalog.json``. Both forms hand
+        workers plain JSON/path data only; neither form downloads anything or
+        searches TD/system Python.
+
+        The current checked-in catalog intentionally has no published assets.
+        Returning it is still valuable: InstallHost can report the exact
+        release gate (rather than pretending some other interpreter is usable)
+        before showing a confirmation or starting a worker.
+        """
+        try:
+            project_folder = str(project.folder or '')
+        except Exception:
+            project_folder = ''
+
+        def local_path(value):
+            value = os.path.expanduser(str(value or '').strip())
+            if not value:
+                return ''
+            if not os.path.isabs(value):
+                value = os.path.join(project_folder, value)
+            return os.path.abspath(value)
+
+        def external_tox_root():
+            try:
+                value = self._embody.par.externaltox.eval()
+            except Exception:
+                return ''
+            path = local_path(value)
+            return os.path.dirname(path) if path else ''
+
+        # Release form: catalog metadata is part of the trusted .tox. Its
+        # binary runtime asset remains a sidecar because a self-contained
+        # CPython tree is not suitable Text DAT payload. If this DAT is
+        # present but malformed, stop here: falling through to a different
+        # catalog would make the release identity ambiguous.
+        catalog_dat = self.ownerComp.op('convoy_runtime_catalog')
+        if catalog_dat is not None:
+            try:
+                catalog = json.loads(str(catalog_dat.text or ''))
+            except Exception as e:
+                return {
+                    'catalog': None,
+                    'asset_root': None,
+                    'source': 'embedded convoy_runtime_catalog DAT',
+                    'error': 'embedded Convoy Runtime catalog is invalid '
+                             'JSON (%s: %s)' % (type(e).__name__, e),
+                }
+            asset_root = ''
+            try:
+                file_par = getattr(catalog_dat.par, 'file', None)
+                catalog_file = local_path(file_par.eval()) if file_par else ''
+                if catalog_file:
+                    asset_root = os.path.dirname(catalog_file)
+            except Exception:
+                asset_root = ''
+            asset_root = asset_root or external_tox_root()
+            return {
+                'catalog': catalog,
+                'asset_root': asset_root or None,
+                'source': 'embedded convoy_runtime_catalog DAT',
+                'error': '',
+            }
+
+        # Sidecar release form. Some load paths preserve External .tox until
+        # the updater detaches it; when they do, the catalog and archive are
+        # resolved only beside that exact .tox, never by a broad filesystem
+        # search.
+        release_root = external_tox_root()
+        if release_root:
+            catalog_path = os.path.join(
+                release_root, self.RUNTIME_CATALOG_FILENAME)
+            if os.path.isfile(catalog_path):
+                return {'catalog': catalog_path,
+                        'asset_root': release_root,
+                        'source': catalog_path, 'error': ''}
+
+        # Development form. ExportPortableTox strips this source reference,
+        # so the branch cannot accidentally make a released .tox depend on
+        # the repository checkout.
+        try:
+            source_dat = self._embody.op('EmbodyExt')
+            source_par = (getattr(source_dat.par, 'file', None)
+                          if source_dat is not None else None)
+            source_path = local_path(source_par.eval()) if source_par else ''
+        except Exception:
+            source_path = ''
+        if source_path:
+            catalog_path = os.path.abspath(os.path.join(
+                os.path.dirname(source_path), '..', '..', 'convoy',
+                self.RUNTIME_CATALOG_FILENAME))
+            if os.path.isfile(catalog_path):
+                return {'catalog': catalog_path,
+                        'asset_root': os.path.dirname(catalog_path),
+                        'source': catalog_path, 'error': ''}
+
+        return {'catalog': None, 'asset_root': None, 'source': '',
+                'error': ''}
 
     def _hostModules(self):
         """{filename: source text} for the vendored host-app DATs.
@@ -396,6 +607,154 @@ class ConvoyExt:
         if par is not None:
             self._setPar(par, str(convoy_id or ''))
 
+    @staticmethod
+    def _sequenceByName(comp, name):
+        """Resolve a custom sequence by enumeration (TD-safe and portable)."""
+        try:
+            return next((seq for seq in comp.seq
+                         if seq is not None and seq.name == name), None)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _sequenceBlockPar(comp, seq, block, index, base_name):
+        """Resolve one custom-sequence block parameter across TD builds.
+
+        Custom SequenceBlock ``.par`` lookup is inconsistent across builds;
+        this mirrors TDNExt's proven attribute/bracket/full-name fallback.
+        """
+        par_collection = getattr(block, 'par', None)
+        par = getattr(par_collection, base_name, None)
+        if par is not None:
+            return par
+        try:
+            par = par_collection[base_name]
+            if par is not None:
+                return par
+        except Exception:
+            pass
+        for suffix in (base_name.lower(), base_name):
+            par = getattr(comp.par, '%s%s%s' % (seq.name, index, suffix),
+                          None)
+            if par is not None:
+                return par
+        return None
+
+    @staticmethod
+    def _lastSeenText(age_s, online):
+        """Humanize an optional host-projected heartbeat age."""
+        try:
+            if isinstance(age_s, bool):
+                raise ValueError
+            age = max(0.0, float(age_s))
+            if not math.isfinite(age):
+                raise ValueError
+        except (TypeError, ValueError, OverflowError):
+            return 'Now' if online else 'Unavailable'
+        if age < 1.5:
+            return 'Now'
+        if age < 60:
+            return '%ds ago' % int(age)
+        if age < 3600:
+            return '%dm ago' % int(age // 60)
+        if age < 86400:
+            return '%dh ago' % int(age // 3600)
+        return '%dd ago' % int(age // 86400)
+
+    @staticmethod
+    def _nodeStatusRows(result):
+        """Turn a bounded client directory result into UI-only row values.
+
+        Deliberately minimal -- Node Name, IP, Status, Last Seen. The node's
+        Embody version is folded INTO Status only when it is the point (an
+        incompatibility); it is noise as a standing column otherwise. Per-node
+        controller counts live in convoy_list_controllers, not here.
+        """
+        if not isinstance(result, dict) or result.get('state') != 'nodes':
+            return None
+        rows = []
+        for node in result.get('nodes') or ():
+            if not isinstance(node, dict):
+                continue
+            online = bool(node.get('online'))
+            raw_status = str(node.get('status') or
+                             ('online' if online else 'offline')).strip()
+            status = raw_status[:1].upper() + raw_status[1:64]
+            version = str(node.get('embody_version') or '').strip()
+            if version and 'incompat' in raw_status.lower():
+                status = '%s (v%s)' % (status, version[:32])
+            name = str(node.get('node_name') or node.get('hostname') or
+                       node.get('toe_name') or 'Unnamed node')[:512]
+            ip = str(node.get('ip') or '-')[:255]
+            rows.append({
+                'Nodename': name,
+                'Ipaddress': ip,
+                'Nodestatus': status or 'Unknown',
+                # The host may expose a bounded AGE, never a raw wall-clock
+                # timestamp. Older hosts omit it, in which case the observed
+                # online/offline state remains the honest fallback.
+                'Lastseen': ConvoyExt._lastSeenText(
+                    node.get('last_seen_age_s'), online),
+            })
+        return rows
+
+    def _projectNodeRows(self, rows, empty_detail='No nodes discovered'):
+        """Populate the read-only Convoy Nodes sequence. MAIN THREAD ONLY."""
+        fields = ('Nodename', 'Ipaddress', 'Nodestatus', 'Lastseen')
+        if not rows:
+            rows = [{
+                'Nodename': str(empty_detail or 'No nodes discovered')[:512],
+                'Ipaddress': '-',
+                'Nodestatus': 'Offline',
+                'Lastseen': 'Never',
+            }]
+        # A stable tuple prevents 30-second heartbeats from dirtying/redrawing
+        # an unchanged custom parameter page.
+        digest = tuple(tuple(row.get(field) for field in fields)
+                       for row in rows)
+        if digest == self._network_rows_digest:
+            return
+        seq = self._sequenceByName(self._embody, 'Convoynodes')
+        if seq is None:
+            return
+        try:
+            seq.numBlocks = len(rows)
+            blocks = list(seq.blocks)
+        except Exception as e:
+            self._log('could not size Convoy Status sequence: %s' % (e,),
+                      'DEBUG')
+            return
+        try:
+            for index, row in enumerate(rows, 1):
+                block = blocks[index - 1]
+                for field in fields:
+                    par = self._sequenceBlockPar(
+                        self._embody, seq, block, index, field)
+                    if par is not None:
+                        self._setPar(par, row.get(field))
+        except Exception as e:
+            self._log('could not populate Convoy Status sequence: %s' % (e,),
+                      'DEBUG')
+            return
+        self._network_rows_digest = digest
+
+    def _applyNetworkNodes(self, result):
+        """Apply one worker-fetched directory without erasing good stale data."""
+        rows = self._nodeStatusRows(result)
+        if rows is not None:
+            detail = ('No enabled nodes in this Convoy' if not rows
+                      else 'No nodes discovered')
+            self._projectNodeRows(rows, detail)
+            return
+        # A transient directory failure must not make every known node
+        # disappear.  Only initialize the untouched placeholder with an
+        # actionable reason; the next successful heartbeat replaces it.
+        if self._network_rows_digest is None:
+            reason = str((result or {}).get('reason') or
+                         (result or {}).get('detail') or
+                         'status unavailable')[:160]
+            self._projectNodeRows([], 'Status unavailable: %s' % reason)
+
     def _enabled(self):
         par = getattr(self._embody.par, 'Convoyenable', None)
         try:
@@ -405,18 +764,153 @@ class ConvoyExt:
 
     def _setEnabled(self, value):
         """Flip the canonical gate (Toggle pars are 0/1)."""
+        if not value:
+            self._revokeSiblingApi()
         par = getattr(self._embody.par, 'Convoyenable', None)
         if par is not None:
             par.val = 1 if value else 0
 
+    def _resetUntrustedDangerProjections(self):
+        """Reset saved host-policy projections. MAIN THREAD ONLY.
+
+        TD Python approval is node/host-private and Full Shell approval is
+        host-private. Neither may be granted by a project file, config restore,
+        clone, peer update, or synthetic parameter callback. The host API that
+        will own local confirmation is not present yet, so this scaffold only
+        supports the safe state and never sends either value in registration.
+        """
+        reset = []
+        self._projecting_policy = True
+        try:
+            for name, safe in (
+                    ('Convoyallowtdpython', 0),
+                    ('Convoyallowfullshell', 0),
+                    ('Convoyartifactquota', 1024)):
+                par = getattr(self._embody.par, name, None)
+                if par is None:
+                    continue
+                try:
+                    if par.eval() != safe:
+                        par.val = safe
+                        reset.append(name)
+                except Exception:
+                    try:
+                        par.val = safe
+                    except Exception:
+                        pass
+        finally:
+            self._projecting_policy = False
+        if reset:
+            self._log('ignored saved capability approval projection(s): %s; '
+                      'the local host policy is authoritative'
+                      % (', '.join(reset),), 'WARNING')
+
+    def PolicyProjectionActive(self):
+        """True only during a host-authored parameter projection."""
+        return bool(self._projecting_policy)
+
+    def _applyPolicyProjection(self, result):
+        """Project one validated convoy_client policy result. MAIN THREAD."""
+        policy = (result or {}).get('policy')
+        if not isinstance(policy, dict):
+            return False
+        required = ('generation', 'allow_td_python', 'allow_full_shell',
+                    'artifact_quota_mb')
+        if any(name not in policy for name in required):
+            return False
+        values = {
+            'Convoyallowtdpython': 1 if policy['allow_td_python'] else 0,
+            'Convoyallowfullshell': 1 if policy['allow_full_shell'] else 0,
+            'Convoyartifactquota': int(policy['artifact_quota_mb']),
+        }
+        self._projecting_policy = True
+        try:
+            for name, value in values.items():
+                par = getattr(self._embody.par, name, None)
+                if par is not None and par.eval() != value:
+                    par.val = value
+        except Exception as e:
+            self._log('could not project host safety policy: %s' % (e,),
+                      'DEBUG')
+            return False
+        finally:
+            self._projecting_policy = False
+        self._session()['policy'] = dict(policy)
+        return True
+
+    def LocalDangerGateChanged(self, par_name, requested):
+        """Request a local host-policy change; the parameter is projection."""
+        if par_name not in ('Convoyallowtdpython', 'Convoyallowfullshell'):
+            return {'ok': False, 'reason': 'unknown_capability'}
+        if getattr(self, '_projecting_policy', False):
+            return {'ok': True, 'projected': True}
+        setting = ('td_python' if par_name == 'Convoyallowtdpython'
+                   else 'full_shell')
+        session = self._session()
+        policy = session.get('policy') or {}
+        authoritative = bool(policy.get(
+            'allow_td_python' if setting == 'td_python'
+            else 'allow_full_shell', False))
+        par = getattr(self._embody.par, par_name, None)
+        self._projecting_policy = True
+        try:
+            if par is not None:
+                # The host has not accepted anything yet. Restore its last
+                # projection immediately so a saved/synthetic On can never be
+                # authority during the confirmation round trip.
+                par.val = 1 if authoritative else 0
+        finally:
+            self._projecting_policy = False
+        if getattr(self, '_policy_busy', False):
+            self._log('another Convoy safety-policy request is still in '
+                      'progress', 'INFO')
+            return {'ok': False, 'reason': 'policy_busy'}
+        node_id = str(session.get('node_id') or '')
+        if setting == 'td_python' and not node_id:
+            self._log('Allow Execute TD Python waits until this node has '
+                      'registered with the Convoy host app', 'WARNING')
+            return {'ok': False, 'reason': 'node_not_registered'}
+        action = 'policy_begin' if bool(requested) else 'policy_disable'
+        self._beginPolicyCall(action, setting=setting, node_id=node_id)
+        return {'ok': True, 'pending': True, 'enabled': authoritative}
+
+    def LocalArtifactQuotaChanged(self, requested):
+        """CAS a host-wide quota, reverting the Par until host acceptance."""
+        if getattr(self, '_projecting_policy', False):
+            return {'ok': True, 'projected': True}
+        session = self._session()
+        current = int((session.get('policy') or {}).get(
+            'artifact_quota_mb', 1024))
+        par = getattr(self._embody.par, 'Convoyartifactquota', None)
+        self._projecting_policy = True
+        try:
+            if par is not None:
+                par.val = current
+        finally:
+            self._projecting_policy = False
+        try:
+            requested_number = float(requested)
+            requested = int(requested_number)
+        except (TypeError, ValueError, OverflowError):
+            return {'ok': False, 'reason': 'invalid_quota'}
+        if requested_number != requested:
+            return {'ok': False, 'reason': 'invalid_quota'}
+        if requested < 0 or requested > 1024 * 1024:
+            return {'ok': False, 'reason': 'invalid_quota'}
+        if getattr(self, '_policy_busy', False):
+            return {'ok': False, 'reason': 'policy_busy'}
+        self._beginPolicyCall('policy_quota', quota_mb=requested)
+        return {'ok': True, 'pending': True}
+
     def _performing(self):
         """True while Embody's Perform Mode is on.
 
-        Single authority: EmbodyExt._performMode (the live Performmode par),
-        the same signal Envoy's watchdog consults -- never a status string,
-        which every writer here overwrites. An exception reads False, so a
-        broken Embody ext reference cannot silently switch Convoy off
-        forever; that matches EnvoyExt._performModeActive.
+        Single authority: EmbodyExt._performMode (the requested Performmode
+        state), never a status string which every writer here overwrites.
+        Envoy separately consults the narrower _envoyPerformMode gate so a
+        wake lease can resume command service without unsuspending unrelated
+        Embody features. An exception reads False so a broken extension
+        reference cannot silently switch Convoy off forever.
         """
         try:
             return bool(self._embody.ext.Embody._performMode)
@@ -444,6 +938,33 @@ class ConvoyExt:
             return self._embody.ext.Embody._readConvoyId() or ''
         except Exception:
             return ''
+
+    def _readConsentScope(self):
+        """The exact locally granted Convoy scope, or ``''``."""
+        try:
+            entry = self._embody.ext.Embody._readConvoyEntry() or {}
+            return str(entry.get('consent_scope') or '')
+        except Exception:
+            return ''
+
+    def _readBindingState(self):
+        """Safe project realm state; old IDs are established, never fresh."""
+        embody = self._embody.ext.Embody
+        try:
+            state = str(embody._readConvoyBindingState() or '')
+            if state in ('candidate', 'established'):
+                return state
+        except Exception:
+            pass
+        try:
+            entry = embody._readConvoyEntry() or {}
+            if entry.get('id'):
+                state = str(entry.get('binding_state') or '')
+                return state if state in ('candidate', 'established') \
+                    else 'established'
+        except Exception:
+            pass
+        return ''
 
     def _envoyPort(self):
         """Envoy's confirmed-bound loopback port, or None.
@@ -474,6 +995,299 @@ class ConvoyExt:
             store = {}
             sys._convoy_sessions = store
         return store.setdefault(self.ownerComp.path, {})
+
+    # ==================================================================
+    # Perform-safe local wake listener
+    # ==================================================================
+
+    def _remoteWakeEnabled(self):
+        par = getattr(self._embody.par, 'Convoyremotewake', None)
+        try:
+            return bool(par.eval()) if par is not None else True
+        except Exception:
+            return False
+
+    def _wakeGrace(self):
+        par = getattr(self._embody.par, 'Convoywakegrace', None)
+        try:
+            value = int(par.eval()) if par is not None else 60
+        except Exception:
+            value = 60
+        return max(0, min(value, 3600))
+
+    def _performRequested(self):
+        """The user's Perform Mode Par, ignoring a temporary wake override."""
+        par = getattr(self._embody.par, 'Performmode', None)
+        try:
+            return bool(par.eval()) if par is not None else False
+        except Exception:
+            return False
+
+    def _wakeActive(self):
+        try:
+            return bool(self._embody.ext.Embody._convoyWakeActive)
+        except Exception:
+            return False
+
+    @classmethod
+    def _parseWakeDatagram(cls, packet, token, address):
+        """Validate one loopback wake packet; return a detached command.
+
+        Pure Python and TD-free so both the listener thread and off-TD tests
+        exercise the exact same parser.  ``None`` is an intentional silent
+        drop: this is a private datagram endpoint, not an oracle.
+        """
+        try:
+            if (not isinstance(packet, bytes)
+                    or not packet or len(packet) > cls.WAKE_PACKET_MAX):
+                return None
+            if (not isinstance(address, tuple) or not address
+                    or address[0] != '127.0.0.1'):
+                return None
+            body = json.loads(packet.decode('utf-8'))
+            if not isinstance(body, dict):
+                return None
+            allowed = {'v', 'auth', 'action', 'lease_id', 'ttl_s'}
+            if set(body) - allowed:
+                return None
+            if body.get('v') != cls.WAKE_PROTOCOL:
+                return None
+            supplied = body.get('auth')
+            if (not isinstance(supplied, str)
+                    or not hmac.compare_digest(supplied, str(token))):
+                return None
+            action = body.get('action')
+            if action not in ('acquire', 'touch', 'release'):
+                return None
+            lease_id = body.get('lease_id')
+            if (not isinstance(lease_id, str) or not lease_id
+                    or len(lease_id) > cls.WAKE_LEASE_MAX_CHARS
+                    or any(ord(ch) < 33 or ord(ch) > 126
+                           for ch in lease_id)):
+                return None
+            ttl_s = body.get('ttl_s', cls.WAKE_TTL_DEFAULT_S)
+            if (isinstance(ttl_s, bool) or not isinstance(ttl_s, int)
+                    or ttl_s < 1 or ttl_s > cls.WAKE_TTL_MAX_S):
+                return None
+            return {'action': action, 'lease_id': lease_id,
+                    'ttl_s': ttl_s}
+        except (UnicodeDecodeError, ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def _wakeListenerLoop(command_queue, shutdown_event, ready_event,
+                          token, state, packet_max, timeout_s):
+        """Loopback UDP listener. WORKER THREAD; absolutely zero TD access."""
+        sock = None
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.bind(('127.0.0.1', 0))
+            sock.settimeout(float(timeout_s))
+            state['port'] = int(sock.getsockname()[1])
+            state['error'] = ''
+            ready_event.set()
+            while not shutdown_event.is_set():
+                try:
+                    packet, address = sock.recvfrom(int(packet_max) + 1)
+                except socket.timeout:
+                    continue
+                except OSError as e:
+                    if not shutdown_event.is_set():
+                        state['error'] = '%s: %s' % (type(e).__name__, e)
+                    break
+                command = ConvoyExt._parseWakeDatagram(
+                    packet, token, address)
+                if command is None:
+                    continue
+                command['received_at'] = time.monotonic()
+                try:
+                    command_queue.put_nowait(command)
+                except Full:
+                    # Keep the newest authenticated intent.  Losing an older
+                    # release cannot strand Perform Mode: every acquire has a
+                    # hard TTL and the main-thread watchdog expires it.
+                    try:
+                        command_queue.get_nowait()
+                        command_queue.task_done()
+                    except Empty:
+                        pass
+                    try:
+                        command_queue.put_nowait(command)
+                    except Full:
+                        pass
+        except Exception as e:
+            state['error'] = '%s: %s' % (type(e).__name__, e)
+            ready_event.set()
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+            state['stopped'] = True
+            ready_event.set()
+        return {'stopped': True, 'port': state.get('port')}
+
+    def _ensureWakeListener(self):
+        """Adopt or start this node's one process-local wake listener."""
+        registry = getattr(sys, '_convoy_wake_listeners', None)
+        if not isinstance(registry, dict):
+            registry = {}
+        path = self.ownerComp.path
+        record = registry.get(path)
+        if isinstance(record, dict) and not record.get('shutdown').is_set():
+            thread = record.get('thread')
+            alive = True
+            if thread is not None:
+                try:
+                    alive = bool(thread.is_alive())
+                except Exception:
+                    alive = True
+            if alive and not record.get('state', {}).get('stopped'):
+                already_adopted = self._wake_record is record
+                self._wake_record = record
+                if not already_adopted:
+                    self._armWakePoll()
+                return True
+
+        command_queue = Queue(maxsize=self.WAKE_QUEUE_MAX)
+        shutdown = Event()
+        ready = Event()
+        token = secrets.token_urlsafe(32)
+        state = {'port': None, 'error': '', 'stopped': False}
+        record = {
+            'queue': command_queue, 'shutdown': shutdown, 'ready': ready,
+            'token': token, 'state': state, 'task': None, 'thread': None,
+        }
+        task = self.ThreadManager.TDTask(
+            target=ConvoyExt._wakeListenerLoop,
+            args=(command_queue, shutdown, ready, token, state,
+                  self.WAKE_PACKET_MAX, self.WAKE_SOCKET_TIMEOUT_S))
+        thread = self.ThreadManager.EnqueueTask(task, standalone=True)
+        if thread is None:
+            shutdown.set()
+            state['error'] = 'ThreadManager refused the wake listener task'
+            state['stopped'] = True
+            self._wake_record = record
+            return False
+        record['task'] = task
+        record['thread'] = thread
+        registry[path] = record
+        sys._convoy_wake_listeners = registry
+        self._wake_record = record
+        self._armWakePoll()
+        return True
+
+    def _stopWakeListener(self):
+        record = self._wake_record
+        if not isinstance(record, dict):
+            registry = getattr(sys, '_convoy_wake_listeners', {})
+            record = registry.get(self.ownerComp.path)
+        if isinstance(record, dict):
+            try:
+                record['shutdown'].set()
+            except Exception:
+                pass
+        registry = getattr(sys, '_convoy_wake_listeners', None)
+        if isinstance(registry, dict):
+            registry.pop(self.ownerComp.path, None)
+        self._wake_record = None
+        self._wake_poll_gen += 1
+        self.ResetWakeLeases(close_override=True)
+
+    def _wakeEndpoint(self):
+        record = self._wake_record
+        if (not self._remoteWakeEnabled() or not isinstance(record, dict)
+                or record.get('shutdown').is_set()):
+            return None, None
+        state = record.get('state') or {}
+        port = state.get('port')
+        token = record.get('token')
+        if (not isinstance(port, int) or not (1 <= port <= 65535)
+                or not isinstance(token, str)):
+            return None, None
+        return port, token
+
+    def _armWakePoll(self):
+        self._wake_poll_gen += 1
+        generation = self._wake_poll_gen
+        run('args[0]._pollWakeCommands(args[1])', self, generation,
+            delayMilliSeconds=self.WAKE_POLL_MS)
+
+    def _pollWakeCommands(self, generation):
+        """Apply wake leases on TD's main thread and expire abandoned ones."""
+        if self._staleInstance() or generation != self._wake_poll_gen:
+            return
+        record = self._wake_record
+        if not isinstance(record, dict) or record.get('shutdown').is_set():
+            return
+        session = self._session()
+        leases = session.setdefault('wake_leases', {})
+        now = time.monotonic()
+        queue = record.get('queue')
+        for _ in range(self.WAKE_DRAIN_MAX):
+            try:
+                command = queue.get_nowait()
+            except Empty:
+                break
+            try:
+                lease_id = command['lease_id']
+                if command['action'] == 'release':
+                    if lease_id in leases:
+                        leases[lease_id] = now + self._wakeGrace()
+                else:
+                    leases[lease_id] = now + int(command['ttl_s'])
+            finally:
+                queue.task_done()
+        for lease_id, expires_at in list(leases.items()):
+            try:
+                expired = float(expires_at) <= now
+            except (TypeError, ValueError):
+                expired = True
+            if expired:
+                leases.pop(lease_id, None)
+
+        desired = bool(leases and self._remoteWakeEnabled()
+                       and self._performRequested())
+        active = self._wakeActive()
+        if desired and not active:
+            if self._embody.ext.Embody._beginConvoyWake():
+                self._log('Perform Mode temporarily awakened for Convoy',
+                          'INFO')
+                session['sent'] = None
+                session['next_call_at'] = None
+                self._reconcile(force=True)
+        elif active and not desired:
+            self._embody.ext.Embody._endConvoyWake()
+            self._log('Convoy wake grace elapsed; Perform Mode restored',
+                      'INFO')
+            session['sent'] = None
+            session['next_call_at'] = None
+            self._reconcile(force=True)
+        run('args[0]._pollWakeCommands(args[1])', self, generation,
+            delayMilliSeconds=self.WAKE_POLL_MS)
+
+    def ResetWakeLeases(self, close_override=True):
+        """Drop process-local leases after a local mode/membership change."""
+        session = self._session()
+        session['wake_leases'] = {}
+        if close_override and self._wakeActive():
+            try:
+                self._embody.ext.Embody._endConvoyWake()
+            except Exception:
+                pass
+
+    def WakeSettingsChanged(self):
+        """Apply local wake/grace changes and refresh host registration."""
+        if not self._remoteWakeEnabled():
+            self._stopWakeListener()
+        else:
+            self._ensureWakeListener()
+        if self._enabled():
+            session = self._session()
+            session['sent'] = None
+            session['next_call_at'] = None
+            self._reconcile(force=True)
 
     # ==================================================================
     # The reconciler
@@ -521,13 +1335,15 @@ class ConvoyExt:
         MAIN THREAD ONLY. Never raises out of the ordinary paths -- the tick
         wraps it, but every branch here is meant to be total.
         """
-        if self._performing():
-            # Perform Mode: ZERO network work, and the status par is left
-            # exactly as the show found it. Resumes on exit.
-            self._tick_ms = self.TICK_MAX_MS
-            return
         if self._busy:
             # A call is already in flight; its poll owns the next schedule.
+            self._tick_ms = self.TICK_MIN_MS
+            return
+        if self._host_busy:
+            # One long-lived worker deliberately serializes registration
+            # with install/start/stop. Do not queue a short registration
+            # behind a potentially long installer and then time out its
+            # shorter poll budget before execution even begins.
             self._tick_ms = self.TICK_MIN_MS
             return
 
@@ -544,6 +1360,8 @@ class ConvoyExt:
         enabled = self._enabled()
 
         if not enabled:
+            self._revokeSiblingApi()
+            self._stopWakeListener()
             if session.get('registered'):
                 # Disabled without going through parexec (a settings restore,
                 # or a scripted par write). Clear the host's port once.
@@ -553,6 +1371,7 @@ class ConvoyExt:
             session['next_call_at'] = None
             self._tick_ms = self.TICK_MAX_MS
             self._apply({'state': client.STATE_DISABLED}, client)
+            self._projectNodeRows([], 'Convoy is disabled')
             return
 
         if not self._savedToe():
@@ -564,7 +1383,27 @@ class ConvoyExt:
             self._apply({'state': client.STATE_UNSAVED}, client)
             return
 
+        # A pre-LAN project may have Convoy Enable persisted On alongside a
+        # narrower loopback-only consent marker.  Never let a background tick
+        # silently widen that grant: turn the gate back off and require the
+        # user to enable it locally, where _ensureConsent shows the trusted-
+        # LAN warning and records the new scope.
         convoy_id = self._readConvoyId()
+        if convoy_id and self._readConsentScope() != self.CONSENT_SCOPE:
+            session['sent'] = None
+            session['next_call_at'] = None
+            self._setEnabled(False)
+            self._publishId(convoy_id)
+            self._tick_ms = self.TICK_MAX_MS
+            self._status('Consent required -- enable Convoy again')
+            self._projectNodeRows([], 'Trusted-LAN consent required')
+            self._logOnce(
+                'convoy_scope_upgrade_required',
+                'Convoy stayed off because this project only recorded the '
+                'older loopback scope. Enable Convoy locally to review the '
+                'trusted-LAN access warning.', 'WARNING')
+            return
+
         if not convoy_id:
             # Enabled with no convoy key in .embody/project.json. Minting is
             # gated on an EXPLICIT enable (A-13) and never happens on a tick
@@ -579,6 +1418,15 @@ class ConvoyExt:
                          'detail': 'no convoy id -- turn Convoy Enable off '
                                    'and on again to mint one'}, client)
             return
+
+        # This is the only Convoy work intentionally kept alive in Perform
+        # Mode. It starts only after membership, project persistence and LAN
+        # consent are all valid; an unsaved/declined project consumes no
+        # listener thread.
+        if self._remoteWakeEnabled():
+            self._ensureWakeListener()
+        elif self._wake_record is not None:
+            self._stopWakeListener()
 
         state = self._desiredState(session, convoy_id)
         due_at = session.get('next_call_at')
@@ -597,7 +1445,10 @@ class ConvoyExt:
     def _desiredState(self, session, convoy_id):
         """D2's desired-state tuple, resolved ENTIRELY on the main thread.
 
-            (enabled, project_root, comp_path, convoy_id, envoy_port, host_id)
+            (enabled, project_root, comp_path, convoy_id, envoy_port, host_id,
+             toe_path, hostname, process_id, embody_version, td_version,
+             node_name, remote_wake, perform_mode, wake_active,
+             wake_port, wake_token, wake_grace_s, binding_state)
 
         Comparing it against the last tuple actually sent is what makes an
         unchanged tick cost zero network calls.
@@ -616,12 +1467,75 @@ class ConvoyExt:
             project_root = str(self._embody.ext.Embody._findProjectRoot())
         except Exception:
             project_root = str(project.folder)
+        toe_path = str(self._savedToe() or '')
+        try:
+            hostname = str(socket.gethostname() or '').strip() or 'localhost'
+        except Exception:
+            hostname = 'localhost'
+        toe_name = os.path.splitext(os.path.basename(toe_path))[0] or 'Untitled'
+        try:
+            embody_version = str(self._embody.par.Version.eval() or '')
+        except Exception:
+            embody_version = ''
+        try:
+            td_version = str(app.version or '')
+        except Exception:
+            td_version = ''
+        node_name = self._nodeName(hostname, toe_name)
+        remote_wake = self._remoteWakeEnabled()
+        perform_requested = self._performRequested()
+        # A wake listener is a routable endpoint ONLY for a sleeping/waking
+        # Perform node. Outside Perform Mode, advertising a wake-only route
+        # could mark a node online even though dispatch correctly requires its
+        # normal Envoy port. The listener may remain warm locally; its secret
+        # endpoint is simply withdrawn from the host until it is applicable.
+        endpoint = (self._wakeEndpoint()
+                    if remote_wake and perform_requested else (None, None))
+        wake_port, wake_token = self._advertisedWakeEndpoint(
+            remote_wake, perform_requested, endpoint)
         return (True,
                 project_root,
                 str(self._embody.path),
                 str(convoy_id),
                 self._envoyPort(),
-                str(session.get('host_id') or ''))
+                str(session.get('host_id') or ''),
+                toe_path,
+                hostname,
+                int(os.getpid()),
+                embody_version,
+                td_version,
+                node_name,
+                remote_wake,
+                perform_requested,
+                self._wakeActive(),
+                wake_port,
+                wake_token,
+                self._wakeGrace(),
+                self._readBindingState() or 'established')
+
+    def _nodeName(self, hostname, toe_name):
+        """Bounded display-only name, honoring the Node Name parameter.
+
+        The shipped parameter starts in expression mode and evaluates to the
+        same automatic ``hostname / toe-stem`` fallback used here. Typing a
+        value switches it to constant mode, which is the user's persistent
+        display override. Empty/error values fall back; routing never uses it.
+        """
+        automatic = '%s / %s' % (str(hostname or 'localhost'),
+                                  str(toe_name or 'Untitled'))
+        par = getattr(self._embody.par, 'Convoynodename', None)
+        try:
+            value = str(par.eval() if par is not None else '').strip()
+        except Exception:
+            value = ''
+        return (value or automatic)[:512]
+
+    @staticmethod
+    def _advertisedWakeEndpoint(remote_wake, perform_mode, endpoint):
+        """Expose a wake-only route exactly while Perform wake can use it."""
+        if remote_wake and perform_mode and isinstance(endpoint, tuple):
+            return endpoint
+        return None, None
 
     def _scheduleFrom(self, session):
         """Tick delay in ms: soon enough to serve the next due call, never a
@@ -633,17 +1547,1018 @@ class ConvoyExt:
         return max(self.TICK_MIN_MS, min(remaining_ms, self.TICK_MAX_MS))
 
     # ==================================================================
-    # Worker + bounded main-thread poll (UpdaterExt's shape)
+    # Long-lived ThreadManager worker + bounded main-thread poll
     # ==================================================================
 
-    def _runInWorker(self, fn):
-        """Start the daemon worker. Isolated in one method so the in-TD
-        suite can run the worker body synchronously against a stubbed
-        client -- no thread, no socket, no timing race inside one frame."""
-        import threading
-        threading.Thread(target=fn, daemon=True).start()
+    def _initWorker(self, generation):
+        """Create this extension generation's plain-Python worker state.
 
-    def _beginCall(self, action, client, session, state=None):
+        The task starts lazily on the first call, so a project with Convoy
+        disabled consumes no worker thread. State lives on the instance;
+        only the previous generation's stop handles live in ``sys`` so a
+        recompiled module can retire them without storing an unpicklable
+        Event on the COMP.
+        """
+        self._worker_generation = int(generation)
+        self._worker_queue = Queue(maxsize=self.WORKER_QUEUE_MAX)
+        self._worker_shutdown = Event()
+        self._worker_task = None
+        self._worker_thread = None
+
+        registry = getattr(sys, '_convoy_workers', None)
+        if not isinstance(registry, dict):
+            registry = {}
+        previous = registry.get(self.ownerComp.path)
+        if isinstance(previous, dict):
+            old_event = previous.get('shutdown')
+            old_queue = previous.get('queue')
+            try:
+                if old_event is not None:
+                    old_event.set()
+            except Exception:
+                pass
+            try:
+                if old_queue is not None:
+                    old_queue.put_nowait(None)
+            except Exception:
+                pass
+        registry[self.ownerComp.path] = {
+            'generation': self._worker_generation,
+            'shutdown': self._worker_shutdown,
+            'queue': self._worker_queue,
+        }
+        sys._convoy_workers = registry
+
+    def _stopWorker(self):
+        """Generation-safe, non-blocking worker shutdown.
+
+        Never joins and never mutates ThreadManager internals during an
+        extension reinit. A bounded network/subprocess call already running
+        may finish, but the Event prevents the loop from accepting another
+        queued callable afterward.
+        """
+        event = getattr(self, '_worker_shutdown', None)
+        queue = getattr(self, '_worker_queue', None)
+        if event is not None:
+            event.set()
+        try:
+            if queue is not None:
+                queue.put_nowait(None)
+        except Full:
+            # A full queue is fine: the set Event is authoritative and the
+            # loop exits before taking another job.
+            pass
+
+    @staticmethod
+    def _workerLoop(work_queue, shutdown_event, generation, idle_s=0.25):
+        """Long-lived TDTask target. WORKER THREAD; zero TD access."""
+        while not shutdown_event.is_set():
+            try:
+                fn = work_queue.get(timeout=idle_s)
+            except Empty:
+                continue
+            try:
+                if fn is None or shutdown_event.is_set():
+                    break
+                # Each submitted closure catches and publishes its own error,
+                # so one failed call cannot kill this long-lived task.
+                fn()
+            finally:
+                work_queue.task_done()
+        return {'generation': generation, 'stopped': True}
+
+    def _ensureWorker(self):
+        """Start this generation's standalone TDTask once. MAIN THREAD."""
+        if self._worker_shutdown.is_set():
+            return False
+        thread = self._worker_thread
+        if thread is not None:
+            try:
+                if thread.is_alive():
+                    return True
+            except Exception:
+                # ThreadManager thread wrappers are expected to expose
+                # is_alive(); if a future wrapper does not, the retained
+                # handle still proves EnqueueTask accepted this task.
+                return True
+
+        task = self.ThreadManager.TDTask(
+            target=ConvoyExt._workerLoop,
+            args=(self._worker_queue, self._worker_shutdown,
+                  self._worker_generation, self.WORKER_IDLE_S))
+        thread = self.ThreadManager.EnqueueTask(task, standalone=True)
+        if thread is None:
+            return False
+        self._worker_task = task
+        self._worker_thread = thread
+        return True
+
+    def _runInWorker(self, fn):
+        """Submit one callable to the long-lived standalone TDTask.
+
+        Isolated in one method so the in-TD suite can execute the worker
+        body synchronously against a stub client. Returns False instead of
+        silently dropping work when ThreadManager is at capacity or the
+        bounded queue is unexpectedly full.
+        """
+        if not self._ensureWorker():
+            return False
+        try:
+            self._worker_queue.put_nowait(fn)
+            return True
+        except Full:
+            return False
+
+    def _runBatchInWorkers(self, client, context, request, progress,
+                           complete, gate_event):
+        """Fan one sibling batch out through bounded ThreadManager tasks.
+
+        MAIN THREAD ONLY.  This method is the sole place the batch fanout
+        touches ``ThreadManager``.  Child TDTasks receive only plain data,
+        Queue/Event objects and the already-resolved client module; the
+        existing long-lived worker performs the one local-host preflight,
+        owns the cumulative deadline and publishes the terminal result.
+
+        A start Event is deliberately held until that coordinator has been
+        accepted.  If ThreadManager refuses the coordinator, already-created
+        child tasks observe cancellation without issuing network traffic.
+        """
+        targets = list(request.get('targets') or ())
+        if not targets:
+            return False
+        worker_count = min(
+            len(targets), max(1, int(self.API_BATCH_WORKER_MAX)))
+        work_queue = Queue(maxsize=len(targets))
+        result_queue = Queue(maxsize=len(targets))
+        start_event = Event()
+        cancel_event = Event()
+        shared = {'handle': None}
+        deadline = time.monotonic() + float(request['timeout_s'])
+        for index, target in enumerate(targets):
+            work_queue.put_nowait((index, dict(target)))
+
+        accepted = 0
+        for _worker_index in range(worker_count):
+            try:
+                task = self.ThreadManager.TDTask(
+                    target=_sibling_batch_target_worker,
+                    args=(client, shared, context['convoy_id'],
+                          context['controller_id'], request, work_queue,
+                          result_queue, start_event, cancel_event,
+                          gate_event, deadline, progress))
+                thread = self.ThreadManager.EnqueueTask(
+                    task, standalone=True)
+            except Exception:
+                thread = None
+            if thread is not None:
+                accepted += 1
+
+        if accepted == 0:
+            cancel_event.set()
+            start_event.set()
+            return False
+
+        # Worker-thread closure: captures plain synchronization/data only.
+        # In particular it does not capture this TD-bound extension object.
+        def _coordinate():
+            try:
+                result = _coordinate_sibling_batch(
+                    client, context, request, work_queue, result_queue,
+                    start_event, cancel_event, gate_event, shared, deadline,
+                    progress)
+            except Exception as e:
+                cancel_event.set()
+                start_event.set()
+                result = _sibling_worker_error(
+                    'worker_exception', '%s: %s' % (type(e).__name__, e))
+            complete(result)
+
+        if not self._runInWorker(_coordinate):
+            cancel_event.set()
+            start_event.set()
+            return False
+        return True
+
+    # ------------------------------------------------------------------
+    # TouchDesigner-originated sibling API
+    # ------------------------------------------------------------------
+
+    def _initSiblingApi(self, generation):
+        """Initialize bounded, generation-local sibling request state.
+
+        Every object here is plain Python.  The two Queue instances are the
+        only worker-to-main-thread handoff; callbacks and retained request
+        records are never captured by a worker callable.
+        """
+        self._api_generation = int(generation)
+        self._api_requests = OrderedDict()
+        self._api_callbacks = {}
+        self._api_completion_events = Queue(
+            maxsize=self.API_COMPLETION_MAX)
+        self._api_progress_events = Queue(maxsize=self.API_PROGRESS_MAX)
+        self._api_gate_event = Event()
+        self._api_poll_armed = False
+
+    def _destroySiblingApi(self):
+        """Forget callbacks/results and invalidate every old worker event."""
+        self._api_generation = -1
+        self._api_poll_armed = False
+        try:
+            self._api_gate_event.set()
+        except Exception:
+            pass
+        try:
+            self._api_callbacks.clear()
+            self._api_requests.clear()
+        except Exception:
+            pass
+        for queue_name in ('_api_completion_events',
+                           '_api_progress_events'):
+            queue = getattr(self, queue_name, None)
+            if queue is None:
+                continue
+            while True:
+                try:
+                    queue.get_nowait()
+                except Empty:
+                    break
+
+    @staticmethod
+    def _apiError(reason, detail, **extra):
+        out = {'state': 'error', 'ok': False,
+               'reason': str(reason), 'detail': str(detail)}
+        out.update(extra)
+        return out
+
+    @staticmethod
+    def _apiText(value, name, limit=256):
+        if (not isinstance(value, str) or not value
+                or value != value.strip() or len(value) > limit
+                or any(ord(char) < 32 or ord(char) == 127
+                       for char in value)):
+            raise ValueError(
+                '%s must be bounded non-empty printable text' % (name,))
+        return value
+
+    @classmethod
+    def _apiTimeout(cls, value):
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or not 0.1 <= float(value) <= cls.API_TIMEOUT_MAX_S):
+            raise ValueError('timeout_s must be within [0.1, %d]'
+                             % int(cls.API_TIMEOUT_MAX_S))
+        return float(value)
+
+    @staticmethod
+    def _apiPlain(value, max_bytes, name):
+        """Return a detached JSON value or reject it before any worker I/O."""
+        try:
+            encoded = json.dumps(
+                value, ensure_ascii=False, allow_nan=False,
+                separators=(',', ':')).encode('utf-8')
+        except (TypeError, ValueError, OverflowError, UnicodeError) as e:
+            raise ValueError('%s must contain only JSON data (%s)'
+                             % (name, type(e).__name__))
+        if len(encoded) > int(max_bytes):
+            raise ValueError('%s exceeds the %d-byte limit'
+                             % (name, int(max_bytes)))
+        try:
+            return json.loads(encoded.decode('utf-8'))
+        except (ValueError, UnicodeError):
+            raise ValueError('%s could not be detached safely' % (name,))
+
+    def _apiBoundResult(self, value):
+        """Detach a worker result and replace oversized/broken values."""
+        try:
+            return self._apiPlain(
+                value, self.API_RESULT_MAX_BYTES, 'result')
+        except ValueError as e:
+            reason = ('result_too_large' if 'byte limit' in str(e)
+                      else 'invalid_worker_result')
+            return self._apiError(reason, str(e))
+
+    def _apiNewRequest(self, kind, callback):
+        """Create a retained local handle, evicting terminal history only."""
+        now = time.time()
+        request_id = 'cr_' + secrets.token_hex(16)
+        while request_id in self._api_requests:
+            request_id = 'cr_' + secrets.token_hex(16)
+
+        while len(self._api_requests) >= self.API_REQUEST_MAX:
+            evicted = False
+            for old_id, old in tuple(self._api_requests.items()):
+                if old.get('state') in self.API_TERMINAL_REQUEST_STATES:
+                    self._api_requests.pop(old_id, None)
+                    self._api_callbacks.pop(old_id, None)
+                    evicted = True
+                    break
+            if not evicted:
+                # All retained slots are genuinely in flight.  Do not evict
+                # a durable lookup handle merely to accept more work.
+                result = self._apiError(
+                    'request_capacity',
+                    'the bounded Convoy request table is full')
+                handle = {
+                    'request_id': request_id, 'kind': kind,
+                    'state': 'failed', 'created': now, 'updated': now,
+                    'result': result,
+                }
+                if callable(callback):
+                    try:
+                        # Preserve the ordinary async contract even when no
+                        # retained slot exists. run() invokes this callable
+                        # on TD's main thread after the public method returns.
+                        run('args[0]._apiCapacityCallback(args[1], args[2])',
+                            self, callback, dict(handle, event='complete'),
+                            delayFrames=1)
+                    except Exception as e:
+                        self._log('could not schedule sibling API capacity '
+                                  'callback: %s' % (e,), 'DEBUG')
+                return None, handle
+
+        record = {
+            'request_id': request_id,
+            'kind': str(kind),
+            'state': 'queued',
+            'created': now,
+            'updated': now,
+            'source': None,
+            'target': None,
+            'result': None,
+            'progress': None,
+        }
+        self._api_requests[request_id] = record
+        if callable(callback):
+            self._api_callbacks[request_id] = callback
+        return record, self._apiRecordSnapshot(record)
+
+    def _apiCapacityCallback(self, callback, snapshot):
+        """Deliver an unretained capacity refusal on TD's main thread."""
+        if self._staleInstance() or not callable(callback):
+            return
+        try:
+            callback(dict(snapshot))
+        except Exception as e:
+            self._log('sibling API capacity callback failed: %s' % (e,),
+                      'DEBUG')
+
+    def _apiRecordSnapshot(self, record, event=None):
+        names = ('request_id', 'kind', 'state', 'created', 'updated',
+                 'source', 'target', 'result', 'progress')
+        out = {name: record.get(name) for name in names
+               if record.get(name) is not None}
+        if event is not None:
+            out['event'] = event
+        try:
+            return self._apiPlain(
+                out, self.API_SNAPSHOT_MAX_BYTES, 'request snapshot')
+        except ValueError as e:
+            return self._apiError('invalid_request_snapshot', str(e))
+
+    def _apiContext(self):
+        """Resolve non-spoofable source identity on the TD main thread."""
+        if not self._enabled():
+            return None, self._apiError(
+                'convoy_disabled', 'Convoy Enable is off')
+        convoy_id = str(self._readConvoyId() or '')
+        if not convoy_id:
+            return None, self._apiError(
+                'convoy_unbound', 'this project has no Convoy id')
+        if self._readBindingState() != 'established':
+            return None, self._apiError(
+                'convoy_not_established',
+                'the automatic Convoy realm has not converged yet')
+        session = self._session()
+        if not session.get('registered'):
+            return None, self._apiError(
+                'node_not_registered',
+                'this Embody node is not registered with its host app')
+        try:
+            source_host_id = self._apiText(
+                str(session.get('host_id') or ''), 'source_host_id')
+            source_node_id = self._apiText(
+                str(session.get('node_id') or ''), 'source_node_id')
+            source_runtime_id = self._apiText(
+                str(session.get('runtime_id') or ''), 'source_runtime_id')
+            convoy_id = self._apiText(convoy_id, 'convoy_id', 128)
+            controller_id = self._apiText(
+                'td:%s:%s:%s' % (source_host_id, source_node_id,
+                                  source_runtime_id),
+                'controller_id')
+        except ValueError as e:
+            return None, self._apiError('invalid_source_identity', str(e))
+        source = {
+            'host_id': source_host_id,
+            'node_id': source_node_id,
+            'runtime_id': source_runtime_id,
+            'convoy_id': convoy_id,
+            'controller_id': controller_id,
+        }
+        # A prior disable sets the old generation's event so queued workers
+        # fail before I/O. Re-registration under an enabled, established
+        # realm starts a fresh submission epoch.
+        if self._api_gate_event.is_set():
+            self._api_gate_event = Event()
+        return {'source': source, 'convoy_id': convoy_id,
+                'controller_id': controller_id}, None
+
+    def _revokeSiblingApi(self):
+        """Prevent not-yet-started sibling workers from issuing any I/O."""
+        try:
+            self._api_gate_event.set()
+        except Exception:
+            pass
+
+    @staticmethod
+    def _apiTargetProjection(kind, request):
+        if kind == 'batch':
+            return {'targets': [
+                {name: row.get(name) for name in (
+                    'host_id', 'node_id', 'expected_runtime_id')
+                 if row.get(name) is not None}
+                for row in request.get('targets', [])]}
+        if kind in ('call', 'ping'):
+            return {name: request.get(name) for name in (
+                'host_id', 'node_id', 'expected_runtime_id')
+                    if request.get(name) is not None}
+        if kind in ('get_job', 'cancel_job'):
+            return {name: request.get(name) for name in (
+                'host_id', 'delivery_id') if request.get(name) is not None}
+        return None
+
+    def listNodes(self, callback=None):
+        """Asynchronously list this established Convoy; never wakes TD."""
+        return self._submitSiblingApi('list_nodes', {}, callback=callback)
+
+    def ping(self, host_id, node_id, expected_runtime_id=None,
+             timeout_s=10.0, callback=None):
+        """Asynchronously ping one exact node through the host plane."""
+        error = None
+        request = {}
+        try:
+            request = {
+                'host_id': self._apiText(host_id, 'host_id'),
+                'node_id': self._apiText(node_id, 'node_id'),
+                'timeout_s': self._apiTimeout(timeout_s),
+            }
+            if expected_runtime_id is not None:
+                request['expected_runtime_id'] = self._apiText(
+                    expected_runtime_id, 'expected_runtime_id')
+        except (TypeError, ValueError) as e:
+            error = self._apiError('invalid_arguments', str(e))
+        return self._submitSiblingApi(
+            'ping', request, callback=callback, local_error=error)
+
+    def call(self, host_id, node_id, operation, arguments=None,
+             expected_runtime_id=None, timeout_s=30.0, wait=False,
+             callback=None, idempotency_key=None):
+        """Submit one exact sibling tool call and optionally await verdict.
+
+        ``wait=False`` is the scalable default: the local request completes
+        with the durable delivery id, which can be reconciled with getJob().
+        ``wait=True`` occupies the one Convoy worker only until timeout_s.
+        """
+        error = None
+        request = {}
+        try:
+            if type(wait) is not bool:
+                raise ValueError('wait must be a boolean')
+            if arguments is None:
+                arguments = {}
+            if not isinstance(arguments, dict):
+                raise ValueError('arguments must be an object')
+            request = {
+                'host_id': self._apiText(host_id, 'host_id'),
+                'node_id': self._apiText(node_id, 'node_id'),
+                'operation': self._apiText(
+                    operation, 'operation', 128),
+                'arguments': self._apiPlain(
+                    arguments, self.API_REQUEST_MAX_BYTES, 'arguments'),
+                'timeout_s': self._apiTimeout(timeout_s),
+                'wait': wait,
+            }
+            if expected_runtime_id is not None:
+                request['expected_runtime_id'] = self._apiText(
+                    expected_runtime_id, 'expected_runtime_id')
+            if idempotency_key is not None:
+                request['idempotency_key'] = self._apiText(
+                    idempotency_key, 'idempotency_key')
+        except (TypeError, ValueError) as e:
+            error = self._apiError('invalid_arguments', str(e))
+        return self._submitSiblingApi(
+            'call', request, callback=callback, local_error=error)
+
+    def batch(self, targets, operations, timeout_s=30.0, wait=False,
+              callback=None):
+        """Fan one Envoy batch to explicit targets (ordered, not atomic).
+
+        Target I/O overlaps through a bounded ThreadManager fanout. The
+        returned rows remain in input order, failures are per-target, and
+        ``timeout_s`` is one cumulative deadline for the entire fanout.
+        """
+        error = None
+        request = {}
+        try:
+            if type(wait) is not bool:
+                raise ValueError('wait must be a boolean')
+            if not isinstance(targets, (list, tuple)) or not targets:
+                raise ValueError('targets must be a non-empty list')
+            if len(targets) > self.API_BATCH_TARGET_MAX:
+                raise ValueError('too many batch targets (maximum %d)'
+                                 % self.API_BATCH_TARGET_MAX)
+            if not isinstance(operations, (list, tuple)):
+                raise ValueError('operations must be a list')
+            if len(operations) > self.API_BATCH_OPERATION_MAX:
+                raise ValueError('too many batch operations (maximum %d)'
+                                 % self.API_BATCH_OPERATION_MAX)
+            clean_targets = []
+            for index, target in enumerate(targets):
+                if not isinstance(target, dict):
+                    raise ValueError('target %d must be an object' % index)
+                unknown = set(target) - {
+                    'host_id', 'node_id', 'expected_runtime_id'}
+                if unknown:
+                    raise ValueError('target %d has unknown fields' % index)
+                clean = {
+                    'host_id': self._apiText(
+                        target.get('host_id'), 'target host_id'),
+                    'node_id': self._apiText(
+                        target.get('node_id'), 'target node_id'),
+                }
+                if target.get('expected_runtime_id') is not None:
+                    clean['expected_runtime_id'] = self._apiText(
+                        target.get('expected_runtime_id'),
+                        'target expected_runtime_id')
+                clean_targets.append(clean)
+            clean_operations = []
+            for index, child in enumerate(operations):
+                if not isinstance(child, dict):
+                    raise ValueError('operation %d must be an object' % index)
+                if set(child) - {'tool', 'params'}:
+                    raise ValueError('operation %d has unknown fields' % index)
+                params = child.get('params', {})
+                if not isinstance(params, dict):
+                    raise ValueError(
+                        'operation %d params must be an object' % index)
+                clean_operations.append({
+                    'tool': self._apiText(
+                        child.get('tool'), 'operation tool', 128),
+                    'params': params,
+                })
+            request = self._apiPlain({
+                'targets': clean_targets,
+                'operations': clean_operations,
+                'timeout_s': self._apiTimeout(timeout_s),
+                'wait': wait,
+            }, self.API_REQUEST_MAX_BYTES, 'batch request')
+        except (TypeError, ValueError) as e:
+            error = self._apiError('invalid_arguments', str(e))
+        return self._submitSiblingApi(
+            'batch', request, callback=callback, local_error=error)
+
+    def getJob(self, host_id, delivery_id, since=None, timeout_s=5.0,
+               callback=None):
+        """Asynchronously read a job from its exact owner; never wakes TD."""
+        error = None
+        request = {}
+        try:
+            request = {
+                'host_id': self._apiText(host_id, 'host_id'),
+                'delivery_id': self._apiText(
+                    delivery_id, 'delivery_id'),
+                'timeout_s': self._apiTimeout(timeout_s),
+            }
+            if since is not None:
+                if (isinstance(since, bool)
+                        or not isinstance(since, (int, float))
+                        or not float('-inf') < float(since) < float('inf')):
+                    raise ValueError('since must be a finite number')
+                request['since'] = float(since)
+        except (TypeError, ValueError) as e:
+            error = self._apiError('invalid_arguments', str(e))
+        return self._submitSiblingApi(
+            'get_job', request, callback=callback, local_error=error)
+
+    def cancelJob(self, host_id, delivery_id, timeout_s=5.0,
+                  callback=None):
+        """Request owner-routed cancellation; never wakes TouchDesigner."""
+        error = None
+        request = {}
+        try:
+            request = {
+                'host_id': self._apiText(host_id, 'host_id'),
+                'delivery_id': self._apiText(
+                    delivery_id, 'delivery_id'),
+                'timeout_s': self._apiTimeout(timeout_s),
+            }
+        except (TypeError, ValueError) as e:
+            error = self._apiError('invalid_arguments', str(e))
+        return self._submitSiblingApi(
+            'cancel_job', request, callback=callback, local_error=error)
+
+    def requestResult(self, request, consume=False):
+        """Return a detached local request snapshot, or None if unknown."""
+        request_id = (request.get('request_id')
+                      if isinstance(request, dict) else request)
+        if not isinstance(request_id, str):
+            return None
+        record = self._api_requests.get(request_id)
+        if record is None:
+            return None
+        out = self._apiRecordSnapshot(record)
+        if consume and record.get('state') in self.API_TERMINAL_REQUEST_STATES:
+            self._api_requests.pop(request_id, None)
+            self._api_callbacks.pop(request_id, None)
+        return out
+
+    def _submitSiblingApi(self, kind, request, callback=None,
+                          local_error=None):
+        """Validate/gate on main, then enqueue one pure worker callable."""
+        if callback is not None and not callable(callback):
+            local_error = self._apiError(
+                'invalid_callback', 'callback must be callable or None')
+            callback = None
+        record, handle = self._apiNewRequest(kind, callback)
+        if record is None:
+            return handle
+
+        request_id = record['request_id']
+        generation = self._api_generation
+        completion_queue = self._api_completion_events
+        progress_queue = self._api_progress_events
+
+        def _complete(result):
+            event = {'generation': generation,
+                     'request_id': request_id,
+                     'result': result}
+            try:
+                completion_queue.put_nowait(event)
+                return True
+            except Full:
+                # Invariant: there can be at most API_REQUEST_MAX retained
+                # in-flight requests and each publishes exactly one terminal
+                # event into an equally sized queue. Reaching this branch is
+                # a programming fault; a short bounded wait still gives the
+                # main-thread poll one chance to preserve the terminal result.
+                try:
+                    completion_queue.put(event, timeout=0.25)
+                    return True
+                except Full:
+                    return False
+
+        if local_error is not None:
+            _complete(local_error)
+            self._armApiPoll()
+            return handle
+
+        context, context_error = self._apiContext()
+        if context_error is not None:
+            _complete(context_error)
+            self._armApiPoll()
+            return handle
+
+        # The retained projection contains identities only, never command
+        # arguments, source code, shell text, tokens or a module reference.
+        record['source'] = dict(context['source'])
+        record['target'] = self._apiTargetProjection(kind, request)
+        if kind in ('call', 'ping') and not request.get('idempotency_key'):
+            request = dict(request)
+            request['idempotency_key'] = request_id
+        elif kind == 'batch':
+            request = dict(request)
+            request['idempotency_key_prefix'] = request_id
+            request['result_budget_bytes'] = max(
+                64 * 1024, self.API_RESULT_MAX_BYTES - 256 * 1024)
+
+        client = self._safeClient()
+        if client is None:
+            _complete(self._apiError(
+                'client_missing', 'the convoy_client module is unavailable'))
+            self._armApiPoll()
+            return handle
+
+        # All values captured below are plain data, Queue instances, or the
+        # convoy_client module resolved on the main thread.  In particular,
+        # the callback table and this extension object are NOT captured.
+        try:
+            plain_context = self._apiPlain(
+                context, self.API_REQUEST_MAX_BYTES, 'source context')
+            plain_request = self._apiPlain(
+                request, self.API_REQUEST_MAX_BYTES, 'request')
+        except ValueError as e:
+            _complete(self._apiError('invalid_arguments', str(e)))
+            self._armApiPoll()
+            return handle
+        gate_event = self._api_gate_event
+        progress_limit = int(self.API_PROGRESS_PER_REQUEST_MAX)
+        progress_value_limit = int(self.API_PROGRESS_VALUE_MAX_BYTES)
+        progress_tokens = Queue(maxsize=progress_limit)
+        for _token_index in range(progress_limit):
+            progress_tokens.put_nowait(None)
+
+        def _progress(value):
+            # Queue operations are synchronized: batch target TDTasks may
+            # publish concurrently, so a list check/increment is not a hard
+            # per-request bound.
+            try:
+                progress_tokens.get_nowait()
+            except Empty:
+                return
+            value = _bound_sibling_worker_value(
+                value, progress_value_limit, 'progress_result_too_large')
+            event = {'generation': generation,
+                     'request_id': request_id,
+                     'result': value}
+            try:
+                progress_queue.put_nowait(event)
+            except Full:
+                # Progress is advisory; the dedicated completion queue keeps
+                # the terminal durable answer lossless.
+                pass
+
+        def _worker():
+            try:
+                result = _run_sibling_api_request(
+                    client, kind, plain_context, plain_request, _progress,
+                    gate_event)
+            except Exception as e:
+                result = {
+                    'state': 'error', 'ok': False,
+                    'reason': 'worker_exception',
+                    'detail': '%s: %s' % (type(e).__name__, e),
+                }
+            _complete(result)
+
+        if kind == 'batch':
+            started = self._runBatchInWorkers(
+                client, plain_context, plain_request, _progress, _complete,
+                gate_event)
+        else:
+            started = self._runInWorker(_worker)
+        if not started:
+            _complete(self._apiError(
+                'thread_manager_unavailable',
+                'ThreadManager could not start the Convoy worker or its '
+                'bounded queue was full'))
+        self._armApiPoll()
+        return handle
+
+    def _armApiPoll(self):
+        """Arm at most one generation-tagged main-thread event drain."""
+        if self._api_poll_armed or self._api_generation < 0:
+            return
+        self._api_poll_armed = True
+        try:
+            run('args[0]._pollApiEvents(args[1])',
+                self, self._api_generation,
+                delayFrames=self.API_POLL_FRAMES)
+        except Exception as e:
+            self._api_poll_armed = False
+            self._log('could not arm sibling API result poll: %s' % (e,),
+                      'DEBUG')
+
+    def _apiHasPending(self):
+        return any(record.get('state') not in
+                   self.API_TERMINAL_REQUEST_STATES
+                   for record in self._api_requests.values())
+
+    @staticmethod
+    def _apiResultFailed(result):
+        if not isinstance(result, dict):
+            return True
+        if result.get('ok') is False:
+            return True
+        return str(result.get('state') or '') in (
+            'error', 'host_error', 'unreachable', 'absent', 'stale',
+            'refused', 'disabled', 'unsaved')
+
+    def _apiInvokeCallback(self, request_id, record, event):
+        callback = self._api_callbacks.get(request_id)
+        if not callable(callback):
+            return
+        try:
+            callback(self._apiRecordSnapshot(record, event=event))
+        except Exception as e:
+            self._log('sibling API callback failed: %s' % (e,), 'DEBUG')
+
+    def _applyApiProgress(self, event):
+        request_id = event.get('request_id')
+        record = self._api_requests.get(request_id)
+        if (record is None or record.get('state') in
+                self.API_TERMINAL_REQUEST_STATES):
+            return
+        record['state'] = 'running'
+        record['updated'] = time.time()
+        record['progress'] = self._apiBoundResult(event.get('result'))
+        self._apiInvokeCallback(request_id, record, 'progress')
+
+    def _applyApiCompletion(self, event):
+        request_id = event.get('request_id')
+        record = self._api_requests.get(request_id)
+        if (record is None or record.get('state') in
+                self.API_TERMINAL_REQUEST_STATES):
+            return
+        result = self._apiBoundResult(event.get('result'))
+        record['result'] = result
+        record['progress'] = None
+        record['state'] = ('failed' if self._apiResultFailed(result)
+                           else 'completed')
+        record['updated'] = time.time()
+        self._apiInvokeCallback(request_id, record, 'complete')
+        self._api_callbacks.pop(request_id, None)
+        self._api_requests.move_to_end(request_id)
+
+    def _pollApiEvents(self, generation):
+        """Drain plain worker events and invoke callbacks on TD's main thread."""
+        self._api_poll_armed = False
+        if (self._staleInstance() or generation != self._api_generation
+                or generation != self._worker_generation):
+            return
+
+        # Progress was published before completion. Drain its dedicated queue
+        # first so a callback never observes "complete" and then "running".
+        drained = 0
+        while drained < self.API_EVENT_DRAIN_MAX:
+            try:
+                event = self._api_progress_events.get_nowait()
+            except Empty:
+                break
+            drained += 1
+            if event.get('generation') == generation:
+                self._applyApiProgress(event)
+
+        drained = 0
+        while drained < self.API_EVENT_DRAIN_MAX:
+            try:
+                event = self._api_completion_events.get_nowait()
+            except Empty:
+                break
+            drained += 1
+            if event.get('generation') == generation:
+                self._applyApiCompletion(event)
+
+        if (self._apiHasPending()
+                or not self._api_progress_events.empty()
+                or not self._api_completion_events.empty()):
+            self._armApiPoll()
+
+    # ------------------------------------------------------------------
+    # Host-private policy worker chain
+    # ------------------------------------------------------------------
+
+    def _beginPolicyCall(self, action, **request):
+        """Run one local policy request off the TD main thread."""
+        client = self._safeClient()
+        if client is None or getattr(self, '_policy_busy', False):
+            return False
+        session = self._session()
+        node_id = str(request.get('node_id') or session.get('node_id') or '')
+        request = dict(request)
+        request['node_id'] = node_id
+        self._policy_busy = True
+        self._policy_result = None
+        self._policy_gen += 1
+        gen = self._policy_gen
+
+        def _worker():
+            out = {'_gen': gen, '_action': action, 'request': request}
+            try:
+                probe = client.probe()
+                if not probe.use_convoy:
+                    result = {'state': probe.status, 'detail': probe.detail}
+                else:
+                    handle = probe.handle
+                    if action == 'policy_refresh':
+                        result = client.get_policy(
+                            handle, node_id=node_id or None)
+                    elif action == 'policy_begin':
+                        current = client.get_policy(
+                            handle, node_id=(node_id or None))
+                        if current.get('state') != client.POLICY_RESULT:
+                            result = current
+                        else:
+                            result = client.begin_policy_challenge(
+                                handle, request.get('setting'),
+                                current['policy']['generation'],
+                                node_id=(node_id or None))
+                    elif action == 'policy_disable':
+                        result = client.disable_policy(
+                            handle, request.get('setting'),
+                            node_id=(node_id or None))
+                    elif action == 'policy_quota':
+                        current = client.get_policy(
+                            handle, node_id=(node_id or None))
+                        if current.get('state') != client.POLICY_RESULT:
+                            result = current
+                        else:
+                            result = client.set_artifact_quota(
+                                handle, request.get('quota_mb'),
+                                current['policy']['generation'])
+                    elif action == 'policy_confirm':
+                        challenge = request.get('challenge') or {}
+                        result = client.confirm_policy_challenge(
+                            handle, challenge.get('challenge_id'),
+                            challenge.get('confirmation'),
+                            challenge.get('generation'))
+                    elif action == 'policy_decline':
+                        challenge = request.get('challenge') or {}
+                        result = client.decline_policy_challenge(
+                            handle, challenge.get('challenge_id'))
+                    else:
+                        result = {'state': 'error',
+                                  'reason': 'unknown_policy_action'}
+                out['result'] = result
+            except Exception as e:
+                out['result'] = {
+                    'state': 'error',
+                    'detail': '%s: %s' % (type(e).__name__, e),
+                }
+            self._policy_result = out
+
+        if not self._runInWorker(_worker):
+            self._policy_result = {
+                '_gen': gen, '_action': action, 'request': request,
+                'result': {
+                    'state': 'error',
+                    'reason': 'thread_manager_unavailable',
+                    'detail': 'ThreadManager could not run the policy call',
+                },
+            }
+        run('args[0]._pollPolicyCall(args[1], args[2])',
+            self, gen, 0, delayFrames=self.POLL_FRAMES)
+        return True
+
+    def _pollPolicyCall(self, gen, attempts):
+        if self._staleInstance():
+            return
+        out = self._policy_result
+        if out is None or out.get('_gen') != gen:
+            if attempts < self.POLL_ATTEMPTS:
+                run('args[0]._pollPolicyCall(args[1], args[2])',
+                    self, gen, attempts + 1, delayFrames=self.POLL_FRAMES)
+            else:
+                self._policy_busy = False
+                self._finishPolicyCall(
+                    'policy_timeout',
+                    {'state': 'error', 'reason': 'policy_timeout'}, {})
+            return
+        self._policy_result = None
+        self._policy_busy = False
+        self._finishPolicyCall(
+            out.get('_action'), out.get('result'), out.get('request') or {})
+
+    def _finishPolicyCall(self, action, result, request):
+        result = result if isinstance(result, dict) else {
+            'state': 'error', 'detail': 'no policy result'}
+        state = str(result.get('state') or '')
+        client = self._safeClient()
+        policy_state = str(getattr(client, 'POLICY_RESULT', 'policy'))
+        if state == policy_state:
+            projected = self._applyPolicyProjection(result)
+            if not projected and action != 'policy_refresh':
+                self._beginPolicyCall('policy_refresh')
+            return
+        if state == 'challenge':
+            challenge = result.get('challenge') or {}
+            setting = str(challenge.get('setting') or '')
+            phrase = str(challenge.get('confirmation') or '')
+            if setting == 'td_python':
+                warning = (
+                    'Allow arbitrary TouchDesigner Python on THIS node?\n\n'
+                    'A remote Convoy controller could execute Python with '
+                    'this TouchDesigner process\'s access. This can modify '
+                    'the project, read files available to TD, or crash the '
+                    'session.')
+                label = 'Enable TD Python'
+            else:
+                warning = (
+                    'Allow Full Shell on THIS computer?\n\nA remote Convoy '
+                    'controller could run arbitrary operating-system '
+                    'commands as your user. This can change or delete files, '
+                    'install software, or expose secrets. Structured Git and '
+                    'GitHub tools do not need this option.')
+                label = 'Enable Full Shell'
+            message = (warning + '\n\nOne-time local confirmation:\n' +
+                       phrase + '\n\nThis approval is stored only by the '
+                       'local Convoy host app.')
+            if self._dialog('Embody - ' + label, message,
+                            ['Cancel', label]) == 1:
+                self._beginPolicyCall(
+                    'policy_confirm', challenge=dict(challenge))
+            else:
+                self._beginPolicyCall(
+                    'policy_decline', challenge=dict(challenge))
+            return
+        reason = str(result.get('reason') or result.get('detail') or state)
+        if action not in ('policy_decline', 'policy_refresh'):
+            self._log('local safety-policy request was not applied: %s'
+                      % (reason,), 'WARNING')
+        # Re-read after a conflict/refusal so every Par returns to the host's
+        # current value rather than the user's speculative click.
+        if action != 'policy_refresh' and not self._policy_busy:
+            self._beginPolicyCall('policy_refresh')
+
+    def _beginCall(self, action, client, session, state=None,
+                   unregister_reason='disabled'):
         """Kick ONE bounded worker plus its poll chain. MAIN THREAD ONLY.
 
         Everything the worker touches is resolved here and handed over as
@@ -666,8 +2581,33 @@ class ConvoyExt:
 
         payload = None
         if action == 'register':
+            node_discriminator = client.stable_node_discriminator(
+                state[6], platform=sys.platform)
+            metadata = {
+                'toe_path': state[6],
+                'toe_name': os.path.basename(state[6]),
+                'hostname': state[7],
+                'process_id': state[8],
+                'embody_version': state[9],
+                'touchdesigner_version': state[10],
+                'node_name': state[11],
+            }
             payload = client.registration_payload(
-                state[1], state[2], state[3], runtime_id, envoy_port=state[4])
+                state[1], state[2], state[3], runtime_id,
+                envoy_port=state[4],
+                node_discriminator=node_discriminator,
+                metadata=metadata,
+                envoy_ready=bool(state[4]),
+                remote_wake=bool(state[12]),
+                perform_mode=bool(state[13]),
+                wake_active=bool(state[14]),
+                wake_port=state[15], wake_token=state[16],
+                wake_grace_s=state[17], binding_state=state[18],
+                td_executable=sys.executable,
+                launch_token=os.environ.get(
+                    'EMBODY_CONVOY_LAUNCH_TOKEN'),
+                launch_reservation_id=os.environ.get(
+                    'EMBODY_CONVOY_LAUNCH_RESERVATION'))
             session['pending_sent'] = state
             self._apply({'state': client.STATE_REGISTERING}, client)
 
@@ -691,9 +2631,21 @@ class ConvoyExt:
                     out['host_id'] = probe.handle.host_id
                     if action == 'register':
                         out['result'] = client.register(probe.handle, payload)
+                        if (isinstance(out['result'], dict)
+                                and out['result'].get('state')
+                                == client.STATE_REGISTERED):
+                            # Directory aggregation is host-side and passive:
+                            # it never wakes TD. Fetch it in the same bounded
+                            # worker turn as the heartbeat so the UI needs no
+                            # extra thread or busy poll.
+                            network_id = (out['result'].get('convoy_id')
+                                          or state[3])
+                            out['result']['_network_nodes'] = \
+                                client.network_nodes(probe.handle, network_id)
                     else:
                         out['result'] = client.unregister(
-                            probe.handle, node_id, runtime_id=runtime_id)
+                            probe.handle, node_id, runtime_id=runtime_id,
+                            reason=unregister_reason)
             except Exception as e:
                 # convoy_client is written never to raise; if it ever does,
                 # the worker must still publish something or the poll spins
@@ -702,7 +2654,16 @@ class ConvoyExt:
                                  'detail': '%s: %s' % (type(e).__name__, e)}
             self._result = out
 
-        self._runInWorker(_worker)
+        if not self._runInWorker(_worker):
+            self._result = {
+                '_gen': gen, '_action': action,
+                'result': {
+                    'state': 'error',
+                    'reason': 'thread_manager_unavailable',
+                    'detail': 'ThreadManager could not start the Convoy '
+                              'worker or its bounded queue was full',
+                },
+            }
         self._tick_ms = self.TICK_MIN_MS
         run('args[0]._pollCall(args[1], args[2], args[3])',
             self, action, gen, 0, delayFrames=self.POLL_FRAMES)
@@ -759,9 +2720,43 @@ class ConvoyExt:
                     self._log('unregister on disable reported %r -- the node '
                               'is off locally regardless' % (state,), 'DEBUG')
                 self._apply({'state': 'unregistered'}, client)
+                self._projectNodeRows([], 'Convoy is disabled')
             else:
                 self._apply(result, client)
             return
+
+        realm_changed = False
+        if client is not None and state == client.STATE_REGISTERED:
+            authoritative_id = str(result.get('convoy_id') or '')
+            authoritative_state = str(result.get('realm_state') or '')
+            current_id = self._readConvoyId()
+            current_state = self._readBindingState()
+            if (authoritative_id and authoritative_state
+                    in ('candidate', 'established')
+                    and (authoritative_id != current_id
+                         or authoritative_state != current_state)):
+                try:
+                    adopted = self._embody.ext.Embody._adoptConvoyId(
+                        authoritative_id, current_id, authoritative_state)
+                except Exception as e:
+                    adopted = ''
+                    self._log('automatic Convoy realm adoption failed: %s'
+                              % (e,), 'WARNING')
+                if adopted:
+                    realm_changed = True
+                    self._publishId(adopted)
+                    self._log('automatic Convoy realm is now %s (%s)'
+                              % (adopted, authoritative_state), 'INFO')
+                else:
+                    result = {
+                        'state': getattr(client, 'STATE_HOST_ERROR',
+                                         'host_error'),
+                        'reason': 'project_rebind_failed',
+                        'detail': 'the host selected an automatic Convoy '
+                                  'realm, but .embody/project.json could not '
+                                  'be updated safely',
+                    }
+                    state = str(result['state'])
 
         registered = client is not None and state == client.STATE_REGISTERED
         if registered:
@@ -771,7 +2766,7 @@ class ConvoyExt:
             if result.get('host_id'):
                 session['host_id'] = str(result['host_id'])
             pending = session.get('pending_sent')
-            if pending is not None:
+            if pending is not None and not realm_changed:
                 # Promote the observed host identity into the sent tuple so a
                 # successful call converges instead of oscillating.
                 sent = list(pending)
@@ -781,9 +2776,13 @@ class ConvoyExt:
             # Registered but portless is NOT steady: Envoy binds seconds
             # after open, and the host cannot dispatch back until it knows
             # the port. Keep converging until it does.
-            session['next_call_at'] = now + (
-                self.HEARTBEAT_S if result.get('envoy_port')
-                else self.CONVERGING_S)
+            session['next_call_at'] = (now if realm_changed else now + (
+                self.HEARTBEAT_S
+                if (result.get('envoy_port')
+                    or result.get('perform_mode'))
+                else self.CONVERGING_S))
+            self._applyPolicyProjection(result)
+            self._applyNetworkNodes(result.get('_network_nodes'))
         else:
             session['registered'] = False
             session['sent'] = None
@@ -944,7 +2943,16 @@ class ConvoyExt:
                                  'detail': '%s: %s' % (type(e).__name__, e)}
             self._host_result = out
 
-        self._runInWorker(_worker)
+        if not self._runInWorker(_worker):
+            self._host_result = {
+                '_gen': gen, '_action': action,
+                'result': {
+                    'ok': False,
+                    'reason': 'thread_manager_unavailable',
+                    'detail': 'ThreadManager could not start the Convoy '
+                              'worker or its bounded queue was full',
+                },
+            }
         run('args[0]._pollHostCall(args[1], args[2], args[3])',
             self, action, gen, 0, delayFrames=self.POLL_FRAMES)
 
@@ -1181,22 +3189,31 @@ class ConvoyExt:
             '    and restarts it within a minute\n'
             '  - IT RUNS WHENEVER YOU ARE LOGGED IN, WHETHER OR NOT\n'
             '    TOUCHDESIGNER IS OPEN\n'
-            '  - runs it under TouchDesigner\'s own Python:\n'
+            '  - runs it with Convoy\'s managed Python runtime:\n'
             '    %s\n\n'
-            'What it does NOT do:\n'
-            '  - it listens on 127.0.0.1 only, on a port the OS assigns.\n'
-            '    Nothing is exposed to the network. No firewall rule is\n'
-            '    created, and none is needed.\n'
-            '  - it never asks for administrator rights, and Embody never\n'
-            '    modifies your firewall.\n\n'
+            'Network behavior:\n'
+            '  - while at least one local node has Enable Convoy On, the\n'
+            '    app advertises on the trusted LAN and opens Convoy\'s\n'
+            '    authenticated, encrypted peer listener on one selected\n'
+            '    LAN interface. It never exposes Envoy itself.\n'
+            '  - turning the final local Enable Convoy Off withdraws the\n'
+            '    advertisement and closes the LAN listener.\n'
+            '  - Embody does not modify your firewall. Windows or macOS may\n'
+            '    ask you to allow local-network access; denying it leaves\n'
+            '    local Embody/Envoy usable but remote nodes unreachable.\n'
+            '  - do NOT enable Convoy on a guest, public, or otherwise\n'
+            '    untrusted network. Automatic first-contact trust assumes\n'
+            '    this LAN is already trusted.\n'
+            '  - it never asks for administrator rights.\n\n'
             'Where the boundary really is:\n'
             '  - ANYTHING RUNNING AS YOUR USER ON THIS MACHINE CAN READ\n'
             '    ITS TOKEN AND SEND IT WORK. The token is a boundary\n'
             '    against OTHER users, not against you.\n'
             '  - it relays only operations in the audited registry, and\n'
             '    only into projects where you turned Convoy on.\n'
-            '  - IT IS NOT CODE-SIGNED OR NOTARIZED. Security software may\n'
-            '    flag an unsigned Python program that runs at login.\n'
+            '  - the managed runtime is pinned to this Embody release. Check\n'
+            '    the release notes for its current signing/notarization and\n'
+            '    platform-certification status before production use.\n'
             '  - it keeps a record of relayed jobs. Uninstall KEEPS that\n'
             '    record unless you separately ask for it to be deleted.\n\n'
             '%s'
@@ -1269,7 +3286,7 @@ class ConvoyExt:
         why it re-runs a full install even when plan_install says the
         version is already current: writing the payload again, rewriting
         the launcher and re-registering the supervisor is exactly what
-        fixes 'Needs repair -- Python not found' (the interpreter is
+        fixes 'Needs repair -- managed runtime unavailable' (the runtime is
         re-resolved here) and 'Installed -- no supervisor'. Every one of
         those steps is idempotent by construction -- temp + os.replace,
         .complete written last, schtasks /Create /F rewriting the whole
@@ -1460,11 +3477,12 @@ class ConvoyExt:
         """True to proceed with registration; False when the user declined.
 
         Consent is recorded per PROJECT, in the COMMITTED
-        .embody/project.json, not per session: a clone that inherits the
-        tracked convoy key inherits the convoy (Model B). So the
-        confirmation fires exactly once per project, on the first explicit
-        enable, and never on a tick or on project open -- no modal during
-        startup, ever.
+        .embody/project.json, not per session. The confirmation fires on the
+        first explicit trusted-LAN enable and again only when a narrower old
+        consent scope must be upgraded. It never fires on a tick or project
+        open -- no modal during startup, ever. The provisional id is a
+        genesis candidate; the host may later converge an uncommitted fresh
+        LAN onto the established automatic Convoy realm.
         """
         embody = self._embody.ext.Embody
         entry = {}
@@ -1475,7 +3493,9 @@ class ConvoyExt:
                       'stays off' % (e,), 'WARNING')
             self._setEnabled(False)
             return False
-        if entry.get('id'):
+        existing_id = str(entry.get('id') or '')
+        existing_scope = str(entry.get('consent_scope') or '')
+        if existing_id and existing_scope == self.CONSENT_SCOPE:
             self._publishId(entry.get('id'))
             return True
 
@@ -1487,37 +3507,48 @@ class ConvoyExt:
             self._apply({'state': 'unsaved'}, self._safeClient())
             return False
 
-        candidate = embody._mintConvoyId()
+        candidate = existing_id or embody._mintConvoyId()
+        widening = bool(existing_id)
         choice = embody._messageBox(
-            'Embody - Enable Convoy',
-            'Enable Convoy for this project?\n\n'
-            'Convoy gives this project a stable identity so a Convoy host\n'
-            'app can find and reach this TouchDesigner session.\n\n'
-            'Enabling it will:\n'
-            '  - mint the convoy id ' + str(candidate) + '\n'
-            '  - record that id, and this consent, in\n'
-            '    .embody/project.json -- a COMMITTED file, so everyone who\n'
-            '    clones this repo shares the same convoy\n'
-            '  - register this session with the Convoy host app running on\n'
-            '    THIS machine, over loopback only\n\n'
-            'Scope granted: this machine\'s local host app only. Convoy does\n'
-            'not reach the network here, and widening that scope later will\n'
-            'ask you again.\n\n'
-            'Turn Convoy Enable off at any time to undo the registration.',
+            ('Embody - Upgrade Convoy Access' if widening
+             else 'Embody - Enable Convoy'),
+            ('Allow this Embody node to join the Convoy on this trusted '
+             'LAN?\n\n'
+             'Enabled Convoy nodes discover one another automatically. Any '
+             'approved controller on a sibling node can inspect and control '
+             'this TouchDesigner session through Convoy\'s audited tools.\n\n'
+             'Do NOT enable Convoy on guest, public, or otherwise untrusted '
+             'networks. Transport is authenticated and encrypted after first '
+             'contact, but automatic first-contact trust assumes the LAN is '
+             'already trusted.\n\n'
+             + (('This upgrades the existing project grant from scope '
+                 + repr(existing_scope or 'unknown') + '.\n')
+                if widening else
+                ('The node will automatically join the established LAN '
+                 'Convoy or help establish one if none exists.\n'))
+             + 'The non-secret binding and this consent are recorded in '
+             '.embody/project.json, a committed file shared by project '
+             'clones.\n\n'
+             'Allow Execute TD Python and Allow Full Shell remain separate, '
+             'local, default-Off approvals. Turn Enable Convoy off at any '
+             'time to withdraw this node.\n\n'
+             'Scope granted: ' + self.CONSENT_SCOPE + '.'),
             ['Cancel', 'Enable Convoy'])
         if choice != 1:
             # -1 is the suppressed-dialog / unseeded-test default, and every
             # non-affirmative value means no (UpdaterExt._dialog's contract).
             # Declining a feature is not an error: INFO, no dialog, no status
             # beyond the resting one.
-            self._log('Convoy enable cancelled -- no convoy id was minted '
-                      'and nothing was written', 'INFO')
+            self._log('Convoy enable cancelled -- no consent change was '
+                      'written', 'INFO')
             self._setEnabled(False)
             self._apply({'state': 'disabled'}, self._safeClient())
             return False
 
         try:
-            recorded = embody._ensureConvoyId(candidate, self.CONSENT_SCOPE)
+            recorded = embody._ensureConvoyId(
+                candidate, self.CONSENT_SCOPE,
+                ('established' if existing_id else 'candidate'))
         except Exception as e:
             recorded = None
             self._log('recording the convoy id failed: %s' % (e,), 'WARNING')
@@ -1546,16 +3577,13 @@ class ConvoyExt:
         minted and the scope it grants, and mints only on confirm. On cancel
         the toggle goes back off with an INFO line and no error.
         """
-        if self._performing():
-            self._log('Perform Mode is on -- registration waits until it '
-                      'ends', 'INFO')
-            return {'state': 'deferred'}
         if not self._enabled():
             self._log('Convoy is off -- turn Convoy Enable on to register',
                       'INFO')
             return {'state': 'disabled'}
         if not self._ensureConsent():
             return {'state': 'declined'}
+        self._ensureWakeListener()
         self._reconcile(force=True)
         return self.ConvoyStatus()
 
@@ -1564,6 +3592,10 @@ class ConvoyExt:
 
         One attempt, a 1 s timeout, every outcome a value -- convoy_client's
         contract, because the callers are a disable and a shutting-down TD.
+        ``disabled`` withdraws membership intent; ``shutdown`` (including
+        the legacy local label ``TD exit``) clears only this runtime so the
+        host can report the enabled node offline and accept its reconnect.
+        Unknown intents fail closed before a request is sent.
         A hard kill still leaves a stale port; that is covered host-side by
         the dispatcher's UNREACHABLE backoff, and a true reaper is Phase 4.
 
@@ -1577,6 +3609,28 @@ class ConvoyExt:
         """
         session = self._session()
         client = self._safeClient()
+        # ``TD exit`` is the label used by the existing execute DAT. Fold it
+        # at this local API boundary; convoy_client and the wire accept only
+        # the two protocol values and fail closed on anything else.
+        wire_reason = ('shutdown' if str(reason).strip().lower() == 'td exit'
+                       else str(reason).strip().lower())
+        allowed_reasons = tuple(getattr(
+            client, 'UNREGISTER_REASONS', ('disabled', 'shutdown')))
+        if wire_reason not in allowed_reasons:
+            result = {
+                'state': 'error',
+                'reason': 'invalid_unregister_reason',
+                'detail': 'reason must be one of: %s'
+                          % (', '.join(allowed_reasons),),
+            }
+            self._log('unregister refused locally: %s' % result['detail'],
+                      'WARNING')
+            return result
+        # The listener is useful only while membership is live.  Stopping it
+        # is local and immediate; the authenticated unregister below clears
+        # the host's transient endpoint record when available.
+        self._revokeSiblingApi()
+        self._stopWakeListener()
         if client is None or not session.get('node_id'):
             session['registered'] = False
             session['sent'] = None
@@ -1586,7 +3640,8 @@ class ConvoyExt:
             return {'state': 'unregistered', 'already_gone': True}
 
         if not blocking:
-            self._beginCall('unregister', client, session)
+            self._beginCall('unregister', client, session,
+                            unregister_reason=wire_reason)
             return {'state': 'unregistering'}
 
         result = {'state': 'error', 'detail': 'unregister did not run'}
@@ -1595,7 +3650,8 @@ class ConvoyExt:
             if probe.use_convoy:
                 result = client.unregister(
                     probe.handle, session.get('node_id'),
-                    runtime_id=session.get('runtime_id'))
+                    runtime_id=session.get('runtime_id'),
+                    reason=wire_reason)
             else:
                 result = {'state': probe.status, 'detail': probe.detail}
         except Exception as e:
@@ -1613,15 +3669,23 @@ class ConvoyExt:
 
     def ConvoyStatus(self):
         """A plain-dict snapshot of this node's Convoy state. Never raises."""
-        out = {'enabled': False, 'performing': False, 'saved_project': False,
+        out = {'enabled': False, 'performing': False,
+               'perform_mode_requested': False, 'wake_active': False,
+               'remote_wake': False, 'wake_port': None,
+               'saved_project': False,
                'convoy_id': '', 'node_id': '', 'host_id': '', 'runtime_id': '',
                'registered': False, 'envoy_port': None, 'busy': False,
+               'api_pending': 0, 'api_results': 0,
                'status': ''}
         try:
             session = self._session()
             out.update({
                 'enabled': self._enabled(),
                 'performing': self._performing(),
+                'perform_mode_requested': self._performRequested(),
+                'wake_active': self._wakeActive(),
+                'remote_wake': self._remoteWakeEnabled(),
+                'wake_port': self._wakeEndpoint()[0],
                 'saved_project': bool(self._savedToe()),
                 'convoy_id': self._readConvoyId(),
                 'node_id': str(session.get('node_id') or ''),
@@ -1630,6 +3694,11 @@ class ConvoyExt:
                 'registered': bool(session.get('registered')),
                 'envoy_port': self._envoyPort(),
                 'busy': bool(self._busy),
+                'api_pending': sum(
+                    1 for record in self._api_requests.values()
+                    if record.get('state') not in
+                    self.API_TERMINAL_REQUEST_STATES),
+                'api_results': len(self._api_requests),
             })
             par = getattr(self._embody.par, 'Convoystatus', None)
             if par is not None:
@@ -1637,6 +3706,403 @@ class ConvoyExt:
         except Exception as e:
             out['error'] = '%s: %s' % (type(e).__name__, e)
         return out
+
+
+# ======================================================================
+# SIBLING API WORKER BODY -- WORKER THREAD, ZERO TD ACCESS
+# ======================================================================
+
+def _sibling_worker_error(reason, detail, **extra):
+    out = {'state': 'error', 'ok': False,
+           'reason': str(reason), 'detail': str(detail)}
+    out.update(extra)
+    return out
+
+
+def _sibling_worker_result(value, wakes_touchdesigner):
+    if not isinstance(value, dict):
+        value = _sibling_worker_error(
+            'invalid_worker_result', 'convoy_client returned no result')
+    else:
+        value = dict(value)
+    value['wakes_touchdesigner'] = bool(wakes_touchdesigner)
+    return value
+
+
+def _bound_sibling_worker_value(value, max_bytes, reason):
+    """Detach/bound one worker event before it can occupy a Queue slot."""
+    try:
+        encoded = json.dumps(
+            value, ensure_ascii=False, allow_nan=False,
+            separators=(',', ':')).encode('utf-8')
+        if len(encoded) <= int(max_bytes):
+            return json.loads(encoded.decode('utf-8'))
+    except (TypeError, ValueError, OverflowError, UnicodeError):
+        pass
+    delivery_id = None
+    if isinstance(value, dict):
+        delivery_id = ((value.get('job') or {}).get('delivery_id')
+                       if isinstance(value.get('job'), dict)
+                       else value.get('delivery_id'))
+    out = _sibling_worker_error(
+        reason, 'the worker value exceeded its bounded handoff budget')
+    if isinstance(delivery_id, str) and delivery_id:
+        out['delivery_id'] = delivery_id
+    return out
+
+
+def _sibling_gate_revoked(gate_event):
+    try:
+        return gate_event is not None and gate_event.is_set()
+    except Exception:
+        return True
+
+
+def _sibling_worker_preflight(client, context, gate_event):
+    """Resolve and authenticate the local host once for a worker request."""
+    if _sibling_gate_revoked(gate_event):
+        return None, _sibling_worker_result({
+            'state': 'disabled', 'ok': False,
+            'reason': 'convoy_disabled',
+            'detail': 'Convoy was disabled before this request started',
+        }, False)
+    probe = client.probe()
+    if not probe.use_convoy:
+        return None, _sibling_worker_result({
+            'state': probe.status, 'ok': False,
+            'reason': 'host_unavailable', 'detail': probe.detail,
+        }, False)
+    handle = probe.handle
+    if _sibling_gate_revoked(gate_event):
+        return None, _sibling_worker_result({
+            'state': 'disabled', 'ok': False,
+            'reason': 'convoy_disabled',
+            'detail': 'Convoy was disabled before command submission',
+        }, False)
+    source = context['source']
+    # Registration is the source-identity proof. If the local host app was
+    # replaced between registration and this request, never issue a command
+    # under the stale controller identity.
+    if handle.host_id != source['host_id']:
+        return None, _sibling_worker_result({
+            'state': 'refused', 'ok': False,
+            'reason': 'source_host_changed',
+            'detail': 'the local host identity changed; wait for Convoy to '
+                      're-register this node',
+            'expected_host_id': source['host_id'],
+            'actual_host_id': handle.host_id,
+        }, False)
+    return handle, None
+
+
+def _sibling_batch_target_call(client, handle, convoy_id, controller_id,
+                               request, index, target, deadline, progress,
+                               gate_event, cancel_event=None):
+    """Submit/wait one target under the batch's single absolute deadline."""
+    if (_sibling_gate_revoked(gate_event)
+            or (cancel_event is not None and cancel_event.is_set())):
+        return {
+            'state': 'disabled', 'ok': False,
+            'reason': 'convoy_disabled',
+            'detail': 'Convoy was disabled before this target was submitted',
+        }
+    remaining = deadline - time.monotonic()
+    if remaining <= 0.0:
+        return _sibling_worker_error(
+            'batch_timeout',
+            'the total batch timeout elapsed before this target was '
+            'submitted')
+    timeout_s = float(request['timeout_s'])
+    submitted = client.submit_sibling_call(
+        handle, target['host_id'], convoy_id, target['node_id'],
+        controller_id, 'batch_operations',
+        {'operations': request['operations']},
+        expected_runtime_id=target.get('expected_runtime_id'),
+        idempotency_key='%s:%d' % (
+            request['idempotency_key_prefix'], index),
+        timeout_s=max(0.001, min(timeout_s, remaining)))
+    final = submitted
+    if submitted.get('ok') and request.get('wait'):
+        delivery_id = (submitted.get('job') or {}).get('delivery_id')
+        remaining = deadline - time.monotonic()
+        if delivery_id and remaining > 0.0:
+            def _wait_progress(value):
+                if callable(progress):
+                    progress({
+                        'state': 'batch_progress', 'ok': True,
+                        'index': index, 'target': dict(target),
+                        'result': _sibling_worker_result(value, True),
+                        'wakes_touchdesigner': True,
+                    })
+
+            final = client.wait_sibling_job(
+                handle, target['host_id'], convoy_id, delivery_id,
+                initial=submitted, timeout_s=remaining,
+                progress=_wait_progress)
+        elif not delivery_id:
+            final = _sibling_worker_error(
+                'host_bad_response',
+                'the accepted batch omitted its durable delivery id')
+        else:
+            final = _sibling_worker_error(
+                'batch_timeout',
+                'the total batch timeout elapsed before waiting')
+    return final
+
+
+def _sibling_batch_target_worker(client, shared, convoy_id, controller_id,
+                                 request, work_queue, result_queue,
+                                 start_event, cancel_event, gate_event,
+                                 deadline, progress):
+    """Short-lived ThreadManager TDTask; processes queued targets only."""
+    # The coordinator sets this Event on every normal/refusal path. Polling
+    # the gate and absolute deadline also retires the task if extension reinit
+    # prevents a queued coordinator from ever starting.
+    while not start_event.is_set():
+        if cancel_event.is_set() or _sibling_gate_revoked(gate_event):
+            return {'stopped': True}
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.0:
+            return {'stopped': True}
+        start_event.wait(min(0.25, remaining))
+    if cancel_event.is_set() or _sibling_gate_revoked(gate_event):
+        return {'stopped': True}
+    handle = shared.get('handle')
+    if handle is None:
+        return {'stopped': True}
+    while not cancel_event.is_set():
+        try:
+            index, target = work_queue.get_nowait()
+        except Empty:
+            break
+        try:
+            try:
+                value = _sibling_batch_target_call(
+                    client, handle, convoy_id, controller_id, request,
+                    index, target, deadline, progress, gate_event,
+                    cancel_event)
+            except Exception as e:
+                value = _sibling_worker_error(
+                    'worker_exception', '%s: %s' % (type(e).__name__, e))
+            try:
+                result_queue.put_nowait((index, dict(target), value))
+            except Full:
+                # Exactly one result is produced per bounded work item into
+                # an equally-sized queue. This branch is defensive only.
+                pass
+        finally:
+            work_queue.task_done()
+    return {'stopped': True}
+
+
+def _collect_sibling_batch_results(targets, request, result_queue,
+                                   cancel_event, gate_event, deadline,
+                                   progress):
+    """Collect concurrent rows to one stable-order, size-bounded answer."""
+    raw_results = {}
+    while len(raw_results) < len(targets):
+        if _sibling_gate_revoked(gate_event):
+            break
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.0:
+            break
+        try:
+            index, target, value = result_queue.get(timeout=remaining)
+        except Empty:
+            break
+        try:
+            if index in raw_results:
+                continue
+            raw_results[index] = value
+            if callable(progress):
+                wrapped = _sibling_worker_result(value, True)
+                progress({
+                    'state': 'batch_progress',
+                    'ok': wrapped.get('ok') is not False,
+                    'index': index, 'target': dict(target),
+                    'result': wrapped,
+                    'wakes_touchdesigner': True,
+                })
+        finally:
+            result_queue.task_done()
+
+    revoked = _sibling_gate_revoked(gate_event)
+    cancel_event.set()
+    result_budget = int(request.get('result_budget_bytes') or 0)
+    result_bytes = 0
+    results = []
+    for index, target in enumerate(targets):
+        if index in raw_results:
+            value = raw_results[index]
+        elif revoked:
+            value = {
+                'state': 'disabled', 'ok': False,
+                'reason': 'convoy_disabled',
+                'detail': 'Convoy was disabled before this target '
+                          'completed',
+            }
+        else:
+            value = _sibling_worker_error(
+                'batch_timeout',
+                'the total batch timeout elapsed before this target '
+                'completed')
+        row = {'index': index, 'target': dict(target),
+               'result': _sibling_worker_result(value, True)}
+        remaining_budget = max(0, result_budget - result_bytes)
+        bounded = _bound_sibling_worker_value(
+            row, remaining_budget, 'batch_result_budget_exceeded')
+        if (isinstance(bounded, dict)
+                and bounded.get('reason') == 'batch_result_budget_exceeded'):
+            bounded = {
+                'index': index, 'target': dict(target),
+                'result': bounded,
+            }
+        try:
+            size = len(json.dumps(
+                bounded, ensure_ascii=False, allow_nan=False,
+                separators=(',', ':')).encode('utf-8'))
+        except (TypeError, ValueError, OverflowError, UnicodeError):
+            bounded = {
+                'index': index, 'target': dict(target),
+                'result': _sibling_worker_error(
+                    'invalid_batch_result',
+                    'the target returned non-JSON data'),
+            }
+            size = 256
+        result_bytes += size
+        results.append(bounded)
+
+    all_ok = (len(results) == len(targets)
+              and all(row['result'].get('ok') is not False
+                      for row in results))
+    return {
+        'state': 'batch', 'ok': all_ok,
+        'atomic': False, 'partial': not all_ok,
+        'count': len(results), 'target_count': len(targets),
+        'results': results, 'wakes_touchdesigner': True,
+    }
+
+
+def _coordinate_sibling_batch(client, context, request, work_queue,
+                              result_queue, start_event, cancel_event,
+                              gate_event, shared, deadline, progress):
+    """Long-lived ThreadManager worker: preflight, release, aggregate."""
+    if deadline - time.monotonic() <= 0.0:
+        cancel_event.set()
+        start_event.set()
+        return _collect_sibling_batch_results(
+            request['targets'], request, result_queue, cancel_event,
+            gate_event, deadline, progress)
+    handle, error = _sibling_worker_preflight(client, context, gate_event)
+    if error is not None:
+        cancel_event.set()
+        start_event.set()
+        return error
+    shared['handle'] = handle
+    start_event.set()
+    return _collect_sibling_batch_results(
+        request['targets'], request, result_queue, cancel_event, gate_event,
+        deadline, progress)
+
+
+def _run_sibling_batch_inline(client, handle, context, request, progress,
+                              gate_event):
+    """Single-worker harness using the exact production target/collector."""
+    targets = request['targets']
+    work_queue = Queue(maxsize=len(targets))
+    result_queue = Queue(maxsize=len(targets))
+    start_event = Event()
+    cancel_event = Event()
+    shared = {'handle': handle}
+    deadline = time.monotonic() + float(request['timeout_s'])
+    for index, target in enumerate(targets):
+        work_queue.put_nowait((index, dict(target)))
+    start_event.set()
+    _sibling_batch_target_worker(
+        client, shared, context['convoy_id'], context['controller_id'],
+        request, work_queue, result_queue, start_event, cancel_event,
+        gate_event, deadline, progress)
+    return _collect_sibling_batch_results(
+        targets, request, result_queue, cancel_event, gate_event, deadline,
+        progress)
+
+
+def _run_sibling_api_request(client, kind, context, request, progress,
+                             gate_event=None):
+    """Execute one already-validated sibling request. WORKER THREAD ONLY.
+
+    ``client`` was resolved from ``mod`` on the main thread. Everything else
+    is detached JSON data or a plain callable that writes to a Queue.
+    """
+    handle, preflight_error = _sibling_worker_preflight(
+        client, context, gate_event)
+    if preflight_error is not None:
+        return preflight_error
+
+    convoy_id = context['convoy_id']
+    controller_id = context['controller_id']
+
+    if kind == 'list_nodes':
+        return _sibling_worker_result(
+            client.network_nodes(handle, convoy_id), False)
+
+    if kind in ('call', 'ping'):
+        operation = ('convoy_ping' if kind == 'ping'
+                     else request['operation'])
+        arguments = ({} if kind == 'ping' else request['arguments'])
+        deadline = time.monotonic() + float(request['timeout_s'])
+        result = client.submit_sibling_call(
+            handle, request['host_id'], convoy_id, request['node_id'],
+            controller_id, operation, arguments,
+            expected_runtime_id=request.get('expected_runtime_id'),
+            idempotency_key=request.get('idempotency_key'),
+            timeout_s=request['timeout_s'])
+        wakes = kind != 'ping'
+        if not result.get('ok'):
+            return _sibling_worker_result(result, wakes)
+        should_wait = kind == 'ping' or bool(request.get('wait'))
+        if not should_wait:
+            return _sibling_worker_result(result, wakes)
+        if callable(progress):
+            progress(_sibling_worker_result(result, wakes))
+        job = result.get('job') or {}
+        delivery_id = job.get('delivery_id')
+        if not delivery_id:
+            return _sibling_worker_result(_sibling_worker_error(
+                'host_bad_response',
+                'the accepted call omitted its durable delivery id'), wakes)
+        remaining = deadline - time.monotonic()
+        if remaining < 0.1:
+            timed_out = dict(result)
+            timed_out['wait_timed_out'] = True
+            timed_out['detail'] = (
+                'the total request deadline elapsed after durable '
+                'submission; reconcile the delivery with getJob()')
+            return _sibling_worker_result(timed_out, wakes)
+        waited = client.wait_sibling_job(
+            handle, request['host_id'], convoy_id, delivery_id,
+            initial=result, timeout_s=remaining,
+            progress=(lambda value: progress(
+                _sibling_worker_result(value, wakes))))
+        return _sibling_worker_result(waited, wakes)
+
+    if kind == 'get_job':
+        return _sibling_worker_result(client.get_sibling_job(
+            handle, request['host_id'], convoy_id,
+            request['delivery_id'], since=request.get('since'),
+            timeout=request['timeout_s']), False)
+
+    if kind == 'cancel_job':
+        return _sibling_worker_result(client.cancel_sibling_job(
+            handle, request['host_id'], convoy_id,
+            request['delivery_id'], timeout=request['timeout_s']), False)
+
+    if kind == 'batch':
+        return _run_sibling_batch_inline(
+            client, handle, context, request, progress, gate_event)
+
+    return _sibling_worker_result(_sibling_worker_error(
+        'unknown_request_kind', 'unsupported sibling request kind'), False)
 
 
 # ======================================================================

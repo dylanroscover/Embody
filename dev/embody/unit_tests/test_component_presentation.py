@@ -3,7 +3,7 @@ Test suite: shipped-component presentation invariants.
 
 Embody follows the POPX pattern for parameter dialogs: showCustomOnly=True
 on the shipped COMP so users see only Embody's custom pages (Embody, Tags,
-TDN, Envoy, Logs, UI, Shortcuts, Advanced, About), not those plus TD's
+TDN, Envoy, Convoy, UI, Shortcuts, Adv, About), not those plus TD's
 Layout/Panel/Look/Children/Drag-Drop/Extensions/Common. The flag is a pure
 dialog filter -- built-in pages stay functional and reachable -- and is
 (re)applied in EmbodyExt.__init__ so every deployed copy converges on it
@@ -36,7 +36,7 @@ class TestComponentPresentation(EmbodyTestCase):
         copy convergence) -- rather than racing the deferred callback."""
         p = self.embody.par.Showbuiltinpars
         self.assertEqual(p.style, 'Toggle')
-        self.assertEqual(p.page.name, 'Advanced')
+        self.assertEqual(p.page.name, 'Adv')
         self.assertEqual(p.default, False)
         self.assertTrue(p.help, 'help text is mandatory')
         parexec_src = self.embody.op('parexec').text
@@ -51,5 +51,5 @@ class TestComponentPresentation(EmbodyTestCase):
         """With built-in pages filtered out, the dialog must not be empty:
         the core custom pages have to exist."""
         pages = {p.name for p in self.embody.customPages}
-        for required in ('Embody', 'Envoy', 'Advanced', 'About'):
+        for required in ('Embody', 'Envoy', 'Convoy', 'Adv', 'About'):
             self.assertIn(required, pages)

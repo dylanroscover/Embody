@@ -17,9 +17,9 @@ THE A-21 MODEL (who signs what). A HOST signs -- it owns the signing key
 
 The canonical signed subset is A-21's, verbatim: convoy_id, request_id,
 idempotency_key, controller_id, origin_host_id, target_node_id,
-operation, hash(arguments), deadline -- plus source_host_id, hop_limit,
-expected_runtime_id, and the sig_alg tag, which are also decision fields
-and so must be signed too.
+operation, hash(arguments), created time, duration, and deadline -- plus
+source_host_id, hop_limit, expected_runtime_id, and the sig_alg tag,
+which are also decision fields and so must be signed too.
 
 Signing is PLUGGABLE (A-21's Phase 3 target). Phase 1 ships HMAC over a
 pre-shared key: this is GROUP / MEMBERSHIP authentication and message
@@ -31,9 +31,13 @@ fingerprint, which is what makes origin_host_id genuinely authoritative;
 the Signer interface is the seam and no caller changes.
 
 job_id is NOT in the request (A-22): it is minted target-side at
-persist-before-acknowledge and returned in the ack. Deadlines are
-ABSOLUTE unix times computed once at the origin, so a multi-hop path
-cannot silently multiply a per-hop timeout.
+persist-before-acknowledge and returned in the ack.  The origin signs a
+duration (budget_s), its wall-clock creation time, and the corresponding
+absolute deadline.  A sender spends that absolute deadline cumulatively
+on its own clock.  A target uses the timestamps only for a bounded skew /
+freshness admission window, then anchors no more than the signed duration
+to its OWN monotonic clock.  Thus host clock offsets and later NTP/manual
+wall-clock jumps cannot silently shorten or refresh admitted work.
 """
 
 import hashlib
@@ -43,7 +47,35 @@ import math
 import time
 import uuid
 
+import convoy_identity as identity
+
 PROTOCOL = "convoy/1"
+
+# A signed budget is an allocation of queue/dispatch time.  It must be
+# finite (checked below) and bounded: otherwise an admitted peer can
+# create work that remains executable effectively forever.  One hour is
+# intentionally much larger than the normal 30-second relay budget while
+# still providing a finite replay horizon.  Long-running node jobs are
+# unaffected -- this is the deadline to DELIVER the operation, not a
+# forced execution kill.
+MAX_DEADLINE_HORIZON_S = 60.0 * 60.0
+
+# LAN hosts are not required to run perfectly synchronized clocks.  This
+# is both an admission tolerance and a hard bound on how far a signed
+# timestamp can extend the replay window.  It intentionally matches the
+# discovery protocol's clock-skew allowance.
+MAX_CLOCK_SKEW_S = 120.0
+
+# build_envelope retains millisecond deadline rounding for wire/audit
+# compatibility.  The receiver therefore permits the corresponding
+# sub-millisecond arithmetic difference, but no material rewrite of the
+# signed created + budget relationship.
+DEADLINE_CORRELATION_TOLERANCE_S = 0.0011
+
+# convoy/1 is direct host-to-host.  The field remains signed for the
+# planned brokered/SaaS protocol, but a v1 receiver neither accepts an
+# unbounded counter nor treats bool (an int subclass) as a hop count.
+MAX_HOP_LIMIT = 2
 
 # Signature algorithm tags. The tag is INSIDE the signed payload, so a
 # verifier keyed for one scheme cannot be fooled into accepting another.
@@ -65,6 +97,8 @@ _SIGNED_FIELDS = (
     "operation",
     "arguments_sha256",
     "expected_runtime_id",
+    "created_unix",
+    "budget_s",
     "deadline_unix",
     "hop_limit",
     "sig_alg",
@@ -151,6 +185,24 @@ def build_envelope(convoy_id, origin_host_id, controller_id, target_node_id,
                    hop_limit=2, source_host_id=None, now=None):
     """Construct a signed request envelope (A-21 field model)."""
     now = time.time() if now is None else now
+    if isinstance(now, bool) or isinstance(timeout_s, bool):
+        raise ValueError("created_unix and budget_s must be numbers")
+    try:
+        now = float(now)
+        timeout_s = float(timeout_s)
+    except (TypeError, ValueError):
+        raise ValueError("created_unix and budget_s must be numbers")
+    if not math.isfinite(now) or now < 0:
+        raise ValueError("created_unix must be a finite nonnegative number")
+    if not math.isfinite(timeout_s) or timeout_s <= 0:
+        raise ValueError("budget_s must be a finite positive number")
+    if timeout_s > MAX_DEADLINE_HORIZON_S:
+        raise ValueError(
+            f"budget_s must be at most {MAX_DEADLINE_HORIZON_S:.0f}s")
+    try:
+        convoy_id = identity.normalize_convoy_id(convoy_id)
+    except identity.IdentityError as e:
+        raise ValueError(e.detail or e.reason)
     envelope = {
         "protocol": PROTOCOL,
         "convoy_id": convoy_id,
@@ -164,6 +216,8 @@ def build_envelope(convoy_id, origin_host_id, controller_id, target_node_id,
         "arguments": arguments or {},
         "arguments_sha256": canonical_arguments_digest(arguments),
         "expected_runtime_id": expected_runtime_id,
+        "created_unix": now,
+        "budget_s": timeout_s,
         "deadline_unix": round(now + timeout_s, 3),
         "hop_limit": hop_limit,
         "sig_alg": signer.alg,
@@ -174,8 +228,14 @@ def build_envelope(convoy_id, origin_host_id, controller_id, target_node_id,
 
 def verify_envelope(envelope, signer, convoy_id, my_node_id,
                     my_runtime_id=None, now=None,
-                    runtime_required=False):
-    """Validate an inbound envelope. Raises EnvelopeRejected, or returns.
+                    runtime_required=False, monotonic_now=None):
+    """Validate an inbound envelope and return accepted timing metadata.
+
+    The return value is suitable for ``HostStore.create_job(...,
+    accepted_timing=timing)``.  ``accepted_deadline_monotonic`` is only
+    meaningful in this process; the remaining wall-clock fields are the
+    durable restart fallback.  Existing callers that ignore the return
+    remain source-compatible.
 
     Order is deliberate: cheap structural checks, then authentication,
     and only then anything that acts on the contents. EVERY refusal is a
@@ -193,6 +253,16 @@ def verify_envelope(envelope, signer, convoy_id, my_node_id,
     operation instead of being duplicated here.
     """
     now = time.time() if now is None else now
+    monotonic_now = (time.monotonic() if monotonic_now is None
+                     else monotonic_now)
+
+    try:
+        now = float(now)
+        monotonic_now = float(monotonic_now)
+    except (TypeError, ValueError):
+        raise EnvelopeRejected("malformed", "receiver clock is not numeric")
+    if not math.isfinite(now) or not math.isfinite(monotonic_now):
+        raise EnvelopeRejected("malformed", "receiver clock is not finite")
 
     if not isinstance(envelope, dict):
         raise EnvelopeRejected("malformed", "envelope is not an object")
@@ -201,13 +271,21 @@ def verify_envelope(envelope, signer, convoy_id, my_node_id,
             "protocol_mismatch",
             f"expected {PROTOCOL}, got {envelope.get('protocol')!r}")
 
-    for field in ("convoy_id", "request_id", "controller_id",
+    for field in ("convoy_id", "request_id", "idempotency_key",
+                  "controller_id",
                   "origin_host_id", "source_host_id", "target_node_id",
                   "operation"):
-        if not envelope.get(field):
+        if (not isinstance(envelope.get(field), str)
+                or not envelope.get(field)):
             raise EnvelopeRejected("malformed", f"missing {field}")
 
-    if envelope["convoy_id"] != convoy_id:
+    try:
+        envelope_convoy_id = identity.normalize_convoy_id(
+            envelope["convoy_id"])
+        local_convoy_id = identity.normalize_convoy_id(convoy_id)
+    except identity.IdentityError:
+        raise EnvelopeRejected("malformed", "invalid convoy_id")
+    if envelope_convoy_id != local_convoy_id:
         raise EnvelopeRejected("namespace_mismatch",
                                f"not a member of {envelope['convoy_id']!r}")
 
@@ -260,24 +338,77 @@ def verify_envelope(envelope, signer, convoy_id, my_node_id,
                 f"addressed runtime {expected_runtime!r}, "
                 f"this is {my_runtime_id!r}")
 
-    try:
-        deadline = float(envelope.get("deadline_unix"))
-    except (TypeError, ValueError):
-        # A signed-but-nonsense deadline is a named refusal, never a raw
-        # ValueError escaping the verifier.
-        raise EnvelopeRejected("malformed",
-                               "deadline_unix is not a number")
-    if not math.isfinite(deadline):
-        # NaN and Infinity are FAIL-OPEN here if waved through: every
-        # comparison against NaN is False, so `deadline <= now` never
-        # fires and the request becomes immortal -- and JSON's NaN /
-        # Infinity tokens make that reachable over the wire. A deadline
-        # that cannot expire is not a deadline.
-        raise EnvelopeRejected("malformed",
-                               "deadline_unix must be a finite number")
-    if deadline <= now:
-        raise EnvelopeRejected("deadline_exceeded",
-                               "the request expired before it was executed")
+    numeric = {}
+    for field in ("created_unix", "budget_s", "deadline_unix"):
+        raw = envelope.get(field)
+        if isinstance(raw, bool):
+            raise EnvelopeRejected("malformed", f"{field} is not a number")
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            # A signed-but-nonsense timing field is a named refusal,
+            # never a raw ValueError escaping the verifier.
+            raise EnvelopeRejected("malformed", f"{field} is not a number")
+        if not math.isfinite(value):
+            # NaN is fail-open in comparisons (`nan <= now` is false),
+            # while Infinity creates immortal work.  JSON accepts both
+            # tokens, so the protocol itself must refuse them.
+            raise EnvelopeRejected(
+                "malformed", f"{field} must be a finite number")
+        numeric[field] = value
+
+    created = numeric["created_unix"]
+    budget = numeric["budget_s"]
+    deadline = numeric["deadline_unix"]
+    if created < 0:
+        raise EnvelopeRejected(
+            "malformed", "created_unix must be nonnegative")
+    if budget <= 0:
+        raise EnvelopeRejected(
+            "malformed", "budget_s must be positive")
+    if budget > MAX_DEADLINE_HORIZON_S:
+        raise EnvelopeRejected(
+            "deadline_too_far",
+            f"budget_s is {budget:.3f}s; convoy/1 permits at most "
+            f"{MAX_DEADLINE_HORIZON_S:.0f}s")
+
+    expected_deadline = created + budget
+    if abs(deadline - expected_deadline) > \
+            DEADLINE_CORRELATION_TOLERANCE_S:
+        raise EnvelopeRejected(
+            "deadline_mismatch",
+            "deadline_unix does not equal created_unix + budget_s")
+
+    # Do NOT compute `deadline - now` as the ordinary target budget: that
+    # assumes synchronized wall clocks and caused a host 31 seconds ahead
+    # to reject a fresh 30-second request.  Instead, timestamps define a
+    # bounded admission window.  At either permitted skew extreme a fresh
+    # request receives its complete signed duration.  Close to the far
+    # end of the replay window it is clamped so a replay cannot extend the
+    # authenticated deadline plus the protocol's fixed skew allowance.
+    if now < created - MAX_CLOCK_SKEW_S:
+        raise EnvelopeRejected(
+            "timestamp_out_of_window",
+            f"created_unix is more than {MAX_CLOCK_SKEW_S:.0f}s in the future")
+    # Use the exact signed duration relationship here rather than the
+    # millisecond-rounded audit deadline, otherwise a request at exactly
+    # the permitted positive skew could lose a fraction of a millisecond.
+    effective_deadline = expected_deadline + MAX_CLOCK_SKEW_S
+    freshness_remaining = effective_deadline - now
+    if freshness_remaining <= 0:
+        raise EnvelopeRejected(
+            "deadline_exceeded",
+            "the request is outside its signed deadline and skew window")
+    remaining = min(budget, freshness_remaining)
+
+    hop_limit = envelope.get("hop_limit")
+    if (isinstance(hop_limit, bool)
+            or not isinstance(hop_limit, int)):
+        raise EnvelopeRejected("malformed", "hop_limit must be an integer")
+    if hop_limit < 1 or hop_limit > MAX_HOP_LIMIT:
+        raise EnvelopeRejected(
+            "hop_limit_exceeded",
+            f"hop_limit must be between 1 and {MAX_HOP_LIMIT}")
 
     # v1 enforces origin == source: exactly one hop, no brokers yet.
     if envelope["origin_host_id"] != envelope["source_host_id"]:
@@ -285,18 +416,48 @@ def verify_envelope(envelope, signer, convoy_id, my_node_id,
             "hop_limit_exceeded",
             "v1 permits no relaying host between origin and target")
 
+    # Anchor the accepted duration to this target's monotonic clock.  The
+    # durable effective wall expiry includes the fixed, protocol-defined
+    # skew allowance; signed_deadline_unix preserves the exact origin
+    # value for audit.  A monotonic timestamp is deliberately never sent:
+    # different hosts have unrelated monotonic epochs.
+    return {
+        "request_deadline_unix": effective_deadline,
+        "signed_deadline_unix": deadline,
+        "accepted_at_unix": now,
+        "accepted_remaining_s": remaining,
+        "accepted_expires_unix": now + remaining,
+        "accepted_deadline_monotonic": monotonic_now + remaining,
+    }
+
 
 def remaining_budget(envelope, now=None):
     """Seconds left before the absolute deadline (never negative, never
     NaN, never raises on a malformed deadline)."""
     now = time.time() if now is None else now
+    if not isinstance(envelope, dict) or isinstance(now, bool):
+        return 0.0
     try:
+        now = float(now)
+        created = float(envelope.get("created_unix"))
+        budget = float(envelope.get("budget_s"))
         deadline = float(envelope.get("deadline_unix"))
     except (TypeError, ValueError):
         return 0.0
-    if not math.isfinite(deadline):
+    if any(isinstance(envelope.get(field), bool) for field in (
+            "created_unix", "budget_s", "deadline_unix")):
+        return 0.0
+    if not all(math.isfinite(value) for value in (
+            now, created, budget, deadline)):
         # A non-finite deadline yields a non-finite budget, which every
         # downstream timeout comparison then reads as "plenty of time".
         # No budget is the safe reading of an unusable deadline.
         return 0.0
-    return max(0.0, deadline - now)
+    if (created < 0 or budget <= 0 or budget > MAX_DEADLINE_HORIZON_S
+            or abs(deadline - (created + budget))
+            > DEADLINE_CORRELATION_TOLERANCE_S):
+        return 0.0
+    # Sender-side cumulative accounting remains wall-clock based on the
+    # sender's OWN clock.  Clamp to the signed duration so a local clock
+    # rollback can never mint a larger budget than the origin authorized.
+    return min(budget, max(0.0, deadline - now))

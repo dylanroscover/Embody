@@ -28,6 +28,7 @@ database earns its place -- not before.
 
 import hashlib
 import json
+import math
 import os
 import secrets
 import stat
@@ -53,16 +54,22 @@ AUDIT_ROTATED = AUDIT_FILE + ".1"
 JOB_STATES = ("queued", "dispatching", "running", "succeeded", "failed",
               "indeterminate", "refused")
 
-# The states a job never leaves. A record here is DONE being decided:
+# The states ordinary coordination never reopens. A record here is DONE being
+# decided by this store's normal delivery authority:
 # succeeded/failed are node verdicts, indeterminate is the host's own
 # may-have-run proof (16.4), refused is the host's own DELIVERY verdict
-# (see mark_refused). Named once, so every guard that must not reopen a
-# settled record reads the same list.
+# (see mark_refused). The sole stronger-evidence exception is
+# reconcile_lifecycle_result: exact-node lifecycle owns a separate durable
+# executor ledger and may replace boot-sweep indeterminate with that bound
+# committed verdict. Named once, so every ordinary guard that must not reopen
+# a settled record reads the same list.
 TERMINAL_STATES = ("succeeded", "failed", "indeterminate", "refused")
 
-# A-15, "one authority, two records". The NODE originates the execution
-# verdict; the host record MIRRORS it. So the host may write three states
-# on its own authority and no more:
+# A-15, "one authority, two records". For TD operations the NODE originates
+# the execution verdict and the host record MIRRORS it.  Reviewed host-native
+# operations are the one explicit second execution locus: the host subprocess
+# facade itself is authoritative for those verdicts.  The coordination layer
+# still may write only delivery/uncertainty states on its own authority:
 #   queued        -- accepted, not yet dispatched.
 #   dispatching   -- the host's transient CLAIM: a dispatcher owns this
 #                    job while it forwards to the node. Not a verdict --
@@ -102,11 +109,11 @@ TERMINAL_STATES = ("succeeded", "failed", "indeterminate", "refused")
 #                    demands EVIDENCE, for the same reason: a terminal
 #                    the host wrote on its own authority must carry what
 #                    it saw.
-# running / succeeded / failed are NODE verdicts: they may only be
-# recorded through record_node_verdict, which demands the provenance
-# (node_job_id + observed_at) that proves a node produced them. The host
-# cannot fabricate a success -- the method that would write it refuses
-# without the evidence.
+# running / succeeded / failed are EXECUTOR verdicts: TD outcomes may only be
+# recorded through record_node_verdict/record_sync_result, while a reviewed
+# host subprocess uses record_host_result.  Every path requires observed_at
+# plus a source naming the executor; the coordination layer cannot fabricate a
+# success by merely passing host_originated=True.
 _HOST_ORIGINABLE_STATES = ("queued", "dispatching", "indeterminate",
                            "refused")
 
@@ -116,10 +123,23 @@ _HOST_ORIGINABLE_STATES = ("queued", "dispatching", "indeterminate",
 _NODE_STATUS_TO_STATE = {"running": "running", "done": "succeeded",
                          "error": "failed"}
 
-# The verdict_source values that name a NODE as the authority.
+# The verdict_source values that name the actual executor as authority.
 # _apply_state refuses an execution verdict carrying any other source --
 # enforcement is BY STATE, never by trusting the caller to pass a flag.
 _NODE_VERDICT_SOURCES = ("node_poll", "node_sync")
+_EXECUTION_VERDICT_SOURCES = _NODE_VERDICT_SOURCES + (
+    "host_operation", "host_operation_recovery")
+_HOST_VERDICT_OPERATIONS = frozenset({
+    "convoy_ping", "convoy_git", "convoy_gh", "convoy_shell",
+    "convoy_start_node", "convoy_restart_node",
+})
+
+# A small backwards wall-clock adjustment is common during time sync.  A
+# larger rollback after admission makes a persisted absolute expiry
+# untrustworthy, so the safe interpretation is expired.  During a live
+# process the monotonic anchor below catches *any* rollback without this
+# tolerance; this constant is principally the restart fallback.
+MAX_CLOCK_ROLLBACK_S = 1.0
 
 
 class IdempotencyOriginConflict(Exception):
@@ -151,6 +171,28 @@ class IdempotencyOriginConflict(Exception):
         self.requested_origin = requested_origin
 
 
+class IdempotencyContentConflict(IdempotencyOriginConflict):
+    """A key was reused for different semantic work in the same scope.
+
+    Returning the old job is not idempotency in that case: it tells the
+    caller its new command was accepted while silently substituting a
+    different operation.  The structured attributes let HTTP/MCP layers
+    return a stable 409 without parsing prose.
+    """
+
+    reason = "idempotency_content_conflict"
+
+    def __init__(self, delivery_id, existing_digest, requested_digest):
+        # Bypass IdempotencyOriginConflict.__init__: inheritance is solely
+        # the compatibility category caught by older host-app layers.
+        Exception.__init__(self,
+            f"idempotency key already names delivery {delivery_id}, whose "
+            f"request content differs from this submission")
+        self.delivery_id = delivery_id
+        self.existing_digest = existing_digest
+        self.requested_digest = requested_digest
+
+
 class StoreTooNew(Exception):
     """Written by a NEWER host app. Refuse to write, never scribble."""
 
@@ -163,13 +205,19 @@ class StoreTooNew(Exception):
 
 
 class HostStore:
-    def __init__(self, directory, now=None):
+    def __init__(self, directory, now=None, monotonic=None):
         self._now = now or time.time
+        self._monotonic = monotonic or time.monotonic
+        # delivery_id -> target-local monotonic deadline.  Never written
+        # to disk: monotonic epochs are process/boot local.  Durable wall
+        # expiry fields rebuild these anchors conservatively on startup.
+        self._monotonic_deadlines = {}
         self.dir = directory
         self.jobs_dir = os.path.join(directory, JOBS_DIR)
         os.makedirs(self.jobs_dir, exist_ok=True)
         self._host_path = os.path.join(directory, HOST_FILE)
         self._state = self._load_host_file()
+        self._restore_expiry_anchors()
         self._sweep_interrupted_dispatches()
 
     # -- host.json ------------------------------------------------------
@@ -221,10 +269,10 @@ class HostStore:
         """Rebuild the pure NodeDirectory from stored nodes.
 
         Rows whose stored host_id is not this host are quarantined, never
-        replayed: replaying them against the CURRENT host_id would make a
-        COPIED state directory reproduce the same node_ids on a second
-        machine, and could carry a TD-Python approval onto a different
-        node. Returns (directory, quarantined).
+        replayed.  Legacy ``td_python_approved`` values are deliberately
+        ignored: code-execution authority moved to host-private policy.json
+        and must be reconfirmed locally rather than migrated fail-open.
+        Returns (directory, quarantined).
         """
         host_id = self.host_id()
         directory = identity.NodeDirectory(host_id)
@@ -238,36 +286,133 @@ class HostStore:
             try:
                 record = directory.register(
                     row.get("project_root"), row.get("comp_path"),
-                    row.get("convoy_id"), minted_id=node_id)
+                    row.get("convoy_id"), minted_id=node_id,
+                    node_discriminator=(
+                        row.get("node_discriminator") or None),
+                    replay=True,
+                    # Rows written before automatic realm genesis existed
+                    # were already authoritative.  Treating a missing field
+                    # as candidate would let a rolling upgrade silently
+                    # rewrite an established deployment.
+                    binding_state=row.get("binding_state", "established"))
             except identity.IdentityError as e:
                 # One bad entry must not make a SUPERVISED daemon
                 # crash-loop -- the spike proved it restarts every 60s.
                 quarantined.append({**row, "node_id": node_id,
                                     "load_error": e.reason})
                 continue
-            if row.get("td_python_approved"):
-                directory.approve_td_python(record["node_id"])
+            # Rows written before these additive fields existed remain
+            # enabled and have no descriptive metadata.  Invalid metadata
+            # cannot carry authority, so discard only that decoration rather
+            # than quarantining an otherwise valid stable node identity.
+            directory.set_enabled(record["node_id"],
+                                  row.get("enabled", True) is True)
+            try:
+                directory.set_metadata(record["node_id"],
+                                       row.get("metadata", {}))
+            except identity.IdentityError as e:
+                directory.set_metadata(record["node_id"], {})
+                self.audit("hoststore", "node_metadata_dropped_on_load",
+                           {"node_id": node_id, "reason": e.reason})
         if quarantined:
             self.audit("hoststore", "nodes_quarantined_on_load",
                        {"count": len(quarantined),
                         "node_ids": [r["node_id"] for r in quarantined][:16]})
         return directory, quarantined
 
-    def save_node(self, record):
-        now = self._now()
-        existing = self._state["nodes"].get(record["node_id"], {})
-        self._state["nodes"][record["node_id"]] = {
-            # project_root + comp_path IS the key. runtime_id is NOT
-            # stored: it is per-launch by design.
+    def _node_row(self, record, existing, now):
+        """Validate and serialize the durable subset of one node record."""
+        return {
+            # Stable location and operator intent survive a host restart.
+            # runtime_id and envoy_port are deliberately absent: both name
+            # one live TD launch and must never be resurrected from disk.
             "project_root": record["project_root"],
+            "node_discriminator": record.get("node_discriminator", ""),
             "host_id": record["host_id"],
             "convoy_id": record["convoy_id"],
+            "binding_state": identity.normalize_binding_state(
+                record.get("binding_state", "established")),
             "comp_path": record["comp_path"],
-            "td_python_approved": bool(record["td_python_approved"]),
+            "enabled": record.get("enabled", True) is True,
+            "metadata": identity.sanitize_node_metadata(
+                record.get("metadata", {})),
             "first_seen": existing.get("first_seen", now),
             "last_seen": now,
         }
-        self._write_host()
+
+    def save_nodes(self, records):
+        """Persist several node rows with one atomic host.json replace.
+
+        Every record is validated and a complete next state is built before
+        either the in-memory store or disk changes.  This is the persistence
+        primitive for realm convergence: a dozen local TD nodes cannot be
+        left half on the candidate id and half on the authoritative id by a
+        process failure between per-row writes.
+        """
+        records = list(records)
+        if not records:
+            return []
+        now = self._now()
+        nodes = dict(self._state["nodes"])
+        seen = set()
+        saved = []
+        for record in records:
+            node_id = record.get("node_id")
+            if not identity.is_valid_id(node_id):
+                raise identity.IdentityError("malformed_node_id",
+                                             repr(node_id))
+            if node_id in seen:
+                raise identity.IdentityError(
+                    "duplicate_node_id", repr(node_id))
+            seen.add(node_id)
+            row = self._node_row(record, nodes.get(node_id, {}), now)
+            nodes[node_id] = row
+            saved.append({"node_id": node_id, **row})
+
+        next_state = dict(self._state)
+        next_state["nodes"] = nodes
+        self._write_host(next_state)
+        self._state = next_state
+        return saved
+
+    def save_node(self, record):
+        return self.save_nodes([record])[0]
+
+    def rebind_candidates(self, directory, convoy_id,
+                          binding_state="established"):
+        """Persist and apply one authoritative binding to local candidates.
+
+        This is the HostApp-facing transaction.  It snapshots only candidate
+        rows, writes their projected durable forms in one atomic replace, and
+        then performs the directory's exact compare-and-swap as one pure
+        mutation.  Established rows -- matching or not -- are not selected
+        and cannot be rewritten here.  HostApp serializes calls with its
+        existing state lock, so the disk-first projection cannot race another
+        directory mutation; disk-first also makes a crash restart converge to
+        the authoritative state rather than resurrecting candidates.
+
+        Returns detached changed directory records.
+        """
+        convoy_id = identity.normalize_convoy_id(convoy_id)
+        binding_state = identity.normalize_binding_state(binding_state)
+        candidates = directory.candidate_nodes()
+        expected = {record["node_id"]: record["convoy_id"]
+                    for record in candidates}
+        projected = []
+        for record in candidates:
+            if (record["convoy_id"] == convoy_id
+                    and record["binding_state"] == binding_state):
+                continue
+            target = dict(record)
+            target["metadata"] = dict(record.get("metadata") or {})
+            target["convoy_id"] = convoy_id
+            target["binding_state"] = binding_state
+            projected.append(target)
+        if not projected:
+            return []
+        self.save_nodes(projected)
+        return directory.rebind_candidates(
+            convoy_id, binding_state=binding_state, expected=expected)
 
     def delete_node(self, node_id):
         if self._state["nodes"].pop(node_id, None) is not None:
@@ -401,13 +546,15 @@ class HostStore:
         os.close(fd)
         return True
 
-    def _fill_marker(self, path, delivery_id):
+    def _fill_marker(self, path, delivery_id, request_sha256=None):
         """Point a claimed marker at the record it names. Atomic replace,
         so it heals an empty (crash- or inherit-left) marker in place."""
+        marker = {"delivery_id": delivery_id, "created": self._now()}
+        if request_sha256:
+            marker["request_sha256"] = request_sha256
         platform_mod._write_private(
             path,
-            json.dumps({"delivery_id": delivery_id, "created": self._now()},
-                       sort_keys=True) + "\n")
+            json.dumps(marker, sort_keys=True) + "\n")
 
     @staticmethod
     def _read_marker(path):
@@ -445,10 +592,95 @@ class HostStore:
             return data if isinstance(data, dict) else None
         raise OSError(f"idempotency marker at {path} unreadable: {last}")
 
+    def _request_digest(self, node_id, operation, arguments, convoy_id,
+                        expected_runtime_id=None, origin_host_id=None,
+                        controller_id=None):
+        """Digest the semantic request bound to an idempotency key.
+
+        Delivery-only fields (request id, deadline, admission lineage)
+        are intentionally excluded: a legitimate retry may have a fresh
+        envelope/deadline and may cross a host restart, but it must still
+        name exactly the same work.  Origin is part of the marker scope;
+        including it here is defense in depth and maps legacy ``None``
+        local origins to this host's identity for rolling upgrades.
+        """
+        origin = (origin_host_id if isinstance(origin_host_id, str)
+                  and origin_host_id else self.host_id())
+        payload = {
+            "convoy_id": convoy_id,
+            "node_id": node_id,
+            "operation": operation,
+            "arguments": arguments or {},
+            "expected_runtime_id": (expected_runtime_id
+                                    if isinstance(expected_runtime_id, str)
+                                    and expected_runtime_id else None),
+            "origin_host_id": origin,
+            "controller_id": (controller_id
+                              if isinstance(controller_id, str)
+                              and controller_id else None),
+        }
+        blob = json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                          ensure_ascii=True, allow_nan=False)
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+    def _job_request_digest(self, job):
+        stored = job.get("request_sha256")
+        if isinstance(stored, str) and stored:
+            return stored
+        # Rolling-upgrade compatibility: derive the binding for a record
+        # written before request_sha256 existed.  We do not have to
+        # rewrite it merely to answer a retry; every newly minted record
+        # persists the digest.
+        return self._request_digest(
+            job.get("node_id"), job.get("operation"), job.get("arguments"),
+            job.get("convoy_id"), job.get("expected_runtime_id"),
+            job.get("origin_host_id"), job.get("controller_id"))
+
+    @staticmethod
+    def _accepted_timing(timing):
+        """Validate and select the durable subset of verifier timing.
+
+        The target-local monotonic timestamp is deliberately omitted from
+        the returned dict because it is meaningless after process restart.
+        It is installed into the in-memory anchor separately by
+        create_job.  Malformed internal timing fails closed before a job
+        is acknowledged.
+        """
+        if timing is None:
+            return None
+        if not isinstance(timing, dict):
+            raise ValueError("accepted_timing must be an object")
+        names = ("request_deadline_unix", "accepted_at_unix",
+                 "accepted_remaining_s", "accepted_expires_unix")
+        values = {}
+        for name in names:
+            try:
+                value = float(timing.get(name))
+            except (TypeError, ValueError):
+                raise ValueError(f"accepted_timing.{name} is not numeric")
+            if not math.isfinite(value):
+                raise ValueError(f"accepted_timing.{name} is not finite")
+            values[name] = value
+        if values["accepted_remaining_s"] <= 0:
+            raise ValueError("accepted_timing has no remaining budget")
+        if values["accepted_expires_unix"] <= values["accepted_at_unix"]:
+            raise ValueError("accepted_timing expires at or before admission")
+        # The receiver-derived durable expiry may be earlier than the
+        # signed deadline (a future protocol can clamp for clock skew),
+        # but it may never extend the authenticated deadline.
+        if (values["accepted_expires_unix"]
+                > values["request_deadline_unix"] + 0.001):
+            raise ValueError("accepted_timing extends the signed deadline")
+        derived = (values["accepted_expires_unix"]
+                   - values["accepted_at_unix"])
+        if abs(derived - values["accepted_remaining_s"]) > 0.002:
+            raise ValueError("accepted_timing remaining budget is inconsistent")
+        return values
+
     def create_job(self, idempotency_key, node_id, operation, arguments,
                    convoy_id, expected_runtime_id=None,
                    origin_host_id=None, controller_id=None,
-                   origin_admission_id=None):
+                   origin_admission_id=None, accepted_timing=None):
         """Persist-before-acknowledge, idempotent per (convoy, node, key).
         Returns (job, created).
 
@@ -473,9 +705,18 @@ class HostStore:
             raise ValueError("idempotency_key is required")
         if not convoy_id or not isinstance(convoy_id, str):
             raise ValueError("convoy_id is required to scope idempotency")
+        if arguments is None:
+            arguments = {}
+        if not isinstance(arguments, dict):
+            raise ValueError("arguments must be an object")
 
         origin = (origin_host_id if isinstance(origin_host_id, str)
                   and origin_host_id else None)
+        request_sha256 = self._request_digest(
+            node_id, operation, arguments, convoy_id,
+            expected_runtime_id=expected_runtime_id,
+            origin_host_id=origin, controller_id=controller_id)
+        durable_timing = self._accepted_timing(accepted_timing)
         marker = self._idem_path(convoy_id, node_id, idempotency_key, origin)
         prior = None
         claimed_fresh = self._claim_marker(marker)
@@ -496,13 +737,52 @@ class HostStore:
             if legacy != marker:
                 prior = self._read_marker(legacy)
         if prior and prior.get("delivery_id"):
+            marker_digest = prior.get("request_sha256")
+            if (isinstance(marker_digest, str) and marker_digest
+                    and not secrets.compare_digest(marker_digest,
+                                                   request_sha256)):
+                # The record may have been manually removed or be
+                # temporarily unreadable.  The atomic admission marker is
+                # still evidence that this key was bound; fail closed
+                # rather than heal it into DIFFERENT work.
+                if claimed_fresh:
+                    try:
+                        os.unlink(marker)
+                    except OSError:
+                        pass
+                raise IdempotencyContentConflict(
+                    prior["delivery_id"], marker_digest, request_sha256)
             existing = self.get_job(prior["delivery_id"])
             if existing is not None:
                 existing_origin = existing.get("origin_host_id")
                 if (existing_origin or None) != origin and not (
                         existing_origin is None and origin == self.host_id()):
+                    if claimed_fresh:
+                        # This can only be the empty origin-scoped marker
+                        # claimed before consulting a legacy marker.  Do
+                        # not strand it on a refusal: an empty marker is a
+                        # crash window that a later retry is allowed to
+                        # heal without re-checking legacy state.
+                        try:
+                            os.unlink(marker)
+                        except OSError:
+                            pass
                     raise IdempotencyOriginConflict(
                         prior["delivery_id"], existing_origin, origin)
+                existing_digest = self._job_request_digest(existing)
+                if not secrets.compare_digest(existing_digest,
+                                              request_sha256):
+                    if claimed_fresh:
+                        # Same rolling-upgrade case as above.  Leaving our
+                        # fresh marker empty would let the *next* retry
+                        # skip the legacy lookup and mint a duplicate.
+                        try:
+                            os.unlink(marker)
+                        except OSError:
+                            pass
+                    raise IdempotencyContentConflict(
+                        prior["delivery_id"], existing_digest,
+                        request_sha256)
                 if existing.get("state") != "refused":
                     if claimed_fresh and marker != self._idem_path(
                             convoy_id, node_id, idempotency_key,
@@ -518,7 +798,8 @@ class HostStore:
                         # work, the exact annihilation class this scoping
                         # exists to prevent. Fill it to name the inherited
                         # record first.
-                        self._fill_marker(marker, existing["delivery_id"])
+                        self._fill_marker(
+                            marker, existing["delivery_id"], existing_digest)
                     return existing, False
                 # A REFUSED record is a delivery this host declined and
                 # never made. It must not wedge its key forever: after a
@@ -539,6 +820,10 @@ class HostStore:
             "convoy_id": convoy_id,
             "operation": operation,
             "arguments": arguments or {},
+            # The canonical semantic request bound to this key. A retry
+            # may refresh delivery metadata (request id/deadline) but may
+            # never substitute different work and receive the old 200.
+            "request_sha256": request_sha256,
             # The runtime the caller addressed (A-22), persisted so the
             # DISPATCHER can re-check it at execution time -- the queue
             # spans node restarts, which is exactly when it changes.
@@ -575,16 +860,35 @@ class HostStore:
             "node_job_id": None,
             "verdict_source": None,
             "observed_at": None,
+            # Terminal evidence is acknowledged explicitly by a future
+            # controller/job API.  In particular, an indeterminate result
+            # is the only proof an operation MAY have executed and is not
+            # retention-eligible until that proof has been observed.
+            "terminal_at": None,
+            "outcome_acknowledged_at": None,
             "created": now,
             "updated": now,
         }
+        if durable_timing is not None:
+            job.update(durable_timing)
         platform_mod._write_private(
             self._job_path(delivery_id),
             json.dumps(job, indent=1, sort_keys=True) + "\n")
-        platform_mod._write_private(
-            marker,
-            json.dumps({"delivery_id": delivery_id, "created": now},
-                       sort_keys=True) + "\n")
+        self._fill_marker(marker, delivery_id, request_sha256)
+        if durable_timing is not None:
+            supplied_monotonic = accepted_timing.get(
+                "accepted_deadline_monotonic")
+            try:
+                supplied_monotonic = float(supplied_monotonic)
+            except (TypeError, ValueError):
+                supplied_monotonic = None
+            if (supplied_monotonic is not None
+                    and math.isfinite(supplied_monotonic)):
+                self._monotonic_deadlines[delivery_id] = supplied_monotonic
+            else:
+                self._monotonic_deadlines[delivery_id] = (
+                    self._monotonic()
+                    + durable_timing["accepted_remaining_s"])
         self.audit("hoststore", "job_created",
                    {"delivery_id": delivery_id,
                     "idempotency_key": idempotency_key,
@@ -613,6 +917,92 @@ class HostStore:
         except (OSError, ValueError):
             return None
 
+    def _restore_expiry_anchors(self):
+        """Anchor durable wall expiries to this process's monotonic clock.
+
+        Monotonic timestamps cannot survive a restart because their epoch
+        is local to a boot/process.  At startup we therefore compute the
+        remaining duration from the durable target-accepted wall expiry,
+        cap it at the originally accepted duration (so a clock rollback
+        cannot mint *more* than the original budget), and start a fresh
+        local monotonic countdown.  job_timing additionally treats a
+        material wall rollback before accepted_at as expired.
+        """
+        try:
+            wall_now = float(self._now())
+            mono_now = float(self._monotonic())
+        except (TypeError, ValueError):
+            return
+        if not math.isfinite(wall_now) or not math.isfinite(mono_now):
+            return
+        for job in self.jobs():
+            delivery_id = job.get("delivery_id")
+            try:
+                expires = float(job.get("accepted_expires_unix"))
+                accepted_remaining = float(job.get("accepted_remaining_s"))
+            except (TypeError, ValueError):
+                continue
+            if (not delivery_id or not math.isfinite(expires)
+                    or not math.isfinite(accepted_remaining)):
+                continue
+            remaining = min(expires - wall_now, accepted_remaining)
+            self._monotonic_deadlines[delivery_id] = (
+                mono_now + max(0.0, remaining))
+
+    def job_timing(self, job_or_delivery_id, now=None, monotonic_now=None):
+        """Return the target-local delivery budget for a durable job.
+
+        ``bounded`` is False for local/legacy jobs with no accepted
+        envelope timing.  A bounded job is expired when EITHER its
+        durable wall deadline or its process-local monotonic deadline is
+        exhausted.  This is the conservative direction under clock
+        changes and provides a single integration point for dispatchers.
+        """
+        job = (job_or_delivery_id if isinstance(job_or_delivery_id, dict)
+               else self.get_job(job_or_delivery_id))
+        if job is None:
+            return {"bounded": False, "expired": True, "remaining_s": 0.0,
+                    "reason": "unknown_job"}
+        if "accepted_expires_unix" not in job:
+            return {"bounded": False, "expired": False,
+                    "remaining_s": None, "reason": None}
+        try:
+            wall_now = float(self._now() if now is None else now)
+            mono_now = float(self._monotonic() if monotonic_now is None
+                             else monotonic_now)
+            expires = float(job.get("accepted_expires_unix"))
+            accepted_at = float(job.get("accepted_at_unix"))
+            accepted_remaining = float(job.get("accepted_remaining_s"))
+        except (TypeError, ValueError):
+            return {"bounded": True, "expired": True, "remaining_s": 0.0,
+                    "reason": "timing_corrupt"}
+        if not all(math.isfinite(v) for v in (
+                wall_now, mono_now, expires, accepted_at,
+                accepted_remaining)):
+            return {"bounded": True, "expired": True, "remaining_s": 0.0,
+                    "reason": "timing_corrupt"}
+        if wall_now < accepted_at - MAX_CLOCK_ROLLBACK_S:
+            return {"bounded": True, "expired": True, "remaining_s": 0.0,
+                    "reason": "clock_rollback"}
+
+        delivery_id = job.get("delivery_id")
+        mono_deadline = self._monotonic_deadlines.get(delivery_id)
+        if mono_deadline is None:
+            # Lazy fallback for a file that appeared after startup.  Cap
+            # by the originally accepted duration for rollback safety.
+            initial = min(expires - wall_now, accepted_remaining)
+            mono_deadline = mono_now + max(0.0, initial)
+            if delivery_id:
+                self._monotonic_deadlines[delivery_id] = mono_deadline
+        remaining = min(expires - wall_now, mono_deadline - mono_now,
+                        accepted_remaining)
+        remaining = max(0.0, remaining)
+        return {"bounded": True, "expired": remaining <= 0.0,
+                "remaining_s": remaining,
+                "reason": "deadline_exceeded" if remaining <= 0.0 else None,
+                "accepted_expires_unix": expires,
+                "request_deadline_unix": job.get("request_deadline_unix")}
+
     def claim_for_dispatch(self, delivery_id):
         """Compare-and-set queued -> dispatching: the dispatcher's CLAIM.
 
@@ -631,6 +1021,27 @@ class HostStore:
         """
         job = self.get_job(delivery_id)
         if job is None or job.get("state") != "queued":
+            return None
+        timing = self.job_timing(job)
+        if timing["expired"]:
+            evidence = {
+                "reason": timing.get("reason") or "deadline_exceeded",
+                "detail": "the accepted delivery budget expired before "
+                          "the operation reached the node",
+                "accepted_expires_unix": timing.get(
+                    "accepted_expires_unix",
+                    job.get("accepted_expires_unix")),
+                "request_deadline_unix": timing.get(
+                    "request_deadline_unix",
+                    job.get("request_deadline_unix")),
+            }
+            self.mark_refused(delivery_id, evidence)
+            try:
+                self.audit("hoststore", "job_expired_before_dispatch",
+                           {"delivery_id": delivery_id,
+                            "reason": evidence["reason"]})
+            except OSError:
+                pass
             return None
         return self._apply_state(delivery_id, "dispatching",
                                  host_originated=True)
@@ -754,6 +1165,90 @@ class HostStore:
                                  result=result, verdict_source="node_sync",
                                  observed_at=observed_at)
 
+    def record_host_result(self, delivery_id, ok, observed_at, result=None):
+        """Record a verdict authored by the reviewed host subprocess facade.
+
+        This is deliberately narrower than a generic "host may succeed"
+        escape hatch: only the reviewed host-native operation names may use
+        it, and only while their durable delivery is in the dispatching claim
+        state. Ordinary TD relays remain subject to A-15's node provenance.
+        """
+        if not isinstance(ok, bool):
+            raise ValueError("a host operation verdict requires boolean ok")
+        if not observed_at:
+            raise ValueError(
+                "a host operation result must carry observed_at")
+        job = self.get_job(delivery_id)
+        if job is None:
+            raise KeyError(delivery_id)
+        if (job.get("state") != "dispatching"
+                or job.get("operation") not in _HOST_VERDICT_OPERATIONS):
+            raise ValueError(
+                "host operation verdict requires a claimed reviewed "
+                "host-operation delivery")
+        return self._apply_state(
+            delivery_id, "succeeded" if ok else "failed", result=result,
+            verdict_source="host_operation", observed_at=observed_at)
+
+    def reconcile_lifecycle_result(self, delivery_id, ok, observed_at,
+                                   result=None):
+        """Repair only a lifecycle delivery proven by its private ledger.
+
+        The load sweep must classify a prior process's ``dispatching`` claim
+        as indeterminate: at that point HostStore alone cannot know whether
+        execution ran.  Exact-node lifecycle has a second, crash-safe attempt
+        ledger whose committed terminal result is stronger evidence.  This
+        method is the deliberately narrow bridge between those authorities;
+        it is not a generic terminal-state rewrite API.
+        """
+        if not isinstance(ok, bool) or not observed_at:
+            raise ValueError(
+                "a recovered lifecycle verdict requires boolean ok and "
+                "observed_at")
+        job = self.get_job(delivery_id)
+        if job is None:
+            raise KeyError(delivery_id)
+        if job.get("operation") not in (
+                "convoy_start_node", "convoy_restart_node"):
+            raise ValueError(
+                "only reviewed lifecycle deliveries may be reconciled")
+        if (not isinstance(result, dict)
+                or result.get("operation_id") != delivery_id
+                or result.get("capability") != "host.td-lifecycle/v1"
+                or result.get("ok") is not ok
+                or result.get("node_id") != job.get("node_id")):
+            raise ValueError(
+                "recovered lifecycle result is not bound to this delivery")
+        state = job.get("state")
+        desired = "succeeded" if ok else "failed"
+        if state == desired:
+            if (job.get("verdict_source") in (
+                    "host_operation", "host_operation_recovery")
+                    and job.get("result") == result):
+                return job
+            raise ValueError("existing lifecycle terminal evidence differs")
+        if state != "indeterminate":
+            raise ValueError(
+                "lifecycle recovery requires an indeterminate delivery")
+        evidence = job.get("result")
+        reason = evidence.get("reason") if isinstance(evidence, dict) else None
+        if reason not in (
+                "host_exited_mid_dispatch", "claim_stranded",
+                "host_operation_result_recording_failed"):
+            raise ValueError(
+                "indeterminate evidence is not an interrupted host dispatch")
+        updated = self._apply_state(
+            delivery_id, desired, result=result,
+            verdict_source="host_operation_recovery",
+            observed_at=observed_at)
+        try:
+            self.audit("hoststore", "lifecycle_result_reconciled", {
+                "delivery_id": delivery_id, "state": desired,
+                "prior_reason": reason})
+        except OSError:
+            pass
+        return updated
+
     def mark_indeterminate(self, delivery_id, evidence):
         """Host-ORIGINATED terminal outcome: the operation MAY have run
         and the node cannot be observed. The one execution-ambiguous
@@ -822,6 +1317,34 @@ class HostStore:
             json.dumps(job, indent=1, sort_keys=True) + "\n")
         return job
 
+    def acknowledge_outcome(self, delivery_id, acknowledged_at=None):
+        """Record that a terminal outcome was observed by its controller.
+
+        This is evidence metadata, not an execution verdict, and cannot
+        alter state/result/provenance.  It gives retention a safe answer
+        to "has anybody seen the only may-have-run proof?".  The host API
+        must perform job-read authorization before calling this method.
+        """
+        job = self.get_job(delivery_id)
+        if job is None:
+            raise KeyError(delivery_id)
+        if job.get("state") not in TERMINAL_STATES:
+            raise ValueError("only a terminal outcome can be acknowledged")
+        at = self._now() if acknowledged_at is None else acknowledged_at
+        try:
+            at = float(at)
+        except (TypeError, ValueError):
+            raise ValueError("acknowledged_at must be numeric")
+        if not math.isfinite(at):
+            raise ValueError("acknowledged_at must be finite")
+        if job.get("outcome_acknowledged_at") is None:
+            job["outcome_acknowledged_at"] = at
+            job["updated"] = self._now()
+            platform_mod._write_private(
+                self._job_path(delivery_id),
+                json.dumps(job, indent=1, sort_keys=True) + "\n")
+        return job
+
     def _apply_state(self, delivery_id, state, result=None,
                      verdict_source=None, observed_at=None, node_job_id=None,
                      host_originated=False):
@@ -832,30 +1355,30 @@ class HostStore:
             # cut of this guard fired only when host_originated=True was
             # PASSED, so simply OMITTING the flag let a host-side writer
             # originate a terminal 'succeeded' with verdict_source=host
-            # and no node provenance (measured 2026-08-02). An execution
+            # and no executor provenance (measured 2026-08-02). An execution
             # verdict (running/succeeded/failed) may land only with the
-            # provenance that proves a node produced it: a node
-            # verdict_source, observed_at, and -- for the poll path,
-            # which mirrors a node-side job -- the node's own job id.
-            # record_node_verdict / record_sync_result validate the same
-            # things at their own doors; this is the belt at the ONLY
-            # write that can rest a record in one of these states.
+            # provenance that proves the node or reviewed host subprocess
+            # produced it: an executor verdict_source, observed_at, and --
+            # for the poll path -- the node's own job id.  The three public
+            # record_* methods validate the same things at their own doors;
+            # this is the belt at the ONLY write that can rest a record in one
+            # of these states.
             if host_originated:
                 raise ValueError(
                     f"A-15: the host may not originate {state!r} -- that "
-                    f"is an EXECUTION verdict and only a node can author "
-                    f"one (host-originable: "
+                    f"is an EXECUTION verdict and only the executor-specific "
+                    f"recording path can author one (coordination-originable: "
                     f"{list(_HOST_ORIGINABLE_STATES)})")
-            if verdict_source not in _NODE_VERDICT_SOURCES:
+            if verdict_source not in _EXECUTION_VERDICT_SOURCES:
                 raise ValueError(
                     f"A-15: {state!r} is an execution verdict and must "
-                    f"carry a node verdict_source "
-                    f"({list(_NODE_VERDICT_SOURCES)}); got "
+                    f"carry an executor verdict_source "
+                    f"({list(_EXECUTION_VERDICT_SOURCES)}); got "
                     f"{verdict_source!r}")
             if not observed_at:
                 raise ValueError(
                     f"A-15: {state!r} must carry observed_at -- when the "
-                    f"node's answer was seen is its provenance")
+                    f"executor's answer was seen is its provenance")
             if verdict_source == "node_poll" and not node_job_id:
                 raise ValueError(
                     f"A-15: a polled {state!r} must carry node_job_id -- "
@@ -863,7 +1386,21 @@ class HostStore:
         job = self.get_job(delivery_id)
         if job is None:
             raise KeyError(delivery_id)
+        prior_state = job.get("state")
+        prior_result = job.get("result")
+        effective_result = result if result is not None else prior_result
+        terminal_changed = (state in TERMINAL_STATES and (
+            prior_state != state or effective_result != prior_result))
         job["state"] = state
+        if state in TERMINAL_STATES and (
+                job.get("terminal_at") is None or terminal_changed):
+            job["terminal_at"] = self._now()
+        if prior_state in TERMINAL_STATES and terminal_changed:
+            # An acknowledgement belongs to the exact terminal evidence
+            # the controller observed.  A later node-authored correction
+            # (done -> error, or a changed result) is new evidence and
+            # must be acknowledged again before retention may remove it.
+            job["outcome_acknowledged_at"] = None
         if result is not None:
             job["result"] = result
         if verdict_source is not None:
@@ -971,9 +1508,11 @@ class HostStore:
                 paths.append(legacy)
         return paths
 
-    def reap(self, retention_s, now=None, max_delete=None):
-        """Delete TERMINAL records older than retention_s, and the
-        idempotency markers that name them. Returns
+    def reap(self, retention_s, now=None, max_delete=None, on_reap=None):
+        """Delete retention-eligible TERMINAL records older than
+        retention_s, and the idempotency markers that name them. An
+        unacknowledged ``indeterminate`` record is never eligible because
+        it is the sole may-have-run proof. Returns
         {jobs, markers, listing_failed}.
 
         NOTHING ELSE in this store ever deletes -- without this the jobs
@@ -993,6 +1532,8 @@ class HostStore:
         unreferenced job the next pass retries, never a filled marker
         pointing at a deleted record.
         """
+        if on_reap is not None and not callable(on_reap):
+            raise ValueError("on_reap must be callable")
         now = self._now() if now is None else now
         cutoff = now - retention_s
         reaped_jobs = reaped_markers = 0
@@ -1007,6 +1548,14 @@ class HostStore:
             if job is None:
                 continue    # gone or unreadable; not ours to force
             if job.get("state") not in TERMINAL_STATES:
+                continue
+            # `indeterminate` is the only durable proof that a command may
+            # have executed.  Deleting it merely because its controller
+            # was offline for the retention window makes a blind retry
+            # possible.  It becomes retention-eligible only after the
+            # controller explicitly acknowledges seeing that outcome.
+            if (job.get("state") == "indeterminate"
+                    and job.get("outcome_acknowledged_at") is None):
                 continue
             # `x or fallback` is the falsy-zero trap on a timestamp: a
             # legitimately small `updated` would fall through to created.
@@ -1037,6 +1586,14 @@ class HostStore:
             try:
                 os.unlink(self._job_path(delivery_id))
                 reaped_jobs += 1
+                if on_reap is not None:
+                    try:
+                        on_reap(dict(job))
+                    except Exception:
+                        # Retention already committed. Cleanup callbacks are
+                        # best-effort and may be retried by their own index
+                        # reconciliation; they must not kill the drain loop.
+                        pass
             except FileNotFoundError:
                 pass
             except OSError:

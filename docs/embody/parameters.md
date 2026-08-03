@@ -5,7 +5,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 <!-- GENERATED FILE - do not edit by hand. Regenerate with: python dev/embody/tools/generate_parameters_doc.py -->
 
 !!! info "Auto-generated from `Embody.tdn`"
-    This page is generated from the externalized Embody COMP (`dev/embody/Embody.tdn`), the source of truth for its parameters, so it stays in sync with the actual component. **121 parameters** across 10 pages.
+    This page is generated from the externalized Embody COMP (`dev/embody/Embody.tdn`), the source of truth for its parameters, so it stays in sync with the actual component. **137 parameters** across 9 pages.
 
 ## Embody
 
@@ -90,18 +90,25 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| <a class="par-anchor" id="par-convoyenable" href="#par-convoyenable">Enable Convoy (`Convoyenable`)</a> | Toggle | - | Register this project as a Convoy node with this machine's local host app, letting approved local controllers relay operations (queries, test runs, project saves) into this project through Envoy. This build is loopback-only: nothing leaves this machine, and only operations in the host app's audited registry can be relayed. The first enable creates the project's convoy identity and asks for confirmation; a future LAN-enabled phase will ask again before any wider exposure. |
+| <a class="par-anchor" id="par-convoyenable" href="#par-convoyenable">Enable Convoy (`Convoyenable`)</a> | Toggle | - | Joins this Embody node to other Convoy-enabled nodes on the same trusted LAN and lets those nodes discover, inspect, and control it -- queries, test runs, project saves, and more -- through Envoy. Enabling this opens an authenticated LAN listener and starts automatic discovery and reconnect. Only enable it on a network you trust; never on guest, public, or mixed-trust networks. Arbitrary TD Python and full shell stay OFF until you enable them locally on this machine. The first enable creates this project's convoy identity and asks for confirmation. |
 | <a class="par-anchor" id="par-convoyid" href="#par-convoyid">Convoy ID (`Convoyid`)</a> | Str (read-only) | - | The convoy this project belongs to (from .embody/project.json). Created on the first explicit enable; empty until then. An identifier, not a credential. |
 | <a class="par-anchor" id="par-convoystatus" href="#par-convoystatus">Convoy Status (`Convoystatus`)</a> | Str (read-only) | `Disabled` | Live registration state with the local Convoy host app. 'No Convoy host app' is a normal resting state, not an error -- the host app simply is not installed or running on this machine. |
-
-## Logs
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| <a class="par-anchor" id="par-verbose" href="#par-verbose">Verbose (Debug) (`Verbose`)</a> | Toggle | - | Enables debug-level logging. When off, only INFO and above are logged. Enable for detailed diagnostics when troubleshooting issues. |
-| <a class="par-anchor" id="par-print" href="#par-print">Print to Textport (`Print`)</a> | Toggle | On | Echoes all log messages to the TouchDesigner textport. Useful for monitoring Embody activity in real-time. |
-| <a class="par-anchor" id="par-logtofile" href="#par-logtofile">Log to File (`Logtofile`)</a> | Toggle | On | Writes log messages to a file on disk. Files are saved to the Log Folder with automatic rotation at 10 MB. |
-| <a class="par-anchor" id="par-logfolder" href="#par-logfolder">Log Folder (`Logfolder`)</a> | Folder | `logs` | Folder where log files are saved. Defaults to dev/logs/ in the project directory. Files are named <project>_YYMMDD.log. |
+| <a class="par-anchor" id="par-convoyhoststatus" href="#par-convoyhoststatus">Host App (`Convoyhoststatus`)</a> | Str (read-only) | `Not installed` | Whether this machine's Convoy host app is installed and running. The host app is a small background program OUTSIDE TouchDesigner, so a node stays reachable while TD is closed. One per LOGGED-IN USER, not one per machine. |
+| <a class="par-anchor" id="par-convoyinstallhost" href="#par-convoyinstallhost">Install or Update Host App (`Convoyinstallhost`)</a> | Pulse | - | Install the Convoy host app for YOUR user account, and register it to start when you log in -- whether or not TouchDesigner is open. Asks for confirmation first. Safe to run again: it is also the repair and upgrade path. The program is unsigned and lives in your user directory, so security software may flag it. |
+| <a class="par-anchor" id="par-convoystarthost" href="#par-convoystarthost">Start Host App (`Convoystarthost`)</a> | Pulse | - | Start the installed host app now, without waiting for the next login. |
+| <a class="par-anchor" id="par-convoystophost" href="#par-convoystophost">Stop Host App (`Convoystophost`)</a> | Pulse | - | Stop the host app and keep it stopped. This disables the supervisor first -- otherwise it would restart within a minute and the button would look broken. Jobs already queued stay queued. Use Start Host App to resume. |
+| <a class="par-anchor" id="par-convoyuninstallhost" href="#par-convoyuninstallhost">Uninstall Host App (`Convoyuninstallhost`)</a> | Pulse | - | Remove the host app and its login registration. Shows you exactly what will be removed and what will be KEPT before doing anything -- this machine's host identity and its job history are kept, so re-installing later rejoins the same convoy rather than becoming a new host. |
+| <a class="par-anchor" id="par-convoynodename" href="#par-convoynodename">Node Name (`Convoynodename`)</a> | Str | `=__import__('socket').gethostname() + ' / ' + project.name.rsplit('.', 1)[0]` | Display name for this node in Convoy. Defaults to '<hostname> / <toe filename>'. Editing it sets a persistent override; routing always uses the stable node identity, never this name. |
+| <a class="par-anchor" id="par-convoyremotewake" href="#par-convoyremotewake">Remote Wake (`Convoyremotewake`)</a> | Toggle | On | Allows a real remote TouchDesigner operation to temporarily wake Convoy's command service while this node is in Perform Mode. Discovery, status, ping, and controller queries never wake it. After remote work finishes, the node returns to its previous Perform state following the idle grace period. |
+| <a class="par-anchor" id="par-convoywakegrace" href="#par-convoywakegrace">Remote Wake Idle Grace (`Convoywakegrace`)</a> | Float | `60` | Seconds after the final remote wake finishes before Convoy restores this node's previous Perform Mode state. |
+| <a class="par-anchor" id="par-convoyallowtdpython" href="#par-convoyallowtdpython">Allow Execute TD Python (`Convoyallowtdpython`)</a> | Toggle | - | Allows Convoy controllers to execute arbitrary Python inside this TouchDesigner process. Python can access the filesystem, network, credentials available to TouchDesigner, and operating-system process APIs, so enabling this is effectively host-user code execution even when Allow Full Shell is off. Keep it off unless explicitly needed. This setting can only be enabled locally. |
+| <a class="par-anchor" id="par-convoyallowfullshell" href="#par-convoyallowfullshell">Allow Full Shell (`Convoyallowfullshell`)</a> | Toggle | - | Allows Convoy controllers to use Convoy's purpose-built interface for arbitrary operating-system commands as the current user. This can change or delete files, install software, or expose secrets. Structured Git and GitHub CLI tools do not require this option. Turning it off does not sandbox arbitrary TouchDesigner Python if Allow Execute TD Python is on. This setting applies to every Convoy node on this computer and can only be enabled locally. |
+| <a class="par-anchor" id="par-convoyartifactquota" href="#par-convoyartifactquota">Artifact Quota (MB) (`Convoyartifactquota`)</a> | Int | `1024` | Maximum disk space (MB) this computer may use for temporary Convoy artifacts: screenshots, transferred files, large tool results, command output, and local client-readable copies. When the limit is reached, Convoy removes the least-recently-used unpinned artifacts first. Active transfers, artifacts required by running or unacknowledged jobs, and files you explicitly saved are not removed. This setting applies to all Convoy nodes on this computer. |
+| <a class="par-anchor" id="par-convoynodes" href="#par-convoynodes">Convoy Nodes (`Convoynodes`)</a> | Sequence | - | - |
+| <a class="par-anchor" id="par-nodename" href="#par-nodename">Node Name (`Nodename`)</a> | Str (read-only) | - | Display name of the node. |
+| <a class="par-anchor" id="par-ipaddress" href="#par-ipaddress">IP Address (`Ipaddress`)</a> | Str (read-only) | - | Current LAN endpoint. |
+| <a class="par-anchor" id="par-nodestatus" href="#par-nodestatus">Status (`Nodestatus`)</a> | Str (read-only) | - | Node and connection status; notes an Embody version mismatch only when relevant. |
+| <a class="par-anchor" id="par-lastseen" href="#par-lastseen">Last Seen (`Lastseen`)</a> | Str (read-only) | - | How recently the node was seen. |
 
 ## UI
 
@@ -145,7 +152,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 | <a class="par-anchor" id="par-shortcuttagger" href="#par-shortcuttagger">Tagger Double-Tap Key (`Shortcuttagger`)</a> | Menu | `lctrl` | Modifier key that opens the tagger for the operator under the cursor when double-tapped (two presses within half a second). Entries are physical keys and adapt per platform: macOS offers Left Ctrl plus left/right Cmd (Apple keyboards have no right Ctrl); Windows/Linux offers left/right Ctrl (no Cmd key). A choice a platform's keyboard lacks falls back to its closest key -- the saved value is never rewritten, so it round-trips between platforms intact. Off disables the tagger shortcut. |
 | <a class="par-anchor" id="par-resetshortcuts" href="#par-resetshortcuts">Reset Shortcuts to Defaults (`Resetshortcuts`)</a> | Pulse | - | Restore all keyboard shortcuts (and the tagger double-tap key) to factory defaults. |
 
-## Advanced
+## Adv
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -161,13 +168,17 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 | <a class="par-anchor" id="par-toxdropexpr" href="#par-toxdropexpr">Dropped .tox Expression (`Toxdropexpr`)</a> | Menu | `ask` | How to handle the default expression TouchDesigner writes into a COMP's External .tox when a .tox is dragged in (me.parent().fileFolder + '/' + ...). Ask: prompt when detected (the dialog's Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody's own descendants are always cleaned regardless. Options: `Ask`, `Always Clean`, `Always Ignore`. |
 | <a class="par-anchor" id="par-tdndatsafety" href="#par-tdndatsafety">Content Safety (`Tdndatsafety`)</a> | Menu | `ask` | What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk. Options: `Ask Each Save`, `Always Externalize`, `Never Ask`. |
 | <a class="par-anchor" id="par-showbuiltinpars" href="#par-showbuiltinpars">Show Built-in Pars (`Showbuiltinpars`)</a> | Toggle | - | Show TouchDesigner's built-in parameter pages (Layout, Panel, Look, Children, Drag/Drop, Extensions, Common) alongside Embody's pages in this dialog. Off (default) filters the dialog to Embody's pages only. The built-in pages remain fully functional either way -- this only controls dialog visibility, e.g. turn it on to reach the Common page's Global OP Shortcut. |
+| <a class="par-anchor" id="par-verbose" href="#par-verbose">Verbose (Debug) (`Verbose`)</a> | Toggle | - | Enables debug-level logging. When off, only INFO and above are logged. Enable for detailed diagnostics when troubleshooting issues. |
+| <a class="par-anchor" id="par-print" href="#par-print">Print to Textport (`Print`)</a> | Toggle | On | Echoes all log messages to the TouchDesigner textport. Useful for monitoring Embody activity in real-time. |
+| <a class="par-anchor" id="par-logtofile" href="#par-logtofile">Log to File (`Logtofile`)</a> | Toggle | On | Writes log messages to a file on disk. Files are saved to the Log Folder with automatic rotation at 10 MB. |
+| <a class="par-anchor" id="par-logfolder" href="#par-logfolder">Log Folder (`Logfolder`)</a> | Folder | `logs` | Folder where log files are saved. Defaults to dev/logs/ in the project directory. Files are named <project>_YYMMDD.log. |
 | <a class="par-anchor" id="par-uninstall" href="#par-uninstall">`Uninstall`</a> | Pulse | - | Removes Embody from this project: deletes Embody-generated config (CLAUDE.md / AGENTS.md / .claude / .cursor / ...), Embody's .venv, and .embody/ state; strips only Embody's block from shared files (.gitignore, .gitattributes, .mcp.json); un-sets the .tdn git diff driver. Your own files, externalized .tox / .tdn / .py, and the Embody COMP are NOT removed. Asks for confirmation first. |
 
 ## About
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| <a class="par-anchor" id="par-version" href="#par-version">`Version`</a> | Str (read-only) | `6.0.171` | Embody version string (read-only). |
+| <a class="par-anchor" id="par-version" href="#par-version">`Version`</a> | Str (read-only) | `6.0.180` | Embody version string (read-only). |
 | <a class="par-anchor" id="par-touchbuild" href="#par-touchbuild">Touch Build (`Touchbuild`)</a> | Str (read-only) | `2025.33070` | TouchDesigner build number this version was developed on (read-only). |
 | <a class="par-anchor" id="par-author" href="#par-author">`Author`</a> | Str (read-only) | `Dylan Roscover` | Embody author (read-only). |
 | <a class="par-anchor" id="par-build" href="#par-build">Build Number (`Build`)</a> | Int (read-only) | - | Embody build number (read-only). Incremented with each release. |

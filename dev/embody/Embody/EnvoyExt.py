@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -3458,6 +3459,32 @@ class EnvoyMCPServer:
             return self._execute_in_td('save_project',
                                        {'idempotency_key': idempotency_key})
 
+        # Host-private lifecycle helpers.  They are visible in the local MCP
+        # manifest because FastMCP has no hidden-tool concept, but calls are
+        # accepted only from Convoy's dedicated loopback session and Convoy's
+        # LAN operation registry does not expose these names.  All TD access
+        # still crosses _execute_in_td onto the main thread.
+
+        @self.mcp.tool()
+        def convoy_lifecycle_state() -> dict:
+            """Host-private clean/unsaved snapshot for exact-node restart."""
+            sid, _label = _SESSION_CTX.get()
+            if sid != 'convoy-lifecycle':
+                return {'error': 'Convoy lifecycle host session required'}
+            return self._execute_in_td('convoy_lifecycle_state', {})
+
+        @self.mcp.tool()
+        def convoy_lifecycle_quit(expected_dirty_revision: str = None,
+                                  discard: bool = False) -> dict:
+            """Host-private CAS-guarded quit for exact-node restart."""
+            sid, _label = _SESSION_CTX.get()
+            if sid != 'convoy-lifecycle':
+                return {'error': 'Convoy lifecycle host session required'}
+            return self._execute_in_td('convoy_lifecycle_quit', {
+                'expected_dirty_revision': expected_dirty_revision,
+                'discard': discard,
+            })
+
         # --- Batch Operations ---
 
         @self.mcp.tool()
@@ -4871,14 +4898,21 @@ class EnvoyExt:
         sys._envoy_import_gate_ok = True
         self._continueStart(git_root)
 
+    @staticmethod
+    def _shouldConfigureAIClient(client) -> bool:
+        """Only the explicit ``none`` token selects internal-only startup."""
+        return str(client or '').strip().lower() != 'none'
+
     def _continueStart(self, git_root) -> None:
         """Finish Envoy startup once the Python environment is confirmed ready.
 
         Runs on the main thread -- either inline from Start() after the session
         import-gate flag is already warm, from _pollImportGate(), or from
         _pollBootstrap() after a background dependency install. Allocates the
-        port, spawns the server worker via the Thread Manager, and writes the
-        MCP / git config files.
+        port and spawns the server worker via the Thread Manager. MCP / git
+        client config is written only when Aiclient is not ``none``; Convoy-only
+        mode uses the same loopback command substrate without configuring or
+        launching an AI coding client.
         """
         base_port = self.ownerComp.par.Envoyport.eval()
         port = self._findAvailablePort(base_port)
@@ -4994,15 +5028,15 @@ class EnvoyExt:
 
         # H1: status stays 'Starting...' (set above) until the worker confirms
         # the socket is bound; _pollStartup flips it to 'Running on port N' or
-        # escalates on timeout/failure. Config files below are written
-        # regardless -- the bridge retries until the server is reachable.
+        # escalates on timeout/failure. When an AI client is selected its config
+        # is written below; Convoy-only startup deliberately skips that work.
         self._startup_deadline = time.time() + 10.0
         run(f"op({self.ownerComp.path!r}).ext.Envoy._pollStartup({gen})",
             fromOP=self.ownerComp, delayFrames=6)
 
-        # Auto-configure project files.
-        # Each step is independent -- one failure must not block the others.
-        # MCP + AI config: always co-located, honoring Aiprojectroot.
+        # Auto-configure project files only for a selected AI client. Each step
+        # is independent -- one failure must not block the others. MCP + AI
+        # config stays co-located, honoring Aiprojectroot.
         #
         # This is a startup Start: in Advanced mode a config write must NOT pop a
         # modal here (it would block the restore chain), so _startup_config_pass
@@ -5025,20 +5059,30 @@ class EnvoyExt:
                 sys._envoy_repo_root = str(target_dir) if target_dir else None
             except Exception:
                 sys._envoy_repo_root = None
-            self._configureMCPClient(port, target_dir=target_dir)
             try:
-                Embody._upgradeEnvoy()
-            except Exception as e:
-                self._log(f'Could not auto-configure AI client files: {e}', 'WARNING')
+                configure_client = self._shouldConfigureAIClient(
+                    self.ownerComp.par.Aiclient.eval())
+            except Exception:
+                configure_client = True
+            if configure_client:
+                self._configureMCPClient(port, target_dir=target_dir)
+                try:
+                    Embody._upgradeEnvoy()
+                except Exception as e:
+                    self._log(f'Could not auto-configure AI client files: {e}', 'WARNING')
 
-            # Git config: only when a git repo exists. Always lives at the git
-            # root regardless of Aiprojectroot -- .gitignore/.gitattributes are
-            # git's files, not Embody's.
-            if git_root != 'no-git':
-                from pathlib import Path
-                git_path = Path(git_root)
-                self._configureGitignore(git_path)
-                self._configureGitattributes(git_path)
+                # Git config: only when a git repo exists. Always lives at the
+                # git root regardless of Aiprojectroot -- .gitignore and
+                # .gitattributes are git's files, not Embody's.
+                if git_root != 'no-git':
+                    from pathlib import Path
+                    git_path = Path(git_root)
+                    self._configureGitignore(git_path)
+                    self._configureGitattributes(git_path)
+            else:
+                self._log(
+                    'Convoy-only Envoy start: AI client configuration skipped',
+                    'DEBUG')
         finally:
             Embody._startup_config_pass = prior_pass
             # Clear the wizard's batch consent now its deferred-Start writes are
@@ -5271,14 +5315,15 @@ class EnvoyExt:
     def _performModeActive(self) -> bool:
         """True while Embody's Perform Mode is suspending Envoy.
 
-        Single authority: Embody's _performMode property (the live Performmode
-        par) -- the same signal the thread-exit restart hooks consult. Never
-        key off the status string: Stop(), the hooks, and the watchdog itself
-        all overwrite status text. Errors read as False so a broken Embody ext
-        reference can never disable self-healing.
+        Single authority: Embody's narrow ``_envoyPerformMode`` property. It
+        normally follows the live Performmode par, but a valid Convoy wake
+        lease may resume Envoy while every unrelated Embody Perform guard
+        remains active. Never key off the status string: Stop(), the hooks,
+        and the watchdog itself all overwrite status text. Errors read as
+        False so a broken Embody ext reference can never disable self-healing.
         """
         try:
-            return bool(self.ownerComp.ext.Embody._performMode)
+            return bool(self.ownerComp.ext.Embody._envoyPerformMode)
         except Exception:
             return False
 
@@ -6264,6 +6309,9 @@ class EnvoyExt:
             # Testing
             'run_tests': self._run_tests,
             'save_project': self._save_project,
+            # Dedicated Convoy host lifecycle leg (session-gated wrappers).
+            'convoy_lifecycle_state': self._convoy_lifecycle_state,
+            'convoy_lifecycle_quit': self._convoy_lifecycle_quit,
             # Batch
             'batch_operations': self._batch_operations,
         }
@@ -6978,6 +7026,140 @@ class EnvoyExt:
                             raise
             except Exception:
                 pass
+
+    def _convoy_lifecycle_state(self) -> dict:
+        """Main-thread, fail-closed project state used by Convoy restart.
+
+        TouchDesigner exposes ``project.modified`` but Embody's own post-save
+        maintenance can conservatively set it again.  That may refuse a safe
+        restart; it can never authorize a dirty one.  The revision is a CAS
+        token over the only stable facts available from TD: modified state,
+        saved-file identity, and TD's last-save marker.  It contains no path.
+        """
+        try:
+            modified = getattr(project, 'modified', None)
+            if type(modified) is not bool:
+                return {'error': 'TouchDesigner dirty state is unavailable',
+                        'code': 'dirty_state_unknown'}
+            toe_path = os.path.join(str(project.folder), str(project.name))
+            try:
+                stat = os.stat(toe_path)
+                unsaved = False
+                file_facts = [int(stat.st_size),
+                              int(getattr(stat, 'st_mtime_ns',
+                                  int(stat.st_mtime * 1000000000)))]
+            except (OSError, ValueError, TypeError):
+                unsaved = True
+                file_facts = [0, 0]
+            facts = {
+                'v': 1,
+                'modified': modified,
+                'unsaved': unsaved,
+                'size': file_facts[0],
+                'mtime_ns': file_facts[1],
+                'save_time': str(getattr(project, 'saveTime', '') or ''),
+            }
+            encoded = json.dumps(
+                facts, sort_keys=True, separators=(',', ':'),
+                ensure_ascii=True).encode('utf-8')
+            revision = hashlib.sha256(encoded).hexdigest()
+            return {'ok': True, 'dirty': modified, 'unsaved': unsaved,
+                    'revision': revision}
+        except Exception as e:
+            self._log('Convoy lifecycle state failed: %s' % type(e).__name__,
+                      'ERROR')
+            return {'error': 'TouchDesigner dirty state is unavailable',
+                    'code': 'dirty_state_unknown'}
+
+    def _convoy_lifecycle_quit(self, expected_dirty_revision=None,
+                               discard=False) -> dict:
+        """Schedule an exact-process quit after a final clean-state CAS.
+
+        The host already verified PID birth, executable, user/session, node,
+        and runtime.  This final in-process check prevents a late edit between
+        the host's dirty read and the quit commit.  ``force=True`` suppresses
+        TD's modal save prompt only after that clean proof, or after the local
+        destructive policy explicitly authorized discard.
+        """
+        if type(discard) is not bool:
+            return {'error': 'discard must be boolean',
+                    'code': 'invalid_arguments'}
+        state = self._convoy_lifecycle_state()
+        if state.get('ok') is not True:
+            return state
+        if not discard:
+            if (not isinstance(expected_dirty_revision, str)
+                    or not expected_dirty_revision):
+                return {'error': 'expected dirty revision is required',
+                        'code': 'invalid_arguments'}
+            if expected_dirty_revision != state.get('revision'):
+                return {'error': 'project changed before quit',
+                        'code': 'dirty_revision_changed'}
+            if state.get('dirty') or state.get('unsaved'):
+                return {'error': 'project is dirty or unsaved',
+                        'code': 'project_dirty'}
+        try:
+            # ``project.quit`` must run after the MCP response has had a
+            # chance to leave this process.  Do not schedule a bare quit:
+            # authored state can change during those two frames.  The
+            # delayed callback repeats the clean-state CAS at the actual
+            # destructive boundary and refuses a late edit.
+            callback = (
+                "op(%r).ext.Envoy._convoy_lifecycle_commit_quit(%r, %r)" %
+                (self.ownerComp.path, expected_dirty_revision, discard))
+            run(callback, fromOP=self.ownerComp, delayFrames=2)
+        except Exception as e:
+            self._log('Convoy lifecycle quit scheduling failed: %s' %
+                      type(e).__name__, 'ERROR')
+            return {'error': 'TouchDesigner quit could not be scheduled',
+                    'code': 'quit_failed'}
+        return {'ok': True, 'quitting': True,
+                'dirty_revision': state.get('revision'),
+                'discard': discard}
+
+    def _convoy_lifecycle_commit_quit(self, expected_dirty_revision=None,
+                                      discard=False) -> dict:
+        """Revalidate and quit at the delayed destructive boundary.
+
+        ``_convoy_lifecycle_quit`` necessarily acknowledges before TD exits.
+        This callback therefore performs the same fail-closed state read and
+        revision comparison again, immediately before ``project.quit``.  A
+        refusal is logged and leaves the process running for the host's
+        lifecycle reconciliation path; it never converts uncertainty into a
+        forced discard.
+        """
+        state = self._convoy_lifecycle_state()
+        if state.get('ok') is not True:
+            self._log('Convoy lifecycle quit aborted: dirty state became '
+                      'unavailable', 'ERROR')
+            return state
+        if not discard:
+            if (not isinstance(expected_dirty_revision, str)
+                    or not expected_dirty_revision):
+                result = {'error': 'expected dirty revision is required',
+                          'code': 'invalid_arguments'}
+            elif expected_dirty_revision != state.get('revision'):
+                result = {'error': 'project changed before quit',
+                          'code': 'dirty_revision_changed'}
+            elif state.get('dirty') or state.get('unsaved'):
+                result = {'error': 'project is dirty or unsaved',
+                          'code': 'project_dirty'}
+            else:
+                result = None
+            if result is not None:
+                self._log('Convoy lifecycle quit aborted: %s' %
+                          result['code'], 'WARNING')
+                return result
+        try:
+            project.quit(force=True)
+        except Exception as e:
+            self._log('Convoy lifecycle quit failed: %s' %
+                      type(e).__name__, 'ERROR')
+            return {'error': 'TouchDesigner quit failed',
+                    'code': 'quit_failed'}
+        return {'ok': True, 'quitting': True,
+                'dirty_revision': state.get('revision'),
+                'discard': discard}
 
     def _schedulePollTestCompletion(self):
         """Schedule the test completion poll via run() with a string

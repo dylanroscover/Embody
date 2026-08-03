@@ -100,7 +100,7 @@ nav:
     - Troubleshooting: envoy/troubleshooting.md
   - Convoy:
     - convoy/index.md
-    - Host App: convoy/host-app.md
+    - Setup & Troubleshooting: convoy/host-app.md
   - TDN:
     - tdn/index.md
     - Specification: tdn/specification.md

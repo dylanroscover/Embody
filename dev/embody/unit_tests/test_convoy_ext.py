@@ -5,8 +5,8 @@ NORMAL TIER. Nothing here touches ext.root, the live Convoy parameters, the
 real host app, a socket, or a thread. Three seams make that true:
 
   - ``_client`` is patched to a StubClient that WRAPS the real
-    convoy_client module and replaces only its three network functions
-    (probe / register / unregister). Every pure helper the extension
+    convoy_client module and replaces only its network functions
+    (registration, directory and sibling relay calls). Every pure helper the extension
     depends on -- status_text, backoff_delay, ensure_runtime_id,
     registration_payload -- is therefore the SHIPPING implementation, not
     a mock that could agree with a bug.
@@ -48,10 +48,19 @@ Coverage:
     error; an already-recorded convoy never re-prompts.
 """
 
+import os
+import re
+import time
+import types
+from collections import OrderedDict
+from queue import Queue
+from threading import Event, Lock, Thread
+
 runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
-CONSENT_SCOPE = 'local host app only'
+CONSENT_SCOPE = 'trusted LAN Convoy mesh'
+LEGACY_CONSENT_SCOPE = 'local host app only'
 NODE_ID = 'n' * 32
 HOST_ID = 'h' * 32
 OTHER_HOST_ID = 'x' * 32
@@ -59,12 +68,12 @@ CONVOY_ID = 'cv_' + '0' * 16
 
 
 class StubClient:
-    """The REAL convoy_client with its three network seams replaced.
+    """The REAL convoy_client with its network seams replaced.
 
     Attribute lookups fall through to the live module, so every constant
     and every pure helper under test is the shipping one. Only probe,
-    register and unregister are stubs -- which is exactly the set that
-    would otherwise open a socket.
+    register, unregister, directory and sibling-job functions are stubs --
+    exactly the set that would otherwise open a socket.
     """
 
     def __init__(self, real):
@@ -76,11 +85,52 @@ class StubClient:
                                 'envoy_port': 9870}
         self.unregister_result = {'state': 'unregistered', 'node_id': NODE_ID,
                                   'cleared': True}
+        self.network_result = {
+            'state': 'nodes',
+            'convoy_id': CONVOY_ID,
+            'nodes': [{
+                'node_id': NODE_ID,
+                'host_id': HOST_ID,
+                'convoy_id': CONVOY_ID,
+                'runtime_id': 'rt_test',
+                'node_name': 'render-01 / project',
+                'hostname': 'render-01',
+                'toe_name': 'project.toe',
+                'embody_version': '6.0.178',
+                'touchdesigner_version': '2025.32180',
+                'ip': '127.0.0.1',
+                'status': 'online',
+                'online': True,
+                'enabled': True,
+            }],
+            'truncated': False,
+            'remote_nodes_available': True,
+        }
+        self.sibling_submit_result = {
+            'state': 'accepted', 'ok': True,
+            'target_host_id': HOST_ID, 'convoy_id': CONVOY_ID,
+            'target_node_id': NODE_ID, 'operation': 'query_network',
+            'idempotency_key': 'stub',
+            'job': {'delivery_id': 'cj_stub', 'state': 'queued',
+                    'node_id': NODE_ID, 'operation': 'query_network'},
+        }
+        self.sibling_wait_result = {
+            'state': 'job', 'ok': True, 'changed': True,
+            'delivery_id': 'cj_stub',
+            'job': {'delivery_id': 'cj_stub', 'state': 'succeeded',
+                    'node_id': NODE_ID, 'operation': 'query_network',
+                    'result': {'ok': True}},
+        }
+        self.sibling_get_result = dict(self.sibling_wait_result)
+        self.sibling_cancel_result = {
+            'state': 'cancel', 'ok': True, 'cancelled': True,
+            'definitive': True, 'wakes_touchdesigner': False,
+        }
 
     def __getattr__(self, name):
         return getattr(self._real, name)
 
-    # -- the three replaced seams -------------------------------------
+    # -- replaced network seams ---------------------------------------
     def probe(self, *args, **kwargs):
         self.calls.append(('probe', None))
         if self.probe_result is None:
@@ -93,8 +143,69 @@ class StubClient:
 
     def unregister(self, handle, node_id, runtime_id=None, **kwargs):
         self.calls.append(('unregister', {'node_id': node_id,
-                                          'runtime_id': runtime_id}))
+                                          'runtime_id': runtime_id,
+                                          'reason': kwargs.get('reason')}))
         return dict(self.unregister_result)
+
+    def network_nodes(self, handle, convoy_id, **kwargs):
+        self.calls.append(('network_nodes', {'convoy_id': convoy_id}))
+        return dict(self.network_result)
+
+    def submit_sibling_call(self, handle, target_host_id, convoy_id,
+                            target_node_id, controller_id, operation,
+                            arguments=None, **kwargs):
+        self.calls.append(('submit_sibling_call', {
+            'target_host_id': target_host_id,
+            'convoy_id': convoy_id,
+            'target_node_id': target_node_id,
+            'controller_id': controller_id,
+            'operation': operation,
+            'arguments': dict(arguments or {}),
+            'expected_runtime_id': kwargs.get('expected_runtime_id'),
+            'idempotency_key': kwargs.get('idempotency_key'),
+            'timeout_s': kwargs.get('timeout_s'),
+        }))
+        out = dict(self.sibling_submit_result)
+        out.update({'target_host_id': target_host_id,
+                    'convoy_id': convoy_id,
+                    'target_node_id': target_node_id,
+                    'operation': operation,
+                    'idempotency_key': kwargs.get('idempotency_key')})
+        out['job'] = dict(self.sibling_submit_result.get('job') or {})
+        return out
+
+    def wait_sibling_job(self, handle, target_host_id, convoy_id,
+                         delivery_id, initial=None, progress=None, **kwargs):
+        self.calls.append(('wait_sibling_job', {
+            'target_host_id': target_host_id, 'convoy_id': convoy_id,
+            'delivery_id': delivery_id,
+            'timeout_s': kwargs.get('timeout_s'),
+        }))
+        if callable(progress):
+            progress(dict(self.sibling_wait_result))
+        out = dict(self.sibling_wait_result)
+        out['job'] = dict(self.sibling_wait_result.get('job') or {})
+        return out
+
+    def get_sibling_job(self, handle, target_host_id, convoy_id,
+                        delivery_id, **kwargs):
+        self.calls.append(('get_sibling_job', {
+            'target_host_id': target_host_id, 'convoy_id': convoy_id,
+            'delivery_id': delivery_id, 'since': kwargs.get('since'),
+            'timeout': kwargs.get('timeout'),
+        }))
+        out = dict(self.sibling_get_result)
+        out['job'] = dict(self.sibling_get_result.get('job') or {})
+        return out
+
+    def cancel_sibling_job(self, handle, target_host_id, convoy_id,
+                           delivery_id, **kwargs):
+        self.calls.append(('cancel_sibling_job', {
+            'target_host_id': target_host_id, 'convoy_id': convoy_id,
+            'delivery_id': delivery_id,
+            'timeout': kwargs.get('timeout'),
+        }))
+        return dict(self.sibling_cancel_result)
 
     # -- probe-result builders ----------------------------------------
     def running(self, host_id=HOST_ID):
@@ -123,6 +234,52 @@ class StubClient:
         return None
 
 
+class _ThreadManagerHarness:
+    """Tiny real-thread stand-in for TDResources.ThreadManager.
+
+    The shipping extension is still responsible for constructing TDTask and
+    asking ThreadManager to enqueue it. Tests use Python threads only to make
+    network-stub overlap observable without touching any TD object.
+    """
+
+    class _Task:
+        def __init__(self, target, args):
+            self.target = target
+            self.args = args
+
+    def __init__(self):
+        self.threads = []
+        self.errors = []
+        self._lock = Lock()
+
+    def TDTask(self, target, args=()):
+        return self._Task(target, args)
+
+    def EnqueueTask(self, task, standalone=True):
+        def _run():
+            try:
+                task.target(*task.args)
+            except Exception as e:
+                with self._lock:
+                    self.errors.append(e)
+
+        thread = Thread(target=_run, daemon=True)
+        with self._lock:
+            self.threads.append(thread)
+        thread.start()
+        return thread
+
+    def enqueue_callable(self, fn):
+        return self.EnqueueTask(self.TDTask(fn), standalone=True) is not None
+
+    def join_all(self, timeout=2.0):
+        with self._lock:
+            threads = list(self.threads)
+        for thread in threads:
+            thread.join(timeout)
+        return all(not thread.is_alive() for thread in threads)
+
+
 class TestConvoyRegistrations(EmbodyTestCase):
     """Registry entries and wiring that must exist BEFORE any behavior.
 
@@ -141,7 +298,8 @@ class TestConvoyRegistrations(EmbodyTestCase):
             'ConvoyExt must be promoted on the convoy COMP with Register()')
         for name in ('Unregister', 'ConvoyStatus', '_convoyTick',
                      '_reconcile', '_desiredState', '_beginCall',
-                     '_pollCall'):
+                     '_pollCall', 'listNodes', 'ping', 'call', 'batch',
+                     'getJob', 'cancelJob', 'requestResult'):
             self.assertTrue(callable(getattr(comp.ext.ConvoyExt, name, None)),
                             'ConvoyExt must expose a callable %s' % (name,))
 
@@ -247,6 +405,11 @@ class TestConvoyRegistrations(EmbodyTestCase):
         self.assertIn('ConvoyExt.Register()', src)
         self.assertIn('ConvoyExt.Unregister()', src)
         self.assertIn("parent.Embody.op('convoy')", src)
+        self.assertIn("par.Aiclient.eval() == 'none'", src)
+        self.assertIn('parent.Embody.par.Envoyenable = True', src,
+                      'Convoy-only mode must keep Envoy\'s internal relay on')
+        self.assertIn('parent.Embody.par.Envoyenable = False', src,
+                      'disabling Convoy must stop an unneeded internal relay')
 
     def test_execute_scrubs_and_unregisters(self):
         src = self.embody.op('execute').text
@@ -280,6 +443,60 @@ class TestConvoyRegistrations(EmbodyTestCase):
             'exactly one mod.convoy_client reference (inside _client), or '
             'the worker is re-resolving a DAT off the main thread')
 
+    def test_convoy_uses_one_long_lived_threadmanager_task(self):
+        src = self.embody.op('convoy').op('ConvoyExt').text
+        self.assertIn('op.TDResources.ThreadManager', src)
+        self.assertIn('self.ThreadManager.TDTask(', src)
+        self.assertIn('standalone=True', src)
+        self.assertIn('def _workerLoop(', src)
+        self.assertNotIn('threading.Thread(', src,
+                         'raw Python threads bypass TD ThreadManager')
+
+    def test_sibling_worker_closures_cannot_reach_the_extension(self):
+        method = self.embody.op('convoy').ext.ConvoyExt._submitSiblingApi
+        function = getattr(method, '__func__', method)
+        nested = {
+            code.co_name: code for code in function.__code__.co_consts
+            if isinstance(code, types.CodeType)
+        }
+        for name in ('_worker', '_progress', '_complete'):
+            self.assertIn(name, nested)
+            self.assertNotIn(
+                'self', nested[name].co_freevars,
+                '%s runs or is called from the worker and must not capture '
+                'the TD-bound extension object' % name)
+
+    def test_worker_shutdown_is_generation_safe_and_non_blocking(self):
+        src = self.embody.op('convoy').op('ConvoyExt').text
+        self.assertIn("sys._convoy_workers", src)
+        self.assertIn('old_event.set()', src)
+        self.assertIn('self._stopWorker()', src)
+        self.assertNotIn('_worker_thread.join(', src,
+                         'extension reinit must never block joining a worker')
+
+    def test_worker_loop_runs_plain_work_then_stops_on_sentinel(self):
+        queue = Queue()
+        shutdown = Event()
+        seen = []
+        queue.put(lambda: seen.append('ran'))
+        queue.put(None)
+        result = self.embody.op('convoy').ext.ConvoyExt._workerLoop(
+            queue, shutdown, 17, idle_s=0.001)
+        self.assertEqual(seen, ['ran'])
+        self.assertEqual(result, {'generation': 17, 'stopped': True})
+
+    def test_preset_shutdown_never_accepts_queued_work(self):
+        queue = Queue()
+        shutdown = Event()
+        seen = []
+        queue.put(lambda: seen.append('must not run'))
+        shutdown.set()
+        self.embody.op('convoy').ext.ConvoyExt._workerLoop(
+            queue, shutdown, 18, idle_s=0.001)
+        self.assertEqual(seen, [],
+                         'a stale generation may finish current work but '
+                         'must never accept the next queued callable')
+
 
 class ConvoyExtBase(EmbodyTestCase):
     """Shared fixture. No network, no thread, no scheduler, no live pars."""
@@ -301,10 +518,14 @@ class ConvoyExtBase(EmbodyTestCase):
         self.status_writes = []
         self.id_writes = []
         self.enable_writes = []
+        self.network_writes = []
         self.session = {}
 
         self._patch(self.convoy, '_client', lambda: self.client)
-        self._patch(self.convoy, '_runInWorker', lambda fn: fn())
+        self._patch(self.convoy, '_runInWorker',
+                    lambda fn: (fn(), True)[1])
+        self._patch(self.convoy, '_runBatchInWorkers',
+                    self._runBatchSynchronously)
         self._patch(self.convoy_mod, 'run', self._fakeRun)
         self._patch(self.convoy, '_log',
                     lambda msg, level='INFO': self._logs.append((msg, level)))
@@ -314,18 +535,43 @@ class ConvoyExtBase(EmbodyTestCase):
                     lambda value: self.id_writes.append(str(value or '')))
         self._patch(self.convoy, '_setEnabled',
                     lambda value: self.enable_writes.append(bool(value)))
+        self._patch(self.convoy, '_applyNetworkNodes',
+                    lambda result: self.network_writes.append(result))
         self._patch(self.convoy, '_session', lambda: self.session)
         self._patch(self.convoy, '_enabled', lambda: True)
         self._patch(self.convoy, '_performing', lambda: False)
         self._patch(self.convoy, '_savedToe', lambda: 'C:/fake/project.toe')
         self._patch(self.convoy, '_readConvoyId', lambda: CONVOY_ID)
+        self._patch(self.convoy, '_readBindingState', lambda: 'established')
+        self._patch(self.convoy, '_readConsentScope', lambda: CONSENT_SCOPE)
         self._patch(self.convoy, '_envoyPort', lambda: 9870)
+        self._patch(self.convoy, '_ensureWakeListener', lambda: True)
+        self._patch(self.convoy, '_stopWakeListener', lambda: None)
+        self._patch(self.convoy, '_remoteWakeEnabled', lambda: True)
+        self._patch(self.convoy, '_performRequested', lambda: False)
+        self._patch(self.convoy, '_wakeActive', lambda: False)
+        self._patch(self.convoy, '_wakeEndpoint',
+                    lambda: (47631, 'A' * 43))
+        self._patch(self.convoy, '_wakeGrace', lambda: 60)
         # Instance bookkeeping the reconciler mutates.
         self._patch(self.convoy, '_busy', False)
         self._patch(self.convoy, '_result', None)
         self._patch(self.convoy, '_logged', '')
         self._patch(self.convoy, '_gen', 0)
         self._patch(self.convoy, '_tick_ms', self.convoy.TICK_MIN_MS)
+        # Fresh bounded sibling API state for every test. The live extension
+        # instance is shared by TestRunnerExt, so retaining one test's local
+        # callbacks/results into the next would be both a leak and a race.
+        self._patch(self.convoy, '_api_generation',
+                    self.convoy._worker_generation)
+        self._patch(self.convoy, '_api_requests', OrderedDict())
+        self._patch(self.convoy, '_api_callbacks', {})
+        self._patch(self.convoy, '_api_completion_events', Queue(
+            maxsize=self.convoy.API_COMPLETION_MAX))
+        self._patch(self.convoy, '_api_progress_events', Queue(
+            maxsize=self.convoy.API_PROGRESS_MAX))
+        self._patch(self.convoy, '_api_gate_event', Event())
+        self._patch(self.convoy, '_api_poll_armed', False)
 
     def tearDown(self):
         while self._patches:
@@ -366,6 +612,36 @@ class ConvoyExtBase(EmbodyTestCase):
         if attempts == 0:
             ext._pollCall(action, gen, attempts)
 
+    def _runBatchSynchronously(self, client, context, request, progress,
+                               complete, gate_event):
+        """No-thread default for ordinary API tests.
+
+        It invokes the shipping preflight, target and collector code through
+        the module's generic worker entry. Dedicated scale tests below restore
+        the real ThreadManager fanout method.
+        """
+        try:
+            result = self.convoy_mod._run_sibling_api_request(
+                client, 'batch', context, request, progress, gate_event)
+        except Exception as e:
+            result = {
+                'state': 'error', 'ok': False,
+                'reason': 'worker_exception',
+                'detail': '%s: %s' % (type(e).__name__, e),
+            }
+        complete(result)
+        return True
+
+    def _useRealBatchFanout(self):
+        """Restore production fanout against a controllable manager."""
+        manager = _ThreadManagerHarness()
+        method = self.convoy_mod.ConvoyExt._runBatchInWorkers.__get__(
+            self.convoy, self.convoy_mod.ConvoyExt)
+        self._patch(self.convoy, '_runBatchInWorkers', method)
+        self._patch(self.convoy, 'ThreadManager', manager)
+        self._patch(self.convoy, '_runInWorker', manager.enqueue_callable)
+        return manager
+
     # -- helpers ------------------------------------------------------
     def _warnings(self):
         return [m for m, level in self._logs if level == 'WARNING']
@@ -373,6 +649,68 @@ class ConvoyExtBase(EmbodyTestCase):
     def _tickReschedules(self):
         return [a for a, _kw in self._runs
                 if a and isinstance(a[0], str) and '_convoyTick' in a[0]]
+
+
+class TestNetworkStatusProjection(ConvoyExtBase):
+
+    def test_online_and_cached_nodes_have_honest_ui_values(self):
+        result = {
+            'state': 'nodes',
+            'nodes': [
+                {
+                    'node_id': '1' * 32, 'host_id': 'a' * 32,
+                    'node_name': 'render-a / show', 'ip': '10.0.0.2',
+                    'status': 'online', 'online': True,
+                    'embody_version': '6.0.178',
+                    'touchdesigner_version': '2025.32180',
+                    'controller_count': 2,
+                    'last_seen_age_s': 8.9,
+                },
+                {
+                    'node_id': '2' * 32, 'host_id': 'b' * 32,
+                    'hostname': 'render-b', 'ip': '10.0.0.3',
+                    'status': 'offline', 'online': False,
+                    'controller_count': 1,
+                    'last_seen_age_s': 125,
+                },
+            ],
+        }
+        rows = self.convoy._nodeStatusRows(result)
+        self.assertLen(rows, 2)
+        # Deliberately minimal: 4 columns only (Node Name, IP, Status, Last
+        # Seen). Controllers / Details / Embody Version were removed.
+        self.assertEqual(set(rows[0]),
+                         {'Nodename', 'Ipaddress', 'Nodestatus', 'Lastseen'})
+        self.assertEqual(rows[0]['Nodename'], 'render-a / show')
+        self.assertEqual(rows[0]['Ipaddress'], '10.0.0.2')
+        self.assertEqual(rows[0]['Nodestatus'], 'Online')
+        self.assertEqual(rows[0]['Lastseen'], '8s ago')
+        self.assertEqual(rows[1]['Nodename'], 'render-b')
+        self.assertEqual(rows[1]['Nodestatus'], 'Offline')
+        self.assertEqual(rows[1]['Lastseen'], '2m ago')
+
+    def test_a_failed_directory_read_means_leave_existing_rows(self):
+        for value in (None, {}, {'state': 'unreachable'},
+                      {'state': 'host_error'}):
+            self.assertIsNone(self.convoy._nodeStatusRows(value))
+
+    def test_node_status_rows_are_bounded_plain_values(self):
+        rows = self.convoy._nodeStatusRows({
+            'state': 'nodes',
+            'nodes': [{
+                'node_id': 'n' * 1000, 'host_id': 'h' * 1000,
+                'node_name': 'x' * 2000, 'ip': '1' * 1000,
+                'status': 'online' * 100, 'online': True,
+                'embody_version': 'v' * 500,
+                'touchdesigner_version': 't' * 500,
+            }],
+        })
+        self.assertLen(rows, 1)
+        self.assertEqual(set(rows[0]),
+                         {'Nodename', 'Ipaddress', 'Nodestatus', 'Lastseen'})
+        self.assertLessEqual(len(rows[0]['Nodename']), 512)
+        self.assertLessEqual(len(rows[0]['Ipaddress']), 255)
+        self.assertLessEqual(len(rows[0]['Nodestatus']), 70)
 
 
 class TestReconcileCalls(ConvoyExtBase):
@@ -385,11 +723,37 @@ class TestReconcileCalls(ConvoyExtBase):
         self.assertEqual(payload['convoy_id'], CONVOY_ID)
         self.assertEqual(payload['comp_path'], self.embody.path)
         self.assertEqual(payload['envoy_port'], 9870)
+        self.assertTrue(payload['envoy_ready'])
+        self.assertTrue(payload['remote_wake'])
+        self.assertFalse(payload['perform_mode'])
+        self.assertFalse(payload['wake_active'])
+        self.assertNotIn('wake_port', payload,
+                         'a wake-only endpoint is routable only while Perform '
+                         'Mode makes remote wake applicable')
+        self.assertTrue(payload['wake_pending'])
+        self.assertEqual(payload['wake_grace_s'], 60)
+        self.assertTrue(re.match(r'^nd_[0-9a-f]{32}$',
+                                 payload['node_discriminator']))
+        metadata = payload['metadata']
+        self.assertEqual(metadata['toe_path'], 'C:/fake/project.toe')
+        self.assertEqual(metadata['toe_name'], 'project.toe')
+        self.assertEqual(metadata['process_id'], os.getpid())
+        # Node name comes from the Convoynodename parameter, which auto-
+        # populates to "hostname / toe-name" via a machine-independent
+        # expression (or a user override). It is the source of truth, so the
+        # registered name matches the parameter's evaluated value.
+        self.assertEqual(metadata['node_name'],
+                         self.embody.par.Convoynodename.eval())
         self.assertTrue(payload['runtime_id'].startswith('rt_'),
                         'runtime_id is REQUIRED on every call: the host '
                         're-mints the run identity when it is omitted')
         self.assertTrue(self.session.get('registered'))
         self.assertEqual(self.session.get('node_id'), NODE_ID)
+        self.assertEqual(self.client.count('network_nodes'), 1)
+        self.assertEqual(self.client.last('network_nodes')['convoy_id'],
+                         CONVOY_ID)
+        self.assertLen(self.network_writes, 1)
+        self.assertEqual(self.network_writes[0]['state'], 'nodes')
 
     def test_unchanged_tuple_issues_zero_calls(self):
         self.convoy._reconcile()
@@ -421,6 +785,7 @@ class TestReconcileCalls(ConvoyExtBase):
         self.assertEqual(self.client.count('unregister'), 1)
         sent = self.client.last('unregister')
         self.assertEqual(sent['node_id'], NODE_ID)
+        self.assertEqual(sent['reason'], 'disabled')
         self.assertTrue(
             sent['runtime_id'],
             'the runtime_id is the ownership proof -- without it a '
@@ -434,14 +799,39 @@ class TestReconcileCalls(ConvoyExtBase):
     def test_convoy_status_snapshot_is_total(self):
         self.convoy._reconcile()
         snap = self.convoy.ConvoyStatus()
-        for key in ('enabled', 'performing', 'saved_project', 'convoy_id',
+        for key in ('enabled', 'performing', 'perform_mode_requested',
+                    'wake_active', 'remote_wake', 'wake_port',
+                    'saved_project', 'convoy_id',
                     'node_id', 'host_id', 'runtime_id', 'registered',
-                    'envoy_port', 'busy', 'status'):
+                    'envoy_port', 'busy', 'api_pending', 'api_results',
+                    'status'):
             self.assertDictHasKey(snap, key)
         self.assertNotIn('error', snap, 'the snapshot must never raise')
         self.assertEqual(snap['node_id'], NODE_ID)
         self.assertEqual(snap['convoy_id'], CONVOY_ID)
         self.assertTrue(snap['registered'])
+
+    def test_td_exit_is_sent_as_shutdown_not_membership_disable(self):
+        self.convoy._reconcile()
+        self.convoy.Unregister(blocking=False, reason='TD exit')
+        sent = self.client.last('unregister')
+        self.assertEqual(sent['reason'], 'shutdown')
+
+    def test_invalid_unregister_intent_fails_closed(self):
+        self.convoy._reconcile()
+        before = self.client.count('unregister')
+        result = self.convoy.Unregister(blocking=False,
+                                        reason='remote-request')
+        self.assertEqual(result['reason'], 'invalid_unregister_reason')
+        self.assertEqual(self.client.count('unregister'), before)
+
+    def test_threadmanager_capacity_failure_is_immediate_and_honest(self):
+        self._patch(self.convoy, '_runInWorker', lambda fn: False)
+        self.convoy._reconcile()
+        self.assertStartsWith(self.status_writes[-1], 'Error:')
+        self.assertFalse(self.convoy._busy)
+        self.assertEqual(self.client.count('register'), 0,
+                         'a rejected TDTask never ran the worker body')
 
     def test_registered_without_a_port_keeps_converging(self):
         self.client.register_result = {'state': 'registered',
@@ -455,13 +845,523 @@ class TestReconcileCalls(ConvoyExtBase):
                              'a portless registration is NOT steady state')
 
 
+class TestAutomaticRealmAdoption(ConvoyExtBase):
+    """The host's converged realm must be persisted before steady state."""
+
+    def setUp(self):
+        super().setUp()
+        self.local_id = CONVOY_ID
+        self.local_state = 'candidate'
+        self.authoritative_id = 'cv_' + '1' * 16
+        self.adoptions = []
+        self._patch(self.convoy, '_readConvoyId', lambda: self.local_id)
+        self._patch(self.convoy, '_readBindingState',
+                    lambda: self.local_state)
+
+        def _adopt(new_id, expected_id, binding_state):
+            self.adoptions.append((new_id, expected_id, binding_state))
+            if expected_id != self.local_id:
+                return ''
+            self.local_id = new_id
+            self.local_state = binding_state
+            return new_id
+
+        self._patch(self.embody.ext.Embody, '_adoptConvoyId', _adopt)
+
+    def test_registration_adopts_host_authority_and_retries_immediately(self):
+        self.client.register_result.update({
+            'convoy_id': self.authoritative_id,
+            'realm_state': 'established',
+        })
+        self.convoy._reconcile()
+
+        self.assertEqual(self.adoptions, [(
+            self.authoritative_id, CONVOY_ID, 'established')])
+        self.assertEqual(self.id_writes[-1], self.authoritative_id)
+        self.assertTrue(self.session.get('registered'))
+        self.assertIsNone(self.session.get('sent'),
+                          'the stale candidate tuple must not become steady')
+        self.assertLessEqual(self.session.get('next_call_at'),
+                             self.convoy_mod.time.monotonic())
+        self.assertEqual(self.client.last('network_nodes')['convoy_id'],
+                         self.authoritative_id)
+
+    def test_failed_project_cas_never_claims_registration_succeeded(self):
+        self.client.register_result.update({
+            'convoy_id': self.authoritative_id,
+            'realm_state': 'established',
+        })
+        self._patch(self.embody.ext.Embody, '_adoptConvoyId',
+                    lambda *args: '')
+        self.convoy._reconcile()
+
+        self.assertFalse(self.session.get('registered'))
+        self.assertIsNone(self.session.get('sent'))
+        self.assertStartsWith(self.status_writes[-1], 'Error:')
+        self.assertTrue(any('project.json' in message.lower()
+                            for message, _level in self._logs))
+
+
+class TestSiblingAPI(ConvoyExtBase):
+    """TD-originated relay is async, exact, bounded and main-thread applied."""
+
+    def setUp(self):
+        super().setUp()
+        self.session.update({
+            'registered': True,
+            'host_id': HOST_ID,
+            'node_id': NODE_ID,
+            'runtime_id': 'rt_source',
+        })
+
+    def _poll(self):
+        self.convoy._pollApiEvents(self.convoy._api_generation)
+
+    def test_list_nodes_returns_before_main_thread_callback(self):
+        callbacks = []
+        handle = self.convoy.listNodes(callback=callbacks.append)
+
+        self.assertEqual(handle['state'], 'queued')
+        self.assertEqual(callbacks, [],
+                         'a worker completion must not call TD code inline')
+        self.assertEqual(
+            self.convoy.requestResult(handle)['state'], 'queued')
+        self._poll()
+
+        result = self.convoy.requestResult(handle)
+        self.assertEqual(result['state'], 'completed')
+        self.assertEqual(result['result']['state'], 'nodes')
+        self.assertFalse(result['result']['wakes_touchdesigner'])
+        self.assertLen(callbacks, 1)
+        self.assertEqual(callbacks[0]['event'], 'complete')
+        self.assertEqual(callbacks[0]['source']['node_id'], NODE_ID)
+
+    def test_call_routes_exact_target_with_non_spoofable_source(self):
+        arguments = {'path': '/project1'}
+        handle = self.convoy.call(
+            OTHER_HOST_ID, 'z' * 32, 'query_network', arguments,
+            expected_runtime_id='rt_target', timeout_s=12)
+        arguments['path'] = '/mutated-after-submit'
+        self._poll()
+
+        sent = self.client.last('submit_sibling_call')
+        self.assertEqual(sent['target_host_id'], OTHER_HOST_ID)
+        self.assertEqual(sent['target_node_id'], 'z' * 32)
+        self.assertEqual(sent['convoy_id'], CONVOY_ID)
+        self.assertEqual(sent['expected_runtime_id'], 'rt_target')
+        self.assertEqual(sent['arguments'], {'path': '/project1'})
+        self.assertEqual(sent['controller_id'],
+                         'td:%s:%s:rt_source' % (HOST_ID, NODE_ID))
+        self.assertEqual(sent['idempotency_key'], handle['request_id'])
+        result = self.convoy.requestResult(handle)
+        self.assertEqual(result['target']['host_id'], OTHER_HOST_ID)
+        self.assertTrue(result['result']['wakes_touchdesigner'])
+
+    def test_disabled_candidate_and_malformed_requests_never_probe(self):
+        self._patch(self.convoy, '_enabled', lambda: False)
+        disabled = self.convoy.listNodes()
+        self._poll()
+        self.assertEqual(self.convoy.requestResult(disabled)['result']['reason'],
+                         'convoy_disabled')
+        self.assertEqual(self.client.count('probe'), 0)
+
+        self._patch(self.convoy, '_enabled', lambda: True)
+        self._patch(self.convoy, '_readBindingState', lambda: 'candidate')
+        candidate = self.convoy.ping(HOST_ID, NODE_ID)
+        self._poll()
+        self.assertEqual(
+            self.convoy.requestResult(candidate)['result']['reason'],
+            'convoy_not_established')
+        self.assertEqual(self.client.count('probe'), 0)
+
+        self._patch(self.convoy, '_readBindingState', lambda: 'established')
+        malformed = self.convoy.call('', NODE_ID, 'query_network', {})
+        self._poll()
+        self.assertEqual(
+            self.convoy.requestResult(malformed)['result']['reason'],
+            'invalid_arguments')
+        self.assertEqual(self.client.count('probe'), 0)
+
+        too_long = self.convoy.call(
+            HOST_ID, NODE_ID, 'query_network', {}, timeout_s=61)
+        self._poll()
+        self.assertEqual(
+            self.convoy.requestResult(too_long)['result']['reason'],
+            'invalid_arguments')
+        self.assertEqual(self.client.count('probe'), 0)
+
+    def test_ping_waits_for_host_native_verdict_without_waking_td(self):
+        callbacks = []
+        clock = iter((100.0, 104.0)).__next__
+        self._patch(self.convoy_mod.time, 'monotonic', clock)
+        handle = self.convoy.ping(
+            OTHER_HOST_ID, 'p' * 32, timeout_s=7,
+            callback=callbacks.append)
+        self.assertEqual(callbacks, [])
+        self._poll()
+
+        sent = self.client.last('submit_sibling_call')
+        self.assertEqual(sent['operation'], 'convoy_ping')
+        self.assertEqual(sent['arguments'], {})
+        self.assertEqual(self.client.count('wait_sibling_job'), 1)
+        self.assertEqual(
+            self.client.last('wait_sibling_job')['timeout_s'], 3.0,
+            'submission and wait must share one total deadline')
+        result = self.convoy.requestResult(handle)
+        self.assertEqual(result['result']['job']['state'], 'succeeded')
+        self.assertFalse(result['result']['wakes_touchdesigner'])
+        self.assertEqual(callbacks[-1]['event'], 'complete')
+        self.assertTrue(all(
+            not item['result']['wakes_touchdesigner']
+            for item in callbacks if item.get('result')))
+
+    def test_get_and_federated_cancel_are_exact_and_non_waking(self):
+        got = self.convoy.getJob(
+            OTHER_HOST_ID, 'cj_remote', since=3.5, timeout_s=6)
+        cancelled = self.convoy.cancelJob(
+            OTHER_HOST_ID, 'cj_remote', timeout_s=8)
+        self._poll()
+
+        get_call = self.client.last('get_sibling_job')
+        self.assertEqual(get_call, {
+            'target_host_id': OTHER_HOST_ID, 'convoy_id': CONVOY_ID,
+            'delivery_id': 'cj_remote', 'since': 3.5, 'timeout': 6.0,
+        })
+        cancel_call = self.client.last('cancel_sibling_job')
+        self.assertEqual(cancel_call, {
+            'target_host_id': OTHER_HOST_ID, 'convoy_id': CONVOY_ID,
+            'delivery_id': 'cj_remote', 'timeout': 8.0,
+        })
+        self.assertFalse(
+            self.convoy.requestResult(got)['result']['wakes_touchdesigner'])
+        self.assertFalse(self.convoy.requestResult(
+            cancelled)['result']['wakes_touchdesigner'])
+
+    def test_batch_has_one_explicit_result_per_target_and_is_not_atomic(self):
+        targets = [
+            {'host_id': HOST_ID, 'node_id': NODE_ID},
+            {'host_id': OTHER_HOST_ID, 'node_id': 'b' * 32,
+             'expected_runtime_id': 'rt_b'},
+        ]
+        operations = [
+            {'tool': 'query_network', 'params': {'root': '/'}},
+            {'tool': 'get_op_errors', 'params': {'op_path': '/project1'}},
+        ]
+        handle = self.convoy.batch(targets, operations)
+        self._poll()
+
+        calls = [payload for name, payload in self.client.calls
+                 if name == 'submit_sibling_call']
+        self.assertLen(calls, 2)
+        self.assertEqual([row['target_host_id'] for row in calls],
+                         [HOST_ID, OTHER_HOST_ID])
+        self.assertTrue(all(row['operation'] == 'batch_operations'
+                            for row in calls))
+        self.assertEqual(calls[0]['arguments'], {'operations': operations})
+        self.assertEqual(calls[1]['expected_runtime_id'], 'rt_b')
+        result = self.convoy.requestResult(handle)['result']
+        self.assertFalse(result['atomic'])
+        self.assertFalse(result['partial'])
+        self.assertLen(result['results'], 2)
+
+    def test_batch_enforces_cumulative_result_budget_in_the_worker(self):
+        self._patch(self.convoy, 'API_RESULT_MAX_BYTES', 128 * 1024)
+        self.client.sibling_submit_result['job']['result'] = {
+            'blob': 'x' * (80 * 1024)}
+        handle = self.convoy.batch([
+            {'host_id': HOST_ID, 'node_id': NODE_ID},
+            {'host_id': OTHER_HOST_ID, 'node_id': 'b' * 32},
+        ], [{'tool': 'query_network', 'params': {}}])
+        self._poll()
+
+        result = self.convoy.requestResult(handle)['result']
+        self.assertEqual(result['state'], 'batch')
+        self.assertTrue(any(
+            row['result'].get('reason') == 'batch_result_budget_exceeded'
+            for row in result['results']))
+        self.assertNotEqual(result.get('reason'), 'result_too_large')
+
+    def test_batch_targets_overlap_and_terminal_rows_keep_input_order(self):
+        manager = self._useRealBatchFanout()
+        self._patch(self.convoy, 'API_BATCH_WORKER_MAX', 4)
+        hosts = [character * 32 for character in 'abcd']
+        indexes = {host: index for index, host in enumerate(hosts)}
+        releases = [Event() for _ in hosts]
+        finished = [Event() for _ in hosts]
+        all_started = Event()
+        lock = Lock()
+        state = {'active': 0, 'maximum': 0, 'started': 0,
+                 'completion_order': []}
+
+        def _submit(handle, target_host_id, convoy_id, target_node_id,
+                    controller_id, operation, arguments=None, **kwargs):
+            index = indexes[target_host_id]
+            with lock:
+                state['active'] += 1
+                state['maximum'] = max(state['maximum'], state['active'])
+                state['started'] += 1
+                if state['started'] == len(hosts):
+                    all_started.set()
+            releases[index].wait()
+            with lock:
+                state['completion_order'].append(index)
+                state['active'] -= 1
+            finished[index].set()
+            return {
+                'state': 'accepted' if index != 1 else 'refused',
+                'ok': index != 1,
+                'marker': index,
+                'reason': None if index != 1 else 'target_refused',
+                'job': {'delivery_id': 'cj_%d' % index,
+                        'state': 'queued'},
+            }
+
+        self._patch(self.client, 'submit_sibling_call', _submit)
+        handle = self.convoy.batch([
+            {'host_id': host, 'node_id': str(index) * 32}
+            for index, host in enumerate(hosts)
+        ], [{'tool': 'query_network', 'params': {}}], timeout_s=5)
+
+        self.assertTrue(all_started.wait(1.0),
+                        'all four targets should be in flight together')
+        for index in reversed(range(len(hosts))):
+            releases[index].set()
+            self.assertTrue(finished[index].wait(1.0))
+        self.assertTrue(manager.join_all())
+        self.assertEqual(manager.errors, [])
+        self._poll()
+
+        result = self.convoy.requestResult(handle)['result']
+        self.assertEqual(state['maximum'], 4)
+        self.assertEqual(state['completion_order'], [3, 2, 1, 0],
+                         'the stub deliberately completed out of order')
+        self.assertEqual([row['index'] for row in result['results']],
+                         [0, 1, 2, 3])
+        self.assertEqual([row['target']['host_id']
+                          for row in result['results']], hosts)
+        self.assertEqual([row['result']['marker']
+                          for row in result['results']], [0, 1, 2, 3])
+        self.assertTrue(result['partial'])
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['results'][1]['result']['reason'],
+                         'target_refused')
+
+    def test_batch_fanout_has_a_hard_worker_bound(self):
+        manager = self._useRealBatchFanout()
+        self._patch(self.convoy, 'API_BATCH_WORKER_MAX', 3)
+        release = Event()
+        first_wave = Event()
+        lock = Lock()
+        state = {'active': 0, 'maximum': 0, 'started': []}
+
+        def _submit(handle, target_host_id, convoy_id, target_node_id,
+                    controller_id, operation, arguments=None, **kwargs):
+            with lock:
+                state['active'] += 1
+                state['maximum'] = max(state['maximum'], state['active'])
+                state['started'].append(target_host_id)
+                if len(state['started']) == 3:
+                    first_wave.set()
+            release.wait()
+            with lock:
+                state['active'] -= 1
+            return {'state': 'accepted', 'ok': True,
+                    'job': {'delivery_id': 'cj_' + target_host_id[:1],
+                            'state': 'queued'}}
+
+        self._patch(self.client, 'submit_sibling_call', _submit)
+        hosts = [chr(ord('a') + index) * 32 for index in range(9)]
+        handle = self.convoy.batch([
+            {'host_id': host, 'node_id': str(index) * 32}
+            for index, host in enumerate(hosts)
+        ], [{'tool': 'query_network', 'params': {}}], timeout_s=5)
+
+        self.assertTrue(first_wave.wait(1.0))
+        with lock:
+            self.assertEqual(len(state['started']), 3,
+                             'a fourth target must remain queued')
+        release.set()
+        self.assertTrue(manager.join_all())
+        self.assertEqual(manager.errors, [])
+        self._poll()
+
+        result = self.convoy.requestResult(handle)['result']
+        self.assertEqual(state['maximum'], 3)
+        self.assertEqual(len(state['started']), 9)
+        self.assertEqual(result['count'], 9)
+        self.assertFalse(result['partial'])
+
+    def test_slow_target_does_not_block_peers_or_extend_total_timeout(self):
+        manager = self._useRealBatchFanout()
+        self._patch(self.convoy, 'API_BATCH_WORKER_MAX', 2)
+        slow_host = 's' * 32
+        fast_hosts = [character * 32 for character in 'fgh']
+        release_slow = Event()
+        slow_started = Event()
+        fast_complete = Event()
+        lock = Lock()
+        seen_fast = []
+        seen_timeouts = []
+
+        def _submit(handle, target_host_id, convoy_id, target_node_id,
+                    controller_id, operation, arguments=None, **kwargs):
+            with lock:
+                seen_timeouts.append(float(kwargs['timeout_s']))
+            if target_host_id == slow_host:
+                slow_started.set()
+                # Deliberately emulate a broken transport that ignores its
+                # own timeout. The coordinator must still honor the batch's
+                # absolute deadline and publish peer results.
+                release_slow.wait()
+                return {'state': 'accepted', 'ok': True,
+                        'marker': 'late',
+                        'job': {'delivery_id': 'cj_slow'}}
+            with lock:
+                seen_fast.append(target_host_id)
+                if len(seen_fast) == len(fast_hosts):
+                    fast_complete.set()
+            return {'state': 'accepted', 'ok': True,
+                    'marker': target_host_id[:1],
+                    'job': {'delivery_id': 'cj_' + target_host_id[:1]}}
+
+        self._patch(self.client, 'submit_sibling_call', _submit)
+        targets = [{'host_id': slow_host, 'node_id': '0' * 32}]
+        targets.extend({
+            'host_id': host, 'node_id': str(index + 1) * 32
+        } for index, host in enumerate(fast_hosts))
+        started_at = time.monotonic()
+        handle = self.convoy.batch(
+            targets, [{'tool': 'query_network', 'params': {}}],
+            timeout_s=0.2)
+
+        self.assertTrue(slow_started.wait(1.0))
+        self.assertTrue(fast_complete.wait(1.0),
+                        'the free worker must serve peers while one hangs')
+        coordinator = manager.threads[-1]
+        coordinator.join(1.0)
+        elapsed = time.monotonic() - started_at
+        self.assertFalse(coordinator.is_alive(),
+                         'one cumulative deadline must finish aggregation')
+        self.assertLess(elapsed, 0.75,
+                        'timeout must not repeat once per target or worker')
+        self._poll()
+
+        result = self.convoy.requestResult(handle)['result']
+        self.assertEqual(result['results'][0]['result']['reason'],
+                         'batch_timeout')
+        self.assertEqual([row['result'].get('marker')
+                          for row in result['results'][1:]], ['f', 'g', 'h'])
+        self.assertTrue(result['partial'])
+        self.assertEqual(set(seen_fast), set(fast_hosts))
+        self.assertTrue(all(0.0 < value <= 0.2
+                            for value in seen_timeouts))
+
+        release_slow.set()
+        self.assertTrue(manager.join_all())
+        self.assertEqual(manager.errors, [])
+
+    def test_old_generation_event_cannot_complete_a_new_request(self):
+        handle = self.convoy.listNodes()
+        while not self.convoy._api_progress_events.empty():
+            self.convoy._api_progress_events.get_nowait()
+        while not self.convoy._api_completion_events.empty():
+            self.convoy._api_completion_events.get_nowait()
+        generation = self.convoy._api_generation
+        self.convoy._api_completion_events.put_nowait({
+            'generation': generation - 1,
+            'request_id': handle['request_id'],
+            'result': {'state': 'nodes', 'nodes': []},
+        })
+        self._poll()
+        self.assertEqual(self.convoy.requestResult(handle)['state'], 'queued')
+
+        self.convoy._api_completion_events.put_nowait({
+            'generation': generation,
+            'request_id': handle['request_id'],
+            'result': {'state': 'nodes', 'nodes': [],
+                       'wakes_touchdesigner': False},
+        })
+        self._poll()
+        self.assertEqual(
+            self.convoy.requestResult(handle)['state'], 'completed')
+
+    def test_result_limit_replaces_oversized_payload_and_lookup_is_detached(self):
+        self.client.network_result['oversized'] = 'x' * 4096
+        self._patch(self.convoy, 'API_RESULT_MAX_BYTES', 1024)
+        handle = self.convoy.listNodes()
+        self._poll()
+        first = self.convoy.requestResult(handle)
+        self.assertEqual(first['state'], 'failed')
+        self.assertEqual(first['result']['reason'], 'result_too_large')
+
+        first['result']['reason'] = 'caller-mutated'
+        again = self.convoy.requestResult(handle)
+        self.assertEqual(again['result']['reason'], 'result_too_large')
+        consumed = self.convoy.requestResult(handle, consume=True)
+        self.assertEqual(consumed['request_id'], handle['request_id'])
+        self.assertIsNone(self.convoy.requestResult(handle))
+
+    def test_threadmanager_rejection_completes_honestly(self):
+        self._patch(self.convoy, '_runInWorker', lambda fn: False)
+        handle = self.convoy.call(
+            OTHER_HOST_ID, NODE_ID, 'query_network', {})
+        self._poll()
+        result = self.convoy.requestResult(handle)
+        self.assertEqual(result['state'], 'failed')
+        self.assertEqual(result['result']['reason'],
+                         'thread_manager_unavailable')
+        self.assertEqual(self.client.count('submit_sibling_call'), 0)
+
+    def test_disable_revokes_a_worker_still_waiting_in_the_queue(self):
+        queued = []
+        self._patch(self.convoy, '_runInWorker',
+                    lambda fn: (queued.append(fn), True)[1])
+        handle = self.convoy.call(
+            OTHER_HOST_ID, NODE_ID, 'query_network', {})
+        self.assertLen(queued, 1)
+
+        self.convoy._revokeSiblingApi()
+        queued[0]()
+        self._poll()
+        result = self.convoy.requestResult(handle)
+        self.assertEqual(result['state'], 'failed')
+        self.assertEqual(result['result']['reason'], 'convoy_disabled')
+        self.assertEqual(self.client.count('probe'), 0)
+
+    def test_request_capacity_never_evicts_an_inflight_handle(self):
+        queued = []
+        self._patch(self.convoy, 'API_REQUEST_MAX', 2)
+        self._patch(self.convoy, '_runInWorker',
+                    lambda fn: (queued.append(fn), True)[1])
+        first = self.convoy.listNodes()
+        second = self.convoy.listNodes()
+        overflow = self.convoy.listNodes()
+
+        self.assertEqual(first['state'], 'queued')
+        self.assertEqual(second['state'], 'queued')
+        self.assertEqual(overflow['state'], 'failed')
+        self.assertEqual(overflow['result']['reason'], 'request_capacity')
+        self.assertIsNotNone(self.convoy.requestResult(first))
+        self.assertIsNotNone(self.convoy.requestResult(second))
+        self.assertIsNone(self.convoy.requestResult(overflow))
+        self.assertLen(queued, 2)
+
+
 class TestQuietRefusals(ConvoyExtBase):
     """Absence, Perform Mode and an unsaved project are not failures."""
 
-    def test_perform_mode_does_zero_work_and_never_writes_status(self):
+    def test_perform_mode_keeps_only_membership_and_wake_heartbeat_alive(self):
         self._patch(self.convoy, '_performing', lambda: True)
+        self._patch(self.convoy, '_performRequested', lambda: True)
+        self._patch(self.convoy, '_envoyPort', lambda: None)
         self.convoy._reconcile()
-        self.assertEqual(self.client.calls, [])
+        self.assertEqual(self.client.count('register'), 1)
+        payload = self.client.last('register')
+        self.assertTrue(payload['perform_mode'])
+        self.assertFalse(payload['wake_active'])
+        self.assertFalse(payload['envoy_ready'])
+        self.assertNotIn('envoy_port', payload)
+        self.assertEqual(payload['wake_port'], 47631)
         self.assertEqual(self.status_writes, [],
                          'Perform Mode must not clobber the show readout')
         # Even a result landing from a call that started BEFORE the show.
@@ -628,8 +1528,9 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
             self.dialogs.append((title, message, list(buttons)))
             return self.choice
 
-        def _ensureConvoyId(convoy_id=None, consent_scope=None):
-            self.recorded.append((convoy_id, consent_scope))
+        def _ensureConvoyId(convoy_id=None, consent_scope=None,
+                            binding_state=None):
+            self.recorded.append((convoy_id, consent_scope, binding_state))
             return convoy_id or self.candidate
 
         self._patch(self.embody_target, '_readConvoyEntry',
@@ -639,24 +1540,29 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
         self._patch(self.embody_target, '_ensureConvoyId', _ensureConvoyId)
         self._patch(self.embody_target, '_messageBox', _messageBox)
 
-    def test_consent_scope_is_the_phase2_scope(self):
+    def test_consent_scope_is_the_lan_scope(self):
         self.assertEqual(self.convoy.CONSENT_SCOPE, CONSENT_SCOPE,
-                         'Phase 3 must be able to detect a widening')
+                         'the LAN build must never inherit the older '
+                         'loopback-only grant')
 
     def test_confirm_mints_and_records_the_scope(self):
         self.choice = 1
         self.assertTrue(self.convoy._ensureConsent())
         self.assertLen(self.dialogs, 1)
         title, message, buttons = self.dialogs[0]
-        self.assertIn(self.candidate, message,
-                      'the dialog must NAME the id it is about to mint')
+        self.assertNotIn(self.candidate, message,
+                         'automatic membership should not expose an '
+                         'implementation identifier in normal UX')
+        self.assertIn('automatically join', message)
         self.assertIn(CONSENT_SCOPE, message,
                       'and the scope the user is granting')
         self.assertIn('project.json', message,
                       'and that the id lands in a COMMITTED file')
         self.assertEqual(buttons[0], 'Cancel',
                          'the safe answer is button 0')
-        self.assertEqual(self.recorded, [(self.candidate, CONSENT_SCOPE)])
+        self.assertEqual(
+            self.recorded,
+            [(self.candidate, CONSENT_SCOPE, 'candidate')])
         self.assertEqual(self.id_writes[-1], self.candidate)
         self.assertEqual(self.enable_writes, [],
                          'a confirmed enable never flips the toggle')
@@ -689,6 +1595,27 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
         self.assertEqual(self.recorded, [])
         self.assertEqual(self.id_writes[-1], CONVOY_ID)
 
+    def test_a_legacy_loopback_grant_requires_explicit_upgrade(self):
+        self.entry = {'id': CONVOY_ID,
+                      'consent_scope': LEGACY_CONSENT_SCOPE,
+                      'granted_at': '2026-08-01T00:00:00Z'}
+        self.assertTrue(self.convoy._ensureConsent())
+        self.assertLen(self.dialogs, 1)
+        self.assertIn('Upgrade Convoy Access', self.dialogs[0][0])
+        self.assertIn(LEGACY_CONSENT_SCOPE, self.dialogs[0][1])
+        self.assertIn(CONSENT_SCOPE, self.dialogs[0][1])
+        self.assertEqual(
+            self.recorded,
+            [(CONVOY_ID, CONSENT_SCOPE, 'established')])
+
+    def test_background_reconcile_never_silently_widens_old_consent(self):
+        self._patch(self.convoy, '_readConsentScope',
+                    lambda: LEGACY_CONSENT_SCOPE)
+        self.convoy._reconcile()
+        self.assertEqual(self.client.calls, [])
+        self.assertEqual(self.enable_writes, [False])
+        self.assertIn('Consent required', self.status_writes[-1])
+
     def test_an_unsaved_project_never_mints(self):
         self._patch(self.convoy, '_savedToe', lambda: None)
         self.assertFalse(self.convoy._ensureConsent())
@@ -698,7 +1625,8 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
 
     def test_a_failed_record_leaves_convoy_off(self):
         self._patch(self.embody_target, '_ensureConvoyId',
-                    lambda convoy_id=None, consent_scope=None: '')
+                    lambda convoy_id=None, consent_scope=None,
+                    binding_state=None: '')
         self.choice = 1
         self.assertFalse(self.convoy._ensureConsent())
         self.assertEqual(self.enable_writes, [False])
@@ -713,9 +1641,11 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
         self.convoy.Register()
         self.assertEqual(self.client.count('register'), 1)
 
-    def test_register_is_a_no_op_while_performing(self):
+    def test_explicit_enable_can_register_the_wake_plane_while_performing(self):
         self._patch(self.convoy, '_performing', lambda: True)
+        self._patch(self.convoy, '_performRequested', lambda: True)
+        self._patch(self.convoy, '_envoyPort', lambda: None)
         result = self.convoy.Register()
-        self.assertEqual(result.get('state'), 'deferred')
-        self.assertEqual(self.dialogs, [])
-        self.assertEqual(self.client.calls, [])
+        self.assertNotEqual(result.get('state'), 'deferred')
+        self.assertEqual(self.client.count('register'), 1)
+        self.assertTrue(self.client.last('register')['perform_mode'])

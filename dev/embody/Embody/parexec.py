@@ -67,6 +67,9 @@ def onValueChange(par, prev):
 			parent.Embody.ext.Envoy.Stop()
 
 	elif par.name == 'Performmode':
+		convoy = parent.Embody.op('convoy')
+		if convoy:
+			convoy.ext.ConvoyExt.ResetWakeLeases(close_override=True)
 		if par.eval():
 			parent.Embody.ext.Embody._enterPerformMode()
 		else:
@@ -94,12 +97,65 @@ def onValueChange(par, prev):
 		if convoy:
 			if par.eval():
 				convoy.ext.ConvoyExt.Register()
+				# Convoy can run without an attached AI coding client, but its TD
+				# relay still terminates at Envoy's loopback command server. Keep
+				# only that internal substrate on; Aiclient='none' makes Start()
+				# skip MCP/client config generation.
+				if (parent.Embody.par.Aiclient.eval() == 'none'
+						and parent.Embody.par.Convoyenable.eval()
+						and not parent.Embody.par.Envoyenable.eval()):
+					parent.Embody.par.Envoyenable = True
 			else:
 				convoy.ext.ConvoyExt.Unregister()
+				if (parent.Embody.par.Aiclient.eval() == 'none'
+						and parent.Embody.par.Envoyenable.eval()):
+					parent.Embody.par.Envoyenable = False
 		else:
 			parent.Embody.Log(
 				'Convoy: convoy component missing '
 				'(reinstall Embody to enable Convoy)', 'WARNING')
+
+	elif par.name == 'Convoynodename':
+		# Descriptive metadata only. Force a prompt registration refresh so a
+		# local rename converges quickly instead of waiting for the heartbeat.
+		# Register() is safe here only while Convoy is already enabled; the
+		# first-enable consent dialog remains owned exclusively by its toggle.
+		convoy = parent.Embody.op('convoy')
+		if convoy and parent.Embody.par.Convoyenable.eval():
+			convoy.ext.ConvoyExt.Register()
+
+	elif par.name in ('Convoyremotewake', 'Convoywakegrace'):
+		# Both are local membership/runtime settings.  The listener remains
+		# loopback-only; this refreshes the transient endpoint advertisement
+		# and immediately closes a temporary wake when the user switches it off.
+		convoy = parent.Embody.op('convoy')
+		if convoy:
+			convoy.ext.ConvoyExt.WakeSettingsChanged()
+
+	elif par.name in ('Convoyallowtdpython', 'Convoyallowfullshell'):
+		# A generic parameter callback cannot distinguish a human click from
+		# remote set_parameters/Python. It may project a host-authoritative
+		# decision, but it can never CREATE one. The extension currently fails
+		# closed and reverts On until the host's local confirmation/CAS route is
+		# available; saved/imported/synthetic values therefore cannot grant.
+		convoy = parent.Embody.op('convoy')
+		if convoy:
+			convoy.ext.ConvoyExt.LocalDangerGateChanged(
+				par.name, bool(par.eval()))
+		elif par.eval():
+			par.val = 0
+			parent.Embody.Log(
+				'Convoy: capability approval refused because the convoy '
+				'component is missing', 'WARNING')
+
+	elif par.name == 'Convoyartifactquota':
+		# Host-wide resource policy. The displayed value is a projection of
+		# host-private policy.json; ConvoyExt reverts the speculative edit,
+		# applies a generation-CAS update off-thread, then projects the host's
+		# accepted value back into every local node.
+		convoy = parent.Embody.op('convoy')
+		if convoy:
+			convoy.ext.ConvoyExt.LocalArtifactQuotaChanged(par.eval())
 
 	# UI color pars changed - reload list theme
 	elif 'color' in par.name.lower():
@@ -337,4 +393,3 @@ def onEnableChange(par, val, prev):
 
 def onModeChange(par, val, prev):
 	return
-	

@@ -4,9 +4,10 @@ _openSetupWizard).
 
 _applyWizardSetup is the single entry point the wizard's finish() calls. It maps
 the collected selections (mode / assistant / client / root) onto Embody's params
-and then either enables Envoy (modal-free, via _enableEnvoyResolved) or -- for
-assistant='none' / an unrecognized token -- leaves it off. _enableEnvoyResolved
-enables on first run and RESTARTS on a re-run (Envoy already on).
+and then either enables Envoy (modal-free, via _enableEnvoyResolved), keeps only
+its internal command substrate on for Convoy-only setup, or leaves it off when
+both the assistant and Convoy are disabled. _enableEnvoyResolved enables on
+first run and RESTARTS on a re-run (Envoy already on).
 _openSetupWizard opens the wizard window but must NEVER do so while dialogs are
 suppressed (a test run or a save).
 
@@ -29,7 +30,8 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 class TestSetupWizard(EmbodyTestCase):
 
     _PARAMS = ('Embodymode', 'Aiprojectroot', 'Aiprojectrootcustom',
-               'Aiclient', 'Envoyenable', 'Envoystatus', 'Toolpermissions')
+               'Aiclient', 'Envoyenable', 'Envoystatus', 'Toolpermissions',
+               'Convoyenable')
 
     def setUp(self):
         self._emb = op.Embody
@@ -62,6 +64,7 @@ class TestSetupWizard(EmbodyTestCase):
 
         # Default posture: first run (Envoy off). Suppressed, so no real Stop.
         self._emb.par.Envoyenable = False
+        self._emb.par.Convoyenable = False
 
     def tearDown(self):
         for obj, name in ((self._ext, '_extractAIConfig'),
@@ -131,7 +134,7 @@ class TestSetupWizard(EmbodyTestCase):
 
     # ----- assistant = none -----------------------------------------------
 
-    def test_none_disables_and_skips_enable(self):
+    def test_none_without_convoy_disables_and_skips_enable(self):
         self._emb.par.Envoyenable = True   # prove the branch flips it back off
         self._ext._applyWizardSetup(mode='auto', assistant='none')
         self.assertEqual(self._emb.par.Aiclient.eval(), 'none')
@@ -139,6 +142,25 @@ class TestSetupWizard(EmbodyTestCase):
                          "assistant='none' must leave Envoy disabled")
         self.assertEqual(self._extract_calls, [],
                          "assistant='none' must NOT write AI config")
+
+    def test_none_with_convoy_keeps_internal_substrate_without_client_config(self):
+        self._ext._applyWizardSetup(
+            mode='auto', assistant='none', convoy='enable')
+        self.assertEqual(self._emb.par.Aiclient.eval(), 'none')
+        self.assertTrue(bool(self._emb.par.Convoyenable.eval()))
+        self.assertTrue(bool(self._emb.par.Envoyenable.eval()),
+                        'Convoy-only setup still needs Envoy\'s internal '
+                        'TouchDesigner command server')
+        self.assertEqual(self._extract_calls, [],
+                         'Convoy-only setup must not generate AI-client config')
+
+    def test_switching_to_convoy_only_does_not_regenerate_old_client(self):
+        self._emb.par.Aiclient = 'claudecode'
+        self._emb.par.Envoyenable = True
+        self._ext._applyWizardSetup(assistant='none', convoy='enable')
+        self.assertEqual(self._emb.par.Aiclient.eval(), 'none')
+        self.assertTrue(bool(self._emb.par.Envoyenable.eval()))
+        self.assertEqual(self._extract_calls, [])
 
     # ----- unrecognized assistant (defensive) -----------------------------
 

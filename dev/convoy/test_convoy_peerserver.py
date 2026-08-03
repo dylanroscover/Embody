@@ -30,8 +30,12 @@ class Mesh:
     node-owner), with B's LAN listener live and A admitted on B."""
 
     def __init__(self, tmp_path, admit_a=True, audit=None):
-        self.a = ha.HostApp(str(tmp_path / "a"))
-        self.b = ha.HostApp(str(tmp_path / "b"))
+        self.a = ha.HostApp(
+            str(tmp_path / "a"),
+            artifact_cache_path=str(tmp_path / "a-artifacts"))
+        self.b = ha.HostApp(
+            str(tmp_path / "b"),
+            artifact_cache_path=str(tmp_path / "b-artifacts"))
         self.audit_events = [] if audit is None else audit
         if admit_a:
             self.admit_a_on_b()
@@ -46,7 +50,8 @@ class Mesh:
     def admit_a_on_b(self):
         with self.b.lock:
             self.b.peers.admit(self.a.host_id, self.a.hostkeys.fingerprint,
-                               cert_pem=self.a.hostkeys.certificate_pem)
+                               cert_pem=self.a.hostkeys.certificate_pem,
+                               convoy_ids=["studio"])
 
     def target(self, host_id=None, cert_pem=None, fingerprint=None):
         return pc.PeerTarget(
@@ -57,10 +62,9 @@ class Mesh:
     runtime_id = "rt-1"
 
     def register_node(self, convoy_id="studio"):
-        with self.b.lock:
-            code, body = self.b.register_node({
-                "project_root": "/Work/proj", "comp_path": "/Embody",
-                "convoy_id": convoy_id, "runtime_id": self.runtime_id})
+        code, body = self.b.register_node({
+            "project_root": "/Work/proj", "comp_path": "/Embody",
+            "convoy_id": convoy_id, "runtime_id": self.runtime_id})
         assert code == 200, body
         return body["node_id"], convoy_id
 
@@ -158,6 +162,18 @@ _LOOPBACK_POST = ["/register", "/unregister", "/remint", "/jobs", "/envelope",
                   "/peers/forget", "/peers/observe", "/peers/quarantine",
                   "/lan/killswitch", "/leases", "/leases/release",
                   "/heartbeat", "/dispatch", "/drain", "/poll", "/shutdown"]
+_LOOPBACK_POST.append("/relay/artifact")
+_LOOPBACK_POST.append("/relay/artifact/release")
+_LOOPBACK_POST.append("/artifact/export")
+
+# Artifact content routes are loopback-token authenticated too.  Name all
+# three shapes in the structural LAN-leak sweep; their bytes must never become
+# reachable merely because the peer listener learned its own artifact routes.
+_LOOPBACK_GET.append("/artifacts/c3R1ZGlv/art_" + "0" * 64)
+_LOOPBACK_POST.extend([
+    "/artifacts/c3R1ZGlv",
+    "/artifacts/c3R1ZGlv/art_" + "0" * 64 + "/capability",
+])
 
 
 @pytest.mark.parametrize("path", _LOOPBACK_GET)
@@ -252,18 +268,31 @@ def test_a_cross_namespace_envelope_is_refused(mesh):
     node_id, _convoy_id = mesh.register_node(convoy_id="studio")
     env = mesh.envelope(node_id, "a-different-convoy", "convoy_ping")
     result = pc.send_envelope(mesh.target(), mesh.a.hostkeys, env)
-    assert result.get("reason") == "namespace_mismatch"
+    # Namespace authorization is checked before envelope verification:
+    # this peer has a valid host pin but no grant for the other Convoy.
+    assert result.get("reason") == "namespace_not_admitted"
 
 
-# -- remote surface: run_tests / save_project stay off the LAN ---------
+# -- remote surface: full node tools, with the independent code gate ---
 
-@pytest.mark.parametrize("operation", ["run_tests", "save_project"])
-def test_non_remote_exposed_operations_are_refused_for_a_peer(mesh, operation):
+def test_remote_run_tests_is_refused(mesh):
+    # run_tests is never relayed to a remote peer. Without TD-Python approval
+    # the TD-Python gate refuses it first (td_python_not_approved); with
+    # approval the remote-exposed gate refuses it (operation_not_remote_exposed
+    # -- covered in test_convoy_peer_hardening). Either way it never executes
+    # (review 2026-08-02, finding 544).
     node_id, convoy_id = mesh.register_node()
-    # A VALID runtime, so verify_envelope's A-22 precondition passes and
-    # the remote_exposed gate is what refuses -- otherwise the trap the
-    # handoff names fires: runtime_id_required proves the wrong refusal.
-    env = mesh.envelope(node_id, convoy_id, operation,
+    env = mesh.envelope(node_id, convoy_id, "run_tests",
+                        expected_runtime_id=mesh.runtime_id)
+    result = pc.send_envelope(mesh.target(), mesh.a.hostkeys, env)
+    assert result.get("reason") == "td_python_not_approved"
+
+
+def test_remote_save_project_is_refused_as_not_remote_exposed(mesh):
+    # save_project blocks TD's main thread and is off the remote surface
+    # until A-30/A-31 show protection exists (finding 544).
+    node_id, convoy_id = mesh.register_node()
+    env = mesh.envelope(node_id, convoy_id, "save_project",
                         expected_runtime_id=mesh.runtime_id)
     result = pc.send_envelope(mesh.target(), mesh.a.hostkeys, env)
     assert result.get("reason") == "operation_not_remote_exposed"
@@ -271,7 +300,9 @@ def test_non_remote_exposed_operations_are_refused_for_a_peer(mesh, operation):
 
 # -- /peer/manifest is filtered to remote-exposed ----------------------
 
-def test_peer_manifest_hides_non_exposed_operations(mesh):
+def test_peer_manifest_excludes_the_non_remote_operations(mesh):
+    # The peer manifest advertises only the remote-exposed surface; the two
+    # worker-only operations must not appear on it (finding 544).
     body = pc.get_peer_manifest(mesh.target(), mesh.a.hostkeys)
     assert body["ok"] is True
     names = set(body["manifest"]["operations"].keys())
@@ -279,6 +310,102 @@ def test_peer_manifest_hides_non_exposed_operations(mesh):
     assert "query_network" in names
     assert "run_tests" not in names
     assert "save_project" not in names
+
+
+# -- /peer/nodes: namespace-bound discovery ---------------------------
+
+def test_peer_nodes_route_delegates_only_after_namespace_authorization(mesh):
+    calls = []
+
+    def view(host_id, convoy_id, authenticated_fingerprint):
+        calls.append((host_id, convoy_id, authenticated_fingerprint))
+        return 200, {"ok": True, "convoy_id": convoy_id, "nodes": []}
+
+    mesh.b.peer_nodes_view = view
+    body = pc.get_peer_nodes(mesh.target(), mesh.a.hostkeys, "studio")
+    assert body["ok"] is True
+    assert calls == [(mesh.a.host_id, "studio",
+                      mesh.a.hostkeys.fingerprint)]
+
+
+def test_peer_nodes_route_rejects_noncanonical_or_escaping_segments(mesh):
+    mesh.b.peer_nodes_view = lambda *_: pytest.fail(
+        "malformed route reached HostApp")
+    encoded_limit = ((ps.MAX_CONVOY_ID_BYTES * 4 + 2) // 3)
+    for segment in ("!!!", "abc=", "abc/def", "x" * (encoded_limit + 1)):
+        body = mesh.raw("GET", ps.ROUTE_NODES_PREFIX + segment)
+        assert body["reason"] == "malformed", (segment, body)
+
+
+def test_convoy_segment_encoding_round_trips_unicode_canonically():
+    value = "studio-舞台"
+    encoded = pc._encode_convoy_segment(value)
+    assert "/" not in encoded and "=" not in encoded
+    assert ps._decode_convoy_segment(encoded) == value
+    assert ps._decode_convoy_segment(encoded + "=") is None
+
+
+def test_oversize_hostapp_response_becomes_a_small_named_failure(mesh):
+    mesh.b.peer_nodes_view = lambda *_: (
+        200, {"ok": True, "convoy_id": "studio",
+              "nodes": [{"node_id": "x" * ps.MAX_PEER_RESPONSE_BYTES}]})
+    body = pc.get_peer_nodes(mesh.target(), mesh.a.hostkeys, "studio")
+    assert body["ok"] is False
+    assert body["reason"] == "response_too_large"
+
+
+@pytest.mark.parametrize("payload", [
+    {"ok": True, "convoy_id": "other", "nodes": []},
+    {"ok": True, "convoy_id": "studio",
+     "nodes": [{"node_id": "n", "convoy_id": "other"}]},
+    {"ok": True, "convoy_id": "studio", "nodes": ["not-an-object"]},
+])
+def test_peer_nodes_route_fails_closed_on_an_unbound_hostapp_view(mesh,
+                                                                  payload):
+    mesh.b.peer_nodes_view = lambda *_: (200, payload)
+    body = pc.get_peer_nodes(mesh.target(), mesh.a.hostkeys, "studio")
+    assert body["reason"] == "invalid_peer_nodes_view"
+
+
+def test_peer_nodes_route_caps_the_number_of_rows(mesh):
+    payload = {"ok": True, "convoy_id": "studio",
+               "nodes": [{} for _ in range(ps.MAX_PEER_NODES + 1)]}
+    mesh.b.peer_nodes_view = lambda *_: (200, payload)
+    body = pc.get_peer_nodes(mesh.target(), mesh.a.hostkeys, "studio")
+    assert body["reason"] == "invalid_peer_nodes_view"
+
+
+# -- /peer/controllers: namespace-bound, non-waking status -------------
+
+def test_peer_controllers_route_delegates_after_namespace_authorization(mesh):
+    calls = []
+
+    def view(host_id, convoy_id, authenticated_fingerprint):
+        calls.append((host_id, convoy_id, authenticated_fingerprint))
+        return 200, {"ok": True, "convoy_id": convoy_id,
+                     "controllers": [], "wakes_touchdesigner": False}
+
+    mesh.b.peer_controllers_view = view
+    body = pc.get_peer_controllers(mesh.target(), mesh.a.hostkeys, "studio")
+    assert body["ok"] is True
+    assert body["wakes_touchdesigner"] is False
+    assert calls == [(mesh.a.host_id, "studio",
+                      mesh.a.hostkeys.fingerprint)]
+
+
+def test_peer_controllers_route_rejects_invalid_hostapp_shape(mesh):
+    mesh.b.peer_controllers_view = lambda *_: (
+        200, {"ok": True, "convoy_id": "studio",
+              "controllers": [{"controller_id": ""}]})
+    body = pc.get_peer_controllers(mesh.target(), mesh.a.hostkeys, "studio")
+    assert body["reason"] == "invalid_peer_controllers_view"
+
+
+def test_peer_controllers_route_rejects_escaping_namespace(mesh):
+    mesh.b.peer_controllers_view = lambda *_: pytest.fail(
+        "malformed controller route reached HostApp")
+    body = mesh.raw("GET", ps.ROUTE_CONTROLLERS_PREFIX + "abc/def")
+    assert body["reason"] == "malformed"
 
 
 # -- /peer/jobs: per-peer authorization + the cursor -------------------
@@ -321,6 +448,72 @@ def test_the_cursor_reports_unchanged_when_since_is_current(mesh):
                             since=cursor)
     assert again["changed"] is False
     assert again["cursor"] == cursor
+
+
+def test_a_peer_cancels_its_own_queued_delivery(mesh):
+    node_id, convoy_id = mesh.register_node()
+    created = pc.send_envelope(mesh.target(), mesh.a.hostkeys,
+                               mesh.envelope(node_id, convoy_id))
+    delivery_id = created["job"]["delivery_id"]
+    cancelled = pc.cancel_peer_job(
+        mesh.target(), mesh.a.hostkeys, convoy_id, delivery_id)
+    assert cancelled["ok"] is True
+    assert cancelled["cancelled"] is True
+    assert cancelled["definitive"] is True
+    assert cancelled["job"]["state"] == "refused"
+
+
+def test_a_peer_cannot_cancel_another_origins_delivery(mesh):
+    with mesh.b.lock:
+        job, _ = mesh.b.db.create_job(
+            "local-cancel-key", "n" * 32, "convoy_ping", {},
+            convoy_id="studio", origin_host_id=mesh.b.host_id)
+    result = pc.cancel_peer_job(
+        mesh.target(), mesh.a.hostkeys, "studio", job["delivery_id"])
+    assert result["reason"] == "unknown_job"
+
+
+def test_peer_cancel_is_namespace_bound_before_job_lookup(mesh):
+    result = pc.cancel_peer_job(
+        mesh.target(), mesh.a.hostkeys, "not-admitted", "cj_deadbeef")
+    assert result["reason"] == peers_mod.REASON_NAMESPACE
+
+
+def test_peer_terminal_outcome_requires_and_accepts_explicit_ack(mesh):
+    node_id, convoy_id = mesh.register_node()
+    created = pc.send_envelope(mesh.target(), mesh.a.hostkeys,
+                               mesh.envelope(node_id, convoy_id))
+    delivery_id = created["job"]["delivery_id"]
+    code, dispatched = mesh.b.dispatch_job(delivery_id)
+    assert code == 200 and dispatched["job"]["state"] == "succeeded"
+
+    # Polling is observation only; it must not release retained terminal
+    # evidence as a hidden side effect.
+    viewed = pc.get_peer_job(mesh.target(), mesh.a.hostkeys, delivery_id)
+    assert viewed["job"]["state"] == "succeeded"
+    assert mesh.b.db.get_job(delivery_id)["outcome_acknowledged_at"] is None
+
+    acknowledged = pc.acknowledge_peer_job(
+        mesh.target(), mesh.a.hostkeys, convoy_id, delivery_id)
+    assert acknowledged["ok"] is True
+    assert acknowledged["already_acknowledged"] is False
+    assert acknowledged["wakes_touchdesigner"] is False
+    assert mesh.b.db.get_job(delivery_id)["outcome_acknowledged_at"] \
+        == acknowledged["acknowledged_at"]
+
+
+def test_peer_ack_is_owner_and_namespace_bound(mesh):
+    with mesh.b.lock:
+        job, _ = mesh.b.db.create_job(
+            "local-ack-key", "n" * 32, "convoy_ping", {},
+            convoy_id="studio", origin_host_id=mesh.b.host_id)
+        mesh.b.db.mark_refused(job["delivery_id"], {"reason": "test"})
+    other_owner = pc.acknowledge_peer_job(
+        mesh.target(), mesh.a.hostkeys, "studio", job["delivery_id"])
+    assert other_owner["reason"] == "unknown_job"
+    other_namespace = pc.acknowledge_peer_job(
+        mesh.target(), mesh.a.hostkeys, "not-admitted", job["delivery_id"])
+    assert other_namespace["reason"] == peers_mod.REASON_NAMESPACE
 
 
 # -- caps: the handshake-audit rate limiter ----------------------------
@@ -450,11 +643,128 @@ def test_a_second_request_after_a_refusal_still_answers(mesh):
         r1 = conn.getresponse()
         r1.read()
         assert r1.status == 403
-        # SECOND request on the SAME connection -- must answer, not hang.
+        assert r1.getheader("Connection") == "close"
+        # http.client transparently opens a NEW TLS connection for the
+        # second request. It must answer, while the refused connection's
+        # bounded server slot has already been released.
         conn.request("GET", ps.ROUTE_MANIFEST)
         r2 = conn.getresponse()
         r2.read()
         assert r2.status == 403
+        assert r2.getheader("Connection") == "close"
+    finally:
+        conn.close()
+
+
+def test_a_normal_response_keeps_its_authenticated_control_connection(mesh):
+    import http.client
+    ctx = pc.build_client_ssl_context(mesh.a.hostkeys,
+                                      mesh.b.hostkeys.certificate_pem)
+    conn = http.client.HTTPSConnection("127.0.0.1", mesh.port,
+                                       context=ctx, timeout=10)
+    try:
+        conn.request("GET", ps.ROUTE_HEALTH)
+        response = conn.getresponse()
+        response.read()
+        assert response.status == 200
+        assert response.getheader("Connection") == "keep-alive"
+        assert response.will_close is False
+        # The same TLS connection remains usable and is authorized again on
+        # every request.
+        sock = conn.sock
+        conn.request("GET", ps.ROUTE_MANIFEST)
+        again = conn.getresponse()
+        again.read()
+        assert again.status == 200
+        assert conn.sock is sock
+    finally:
+        conn.close()
+
+
+def test_connection_caps_apply_before_worker_thread_creation(tmp_path):
+    """A slow handshake from one IP cannot create overflow threads."""
+    app = ha.HostApp(str(tmp_path / "bounded"))
+    overflow = threading.Event()
+    audit = []
+
+    def sink(event, detail):
+        audit.append((event, detail))
+        if event == "peer_connection_overflow":
+            overflow.set()
+
+    server, port = ps.serve_lan(
+        app, "127.0.0.1", 0, audit_sink=sink,
+        max_connections=2, max_connections_per_ip=1,
+        handshake_timeout=5.0)
+    worker_started = threading.Event()
+    workers = []
+    original = server.process_request_thread
+
+    def counted(request, address):
+        workers.append(address)
+        worker_started.set()
+        return original(request, address)
+
+    server.process_request_thread = counted
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    first = second = None
+    try:
+        first = socket.create_connection(("127.0.0.1", port), timeout=2)
+        assert worker_started.wait(2), "first connection got no worker"
+        # It sends no TLS ClientHello, so it occupies the single per-IP
+        # handshake slot. The next accept must close before spawning.
+        second = socket.create_connection(("127.0.0.1", port), timeout=2)
+        assert overflow.wait(2), "overflow connection was not refused"
+        assert len(workers) == 1
+        assert audit[-1][1]["max_connections_per_ip"] == 1
+    finally:
+        if second is not None:
+            second.close()
+        if first is not None:
+            first.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+        app.db.close()
+
+
+def test_default_connection_budget_covers_the_thirty_host_mesh():
+    assert ps.DEFAULT_MAX_CONNECTIONS >= 29
+    assert ps.PeerHTTPSServer.request_queue_size >= 29
+
+
+def test_per_ip_cap_covers_one_peers_session_control_and_transfers():
+    """A single well-behaved peer legitimately holds, from its own IP, one
+    long-lived /peer/session WSS upgrade + one persistent pooled control
+    connection + up to DEFAULT_MAX_TRANSFERS one-shot artifact streams. The
+    per-IP cap must clear that sum (1 + 1 + 4 = 6) or a peer starves its own
+    transfers behind its own session/control connections."""
+    import convoy_artifact_http as ah
+    assert (ps.DEFAULT_MAX_CONNECTIONS_PER_IP
+            >= ah.DEFAULT_MAX_TRANSFERS + 2)
+
+
+def test_a_bad_artifact_route_post_drains_body_and_stays_usable(mesh):
+    """do_POST that raises ArtifactHTTPError from parse_route (here, a query
+    string) leaves the declared request body unread. It MUST DRAIN that body
+    and deliver the error on a still-usable keep-alive connection. Closing
+    without draining RSTs the socket on Windows and discards the response we
+    just wrote (review 2026-08-02). Two consecutive POSTs on the SAME
+    connection both getting a clean 400 proves the response was delivered
+    (no RST) AND the body was drained (else the second would mis-parse)."""
+    import http.client
+    ctx = pc.build_client_ssl_context(mesh.a.hostkeys,
+                                      mesh.b.hostkeys.certificate_pem)
+    conn = http.client.HTTPSConnection("127.0.0.1", mesh.port,
+                                       context=ctx, timeout=10)
+    try:
+        for _ in range(2):
+            conn.request("POST", ps.ROUTE_ARTIFACTS_PREFIX + "c3R1ZGlv?x=1",
+                         body=b'{"unread": "body"}')
+            response = conn.getresponse()
+            response.read()
+            assert response.status == 400
     finally:
         conn.close()
 

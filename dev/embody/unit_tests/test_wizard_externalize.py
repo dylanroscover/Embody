@@ -13,8 +13,8 @@ see .claude/rules/destructive-tests.md). So NOTHING here ever lets the real
 sweep run: _scheduleProjectExternalization is stubbed to record, and the
 recovery-point probe is stubbed for both outcomes. As in test_setup_wizard,
 _restoring_settings is set for the whole test so a param write fires NO parexec
-side effects (no config migration at the live repo root), the Envoy-enable path
-is never taken (assistant='none' returns before it), and every mutated param is
+side effects (no config migration at the live repo root), Convoy is held off so
+assistant='none' leaves Envoy off, and every mutated parameter is
 saved and restored. finish() is NEVER called -- it closes the window and kicks
 a real setup. NOT destructive.
 """
@@ -25,7 +25,8 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 
 class TestWizardExternalize(EmbodyTestCase):
 
-    _PARAMS = ('Autoexternalize', 'Aiclient', 'Envoyenable', 'Envoystatus')
+    _PARAMS = ('Autoexternalize', 'Aiclient', 'Envoyenable', 'Envoystatus',
+               'Convoyenable')
 
     def setUp(self):
         self._emb = op.Embody
@@ -55,6 +56,7 @@ class TestWizardExternalize(EmbodyTestCase):
         # Known starting point so 'unchanged' assertions mean something.
         self._emb.par.Autoexternalize = 'neither'
         self._emb.par.Envoyenable = False
+        self._emb.par.Convoyenable = False
 
     def tearDown(self):
         for obj, name in ((self._ext, '_scheduleProjectExternalization'),

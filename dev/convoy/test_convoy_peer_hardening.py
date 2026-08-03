@@ -28,6 +28,7 @@ import time
 import pytest
 
 import convoy_controllers as controllers
+from conftest import approve_td_python
 import convoy_hostapp as ha
 import convoy_hoststore as hs
 import convoy_peers as cp
@@ -180,46 +181,72 @@ def test_authorize_origin_hands_back_the_whole_decision(server):
 
 
 # =====================================================================
-# BLOCKER 2 -- remote_exposed must be ENFORCED, not merely stored
+# BLOCKER 2 -- the reviewed remote surface and per-node code gate bind
 # =====================================================================
 
-@pytest.mark.parametrize("operation", ["run_tests", "save_project"])
-def test_a_peer_cannot_submit_a_non_remote_exposed_operation(server,
-                                                             operation):
-    """R-2 is binding. run_tests exec_module's every test_*.py AND
-    test_*.txt it finds on disk; save_project blocks TD's main thread for
-    15+ seconds and restarts Envoy under itself. Neither is on the remote
-    surface, and the registry has said so since before this code existed.
-    """
+def test_peer_run_tests_is_never_relayed_whether_or_not_approved(server):
+    """run_tests exec_module's every test file on disk, so it is NOT relayable
+    to a remote peer at all (remote_exposed=False, A-1/R-2) -- it returns to the
+    remote surface only in a later phase, gated by A-30/A-31 show protection,
+    which does not exist yet. A peer submitting it is REFUSED whether or not the
+    node has TD-Python approval; the refusal reason differs by gate order (the
+    TD-Python gate is checked before the remote-exposed gate), but it is never
+    executed (review 2026-08-02, finding 544)."""
     code, node = server.call("/register", {
         "project_root": "/Work/p", "convoy_id": CONVOY,
         "comp_path": "/Embody", "envoy_port": 9800,
         "runtime_id": "rt_live"})
     assert code == 200
     admit(server)
-    # A-22 satisfied on purpose: both operations are runtime_required, and
-    # a runtime refusal would stop the request SHORT of the gate under
-    # test -- the test would pass while remote_exposed stayed dead data.
     envelope = envelope_for(server, node, psk_for(server),
-                            operation=operation, idempotency_key="b2",
+                            operation="run_tests", idempotency_key="b2",
                             expected_runtime_id="rt_live")
     code, body = submit_as_peer(server, envelope)
-    assert code == 403, (
-        f"{operation} was accepted from a LAN peer -- remote_exposed is "
-        f"dead data")
+    assert code == 403
+    assert body["reason"] == "td_python_not_approved"
+
+    # With TD-Python approved the earlier gate passes, but run_tests is still
+    # refused by the remote-exposed gate -- it never reaches execution.
+    approve_td_python(server.app, node["node_id"])
+    envelope = envelope_for(server, node, psk_for(server),
+                            operation="run_tests", idempotency_key="b2-ok",
+                            expected_runtime_id="rt_live")
+    code, body = submit_as_peer(server, envelope)
+    assert code == 403
+    assert body["reason"] == "operation_not_remote_exposed"
+
+
+def test_peer_save_project_is_not_on_the_remote_surface(server):
+    """save_project blocks TD's main thread 15+s and, without A-30/A-31 show
+    protection, is NOT relayable to a remote peer (remote_exposed=False). A peer
+    submitting it is refused as not remote-exposed (finding 544). It remains
+    available on the LOCAL path (see test_the_local_path_keeps_both_operations)."""
+    code, node = server.call("/register", {
+        "project_root": "/Work/p", "convoy_id": CONVOY,
+        "comp_path": "/Embody", "envoy_port": 9800,
+        "runtime_id": "rt_live"})
+    assert code == 200
+    admit(server)
+    envelope = envelope_for(server, node, psk_for(server),
+                            operation="save_project", idempotency_key="b2-save",
+                            expected_runtime_id="rt_live")
+    code, body = submit_as_peer(server, envelope)
+    assert code == 403
     assert body["reason"] == "operation_not_remote_exposed"
 
 
 @pytest.mark.parametrize("operation", ["run_tests", "save_project"])
 def test_the_local_path_keeps_both_operations(server, operation):
-    """POSITIVE CONTROL: the boundary is REMOTE-only. The owner running
-    their own tests on their own machine must be untouched."""
+    """Both operations remain available locally under the same node policy;
+    run_tests needs TD-Python approval regardless of transport."""
     node = register(server)
     code, body = server.call("/register", {
         "project_root": "/Work/p", "convoy_id": CONVOY,
         "comp_path": "/Embody", "envoy_port": 9800,
         "runtime_id": "rt_live"})
     runtime = body.get("runtime_id") or "rt_live"
+    if operation == "run_tests":
+        approve_td_python(server.app, node["node_id"])
     code, body = server.call("/jobs", {
         "idempotency_key": "local-" + operation,
         "node_id": node["node_id"], "operation": operation,
@@ -227,9 +254,9 @@ def test_the_local_path_keeps_both_operations(server, operation):
     assert code == 200, body
 
 
-def test_a_queued_non_remote_exposed_job_is_never_dispatched(server):
-    """Defence in depth: even a record created before the gate existed
-    (or by a build whose registry was wider) must not reach the node."""
+def test_a_queued_unapproved_run_tests_job_is_never_dispatched(server):
+    """Defence in depth: a legacy/directly-created code job is re-gated at
+    dispatch and terminally refused while TD-Python approval is off."""
     code, node = server.call("/register", {
         "project_root": "/Work/p", "convoy_id": CONVOY,
         "comp_path": "/Embody", "envoy_port": 9800,
@@ -252,11 +279,11 @@ def test_a_queued_non_remote_exposed_job_is_never_dispatched(server):
                                             or {"ok": True, "result": {}})
     server.app.drain_once()
     assert forwarded == [], "a peer's run_tests reached the node at dispatch"
-    # The refusal REASON is the evidence, never absence alone: it must
-    # be the remote-surface gate that fired, not some earlier fence.
+    # The refusal REASON is the evidence, never absence alone: it must be
+    # the node code-permission gate that fired, not some earlier fence.
     after = server.call("/jobs/" + job["delivery_id"])[1]["job"]
     assert after["state"] == "refused"
-    assert after["result"]["cause"] == "operation_not_remote_exposed", (
+    assert after["result"]["reason"] == "td_python_not_approved", (
         after["result"])
 
 
@@ -589,7 +616,8 @@ def test_the_killswitch_scans_the_job_store_at_most_once(server,
         host = "%02x" % i * 16
         fingerprint = "cvfp1-%s" % "-".join(["%04d" % i] * 8)
         server.call("/peers/admit", {"host_id": host,
-                                     "fingerprint": fingerprint})
+                                     "fingerprint": fingerprint,
+                                     "convoy_ids": [CONVOY]})
     scans = []
     real_scan = server.app.db.scan_jobs
     monkeypatch.setattr(server.app.db, "scan_jobs",
@@ -987,7 +1015,8 @@ def test_new5_an_unreadable_store_can_be_quarantined_in_band(server):
     assert code == 200 and body["peers"] == [] and \
         body["peers_unreadable"] is None
     assert server.call("/peers/admit", {"host_id": PEER,
-                                        "fingerprint": PEER_FP})[0] == 200
+                                        "fingerprint": PEER_FP,
+                                        "convoy_ids": [CONVOY]})[0] == 200
 
 
 def test_new5_quarantine_refuses_a_READABLE_store(server):

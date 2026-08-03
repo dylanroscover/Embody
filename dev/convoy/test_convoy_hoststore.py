@@ -18,6 +18,16 @@ import convoy_identity as ci
 VALID_HOST = "ab" * 16
 
 
+def accepted_timing(at=100.0, remaining=30.0, monotonic_deadline=40.0):
+    return {
+        "request_deadline_unix": at + remaining,
+        "accepted_at_unix": at,
+        "accepted_remaining_s": remaining,
+        "accepted_expires_unix": at + remaining,
+        "accepted_deadline_monotonic": monotonic_deadline,
+    }
+
+
 @pytest.fixture
 def db(tmp_path):
     d = hdb.HostStore(str(tmp_path / "state"))
@@ -91,7 +101,7 @@ def test_state_is_human_readable_json(tmp_path):
 
 # -- node persistence -------------------------------------------------
 
-def test_directory_survives_restart_with_ids_and_approvals(tmp_path):
+def test_directory_survives_restart_but_legacy_approval_does_not(tmp_path):
     path = str(tmp_path / "state")
     db1 = hdb.HostStore(path)
     directory, _foreign = db1.load_directory()
@@ -107,12 +117,216 @@ def test_directory_survives_restart_with_ids_and_approvals(tmp_path):
     assert {n["node_id"] for n in restored.nodes()} == \
         {a["node_id"], b["node_id"]}
     assert restored.lookup(a["node_id"])["td_python_approved"] is False
-    assert restored.lookup(b["node_id"])["td_python_approved"] is True, (
-        "an explicit approval must survive a host restart")
+    assert restored.lookup(b["node_id"])["td_python_approved"] is False, (
+        "HostStore must not persist code authority; PolicyStore owns it")
     # And the pair mapping still resolves: re-registering is stable.
     assert restored.register("/Work/A", "/Embody", "cv")["node_id"] == \
         a["node_id"]
     db2.close()
+
+
+def test_node_location_membership_and_metadata_survive_restart(tmp_path):
+    path = str(tmp_path / "state")
+    db1 = hdb.HostStore(path)
+    directory, _foreign = db1.load_directory()
+    node = directory.register(
+        "/Work/A", "/Embody", "cv", runtime_id="rt_live",
+        envoy_port=9981, node_discriminator="nd_" + "1" * 32)
+    directory.set_enabled(node["node_id"], False)
+    directory.set_metadata(node["node_id"], {
+        "toe_path": "/Work/A/show.toe",
+        "toe_name": "show.toe",
+        "node_name": "render / show",
+        "hostname": "render",
+        "process_id": 4312,
+        "embody_version": "6.0.178",
+        "touchdesigner_version": "2025.30000",
+    })
+    db1.save_node(directory.lookup(node["node_id"]))
+    db1.close()
+
+    with open(os.path.join(path, hdb.HOST_FILE), encoding="utf-8") as f:
+        disk = json.load(f)["nodes"][node["node_id"]]
+    assert disk["node_discriminator"] == "nd_" + "1" * 32
+    assert disk["enabled"] is False
+    assert disk["metadata"]["node_name"] == "render / show"
+    assert "runtime_id" not in disk
+    assert "envoy_port" not in disk
+
+    db2 = hdb.HostStore(path)
+    restored, quarantined = db2.load_directory()
+    assert quarantined == []
+    record = restored.lookup(node["node_id"])
+    assert record["node_discriminator"] == "nd_" + "1" * 32
+    assert record["enabled"] is False
+    assert record["metadata"]["process_id"] == 4312
+    assert record["envoy_port"] is None
+    assert record["runtime_id"] != "rt_live"
+    assert restored.lookup_location(
+        "/Work/A", "/Embody",
+        node_discriminator="nd_" + "1" * 32)["node_id"] == node["node_id"]
+    db2.close()
+
+
+def test_candidate_binding_survives_restart_without_becoming_authority(
+        tmp_path):
+    path = str(tmp_path / "state")
+    db1 = hdb.HostStore(path)
+    directory, _ = db1.load_directory()
+    node = directory.register(
+        "/Work/Candidate", "/Embody", "cv_provisional",
+        binding_state="candidate")
+    db1.save_node(node)
+    db1.close()
+
+    with open(os.path.join(path, hdb.HOST_FILE), encoding="utf-8") as f:
+        disk = json.load(f)["nodes"][node["node_id"]]
+    assert disk["binding_state"] == "candidate"
+
+    db2 = hdb.HostStore(path)
+    restored, quarantined = db2.load_directory()
+    assert quarantined == []
+    record = restored.lookup(node["node_id"])
+    assert record["convoy_id"] == "cv_provisional"
+    assert record["binding_state"] == "candidate"
+    db2.close()
+
+
+def test_hoststore_rebinds_all_candidates_in_one_write_and_restart_replays_it(
+        tmp_path, monkeypatch):
+    path = str(tmp_path / "state")
+    db1 = hdb.HostStore(path)
+    directory, _ = db1.load_directory()
+    first = directory.register(
+        "/Work/A", "/Embody", "cv_b", binding_state="candidate",
+        runtime_id="rt_a", envoy_port=9981)
+    second = directory.register(
+        "/Work/B", "/Embody", "cv_c", binding_state="candidate",
+        runtime_id="rt_b", envoy_port=9982)
+    established = directory.register(
+        "/Work/Existing", "/Embody", "cv_existing")
+    directory.set_metadata(first["node_id"], {"node_name": "A"})
+    directory.set_enabled(second["node_id"], False)
+    db1.save_nodes(directory.nodes())
+
+    writes = []
+    original_write = db1._write_host
+
+    def counted_write(data=None):
+        writes.append(1)
+        return original_write(data)
+
+    monkeypatch.setattr(db1, "_write_host", counted_write)
+    changed = db1.rebind_candidates(directory, "cv_authoritative")
+
+    assert len(writes) == 1, "all local candidates use one atomic replace"
+    assert {row["node_id"] for row in changed} == {
+        first["node_id"], second["node_id"]}
+    assert directory.lookup(first["node_id"])["runtime_id"] == "rt_a"
+    assert directory.lookup(first["node_id"])["envoy_port"] == 9981
+    assert directory.lookup(first["node_id"])["metadata"] == {
+        "node_name": "A"}
+    assert directory.lookup(second["node_id"])["enabled"] is False
+    assert established["convoy_id"] == "cv_existing"
+    assert established["binding_state"] == "established"
+    db1.close()
+
+    db2 = hdb.HostStore(path)
+    restored, quarantined = db2.load_directory()
+    assert quarantined == []
+    for node in (first, second):
+        record = restored.lookup(node["node_id"])
+        assert record["convoy_id"] == "cv_authoritative"
+        assert record["binding_state"] == "established"
+    existing = restored.lookup(established["node_id"])
+    assert existing["convoy_id"] == "cv_existing"
+    assert existing["binding_state"] == "established"
+    db2.close()
+
+
+def test_failed_batch_write_leaves_store_and_directory_candidates_unchanged(
+        tmp_path, monkeypatch):
+    path = str(tmp_path / "state")
+    db = hdb.HostStore(path)
+    directory, _ = db.load_directory()
+    node = directory.register(
+        "/Work/A", "/Embody", "cv_candidate",
+        binding_state="candidate")
+    db.save_node(node)
+    before_state = json.loads(json.dumps(db._state))
+
+    def fail_write(_data=None):
+        raise OSError("simulated disk failure")
+
+    monkeypatch.setattr(db, "_write_host", fail_write)
+    with pytest.raises(OSError, match="simulated disk failure"):
+        db.rebind_candidates(directory, "cv_authoritative")
+
+    assert db._state == before_state
+    assert directory.lookup(node["node_id"])["convoy_id"] == "cv_candidate"
+    assert directory.lookup(node["node_id"])["binding_state"] == "candidate"
+    db.close()
+
+
+def test_legacy_node_row_replays_with_safe_additive_defaults(tmp_path):
+    path = str(tmp_path / "state")
+    db1 = hdb.HostStore(path)
+    host_id = db1.host_id()
+    node_id = "cd" * 16
+    db1._state["nodes"][node_id] = {
+        "project_root": "/Work/Legacy",
+        "host_id": host_id,
+        "convoy_id": "cv",
+        "comp_path": "/Embody",
+        "td_python_approved": True,
+        "first_seen": 1.0,
+        "last_seen": 2.0,
+    }
+    db1._write_host()
+    db1.close()
+
+    db2 = hdb.HostStore(path)
+    restored, quarantined = db2.load_directory()
+    record = restored.lookup(node_id)
+    assert quarantined == []
+    assert record["node_discriminator"] == ""
+    assert record["binding_state"] == "established"
+    assert record["enabled"] is True
+    assert record["metadata"] == {}
+    assert record["td_python_approved"] is False
+    assert record["envoy_port"] is None
+    db2.close()
+
+
+def test_invalid_stored_metadata_drops_decoration_not_node_identity(tmp_path):
+    path = str(tmp_path / "state")
+    db1 = hdb.HostStore(path)
+    directory, _ = db1.load_directory()
+    node = directory.register("/Work/A", "/Embody", "cv")
+    db1.save_node(node)
+    db1._state["nodes"][node["node_id"]]["metadata"] = {
+        "controller_id": "authority-shaped"
+    }
+    db1._write_host()
+    db1.close()
+
+    db2 = hdb.HostStore(path)
+    restored, quarantined = db2.load_directory()
+    assert quarantined == []
+    assert restored.lookup(node["node_id"])["metadata"] == {}
+    assert any(row["event"] == "node_metadata_dropped_on_load"
+               for row in db2.audit_tail())
+    db2.close()
+
+
+def test_save_node_defensively_refuses_unbounded_or_unknown_metadata(db):
+    directory, _ = db.load_directory()
+    node = directory.register("/Work/A", "/Embody", "cv")
+    forged = dict(node)
+    forged["metadata"] = {"authorization": "yes"}
+    with pytest.raises(ci.IdentityError) as e:
+        db.save_node(forged)
+    assert e.value.reason == "malformed_metadata"
 
 
 # -- durable jobs -----------------------------------------------------
@@ -137,14 +351,65 @@ def test_idempotent_create_returns_the_same_job(db):
     assert len(db.jobs()) == 1
 
 
-def test_idempotency_holds_even_if_the_retry_differs(db):
-    """The key is the contract. A retry claiming the same key gets the
-    ORIGINAL job back rather than silently starting different work."""
+def test_idempotency_key_reuse_with_different_work_is_a_conflict(db):
+    """A key cannot silently substitute the original command for new work."""
     first, _ = db.create_job("k", "n", "query_network", {"parent_path": "/"}, "cv")
-    second, created = db.create_job("k", "n", "delete_op", {"op_path": "/x"}, "cv")
+    with pytest.raises(hdb.IdempotencyContentConflict) as e:
+        db.create_job("k", "n", "delete_op", {"op_path": "/x"}, "cv")
+    assert e.value.reason == "idempotency_content_conflict"
+    assert e.value.delivery_id == first["delivery_id"]
+    assert e.value.existing_digest != e.value.requested_digest
+    assert len(db.jobs()) == 1
+
+
+def test_idempotency_digest_is_canonical_for_argument_key_order(db):
+    first, _ = db.create_job(
+        "k", "n", "query_network", {"a": 1, "nested": {"y": 2, "x": 3}},
+        "cv")
+    retry, created = db.create_job(
+        "k", "n", "query_network", {"nested": {"x": 3, "y": 2}, "a": 1},
+        "cv")
     assert created is False
-    assert second["delivery_id"] == first["delivery_id"]
-    assert second["operation"] == "query_network"
+    assert retry["delivery_id"] == first["delivery_id"]
+
+
+def test_conflicting_upgrade_retry_does_not_strand_an_empty_marker(db):
+    """A local origin-scoped retry may inherit the pre-origin marker.
+
+    If that first retry conflicts, its freshly claimed four-part marker
+    must not be left empty: otherwise the following correct retry skips
+    the legacy lookup and mints duplicate acknowledged work.
+    """
+    first, _ = db.create_job("k", "n", "query_network", {"a": 1}, "cv")
+    with pytest.raises(hdb.IdempotencyContentConflict):
+        db.create_job("k", "n", "delete_op", {"a": 2}, "cv",
+                      origin_host_id=db.host_id())
+    retry, created = db.create_job(
+        "k", "n", "query_network", {"a": 1}, "cv",
+        origin_host_id=db.host_id())
+    assert created is False
+    assert retry["delivery_id"] == first["delivery_id"]
+    assert len(db.jobs()) == 1
+
+
+@pytest.mark.parametrize("change", ["runtime", "controller", "arguments"])
+def test_idempotency_digest_binds_execution_preconditions_and_caller(db,
+                                                                     change):
+    base = dict(expected_runtime_id="rt-1", origin_host_id=VALID_HOST,
+                controller_id="ctl-1")
+    first, _ = db.create_job("k", "n", "query_network", {"a": 1}, "cv",
+                             **base)
+    changed = dict(base)
+    arguments = {"a": 1}
+    if change == "runtime":
+        changed["expected_runtime_id"] = "rt-2"
+    elif change == "controller":
+        changed["controller_id"] = "ctl-2"
+    else:
+        arguments = {"a": 2}
+    with pytest.raises(hdb.IdempotencyContentConflict) as e:
+        db.create_job("k", "n", "query_network", arguments, "cv", **changed)
+    assert e.value.delivery_id == first["delivery_id"]
 
 
 def test_jobs_survive_host_restart(tmp_path):
@@ -170,6 +435,104 @@ def test_jobs_survive_host_restart(tmp_path):
     db2.close()
 
 
+def test_accepted_expiry_is_durable_and_refused_after_restart(tmp_path):
+    path = str(tmp_path / "state")
+    clock = {"wall": 100.0, "mono": 10.0}
+    db1 = hdb.HostStore(path, now=lambda: clock["wall"],
+                        monotonic=lambda: clock["mono"])
+    job, _ = db1.create_job(
+        "expires", "node-9", "query_network", {}, "cv",
+        origin_host_id=VALID_HOST,
+        accepted_timing=accepted_timing(monotonic_deadline=40.0))
+    stored = db1.get_job(job["delivery_id"])
+    assert stored["accepted_expires_unix"] == 130.0
+    assert "accepted_deadline_monotonic" not in stored, (
+        "a process-local monotonic epoch must never be persisted")
+    db1.close()
+
+    clock.update(wall=131.0, mono=2.0)
+    db2 = hdb.HostStore(path, now=lambda: clock["wall"],
+                        monotonic=lambda: clock["mono"])
+    assert db2.claim_for_dispatch(job["delivery_id"]) is None
+    refused = db2.get_job(job["delivery_id"])
+    assert refused["state"] == "refused"
+    assert refused["result"]["reason"] == "deadline_exceeded"
+    assert any(row["event"] == "job_expired_before_dispatch"
+               for row in db2.audit_tail())
+    db2.close()
+
+
+def test_live_monotonic_deadline_survives_wall_clock_rollback(tmp_path):
+    clock = {"wall": 100.0, "mono": 10.0}
+    store = hdb.HostStore(str(tmp_path / "state"),
+                          now=lambda: clock["wall"],
+                          monotonic=lambda: clock["mono"])
+    job, _ = store.create_job(
+        "k", "n", "query_network", {}, "cv",
+        origin_host_id=VALID_HOST,
+        accepted_timing=accepted_timing(monotonic_deadline=40.0))
+    # Wall time still claims almost the entire budget remains, but the
+    # target-local monotonic clock proves the accepted duration elapsed.
+    clock.update(wall=100.5, mono=40.1)
+    status = store.job_timing(job["delivery_id"])
+    assert status["expired"] is True
+    assert status["reason"] == "deadline_exceeded"
+    assert store.claim_for_dispatch(job["delivery_id"]) is None
+    assert store.get_job(job["delivery_id"])["state"] == "refused"
+    store.close()
+
+
+def test_material_clock_rollback_after_restart_fails_closed(tmp_path):
+    path = str(tmp_path / "state")
+    clock = {"wall": 100.0, "mono": 10.0}
+    store = hdb.HostStore(path, now=lambda: clock["wall"],
+                          monotonic=lambda: clock["mono"])
+    job, _ = store.create_job(
+        "k", "n", "query_network", {}, "cv",
+        origin_host_id=VALID_HOST,
+        accepted_timing=accepted_timing(monotonic_deadline=40.0))
+    store.close()
+
+    clock.update(wall=90.0, mono=1.0)
+    restored = hdb.HostStore(path, now=lambda: clock["wall"],
+                             monotonic=lambda: clock["mono"])
+    status = restored.job_timing(job["delivery_id"])
+    assert status["expired"] is True
+    assert status["reason"] == "clock_rollback"
+    restored.close()
+
+
+def test_idempotent_retry_may_refresh_envelope_timing_but_not_work(db):
+    first, _ = db.create_job(
+        "k", "n", "query_network", {}, "cv",
+        origin_host_id=VALID_HOST,
+        accepted_timing=accepted_timing(at=100.0, remaining=10.0,
+                                        monotonic_deadline=20.0))
+    retry, created = db.create_job(
+        "k", "n", "query_network", {}, "cv",
+        origin_host_id=VALID_HOST,
+        accepted_timing=accepted_timing(at=105.0, remaining=30.0,
+                                        monotonic_deadline=40.0))
+    assert created is False
+    assert retry["delivery_id"] == first["delivery_id"]
+    assert retry["accepted_expires_unix"] == 110.0, (
+        "a retry must not refresh an already accepted delivery budget")
+
+
+@pytest.mark.parametrize("field,bad", [
+    ("accepted_remaining_s", float("inf")),
+    ("accepted_expires_unix", 99.0),
+    ("request_deadline_unix", 120.0),
+])
+def test_malformed_accepted_timing_is_refused_before_ack(db, field, bad):
+    timing = accepted_timing()
+    timing[field] = bad
+    with pytest.raises(ValueError):
+        db.create_job("k", "n", "query_network", {}, "cv",
+                      accepted_timing=timing)
+    assert db.jobs() == []
+
+
 def test_indeterminate_is_host_originated_and_first_class(db):
     job, _ = db.create_job("k", "n", "capture_top", {}, "cv")
     updated = db.mark_indeterminate(
@@ -180,12 +543,76 @@ def test_indeterminate_is_host_originated_and_first_class(db):
     assert "indeterminate" in hdb.JOB_STATES
 
 
+def test_reap_notifies_cleanup_only_after_job_file_is_deleted(tmp_path):
+    clock = {"t": 100.0}
+    store = hdb.HostStore(str(tmp_path / "state"), now=lambda: clock["t"])
+    job, _ = store.create_job("cleanup", "n", "query_network", {}, "cv")
+    store.mark_refused(job["delivery_id"], {"reason": "test"})
+    clock["t"] = 200.0
+    observed = []
+
+    def cleanup(reaped):
+        assert store.get_job(reaped["delivery_id"]) is None
+        observed.append(reaped["delivery_id"])
+
+    result = store.reap(retention_s=10.0, on_reap=cleanup)
+    assert result["jobs"] == 1
+    assert observed == [job["delivery_id"]]
+    store.close()
+
+
 def test_indeterminate_requires_evidence(db):
     """The record is the only proof a consequential op MAY have run
     (16.4), so it must carry what was seen."""
     job, _ = db.create_job("k", "n", "capture_top", {}, "cv")
     with pytest.raises(ValueError):
         db.mark_indeterminate(job["delivery_id"], None)
+
+
+def test_indeterminate_evidence_is_not_reaped_before_acknowledgement(tmp_path):
+    clock = {"t": 100.0}
+    store = hdb.HostStore(str(tmp_path / "state"),
+                          now=lambda: clock["t"])
+    job, _ = store.create_job("k", "n", "capture_top", {}, "cv")
+    terminal = store.mark_indeterminate(
+        job["delivery_id"], {"detail": "response was lost"})
+    assert terminal["terminal_at"] == 100.0
+    assert terminal["outcome_acknowledged_at"] is None
+
+    clock["t"] = 1000.0
+    assert store.reap(retention_s=10.0)["jobs"] == 0
+    assert store.get_job(job["delivery_id"])["state"] == "indeterminate"
+
+    acknowledged = store.acknowledge_outcome(job["delivery_id"])
+    assert acknowledged["outcome_acknowledged_at"] == 1000.0
+    clock["t"] = 1011.0
+    assert store.reap(retention_s=10.0)["jobs"] == 1
+    assert store.get_job(job["delivery_id"]) is None
+    store.close()
+
+
+def test_nonterminal_outcome_cannot_be_acknowledged(db):
+    job, _ = db.create_job("k", "n", "capture_top", {}, "cv")
+    with pytest.raises(ValueError):
+        db.acknowledge_outcome(job["delivery_id"])
+
+
+def test_a_node_correction_invalidates_the_prior_acknowledgement(tmp_path):
+    clock = {"t": 100.0}
+    store = hdb.HostStore(str(tmp_path / "state"),
+                          now=lambda: clock["t"])
+    job, _ = store.create_job("k", "n", "capture_top", {}, "cv")
+    store.mark_indeterminate(job["delivery_id"], {"detail": "lost"})
+    store.acknowledge_outcome(job["delivery_id"])
+
+    clock["t"] = 200.0
+    corrected = store.record_node_verdict(
+        job["delivery_id"], "error", node_job_id="job_deadbeef",
+        observed_at=200.0, result={"detail": "node later answered"})
+    assert corrected["state"] == "failed"
+    assert corrected["terminal_at"] == 200.0
+    assert corrected["outcome_acknowledged_at"] is None
+    store.close()
 
 
 def test_host_cannot_originate_an_execution_verdict(db):
@@ -441,6 +868,15 @@ def test_marker_pointing_at_a_deleted_job_heals(db):
     assert healed["delivery_id"] != job["delivery_id"]
 
 
+def test_marker_for_missing_job_still_rejects_different_request(db):
+    """The atomic marker is binding evidence even if its job is absent."""
+    job, _ = db.create_job("k", "n", "query_network", {"a": 1}, "cv")
+    os.remove(db._job_path(job["delivery_id"]))
+    with pytest.raises(hdb.IdempotencyContentConflict) as e:
+        db.create_job("k", "n", "delete_op", {"a": 2}, "cv")
+    assert e.value.delivery_id == job["delivery_id"]
+
+
 def test_idempotency_markers_are_not_listed_as_jobs(db):
     db.create_job("k1", "n", "x", {}, "cv")
     db.create_job("k2", "n", "y", {}, "cv")
@@ -517,6 +953,63 @@ def test_the_load_sweep_touches_only_dispatching(tmp_path):
                      "failed": "failed",
                      "indeterminate": "indeterminate"}
     db2.close()
+
+
+def test_committed_lifecycle_ledger_can_reconcile_boot_indeterminate(tmp_path):
+    path = str(tmp_path / "state")
+    db1 = hdb.HostStore(path)
+    job, _ = db1.create_job(
+        "restart-recovery", "node-1", "convoy_restart_node",
+        {"timeout_s": 5}, "cv", expected_runtime_id="runtime-1")
+    delivery_id = job["delivery_id"]
+    db1.claim_for_dispatch(delivery_id)
+    db1.close()
+
+    db2 = hdb.HostStore(path)
+    assert db2.get_job(delivery_id)["state"] == "indeterminate"
+    result = {
+        "ok": True, "code": "ok", "detail": "operation completed",
+        "capability": "host.td-lifecycle/v1",
+        "node_id": "node-1", "operation_id": delivery_id,
+        "runtime_id": "runtime-new",
+    }
+    recovered = db2.reconcile_lifecycle_result(
+        delivery_id, True, 1234.0, result=result)
+    assert recovered["state"] == "succeeded"
+    assert recovered["verdict_source"] == "host_operation_recovery"
+    assert recovered["result"] == result
+    db2.close()
+
+
+def test_lifecycle_reconciliation_refuses_unrelated_or_unbound_evidence(
+        tmp_path):
+    db = hdb.HostStore(str(tmp_path / "state"))
+    job, _ = db.create_job("shell", "node-1", "convoy_shell", {}, "cv")
+    delivery_id = job["delivery_id"]
+    db.claim_for_dispatch(delivery_id)
+    db.mark_indeterminate(
+        delivery_id, {"reason": "host_exited_mid_dispatch"})
+    result = {
+        "ok": True, "code": "ok", "detail": "operation completed",
+        "capability": "host.td-lifecycle/v1",
+        "node_id": "node-1", "operation_id": delivery_id,
+    }
+    with pytest.raises(ValueError, match="only reviewed lifecycle"):
+        db.reconcile_lifecycle_result(
+            delivery_id, True, 1234.0, result=result)
+
+    lifecycle, _ = db.create_job(
+        "restart", "node-1", "convoy_restart_node", {}, "cv",
+        expected_runtime_id="runtime-1")
+    lifecycle_id = lifecycle["delivery_id"]
+    db.claim_for_dispatch(lifecycle_id)
+    db.mark_indeterminate(
+        lifecycle_id, {"reason": "host_exited_mid_dispatch"})
+    with pytest.raises(ValueError, match="not bound"):
+        db.reconcile_lifecycle_result(
+            lifecycle_id, True, 1234.0, result=result)
+    assert db.get_job(lifecycle_id)["state"] == "indeterminate"
+    db.close()
 
 
 def test_a_terminal_job_never_regresses_to_running(tmp_path):

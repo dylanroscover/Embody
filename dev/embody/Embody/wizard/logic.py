@@ -1,9 +1,10 @@
 SURF=(0.16,0.17,0.165)
 BACK_ON=(0.19,0.20,0.195); NEXT_ON=(0.24,0.52,0.35); NEXT_OFF=(0.135,0.15,0.14)
 TXT=(0.92,0.92,0.92); TXT_DIM=(0.34,0.35,0.34); NEXT_TXT=(0.97,0.99,0.97)
-GROUPS=['grp_mode','grp_assistant','grp_client','grp_permissions','grp_git','grp_footprint','grp_externalize']
+GROUPS=['grp_mode','grp_assistant','grp_client','grp_permissions','grp_convoy','grp_git','grp_footprint','grp_externalize']
 DEFS={
  'mode':{'g':'grp_mode','sel':'sel_mode','title':'How should Embody manage your project?','hint':'Choose one, then Next.'},
+ 'convoy':{'g':'grp_convoy','sel':'sel_convoy','title':'Enable Convoy?','hint':'Convoy connects this Embody with other Convoy-enabled instances on the same trusted LAN. It works with or without an AI coding assistant. With no assistant, Embody runs only the internal local command service Convoy needs; it does not configure or launch an AI client. Enable only on a network you trust; installing the host app stays a separate, explicit step.'},
  'externalize':{'g':'grp_externalize','sel':'sel_externalize','title':'Make your project AI-readable?','hint':'Write your network to diffable files git and AI tools can read.'},
  'assistant':{'g':'grp_assistant','sel':'sel_assistant','title':'Turn on the AI assistant (Envoy)?','hint':'It lets AI tools work in your network. Easy to remove later.'},
  'client':{'g':'grp_client','sel':'sel_client','title':'Pick your AI coding tool','hint':'Embody will generate its config.'},
@@ -35,11 +36,16 @@ def spine():
 	s.append('assistant')
 	if a=='other': s.append('client')
 	if a=='claudecode': s.append('permissions')
+	# Convoy is also a TouchDesigner-originated sibling API, so it is independent
+	# of the AI-client choice. Default is DISABLED -- turning on remote control
+	# is an explicit, trusted-LAN choice, and installing the host app is a
+	# separate explicit pulse, never the wizard.
+	s.append('convoy')
 	# Git decision only when no repo was found at wizard start -- and for
 	# EVERY assistant choice incl. 'none' (externalization is git's whole
 	# point; the decision is about the project, not the AI).
 	if w.fetch('git_missing',False): s.append('git')
-	if m=='advanced' and a not in (None,'none'): s.append('footprint')
+	if m=='advanced' and (a not in (None,'none') or w.fetch('sel_convoy','')=='enable'): s.append('footprint')
 	s.append('summary'); return s
 def _grp(step): return _w().op(DEFS.get(step,{}).get('g') or '')
 def _chosen(step):
@@ -60,7 +66,9 @@ def _recap():
 	# project, so the summary always states it back before Set up Embody.
 	if 'externalize' in spine():
 		g+={'full':' Externalize: whole project now, plus new work.','auto':' Externalize: new work from here on.','skip':' Externalize: skipped for now.'}.get(w.fetch('sel_externalize',''),'')
-	if a=='none': return 'Mode: %s. AI assistant: off (externalization only).%s\nNothing has changed yet - click Set up Embody to apply.'%(m,g)
+	if 'convoy' in spine():
+		g+={'enable':' Convoy: enabled.','disable':' Convoy: off.'}.get(w.fetch('sel_convoy',''),'')
+	if a=='none': return 'Mode: %s. AI assistant: off.%s\nNothing has changed yet - click Set up Embody to apply.'%(m,g)
 	c=w.fetch('sel_client','') if a=='other' else ('Claude Code' if a=='claudecode' else a)
 	return 'Mode: %s. AI assistant: on (%s).%s\nNothing has changed yet - click Set up Embody to apply.'%(m, c or 'your tool', g)
 def _permHint():
@@ -72,6 +80,11 @@ def _permHint():
 			base+='\nA settings.local.json already exists -- Embody edits only its Envoy entries, keeping the rest.'
 	except Exception: pass
 	return base
+def _footprintHint():
+	w=_w()
+	if w.fetch('sel_assistant','')=='none' and w.fetch('sel_convoy','')=='enable':
+		return 'Convoy-only setup adds a Python env (.venv), the internal local Envoy command service, and .embody runtime state. It does not generate AI-client config or launch an AI coding tool. The separate Convoy host-app install remains an explicit action. Everything Embody adds is recorded and reversible via Uninstall.'
+	return DEFS['footprint']['hint']
 def render():
 	w=_w(); sp=spine(); cur=w.fetch('step_id','mode')
 	if cur not in sp: cur='mode'; w.store('step_id',cur)
@@ -82,8 +95,8 @@ def render():
 		g=w.op(gid)
 		if g: g.par.display = 1 if gid==d.get('g') else 0
 	w.op('title').par.text=d['title']
-	w.op('hint').par.text=_permHint() if cur=='permissions' else (_recap() if cur=='summary' else d['hint'])
-	w.op('hint').par.h = 60 if cur in ('footprint','summary','permissions') else 16
+	w.op('hint').par.text=_permHint() if cur=='permissions' else (_footprintHint() if cur=='footprint' else (_recap() if cur=='summary' else d['hint']))
+	w.op('hint').par.h = 60 if cur in ('footprint','summary','permissions','convoy') else 16
 	bb=_nav('back'); nb=_nav('next'); first=idx==0
 	if bb:
 		if bb.op('text'): bb.op('text').par.text='Not now' if first else 'Back'
@@ -159,6 +172,7 @@ def finish():
 	# Only pass a choice the user was actually shown -- same test spine()
 	# uses, so a hidden step can never mutate the whole project.
 	x=w.fetch('sel_externalize','') if 'externalize' in spine() else ''
+	cv=w.fetch('sel_convoy','') if 'convoy' in spine() else ''
 	cr=''
 	if r=='custom':
 		try: cr=ui.chooseFolder(title='Choose the folder for Embody config') or ''
@@ -166,7 +180,7 @@ def finish():
 	_close()
 	# Defer so the window closes cleanly before setup runs. Tokens come from the
 	# wizard's fixed option set, so repr-interpolation is safe.
-	run('op.Embody.ext.Embody._applyWizardSetup(mode=%r, assistant=%r, client=%r, root=%r, custom_root=%r, permissions=%r, git=%r, externalize=%r)'%(m,a,c,r,cr,pm,g,x), delayFrames=2)
+	run('op.Embody.ext.Embody._applyWizardSetup(mode=%r, assistant=%r, client=%r, root=%r, custom_root=%r, permissions=%r, git=%r, externalize=%r, convoy=%r)'%(m,a,c,r,cr,pm,g,x,cv), delayFrames=2)
 def start():
 	w=_w(); w.store('step_id','mode')
 	for gid in GROUPS:
@@ -178,8 +192,14 @@ def start():
 	mb=w.op('grp_mode/opt_'+md)
 	if mb: mb.par.value0=1
 	w.store('sel_mode',md)
-	ab=w.op('grp_assistant/opt_claudecode')
+	try: ai=str(op.Embody.par.Aiclient.eval() or 'claudecode')
+	except Exception: ai='claudecode'
+	a=('none' if ai=='none' else ('claudecode' if ai=='claudecode' else 'other'))
+	ab=w.op('grp_assistant/opt_'+a)
 	if ab: ab.par.value0=1
+	if a=='other':
+		cb=w.op('grp_client/opt_'+ai)
+		if cb: cb.par.value0=1
 	pb=w.op('grp_permissions/opt_all')
 	if pb: pb.par.value0=1
 	# Git step gate: same probe the enable path uses (_findGitRootSync), so
@@ -198,5 +218,11 @@ def start():
 	# Pre-select the safe, non-destructive option: externalize new work only.
 	xb=w.op('grp_externalize/opt_auto')
 	if xb: xb.par.value0=1
-	w.store('sel_assistant','claudecode'); w.store('sel_client',''); w.store('sel_root','gitroot'); w.store('sel_permissions','all'); w.store('sel_git','gitinit'); w.store('sel_externalize','auto')
+	# Convoy step: pre-select the CURRENT enable state so re-running the wizard
+	# never silently flips an existing choice (as mode/git are pre-selected).
+	try: cv_on=bool(op.Embody.par.Convoyenable.eval())
+	except Exception: cv_on=False
+	vb=w.op('grp_convoy/opt_'+('enable' if cv_on else 'disable'))
+	if vb: vb.par.value0=1
+	w.store('sel_assistant',a); w.store('sel_client',ai if a=='other' else ''); w.store('sel_root','gitroot'); w.store('sel_permissions','all'); w.store('sel_git','gitinit'); w.store('sel_externalize','auto'); w.store('sel_convoy','enable' if cv_on else 'disable')
 	render()

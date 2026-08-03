@@ -15,13 +15,16 @@ import pytest
 
 import convoy_hostapp as ha
 import convoy_platform as cp
+from conftest import approve_td_python
 
 
 class Server:
     """A running host app on a throwaway data dir."""
 
     def __init__(self, data_dir):
-        self.app = ha.HostApp(data_dir)
+        self.app = ha.HostApp(
+            data_dir,
+            artifact_cache_path=os.path.join(data_dir, "test-artifacts"))
         self.server, self.port = ha.serve(self.app, port=0)
         self.thread = threading.Thread(target=self.server.serve_forever,
                                        daemon=True)
@@ -163,10 +166,7 @@ def test_anchor_switching_convoy_is_refused(server):
 
 def test_remint_over_the_wire_resets_approval(server):
     _, node = server.call("/register", {"project_root": "/Work/x", "convoy_id": "c", "comp_path": "/Embody"})
-    with server.app.lock:
-        server.app.directory.approve_td_python(node["node_id"])
-        server.app.db.save_node(
-            server.app.directory.lookup(node["node_id"]))
+    approve_td_python(server.app, node["node_id"])
 
     code, fresh = server.call("/remint", {"node_id": node["node_id"]})
     assert code == 200
@@ -381,8 +381,7 @@ def test_unregister_keeps_the_node_record(server):
     """Only the per-launch port goes. node_id is the durable address an
     approval attaches to -- deleting it would silently revoke consent."""
     _, node = _register(server, port=9981)
-    with server.app.lock:
-        server.app.directory.approve_td_python(node["node_id"])
+    approve_td_python(server.app, node["node_id"])
 
     server.call("/unregister", {"node_id": node["node_id"]})
 

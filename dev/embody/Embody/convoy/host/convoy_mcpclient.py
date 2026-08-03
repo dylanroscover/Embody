@@ -31,6 +31,11 @@ import urllib.request
 
 SESSION_HEADER = "X-Envoy-Session"
 DEFAULT_TIMEOUT_S = 30.0
+# The inline MCP leg is a control channel, not an artifact transport.
+# Bound the read before decoding/JSON parsing so a compromised or buggy
+# local Envoy cannot make the host buffer an arbitrary response. Large
+# screenshots move through Convoy's artifact layer instead.
+MAX_MCP_RESPONSE_BYTES = 8 * 1024 * 1024
 
 
 class _Unreachable:
@@ -76,6 +81,11 @@ def _tool_payload(content):
     else the content itself."""
     if not isinstance(content, list) or not content:
         return None
+    # Preserve multi-block results.  In particular, capture_top can return
+    # a text descriptor followed by an image block; silently taking only
+    # the first block made a successful remote screenshot unusable.
+    if len(content) > 1:
+        return {"content": content}
     first = content[0]
     text = first.get("text") if isinstance(first, dict) else None
     if text is None:
@@ -84,6 +94,16 @@ def _tool_payload(content):
         return json.loads(text)
     except (ValueError, TypeError):
         return text
+
+
+def _read_bounded(response):
+    raw = response.read(MAX_MCP_RESPONSE_BYTES + 1)
+    if len(raw) > MAX_MCP_RESPONSE_BYTES:
+        return None
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
 
 
 def forward(port, operation, arguments, opener=None,
@@ -113,12 +133,19 @@ def forward(port, operation, arguments, opener=None,
         return UNREACHABLE      # a non-numeric port cannot be reached
     try:
         with opener(req, timeout=timeout) as resp:
-            body = resp.read().decode("utf-8")
+            body = _read_bounded(resp)
+        if body is None:
+            # The operation may have run, but its response was outside the
+            # control-channel contract.  None maps to indeterminate rather
+            # than fabricating either success or failure.
+            return None
     except urllib.error.HTTPError as e:
         # An HTTP error IS a response (the node answered) -- a tool error,
         # not a transport failure.
         try:
-            body = e.read().decode("utf-8")
+            body = _read_bounded(e)
+            if body is None:
+                return None
         except Exception:
             return {"ok": False, "error": "HTTP %s" % e.code}
     except urllib.error.URLError as e:

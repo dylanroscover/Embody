@@ -542,6 +542,48 @@ class TestConvoyClientPayload(EmbodyTestCase):
             'envoy_port': 9981,
         })
 
+    def test_payload_carries_explicit_realm_binding_state(self):
+        payload = client.registration_payload(
+            '/r', '/Embody', 'cv', 'rt_1234',
+            binding_state='candidate')
+        self.assertEqual(payload['binding_state'], 'candidate')
+        with self.assertRaises(ValueError):
+            client.registration_payload(
+                '/r', '/Embody', 'cv', 'rt_1234',
+                binding_state='conflict')
+
+    def test_payload_carries_exact_executable_and_paired_launch_proof(self):
+        token = 'T' * 43
+        reservation = 'lr_' + 'R' * 32
+        payload = client.registration_payload(
+            '/r', '/Embody', 'cv', 'rt_1234',
+            td_executable='C:/Program Files/Derivative/TouchDesigner.exe',
+            launch_token=token, launch_reservation_id=reservation)
+        self.assertEqual(
+            payload['td_executable'],
+            'C:/Program Files/Derivative/TouchDesigner.exe')
+        self.assertEqual(payload['launch_token'], token)
+        self.assertEqual(payload['launch_reservation_id'], reservation)
+        self.assertEqual(json.loads(json.dumps(payload)), payload)
+
+    def test_launch_proof_and_executable_are_strictly_bounded(self):
+        base = ('/r', '/Embody', 'cv', 'rt_1234')
+        bad = (
+            {'td_executable': ''},
+            {'td_executable': 'C:/Touch\nDesigner.exe'},
+            {'launch_token': 'T' * 43},
+            {'launch_reservation_id': 'lr_' + 'R' * 32},
+            {'launch_token': 'short',
+             'launch_reservation_id': 'lr_' + 'R' * 32},
+            {'launch_token': 'T' * 42 + '!',
+             'launch_reservation_id': 'lr_' + 'R' * 32},
+            {'launch_token': 'T' * 43,
+             'launch_reservation_id': 'bad\nreservation'},
+        )
+        for kwargs in bad:
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                client.registration_payload(*base, **kwargs)
+
     def test_runtime_id_is_always_present(self):
         """The host does `runtime_id or mint_runtime_id()`: omitting it
         re-mints the run identity on every heartbeat and invalidates
@@ -590,6 +632,108 @@ class TestConvoyClientPayload(EmbodyTestCase):
         payload = client.registration_payload('/r', '/Embody', 'cv',
                                               'rt_1234', envoy_port=9981)
         self.assertEqual(json.loads(json.dumps(payload)), payload)
+
+    def test_two_toe_files_get_distinct_stable_discriminators(self):
+        a = client.stable_node_discriminator(
+            'C:/Work/Show/main.toe', platform='win32')
+        b = client.stable_node_discriminator(
+            'C:/Work/Show/backup.toe', platform='win32')
+        self.assertNotEqual(a, b)
+        self.assertTrue(re.match(r'^nd_[0-9a-f]{32}$', a), a)
+        self.assertEqual(
+            a,
+            client.stable_node_discriminator(
+                'c:\\work\\show\\main.toe', platform='win32'),
+            'Windows case/separator variants are the same saved .toe')
+
+    def test_posix_toe_discriminator_is_case_sensitive(self):
+        upper = client.stable_node_discriminator(
+            '/Work/Show/main.toe', platform='darwin')
+        lower = client.stable_node_discriminator(
+            '/work/show/main.toe', platform='darwin')
+        self.assertNotEqual(upper, lower)
+
+    def test_relative_or_missing_toe_path_is_refused(self):
+        for bad in (None, '', 'show/main.toe'):
+            with self.assertRaises(ValueError):
+                client.stable_node_discriminator(bad, platform='linux')
+
+    def test_payload_carries_discriminator_and_bounded_metadata(self):
+        discriminator = client.stable_node_discriminator(
+            '/Work/Show/main.toe', platform='darwin')
+        metadata = {
+            'toe_path': '/Work/Show/main.toe',
+            'toe_name': 'main.toe',
+            'node_name': 'studio-mac / main',
+            'hostname': 'studio-mac',
+            'process_id': 1234,
+            'embody_version': '6.0.178',
+            'touchdesigner_version': '2025.32460',
+        }
+        payload = client.registration_payload(
+            '/Work/Show', '/Embody', 'cv', 'rt_1234',
+            node_discriminator=discriminator, metadata=metadata)
+        self.assertEqual(payload['node_discriminator'], discriminator)
+        self.assertEqual(payload['metadata'], metadata)
+        self.assertEqual(json.loads(json.dumps(payload)), payload)
+
+    def test_unknown_metadata_is_refused_not_forwarded(self):
+        with self.assertRaises(ValueError):
+            client.registration_payload(
+                '/Work/Show', '/Embody', 'cv', 'rt_1234',
+                node_discriminator='nd_' + '1' * 32,
+                metadata={'secret_td_object': 'no'})
+
+    def test_malformed_discriminator_is_refused(self):
+        for bad in ('', 'legacy', 'nd_' + 'A' * 32, 'nd_short'):
+            with self.assertRaises(ValueError):
+                client.registration_payload(
+                    '/Work/Show', '/Embody', 'cv', 'rt_1234',
+                    node_discriminator=bad)
+
+    def test_runtime_wake_endpoint_is_explicit_and_json_safe(self):
+        token = 'A' * 43
+        payload = client.registration_payload(
+            '/Work/Show', '/Embody', 'cv', 'rt_1234',
+            envoy_port=None, envoy_ready=False,
+            wake_port=47631, wake_token=token, remote_wake=True,
+            perform_mode=True, wake_active=False, wake_grace_s=60)
+        self.assertEqual(payload['wake_port'], 47631)
+        self.assertEqual(payload['wake_token'], token)
+        self.assertFalse(payload['envoy_ready'])
+        self.assertTrue(payload['remote_wake'])
+        self.assertTrue(payload['perform_mode'])
+        self.assertFalse(payload['wake_active'])
+        self.assertEqual(payload['wake_grace_s'], 60)
+        self.assertEqual(json.loads(json.dumps(payload)), payload)
+
+    def test_wake_intent_may_be_pending_while_listener_binds(self):
+        payload = client.registration_payload(
+            '/r', '/Embody', 'cv', 'rt_1', remote_wake=True,
+            perform_mode=True, wake_active=False, wake_grace_s=60)
+        self.assertTrue(payload['wake_pending'])
+        self.assertNotIn('wake_port', payload)
+        self.assertNotIn('wake_token', payload)
+
+    def test_malformed_wake_registration_is_refused_locally(self):
+        base = ('/r', '/Embody', 'cv', 'rt_1')
+        bad_kwargs = (
+            {'wake_port': 47631},
+            {'wake_token': 'A' * 43},
+            {'wake_port': 0, 'wake_token': 'A' * 43},
+            {'wake_port': True, 'wake_token': 'A' * 43},
+            {'wake_port': 47631, 'wake_token': 'short'},
+            {'wake_port': 47631, 'wake_token': 'A' * 42 + '!'},
+            {'envoy_ready': True},
+            {'remote_wake': 1},
+            {'perform_mode': 'yes'},
+            {'wake_active': 0},
+            {'wake_grace_s': -1},
+            {'wake_grace_s': 3601},
+        )
+        for kwargs in bad_kwargs:
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                client.registration_payload(*base, **kwargs)
 
 
 # =====================================================================
@@ -888,12 +1032,18 @@ class TestConvoyClientRegister(EmbodyTestCase):
         answer = {'ok': True, 'node_id': 'n' * 32, 'host_id': HOST_ID,
                   'runtime_id': 'rt_1234', 'envoy_port': 9981,
                   'td_python_approved': False}
-        result = client.register(_handle(), {'project_root': '/r'},
+        result = client.register(
+                                 _handle(),
+                                 {'project_root': '/r',
+                                  'convoy_id': 'cv_test',
+                                  'binding_state': 'candidate'},
                                  opener=lambda req, timeout=None:
                                  _Resp(answer))
         self.assertEqual(result['state'], client.STATE_REGISTERED)
         self.assertEqual(result['node_id'], 'n' * 32)
         self.assertEqual(result['envoy_port'], 9981)
+        self.assertEqual(result['convoy_id'], 'cv_test')
+        self.assertEqual(result['realm_state'], 'candidate')
         self.assertIs(result['td_python_approved'], False)
         self.assertEqual(client.status_text(result),
                          'Registered nnnnnnnn (host hhhhhhhh)')
@@ -947,6 +1097,24 @@ class TestConvoyClientRegister(EmbodyTestCase):
                                  _Resp(['not', 'an', 'object']))
         self.assertEqual(result['state'], client.STATE_ERROR)
         self.assertStartsWith(client.status_text(result), 'Error: ')
+
+    def test_an_oversized_post_answer_is_bounded_before_json_decode(self):
+        class HugeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self, amount=None):
+                return b'x' * (client.MAX_HOST_RESPONSE_BYTES + 1)
+
+        result = client.register(
+            _handle(), {}, opener=lambda req, timeout=None: HugeResponse())
+        self.assertEqual(result['state'], client.STATE_HOST_ERROR)
+        self.assertEqual(result['reason'], 'host_response_too_large')
 
     def test_an_unparseable_refusal_body_still_names_the_http_code(self):
         def opener(req, timeout=None):
@@ -1056,6 +1224,457 @@ class TestConvoyClientRegister(EmbodyTestCase):
         client.register(_handle(), {'x': Weird()}, opener=opener)
 
 
+class TestConvoyClientNetworkNodes(EmbodyTestCase):
+
+    @staticmethod
+    def _row(index=1, convoy_id='cv_studio'):
+        return {
+            'node_id': ('%032x' % index),
+            'host_id': ('%032x' % (index + 100)),
+            'convoy_id': convoy_id,
+            'runtime_id': 'rt_%016x' % index,
+            'node_name': 'render-%s / show' % index,
+            'hostname': 'render-%s' % index,
+            'toe_name': 'show.toe',
+            'embody_version': '6.0.178',
+            'touchdesigner_version': '2025.32180',
+            'ip': '192.168.10.%s' % index,
+            'status': 'online',
+            'online': True,
+            'enabled': True,
+            'controller_count': 2,
+            'last_seen_age_s': 3.25,
+            # Host-private fields must never survive the TD-side projection.
+            'project_root': 'C:/secret/project',
+            'td_python_approved': True,
+        }
+
+    def test_fetch_is_authenticated_get_to_literal_loopback(self):
+        seen = {}
+
+        def opener(req, timeout=None):
+            seen['url'] = req.full_url
+            seen['method'] = req.get_method()
+            seen['headers'] = {k.lower(): v for k, v in req.header_items()}
+            seen['timeout'] = timeout
+            return _Resp({'ok': True, 'nodes': [self._row()]})
+
+        result = client.network_nodes(
+            _handle(), 'cv_studio', opener=opener)
+        self.assertEqual(result['state'], client.NETWORK_NODES_RESULT)
+        self.assertStartsWith(
+            seen['url'],
+            'http://127.0.0.1:8080/network/nodes?')
+        self.assertIn('convoy_id=cv_studio', seen['url'])
+        self.assertEqual(seen['method'], 'GET')
+        self.assertEqual(seen['headers'][client.TOKEN_HEADER.lower()], 'tok')
+        self.assertEqual(seen['timeout'], client.NETWORK_TIMEOUT_S)
+
+
+    def test_projection_is_bounded_and_drops_private_fields(self):
+        row = self._row()
+        row['node_name'] = 'n' * 2000
+        result = client.network_nodes(
+            _handle(), 'cv_studio',
+            opener=lambda req, timeout=None: _Resp(
+                {'ok': True, 'nodes': [row]}))
+        self.assertEqual(len(result['nodes']), 1)
+        projected = result['nodes'][0]
+        self.assertLessEqual(len(projected['node_name']), 512)
+        self.assertNotIn('project_root', projected)
+        self.assertNotIn('td_python_approved', projected)
+        self.assertEqual(projected['controller_count'], 2)
+        self.assertEqual(projected['last_seen_age_s'], 3.25)
+
+    def test_optional_status_metrics_fail_closed_without_an_extra_request(self):
+        row = self._row()
+        row['controller_count'] = True
+        row['last_seen_age_s'] = float('nan')
+        result = client.network_nodes(
+            _handle(), 'cv_studio',
+            opener=lambda req, timeout=None: _Resp(
+                {'ok': True, 'nodes': [row]}))
+        projected = result['nodes'][0]
+        self.assertIsNone(projected['controller_count'])
+        self.assertIsNone(projected['last_seen_age_s'])
+
+    def test_other_namespace_and_identityless_rows_are_dropped(self):
+        wrong = self._row(2, convoy_id='cv_other')
+        identityless = self._row(3)
+        identityless['node_id'] = ''
+        result = client.network_nodes(
+            _handle(), 'cv_studio',
+            opener=lambda req, timeout=None: _Resp(
+                {'ok': True,
+                 'nodes': [self._row(1), wrong, identityless]}))
+        self.assertEqual([r['node_name'] for r in result['nodes']],
+                         ['render-1 / show'])
+
+    def test_directory_count_is_bounded_for_the_td_sequence(self):
+        rows = [self._row(i + 1) for i in range(
+            client.MAX_STATUS_NODES + 20)]
+        result = client.network_nodes(
+            _handle(), 'cv_studio',
+            opener=lambda req, timeout=None: _Resp(
+                {'ok': True, 'nodes': rows}))
+        self.assertLen(result['nodes'], client.MAX_STATUS_NODES)
+        self.assertIs(result['truncated'], True)
+
+    def test_oversized_response_is_a_named_host_error(self):
+        class HugeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self, amount=None):
+                return b'x' * (client.MAX_HOST_RESPONSE_BYTES + 1)
+
+        result = client.network_nodes(
+            _handle(), 'cv_studio',
+            opener=lambda req, timeout=None: HugeResponse())
+        self.assertEqual(result['state'], client.STATE_HOST_ERROR)
+        self.assertEqual(result['reason'], 'host_response_too_large')
+
+    def test_transport_loss_is_not_a_policy_refusal(self):
+        def gone(req, timeout=None):
+            raise urllib.error.URLError('gone')
+
+        result = client.network_nodes(_handle(), 'cv_studio', opener=gone)
+        self.assertEqual(result['state'], client.STATE_UNREACHABLE)
+
+    def test_malformed_convoy_id_never_reaches_the_host(self):
+        def forbidden(req, timeout=None):
+            raise AssertionError('malformed id must not reach the host')
+
+        for value in ('', ' cv_studio', 'cv\nstudio', 'x' * 129, None):
+            result = client.network_nodes(_handle(), value, opener=forbidden)
+            self.assertEqual(result['state'], client.STATE_ERROR)
+            self.assertEqual(result['reason'], 'malformed_convoy_id')
+
+
+class TestConvoyClientSiblingAPI(EmbodyTestCase):
+    """Pure worker-side relay helpers for TouchDesigner-originated calls."""
+
+    NODE_ID = 'n' * 32
+    CONVOY_ID = 'cv_studio'
+
+    @staticmethod
+    def _job(state='queued', convoy_id=CONVOY_ID):
+        return {
+            'delivery_id': 'cj_123', 'state': state,
+            'convoy_id': convoy_id, 'node_id': TestConvoyClientSiblingAPI.NODE_ID,
+            'operation': 'convoy_ping', 'created': 1.0, 'updated': 2.0,
+        }
+
+    def test_local_submit_uses_atomic_same_host_relay(self):
+        seen = []
+
+        def opener(req, timeout=None):
+            seen.append((req.get_method(), req.full_url,
+                         json.loads(req.data) if req.data else None))
+            return _Resp({'ok': True, 'created': True,
+                          'job': self._job()})
+
+        result = client.submit_sibling_call(
+            _handle(), HOST_ID, self.CONVOY_ID, self.NODE_ID,
+            'td:source', 'convoy_ping', {}, idempotency_key='stable',
+            opener=opener)
+        self.assertEqual(result['state'], client.SIBLING_ACCEPTED)
+        self.assertTrue(result['local_target'])
+        self.assertEqual(result['job']['delivery_id'], 'cj_123')
+        self.assertLen(seen, 1)
+        self.assertEqual(seen[0][0:2],
+                         ('POST', 'http://127.0.0.1:8080/relay'))
+        self.assertEqual(seen[0][2], {
+            'target_host_id': HOST_ID,
+            'convoy_id': self.CONVOY_ID,
+            'target_node_id': self.NODE_ID,
+            'controller_id': 'td:source', 'operation': 'convoy_ping',
+            'arguments': {}, 'timeout_s': 30.0,
+            'idempotency_key': 'stable',
+        })
+
+    def test_local_submit_obeys_atomic_namespace_refusal_without_fallback(self):
+        calls = []
+
+        def opener(req, timeout=None):
+            calls.append((req.get_method(), req.full_url))
+            return _Resp({'ok': False, 'reason': 'unknown_node',
+                          'detail': 'not in requested Convoy'})
+
+        result = client.submit_sibling_call(
+            _handle(), HOST_ID, self.CONVOY_ID, self.NODE_ID,
+            'td:source', 'convoy_ping', {}, opener=opener)
+        self.assertEqual(result['reason'], 'unknown_node')
+        self.assertEqual(calls, [
+            ('POST', 'http://127.0.0.1:8080/relay')])
+
+    def test_remote_submit_uses_relay_and_never_local_fallback(self):
+        seen = []
+
+        def opener(req, timeout=None):
+            seen.append((req.get_method(), req.full_url,
+                         json.loads(req.data)))
+            return _Resp({'ok': True, 'created': True,
+                          'request_id': 'rq_1', 'job': self._job()})
+
+        result = client.submit_sibling_call(
+            _handle(), OTHER_HOST_ID, self.CONVOY_ID, self.NODE_ID,
+            'td:source', 'query_network', {'path': '/'},
+            expected_runtime_id='rt_target', idempotency_key='stable',
+            timeout_s=12, opener=opener)
+        self.assertFalse(result['local_target'])
+        self.assertLen(seen, 1)
+        self.assertEqual(seen[0][0:2],
+                         ('POST', 'http://127.0.0.1:8080/relay'))
+        body = seen[0][2]
+        self.assertEqual(body['target_host_id'], OTHER_HOST_ID)
+        self.assertEqual(body['target_node_id'], self.NODE_ID)
+        self.assertEqual(body['convoy_id'], self.CONVOY_ID)
+        self.assertEqual(body['expected_runtime_id'], 'rt_target')
+        self.assertEqual(body['controller_id'], 'td:source')
+
+    def test_submit_passes_only_remaining_total_deadline_to_transport(self):
+        seen = {}
+
+        def opener(req, timeout=None):
+            seen['timeout'] = timeout
+            return _Resp({'ok': True, 'job': self._job()})
+
+        clock = iter((10.0, 10.4)).__next__
+        result = client.submit_sibling_call(
+            _handle(), OTHER_HOST_ID, self.CONVOY_ID, self.NODE_ID,
+            'td:source', 'convoy_ping', {}, timeout_s=1.0,
+            opener=opener, monotonic=clock)
+        self.assertEqual(result['state'], client.SIBLING_ACCEPTED)
+        self.assertAlmostEqual(seen['timeout'], 0.6)
+
+    def test_bad_sibling_call_shape_never_reaches_the_host(self):
+        def forbidden(*args, **kwargs):
+            raise AssertionError('network must not be reached')
+
+        cases = (
+            {'target_host_id': '', 'arguments': {}},
+            {'target_host_id': OTHER_HOST_ID, 'arguments': []},
+            {'target_host_id': OTHER_HOST_ID,
+             'arguments': {'bad': object()}},
+            {'target_host_id': OTHER_HOST_ID,
+             'arguments': {'bad': float('nan')}},
+            {'target_host_id': OTHER_HOST_ID, 'timeout_s': float('nan'),
+             'arguments': {}},
+        )
+        for case in cases:
+            with self.subTest(case=case):
+                result = client.submit_sibling_call(
+                    _handle(), case['target_host_id'], self.CONVOY_ID,
+                    self.NODE_ID, 'td:source', 'query_network',
+                    case['arguments'], timeout_s=case.get('timeout_s', 30),
+                    opener=forbidden)
+                self.assertEqual(result['reason'], 'invalid_arguments')
+
+    def test_oversized_sibling_arguments_are_refused_before_network_io(self):
+        def forbidden(*args, **kwargs):
+            raise AssertionError('oversized arguments must stay local')
+
+        result = client.submit_sibling_call(
+            _handle(), OTHER_HOST_ID, self.CONVOY_ID, self.NODE_ID,
+            'td:source', 'query_network',
+            {'blob': 'x' * client.MAX_SIBLING_REQUEST_BYTES},
+            opener=forbidden)
+        self.assertEqual(result['state'], client.STATE_ERROR)
+        self.assertEqual(result['reason'], 'invalid_arguments')
+
+    def test_local_get_job_is_namespace_checked_and_redacted(self):
+        raw = self._job(state='succeeded')
+        raw.update({'arguments': {'token': 'must-not-return'},
+                    'origin_host_id': 'private', 'result': {'pong': True}})
+        result = client.get_sibling_job(
+            _handle(), HOST_ID, self.CONVOY_ID, 'cj_123',
+            opener=lambda req, timeout=None: _Resp(
+                {'ok': True, 'job': raw}))
+        self.assertEqual(result['state'], client.SIBLING_JOB)
+        self.assertEqual(result['job']['result'], {'pong': True})
+        self.assertNotIn('arguments', result['job'])
+        self.assertNotIn('origin_host_id', result['job'])
+
+        mismatch = client.get_sibling_job(
+            _handle(), HOST_ID, 'cv_wrong', 'cj_123',
+            opener=lambda req, timeout=None: _Resp(
+                {'ok': True, 'job': raw}))
+        self.assertEqual(mismatch['reason'], 'job_namespace_mismatch')
+
+    def test_remote_get_job_uses_future_stable_owner_schema(self):
+        seen = {}
+
+        def opener(req, timeout=None):
+            seen['url'] = req.full_url
+            seen['body'] = json.loads(req.data)
+            remote = self._job(state='running')
+            remote.pop('convoy_id')
+            return _Resp({'ok': True, 'changed': True,
+                          'cursor': 3.0, 'job': remote})
+
+        result = client.get_sibling_job(
+            _handle(), OTHER_HOST_ID, self.CONVOY_ID, 'cj_123',
+            since=2.0, opener=opener)
+        self.assertEqual(seen['url'],
+                         'http://127.0.0.1:8080/relay/job')
+        self.assertEqual(seen['body'], {
+            'target_host_id': OTHER_HOST_ID, 'convoy_id': self.CONVOY_ID,
+            'delivery_id': 'cj_123', 'since': 2.0})
+        self.assertEqual(result['job']['state'], 'running')
+
+    def test_remote_cancel_uses_federated_owner_route_without_waking_td(self):
+        seen = {}
+
+        def opener(req, timeout=None):
+            seen['url'] = req.full_url
+            seen['body'] = json.loads(req.data)
+            return _Resp({'ok': True, 'cancelled': True,
+                          'definitive': True})
+
+        result = client.cancel_sibling_job(
+            _handle(), OTHER_HOST_ID, self.CONVOY_ID, 'cj_123',
+            opener=opener)
+        self.assertEqual(seen['url'],
+                         'http://127.0.0.1:8080/relay/cancel')
+        self.assertEqual(seen['body'], {
+            'target_host_id': OTHER_HOST_ID,
+            'convoy_id': self.CONVOY_ID,
+            'delivery_id': 'cj_123',
+        })
+        self.assertEqual(result['state'], client.SIBLING_CANCEL)
+        self.assertEqual(result['scope'], 'owner_host')
+        self.assertTrue(result['remote_supported'])
+        self.assertFalse(result['local_target'])
+        self.assertFalse(result['wakes_touchdesigner'])
+
+    def test_local_cancel_uses_same_federated_route_with_exact_namespace(self):
+        seen = []
+
+        def opener(req, timeout=None):
+            seen.append((req.get_method(), req.full_url,
+                         json.loads(req.data) if req.data else None))
+            return _Resp({'ok': True, 'cancel_requested': True,
+                          'definitive': False})
+
+        result = client.cancel_sibling_job(
+            _handle(), HOST_ID, self.CONVOY_ID, 'cj_123', opener=opener)
+        self.assertEqual(seen, [
+            ('POST', 'http://127.0.0.1:8080/relay/cancel', {
+                'target_host_id': HOST_ID,
+                'convoy_id': self.CONVOY_ID,
+                'delivery_id': 'cj_123',
+            }),
+        ])
+        self.assertTrue(result['cancel_requested'])
+        self.assertEqual(result['state'], client.SIBLING_CANCEL)
+        self.assertTrue(result['local_target'])
+
+    def test_wait_job_emits_plain_progress_and_stops_on_terminal(self):
+        progress = []
+        terminal = self._job(state='succeeded')
+        terminal.pop('convoy_id')
+        result = client.wait_sibling_job(
+            _handle(), OTHER_HOST_ID, self.CONVOY_ID, 'cj_123',
+            initial={'ok': True, 'job': {'delivery_id': 'cj_123',
+                                         'state': 'queued', 'updated': 1}},
+            timeout_s=5, progress=lambda value: progress.append(value),
+            opener=lambda req, timeout=None: _Resp({
+                'ok': True, 'changed': True, 'cursor': 2,
+                'job': terminal}), sleep=lambda _seconds: None,
+            monotonic=iter((0, 0, 0, 0, 0)).__next__)
+        self.assertEqual(result['job']['state'], 'succeeded')
+        self.assertLen(progress, 1)
+        self.assertEqual(progress[0]['job']['state'], 'succeeded')
+
+
+class TestConvoyClientPolicy(EmbodyTestCase):
+
+    POLICY = {
+        'generation': 3,
+        'allow_td_python': True,
+        'allow_full_shell': False,
+        'artifact_quota_mb': 512,
+    }
+
+    def test_get_policy_is_bounded_and_detached(self):
+        seen = {}
+
+        def opener(req, timeout=None):
+            seen['url'] = req.full_url
+            headers = {key.lower(): value
+                       for key, value in req.header_items()}
+            seen['token'] = headers.get(client.TOKEN_HEADER.lower())
+            return _Resp({'ok': True, 'policy': dict(self.POLICY)})
+
+        result = client.get_policy(_handle(), 'n' * 32, opener=opener)
+        self.assertEqual(result['state'], client.POLICY_RESULT)
+        self.assertEqual(result['policy'], self.POLICY)
+        self.assertIn('node_id=' + 'n' * 32, seen['url'])
+        self.assertEqual(seen['token'], _handle().token)
+
+    def test_malformed_policy_is_a_host_error(self):
+        result = client.get_policy(
+            _handle(), opener=lambda req, timeout=None: _Resp({
+                'ok': True,
+                'policy': {**self.POLICY, 'allow_full_shell': 1},
+            }))
+        self.assertEqual(result['state'], client.STATE_HOST_ERROR)
+        self.assertEqual(result['reason'], 'host_bad_response')
+
+    def test_begin_challenge_preserves_the_exact_local_phrase(self):
+        phrase = 'ENABLE TD PYTHON ' + 'n' * 32 + ' A1B2C3D4'
+        result = client.begin_policy_challenge(
+            _handle(), 'td_python', 3, node_id='n' * 32,
+            opener=lambda req, timeout=None: _Resp({
+                'ok': True,
+                'challenge': {
+                    'challenge_id': 'challenge',
+                    'confirmation': phrase,
+                    'setting': 'td_python',
+                    'node_id': 'n' * 32,
+                    'generation': 3,
+                },
+            }))
+        self.assertEqual(result['state'], 'challenge')
+        self.assertEqual(result['challenge']['confirmation'], phrase)
+
+    def test_confirm_disable_and_quota_use_the_named_routes(self):
+        paths = []
+
+        def opener(req, timeout=None):
+            paths.append(req.full_url)
+            return _Resp({'ok': True, 'policy': dict(self.POLICY)})
+
+        self.assertEqual(client.confirm_policy_challenge(
+            _handle(), 'cid', 'phrase', 3, opener=opener)['state'],
+            client.POLICY_RESULT)
+        self.assertTrue(client.disable_policy(
+            _handle(), 'td_python', node_id='n' * 32,
+            opener=opener)['ok'])
+        self.assertTrue(client.set_artifact_quota(
+            _handle(), 512, 3, opener=opener)['ok'])
+        self.assertTrue(paths[0].endswith('/policy/confirm'))
+        self.assertTrue(paths[1].endswith('/policy/disable'))
+        self.assertTrue(paths[2].endswith('/policy/artifact-quota'))
+
+    def test_policy_refusal_is_not_misreported_as_transport_absence(self):
+        result = client.begin_policy_challenge(
+            _handle(), 'full_shell', 0,
+            opener=_refusing_opener(409, {
+                'ok': False,
+                'reason': 'policy_generation_conflict',
+                'detail': 'stale',
+            }))
+        self.assertEqual(result['state'], client.STATE_REFUSED)
+        self.assertEqual(result['reason'], 'policy_generation_conflict')
+
+
 class TestConvoyClientUnregister(EmbodyTestCase):
 
     def test_a_successful_unregister_reports_the_node(self):
@@ -1078,7 +1697,30 @@ class TestConvoyClientUnregister(EmbodyTestCase):
 
         client.unregister(_handle(), 'n' * 32, opener=opener)
         self.assertEqual(seen['url'], 'http://127.0.0.1:8080/unregister')
-        self.assertEqual(json.loads(seen['data']), {'node_id': 'n' * 32})
+        self.assertEqual(json.loads(seen['data']), {
+            'node_id': 'n' * 32,
+            'reason': 'disabled',
+        })
+
+    def test_shutdown_intent_rides_on_unregister(self):
+        seen = {}
+
+        def opener(req, timeout=None):
+            seen['data'] = json.loads(req.data)
+            return _Resp({'ok': True})
+
+        client.unregister(_handle(), 'n' * 32, reason='shutdown',
+                          opener=opener)
+        self.assertEqual(seen['data']['reason'], 'shutdown')
+
+    def test_invalid_unregister_reason_fails_closed_before_network(self):
+        def opener(req, timeout=None):
+            raise AssertionError('invalid intent must not reach the host')
+
+        result = client.unregister(_handle(), 'n' * 32,
+                                   reason='TD exit', opener=opener)
+        self.assertEqual(result['state'], client.STATE_ERROR)
+        self.assertEqual(result['reason'], 'invalid_unregister_reason')
 
     def test_unregister_uses_a_short_single_attempt_timeout(self):
         """Best-effort on the way out: a shutting-down session must never
@@ -1131,7 +1773,8 @@ class TestConvoyClientUnregister(EmbodyTestCase):
         client.unregister(_handle(), 'n' * 32, runtime_id='rt_abc',
                           opener=opener)
         self.assertEqual(seen['data'], {'node_id': 'n' * 32,
-                                        'runtime_id': 'rt_abc'})
+                                        'runtime_id': 'rt_abc',
+                                        'reason': 'disabled'})
 
     def test_no_runtime_id_means_no_runtime_field(self):
         seen = {}
@@ -1559,7 +2202,9 @@ class TestConvoyClientAgainstARealHostApp(EmbodyTestCase):
         try:
             self._root = tempfile.mkdtemp(prefix='convoy_client_e2e_')
             self.data_dir = os.path.join(self._root, 'state')
-            self.app = self.hostapp.HostApp(self.data_dir)
+            self.app = self.hostapp.HostApp(
+                self.data_dir,
+                artifact_cache_path=os.path.join(self._root, 'artifacts'))
             self.server, self.port = self.hostapp.serve(self.app, port=0)
             self.thread = threading.Thread(target=self.server.serve_forever,
                                            daemon=True)
@@ -1704,6 +2349,30 @@ class TestConvoyClientAgainstARealHostApp(EmbodyTestCase):
         self.assertEqual(first['node_id'], second['node_id'])
         self.assertLen(self._nodes(), 1)
 
+    def test_local_sibling_submit_get_and_federated_cancel_over_real_http(self):
+        handle = self._handle()
+        registered = self._do_register(handle, self._payload())
+        node_id = registered['node_id']
+        accepted = client.submit_sibling_call(
+            handle, self.app.host_id, 'cv_integration', node_id,
+            'td:%s:%s:rt_source' % (self.app.host_id, node_id),
+            'convoy_ping', {}, idempotency_key='client-e2e-sibling')
+        self.assertEqual(accepted['state'], client.SIBLING_ACCEPTED)
+        self.assertTrue(accepted['local_target'])
+        delivery_id = accepted['job']['delivery_id']
+
+        view = client.get_sibling_job(
+            handle, self.app.host_id, 'cv_integration', delivery_id)
+        self.assertEqual(view['state'], client.SIBLING_JOB)
+        self.assertEqual(view['job']['delivery_id'], delivery_id)
+
+        cancelled = client.cancel_sibling_job(
+            handle, self.app.host_id, 'cv_integration', delivery_id)
+        self.assertEqual(cancelled['state'], client.SIBLING_CANCEL)
+        self.assertTrue(cancelled['local_target'])
+        self.assertTrue(cancelled['remote_supported'])
+        self.assertFalse(cancelled['wakes_touchdesigner'])
+
     def test_the_runtime_id_we_send_is_the_one_the_host_records(self):
         """The A-22 precondition depends on it: a heartbeat that let the
         host re-mint would invalidate every in-flight expected_runtime_id."""
@@ -1847,8 +2516,8 @@ class TestConvoyClientAgainstARealHostApp(EmbodyTestCase):
 # =====================================================================
 
 _STDLIB_ALLOWED = {
-    'json', 'ntpath', 'os', 'posixpath', 'random', 'secrets', 'sys',
-    'urllib', 'urllib.error', 'urllib.request', 'ctypes',
+    'hashlib', 'json', 'math', 'ntpath', 'os', 'posixpath', 'random', 'secrets', 'sys',
+    'time', 'urllib', 'urllib.error', 'urllib.parse', 'urllib.request', 'ctypes',
 }
 
 def _code_only(source):
@@ -1979,6 +2648,7 @@ class TestConvoyClientIsTouchDesignerFree(EmbodyTestCase):
     def test_the_public_surface_the_plan_names_exists(self):
         for name in ('data_dir', 'read_live_portfile', 'pid_is_alive',
                      'probe', 'register', 'unregister', 'mint_runtime_id',
-                     'backoff_delay', 'status_text'):
+                     'stable_node_discriminator', 'backoff_delay',
+                     'status_text'):
             self.assertTrue(callable(getattr(client, name, None)),
                             'missing public function %r' % (name,))

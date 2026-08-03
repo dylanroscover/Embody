@@ -347,8 +347,8 @@ def test_the_sig_alg_tag_cannot_be_relabelled_to_slip_through(data_dir):
 # One tampered value per field in protocol._SIGNED_FIELDS, with the
 # refusal each must produce. Three fields are checked BEFORE the
 # signature (protocol, convoy_id, sig_alg) and so refuse earlier and
-# more specifically; the other eleven land on bad_signature. Nothing is
-# allowed to verify.
+# more specifically; the other thirteen land on bad_signature. Nothing
+# is allowed to verify.
 _TAMPER = {
     "protocol": ("convoy/2", "protocol_mismatch"),
     "convoy_id": ("someone-elses-convoy", "namespace_mismatch"),
@@ -362,6 +362,8 @@ _TAMPER = {
     "operation": ("execute_python", "bad_signature"),
     "arguments_sha256": ("f" * 64, "bad_signature"),
     "expected_runtime_id": ("rt_attacker", "bad_signature"),
+    "created_unix": (12345.0, "bad_signature"),
+    "budget_s": (99.0, "bad_signature"),
     "deadline_unix": (time.time() + 99999, "bad_signature"),
     "hop_limit": (99, "bad_signature"),
 }
@@ -1702,11 +1704,32 @@ def _start_host(directory):
     check would make this test pass only outside a venv. The portfile is
     cleared first, so 'live portfile present' cannot be satisfied by a
     stale one from an earlier boot.
+
+    The real CLI intentionally has no artifact-cache override.  This test
+    therefore replaces only the child process's HostApp class with a narrow
+    subclass that injects a cache beneath its temporary data directory.  The
+    daemon entry point and every production default remain unchanged, while
+    the subprocess never writes to the developer's per-user cache.
     """
     cp.clear_portfile(directory)
+    artifact_cache = os.path.join(directory, "artifact-cache")
+    child_script = textwrap.dedent("""
+        import sys
+
+        sys.path.insert(0, %r)
+        import convoy_hostapp as hostapp
+
+        class IsolatedHostApp(hostapp.HostApp):
+            def __init__(self, data_dir, *args, **kwargs):
+                kwargs["artifact_cache_path"] = %r
+                super().__init__(data_dir, *args, **kwargs)
+
+        hostapp.HostApp = IsolatedHostApp
+        sys.argv = ["convoy_hostapp.py", "--data-dir", %r]
+        hostapp.main()
+    """) % (HERE, artifact_cache, directory)
     process = subprocess.Popen(
-        [sys.executable, os.path.join(HERE, "convoy_hostapp.py"),
-         "--data-dir", directory],
+        [sys.executable, "-c", child_script],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     for _ in range(160):
         if process.poll() is not None:
@@ -1864,7 +1887,7 @@ def test_the_module_imports_with_cryptography_genuinely_unavailable():
     -- if convoy_hostkeys raised at import time, the whole daemon would
     be unimportable on an install that simply has not got the package."""
     script = textwrap.dedent("""
-        import sys, tempfile
+        import os, sys, tempfile
 
         class Block:
             def find_module(self, name, path=None):
@@ -1883,7 +1906,9 @@ def test_the_module_imports_with_cryptography_genuinely_unavailable():
         assert hk.cryptography_available() is False
         import convoy_hostapp as ha
         directory = tempfile.mkdtemp(prefix="convoy_nocrypto_")
-        app = ha.HostApp(directory)
+        app = ha.HostApp(
+            directory,
+            artifact_cache_path=os.path.join(directory, "artifact-cache"))
         assert app.hostkeys is None
         code, body = app.get_identity()
         assert code == 503, (code, body)

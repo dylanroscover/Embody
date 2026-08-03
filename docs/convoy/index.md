@@ -1,110 +1,255 @@
 # Convoy
 
-**Convoy** makes the TouchDesigner projects on one machine addressable as **nodes**. A small program outside TouchDesigner — the [Convoy host app](host-app.md) — keeps a register of which projects exist, which of them are open right now, and where each open one's Envoy server is listening. Anything on the same machine that can authenticate to the host app can then hand it a piece of work, and the host app relays that work into the right project through Envoy.
+**Convoy** connects Embody-enabled TouchDesigner projects on the same trusted LAN. Each open project is a **node**: it can be selected as a remote target, and it can originate work for another node. There is no permanent controller, primary machine, or network leader.
 
-In this build, every part of that happens over **loopback**. Nothing binds to the network.
+The everyday path is:
 
-!!! info "Convoy today is one machine, and one user on it"
-    The host app listens on `127.0.0.1` only, on an OS-assigned port, and there is no non-loopback code path in it. No firewall rule is created and none is needed. A LAN mesh — pinned identities, mutual TLS, per-peer admission — is a later phase that has not been built. The consent Convoy records today grants **`local host app only`**, and widening it will ask you again rather than inherit that grant.
+```text
+VS Code / Cursor / another AI client
+        -> Envoy in the local Embody
+        -> Convoy
+        -> a selected remote Embody node
+        -> TouchDesigner or an approved computer action
+```
 
-## The three pieces
+Several Embody nodes can run on one computer. They share an IP address but remain separately addressable.
 
-| Piece | What it is | Where it runs |
-|---|---|---|
-| **Node** | A TouchDesigner project with **Convoy Enable** on. It registers itself and heartbeats; it never dispatches anything. | Inside TD, as a `ConvoyExt` child COMP on the Embody COMP |
-| **Host app** | The per-user register, job queue, and audit trail. Mints the node ids, holds the durable jobs, forwards work into a node's Envoy. | Outside TD, one per logged-in user on the machine |
-| **Controller** | Whatever submits work — a script or an AI session on this machine. It talks to the host app, never to a node directly. | Same machine, over loopback |
+!!! warning "Development preview"
+    Convoy is under active development. The LAN runtime and user controls are being built and tested, but production host-app packaging is not complete in every build. Windows-to-Windows acceptance testing is in progress, and the macOS path has not yet been physically validated. Do not treat this preview as a production certification.
 
-A node's job is small and honest: reconcile. On a self-adjusting tick — as often as every 4 seconds while something is still settling, as rarely as every 60 when nothing is — `ConvoyExt` computes a desired-state tuple — enabled, project root, Embody COMP path, convoy id, Envoy port, host id — and compares it to what it last sent. **Unchanged, and inside the heartbeat window, costs zero network calls.** Changed, or ~30 seconds elapsed, and it sends one registration. The heartbeat matters because the Envoy port is per-launch and the host app does not persist it: after a host restart, the heartbeat is what puts the port back.
+## How membership works
 
-## What enabling Convoy grants
+**Enable Convoy** is the membership and exposure gate. Turning it on says, “this node may join the Convoy on this trusted LAN.” There are no Create, Join, invitation, role, or “Expose This Node” controls.
 
-Turning **Convoy Enable** on for a project the first time shows a confirmation naming the id it is about to mint. Cancelling writes nothing at all.
+- If a compatible Convoy is already present, the node joins it automatically.
+- If none is present, enabled nodes establish one automatically.
+- Nodes discover changes and reconnect without a manual refresh.
+- Membership is remembered locally across ordinary restarts. Network-visible node status converges automatically, while dangerous permissions and resource limits remain local settings that peers cannot overwrite.
+- Every node is a sibling. A host going offline makes its own nodes unavailable, but reachable siblings continue communicating.
+- Turning **Enable Convoy** off prevents that node from both sending and receiving Convoy work and withdraws it from the LAN.
 
-> Convoy gives this project a stable identity so a Convoy host app can find and reach this TouchDesigner session.
->
-> Enabling it will:
->
-> - mint the convoy id `cv_…`
-> - record that id, and this consent, in `.embody/project.json` — a COMMITTED file, so everyone who clones this repo shares the same convoy
-> - register this session with the Convoy host app running on THIS machine, over loopback only
->
-> Scope granted: this machine's local host app only. Convoy does not reach the network here, and widening that scope later will ask you again.
+Convoy does not require an attached AI client. When **AI Client** is **None**, enabling Convoy keeps Envoy's loopback command server running only as Convoy's internal TouchDesigner relay; it does not generate client configuration or launch a coding tool. Turning Convoy off stops that otherwise-unused internal server.
 
-Stated plainly, in full:
+Convoy is intentionally convenient on a trusted production network. That also means it must not be enabled on guest Wi-Fi, public networks, or a LAN shared with people or devices you do not trust. Ordinary relayed tools can inspect and change a TouchDesigner project; the additional TD Python and Full Shell gates protect still more powerful interfaces.
 
-- **A convoy id is written into a committed file.** `.embody/project.json` gains a `convoy` key holding the id (`cv_` plus 16 hex characters), the consent scope `local host app only`, and a UTC timestamp. `.gitignore` deliberately un-ignores that file, so it is committed in every Embody project. **Everyone who clones the repo inherits the id and the recorded consent** — and therefore never sees this confirmation on their own machine. The id is an identifier, not a credential: it names a convoy, it does not grant access to one.
-- **This session registers with the host app on this machine, if one is running.** The registration carries the project root, the Embody COMP's path, the convoy id, a per-launch runtime id, and Envoy's port. It is re-asserted about every 30 seconds while TD is open.
-- **The host app may relay operations into this project through Envoy** — and only operations in its audited registry (see below). Convoy adds no capability Envoy does not already have locally; it adds a way for something else on this machine to reach it.
-- **Anything running as your user on this machine can read the host app's token and send it work.** The token is a 0600 file in your own data directory. It is a boundary against *other users* on a shared machine — not against you, and not against anything already running as you.
-- **Turning Convoy Enable off unregisters this node** and clears its port on the host app. The convoy id stays in `project.json` — it is not a secret, and removing it would break the project's identity for every clone. Enabling again does not re-ask, because consent is recorded per project, not per session.
+## Set up a Convoy
 
-A project that has never been saved to disk refuses to register at all: a node is identified by its project folder, and an unsaved one would mint a throwaway identity. The status reads `Waiting for project save`.
+Repeat these steps on every participating computer:
 
-## What Convoy is not
+1. Save the TouchDesigner project. A saved `.toe` gives the node a stable project identity and a useful automatic name.
+2. Choose an AI assistant if you want one. Convoy also works with **None**: Embody keeps only its internal local command service enabled and does not configure or launch an AI client.
+3. In the [Setup Wizard](../embody/setup-wizard.md), choose **Enable Convoy**. You can also turn on **Enable Convoy** later from the Embody COMP's **Convoy** page.
+4. Use **Install or Update Host App**, then **Start Host App**, on the Convoy page. Installing the background app is a separate local approval; the setup wizard never installs it silently.
+5. Allow the Convoy host app through the operating-system firewall on the **private/trusted network profile only**.
+6. Check **This Node Status** and the **Convoy Status** sequence. Other enabled nodes should appear automatically.
 
-- **Not a render farm.** Nothing schedules, balances, splits, or distributes rendering work. The host app relays individual operations into individual projects.
-- **Not remote access.** Nothing in this build binds off the machine. There is no address a second machine could reach, no discovery, and no peers.
-- **Not authenticated beyond loopback and a per-user token.** Every route except `GET /health` requires the `X-Convoy-Host-Token` header, read from a 0600 file in the per-user data directory. That authenticates the *OS user*, not the caller. See [Envoy's security model](../envoy/security.md) — Convoy inherits it, because Convoy's relay terminates in Envoy.
-- **Not a remote code path.** Operations that execute arbitrary code are refused outright: the TD-Python gate that would make them safe does not exist. Absence from the registry is itself a refusal, and so is an entry that fails to declare its own gating.
-- **Not a replacement for Envoy.** Convoy goes *through* Envoy. If Envoy is not running, a node registers without a port and the host app cannot dispatch to it — the status says so explicitly.
-- **Not required.** With no host app on the machine — which is every install today — Convoy simply reads `No Convoy host app` and does nothing. That is a resting state, not an error.
+Keep every node on the same Embody release for supported deployments. Version-skewed nodes may remain visible, but operations that cannot be proven compatible are limited or refused.
 
-## What can be relayed
+See [Setup and Troubleshooting](host-app.md) for a machine-by-machine checklist and status help.
 
-The host app relays **nothing that is not explicitly entered in its operation registry**. This build ships the seed of that registry:
+## Node names and status
 
-| Operation | Mutating | Notes |
-|---|---|---|
-| `convoy_ping` | No | Liveness |
-| `query_network` | No | Read the network under a path |
-| `capture_top` | No | Cooks the TOP it captures |
-| `set_op_position` | Yes | A layout nudge — the benign mutation that exercises the lease gate |
-| `run_tests` | Yes | Runs asynchronously; the host mirrors the node's own job handle and polls it to a verdict. `background=True` and `override=False` are forced by the host, so a caller cannot bypass the node's multi-session gate |
-| `save_project` | Yes | Also asynchronous; blocks TD's main thread for 15+ seconds and restarts Envoy under itself |
+**Node Name** defaults to the computer hostname plus the saved `.toe` filename, for example:
 
-Every field is read with a strict default: an entry that omits one is treated as unaudited, which means refused. Two entries (`run_tests`, `save_project`) additionally carry a flag marking them as never relayable to a remote peer — data recorded now for a phase whose code does not exist yet. Nothing reads that flag in this build.
+```text
+render-01 / lobby
+```
 
-There is also **no controller application yet**. Nothing ships that submits work to a host app for you; doing it today means speaking the host app's authenticated loopback API directly. Combined with the fact that no host app installs, that is the practical shape of Convoy in this build: a node registers itself correctly, and there is not yet anything on the other end of the register.
+You can type a clearer display name. The name is a label only; changing it does not change the node's identity or permissions. Duplicate names are allowed, so always confirm the IP and other status details before sending consequential work.
 
-## Status vocabulary
+The read-only **Convoy Status** sequence shows one row per known node:
 
-**Convoy Status** on the Embody COMP is a read-only readout of this node's registration state, truncated to 160 characters. Every string it can show is listed here. Absence is never reported as an error.
-
-| Status | What it means |
+| Column | Meaning |
 |---|---|
-| `Disabled` | **Convoy Enable** is off. Also the resting readout after a disable or a cancelled first enable — this node is off locally whether or not the host app was reachable to hear about it |
-| `Waiting for project save` | Enabled, but the project has never been saved to disk. Save it and registration proceeds |
-| `No Convoy host app` | No host app on this machine — or one that vanished mid-call. **Normal, and not an error.** Nothing is wrong; there is simply nothing to talk to |
-| `Host app stale` | A portfile exists but nothing usable answers on it: the writing process is gone, or something else now holds that port. Same action as absence — nothing is sent |
-| `Host app found` | A live, identity-confirmed host app was located. A registration result normally replaces this within the same call |
-| `Registering...` | A registration call is in flight. Not logged — it passes through on every heartbeat |
-| `Registered -- Envoy port pending` | The node is registered, but Envoy has not bound a port yet, so the host app cannot dispatch back. Temporary: Envoy binds seconds after open, and the tick keeps converging until it does |
-| `Registered <node> (host <host>)` | Steady state. Both ids are shown as their first 8 characters |
-| `Refused: <reason>` | The host app refused on policy — a decision it made, not a fault. Common reasons: `unknown_node`, `node_identity_conflict`. Not retried hard |
-| `Error: <reason>` | The host app answered, but failed (a 5xx, or a request that never left this process). Retried with a jittered 5 s → 60 s backoff |
-| `Error: <detail>` | A client-side or transport fault, with the detail attached |
-| `Error: the register call timed out` | The worker never published a result inside its budget. The same string appears for `unregister` |
-| `Error: no convoy id -- turn Convoy Enable off and on again to mint one` | Convoy is on but `.embody/project.json` has no convoy key — the key was removed, or a persisted toggle was restored onto a `project.json` that lost it. No network work is attempted |
-| `Error: convoy_client module missing` | The `convoy_client` module is not in the `convoy` COMP. Reinstall Embody |
-| `Error: unreadable result` | A result arrived that the status mapper could not read |
-| `Error: no result` | A call produced no result object at all |
-| `Error: unexpected state '<state>'` | A state string the mapper does not know. This one is a bug — please report it |
+| **Node Name** | Automatic or user-supplied display name |
+| **IP Address** | Current address; several nodes can correctly show the same IP |
+| **Status** | Online, offline, limited, incompatible, conflict, or an actionable error |
+| **Embody Version** | Release reported by that node |
+| **Last Seen** | Age of the most recent presence update when the host reports it; otherwise the current observed online/offline state |
+| **Controllers** | Number of active client sessions reported for the node; older preview hosts may not provide this aggregate yet |
+| **Details** | Reconnect, compatibility, permission, or error context |
 
-During **Perform Mode** the readout is left exactly as the show found it and no network work happens at all. Reconciliation resumes when Perform Mode ends.
+Offline rows may remain visible so a temporarily closed or disconnected project does not disappear from the operator's mental map. Convoy routes with stable identities, not names or IP addresses.
 
-## Parameters
+## Use Convoy from an AI client
 
-Three parameters on the Embody COMP's **Convoy** page, documented in full in the [Parameter Reference](../embody/parameters.md#convoy):
+The MCP workflow is explicit about where work runs:
 
-| Parameter | Type | What it does |
+1. `get_convoy_status` checks that the local Convoy host app is available.
+2. `convoy_list_nodes` lists local and reachable remote nodes.
+3. `convoy_select_node` pins this client session to one exact node. Ordinary Envoy tools then run there until you call `convoy_select_node` with `clear=true`.
+4. `convoy_call` sends a one-off registered operation without changing the session selection.
+5. `convoy_batch` runs the same ordered batch on one or more explicit targets and reports each target separately. It does not promise multi-machine rollback.
+6. `convoy_get_job` checks durable work that outlives the original tool call or reconnect; `convoy_cancel_job` requests cancellation from the exact owning host.
+7. `convoy_get_artifact` retrieves a large JSON, text, or file result from its artifact reference and verifies it into a temporary local file. Relayed screenshots are normally retrieved automatically.
+8. `convoy_save_artifact` verifies an artifact and saves it into the current client's Embody project. An optional plain filename can be supplied; existing files are preserved unless `overwrite=true` is explicit.
+9. `convoy_list_controllers` shows live client sessions, selected targets, leases, and active work without waking TouchDesigner.
+10. `convoy_start_node` can reopen a previously registered, currently offline node; `convoy_restart_node` safely replaces one exact running TouchDesigner process.
+
+You can usually ask in plain language. For example:
+
+> List my Convoy nodes, then query `/project1` on `render-02 / lobby` and report any operator errors. Do not modify anything.
+
+For a mutation, name the target and scope clearly:
+
+> On `render-03 / facade`, change only `/project1/output/level1`, then verify that operator for errors.
+
+Convoy never silently falls back to a local TouchDesigner instance when an explicit remote target cannot be reached.
+
+## Use Convoy from TouchDesigner Python
+
+An enabled node can also originate work without an attached AI client. The API is asynchronous: it returns a local request handle immediately, and an optional callback receives progress and completion events on TouchDesigner's main thread.
+
+Convoy's extension lives on Embody's `convoy` child COMP, so TouchDesigner Python reaches it through `op.Embody.op('convoy').ext.ConvoyExt`.
+
+```python
+def on_nodes(event):
+    if event.get('event') == 'complete':
+        debug(event.get('result'))
+
+request = op.Embody.op('convoy').ext.ConvoyExt.listNodes(callback=on_nodes)
+```
+
+Use the `host_id` and `node_id` returned by that list for an exact sibling call:
+
+```python
+def on_result(event):
+    if event.get('event') == 'complete':
+        debug(event.get('result'))
+
+request = op.Embody.op('convoy').ext.ConvoyExt.call(
+    host_id='host-id-from-list',
+    node_id='node-id-from-list',
+    operation='query_network',
+    arguments={'root': '/'},
+    wait=False,
+    callback=on_result,
+)
+```
+
+Keep the returned handle if you need to inspect it later with `requestResult()`. `ping()`, `batch()`, `getJob()`, and `cancelJob()` follow the same callback pattern. Disabling Convoy prevents this node from both originating and receiving sibling work.
+
+## Controllers, edit leases, and jobs
+
+A **controller** is an active client session, such as one Cursor window or one Envoy session. It is not a membership role and does not outrank another controller. Controller counts are visible in the status sequence; the detailed controller list is intended to show who is active, which node they selected, and whether work is in progress without waking TouchDesigner.
+
+Convoy supports concurrent readers and tracks bounded **edit leases** for coordinated work:
+
+- Read and status work can proceed together.
+- A mutation is refused while another live controller holds an incompatible exclusive node lease.
+- Ordered work sent with `convoy_batch` is one target-side Envoy batch. Fanout targets remain independent and may partially succeed.
+- A conflict is reported with the current owner/context; Convoy does not guess, steal control, or imply distributed rollback.
+- Expired sessions and leases are cleaned up automatically.
+
+This is the network counterpart to Envoy's local multi-session scoping, not a permanent lock the user must manage for ordinary calls.
+
+Long-running and relayed operations are represented as **jobs**. Jobs survive a client disconnect and can be checked after the network returns. If a call times out, that does not prove it never ran: use the returned job or retry identity to reconcile before issuing a different mutation. Cancellation is best effort once work has started; always inspect the target before retrying an uncertain write.
+
+## Perform Mode and Remote Wake
+
+**Remote Wake** is on by default. When a permitted remote TouchDesigner operation arrives while the target is in Perform Mode, Convoy temporarily makes its command service available, completes the work, and restores the previous Perform state after the idle grace period.
+
+- **Remote Wake Idle Grace** defaults to **60 seconds**.
+- New remote work during that window restarts the timer.
+- Discovery, status, ping, job polling, and controller queries do **not** wake TouchDesigner.
+- Turning **Remote Wake** off leaves the node discoverable but refuses work that requires waking it.
+
+Remote Wake means “temporarily leave Perform Mode.” It does not launch a closed TouchDesigner process. Use the separate lifecycle tools described below when they are present in your preview build.
+
+## Start or restart a TouchDesigner node
+
+`convoy_start_node` asks the target computer's host app to reopen a known offline node. The node must have registered successfully before, and its saved `.toe` file and TouchDesigner application must still match that local launch record. Starting an already-running node is harmless and reports that it is already online.
+
+`convoy_restart_node` addresses one exact running node and requires the runtime ID returned by `convoy_list_nodes`. This comparison prevents a delayed request from restarting a newer TouchDesigner process that happens to have taken the old node's place. Give each intended action a unique `idempotency_key`; if a response is lost, retry with the same key so Convoy can reconcile the original attempt instead of launching twice.
+
+The normal restart policies are:
+
+| Policy | Behavior |
+|---|---|
+| `require_clean` | Default. Refuses to restart if the project is dirty, unsaved, or its state cannot be verified. |
+| `save_then_restart` | Saves first, verifies the saved state, and then restarts. A failed or uncertain save stops the restart. |
+
+The public Convoy relay accepts only these two restart policies. Discard/force behavior is not exposed as a remote recovery shortcut. A restart also refuses when several Embody nodes share the same TouchDesigner process, because restarting one would silently interrupt the others.
+
+Cancellation and deadlines have an intentional safety boundary. Before the old process commits to exiting, either condition stops the restart without deliberately quitting that process. With `save_then_restart`, a response containing `save_may_have_run` means the save was handed to TouchDesigner but its final acknowledgement was uncertain; inspect the project file before retrying. After the quit commit, a response may report `cancel_deferred` or `deadline_deferred`: Convoy continues a bounded restoration attempt because abandoning the node while it is down would be less safe.
+
+The host app records that commit durably. If it restarts during the replacement window, it automatically resumes reconciliation and updates the original job instead of treating the request as new work. Query the same job, or retry with the same idempotency key, until the exact node and runtime are confirmed online. Do not issue a second restart with a new key merely because the first client wait ended.
+
+Remote lifecycle control is part of the development preview. Validate the complete quit, launch, registration, and crash-recovery path on your own machines before using it in a show-critical deployment.
+
+## Permissions for code and computer actions
+
+Convoy's ordinary registered TouchDesigner tools are available when the node is enabled and the request is compatible. More powerful code paths have separate local gates.
+
+| Capability | Default | Approval |
 |---|---|---|
-| [`Convoyenable`](../embody/parameters.md#par-convoyenable) | Toggle | The one gate. Off is the default and does nothing at all |
-| [`Convoyid`](../embody/parameters.md#par-convoyid) | Str (read-only) | Projects the id from `.embody/project.json`. Empty until the first explicit enable, and deliberately not baked into the tracked `Embody.tdn` or any released `.tox` |
-| [`Convoystatus`](../embody/parameters.md#par-convoystatus) | Str (read-only) | The live readout above |
+| Registered TouchDesigner operations | Available | **Enable Convoy** on the target node |
+| Structured Git and GitHub CLI actions | Available where supported | No Full Shell approval required |
+| Arbitrary TouchDesigner Python | Off | Turn on **Allow Execute TD Python** locally on that node |
+| Arbitrary operating-system shell | Off | Turn on **Allow Full Shell** locally on that computer |
 
-## Where to go next
+Structured Git and GitHub actions use named, bounded operations rather than accepting an arbitrary command line. The initial catalog focuses on repository status, remotes, branches/revision, safe fetch/pull/push, and read-only GitHub inspection; destructive Git history rewrites and force operations are not part of the default surface.
 
-- [The Convoy host app](host-app.md) — what it is, what it does, and what is and is not available today
-- [Envoy security model](../envoy/security.md) — the boundary Convoy relays into
-- [Changelog](../changelog.md) — Convoy's shipping history
+**Allow Execute TD Python** is effectively code execution as the user running TouchDesigner. TD Python can access files, the network, credentials available to TD, and process APIs. It is a separate gate from **Allow Full Shell**; leaving Full Shell off does not sandbox Python.
+
+**Allow Full Shell** permits arbitrary operating-system commands as the logged-in user. It applies to the computer's Convoy host, including its local nodes, and can only be enabled locally. Leave it off on show machines unless a specific workflow requires it. Convoy peers cannot remotely turn on either dangerous permission.
+
+Git, GitHub CLI, and shell actions use the tools and credentials already configured for the logged-in user. Convoy does not create a second GitHub identity.
+
+## Screenshots, files, and Artifact Quota
+
+Screenshots, transferred files, large results, and command output are stored temporarily as **artifacts**. **Artifact Quota (MB)** limits the combined managed cache for the logged-in user on that computer across all local Convoy nodes. The default is **1024 MB**.
+
+When a relayed screenshot returns a PNG or JPEG artifact, Convoy normally downloads and verifies it automatically and presents it to the AI client as image content. Once the image is inline, Convoy removes its bridge temporary file and does not report a retained temp path. The artifact reference remains available if you want to save it explicitly.
+
+For a large JSON result, text result, or other file returned as an artifact reference, use `convoy_get_artifact`. Convoy retrieves the bytes from the owning host, verifies their size and SHA-256 digest, and returns a local temporary path. Pass the complete artifact reference and exact target information from the original result; do not substitute a displayed filename or a path reported by the remote computer.
+
+Use `convoy_save_artifact` when the file must persist. It verifies the artifact again and saves it under the current Envoy client's own `.embody/convoy/artifacts/` directory; callers cannot redirect it into another project or arbitrary folder. You may provide one plain filename. The default `overwrite=false` protects an existing project file, so set `overwrite=true` only when replacement is intended.
+
+When the quota is reached, Convoy removes the **least recently used** unpinned artifacts first. It does not remove active transfers, data required by running or not-yet-acknowledged jobs, temporary pins, or copies you explicitly saved into a project. If nothing safe can be removed, the new transfer is refused instead of deleting protected work. A quota of `0` disables operations that require managed artifact storage; it does not mean unlimited space.
+
+The managed cache is outside the project:
+
+| Platform | Managed cache |
+|---|---|
+| Windows | `%LOCALAPPDATA%\Embody\Convoy\cache\artifacts` |
+| macOS | `~/Library/Caches/Embody/Convoy/artifacts` |
+
+When you explicitly save or export an artifact into a project, it goes under:
+
+```text
+.embody/convoy/artifacts/
+```
+
+Those explicit copies are outside the runtime quota and are yours to retain, delete, ignore, or commit. Convoy never treats a path on another computer as though it were a local path; remote data must arrive as a verified artifact or a normal structured result. A remote `C:\...` or `/Users/...` path is descriptive target-side information only and must never be opened as a local result.
+
+## Version and platform compatibility
+
+Use the same Embody version on all nodes. That is the supported and easiest-to-debug configuration.
+
+Convoy checks capabilities per operation, so a minor mismatch does not have to hide a node completely. Presence and some read-only actions may continue while unsupported mutations are marked **Limited** or refused. A fundamentally incompatible version or safety contract is not bypassed for convenience.
+
+The compatibility target is:
+
+- Windows x64 to Windows x64
+- Windows x64 to Apple Silicon macOS, in both directions
+- Apple Silicon macOS to Apple Silicon macOS
+
+TouchDesigner also runs on Intel macOS, but Convoy's first macOS target is Apple Silicon. The current preview has not completed physical macOS validation, and managed runtime packaging is not yet a finished cross-platform release. Check the release notes before using Convoy in a show-critical deployment.
+
+## Owlette
+
+Owlette is optional. Convoy on a LAN does not require an Owlette account, internet access, or an Owlette agent.
+
+The first Owlette bridge is intentionally small. `convoy_owlette` consumes only Owlette's supported public API for site and machine inventory, online detail, and command status. It is optional and fails closed when credentials or a published API primitive are unavailable.
+
+For the current preview, provide `OWLETTE_API_KEY` in the Convoy host app's process environment, then restart the host app. `OWLETTE_SITE_ID` can provide an optional default site. Ask `convoy_owlette` for `capabilities` before sending another action; inventory and status calls do not wake TouchDesigner.
+
+Owlette command submission has an additional local host opt-in: set `EMBODY_CONVOY_ALLOW_OWLETTE_COMMANDS=1` in that same host environment and restart the host app. Every submission also requires a caller-held idempotency key. Leave this setting absent or false on machines where the bridge should remain read-only. The generic `mcp_tool_call` command is refused, so Owlette cannot become an unrestricted shell or an ad hoc Convoy tunnel. Convoy and Owlette keep distinct identities, and no Owlette repository, agent, protocol, or API change is required.
+
+## Next steps
+
+- [Setup and Troubleshooting](host-app.md)
+- [Setup Wizard](../embody/setup-wizard.md)
+- [Convoy Parameter Reference](../embody/parameters.md#convoy)
+- [Envoy Tools Reference](../envoy/tools-reference.md)

@@ -38,6 +38,75 @@ def test_round_trip_verifies():
     _verify(_envelope())
 
 
+def test_verified_deadline_becomes_target_local_monotonic_budget():
+    env = _envelope(timeout_s=30.0, now=1000.0)
+    timing = _verify(env, now=1010.0, monotonic_now=500.0)
+    assert timing == {
+        "request_deadline_unix": 1150.0,
+        "signed_deadline_unix": 1030.0,
+        "accepted_at_unix": 1010.0,
+        "accepted_remaining_s": 30.0,
+        "accepted_expires_unix": 1040.0,
+        "accepted_deadline_monotonic": 530.0,
+    }
+
+
+def test_replaying_an_envelope_does_not_refresh_its_signed_budget():
+    env = _envelope(timeout_s=30.0, now=1000.0)
+    first = _verify(env, now=1140.0, monotonic_now=50.0)
+    replay = _verify(env, now=1145.0, monotonic_now=900.0)
+    assert first["accepted_remaining_s"] == 10.0
+    assert replay["accepted_remaining_s"] == 5.0
+    assert first["accepted_expires_unix"] == 1150.0
+    assert replay["accepted_expires_unix"] == 1150.0
+
+
+@pytest.mark.parametrize("receiver_now", [880.0, 1120.0])
+def test_fresh_request_accepts_full_budget_at_either_clock_skew_limit(
+        receiver_now):
+    env = _envelope(timeout_s=30.0, now=1000.0)
+    timing = _verify(env, now=receiver_now, monotonic_now=500.0)
+    assert timing["accepted_remaining_s"] == 30.0
+    assert timing["accepted_deadline_monotonic"] == 530.0
+
+
+def test_deadline_rounding_does_not_shave_budget_at_skew_limit():
+    created = 1000.0004
+    budget = 30.0004
+    env = _envelope(timeout_s=budget, now=created)
+    timing = _verify(
+        env, now=created + cp.MAX_CLOCK_SKEW_S, monotonic_now=500.0)
+    assert timing["accepted_remaining_s"] == pytest.approx(budget)
+    assert timing["accepted_deadline_monotonic"] == pytest.approx(
+        500.0 + budget)
+
+
+def test_receiver_more_than_skew_behind_refuses_future_timestamp():
+    env = _envelope(timeout_s=30.0, now=1000.0)
+    with pytest.raises(cp.EnvelopeRejected) as e:
+        _verify(env, now=879.999)
+    assert e.value.reason == "timestamp_out_of_window"
+
+
+def test_replay_past_deadline_plus_skew_is_refused():
+    env = _envelope(timeout_s=30.0, now=1000.0)
+    with pytest.raises(cp.EnvelopeRejected) as e:
+        _verify(env, now=1150.001)
+    assert e.value.reason == "deadline_exceeded"
+
+
+def test_wall_clock_jump_after_admission_cannot_change_monotonic_deadline(
+        monkeypatch):
+    env = _envelope(timeout_s=30.0, now=1000.0)
+    wall_reads = iter((1010.0, 9999999999.0))
+    monkeypatch.setattr(cp.time, "time", lambda: next(wall_reads))
+    timing = _verify(env, monotonic_now=500.0)
+    assert timing["accepted_deadline_monotonic"] == 530.0
+    # A later wall-clock jump cannot mutate the already-admitted anchor.
+    assert cp.time.time() == 9999999999.0
+    assert timing["accepted_deadline_monotonic"] == 530.0
+
+
 def test_a21_signs_controller_and_origin_host():
     """A HOST signs, on behalf of a CONTROLLER, targeting a NODE."""
     env = _envelope()
@@ -55,11 +124,25 @@ def test_algorithm_tag_is_signed():
     assert "sig_alg" in cp._SIGNED_FIELDS
 
 
+def test_duration_and_creation_time_are_signed():
+    assert "created_unix" in cp._SIGNED_FIELDS
+    assert "budget_s" in cp._SIGNED_FIELDS
+
+
 def test_deadline_is_absolute():
     env = _envelope(timeout_s=30.0, now=1000.0)
+    assert env["created_unix"] == 1000.0
+    assert env["budget_s"] == 30.0
     assert env["deadline_unix"] == 1030.0
     assert cp.remaining_budget(env, now=1020.0) == pytest.approx(10.0)
     assert cp.remaining_budget(env, now=9999.0) == 0.0
+
+
+def test_sender_budget_is_cumulative_on_its_own_clock_and_rollback_capped():
+    env = _envelope(timeout_s=30.0, now=1000.0)
+    assert cp.remaining_budget(env, now=1005.0) == 25.0
+    assert cp.remaining_budget(env, now=1025.0) == 5.0
+    assert cp.remaining_budget(env, now=900.0) == 30.0
 
 
 def test_no_job_id_in_the_request():
@@ -102,6 +185,8 @@ def test_hmac_signer_requires_a_key():
     ("target_node_id", "node-c"),
     ("origin_host_id", "attacker-host"),
     ("controller_id", "attacker-controller"),
+    ("created_unix", 123.0),
+    ("budget_s", 999.0),
     ("deadline_unix", 9999999999.0),
     ("expected_runtime_id", "someone-elses-runtime"),
     ("hop_limit", 99),
@@ -155,9 +240,64 @@ def test_relayed_envelope_rejected_in_v1():
 
 
 def test_expired_deadline_rejected():
+    env = _envelope(timeout_s=30.0, now=1000.0)
     with pytest.raises(cp.EnvelopeRejected) as e:
-        _verify(_envelope(timeout_s=-1.0))
+        _verify(env, now=1150.0)
     assert e.value.reason == "deadline_exceeded"
+
+
+def test_excessive_signed_budget_is_a_named_refusal():
+    env = _envelope(now=1000.0)
+    env["budget_s"] = cp.MAX_DEADLINE_HORIZON_S + 0.001
+    env["deadline_unix"] = env["created_unix"] + env["budget_s"]
+    env["signature"] = signer().sign(cp._signing_payload(env))
+    with pytest.raises(cp.EnvelopeRejected) as e:
+        _verify(env, now=1000.0)
+    assert e.value.reason == "deadline_too_far"
+
+
+@pytest.mark.parametrize("bad", [
+    0, -1, cp.MAX_DEADLINE_HORIZON_S + 0.001,
+    float("nan"), float("inf"), True, "not-a-number",
+])
+def test_builder_refuses_invalid_budget(bad):
+    with pytest.raises(ValueError):
+        _envelope(timeout_s=bad, now=1000.0)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -1, True])
+def test_builder_refuses_invalid_creation_time(bad):
+    with pytest.raises(ValueError):
+        _envelope(now=bad)
+
+
+def test_resigned_inconsistent_deadline_is_refused():
+    env = _envelope(timeout_s=30.0, now=1000.0)
+    env["deadline_unix"] += 0.01
+    env["signature"] = signer().sign(cp._signing_payload(env))
+    with pytest.raises(cp.EnvelopeRejected) as e:
+        _verify(env, now=1000.0)
+    assert e.value.reason == "deadline_mismatch"
+
+
+@pytest.mark.parametrize("field", ["created_unix", "budget_s"])
+def test_resigned_missing_duration_field_is_a_named_refusal(field):
+    env = _envelope(timeout_s=30.0, now=1000.0)
+    del env[field]
+    env["signature"] = signer().sign(cp._signing_payload(env))
+    with pytest.raises(cp.EnvelopeRejected) as e:
+        _verify(env, now=1000.0)
+    assert e.value.reason == "malformed"
+
+
+@pytest.mark.parametrize("bad", [0, -1, cp.MAX_HOP_LIMIT + 1, 1.5, True])
+def test_malformed_or_excessive_hop_limit_is_refused(bad):
+    env = _envelope()
+    env["hop_limit"] = bad
+    env["signature"] = signer().sign(cp._signing_payload(env))
+    with pytest.raises(cp.EnvelopeRejected) as e:
+        _verify(env)
+    assert e.value.reason in ("malformed", "hop_limit_exceeded")
 
 
 # -- A-22 runtime precondition (the fail-open fix) ------------------
@@ -224,7 +364,7 @@ def test_protocol_mismatch_rejected():
 
 
 @pytest.mark.parametrize("field", [
-    "convoy_id", "request_id", "controller_id", "origin_host_id",
+    "convoy_id", "request_id", "idempotency_key", "controller_id", "origin_host_id",
     "source_host_id", "target_node_id", "operation",
 ])
 def test_missing_required_field_rejected(field):
@@ -241,11 +381,14 @@ def test_non_object_rejected():
     assert e.value.reason == "malformed"
 
 
-# -- panel regression (2026-07-31): non-finite deadlines --------------
+# -- panel regression (2026-07-31): non-finite timing -----------------
 
+@pytest.mark.parametrize("field", [
+    "created_unix", "budget_s", "deadline_unix",
+])
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"),
-                                 float("-inf")])
-def test_non_finite_deadline_is_refused(bad):
+                                 float("-inf"), True, "garbage"])
+def test_malformed_signed_timing_field_is_refused(field, bad):
     """PROVEN FAIL-OPEN: every comparison against NaN is False, so
     `deadline <= now` never fired and a signed NaN deadline produced a
     request that could never expire. Infinity is the same guarantee
@@ -253,16 +396,17 @@ def test_non_finite_deadline_is_refused(bad):
     reachable over the wire, so the verifier -- not just the transport
     -- must refuse them."""
     env = _envelope()
-    env["deadline_unix"] = bad
+    env[field] = bad
     env["signature"] = signer().sign(cp._signing_payload(env))
     with pytest.raises(cp.EnvelopeRejected) as e:
         _verify(env)
     assert e.value.reason == "malformed"
-    assert "finite" in e.value.detail
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf")])
 def test_remaining_budget_of_a_non_finite_deadline_is_zero(bad):
     """A non-finite budget reads as 'plenty of time' to every downstream
     timeout comparison; no budget is the safe reading."""
-    assert cp.remaining_budget({"deadline_unix": bad}) == 0.0
+    env = _envelope(now=1000.0)
+    env["deadline_unix"] = bad
+    assert cp.remaining_budget(env, now=1000.0) == 0.0

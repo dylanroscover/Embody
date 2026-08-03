@@ -1,143 +1,217 @@
-# The Convoy Host App
+# Convoy Setup and Troubleshooting
 
-The **host app** is the other half of [Convoy](index.md): a small program that runs outside TouchDesigner, keeps the register of this user's Convoy nodes, holds the durable job queue, and relays audited operations into a node through its Envoy server.
+Convoy uses a small background **host app** on each participating computer. One host app serves every Convoy-enabled TouchDesigner project for the logged-in user. It is a local helper, not a central Convoy server: if it stops, only the nodes on that computer become unavailable, while other reachable siblings continue communicating.
 
-!!! warning "Built, but never yet installed end to end — treat it as unproven"
-    The install path now exists. The `.tox` carries the host app itself (as text DATs, so an install needs no network), and the Convoy page has **Install or Update Host App**, **Start**, **Stop** and **Uninstall Host App**. Pressing Install asks for confirmation, writes the daemon into your per-user data directory, and registers it to start when you log in.
+!!! warning "Development preview"
+    The controls and runtime are still being completed. **Install or Update Host App** may not have a production-ready package in every build. Windows acceptance testing is in progress; the host app, login supervision, firewall flow, and node-to-node operation have not yet been physically validated on macOS. Use a development test deployment, not a show-critical machine, until the relevant release notes say otherwise.
 
-    **What has not happened is a single complete install on real hardware.** The orchestration is covered by tests — including a run inside TouchDesigner — and the daemon has been started from an installed payload and answered `/health`. But the end-to-end acceptance run (install → supervised restart → survives logout and reboot → uninstall → reinstall rejoins the same convoy) has not been performed. Until it has, treat the buttons as unproven rather than supported, and know that [Uninstall](#how-the-install-behaves) removes the program and its login entry while keeping your host identity and job history.
+## Checklist for each computer
 
-    Two specific limits, stated plainly rather than discovered later:
+1. Connect the computer to the same trusted LAN as the other Convoy machines.
+2. Save and open each `.toe` that should appear as a node.
+3. Choose an AI assistant if desired, then turn on **Enable Convoy** on each participating Embody COMP. With no assistant selected, Embody runs only the internal loopback command service Convoy needs and does not configure or launch an AI client.
+4. Press **Install or Update Host App** and approve the local installation prompt.
+5. Press **Start Host App** if it is not already running.
+6. Allow the host app on the operating system's private/trusted network profile. Do not open Envoy's local-only port to the LAN.
+7. Confirm **Host App**, **This Node Status**, and the **Convoy Status** sequence on the Embody COMP.
+8. Repeat on the next computer, using the same Embody version.
 
-    - **macOS is entirely unverified.** The Launch Agent, the plist and the `launchctl` calls are generated and unit-tested, but no part of the macOS path has ever run on a Mac. Only the Windows leg has been exercised at all.
-    - **A host installed this way has no cryptographic identity.** TouchDesigner bundles Python 3.11.15 without the `cryptography` package, so the daemon starts and serves normally but reports `cryptography_missing` and holds no signing key. That is harmless for the loopback-only feature that exists today, and it is a hard blocker for the LAN peering described under [What is coming](#what-is-coming) — peer admission is built on pinned key fingerprints, and there is no key to pin.
+There is no invitation code or Create/Join decision. Enabled nodes find the Convoy automatically and reconnect after ordinary process, address, or network interruptions.
 
-    The program it installs is **unsigned** and lives in a user-writable directory, which is by construction a persistence mechanism; security software may reasonably flag it. It is **one per logged-in user**, not one per machine.
+## Host App controls
 
-## Why it lives outside TouchDesigner
-
-The host app is machine-scoped — more precisely, **per logged-in user** — and the node is per project. Putting the coordinator inside one of the things it coordinates does not work:
-
-- **It has to survive TD being closed.** A project is still a node when its TouchDesigner is not open; the host app can still answer for it, list it, and hold work queued for it. When TD opens again, the node re-registers and its Envoy port comes back.
-- **Many projects, one register.** Several projects on one machine each register as their own node with the same host app. Nothing about that arrangement fits inside any one of them.
-- **Durable jobs must outlive a session.** A job is persisted before it is acknowledged, and its record survives a host restart. A queue that dies with a `.toe` is not a queue.
-- **A relay must not be reachable only while its target is up.** The whole point is to have somewhere to ask about a project that is not currently running.
-
-## What it does when it runs
-
-- Binds `127.0.0.1` on an **OS-assigned port** and writes `host.portfile.json` with that port and its own pid. Nothing binds off the machine.
-- Mints a **host id** once, host-private, and serves it on `GET /health` — the only unauthenticated route. Every other route requires the `X-Convoy-Host-Token` header, read from a 0600 file in the same directory.
-- Keeps the **node register**: TD sessions register their project root, Embody COMP path, convoy id, per-launch runtime id, and Envoy port, and get a host-minted node id back.
-- Turns an authorized request into a **durable job** — persisted before it is acknowledged — and records every state change in an append-only audit trail.
-- Optionally **drains itself**: with `--drain-interval N` it polls running node jobs and dispatches queued ones every N seconds. **This is off by default** (`0`), which means a host app started with no arguments never dispatches on its own; work moves only when something asks it to.
-- Refuses to be run twice against the same data directory. An exclusive `host.lock` is taken before anything else, and a second instance exits with a clear line rather than corrupting the first one's in-flight job claims.
-
-Clients never trust a portfile on its face: the writing process's liveness is checked, and the host app's identity is confirmed through the unauthenticated `/health` route **before** the IPC token is ever transmitted. A recycled port therefore reads as `Host app stale`, not as a live host to hand a credential to.
-
-## Where it keeps its state
-
-One per-user directory, never inside your project and never in git:
-
-| Platform | Directory |
+| Control | What it does |
 |---|---|
-| Windows | `%LOCALAPPDATA%\EmbodyConvoy` (Local, never Roaming — identity must not follow a roaming profile to another machine) |
-| macOS | `~/Library/Application Support/EmbodyConvoy` |
-| Linux | `$XDG_STATE_HOME/embody-convoy`, or `~/.local/state/embody-convoy` |
+| **Host App** | Reports whether the background app for this logged-in user is installed, running, stopped, or needs attention |
+| **Install or Update Host App** | Installs, repairs, or updates the per-user app after local confirmation |
+| **Start Host App** | Starts the installed app now |
+| **Stop Host App** | Stops it and disables automatic restart; queued job records are retained |
+| **Uninstall Host App** | Removes the app and login registration while retaining the local host identity and job history for a later reinstall |
 
-| File | Contents |
+Installing the host app is separate from **Enable Convoy** because it runs outside TouchDesigner and may start when the user logs in. Enabling Convoy in the wizard never performs that installation silently.
+
+The **Host App** readout uses these user-facing states:
+
+| Readout | What to do |
 |---|---|
-| `host.json` | Host identity and the node register. Rewritten whole, atomically, and only on register / approve / remint |
-| `host.token` | The per-install IPC token (0600). Created by the host app; nothing else ever mints one |
-| `host.portfile.json` | The current port and the pid that wrote it. Cleared on a clean shutdown |
-| `host.lock` | The singleton lock, held for the process lifetime. A crash releases it; a pid file would not |
-| `jobs/` | One JSON file per job. A job write never rewrites the others |
-| `audit.jsonl` | Append-only, one JSON object per line |
+| `Not installed` | Use **Install or Update Host App** if your build contains a runtime package |
+| `Checking...`, `Installing...`, `Installed -- starting...` | Wait for the current local action to finish |
+| `Running ...` | Ready; the version and process ID may also be shown |
+| `Installed -- not running (restarts within a minute)` | On Windows, the scheduled supervisor may take up to a minute; macOS LaunchAgent recovery is normally prompt. You can press **Start Host App** immediately on either platform. |
+| `Installed -- stopped` | Press **Start Host App** when you want Convoy available again |
+| `Installed -- no supervisor (use Install or Update)` | Run **Install or Update Host App** to repair login startup |
+| `Needs repair -- managed runtime unavailable` | Install the runtime package supplied for this Embody build, then run **Install or Update Host App** |
+| `Running ... -- installed by a newer Embody` or `Installed ... -- installed by a newer Embody` | Do not downgrade it from an older Embody; align versions first |
+| `Managed by another supervisor` | Use the studio or Owlette process that owns startup, rather than competing with it |
+| `Install failed -- see log` | Review the Embody log, then retry the repair action |
 
-## What to expect today
+Use one dedicated logged-in user for an unattended show machine. The host app is per user, not a system service, so a different user account has a separate identity, settings, jobs, and artifact quota.
 
-| Your situation | What you see |
+## Network and firewall requirements
+
+Convoy is for a trusted local network. For the initial release, participating computers should be on the same local discovery domain. Guest Wi-Fi isolation, client isolation, strict VLAN boundaries, VPN routing, or blocked local discovery traffic can keep otherwise reachable machines from finding each other.
+
+- On Windows, keep the network profile **Private** and approve only the Convoy host app on that profile.
+- On macOS, grant the host app Local Network access when prompted.
+- Do not expose Envoy itself; it remains local to its computer.
+- Avoid manually forwarding Convoy ports to the internet.
+- A changing DHCP address is expected. Convoy uses stable node identities and should reconnect automatically.
+
+Automatic first contact assumes the LAN is trusted. Do not “test briefly” on airport, hotel, coffee-shop, conference, guest, or public Wi-Fi.
+
+## Reading status
+
+Exact wording can vary by release, but these are the useful categories:
+
+| Status | Meaning and next action |
 |---|---|
-| Embody installed, **Convoy Enable** off (the default) | `Disabled`. Convoy does nothing and costs nothing |
-| **Convoy Enable** on, no host app on the machine | `No Convoy host app`, indefinitely. One DEBUG line on the transition, a slower tick, and no error, no dialog, no retry storm |
-| **Convoy Enable** on, project never saved | `Waiting for project save` |
-| A source checkout of the Embody repo, daemon started by hand | The node registers within a few seconds and the status becomes `Registered <node> (host <host>)` |
+| **Disabled** | **Enable Convoy** is off for this node |
+| **Waiting for project save** | Save the `.toe`, then wait for automatic registration |
+| **Host app not installed / unavailable** | Install, repair, or start the local host app |
+| **Online / Registered** | The node and host app are ready |
+| **Offline** | The node is known but its TD process, host app, or network path is unavailable; automatic reconnect continues |
+| **Limited** | The node is reachable but the requested capability or version contract is unavailable |
+| **Incompatible** | Align Embody versions before sending work |
+| **Conflict - Multiple Convoys Found** | More than one previously established Convoy is visible; do not merge them by guessing. Keep existing peers running and use the advanced local reset/rejoin recovery when it is available in your build |
+| **Permission denied / approval required** | Enable the required setting locally on the target; a peer cannot grant itself TD Python or Full Shell |
+| **Error** | Read **Details**, then check version, firewall, host-app health, and the troubleshooting cases below |
 
-## Running it from a source checkout
+Several rows with the same IP address are normal when one computer has multiple `.toe` files or TouchDesigner processes. Use **Node Name**, version, and details to select the intended row.
 
-!!! danger "Developer path — not a supported install"
-    This is how the host app is exercised during development. It is not an install: nothing supervises the process, nothing restarts it, it does not survive a logout, and closing the terminal ends it. Do not treat it as a way to deploy Convoy.
+## When nodes do not appear
 
-From a clone of the [Embody repository](https://github.com/dylanroscover/Embody) (the daemon is stdlib-only Python 3, except that it will use `cryptography` for its host identity key if the interpreter you run it under happens to have it — TouchDesigner's does not):
+Work through this list on both computers:
 
-```bash
-python dev/convoy/convoy_hostapp.py
-```
+1. Confirm **Enable Convoy** is on and the project has been saved.
+2. Confirm **Host App** says it is running for the same logged-in user that runs TouchDesigner.
+3. Confirm both machines use the same Embody version.
+4. Confirm both are on the same trusted LAN and are not isolated guest clients.
+5. Check the private-network firewall permission on both sides. A successful connection in one direction does not prove the reverse direction is allowed.
+6. Wait for automatic reconnect; do not repeatedly toggle permissions while a node is converging.
+7. If several established Convoys are reported, stop and use the explicit local recovery path instead of deleting random state.
 
-It prints the host id, the loopback port, and its data directory, then serves until interrupted. Useful flags:
+If the host app was just updated, run **Install or Update Host App** once more as the repair path, then **Start Host App**. Do not manually copy host identities or settings between computers.
 
-| Flag | Effect |
+## When a node keeps going offline
+
+An offline row is retained intentionally. Common causes are a closed `.toe`, a sleeping computer, a stopped host app, Wi-Fi roaming, DHCP renewal, or a temporary cable/switch interruption. Convoy reconnects and refreshes the row when the node returns.
+
+For unattended machines:
+
+- Disable sleep where appropriate for the installation.
+- Use a dedicated user with a deliberate login/startup policy.
+- Keep TouchDesigner project launch and restart procedures separate from Remote Wake.
+- Verify the full shutdown, restart, login, host-app start, and `.toe` reopen path before relying on it.
+
+Remote Wake only leaves Perform Mode temporarily; it does not reopen a closed `.toe` or relaunch TouchDesigner.
+
+## When remote start or restart is refused
+
+`convoy_start_node` works from a previously confirmed local launch record. If it reports an unknown or incomplete profile, open that `.toe` normally, let the node register, and verify its status before testing remote start again. A moved or deleted `.toe`, changed TouchDesigner installation, disabled node, or repeated crash loop is refused instead of guessed around.
+
+For `convoy_restart_node`, use the node's current runtime ID from `convoy_list_nodes` and a unique `idempotency_key`. The default `require_clean` policy refuses dirty, unsaved, or unverifiable project state. Use `save_then_restart` only when saving is intended. If several Embody nodes share one TouchDesigner process, Convoy refuses a single-node restart; restart that shared application through your normal local operating procedure.
+
+If cancellation or the deadline arrives before the old process commits to exiting, Convoy stops without deliberately quitting that process. Under `save_then_restart`, `save_may_have_run` means the save request was accepted but its final acknowledgement was uncertain; inspect the project file before deciding whether to retry.
+
+After the old process commits to exiting, Convoy prioritizes restoring the replacement and may return `cancel_deferred` or `deadline_deferred`. The host app keeps that restoration attempt bounded and records the commit durably. If the host app itself restarts in this window, it automatically resumes reconciliation and updates the original lifecycle job. Query that same job, or repeat with the same idempotency key, until the exact node and runtime are confirmed online. Do not create a second restart identity just because the first client wait ended.
+
+## When Remote Wake does not happen
+
+Check **Remote Wake** on the target node. A real TouchDesigner operation should wake the command service, while discovery, ping, status, controller listing, and job polling intentionally do not.
+
+After the final remote operation and edit lease finish, **Remote Wake Idle Grace** waits 60 seconds by default before restoring the previous Perform state. New remote work resets the timer. If Remote Wake is off, the Host App can keep the node visible for non-waking status queries while work that needs TouchDesigner is refused.
+
+## Controller or edit-lease conflicts
+
+The **Controllers** column is a count of active client sessions reported with the node row, not a list of privileged users. Older preview hosts may display zero until they expose that aggregate. Read-only work can overlap, but mutations acquire an edit lease for the target scope. A lease conflict means another controller currently owns the required mutation scope.
+
+- Do not bypass the refusal by switching to a less specific target name.
+- Check the detailed controller list if `convoy_list_controllers` is present in your build.
+- Wait for the active work to finish or the abandoned session to expire, then inspect the target before retrying.
+- Use an exclusive batch for a change that must not be interleaved with another controller.
+
+Detailed controller listing is non-waking. It is part of the intended public tool surface but is not present in every preview build.
+
+## Jobs, timeouts, and cancellation
+
+A Convoy tool call can return before the remote work finishes. Keep its delivery/job ID and use `convoy_get_job` to reconcile it after a timeout or reconnect. A timeout means “the client stopped waiting,” not “the operation definitely did not run.”
+
+Never submit a new mutation merely because the first response was lost. First query the existing job or repeat with the same returned retry identity. If the final state remains uncertain, inspect the target before making another change.
+
+Cancellation is definitive for queued work but may be best effort once TouchDesigner or a computer action has started. The current bridge exposes `convoy_cancel_job`; older installed preview builds may not. A committed lifecycle restart is a special case: cancellation is reported as deferred while Convoy restores the replacement, as described above. Cancellation is not an operational safety system, so inspect the target before retrying any uncertain mutation.
+
+## Permission refusals
+
+| Refusal | Resolution |
 |---|---|
-| `--data-dir DIR` | Use a scratch state directory instead of the per-user one — the safe way to experiment |
-| `--port N` | Pin the loopback port instead of letting the OS assign one |
-| `--drain-interval N` | Poll running node jobs and dispatch queued ones every N seconds. Off (`0`) unless you pass it |
-| `--no-singleton` | Start even if another host app holds the data directory. **Tests only** — two daemons on one data directory burn each other's live job claims |
+| TD Python not allowed | Turn on **Allow Execute TD Python** locally on that target node, only for as long as needed |
+| Full Shell not allowed | Turn on **Allow Full Shell** locally on that computer, only for an explicitly reviewed workflow |
+| Git/GitHub operation unavailable | Use a supported structured action, verify the registered repository and local CLI authentication, and align versions |
+| Version/capability mismatch | Update nodes to the same Embody release |
+| Node in Perform Mode with wake disabled | Turn on **Remote Wake** locally or leave Perform Mode manually |
 
-If a TouchDesigner project on the same machine has **Convoy Enable** on, it will find this host app on its next reconcile tick and register with it. That is the intended behaviour, and it is worth knowing before you start one.
+TD Python and Full Shell are separate dangerous capabilities. TD Python can use operating-system process APIs, so turning Full Shell off does not make arbitrary Python safe.
 
-## How to tell it is working
+## Optional Owlette API access
 
-**From TouchDesigner** — the Convoy page on the Embody COMP:
+Owlette is not required for Convoy LAN communication. In the current preview, its read-only inventory and status bridge uses an `OWLETTE_API_KEY` available to the Convoy host app process. After configuring the host environment, restart the host app and call `convoy_owlette` with `action=capabilities` to verify the connection. `OWLETTE_SITE_ID` may be set as an optional default.
 
-- **Convoy Status** reads `Registered <node> (host <host>)`. That is the steady state.
-- `Registered -- Envoy port pending` means the registration landed but Envoy has not bound its port yet; it resolves on its own within seconds.
-- `No Convoy host app` means the probe found nothing. Nothing is broken.
+Command submission is off independently. To opt in on that computer, set `EMBODY_CONVOY_ALLOW_OWLETTE_COMMANDS=1` in the same host environment and restart the app. Each submitted command still needs an idempotency key. Remove or set the opt-in false and restart to return the bridge to read-only use. Convoy does not expose Owlette's generic MCP command as a relay.
 
-**From outside TouchDesigner** — in the data directory above:
+The preview does not yet provide a cross-platform credential-configuration control in the Embody UI. Ensure a supervised host app actually receives the intended environment without placing API keys in a `.toe`, repository, command prompt transcript, or AI request. Physical Apple Silicon macOS validation remains pending.
 
-- `host.portfile.json` exists and names a pid that is actually running.
-- The health route answers, unauthenticated, with the same host id:
+## Artifact quota problems
 
-```bash
-curl http://127.0.0.1:<port>/health
-# {"ok": true, "protocol": "convoy-host/1", "host_id": "..."}
-```
+The default managed **Artifact Quota** is 1024 MB per logged-in user/computer across all local nodes. It covers screenshots, transferred files, large results, command output, partial transfers, and local materialized copies.
 
-Every other route is authenticated:
+Relayed PNG/JPEG screenshots are normally materialized automatically and returned to the AI client as image content. Inline screenshots do not retain or report a bridge temporary path. For a large JSON/text result or another file, call `convoy_get_artifact` with the artifact reference and exact target from the original result. A successful download is verified and returns a temporary path on the computer running the local Envoy bridge; it is never a remote-host path.
 
-```bash
-curl -H "X-Convoy-Host-Token: <contents of host.token>" \
-     http://127.0.0.1:<port>/status
-```
+To keep an artifact, call `convoy_save_artifact` with that same reference and exact target. It saves only into the current client's registered project at `.embody/convoy/artifacts/`. A custom name must be one plain filename. Existing files are protected by default; use `overwrite=true` only when you intend to replace one.
 
-`/nodes` lists the registered nodes, and `/jobs/<id>` reads one job record.
+Do not try to open a Windows or macOS path reported by the target as though it existed on the client computer. If a result contains only a remote path and no artifact reference, the operation has not produced a transferable Convoy file result.
 
-## Stopping it
+When space is needed, Convoy removes least-recently-used unpinned entries. Active transfers, running or unacknowledged job data, and explicitly saved project copies are protected. If all candidates are protected, the incoming artifact is refused.
 
-- **Interrupt it** (Ctrl+C, or `SIGTERM` / `SIGINT` / `SIGBREAK`). The daemon unwinds cleanly: it stops the drain loop, clears the portfile, writes a `stopped` audit line, and releases the lock.
-- **Or ask it to stop** over the authenticated `POST /shutdown` route, which runs the same path.
-- **A hard kill** leaves the portfile behind. Nothing breaks: clients verify the writer's pid, so a dead port is never handed out as live — the status simply reads `Host app stale`.
+You can:
 
-## How the install behaves
+- Increase **Artifact Quota (MB)** locally if the machine has room.
+- Wait for active jobs/transfers to finish so temporary pins can be released.
+- Use `convoy_save_artifact` to save anything you need under `.embody/convoy/artifacts/` before cache cleanup.
+- Set the quota to `0` to disable storage-backed artifact operations. Zero is not unlimited.
 
-These are properties of the install that now exists, not promises.
+Managed cache locations:
 
-- **Its own confirmation, separate from Convoy Enable.** Installing a program that runs whenever you are logged in — whether or not TouchDesigner is open — is a different grant from registering a project, so it is asked for separately. **Enabling Convoy never installs anything**, and neither does the setup wizard.
-- **Unsigned and un-notarized**, dependent on TouchDesigner's bundled interpreter (so moving or uninstalling TD needs a repair — press Install again), **per user, not per machine**, loopback only with no firewall rule created or needed, and never elevated.
-- **Install is also repair and upgrade.** Running it again over a broken or older install is the supported fix; it does not need an uninstall first.
-- **Asymmetric self-heal, by construction**: Windows Task Scheduler's repetition means a dead daemon comes back within about a minute, while launchd's `KeepAlive` restarts it in about a second. That difference is a property of the two supervisors, not something Convoy hides.
-- **Stop really stops.** Because the supervisor would otherwise bring the daemon back within a minute, Stop disables the supervision entry first — otherwise the button would look broken.
-- **Uninstall keeps the evidence.** It removes the program files and the supervision entry and deliberately **keeps** `host.json`, `host.token`, `host.portfile.json`, `audit.jsonl` and `jobs/`. A re-install therefore rejoins the same convoy under the same host identity rather than becoming a new host. Uninstall shows you exactly what it will remove and what it will keep before it does anything.
+| Platform | Path |
+|---|---|
+| Windows | `%LOCALAPPDATA%\Embody\Convoy\cache\artifacts` |
+| macOS | `~/Library/Caches/Embody/Convoy/artifacts` |
 
-## What is coming
+Project-saved artifacts are not counted against this quota and are never removed by cache cleanup.
 
-!!! note "Planned, not shipped — none of this exists in this build"
-    Described here so the gap between what shipped and what was designed is visible, not to imply it is available.
+## Repair, stop, and uninstall
 
-- **LAN peering between machines.** Everything today is loopback only. Multi-machine Convoy needs a transport, mutual authentication and an admission model, and it is gated on the identity problem noted at the top of this page: a host installed under TouchDesigner's interpreter has no signing key, and peer admission is built on pinned key fingerprints.
-- **A verified install.** The acceptance run described at the top — install, supervised restart with a new pid, survives logout and reboot, uninstall, reinstall rejoining the same convoy — has not been performed on real hardware, and none of the macOS path has run on a Mac at all.
+**Install or Update Host App** is also the repair action. It should preserve the computer's Convoy identity and durable records while refreshing the installed runtime.
 
-## Platform honesty
+**Stop Host App** intentionally prevents its login supervisor from immediately starting it again. Existing queued job records remain. Press **Start Host App** to resume.
 
-The host app and its TouchDesigner-side libraries are pure-Python and run their test suites on both **windows-latest** and **macos-latest** in CI. That covers path computation, the probe decision tree, the job store, dispatch, and the protocol.
+**Uninstall Host App** removes the background app and login registration but retains the local host identity and job history so a later reinstall rejoins as the same host. Review the confirmation shown by your build before proceeding. Explicitly saved project artifacts are project files and are not part of host-app cache cleanup.
 
-It does not cover the parts that only a real machine can exercise. The Scheduled Task XML and the LaunchAgent plist are generated and asserted against golden fixtures, and the supervisor commands are tested against captured `schtasks` and `launchctl` output — but a fixture is not a supervisor. **No install or login-supervision behaviour has been verified on a Mac**: that leg is verified by construction and CI only, and is stated that way deliberately rather than being left for a user to discover. The Windows leg has had its unelevated task-registration path exercised from inside TouchDesigner, but not a full install-to-reboot run.
+## Platform validation status
+
+Convoy is designed for Windows x64 and Apple Silicon macOS in every direction: Windows/Windows, Windows/macOS, macOS/Windows, and macOS/macOS. Cross-platform behavior is a release requirement, but design intent and automated tests are not the same as hardware acceptance.
+
+At the time of this preview:
+
+- Production runtime packaging is not complete in every build.
+- Windows-to-Windows physical acceptance is in progress.
+- Physical Apple Silicon macOS validation is pending.
+- Intel macOS is not the first supported Convoy host target.
+
+Consult the release notes for the combinations certified by the build you plan to deploy.
+
+## Related guides
+
+- [Convoy overview and daily use](index.md)
+- [Convoy Parameter Reference](../embody/parameters.md#convoy)
+- [Setup Wizard](../embody/setup-wizard.md)
+- [Envoy Troubleshooting](../envoy/troubleshooting.md)

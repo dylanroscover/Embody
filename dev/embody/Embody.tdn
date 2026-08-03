@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1056
-generator: Embody/6.0.176
+build: 1063
+generator: Embody/6.0.181
 td_build: 099.2025.33070
-source_file: Embody-6.177.toe
-exported_at: '2026-08-02T13:09:39Z'
+source_file: Embody-6.181.toe
+exported_at: '2026-08-03T09:49:56Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -439,7 +439,7 @@ custom_pars:
   - name: Convoyenable
     style: Toggle
     label: Enable Convoy
-    help: 'Register this project as a Convoy node with this machine''s local host app, letting approved local controllers relay operations (queries, test runs, project saves) into this project through Envoy. This build is loopback-only: nothing leaves this machine, and only operations in the host app''s audited registry can be relayed. The first enable creates the project''s convoy identity and asks for confirmation; a future LAN-enabled phase will ask again before any wider exposure.'
+    help: Joins this Embody node to other Convoy-enabled nodes on the same trusted LAN and lets those nodes discover, inspect, and control it -- queries, test runs, project saves, and more -- through Envoy. Enabling this opens an authenticated LAN listener and starts automatic discovery and reconnect. Only enable it on a network you trust; never on guest, public, or mixed-trust networks. Arbitrary TD Python and full shell stay OFF until you enable them locally on this machine. The first enable creates this project's convoy identity and asks for confirmation.
   - name: Convoyid
     style: Str
     label: Convoy ID
@@ -477,26 +477,71 @@ custom_pars:
     style: Pulse
     label: Uninstall Host App
     help: Remove the host app and its login registration. Shows you exactly what will be removed and what will be KEPT before doing anything -- this machine's host identity and its job history are kept, so re-installing later rejoins the same convoy rather than becoming a new host.
-  Logs:
-  - name: Verbose
+  - name: Convoynodename
+    style: Str
+    label: Node Name
+    startSection: true
+    help: Display name for this node in Convoy. Defaults to '<hostname> / <toe filename>'. Editing it sets a persistent override; routing always uses the stable node identity, never this name.
+    value: =__import__('socket').gethostname() + ' / ' + project.name.rsplit('.', 1)[0]
+  - name: Convoyremotewake
     style: Toggle
-    label: Verbose (Debug)
-    help: Enables debug-level logging. When off, only INFO and above are logged. Enable for detailed diagnostics when troubleshooting issues.
-  - name: Print
+    label: Remote Wake
+    startSection: true
+    default: true
+    help: Allows a real remote TouchDesigner operation to temporarily wake Convoy's command service while this node is in Perform Mode. Discovery, status, ping, and controller queries never wake it. After remote work finishes, the node returns to its previous Perform state following the idle grace period.
+  - name: Convoywakegrace
+    style: Float
+    label: Remote Wake Idle Grace
+    default: 60
+    max: 3600.0
+    clampMin: true
+    normMax: 300.0
+    help: Seconds after the final remote wake finishes before Convoy restores this node's previous Perform Mode state.
+  - name: Convoyallowtdpython
     style: Toggle
-    label: Print to Textport
-    help: Echoes all log messages to the TouchDesigner textport. Useful for monitoring Embody activity in real-time.
-    value: true
-  - name: Logtofile
+    label: Allow Execute TD Python
+    startSection: true
+    help: Allows Convoy controllers to execute arbitrary Python inside this TouchDesigner process. Python can access the filesystem, network, credentials available to TouchDesigner, and operating-system process APIs, so enabling this is effectively host-user code execution even when Allow Full Shell is off. Keep it off unless explicitly needed. This setting can only be enabled locally.
+  - name: Convoyallowfullshell
     style: Toggle
-    label: Log to File
-    help: Writes log messages to a file on disk. Files are saved to the Log Folder with automatic rotation at 10 MB.
-    value: true
-  - name: Logfolder
-    style: Folder
-    label: Log Folder
-    help: Folder where log files are saved. Defaults to dev/logs/ in the project directory. Files are named <project>_YYMMDD.log.
-    value: logs
+    label: Allow Full Shell
+    help: Allows Convoy controllers to use Convoy's purpose-built interface for arbitrary operating-system commands as the current user. This can change or delete files, install software, or expose secrets. Structured Git and GitHub CLI tools do not require this option. Turning it off does not sandbox arbitrary TouchDesigner Python if Allow Execute TD Python is on. This setting applies to every Convoy node on this computer and can only be enabled locally.
+  - name: Convoyartifactquota
+    style: Int
+    label: Artifact Quota (MB)
+    startSection: true
+    default: 1024
+    max: 65536.0
+    clampMin: true
+    normMax: 8192.0
+    help: 'Maximum disk space (MB) this computer may use for temporary Convoy artifacts: screenshots, transferred files, large tool results, command output, and local client-readable copies. When the limit is reached, Convoy removes the least-recently-used unpinned artifacts first. Active transfers, artifacts required by running or unacknowledged jobs, and files you explicitly saved are not removed. This setting applies to all Convoy nodes on this computer.'
+  - name: Convoynodes
+    style: Sequence
+    label: Convoy Nodes
+  - name: Nodename
+    style: Str
+    label: Node Name
+    readOnly: true
+    help: Display name of the node.
+    sequence: Convoynodes
+  - name: Ipaddress
+    style: Str
+    label: IP Address
+    readOnly: true
+    help: Current LAN endpoint.
+    sequence: Convoynodes
+  - name: Nodestatus
+    style: Str
+    label: Status
+    readOnly: true
+    help: Node and connection status; notes an Embody version mismatch only when relevant.
+    sequence: Convoynodes
+  - name: Lastseen
+    style: Str
+    label: Last Seen
+    readOnly: true
+    help: How recently the node was seen.
+    sequence: Convoynodes
   UI:
   - name: Openmanager
     style: Pulse
@@ -667,7 +712,7 @@ custom_pars:
     label: Reset Shortcuts to Defaults
     startSection: true
     help: Restore all keyboard shortcuts (and the tagger double-tap key) to factory defaults.
-  Advanced:
+  Adv:
   - name: Createexternalizationstable
     style: Pulse
     label: Create Externalizations Table
@@ -722,7 +767,7 @@ custom_pars:
     - Always Keep Files
     - Always Delete Files
     help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-    value: keep
+    value: delete
   - name: Toxdropexpr
     style: Menu
     label: Dropped .tox Expression
@@ -737,6 +782,7 @@ custom_pars:
     - Always Clean
     - Always Ignore
     help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
+    value: ignore
   - name: Tdndatsafety
     style: Menu
     label: Content Safety
@@ -755,6 +801,26 @@ custom_pars:
     label: Show Built-in Pars
     startSection: true
     help: Show TouchDesigner's built-in parameter pages (Layout, Panel, Look, Children, Drag/Drop, Extensions, Common) alongside Embody's pages in this dialog. Off (default) filters the dialog to Embody's pages only. The built-in pages remain fully functional either way -- this only controls dialog visibility, e.g. turn it on to reach the Common page's Global OP Shortcut.
+  - name: Verbose
+    style: Toggle
+    label: Verbose (Debug)
+    startSection: true
+    help: Enables debug-level logging. When off, only INFO and above are logged. Enable for detailed diagnostics when troubleshooting issues.
+  - name: Print
+    style: Toggle
+    label: Print to Textport
+    help: Echoes all log messages to the TouchDesigner textport. Useful for monitoring Embody activity in real-time.
+    value: true
+  - name: Logtofile
+    style: Toggle
+    label: Log to File
+    help: Writes log messages to a file on disk. Files are saved to the Log Folder with automatic rotation at 10 MB.
+    value: true
+  - name: Logfolder
+    style: Folder
+    label: Log Folder
+    help: Folder where log files are saved. Defaults to dev/logs/ in the project directory. Files are named <project>_YYMMDD.log.
+    value: logs
   - name: Uninstall
     style: Pulse
     startSection: true
@@ -765,7 +831,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.176
+    value: 6.0.181
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -942,6 +1008,7 @@ operators:
     - object: op('./ConvoyExt').module.ConvoyExt(me)
       name: ConvoyExt
       promote: true
+  position: [925, -550]
   color: [0.3, 0.5, 0.9]
   tags:
   - tdn
@@ -1006,6 +1073,10 @@ operators:
     step: 0
     sel:
       mode: advanced
+    sel_assistant: claudecode
+    git_missing: false
+    ext_needed: false
+    sel_mode: auto
   tdn_ref: embody/Embody/wizard.tdn
 - name: execute
   type: executeDAT
@@ -1132,8 +1203,8 @@ operators:
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
-  - py
   - TDExtension
+  - py
 - name: mousein1
   type: mouseinCHOP
   parameters:

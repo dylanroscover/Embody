@@ -34,6 +34,7 @@ TWO CONVENTIONS THIS FILE HOLDS TO:
 
 import ast
 import builtins
+import hashlib
 import importlib.util
 import json
 import os
@@ -43,7 +44,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+import venv
+import zipfile
+from unittest import mock
 
 # unit_tests/ -> embody/ -> dev/ -> the repo root. __file__ is the real
 # path under BOTH runners (TestRunnerExt loads these modules with
@@ -55,6 +60,8 @@ _INSTALL_PATH = os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody',
                              'convoy', 'convoy_install.py')
 _BRIDGE_PATH = os.path.join(_REPO_ROOT, 'dev', 'embody', 'envoy_bridge.py')
 _CONVOY_DIR = os.path.join(_REPO_ROOT, 'dev', 'convoy')
+_RUNTIME_BUILDER_PATH = os.path.join(
+    _CONVOY_DIR, 'build_convoy_runtime_bundle.py')
 
 _spec = importlib.util.spec_from_file_location('convoy_install',
                                                _INSTALL_PATH)
@@ -204,6 +211,29 @@ class _Runner:
         return code, self.stdout, self.stderr
 
 
+def _approved_runtime(data_dir, interpreter, platform=None,
+                      architecture=None, runner=None):
+    """Bypass only for tests of installer behavior below the runtime gate.
+
+    Dedicated runtime tests exercise the real verifier. Task/plist/order tests
+    use this seam because a macOS binary cannot execute on Windows or vice
+    versa, and no test may touch a real per-user runtime directory.
+    """
+    platform = platform or sys.platform
+    architecture = ('arm64' if platform == 'darwin' else 'x86_64')
+    return {
+        'ok': True,
+        'runtime_id': 'cpython-3.11-test-%s-%s' % (platform, architecture),
+        'platform': platform,
+        'architecture': architecture,
+        'python_version': '3.11.15',
+        'cryptography_version': 'test',
+        'archive_sha256': 'a' * 64,
+        'interpreter': str(interpreter),
+        'receipt_format': install_mod.RUNTIME_RECEIPT_FORMAT,
+    }
+
+
 class _TempDir:
     """tempfile.mkdtemp with a context manager, because the in-TD runner
     and pytest disagree about fixtures."""
@@ -292,7 +322,7 @@ class TestConvoyInstallVersionSafety(EmbodyTestCase):
 
     def test_a_traversing_version_is_refused(self):
         for bad in ('..', '../../bin', r'..\..\bin', '.', '',
-                    'a/b', r'a\b', None, '  '):
+                    'a/b', r'a\b', 'looks-safe\n', None, '  '):
             with self.assertRaises(ValueError):
                 install_mod.safe_version(bad)
 
@@ -472,7 +502,8 @@ class TestConvoyInstallRemovePayload(EmbodyTestCase):
 
         Enumerating what is dangerous cannot work on Windows paths.
         This is an ACCEPT-list -- the same lesson as safe_version."""
-        for escape in ('D:evil.py', 'C:foo', 'D:', 'Z:Users/evil.py',
+        for escape in ('D:evil.py', 'C:foo', 'D:', 'looks-safe.py\n',
+                       'Z:Users/evil.py',
                        '\\\\server\\share\\evil.py', '..\\evil.py',
                        '../evil.py', '/etc/passwd', '.', '..', ''):
             self.assertIsNone(install_mod._bare_name(escape),
@@ -602,8 +633,8 @@ class TestConvoyInstallTaskXml(EmbodyTestCase):
             '  <RegistrationInfo>\n'
             '    <Author>Embody</Author>\n'
             '    <Description>Runs the Embody Convoy host app for this '
-            'user and restarts it within a minute if it stops. Loopback '
-            'only; never elevated.</Description>\n'
+            'user and restarts it within a minute if it stops. Per-user '
+            'and never elevated.</Description>\n'
             '    <URI>\\EmbodyConvoyHost</URI>\n'
             '  </RegistrationInfo>\n'
             '  <Triggers>\n'
@@ -1055,8 +1086,16 @@ class TestConvoyInstallLauncherReallyRuns(EmbodyTestCase):
         launcher = install_mod.launcher_path(root)
         code = ('import sys, runpy; sys.stdout = None; sys.stderr = None; '
                 'runpy.run_path(%r, run_name="__main__")' % (launcher,))
-        proc = subprocess.run([sys.executable, '-c', code],
-                              capture_output=True, text=True, timeout=120)
+        env = dict(os.environ)
+        runtime_root = install_mod.runtime_dir(root, 'test-runtime')
+        prior = env.get('PYTHONPATH')
+        env['PYTHONPATH'] = (runtime_root + (os.pathsep + prior
+                                             if prior else ''))
+        record = install_mod.read_installed(root)
+        interpreter = ((record or {}).get('interpreter') or sys.executable)
+        proc = subprocess.run([interpreter, '-c', code],
+                              capture_output=True, text=True, timeout=120,
+                              env=env)
         if expect_rc is not None:
             self.assertEqual(proc.returncode, expect_rc,
                              'stderr: %s' % (proc.stderr,))
@@ -1086,12 +1125,53 @@ class TestConvoyInstallLauncherReallyRuns(EmbodyTestCase):
             '    return 0\n' % (root,))
         modules = dict(_MODULES)
         modules['convoy_hostapp.py'] = stub
+        modules['convoy_hostkeys.py'] = (
+            'def cryptography_available():\n'
+            '    return True\n')
         install_mod.write_payload(root, version, modules)
         if not complete:
             os.unlink(install_mod.complete_path(root, version))
         if record:
-            install_mod.write_installed(root, {'version': version,
-                                               'drain_interval': 2.0})
+            runtime_root = install_mod.runtime_dir(root, 'test-runtime')
+            venv.EnvBuilder(with_pip=False).create(runtime_root)
+            if sys.platform == 'win32':
+                python_rel = 'Scripts/python.exe'
+            else:
+                python_rel = 'bin/python'
+            interpreter = os.path.join(runtime_root,
+                                       *python_rel.split('/'))
+            with open(os.path.join(runtime_root, 'cryptography.py'),
+                      'w') as f:
+                f.write('__version__ = "test"\n')
+            with open(interpreter, 'rb') as f:
+                python_bytes = f.read()
+            receipt = {
+                'format': install_mod.RUNTIME_RECEIPT_FORMAT,
+                'runtime_id': 'test-runtime',
+                'python': python_rel,
+                'cryptography_version': 'test',
+                'archive_sha256': 'a' * 64,
+                'files': [{
+                    'path': python_rel,
+                    'size': len(python_bytes),
+                    'sha256': hashlib.sha256(python_bytes).hexdigest(),
+                    'mode': 0o755,
+                }],
+            }
+            with open(os.path.join(runtime_root, install_mod.COMPLETE_FILE),
+                      'w', encoding='utf-8') as f:
+                json.dump(receipt, f)
+            install_mod.write_installed(root, {
+                'version': version,
+                'drain_interval': 2.0,
+                'interpreter': interpreter,
+                'runtime': {
+                    'format': install_mod.RUNTIME_RECEIPT_FORMAT,
+                    'runtime_id': 'test-runtime',
+                    'cryptography_version': 'test',
+                    'archive_sha256': 'a' * 64,
+                },
+            })
         install_mod._atomic_write(install_mod.launcher_path(root),
                                   install_mod.render_launcher(
                                       sys.platform, root))
@@ -1135,6 +1215,31 @@ class TestConvoyInstallLauncherReallyRuns(EmbodyTestCase):
             self.assertFalse(os.path.exists(
                 os.path.join(root, 'marker.json')),
                 'an incomplete payload must never be imported')
+
+    @unittest.skipUnless(_SPAWNABLE, 'needs a plain python')
+    def test_legacy_install_without_managed_runtime_receipt_fails_closed(self):
+        with _TempDir() as root:
+            self._install_stub(root)
+            install_mod.write_installed(root, {
+                'version': '6.0.171',
+                'drain_interval': 2.0,
+                'interpreter': sys.executable,
+            })
+            self._run(root, expect_rc=1)
+            self.assertIn('no verified managed-runtime receipt',
+                          self._log(root))
+
+    @unittest.skipUnless(_SPAWNABLE, 'needs a plain python')
+    def test_changed_runtime_receipt_fails_closed_before_daemon_import(self):
+        with _TempDir() as root:
+            self._install_stub(root)
+            receipt = os.path.join(install_mod.runtime_dir(
+                root, 'test-runtime'), install_mod.COMPLETE_FILE)
+            with open(receipt, 'w', encoding='utf-8') as f:
+                f.write('{not-json')
+            self._run(root, expect_rc=1)
+            self.assertIn('receipt is absent or changed', self._log(root))
+            self.assertFalse(os.path.exists(os.path.join(root, 'marker.json')))
 
     @unittest.skipUnless(_SPAWNABLE, 'needs a plain python')
     def test_no_install_record_exits_one_and_says_so(self):
@@ -1181,7 +1286,7 @@ class TestConvoyInstallLauncherReallyRuns(EmbodyTestCase):
             with open(os.path.join(elsewhere, '.complete'), 'w') as f:
                 json.dump({'version': 'x', 'files': ['convoy_hostapp.py']},
                           f)
-            for version in ('../elsewhere', '..\\elsewhere',
+            for version in ('.', '..', '../elsewhere', '..\\elsewhere',
                             '../../elsewhere', 'a/../../elsewhere'):
                 install_mod.write_installed(root, {'version': version,
                                                    'drain_interval': 2.0})
@@ -1191,6 +1296,17 @@ class TestConvoyInstallLauncherReallyRuns(EmbodyTestCase):
                     '%r escaped app/ and its module-level code RAN'
                     % (version,))
             self.assertIn('refusing an unusable version', self._log(root))
+
+    @unittest.skipUnless(_SPAWNABLE, 'needs a plain python')
+    def test_dot_runtime_id_is_refused_before_receipt_path_resolution(self):
+        with _TempDir() as root:
+            self._install_stub(root)
+            record = install_mod.read_installed(root)
+            record['runtime']['runtime_id'] = '..'
+            install_mod.write_installed(root, record)
+            self._run(root, expect_rc=1)
+            self.assertIn('unusable managed runtime', self._log(root))
+            self.assertFalse(os.path.exists(os.path.join(root, 'marker.json')))
 
     @unittest.skipUnless(_SPAWNABLE, 'needs a plain python')
     def test_an_oversized_log_is_truncated_and_restarted(self):
@@ -1204,6 +1320,29 @@ class TestConvoyInstallLauncherReallyRuns(EmbodyTestCase):
             self.assertLess(len(log), install_mod.LOG_MAX_BYTES)
             self.assertIn('log restarted', log)
             self.assertNotIn('x' * 100, log)
+
+    @unittest.skipUnless(_SPAWNABLE, 'needs a plain python')
+    def test_one_long_running_process_cannot_grow_the_log_past_the_cap(self):
+        """The supervisor does not restart a healthy host app, so checking
+        the file only when the launcher starts is not a lifetime bound."""
+        with _TempDir() as root:
+            version = '6.0.171'
+            self._install_stub(root, version=version)
+            stub_path = os.path.join(
+                install_mod.app_dir(root, version), 'convoy_hostapp.py')
+            with open(stub_path, 'w', encoding='utf-8') as f:
+                f.write(
+                    'import sys\n'
+                    'def main(argv=None):\n'
+                    '    sys.stderr.write("z" * %d)\n'
+                    '    sys.stderr.flush()\n'
+                    '    return 0\n'
+                    % (install_mod.LOG_MAX_BYTES + 1024,))
+            self._run(root, expect_rc=0)
+            path = install_mod.log_path(root)
+            self.assertLessEqual(os.path.getsize(path),
+                                 install_mod.LOG_MAX_BYTES)
+            self.assertIn('log restarted', self._log(root))
 
     @unittest.skipUnless(_SPAWNABLE, 'needs a plain python')
     def test_an_ordinary_log_is_appended_not_clobbered(self):
@@ -1551,101 +1690,973 @@ class TestConvoyInstallStatusParsing(EmbodyTestCase):
                 self.assertIsNone(got['repetition'])
 
 
-# -- 8. interpreter discovery + the drift canary -----------------------
+# -- 8. isolated managed-runtime discovery -----------------------------
 
 class TestConvoyInstallInterpreterDiscovery(EmbodyTestCase):
 
-    def _win_tree(self, root, builds=('2025.33070',), names=None):
-        for build in builds:
-            binary = os.path.join(root, 'TouchDesigner.%s' % build, 'bin')
-            os.makedirs(binary, exist_ok=True)
-            for name in (names or ('pythonw.exe', 'python.exe')):
-                with open(os.path.join(binary, name), 'w') as f:
-                    f.write('')
-        return root
+    def _runtime(self, root, runtime_id, platform, architecture,
+                 python_version='3.11.15'):
+        target = os.path.join(root, runtime_id)
+        relative = ('python/pythonw.exe' if platform == 'win32'
+                    else 'python/bin/python3')
+        probe_relative = ('python/python.exe' if platform == 'win32'
+                          else relative)
+        interpreter = os.path.join(target, *relative.split('/'))
+        os.makedirs(os.path.dirname(interpreter), exist_ok=True)
+        with open(interpreter, 'wb') as f:
+            f.write(b'fake managed python')
+        probe_interpreter = os.path.join(target,
+                                         *probe_relative.split('/'))
+        if probe_interpreter != interpreter:
+            with open(probe_interpreter, 'wb') as f:
+                f.write(b'fake managed probe python')
+        receipt = {
+            'format': install_mod.RUNTIME_RECEIPT_FORMAT,
+            'runtime_id': runtime_id,
+            'platform': platform,
+            'architecture': architecture,
+            'python': relative,
+            'probe_python': probe_relative,
+            'python_version': python_version,
+            'cryptography_version': 'test',
+            'source_revision': 'test-fixture',
+            'archive_sha256': 'a' * 64,
+            'files': [],
+        }
+        seen = set()
+        for name, path in ((relative, interpreter),
+                           (probe_relative, probe_interpreter)):
+            if name in seen:
+                continue
+            seen.add(name)
+            with open(path, 'rb') as f:
+                value = f.read()
+            receipt['files'].append({
+                'path': name,
+                'size': len(value),
+                'sha256': hashlib.sha256(value).hexdigest(),
+                'mode': 0o755,
+            })
+        with open(os.path.join(target, install_mod.COMPLETE_FILE),
+                  'w', encoding='utf-8') as f:
+            json.dump(receipt, f)
+        return interpreter
 
-    def test_win32_discovery_finds_pythonw_and_python(self):
+    def test_win32_discovery_finds_only_complete_managed_runtime(self):
         with _TempDir() as root:
-            self._win_tree(root)
-            found = install_mod.find_interpreters('win32', roots=[root])
-            self.assertEqual(len(found), 2)
+            expected = self._runtime(root, 'runtime-1', 'win32', 'x86_64')
+            found = install_mod.find_interpreters(
+                'win32', roots=[root], architecture='AMD64')
+            self.assertEqual([c['path'] for c in found], [expected])
+            self.assertTrue(found[0]['managed'])
             self.assertTrue(found[0]['windowless'])
-            self.assertTrue(found[0]['path'].endswith('pythonw.exe'))
-            self.assertEqual(found[0]['build'], (2025, 33070))
 
-    def test_the_newest_build_wins(self):
+    def test_the_newest_managed_python_wins(self):
         with _TempDir() as root:
-            self._win_tree(root, builds=('2024.30000', '2025.33070',
-                                         '2025.9000'))
+            self._runtime(root, 'runtime-old', 'win32', 'x86_64', '3.11.9')
+            expected = self._runtime(root, 'runtime-new', 'win32', 'x86_64',
+                                     '3.12.2')
             chosen = install_mod.choose_interpreter(
-                install_mod.find_interpreters('win32', roots=[root]))
-            self.assertIn('TouchDesigner.2025.33070', chosen)
+                install_mod.find_interpreters(
+                    'win32', roots=[root], architecture='x86_64'))
+            self.assertEqual(chosen, expected)
 
-    def test_pythonw_is_preferred_over_python(self):
-        """A console python leaves a window on screen for as long as the
-        daemon runs -- on a show machine that is not cosmetic."""
+    def test_touchdesigner_and_unmanaged_python_are_never_candidates(self):
         with _TempDir() as root:
-            self._win_tree(root)
-            chosen = install_mod.choose_interpreter(
-                install_mod.find_interpreters('win32', roots=[root]))
-            self.assertTrue(chosen.endswith('pythonw.exe'))
-
-    def test_python_exe_is_used_when_pythonw_is_absent(self):
-        with _TempDir() as root:
-            self._win_tree(root, names=('python.exe',))
-            chosen = install_mod.choose_interpreter(
-                install_mod.find_interpreters('win32', roots=[root]))
-            self.assertTrue(chosen.endswith('python.exe'))
-
-    def test_darwin_discovery_walks_the_bundle(self):
-        """UNVERIFIED on hardware -- the bundle layout is from
-        Derivative's documented structure, not from a Mac we have run
-        this on. What IS proven is that a tree matching it is found."""
-        with _TempDir() as root:
-            binary = os.path.join(root, 'TouchDesigner.app', 'Contents',
-                                  'Frameworks', 'Python.framework',
-                                  'Versions', 'Current', 'bin')
+            binary = os.path.join(root, 'TouchDesigner.2025.33070', 'bin')
             os.makedirs(binary)
-            with open(os.path.join(binary, 'python3'), 'w') as f:
+            with open(os.path.join(binary, 'pythonw.exe'), 'w') as f:
                 f.write('')
-            found = install_mod.find_interpreters('darwin', roots=[root])
-            self.assertEqual(len(found), 1)
-            self.assertTrue(found[0]['path'].endswith('python3'))
-            self.assertTrue(found[0]['windowless'])
+            self.assertEqual(install_mod.find_interpreters(
+                'win32', roots=[root], architecture='x86_64'), [])
+            self.assertIsNone(install_mod.choose_interpreter([
+                {'path': WIN_PY, 'windowless': True, 'managed': False}
+            ]))
+
+    def test_darwin_discovers_apple_silicon_runtime_only(self):
+        with _TempDir() as root:
+            expected = self._runtime(root, 'runtime-mac', 'darwin', 'arm64')
+            found = install_mod.find_interpreters(
+                'darwin', roots=[root], architecture='aarch64')
+            self.assertEqual([c['path'] for c in found], [expected])
+            self.assertEqual(install_mod.find_interpreters(
+                'darwin', roots=[root], architecture='x86_64'), [])
 
     def test_an_empty_or_missing_root_yields_nothing_and_does_not_raise(self):
         with _TempDir() as root:
             self.assertEqual(
-                install_mod.find_interpreters('win32', roots=[root]), [])
+                install_mod.find_interpreters(
+                    'win32', roots=[root], architecture='x86_64'), [])
         self.assertEqual(
             install_mod.find_interpreters(
-                'win32', roots=['/definitely/not/here']), [])
+                'win32', roots=['/definitely/not/here'],
+                architecture='x86_64'), [])
         self.assertIsNone(install_mod.choose_interpreter([]))
         self.assertIsNone(install_mod.choose_interpreter(None))
 
-    def test_a_directory_with_no_interpreter_is_skipped(self):
+    def test_an_incomplete_runtime_is_skipped(self):
         with _TempDir() as root:
-            os.makedirs(os.path.join(root, 'TouchDesigner.2025.33070',
-                                     'bin'))
+            os.makedirs(os.path.join(root, 'runtime-no-receipt', 'python'))
             self.assertEqual(
-                install_mod.find_interpreters('win32', roots=[root]), [])
+                install_mod.find_interpreters(
+                    'win32', roots=[root], architecture='x86_64'), [])
 
-    def test_win32_install_roots_have_not_drifted_from_the_bridge(self):
-        """DRIFT CANARY. This module deliberately does NOT import the
-        bridge (A-44 forbids it, and the bridge answers a different
-        question -- which app can I LAUNCH, not which interpreter can I
-        RUN A SCRIPT UNDER). The cost of that copy is exactly this test:
-        if someone moves TD's install root for the bridge and not here,
-        interpreter discovery silently finds nothing and every install
-        reports 'Needs repair -- Python not found'."""
-        spec = importlib.util.spec_from_file_location('_bridge_canary',
-                                                      _BRIDGE_PATH)
-        bridge = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(bridge)
-        self.assertEqual(install_mod.TD_INSTALL_ROOTS['win32'],
-                         bridge._td_install_roots('win32'),
-                         'the bridge moved TD\'s Windows install root and '
-                         'convoy_install did not follow')
+    def test_default_data_dir_matches_the_client_contract(self):
+        self.assertEqual(install_mod.default_data_dir(
+            'win32', env={'LOCALAPPDATA': r'C:\Users\x\AppData\Local'},
+            home=r'C:\Users\x'), WIN_DATA)
+        self.assertEqual(install_mod.default_data_dir(
+            'darwin', env={}, home='/Users/x'), MAC_DATA)
+
+
+class TestConvoyManagedRuntime(EmbodyTestCase):
+
+    PLATFORM = 'win32'
+    ARCH = 'x86_64'
+    RUNTIME_ID = 'cpython-3.11.15-crypto-test-win64'
+    PYTHON_REL = 'python/pythonw.exe'
+    PROBE_PYTHON_REL = 'python/python.exe'
+    CRYPTO_REL = 'Lib/site-packages/cryptography/__init__.py'
+
+    def _payloads(self):
+        return {
+            self.PYTHON_REL: b'fake self-contained python',
+            self.PROBE_PYTHON_REL: b'fake self-contained probe python',
+            self.CRYPTO_REL: b'__version__ = "test"\n',
+        }
+
+    def _manifest(self, payloads=None, **changes):
+        payloads = payloads or self._payloads()
+        files = []
+        for name in sorted(payloads):
+            files.append({
+                'path': name,
+                'size': len(payloads[name]),
+                'sha256': hashlib.sha256(payloads[name]).hexdigest(),
+                'mode': (0o755 if name in (self.PYTHON_REL,
+                                           self.PROBE_PYTHON_REL)
+                         else 0o644),
+            })
+        manifest = {
+            'format': install_mod.RUNTIME_BUNDLE_FORMAT,
+            'runtime_id': self.RUNTIME_ID,
+            'platform': self.PLATFORM,
+            'architecture': self.ARCH,
+            'python': self.PYTHON_REL,
+            'probe_python': self.PROBE_PYTHON_REL,
+            'python_version': '3.11.15',
+            'cryptography_version': 'test',
+            'source_revision': 'test-fixture',
+            'files': files,
+        }
+        manifest.update(changes)
+        return manifest
+
+    def _bundle(self, root, manifest=None, payloads=None, extras=None,
+                symlink=None):
+        payloads = payloads or self._payloads()
+        manifest = manifest or self._manifest(payloads)
+        path = os.path.join(root, 'runtime.zip')
+        with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(install_mod.RUNTIME_MANIFEST_FILE,
+                             json.dumps(manifest))
+            for name, value in payloads.items():
+                info = zipfile.ZipInfo(name)
+                info.external_attr = (0o100755 if name in (
+                    self.PYTHON_REL, self.PROBE_PYTHON_REL)
+                                      else 0o100644) << 16
+                archive.writestr(info, value)
+            for name, value in (extras or {}).items():
+                archive.writestr(name, value)
+            if symlink:
+                info = zipfile.ZipInfo(symlink)
+                info.external_attr = 0o120777 << 16
+                archive.writestr(info, 'target')
+        with open(path, 'rb') as f:
+            digest = hashlib.sha256(f.read()).hexdigest()
+        return path, digest
+
+    def _probe_runner(self, crypto_outside=False, base_outside=False,
+                      fail=False):
+        def run(argv, timeout_s=None):
+            if fail:
+                return 1, '', 'cryptography import failed'
+            interpreter = os.path.realpath(argv[0])
+            target = os.path.dirname(os.path.dirname(interpreter))
+            crypto_file = (os.path.join(os.path.dirname(target), 'outside.py')
+                           if crypto_outside else
+                           os.path.join(target, *self.CRYPTO_REL.split('/')))
+            result = {
+                'format': install_mod.RUNTIME_PROBE_FORMAT,
+                'implementation': 'CPython',
+                'python': [3, 11, 15],
+                'platform': self.PLATFORM,
+                'architecture': 'AMD64',
+                'executable': interpreter,
+                'prefix': target,
+                'base_prefix': (os.path.join(os.path.dirname(target),
+                                             'system-python')
+                                if base_outside else target),
+                'stdlib': os.path.join(target, 'Lib'),
+                'platstdlib': os.path.join(target, 'Lib'),
+                'cryptography_version': 'test',
+                'cryptography_file': crypto_file,
+                'x509': True,
+                'ed25519': True,
+                'tls13': True,
+            }
+            return 0, json.dumps(result) + '\n', ''
+        return run
+
+    def _catalog(self, artifacts=None, win_status='published',
+                 mac_status='release-asset-not-built'):
+        return {
+            'format': install_mod.RUNTIME_CATALOG_FORMAT,
+            'artifacts': list(artifacts or []),
+            'policy': {
+                'network_install': False,
+                'release_sha256_required': True,
+                'windows_signing': 'Authenticode required before publication',
+                'macos_signing': ('Developer ID and notarization required '
+                                  'before publication'),
+            },
+            'required_targets': [
+                {'platform': 'win32', 'architecture': 'x86_64',
+                 'status': win_status},
+                {'platform': 'darwin', 'architecture': 'arm64',
+                 'status': mac_status},
+            ],
+        }
+
+    def _artifact(self, bundle, digest, runtime_id=None, **changes):
+        record = {
+            'format': install_mod.RUNTIME_RELEASE_FORMAT,
+            'runtime_id': runtime_id or self.RUNTIME_ID,
+            'platform': self.PLATFORM,
+            'architecture': self.ARCH,
+            'asset': os.path.basename(bundle),
+            'size': os.path.getsize(bundle),
+            'sha256': digest,
+            'python_version': '3.11.15',
+            'cryptography_version': 'test',
+            'source_revision': 'test-fixture',
+            'status': 'published',
+            'current': True,
+            'signature': 'authenticode-verified',
+        }
+        record.update(changes)
+        return record
+
+    def test_supported_targets_are_windows_x64_and_apple_silicon(self):
+        self.assertTrue(install_mod.runtime_target_supported(
+            'win32', 'AMD64'))
+        self.assertTrue(install_mod.runtime_target_supported(
+            'darwin', 'aarch64'))
+        self.assertFalse(install_mod.runtime_target_supported(
+            'darwin', 'x86_64'))
+        self.assertFalse(install_mod.runtime_target_supported(
+            'linux', 'x86_64'))
+
+    def test_missing_architecture_never_defaults_trusted_metadata_to_host(self):
+        manifest = self._manifest()
+        manifest.pop('architecture')
+        got = install_mod._validate_runtime_manifest(
+            manifest, self.PLATFORM, self.ARCH)
+        self.assertEqual(got['reason'], 'runtime_target_mismatch')
+
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            artifact = self._artifact(bundle, digest)
+            artifact.pop('architecture')
+            got = install_mod.validate_runtime_catalog(
+                self._catalog([artifact]))
+            self.assertEqual(got['reason'], 'runtime_catalog_invalid')
+
+        ordinary = self._probe_runner()
+
+        def missing_architecture(argv, timeout_s=None):
+            code, out, err = ordinary(argv, timeout_s)
+            value = json.loads(out)
+            value.pop('architecture')
+            return code, json.dumps(value), err
+
+        got = install_mod.probe_runtime(
+            '/managed/python', self.PLATFORM, self.ARCH,
+            missing_architecture)
+        self.assertEqual(got['reason'], 'runtime_probe_target_mismatch')
+
+    def test_windows_runtime_separates_windowless_daemon_and_probe_python(self):
+        manifest = self._manifest(python=self.PROBE_PYTHON_REL)
+        got = install_mod._validate_runtime_manifest(
+            manifest, self.PLATFORM, self.ARCH)
+        self.assertFalse(got['ok'])
+        self.assertIn('pythonw.exe', got['detail'])
+
+    def test_release_pinned_bundle_provisions_and_verifies_offline(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            got = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner(), now=lambda: 12.5)
+            self.assertTrue(got['ok'], got)
+            self.assertFalse(got['current'])
+            self.assertEqual(got['archive_sha256'], digest)
+            receipt = install_mod.read_runtime_receipt(
+                root, self.RUNTIME_ID, self.PLATFORM)
+            self.assertEqual(receipt['format'],
+                             install_mod.RUNTIME_RECEIPT_FORMAT)
+            self.assertEqual(receipt['installed_at'], 12.5)
+            self.assertTrue(os.path.isfile(got['interpreter']))
+
+            verified = install_mod.verify_managed_runtime(
+                root, got['interpreter'], self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertTrue(verified['ok'], verified)
+            discovered = install_mod.find_interpreters(
+                self.PLATFORM,
+                roots=[os.path.join(root, install_mod.RUNTIME_SUBDIR)],
+                architecture=self.ARCH)
+            self.assertEqual([c['path'] for c in discovered],
+                             [got['interpreter']])
+
+    def test_catalog_selects_and_provisions_only_this_architecture_offline(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            catalog = self._catalog([self._artifact(bundle, digest)])
+            catalog_path = os.path.join(root, 'runtime-catalog.json')
+            with open(catalog_path, 'w', encoding='utf-8') as f:
+                json.dump(catalog, f)
+            selected = install_mod.select_runtime_artifact(
+                catalog, self.PLATFORM, 'AMD64')
+            self.assertTrue(selected['ok'], selected)
+            self.assertEqual(selected['artifact']['runtime_id'],
+                             self.RUNTIME_ID)
+            installed = install_mod.provision_runtime_from_catalog(
+                os.path.join(root, 'data'), catalog_path,
+                platform=self.PLATFORM, architecture=self.ARCH,
+                runner=self._probe_runner())
+            self.assertTrue(installed['ok'], installed)
+            self.assertEqual(installed['runtime_id'], self.RUNTIME_ID)
+
+    def test_catalog_selection_is_exact_for_windows_and_apple_silicon(self):
+        win = {
+            'format': install_mod.RUNTIME_RELEASE_FORMAT,
+            'runtime_id': 'runtime-win',
+            'platform': 'win32', 'architecture': 'x86_64',
+            'asset': 'runtime-win.zip', 'size': 10, 'sha256': 'a' * 64,
+            'python_version': '3.11.15', 'cryptography_version': '44.0.0',
+            'source_revision': 'release-test', 'status': 'published',
+            'current': True, 'signature': 'authenticode-verified',
+        }
+        mac = dict(win, runtime_id='runtime-mac', platform='darwin',
+                   architecture='arm64', asset='runtime-mac.zip',
+                   sha256='b' * 64,
+                   signature='developer-id-notarized-verified')
+        catalog = self._catalog([win, mac], mac_status='published')
+        self.assertEqual(install_mod.select_runtime_artifact(
+            catalog, 'win32', 'AMD64')['artifact']['runtime_id'],
+            'runtime-win')
+        self.assertEqual(install_mod.select_runtime_artifact(
+            catalog, 'darwin', 'aarch64')['artifact']['runtime_id'],
+            'runtime-mac')
+
+    def test_empty_catalog_reports_the_external_release_gate_honestly(self):
+        catalog = self._catalog([], win_status='release-asset-not-built')
+        got = install_mod.select_runtime_artifact(
+            catalog, self.PLATFORM, self.ARCH)
+        self.assertFalse(got['ok'])
+        self.assertEqual(got['reason'], 'runtime_bundle_unavailable')
+        self.assertEqual(got['release_status'], 'release-asset-not-built')
+        self.assertIn('TouchDesigner Python', got['detail'])
+        self.assertIn('network installation', got['detail'])
+
+    def test_catalog_rejects_candidate_or_unattested_release_metadata(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            candidate = self._artifact(
+                bundle, digest, status='candidate', current=False,
+                signature='verification-required')
+            got = install_mod.validate_runtime_catalog(
+                self._catalog([candidate], win_status='candidate'))
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'runtime_catalog_invalid')
+            self.assertIn('published', got['detail'])
+
+    def test_catalog_asset_path_and_runtime_id_are_release_fences(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            traversing = self._artifact(bundle, digest, asset='../runtime.zip')
+            got = install_mod.validate_runtime_catalog(
+                self._catalog([traversing]))
+            self.assertEqual(got['reason'], 'runtime_catalog_invalid')
+
+            wrong_id = self._artifact(bundle, digest,
+                                      runtime_id='different-runtime-id')
+            catalog = self._catalog([wrong_id])
+            got = install_mod.provision_runtime_from_catalog(
+                os.path.join(root, 'data'), catalog, asset_root=root,
+                platform=self.PLATFORM, architecture=self.ARCH,
+                runner=self._probe_runner())
+            self.assertEqual(got['reason'], 'runtime_catalog_mismatch')
+            self.assertFalse(os.path.exists(os.path.join(
+                root, 'data', install_mod.RUNTIME_SUBDIR, self.RUNTIME_ID)))
+
+            wrong_provenance = self._artifact(
+                bundle, digest, source_revision='different-release')
+            got = install_mod.provision_runtime_from_catalog(
+                os.path.join(root, 'data'),
+                self._catalog([wrong_provenance]), asset_root=root,
+                platform=self.PLATFORM, architecture=self.ARCH,
+                runner=self._probe_runner())
+            self.assertEqual(got['reason'], 'runtime_catalog_mismatch')
+            self.assertIn('source_revision', got['detail'])
+
+    def test_catalog_size_mismatch_fails_before_archive_install(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            artifact = self._artifact(bundle, digest,
+                                      size=os.path.getsize(bundle) + 1)
+            got = install_mod.provision_runtime_from_catalog(
+                os.path.join(root, 'data'), self._catalog([artifact]),
+                asset_root=root, platform=self.PLATFORM,
+                architecture=self.ARCH, runner=self._probe_runner())
+            self.assertEqual(got['reason'], 'runtime_bundle_size_mismatch')
+            self.assertFalse(os.path.exists(os.path.join(
+                root, 'data', install_mod.RUNTIME_SUBDIR)))
+
+    def test_fresh_runtime_appears_only_after_probe_and_atomic_activation(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            data = os.path.join(root, 'data')
+            got = install_mod.provision_runtime_bundle(
+                data, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner(fail=True))
+            self.assertEqual(got['reason'], 'runtime_probe_failed')
+            runtime_root = os.path.join(data, install_mod.RUNTIME_SUBDIR)
+            self.assertFalse(os.path.exists(os.path.join(
+                runtime_root, self.RUNTIME_ID)))
+            if os.path.isdir(runtime_root):
+                self.assertFalse(any(name.startswith('.install-')
+                                     for name in os.listdir(runtime_root)))
+
+    def test_concurrent_identical_activation_converges_on_verified_winner(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            real_replace = os.replace
+            raced = []
+
+            def winner_then_race(source, destination):
+                if (not raced
+                        and os.path.basename(source).startswith('.install-')):
+                    raced.append(True)
+                    real_replace(source, destination)
+                    raise PermissionError('simulated concurrent activation')
+                return real_replace(source, destination)
+
+            os.replace = winner_then_race
+            try:
+                got = install_mod.provision_runtime_bundle(
+                    root, bundle, digest, self.PLATFORM, self.ARCH,
+                    runner=self._probe_runner())
+            finally:
+                os.replace = real_replace
+            self.assertTrue(got['ok'], got)
+            self.assertTrue(got['current'])
+            self.assertTrue(raced)
+
+    def test_incomplete_existing_runtime_is_never_overwritten(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            target = os.path.join(root, install_mod.RUNTIME_SUBDIR,
+                                  self.RUNTIME_ID)
+            os.makedirs(target)
+            stranger = os.path.join(target, 'keep.txt')
+            with open(stranger, 'w') as f:
+                f.write('unknown ownership')
+            got = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertEqual(got['reason'], 'runtime_incomplete_exists')
+            self.assertTrue(os.path.isfile(stranger))
+
+    def test_portable_case_collisions_and_windows_devices_are_refused(self):
+        payloads = self._payloads()
+        payloads['Lib/A.py'] = b'a'
+        payloads['lib/a.py'] = b'b'
+        got = install_mod._validate_runtime_manifest(
+            self._manifest(payloads), self.PLATFORM, self.ARCH)
+        self.assertEqual(got['reason'], 'runtime_manifest_invalid')
+        self.assertIn('collide', got['detail'])
+
+        payloads = self._payloads()
+        payloads['Lib/NUL.dll'] = b'bad'
+        got = install_mod._validate_runtime_manifest(
+            self._manifest(payloads), self.PLATFORM, self.ARCH)
+        self.assertEqual(got['reason'], 'runtime_manifest_invalid')
+        self.assertIn('unsafe', got['detail'])
+
+        payloads = self._payloads()
+        payloads['Lib/conflict'] = b'file'
+        payloads['lib/conflict/module.py'] = b'child'
+        got = install_mod._validate_runtime_manifest(
+            self._manifest(payloads), self.PLATFORM, self.ARCH)
+        self.assertEqual(got['reason'], 'runtime_manifest_invalid')
+        self.assertIn('parent directory', got['detail'])
+
+    def test_verification_hashes_native_dependencies_not_only_python(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            installed = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            crypto = os.path.join(
+                root, install_mod.RUNTIME_SUBDIR, self.RUNTIME_ID,
+                *self.CRYPTO_REL.split('/'))
+            with open(crypto, 'ab') as f:
+                f.write(b'tampered')
+            verified = install_mod.verify_managed_runtime(
+                root, installed['interpreter'], self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertEqual(verified['reason'], 'runtime_integrity_failed')
+            self.assertIn(self.CRYPTO_REL, verified['detail'])
+
+    def test_provision_is_idempotent_but_runtime_id_collision_refuses(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            first = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            second = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertTrue(first['ok'] and second['ok'])
+            self.assertTrue(second['current'])
+            receipt_path = os.path.join(
+                root, install_mod.RUNTIME_SUBDIR, self.RUNTIME_ID,
+                install_mod.COMPLETE_FILE)
+            with open(receipt_path, encoding='utf-8') as f:
+                receipt = json.load(f)
+            receipt['archive_sha256'] = 'b' * 64
+            with open(receipt_path, 'w', encoding='utf-8') as f:
+                json.dump(receipt, f)
+            refused = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertEqual(refused['reason'], 'runtime_id_collision')
+
+    def test_same_release_bundle_repairs_a_damaged_runtime(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            first = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            with open(first['interpreter'], 'wb') as f:
+                f.write(b'damaged')
+            repaired = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertTrue(repaired['ok'], repaired)
+            self.assertFalse(repaired['current'])
+            expected = next(row['sha256'] for row in self._manifest()['files']
+                            if row['path'] == self.PYTHON_REL)
+            with open(repaired['interpreter'], 'rb') as f:
+                actual = hashlib.sha256(f.read()).hexdigest()
+            self.assertEqual(actual, expected)
+
+    def test_interrupted_same_release_repair_can_resume_safely(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            first = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            with open(first['interpreter'], 'wb') as f:
+                f.write(b'damaged')
+            interrupted = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner(fail=True))
+            self.assertEqual(interrupted['reason'], 'runtime_probe_failed')
+            self.assertIsNone(install_mod.read_runtime_receipt(
+                root, self.RUNTIME_ID, self.PLATFORM))
+            resumed = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertTrue(resumed['ok'], resumed)
+            self.assertIsNotNone(install_mod.read_runtime_receipt(
+                root, self.RUNTIME_ID, self.PLATFORM))
+
+    def test_missing_or_wrong_release_digest_writes_nothing(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            for supplied, reason in ((None, 'runtime_digest_required'),
+                                     ('0' * 64,
+                                      'runtime_bundle_digest_mismatch')):
+                got = install_mod.provision_runtime_bundle(
+                    root, bundle, supplied, self.PLATFORM, self.ARCH,
+                    runner=self._probe_runner())
+                self.assertEqual(got['reason'], reason)
+            self.assertFalse(os.path.exists(os.path.join(
+                root, install_mod.RUNTIME_SUBDIR)))
+            self.assertNotEqual(digest, '0' * 64)
+
+    def test_extra_traversing_and_symlink_members_are_refused(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root, extras={'extra.dll': b'x'})
+            got = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertEqual(got['reason'], 'runtime_bundle_invalid')
+
+        with _TempDir() as root:
+            payloads = self._payloads()
+            payloads['../escape.py'] = b'bad'
+            bundle, digest = self._bundle(
+                root, manifest=self._manifest(payloads), payloads=payloads)
+            got = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertEqual(got['reason'], 'runtime_manifest_invalid')
+            self.assertFalse(os.path.exists(os.path.join(root, 'escape.py')))
+
+        with _TempDir() as root:
+            payloads = self._payloads()
+            payloads['link'] = b'target'
+            bundle, digest = self._bundle(
+                root, manifest=self._manifest(payloads), payloads={
+                    key: value for key, value in payloads.items()
+                    if key != 'link'
+                }, symlink='link')
+            got = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertEqual(got['reason'], 'runtime_bundle_invalid')
+
+    def test_failed_or_external_crypto_probe_never_writes_complete(self):
+        for runner, reason in (
+                (self._probe_runner(fail=True), 'runtime_probe_failed'),
+                (self._probe_runner(crypto_outside=True),
+                 'runtime_dependency_outside_bundle'),
+                (self._probe_runner(base_outside=True),
+                 'runtime_dependency_outside_bundle')):
+            with _TempDir() as root:
+                bundle, digest = self._bundle(root)
+                got = install_mod.provision_runtime_bundle(
+                    root, bundle, digest, self.PLATFORM, self.ARCH,
+                    runner=runner)
+                self.assertEqual(got['reason'], reason)
+                self.assertIsNone(install_mod.read_runtime_receipt(
+                    root, self.RUNTIME_ID, self.PLATFORM))
+
+    def test_manifest_versions_must_match_the_live_runtime(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(
+                root, manifest=self._manifest(
+                    cryptography_version='different'))
+            got = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertEqual(got['reason'],
+                             'runtime_manifest_probe_mismatch')
+            self.assertIsNone(install_mod.read_runtime_receipt(
+                root, self.RUNTIME_ID, self.PLATFORM))
+
+    def test_runtime_uninstall_removes_only_receipt_listed_files(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            installed = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertTrue(installed['ok'], installed)
+            plan = install_mod.plan_runtime_uninstall(root)
+            self.assertEqual(plan['runtime_ids'], [self.RUNTIME_ID])
+            self.assertIn(installed['interpreter'], plan['remove'])
+            removed = install_mod.remove_managed_runtime(
+                root, self.RUNTIME_ID)
+            self.assertTrue(removed['removed_dir'], removed)
+            self.assertFalse(os.path.exists(os.path.join(
+                root, install_mod.RUNTIME_SUBDIR, self.RUNTIME_ID)))
+
+    def test_runtime_uninstall_keeps_and_reports_a_stranger(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            installed = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            target = os.path.dirname(os.path.dirname(installed['interpreter']))
+            stranger = os.path.join(target, 'user-file.txt')
+            with open(stranger, 'w') as f:
+                f.write('keep')
+            removed = install_mod.remove_managed_runtime(
+                root, self.RUNTIME_ID)
+            self.assertFalse(removed['removed_dir'])
+            self.assertIn(stranger, removed['remaining'])
+            self.assertTrue(os.path.isfile(stranger))
+
+    def test_runtime_uninstall_never_follows_a_redirected_runtime_dir(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            installed = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            target = os.path.dirname(os.path.dirname(installed['interpreter']))
+            ordinary_islink = os.path.islink
+
+            def redirected(path):
+                return (os.path.normcase(os.path.abspath(path))
+                        == os.path.normcase(os.path.abspath(target))
+                        or ordinary_islink(path))
+
+            with mock.patch.object(install_mod.os.path, 'islink',
+                                   side_effect=redirected):
+                plan = install_mod.plan_runtime_uninstall(root)
+                removed = install_mod.remove_managed_runtime(
+                    root, self.RUNTIME_ID)
+            self.assertIn(target, plan['stray'])
+            self.assertFalse(removed['removed_dir'])
+            self.assertIn(target, removed['kept'])
+            self.assertTrue(os.path.isfile(installed['interpreter']))
+
+    def test_incomplete_runtime_is_never_deleted_by_uninstall(self):
+        with _TempDir() as root:
+            target = os.path.join(root, install_mod.RUNTIME_SUBDIR,
+                                  'interrupted-runtime')
+            os.makedirs(target)
+            unknown = os.path.join(target, 'unknown.bin')
+            with open(unknown, 'wb') as f:
+                f.write(b'user-or-interrupted-data')
+            plan = install_mod.plan_runtime_uninstall(root)
+            self.assertIn(target, plan['incomplete'])
+            got = install_mod.remove_managed_runtime(
+                root, 'interrupted-runtime')
+            self.assertFalse(got['removed_dir'])
+            self.assertTrue(os.path.isfile(unknown))
+
+    def test_host_uninstall_removes_the_complete_managed_runtime(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            installed = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertTrue(installed['ok'], installed)
+            got = install_mod.uninstall(
+                root, platform=self.PLATFORM, runner=_Runner())
+            self.assertTrue(got['ok'], got)
+            self.assertFalse(os.path.exists(os.path.join(
+                root, install_mod.RUNTIME_SUBDIR, self.RUNTIME_ID)))
+
+    def test_probe_requires_cpython_crypto_ed25519_and_tls13(self):
+        bad = self._probe_runner()
+
+        def missing_tls(argv, timeout_s=None):
+            code, out, err = bad(argv, timeout_s)
+            value = json.loads(out)
+            value['tls13'] = False
+            return code, json.dumps(value), err
+
+        got = install_mod.probe_runtime(
+            '/managed/python', self.PLATFORM, self.ARCH, missing_tls)
+        self.assertEqual(got['reason'], 'runtime_crypto_unavailable')
+
+    def test_install_refuses_unmanaged_python_before_writing_anything(self):
+        with _TempDir() as root:
+            got = install_mod.install(
+                root, '6.0.171', _MODULES, WIN_PY, platform='win32',
+                runner=_Runner(), user=WIN_USER, architecture='x86_64')
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'runtime_not_managed')
+            self.assertIn('TouchDesigner Python', got['detail'])
+            self.assertFalse(os.path.exists(
+                install_mod.app_dir(root, platform='win32')))
+            self.assertIsNone(install_mod.read_installed(root, 'win32'))
+
+    def test_installer_accepts_a_provisioned_runtime_and_records_provenance(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            runtime = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            supervisor = _Runner()
+            got = install_mod.install(
+                root, '6.0.171', _MODULES, runtime['interpreter'],
+                platform=self.PLATFORM, architecture=self.ARCH,
+                runner=supervisor, runtime_runner=self._probe_runner(),
+                user=WIN_USER)
+            self.assertTrue(got['ok'], got)
+            record = install_mod.read_installed(root, self.PLATFORM)
+            self.assertEqual(record['runtime']['runtime_id'], self.RUNTIME_ID)
+            self.assertEqual(record['runtime']['archive_sha256'], digest)
+            self.assertEqual(record['runtime']['cryptography_version'], 'test')
+            self.assertEqual(record['runtime']['source_revision'],
+                             'test-fixture')
+            self.assertEqual(len(supervisor.calls), 1)
+
+    def test_fresh_machine_install_can_provision_from_local_catalog(self):
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            catalog = self._catalog([self._artifact(bundle, digest)])
+            supervisor = _Runner()
+            data = os.path.join(root, 'data')
+            got = install_mod.install(
+                data, '6.0.171', _MODULES, None,
+                platform=self.PLATFORM, architecture=self.ARCH,
+                runner=supervisor, runtime_runner=self._probe_runner(),
+                runtime_catalog=catalog, runtime_asset_root=root,
+                user=WIN_USER)
+            self.assertTrue(got['ok'], got)
+            self.assertEqual(got['record']['runtime']['runtime_id'],
+                             self.RUNTIME_ID)
+            self.assertEqual(len(supervisor.calls), 1)
+
+    def test_fresh_machine_install_with_empty_catalog_writes_nothing(self):
+        with _TempDir() as root:
+            data = os.path.join(root, 'data')
+            got = install_mod.install(
+                data, '6.0.171', _MODULES, None,
+                platform=self.PLATFORM, architecture=self.ARCH,
+                runner=_Runner(), runtime_runner=self._probe_runner(),
+                runtime_catalog=self._catalog(
+                    [], win_status='release-asset-not-built'),
+                runtime_asset_root=root, user=WIN_USER)
+            self.assertEqual(got['reason'], 'runtime_bundle_unavailable')
+            self.assertIn('TouchDesigner Python', got['detail'])
+            self.assertFalse(os.path.exists(
+                install_mod.app_dir(data, platform=self.PLATFORM)))
+            self.assertIsNone(install_mod.read_installed(data, self.PLATFORM))
+
+    def test_runtime_catalog_declares_both_unbuilt_release_assets(self):
+        path = os.path.join(_CONVOY_DIR, 'convoy_runtime_catalog.json')
+        with open(path, encoding='utf-8') as f:
+            catalog = json.load(f)
+        self.assertEqual(catalog['format'],
+                         'embody-convoy-runtime-catalog/1')
+        targets = {(row['platform'], row['architecture'], row['status'])
+                   for row in catalog['required_targets']}
+        self.assertEqual(targets, {
+            ('win32', 'x86_64', 'release-asset-not-built'),
+            ('darwin', 'arm64', 'release-asset-not-built'),
+        })
+        self.assertEqual(catalog['artifacts'], [])
+        self.assertFalse(catalog['policy']['network_install'])
+        self.assertTrue(catalog['policy']['release_sha256_required'])
+        self.assertIn('Authenticode', catalog['policy']['windows_signing'])
+        self.assertIn('notarization', catalog['policy']['macos_signing'])
+        self.assertEqual(catalog['artifact_contract']['builder_output_status'],
+                         'candidate')
+        self.assertEqual(catalog['artifact_contract']['windows_signature'],
+                         'authenticode-verified')
+        self.assertEqual(catalog['artifact_contract']['macos_signature'],
+                         'developer-id-notarized-verified')
+        checked = install_mod.read_runtime_catalog(path)
+        self.assertTrue(checked['ok'], checked)
+        for platform_name, architecture in (('win32', 'x86_64'),
+                                             ('darwin', 'arm64')):
+            unavailable = install_mod.select_runtime_artifact(
+                checked['catalog'], platform_name, architecture)
+            self.assertEqual(unavailable['reason'],
+                             'runtime_bundle_unavailable')
+
+    def test_runtime_packager_has_no_download_path(self):
+        path = os.path.join(_CONVOY_DIR, 'build_convoy_runtime_bundle.py')
+        with open(path, encoding='utf-8') as f:
+            source = f.read()
+        tree = ast.parse(source, path)
+        imports = _imported_modules(tree)
+        for forbidden in ('requests', 'urllib', 'httpx', 'http', 'socket'):
+            self.assertNotIn(forbidden, {name.split('.')[0]
+                                         for name in imports})
+        for forbidden_call in ('urlopen(', 'requests.', 'curl', 'wget'):
+            self.assertNotIn(forbidden_call, source)
+
+    def test_runtime_packager_output_is_consumed_by_offline_installer(self):
+        platform_name = sys.platform
+        architecture = install_mod.normalize_architecture()
+        if not install_mod.runtime_target_supported(
+                platform_name, architecture):
+            self.skipTest('host is not a supported runtime-build target')
+        if platform_name == 'win32':
+            python_rel = 'python/pythonw.exe'
+            probe_rel = 'python/python.exe'
+            stdlib_rel = 'Lib'
+        else:
+            python_rel = probe_rel = 'python/bin/python3'
+            stdlib_rel = 'python/lib/python3.11'
+        crypto_rel = 'python/site-packages/cryptography/__init__.py'
+
+        with _TempDir() as root:
+            prepared = os.path.join(root, 'prepared')
+            payloads = {
+                python_rel: b'daemon-python',
+                probe_rel: b'probe-python',
+                crypto_rel: b'__version__ = "test"\n',
+                os.path.join(stdlib_rel, 'os.py').replace('\\', '/'):
+                    b'# stdlib marker\n',
+            }
+            for relative, value in payloads.items():
+                path = os.path.join(prepared, *relative.split('/'))
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, 'wb') as f:
+                    f.write(value)
+                if relative in (python_rel, probe_rel):
+                    os.chmod(path, 0o755)
+
+            def probe(argv, timeout_s=None):
+                target = os.path.realpath(argv[0])
+                for unused in probe_rel.split('/'):
+                    target = os.path.dirname(target)
+                result = {
+                    'format': install_mod.RUNTIME_PROBE_FORMAT,
+                    'implementation': 'CPython',
+                    'python': [3, 11, 15],
+                    'platform': platform_name,
+                    'architecture': architecture,
+                    'executable': os.path.realpath(argv[0]),
+                    'prefix': target,
+                    'base_prefix': target,
+                    'stdlib': os.path.join(target,
+                                            *stdlib_rel.split('/')),
+                    'platstdlib': os.path.join(target,
+                                                *stdlib_rel.split('/')),
+                    'cryptography_version': 'test',
+                    'cryptography_file': os.path.join(
+                        target, *crypto_rel.split('/')),
+                    'x509': True,
+                    'ed25519': True,
+                    'tls13': True,
+                }
+                return 0, json.dumps(result), ''
+
+            spec = importlib.util.spec_from_file_location(
+                'convoy_runtime_builder_test', _RUNTIME_BUILDER_PATH)
+            builder = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(builder)
+            output = os.path.join(root, 'runtime.zip')
+            metadata = builder.build_bundle(
+                prepared, output, 'runtime-packager-test', python_rel,
+                probe_rel, platform_name, architecture, 'test-revision',
+                installer=install_mod, probe_runner=probe)
+            second_output = os.path.join(root, 'runtime-second.zip')
+            second_metadata = builder.build_bundle(
+                prepared, second_output, 'runtime-packager-test', python_rel,
+                probe_rel, platform_name, architecture, 'test-revision',
+                installer=install_mod, probe_runner=probe)
+            with open(output, 'rb') as f:
+                output_sha = hashlib.sha256(f.read()).hexdigest()
+            self.assertEqual(metadata['sha256'], output_sha)
+            self.assertEqual(second_metadata['sha256'], output_sha)
+            self.assertEqual(metadata['status'], 'candidate')
+            self.assertEqual(metadata['signature'], 'verification-required')
+            self.assertFalse(metadata['current'])
+            self.assertFalse(install_mod.validate_runtime_catalog(
+                self._catalog([metadata], win_status='candidate')
+                if platform_name == 'win32' else {
+                    **self._catalog([], mac_status='candidate'),
+                    'artifacts': [metadata],
+                })['ok'])
+            installed = install_mod.provision_runtime_bundle(
+                os.path.join(root, 'data'), output, metadata['sha256'],
+                platform_name, architecture, runner=probe)
+            self.assertTrue(installed['ok'], installed)
+            self.assertEqual(installed['runtime_id'],
+                             'runtime-packager-test')
 
 
 # -- 9. plan_install matrix ---------------------------------------------
@@ -1790,6 +2801,32 @@ class TestConvoyInstallRecord(EmbodyTestCase):
             install_mod.write_installed(root, {'version': '6.0.171'})
             leftovers = [n for n in os.listdir(root) if n.endswith('.tmp')]
             self.assertEqual(leftovers, [])
+
+    def test_same_process_concurrent_atomic_writes_do_not_share_a_temp(self):
+        with _TempDir() as root:
+            path = os.path.join(root, 'concurrent.json')
+            values = ['{"writer": %d}\n' % index for index in range(8)]
+            barrier = threading.Barrier(len(values))
+            errors = []
+
+            def write(value):
+                try:
+                    barrier.wait()
+                    install_mod._atomic_write(path, value)
+                except Exception as e:
+                    errors.append(e)
+
+            workers = [threading.Thread(target=write, args=(value,))
+                       for value in values]
+            for worker in workers:
+                worker.start()
+            for worker in workers:
+                worker.join(10)
+            self.assertEqual(errors, [])
+            with open(path, encoding='utf-8') as f:
+                self.assertIn(f.read(), values)
+            self.assertEqual([name for name in os.listdir(root)
+                              if name.endswith('.tmp')], [])
 
 
 # -- 10. THE uninstall preview -----------------------------------------
@@ -2037,10 +3074,14 @@ class TestConvoyInstallHostState(EmbodyTestCase):
 
 class TestConvoyInstallActions(EmbodyTestCase):
 
+    def _install(self, *args, **kwargs):
+        kwargs.setdefault('runtime_verifier', _approved_runtime)
+        return install_mod.install(*args, **kwargs)
+
     def test_install_writes_everything_and_registers_once(self):
         with _TempDir() as root:
             runner = _Runner()
-            got = install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
+            got = self._install(root, '6.0.171', _MODULES, WIN_PY,
                                       platform='win32', runner=runner,
                                       env=WIN_ENV)
             self.assertTrue(got['ok'], got)
@@ -2064,7 +3105,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
         PREVIOUS install intact and running."""
         with _TempDir() as root:
             runner = _Runner()
-            got = install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
+            got = self._install(root, '6.0.171', _MODULES, WIN_PY,
                                       platform='win32', runner=runner,
                                       env=WIN_ENV)
             self.assertEqual(got['steps'][-1], 'installed.json')
@@ -2074,7 +3115,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
         """Half-installed must never read as installed."""
         with _TempDir() as root:
             runner = _Runner(returncode=1, stderr='ERROR: access denied')
-            got = install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
+            got = self._install(root, '6.0.171', _MODULES, WIN_PY,
                                       platform='win32', runner=runner,
                                       env=WIN_ENV)
             self.assertFalse(got['ok'])
@@ -2087,7 +3128,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
         both places -- the defect measured 2026-08-01 was invisible
         until a real schtasks saw the file."""
         with _TempDir() as root:
-            install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
+            self._install(root, '6.0.171', _MODULES, WIN_PY,
                                 platform='win32', runner=_Runner(),
                                 user=WIN_USER)
             with open(install_mod.task_xml_path(root, 'win32'), 'rb') as f:
@@ -2106,7 +3147,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
             runner = _Runner()
             # env injected empty: without the seam this would fall
             # through to the real environment, which always has a user.
-            got = install_mod.install(
+            got = self._install(
                 root, '6.0.171', _MODULES, WIN_PY, platform='win32',
                 runner=runner, user=None, env={})
             self.assertFalse(got['ok'])
@@ -2119,7 +3160,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
         """A LaunchAgent is per-user by construction -- an account
         requirement there would be a Windows habit leaking across."""
         with _TempDir() as root:
-            got = install_mod.install(root, '6.0.171', _MODULES, MAC_PY,
+            got = self._install(root, '6.0.171', _MODULES, MAC_PY,
                                       platform='darwin', runner=_Runner(),
                                       home=os.path.join(root, 'home'),
                                       user=None)
@@ -2127,7 +3168,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
 
     def test_install_records_the_interpreter_and_the_drain_interval(self):
         with _TempDir() as root:
-            install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
+            self._install(root, '6.0.171', _MODULES, WIN_PY,
                                 platform='win32', runner=_Runner(),
                                 drain_interval=5.0,
                                 installed_by='/project/x.toe', env=WIN_ENV)
@@ -2136,12 +3177,17 @@ class TestConvoyInstallActions(EmbodyTestCase):
             self.assertEqual(record['drain_interval'], 5.0)
             self.assertEqual(record['installed_by'], '/project/x.toe')
             self.assertEqual(record['supervisor'], 'scheduled_task')
+            self.assertEqual(record['runtime']['format'],
+                             install_mod.RUNTIME_RECEIPT_FORMAT)
+            self.assertEqual(record['runtime']['architecture'], 'x86_64')
+            self.assertEqual(record['runtime']['cryptography_version'],
+                             'test')
 
     def test_an_external_supervisor_install_registers_NOTHING(self):
         """A-36: write the payload, never a second supervisor."""
         with _TempDir() as root:
             runner = _Runner()
-            got = install_mod.install(
+            got = self._install(
                 root, '6.0.171', _MODULES, WIN_PY, platform='win32',
                 runner=runner, supervisor=install_mod.SUPERVISOR_EXTERNAL)
             self.assertTrue(got['ok'])
@@ -2158,9 +3204,8 @@ class TestConvoyInstallActions(EmbodyTestCase):
                         ('6.0.171', None, WIN_PY),
                         ('6.0.171', _MODULES, None),
                         ('6.0.171', {}, WIN_PY)):
-                got = install_mod.install(root, bad[0], bad[1], bad[2],
-                                          platform='win32',
-                                          runner=_Runner())
+                got = self._install(root, bad[0], bad[1], bad[2],
+                                    platform='win32', runner=_Runner())
                 self.assertFalse(got['ok'])
                 self.assertIn('reason', got)
 
@@ -2180,7 +3225,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
         with _TempDir() as root:
             home = os.path.join(root, 'home')
             runner = _Runner()
-            got = install_mod.install(root, '6.0.171', _MODULES, MAC_PY,
+            got = self._install(root, '6.0.171', _MODULES, MAC_PY,
                                       platform='darwin', runner=runner,
                                       home=home, uid=501)
             self.assertTrue(got['ok'], got)
@@ -2196,7 +3241,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
         <Enabled>true</Enabled>, so registration already re-enables."""
         with _TempDir() as root:
             runner = _Runner()
-            install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
+            self._install(root, '6.0.171', _MODULES, WIN_PY,
                                 platform='win32', runner=runner,
                                 user=WIN_USER)
             self.assertEqual(len(runner.calls), 1)
@@ -2204,7 +3249,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
 
     def test_a_darwin_install_without_a_home_is_refused(self):
         with _TempDir() as root:
-            got = install_mod.install(root, '6.0.171', _MODULES, MAC_PY,
+            got = self._install(root, '6.0.171', _MODULES, MAC_PY,
                                       platform='darwin', runner=_Runner())
             self.assertFalse(got['ok'])
             self.assertEqual(got['reason'], 'no_home')
@@ -2305,7 +3350,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
         payload modules and installed.json out from under a daemon that
         may still be running."""
         with _TempDir() as root:
-            install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
+            self._install(root, '6.0.171', _MODULES, WIN_PY,
                                 platform='win32', runner=_Runner(),
                                 user=WIN_USER)
             events = []
@@ -2363,7 +3408,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
     def test_uninstall_removes_the_payload_and_keeps_the_evidence(self):
         with _TempDir() as root:
             runner = _Runner()
-            install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
+            self._install(root, '6.0.171', _MODULES, WIN_PY,
                                 platform='win32', runner=runner)
             for name in ('host.json', 'host.token'):
                 with open(os.path.join(root, name), 'w') as f:
@@ -2392,7 +3437,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
 
     def test_uninstall_unregisters_the_supervisor(self):
         with _TempDir() as root:
-            install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
+            self._install(root, '6.0.171', _MODULES, WIN_PY,
                                 platform='win32', runner=_Runner(),
                                 env=WIN_ENV)
             runner = _Runner()
@@ -2409,7 +3454,7 @@ class TestConvoyInstallActions(EmbodyTestCase):
 
     def test_uninstall_keeps_a_stranger_and_reports_it(self):
         with _TempDir() as root:
-            install_mod.install(root, '6.0.171', _MODULES, WIN_PY,
+            self._install(root, '6.0.171', _MODULES, WIN_PY,
                                 platform='win32', runner=_Runner(),
                                 env=WIN_ENV)
             stranger = os.path.join(
@@ -2473,8 +3518,9 @@ class TestConvoyInstallIsTouchDesignerFree(EmbodyTestCase):
         """No third-party dependency may creep in: this module has to
         import cleanly inside TD's interpreter and on a bare CI runner
         with nothing but pytest installed."""
-        allowed = {'json', 'ntpath', 'os', 'posixpath', 're',
-                   'subprocess', 'sys', 'time', 'xml'}
+        allowed = {'hashlib', 'json', 'ntpath', 'os', 'platform',
+                   'posixpath', 're', 'stat', 'subprocess', 'sys', 'time',
+                   'xml', 'zipfile'}
         for module in _imported_modules(_module_ast()):
             self.assertIn(module.split('.')[0], allowed,
                           '%s is not in the stdlib allowlist' % module)
@@ -2523,7 +3569,8 @@ class TestConvoyInstallIsTouchDesignerFree(EmbodyTestCase):
             # globbing convoy_*.py, which is why it does not have this
             # problem in the other direction.)
             if name in ('conftest.py', 'manual_exit_proof.py',
-                        'vendor_host_modules.py'):
+                        'vendor_host_modules.py',
+                        'build_convoy_runtime_bundle.py'):
                 continue
             on_disk.add(name)
         self.assertEqual(set(install_mod.HOST_MODULES), on_disk)
@@ -2532,19 +3579,25 @@ class TestConvoyInstallIsTouchDesignerFree(EmbodyTestCase):
         # slice 1 added convoy_hostkeys.py, 10 -> 11 when slice 2 added
         # convoy_peers.py, and 11 -> 14 when slice 3 added convoy_lan.py,
         # convoy_peerserver.py and convoy_peerclient.py (the LAN
-        # transport) -- THIS TEST is what catches a payload that would
-        # otherwise ship without a module the daemon imports.
-        self.assertEqual(len(install_mod.HOST_MODULES), 14,
+        # transport), 14 -> 21 for discovery/realm, host-private policy,
+        # artifacts/HTTP, wake, and host operations, 21 -> 23 for the optional
+        # Owlette public-API consumer and host-native lifecycle manager, and
+        # 23 -> 25 for full-duplex WebSocket sessions -- THIS TEST is what
+        # catches a payload that would otherwise ship without an imported
+        # module.
+        self.assertEqual(len(install_mod.HOST_MODULES), 25,
                          'nine plan modules, convoy_hostkeys.py (slice 1), '
                          'convoy_peers.py (slice 2), and convoy_lan.py + '
                          'convoy_peerserver.py + convoy_peerclient.py '
-                         '(slice 3 transport)')
+                         '(slice 3 transport), plus seven completed '
+                         'host-owned Convoy modules, Owlette, lifecycle, and '
+                         'the WebSocket session transport')
 
     def test_the_module_docstring_states_the_honest_limits(self):
         """The code must not read softer than the install dialog. If
         these sentences go, the docs and the dialog have drifted from
         what is actually true."""
         doc = install_mod.__doc__
-        for claim in ('per-user', 'UNVERIFIED', 'persistence',
-                      'signed', 'Loopback'):
+        for claim in ('per-user', 'UNVERIFIED', 'self-contained',
+                      'signed', 'never downloads'):
             self.assertIn(claim, doc)

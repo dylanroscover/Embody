@@ -955,17 +955,25 @@ class TestTransientParScrub(EmbodyTestCase):
         protection; what stays banned is a literal '' resting, which
         would claim an empty string is a state.
         """
+        # A registered name is either a single status par or a custom
+        # SEQUENCE (e.g. Convoynodes, the read-only network-status rows).
+        # A sequence exists in comp.seq, not comp.par, and its None resting
+        # means "reset every block value to its template default" (the
+        # _scrubTransientPars sequence branch), so the empty-default check
+        # for single identifier pars does not apply to it.
+        seq_names = {s.name for s in self.embody.seq if s is not None}
         for name, resting in sorted(
                 self._orig_registry['Embody'].items()):
-            self.assertIsNotNone(
-                getattr(self.embody.par, name, None),
+            is_sequence = name in seq_names
+            self.assertTrue(
+                is_sequence or getattr(self.embody.par, name, None) is not None,
                 'registered transient par %r does not exist on the '
                 'Embody COMP -- registry is stale' % name)
             self.assertTrue(
                 resting is None or (isinstance(resting, str) and resting),
                 'resting for %r must be a truthy state string, or None '
                 'for reset-to-default; got %r' % (name, resting))
-            if resting is None:
+            if resting is None and not is_sequence:
                 par = getattr(self.embody.par, name, None)
                 self.assertEqual(
                     par.default, '',
@@ -1062,7 +1070,12 @@ class TestTransientParScrub(EmbodyTestCase):
         session while its resting is 'Disabled', so the snapshot is
         guaranteed non-empty -- this test cannot pass vacuously."""
         registry = self._orig_registry['Embody']
-        names = sorted(registry)
+        # Sequence-registered names (Convoynodes) have no comp.par entry --
+        # they roundtrip through the scrub snapshot per block, covered by
+        # test_registered_sequence_count_kept_values_dropped. This live
+        # roundtrip pins the single status readout pars.
+        seq_names = {s.name for s in self.embody.seq if s is not None}
+        names = [n for n in sorted(registry) if n not in seq_names]
         before = {n: getattr(self.embody.par, n).eval() for n in names}
         snap = self.embody_ext._scrubTransientPars(self.embody)
         try:

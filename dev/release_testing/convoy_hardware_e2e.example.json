@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "convoy_id": "replace-with-convoy-id",
+  "expected_embody_version": "6.0.178",
+  "local": {
+    "data_dir": null,
+    "node_id": "replace-with-local-node-id"
+  },
+  "remote": {
+    "ssh_host": "TEC-B4A",
+    "ssh_port": 22,
+    "ssh_user": "replace-with-windows-user",
+    "known_hosts_file": "C:/Users/YOU/.ssh/known_hosts",
+    "identity_file": null,
+    "python_command": "python",
+    "target_node_id": "replace-with-tec-b4a-node-id",
+    "data_dir": null
+  },
+  "timeouts": {
+    "http_s": 10,
+    "ssh_s": 20,
+    "job_s": 90,
+    "reconnect_s": 120,
+    "poll_s": 0.5
+  },
+  "scenarios": {
+    "read": {
+      "enabled": true,
+      "operation": "query_network",
+      "arguments": {
+        "parent_path": "/",
+        "recursive": false
+      }
+    },
+    "mutation": {
+      "enabled": false,
+      "operation": null,
+      "arguments": {},
+      "cleanup": {
+        "operation": null,
+        "arguments": {}
+      }
+    },
+    "artifact": {
+      "enabled": false,
+      "operation": "capture_top",
+      "arguments": {
+        "op_path": "/replace/with/test/top",
+        "format": "png"
+      },
+      "export_project_root": "C:/replace/with/local/registered/project",
+      "filename": "convoy-hardware-{run_id}-{artifact_id}.png"
+    },
+    "cancel": {
+      "enabled": false,
+      "operation": null,
+      "arguments": {},
+      "expected_terminal_states": [
+        "cancelled",
+        "canceled"
+      ]
+    },
+    "dropout": {
+      "enabled": false,
+      "self_reverting_command": null,
+      "command_timeout_s": 20,
+      "observe_disconnect_s": 20,
+      "require_observed_disconnect": true,
+      "accepted_exit_codes": [
+        0,
+        255
+      ]
+    },
+    "host_restart": {
+      "enabled": false,
+      "command": null,
+      "command_timeout_s": 30,
+      "require_pid_change": true,
+      "accepted_exit_codes": [
+        0,
+        255
+      ]
+    },
+    "td_restart": {
+      "enabled": false,
+      "policy": "require_clean",
+      "timeout_s": 120
+    }
+  }
+}

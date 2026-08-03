@@ -105,7 +105,8 @@ def test_known_answer_the_states_and_reasons_are_fixed():
     assert cp.PEER_STATES == ("pending", "admitted", "observe_only",
                               "blocked")
     assert cp.PEER_REASONS == ("peer_blocked", "peer_unknown",
-                               "pin_mismatch", "peer_observe_only")
+                               "pin_mismatch", "peer_observe_only",
+                               "namespace_not_admitted")
 
 
 def test_malformed_identities_normalize_to_none():
@@ -184,6 +185,29 @@ def test_an_absent_denylist_blocks_nobody(store):
     store.admit(HOST_A, FP_A)
     assert not os.path.exists(denylist_path(store))
     assert store.authorize_peer(HOST_A, FP_A).allowed is True
+
+
+def test_namespace_authorization_is_explicit_and_fail_closed(store):
+    store.admit(HOST_A, FP_A, convoy_ids=["show-a"])
+
+    # Host/session admission remains available to the TLS connection
+    # layer, which does not reveal namespace-owned state.
+    assert store.authorize_peer(HOST_A, FP_A).allowed is True
+
+    allowed = store.authorize_peer(HOST_A, FP_A, convoy_id="show-a")
+    assert allowed.allowed is True
+
+    refused = store.authorize_peer(HOST_A, FP_A, convoy_id="show-b")
+    assert refused.allowed is False
+    assert refused.reason == cp.REASON_NAMESPACE
+    assert "show-b" in refused.detail
+
+
+def test_empty_namespace_grant_is_not_a_wildcard(store):
+    store.admit(HOST_A, FP_A)
+    decision = store.authorize_peer(HOST_A, FP_A, convoy_id="studio")
+    assert decision.allowed is False
+    assert decision.reason == cp.REASON_NAMESPACE
     # an explicitly empty object is the unambiguous "block nobody"
     write_denylist(store, "{}")
     assert store.authorize_peer(HOST_A, FP_A).allowed is True

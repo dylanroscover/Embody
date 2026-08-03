@@ -102,7 +102,7 @@ class EmbodyExt:
         # is not here (it lives in the tracked .embody/project.json), and
         # the Phase 3+ dangerous gates deliberately stay OUT of this
         # whitelist per A-49.
-        'Convoyenable',
+        'Convoyenable', 'Convoyremotewake', 'Convoywakegrace',
         # Keyboard shortcuts (issue #50)
         'Enablekeyboardshortcuts',
         'Shortcutmanager', 'Shortcutupdateall', 'Shortcutupdatecomp',
@@ -1379,7 +1379,7 @@ class EmbodyExt:
 
     def _applyWizardSetup(self, mode='auto', assistant='claudecode',
                           client='', root='gitroot', custom_root='',
-                          permissions='all', git='', externalize=''):
+                          permissions='all', git='', externalize='', convoy=''):
         """Apply the setup-wizard selections and enable (or skip) Envoy.
 
         The single backend entry point the wizard's finish() calls. Because the
@@ -1418,6 +1418,12 @@ class EmbodyExt:
                        + TOX/TDN choice, and is refused outright when there
                        is no saved .toe to fall back on); 'skip' / '' change
                        nothing.
+          convoy:      '' | 'enable' | 'disable' -- the wizard's independent
+                       Convoy step. Sets the canonical Convoyenable toggle;
+                       '' leaves it unchanged for compatibility with an older
+                       wizard that had no Convoy step. Installing the per-user
+                       host app stays a SEPARATE explicit pulse -- the wizard
+                       only flips the enable flag, never installs it.
         """
         # Whitelist the assistant token: an unrecognized value (a typo, a
         # mis-cased 'None') must be a safe no-op, never fall through to ENABLING
@@ -1452,6 +1458,23 @@ class EmbodyExt:
                      'WARNING')
             externalize = ''
 
+        # Whitelist the convoy token; anything unrecognized means "do nothing"
+        # -- a garbled choice must never silently ENABLE remote LAN control.
+        convoy = (convoy or '').strip().lower()
+        if convoy not in ('', 'enable', 'disable'):
+            self.Log(f'Setup wizard: unrecognized convoy choice "{convoy}" -- '
+                     f'leaving Convoy unchanged.', 'WARNING')
+            convoy = ''
+
+        # Applying assistant='none' to any running Envoy must stop it BEFORE
+        # root/client parameter writes below. Both
+        # parexec handlers regenerate AI config while Envoy is on; stopping
+        # first keeps the Convoy-only promise even when the wizard also moves
+        # the project root during this apply pass.
+        if (assistant == 'none'
+                and bool(self.my.par.Envoyenable.eval())):
+            self.my.par.Envoyenable = False
+
         # 1. Posture.
         if mode in ('auto', 'advanced'):
             self.my.par.Embodymode = mode
@@ -1479,13 +1502,32 @@ class EmbodyExt:
         #     the AI, so an assistant='none' user must still get their choice.
         self._applyWizardExternalize(externalize)
 
-        # 3. AI client / assistant.
+        # 3. AI client / assistant. Convoy does not require an attached AI
+        #    client, but remote TD operations still need Envoy's loopback
+        #    command server inside TouchDesigner. In that Convoy-only posture
+        #    Aiclient='none' prevents launch/config generation while
+        #    Envoyenable deliberately remains on as an INTERNAL substrate.
         if assistant == 'none':
             self.my.par.Aiclient = 'none'
-            self.my.par.Envoyenable = False
-            self.Log('Embody is set up for externalization only. Turn on the AI '
-                     'assistant anytime via the Envoyenable parameter or by '
-                     're-running setup (the Setup Wizard button).', 'SUCCESS')
+            if convoy in ('enable', 'disable'):
+                self.my.par.Convoyenable = (convoy == 'enable')
+            if bool(self.my.par.Convoyenable.eval()):
+                # A fresh Convoy-enable callback also starts the substrate.
+                # Re-running the wizard against an already-enabled toggle has
+                # no callback, so cover that path explicitly without stacking
+                # a redundant Stop/Start on the fresh-enable path.
+                if not bool(self.my.par.Envoyenable.eval()):
+                    self._enableEnvoyResolved(configure_client=False)
+                self.Log(
+                    'Embody is set up without an AI coding assistant. Convoy '
+                    'keeps its internal command service available, but no AI '
+                    'client was configured or launched.', 'SUCCESS')
+            else:
+                self.my.par.Envoyenable = False
+                self.Log(
+                    'Embody is set up for externalization only. Turn on the AI '
+                    'assistant or Convoy anytime by re-running the Setup Wizard.',
+                    'SUCCESS')
             return
         if assistant == 'claudecode':
             self.my.par.Aiclient = 'claudecode'
@@ -1495,6 +1537,13 @@ class EmbodyExt:
             except Exception:
                 self.Log(f'Unknown AI client "{client}" -- keeping the current '
                          f'selection.', 'WARNING')
+
+        # 3.5 Convoy. Flips the canonical Convoyenable toggle -- '' means an
+        #     older wizard did not show the step, so leave the setting alone.
+        #     Installing/starting the per-user host app is a SEPARATE explicit
+        #     pulse (ConvoyExt.InstallHost); the wizard only sets the flag.
+        if convoy in ('enable', 'disable'):
+            self.my.par.Convoyenable = (convoy == 'enable')
 
         # 4. Tool-permissions posture. Persist BEFORE enabling so the deferred
         #    Start()'s _deploySettingsLocal reads the chosen value. The wizard
@@ -1669,18 +1718,24 @@ class EmbodyExt:
         except Exception:
             return False
 
-    def _enableEnvoyResolved(self):
+    def _enableEnvoyResolved(self, configure_client=True):
         """Modal-free Envoy enable/refresh, used by the setup wizard.
 
         Skips the interactive git modal that _enableEnvoy() pops: the wizard
         already chose the config location (Aiprojectroot) and disclosed the git
         changes, so consent exists. Resolves the git root silently (via
         _findGitRootSync -- Start() re-resolves the same way). If the project is
-        not in a git repo, MCP + AI config are still generated, with no
-        .gitignore / .gitattributes edits.
+        not in a git repo, client config is still generated when requested,
+        with no .gitignore / .gitattributes edits.
+
+        ``configure_client=False`` is Convoy-only mode: start the same internal
+        loopback command server, but do not extract or configure an AI coding
+        client. Aiclient must already be ``none``; EnvoyExt also enforces that
+        distinction on every later watchdog restart.
 
         Two paths:
-        - FIRST RUN (Envoy off): write AI config, then flip Envoyenable so
+        - FIRST RUN (Envoy off): optionally write AI config, then flip
+          Envoyenable so
           parexec launches Start(), whose async bootstrap builds the venv OFF
           the main thread (do NOT call _setupEnvironment() here -- that is the
           blocking path _enableEnvoy uses).
@@ -1697,9 +1752,15 @@ class EmbodyExt:
         git_root = self._findGitRootSync()  # Path or 'no-git'
         self.my.store('_git_root', str(git_root))
         if git_root == 'no-git':
-            self.Log('No git repo found -- generating MCP + AI config only (no '
-                     '.gitignore / .gitattributes). Run op.Embody.InitGit() '
-                     'later to add git integration.', 'INFO')
+            if configure_client:
+                self.Log('No git repo found -- generating MCP + AI config only '
+                         '(no .gitignore / .gitattributes). Run '
+                         'op.Embody.InitGit() later to add git integration.',
+                         'INFO')
+            else:
+                self.Log('No git repo found -- starting only Convoy\'s internal '
+                         'command service; no AI-client or git config will be '
+                         'generated.', 'INFO')
 
         if already_on:
             # Re-run: config already regenerated by parexec on the param changes.
@@ -1708,32 +1769,42 @@ class EmbodyExt:
             self.my.ext.Envoy.Stop()
             self.my.par.Envoystatus = 'Starting...'
             run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=10)
-            self.Log(f'Envoy setup updated for {self._aiClientLabel()}.',
-                     'SUCCESS')
+            if configure_client:
+                self.Log(f'Envoy setup updated for {self._aiClientLabel()}.',
+                         'SUCCESS')
+            else:
+                self.Log('Convoy internal command service restarted.', 'SUCCESS')
             return
 
-        # First enable. The wizard's footprint step disclosed + the user
-        # confirmed the whole set, so consent the initial writes as a batch: set
-        # _consent_bulk so this sync _extractAIConfig AND the git/MCP writes in
-        # the DEFERRED Start() apply silently (no double-prompt; the enable stays
-        # atomic -- config can't be declined while Envoyenable flips True).
-        # _continueStart clears the flag once its writes finish; a bounded timer
-        # is the backstop so it can never stick (which would silence all guards).
-        self.Log('Setting up Envoy...', 'INFO')
-        self._consent_bulk = True
-        run(f"op('{self.my}').ext.Embody._consent_bulk = False", delayFrames=7200)
-        # AI config now (fast, no venv needed). The heavy venv build + pip
-        # install runs asynchronously inside Start() (_beginAsyncBootstrap).
-        self._extractAIConfig()
-        # Flip Envoyenable -> parexec kicks Envoy.Start() (async bootstrap); its
-        # git/MCP writes run under the still-set _consent_bulk.
+        # First enable. When a client is selected, the wizard's footprint step
+        # disclosed + the user confirmed the config writes, so consent them as
+        # one batch. Convoy-only mode performs none of those writes and therefore
+        # does not raise the bulk-consent flag.
+        self.Log('Setting up Envoy...' if configure_client else
+                 'Starting Convoy internal command service...', 'INFO')
+        if configure_client:
+            self._consent_bulk = True
+            run(f"op('{self.my}').ext.Embody._consent_bulk = False",
+                delayFrames=7200)
+            # AI config now (fast, no venv needed). The heavy venv build + pip
+            # install runs asynchronously inside Start() (_beginAsyncBootstrap).
+            self._extractAIConfig()
+        # Flip Envoyenable -> parexec kicks Envoy.Start() (async bootstrap).
+        # Client-selected git/MCP writes run under the still-set bulk consent;
+        # Convoy-only Start() skips them.
         self.my.par.Envoyenable = True
         self.my.par.Envoystatus = 'Starting...'
-        self.Log(
-            f'Envoy enabled! Config generated for {self._aiClientLabel()}. '
-            f'Dependencies install in the background; MCP connects when ready.',
-            'SUCCESS'
-        )
+        if configure_client:
+            self.Log(
+                f'Envoy enabled! Config generated for {self._aiClientLabel()}. '
+                f'Dependencies install in the background; MCP connects when ready.',
+                'SUCCESS'
+            )
+        else:
+            self.Log(
+                'Convoy command service enabled. Dependencies install in the '
+                'background; no AI client configuration was generated.',
+                'SUCCESS')
 
     def _findProjectRoot(self):
         """Where Embody writes AI config, MCP config, and its own state.
@@ -2590,19 +2661,32 @@ class EmbodyExt:
         """This project's convoy id, or '' -- see embody_admin."""
         return mod.embody_admin.read_convoy_id(self)
 
+    def _readConvoyBindingState(self) -> str:
+        """The safe candidate/established project binding interpretation."""
+        return mod.embody_admin.read_convoy_binding_state(self)
+
     def _mintConvoyId(self) -> str:
         """A candidate convoy id ('cv_' + 16 hex), unwritten -- so the
         first-enable confirmation can NAME the id before minting it."""
         return mod.embody_admin.mint_convoy_id()
 
-    def _ensureConvoyId(self, convoy_id=None, consent_scope=None) -> str:
+    def _ensureConvoyId(self, convoy_id=None, consent_scope=None,
+                        binding_state=None) -> str:
         """Record the convoy key (id + consent scope + grant time) with
         key-level ownership; return the id in force, or '' -- see
         embody_admin. Explicit-enable path only."""
-        if consent_scope is None:
-            return mod.embody_admin.ensure_convoy_id(self, convoy_id)
-        return mod.embody_admin.ensure_convoy_id(
-            self, convoy_id, consent_scope)
+        kwargs = {}
+        if consent_scope is not None:
+            kwargs['consent_scope'] = consent_scope
+        if binding_state is not None:
+            kwargs['binding_state'] = binding_state
+        return mod.embody_admin.ensure_convoy_id(self, convoy_id, **kwargs)
+
+    def _adoptConvoyId(self, convoy_id, expected_id,
+                       binding_state='established') -> str:
+        """Persist a host-authoritative automatic realm using a CAS guard."""
+        return mod.embody_admin.adopt_convoy_id(
+            self, convoy_id, expected_id, binding_state)
 
     def _saveSettings(self) -> None:
         """Persist whitelisted parameter values to .embody/config.json -- see embody_admin."""
@@ -3891,6 +3975,11 @@ class EmbodyExt:
             # convoy id into git and into every user's download. Exactly
             # the A-50 leak class (value: Testing, v6.0.169).
             'Convoystatus': 'Disabled',  # 'Registered <node8> (host <host8>)'
+            # Read-only network status rows. Sequence registration scrubs
+            # every runtime-populated block back to its template defaults
+            # while preserving the block count, so another machine's names,
+            # addresses and presence never bake into a TDN or release tox.
+            'Convoynodes': None,
             # None = reset to the par's own DEFAULT. Convoyid is an
             # identifier, not a state: it legitimately rests EMPTY (no
             # convoy until the first explicit enable), so it has no
@@ -8864,21 +8953,63 @@ class EmbodyExt:
     # PERFORM MODE
     # ==========================================================================
 
+    def _convoyWakeState(self) -> dict:
+        """Process-only Perform override state, stable across extension reinit.
+
+        COMP storage can be baked into a .toe/TDN and an instance attribute is
+        lost on syncfile reinit. A sys registry has the exact lifetime this
+        capability needs: one TouchDesigner process, never a project file.
+        """
+        registry = getattr(sys, '_embody_convoy_wake_states', None)
+        if not isinstance(registry, dict):
+            registry = {}
+            sys._embody_convoy_wake_states = registry
+        return registry.setdefault(self.my.path, {'active': False})
+
     @property
-    def _performMode(self) -> bool:
-        """True when Perform Mode is active -- all compute suppressed."""
+    def _performModeRequested(self) -> bool:
+        """The user's live Perform Mode toggle, independent of Convoy."""
         par = getattr(self.my.par, 'Performmode', None)
         return bool(par.eval()) if par is not None else False
 
+    @property
+    def _convoyWakeActive(self) -> bool:
+        """True only for a process-local, main-thread-applied wake override."""
+        try:
+            return bool(self._convoyWakeState().get('active'))
+        except Exception:
+            return False
+
+    @property
+    def _performMode(self) -> bool:
+        """The user's Perform request and authority for unrelated features.
+
+        A Convoy wake must not turn autosave, externalization, visualization,
+        shortcuts, viewers, or any other background subsystem back on.  Envoy
+        has its own narrower suspension property below; every existing Embody
+        guard continues to see the requested Perform state unchanged.
+        """
+        return self._performModeRequested
+
+    @property
+    def _envoyPerformMode(self) -> bool:
+        """Whether Perform Mode should currently suspend Envoy itself."""
+        return self._performModeRequested and not self._convoyWakeActive
+
     def _enterPerformMode(self) -> None:
         """Suspend all Embody features for live performance."""
+        self._convoyWakeState()['active'] = False
         # Snapshot state so we can restore on exit
-        state = {
-            'envoy_was_running': bool(self.my.fetch('envoy_running', False, search=False)),
-            'kb_active': self.my.op('keyboardin1').par.active.eval(),
-            'exit_tagger_active': self.my.op('chopexec_exit_tagger').par.active.eval(),
-        }
-        self.my.store('_perform_state', state)
+        state = self.my.fetch('_perform_state', None, search=False)
+        if not isinstance(state, dict):
+            state = {
+                'envoy_was_running': bool(self.my.fetch(
+                    'envoy_running', False, search=False)),
+                'kb_active': self.my.op('keyboardin1').par.active.eval(),
+                'exit_tagger_active': self.my.op(
+                    'chopexec_exit_tagger').par.active.eval(),
+            }
+            self.my.store('_perform_state', state)
 
         # Stop Envoy directly (do NOT touch Envoyenable -- that would corrupt config.json)
         self.my.ext.Envoy.Stop()
@@ -8903,6 +9034,7 @@ class EmbodyExt:
 
     def _exitPerformMode(self) -> None:
         """Restore all Embody features after live performance."""
+        self._convoyWakeState()['active'] = False
         state = self.my.fetch('_perform_state', {}, search=False)
 
         # Re-enable keyboard shortcuts and exit tagger
@@ -8926,6 +9058,43 @@ class EmbodyExt:
         run("parent.Embody.par.Refresh.pulse()", delayFrames=10)
 
         self.Log('Perform Mode OFF -- features restored', 'INFO')
+
+    def _beginConvoyWake(self) -> bool:
+        """Temporarily resume only Envoy without changing the Perform Par.
+
+        MAIN THREAD ONLY. The loopback listener merely queues a command;
+        ConvoyExt calls this method from its main-thread poll. All unrelated
+        Embody guards continue to observe ``_performMode == True`` while the
+        narrower ``_envoyPerformMode`` gate allows command service startup.
+        """
+        if not self._performModeRequested:
+            return False
+        state = self._convoyWakeState()
+        if state.get('active'):
+            return True
+        state['active'] = True
+        should_start = bool(self.my.fetch(
+            'envoy_running', False, search=False))
+        try:
+            should_start = should_start or bool(self.my.par.Envoyenable.eval())
+        except Exception:
+            pass
+        if should_start:
+            run("parent.Embody.ext.Envoy.Start()", delayFrames=1)
+            self.my.par.Envoystatus = 'Convoy wake starting...'
+        self.Log('Convoy command service temporarily awake in Perform Mode',
+                 'INFO')
+        return True
+
+    def _endConvoyWake(self) -> bool:
+        """End a temporary wake and restore suspension if the Par is still On."""
+        state = self._convoyWakeState()
+        was_active = bool(state.get('active'))
+        state['active'] = False
+        if self._performModeRequested:
+            self.my.ext.Envoy.Stop()
+            self.my.par.Envoystatus = 'Perform Mode'
+        return was_active
 
     def _applyTdnModeGating(self) -> None:
         """Three-way UI gating for TDN-page parameters based on Tdnmode.
