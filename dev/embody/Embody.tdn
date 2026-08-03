@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1068
-generator: Embody/6.0.185
+build: 1070
+generator: Embody/6.0.187
 td_build: 099.2025.33070
-source_file: Embody-6.186.toe
-exported_at: '2026-08-03T12:30:48Z'
+source_file: Embody-6.188.toe
+exported_at: '2026-08-03T12:41:26Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -829,7 +829,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.185
+    value: 6.0.187
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -914,6 +914,10 @@ sequences:
   - {}
   - {}
   - {}
+  - {}
+  - {}
+  - {}
+  Convoynodes:
   - {}
   - {}
   - {}
@@ -1073,8 +1077,15 @@ operators:
       mode: advanced
     sel_assistant: claudecode
     git_missing: false
-    ext_needed: false
+    ext_needed: true
     sel_mode: auto
+    step_id: convoy
+    sel_client: ''
+    sel_root: gitroot
+    sel_permissions: all
+    sel_git: gitinit
+    sel_externalize: auto
+    sel_convoy: enable
   tdn_ref: embody/Embody/wizard.tdn
 - name: execute
   type: executeDAT

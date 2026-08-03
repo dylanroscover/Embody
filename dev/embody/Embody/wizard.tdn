@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 17
-generator: Embody/6.0.177
+build: 19
+generator: Embody/6.0.187
 td_build: 099.2025.33070
-source_file: Embody-6.178.toe
-exported_at: '2026-08-02T13:59:48Z'
+source_file: Embody-6.188.toe
+exported_at: '2026-08-03T12:41:26Z'
 network_path: /embody/Embody/wizard
 options:
   include_dat_content: false
@@ -87,13 +87,20 @@ storage:
     mode: advanced
   sel_assistant: claudecode
   git_missing: false
-  ext_needed: false
+  ext_needed: true
   sel_mode: auto
+  step_id: convoy
+  sel_client: ''
+  sel_root: gitroot
+  sel_permissions: all
+  sel_git: gitinit
+  sel_externalize: auto
+  sel_convoy: enable
 operators:
 - name: hint
   type: textCOMP
   parameters:
-    text: Externalized files diff and restore best under version control.
+    text: Connects this Embody with other Convoy-enabled instances on the same trusted LAN, so they can discover and control each other. Enable only on a network you trust. Installing the host app is a separate, explicit step.
     type: multiline
     wordwrap: true
     callbacks: hint_callbacks
@@ -106,7 +113,7 @@ operators:
     alignx: left
     aligny: top
     w: 452
-    h: 16
+    h: 60
     alignorder: 3
     bgcolorr: 0.11
     bgcolorg: 0.12
@@ -126,7 +133,7 @@ operators:
 - name: title
   type: textCOMP
   parameters:
-    text: Make this project a Git repository?
+    text: Enable Convoy?
     wordwrap: true
     callbacks: title_callbacks
     fontsize: 18
@@ -388,6 +395,7 @@ operators:
     h: 235
     hmode: fill
     alignorder: 4
+    display: false
     bgcolorr: 0.11
     bgcolorg: 0.12
     bgcolorb: 0.115
@@ -402,6 +410,7 @@ operators:
   - name: opt_gitinit
     type: buttonCOMP
     parameters:
+      value0: true
       buttontype: radiodown
       colorr: 0.2
       colorg: 0.42
@@ -516,7 +525,6 @@ operators:
   - name: opt_gitskip
     type: buttonCOMP
     parameters:
-      value0: true
       buttontype: radiodown
       colorr: 0.2
       colorg: 0.42
@@ -1751,10 +1759,9 @@ operators:
 - name: grp_convoy
   type: containerCOMP
   parameters:
-    h: 235
+    h: 190
     hmode: fill
     alignorder: 4
-    display: false
     bgcolorr: 0.11
     bgcolorg: 0.12
     bgcolorb: 0.115
@@ -1769,6 +1776,7 @@ operators:
   - name: opt_enable
     type: buttonCOMP
     parameters:
+      value0: true
       buttontype: radiodown
       colorr: 0.2
       colorg: 0.42
@@ -2035,7 +2043,7 @@ operators:
     - name: desc
       type: textCOMP
       parameters:
-        text: No AI-client config or launcher. Convoy can still use its internal command service.
+        text: Convoy can still use its internal command service. Embody keeps your project diff-friendly.
         type: multiline
         wordwrap: true
         callbacks: desc_callbacks
@@ -2748,6 +2756,7 @@ operators:
   - name: opt_auto
     type: buttonCOMP
     parameters:
+      value0: true
       buttontype: radiodown
       colorr: 0.2
       colorg: 0.42
@@ -2864,7 +2873,6 @@ operators:
   - name: opt_full
     type: buttonCOMP
     parameters:
-      value0: true
       buttontype: radiodown
       colorr: 0.2
       colorg: 0.42
