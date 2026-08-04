@@ -442,7 +442,7 @@ def test_start_refuses_missing_or_changed_exact_files(tmp_path, mutate, code):
     manager, _, _, _, launcher, _, toe, exe = system
     offline(system)
     mutate(toe, exe)
-    result = manager.start_node(NODE, CONVOY, "start-files", timeout_s=.1)
+    result = manager.start_node(NODE, CONVOY, "start-files", timeout_s=5)
     assert result["code"] == code
     assert launcher.spawns == []
 
@@ -452,7 +452,7 @@ def test_start_refuses_stale_recorded_session(tmp_path):
     manager, _, _, inspector, launcher, _, _, _ = system
     offline(system)
     inspector.backend.session["session_id"] = "session:new"
-    result = manager.start_node(NODE, CONVOY, "start-session", timeout_s=.1)
+    result = manager.start_node(NODE, CONVOY, "start-session", timeout_s=5)
     assert result["code"] == "session_unavailable"
     assert launcher.spawns == []
 
@@ -467,7 +467,7 @@ def test_start_returns_already_running_only_for_verified_process(tmp_path):
 def test_offline_directory_with_last_exact_pid_alive_is_orphan_not_duplicate(tmp_path):
     manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
     runtime.value = None
-    result = manager.start_node(NODE, CONVOY, "start-orphan", timeout_s=.1)
+    result = manager.start_node(NODE, CONVOY, "start-orphan", timeout_s=5)
     assert result["code"] == "orphan_runtime"
     assert launcher.spawns == []
 
@@ -586,7 +586,7 @@ def test_unknown_old_pid_state_cannot_be_treated_as_dead_and_duplicated(tmp_path
         return {"status": "unknown"} if pid == 100 else original(pid)
 
     inspector.backend.inspect_status = unknown
-    result = manager.start_node(NODE, CONVOY, "unknown-old-pid", timeout_s=.1)
+    result = manager.start_node(NODE, CONVOY, "unknown-old-pid", timeout_s=5)
     assert result["code"] == "runtime_unverifiable"
     assert launcher.spawns == []
 
@@ -599,7 +599,7 @@ def test_runtime_directory_error_cannot_be_treated_as_offline(tmp_path):
         raise OSError("directory unavailable")
 
     runtime.current = broken_current
-    result = manager.start_node(NODE, CONVOY, "directory-error", timeout_s=.1)
+    result = manager.start_node(NODE, CONVOY, "directory-error", timeout_s=5)
     assert result["code"] == "runtime_unverifiable"
     assert launcher.spawns == []
 
@@ -609,7 +609,7 @@ def test_atomic_launch_reservation_failure_prevents_popen(tmp_path):
     manager, _, runtime, _, launcher, _, _, _ = system
     offline(system)
     runtime.reserve_launch = lambda *args: {"ok": False, "code": "occupied"}
-    result = manager.start_node(NODE, CONVOY, "reserve-refused", timeout_s=.1)
+    result = manager.start_node(NODE, CONVOY, "reserve-refused", timeout_s=5)
     assert result["code"] == "launch_reservation_failed"
     assert launcher.spawns == []
 
@@ -823,7 +823,7 @@ def test_crash_loop_blocks_fourth_recent_spawn(tmp_path):
         store.update_attempt(attempt["operation_id"], state="failed",
                              spawned_at=manager._clock(),
                              result={"ok": False, "code": "launch_failed"})
-    result = manager.start_node(NODE, CONVOY, "start-loop", timeout_s=.1)
+    result = manager.start_node(NODE, CONVOY, "start-loop", timeout_s=5)
     assert result["code"] == "crash_loop"
     assert launcher.spawns == []
 
@@ -839,7 +839,7 @@ def test_restart_crash_loop_refuses_before_quitting_healthy_runtime(tmp_path):
                              launch_started_at=manager._clock(),
                              result={"ok": False, "code": "launch_failed"})
     result = manager.restart_node(NODE, CONVOY, "restart-loop",
-                                  "runtime-1", timeout_s=.1)
+                                  "runtime-1", timeout_s=5)
     assert result["code"] == "crash_loop"
     assert runtime.quit_calls == [] and launcher.spawns == []
 
@@ -856,7 +856,7 @@ def test_disabled_and_ineligible_profiles_fail_closed(tmp_path):
                             launch_eligible=eligible)
         if not eligible:
             manager.set_enabled(NODE, CONVOY, True, launch_eligible=False)
-        result = manager.start_node(NODE, CONVOY, "op-" + code, timeout_s=.1)
+        result = manager.start_node(NODE, CONVOY, "op-" + code, timeout_s=5)
         assert result["code"] == code and launcher.spawns == []
 
 
@@ -878,6 +878,14 @@ def test_reregistration_cannot_undo_local_membership_or_launch_gates(tmp_path):
 # -- restart dirty gates, commit, cancellation -----------------------
 
 
+# Refusal-path timeouts are CEILINGS the manager never sits out -- the
+# canned probes refuse immediately. But the deadline is armed on entry
+# against the real clock, so a loaded CI runner stalling ~100ms anywhere
+# before the check turns the expected refusal into deadline_exceeded
+# (flaked on windows-latest 2026-08-04). Such sites use timeout_s=5;
+# tests whose SHORT window is the semantics (launch_unconfirmed
+# sit-outs, deadline_exceeded contracts, deferred-until-replacement,
+# idempotency content) keep .1 deliberately.
 @pytest.mark.parametrize("dirty,code", [
     ({"ok": False}, "dirty_state_unknown"),
     ({"ok": True, "dirty": True}, "project_dirty"),
@@ -886,7 +894,7 @@ def test_require_clean_refuses_unknown_or_dirty_state(tmp_path, dirty, code):
     manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
     runtime.dirty_values = [dirty]
     result = manager.restart_node(NODE, CONVOY, "restart-dirty",
-                                  "runtime-1", timeout_s=.1)
+                                  "runtime-1", timeout_s=5)
     assert result["code"] == code
     assert runtime.quit_calls == [] and launcher.spawns == []
 
@@ -949,7 +957,7 @@ def test_unsaved_flag_is_dirty_even_when_generic_dirty_flag_is_false(tmp_path):
     runtime.dirty_values = [{"ok": True, "dirty": False,
                              "unsaved": True, "revision": "unsaved"}]
     result = manager.restart_node(NODE, CONVOY, "restart-unsaved",
-                                  "runtime-1", timeout_s=.1)
+                                  "runtime-1", timeout_s=5)
     assert result["code"] == "project_dirty"
     assert runtime.quit_calls == [] and launcher.spawns == []
 
@@ -968,7 +976,7 @@ def test_quit_revision_cas_refusal_never_escalates_without_force(
 
     runtime.quit = state_changed
     result = manager.restart_node(NODE, CONVOY, "restart-cas-refusal",
-                                  "runtime-1", timeout_s=.1)
+                                  "runtime-1", timeout_s=5)
     assert result["code"] == "quit_failed"
     assert launcher.spawns == []
 
@@ -994,7 +1002,7 @@ def test_destructive_restart_requires_local_literal_true(tmp_path, policy):
         tmp_path, local_policy=lambda node, selected: 1)
     runtime.dirty_values = [{"ok": True, "dirty": True}]
     result = manager.restart_node(NODE, CONVOY, "restart-" + policy,
-                                  "runtime-1", policy=policy, timeout_s=.1)
+                                  "runtime-1", policy=policy, timeout_s=5)
     assert result["code"] == "destructive_policy_disabled"
     assert runtime.quit_calls == [] and launcher.spawns == []
 
@@ -1023,7 +1031,7 @@ def test_process_birth_mismatch_refuses_restart_without_quit(tmp_path):
     manager, _, runtime, inspector, launcher, _, _, _ = make_system(tmp_path)
     inspector.backend.processes[100]["birth_id"] = "birth:pid-reused"
     result = manager.restart_node(NODE, CONVOY, "restart-birth",
-                                  "runtime-1", timeout_s=.1)
+                                  "runtime-1", timeout_s=5)
     assert result["code"] == "runtime_changed"
     assert runtime.quit_calls == [] and launcher.spawns == []
 
@@ -1039,7 +1047,7 @@ def test_shared_touchdesigner_process_refuses_single_node_restart(tmp_path):
     manager.record_registration(second, str(exe), launch_eligible=True)
     assert manager._lock_for(NODE) is manager._lock_for(NODE_2)
     result = manager.restart_node(NODE, CONVOY, "restart-shared-runtime",
-                                  "runtime-1", timeout_s=.1)
+                                  "runtime-1", timeout_s=5)
     assert result["code"] == "shared_runtime"
     assert result["impacted_node_ids"] == [NODE_2]
     assert runtime.quit_calls == [] and launcher.spawns == []
@@ -1048,7 +1056,7 @@ def test_shared_touchdesigner_process_refuses_single_node_restart(tmp_path):
 def test_expected_runtime_id_is_compare_and_swap_fence(tmp_path):
     manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
     result = manager.restart_node(NODE, CONVOY, "restart-cas",
-                                  "runtime-other", timeout_s=.1)
+                                  "runtime-other", timeout_s=5)
     assert result["code"] == "runtime_changed"
     assert runtime.quit_calls == [] and launcher.spawns == []
 
@@ -1668,7 +1676,7 @@ def test_runtime_identity_fields_are_exact_restart_fences(tmp_path, field, value
     manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
     runtime.value[field] = value
     result = manager.restart_node(NODE, CONVOY, "restart-field-" + field,
-                                  "runtime-1", timeout_s=.1)
+                                  "runtime-1", timeout_s=5)
     assert result["code"] == "runtime_changed"
     assert runtime.quit_calls == [] and launcher.spawns == []
 
@@ -1680,7 +1688,7 @@ def test_runtime_metadata_is_exact_restart_fence(tmp_path, name, value):
     manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
     runtime.value["metadata"][name] = value
     result = manager.restart_node(NODE, CONVOY, "restart-meta-" + name,
-                                  "runtime-1", timeout_s=.1)
+                                  "runtime-1", timeout_s=5)
     assert result["code"] == "runtime_changed"
     assert runtime.quit_calls == [] and launcher.spawns == []
 
@@ -2110,7 +2118,7 @@ def test_save_then_restart_still_fails_when_save_never_writes_toe(tmp_path):
     runtime.dirty_values = [{"ok": True, "dirty": True}]
     result = manager.restart_node(
         NODE, CONVOY, "restart-nosave", "runtime-1",
-        policy="save_then_restart", timeout_s=.1)
+        policy="save_then_restart", timeout_s=5)
     assert result["code"] == "save_failed"
     assert runtime.quit_calls == [] and launcher.spawns == []
 
