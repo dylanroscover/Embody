@@ -1497,6 +1497,7 @@ class TestTickHygiene(ConvoyExtBase):
 
     def test_stale_instance_drops_its_poll(self):
         self._patch(self.convoy, '_staleInstance', lambda: True)
+        self.convoy._busy = True
         self.convoy._result = {'_gen': 7, '_action': 'register',
                                'result': {'state': 'registered',
                                           'node_id': NODE_ID,
@@ -1505,8 +1506,13 @@ class TestTickHygiene(ConvoyExtBase):
         self.assertEqual(self.status_writes, [],
                          'a superseded instance must apply nothing')
         self.assertEqual(self._runs, [], 'and must not reschedule')
-        self.assertIsNotNone(self.convoy._result,
-                             'and must not consume the slot')
+        # The stale exit CLEARS its instance's slot -- leaving it parked
+        # orphaned the busy flag and wedged a Mac first-install session
+        # (2026-08-04); same contract as the host/policy drains.
+        self.assertIsNone(self.convoy._result,
+                          'a stale poll clears its slot')
+        self.assertFalse(self.convoy._busy,
+                         'and releases the busy flag')
 
     def test_superseded_worker_generation_retries_instead_of_applying(self):
         self.convoy._result = {'_gen': 4, '_action': 'register',

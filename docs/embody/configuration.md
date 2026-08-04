@@ -92,7 +92,7 @@ The file is created on your first parameter change — no `.embody/config.json` 
 
 Embody provides a multi-destination logging system:
 
-- **File logging** (default): Logs are written to `logs/<project_name>_YYMMDD.log`. Files auto-rotate at 10 MB with numbered suffixes (`_001`, `_002`, etc.).
+- **File logging** (default): Logs are written to `logs/<project_name>_YYMMDD.log`. Files auto-rotate at 10 MB with numbered suffixes (`_001`, `_002`, etc.). File logging begins once the project has been saved — on a never-saved project nothing is written to disk (the ring buffer, FIFO, and textport still receive every line), and it resumes automatically with the first log line after the save.
 - **FIFO DAT**: Recent log entries are visible in TouchDesigner's network editor.
 - **Textport**: Enable the **Print to Textport** parameter to echo logs to the textport.
 - **Ring buffer**: The most recent 200 entries are accessible via the Envoy `get_logs` MCP tool.

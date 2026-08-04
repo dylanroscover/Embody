@@ -2,7 +2,11 @@
 
 ## v6.0.207
 
-Convoy: nodes stop registering under TouchDesigner's throwaway project name.
+A fresh install stops scattering files into TouchDesigner's default folder before the project is saved.
+
+- **No more orphaned files from a never-saved project**: dropping the tox into a brand-new project immediately created a `logs/` folder, `.embody/` (with the op-type catalog), and `project1/externalizations.tsv` -- all rooted in TouchDesigner's default location, orphaned the moment the wizard's save step gave the project its real home. Every writer Embody fires on its own initiative now waits for a saved project: file logging pauses (ring buffer and textport unaffected) and resumes with the first post-save log line; the catalog scan still runs but holds its result in memory and lands on disk via a post-save flush; the externalizations table defers and is swept in by the first save; `.embody/local.json`/`project.json` wait for the post-save hook that already writes them. (Settings persistence to `.embody/config.json` stays as-is by design -- it only fires when a persisted setting actually changes.) MCP's `externalize_op` reports `deferred: true` when it tags on a not-yet-saved project. Two contract tests pin every gate (they fail against the previous build).
+
+Also in this release -- Convoy nodes stop registering under TouchDesigner's throwaway project name.
 
 - **`hostname / NewProject.1` node names fixed**: the Node Name parameter is filled once per machine at extension load -- which on a fresh install ran before the wizard's save step, baking the unsaved project's placeholder name in as if the user had typed it. A node saved as `e3` during the wizard then registered as `NewProject.1` forever. The fill now waits until the project is saved (until then the automatic `hostname / toe-stem` is computed live from the real `.toe` at each registration; the wizard's save step fills it the moment the save lands), and an already-baked placeholder for this machine is healed in place on load -- genuine user-typed names never match the placeholder pattern and are untouched. The corrected name re-registers automatically on the next heartbeat.
 - Five new contract tests pin the fill's ordering (waits for save, stamps the saved stem, heals the baked placeholder, never clobbers a real override, leaves expression-mode alone); the heal and wait-for-save tests fail against the previous build.

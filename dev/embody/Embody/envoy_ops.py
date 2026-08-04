@@ -782,12 +782,21 @@ def externalize_op(ext, op_path: str, tag_type: str = None) -> dict:
                 or target.fetch('_tdn_rel_path', '', search=False))
         else:
             file_path = target.par.externaltox.eval()
-        return {
+        result = {
             'success': True,
             'path': op_path,
             'tag': tag_type,
             'file': file_path
         }
+        # On a never-saved project the tag applied but the disk write was
+        # deferred by the save gate -- tell the caller instead of handing
+        # back success with an empty file path.
+        if not op.Embody.ext.Embody._projectSavedOnDisk():
+            result['deferred'] = True
+            result['note'] = ('Project not saved yet: the tag is applied '
+                              'and the file will be written by the first '
+                              'sweep after the project is saved.')
+        return result
     except Exception as e:
         return {'error': f'Failed to tag: {e}'}
 

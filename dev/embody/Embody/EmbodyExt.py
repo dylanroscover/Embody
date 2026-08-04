@@ -1792,6 +1792,28 @@ class EmbodyExt:
         except Exception:
             return None
 
+    def _projectSavedOnDisk(self):
+        """True once this project exists as a .toe on disk.
+
+        THE gate for every disk write Embody makes on its own initiative
+        (log files, externalizations.tsv, .embody state): on a fresh
+        never-saved project those writes land in TouchDesigner's default
+        folder and are orphaned the moment the wizard's save step
+        relocates the project -- so nothing is written until the project
+        has a real home. Same on-disk invariant as _wizardRecoveryPoint,
+        ConvoyExt._savedToe and the wizard's _projectSaved; a project
+        cannot become unsaved within a session, so callers may latch a
+        True result. (The latch means a failed first save that already
+        re-pointed project.folder keeps the gate open -- writes then root
+        at the user-chosen folder, which is where they belong anyway.)
+        Never raises."""
+        if getattr(self, '_saved_on_disk', False):
+            return True
+        if self._wizardRecoveryPoint() is not None:
+            self._saved_on_disk = True
+            return True
+        return False
+
     def _scheduleProjectExternalization(self):
         """Run ExternalizeProject() a few frames out (wizard externalize step).
 
@@ -2786,6 +2808,12 @@ class EmbodyExt:
         retired td_build key removed once, everything else preserved,
         unreadable JSON never overwritten) -- see embody_admin.
         """
+        # A never-saved project has no real .embody home yet (the frame-80
+        # onStart schedule reaches here on unsaved untitled projects
+        # spawned from a startup .toe). onProjectPostSave calls this
+        # again, so the files appear with the first save.
+        if not self._projectSavedOnDisk():
+            return
         try:
             mod.embody_admin.write_local_json(self)
         except Exception as e:
@@ -3244,12 +3272,14 @@ class EmbodyExt:
             self.param_tracker.initializeTracking(self)
             
             # Create externalization folder (makedirs handles missing parents)
-            folder = self.getProjectFolder()
-            try:
-                os.makedirs(folder, exist_ok=True)
-                self.Log(f"Created folder '{folder}'", "SUCCESS")
-            except Exception as e:
-                self.Log(f"Failed to create folder '{folder}': {e}", "ERROR")
+            # -- but never in TD's default location on a never-saved project.
+            if self._projectSavedOnDisk():
+                folder = self.getProjectFolder()
+                try:
+                    os.makedirs(folder, exist_ok=True)
+                    self.Log(f"Created folder '{folder}'", "SUCCESS")
+                except Exception as e:
+                    self.Log(f"Failed to create folder '{folder}': {e}", "ERROR")
 
         # Migrate table schema if needed (adds strategy column)
         self._migrateTableSchema()
@@ -3390,6 +3420,16 @@ class EmbodyExt:
 
         # Process changes
         additions.sort(key=lambda x: (self.Externalizations.path in x.path, x.path), reverse=True)
+
+        # On a never-saved project every addition would be deferred by
+        # handleAddition's save gate anyway; empty the list HERE so the
+        # sweep report counts what actually landed, and say so once per
+        # sweep instead of once per op.
+        if additions and not self._projectSavedOnDisk():
+            self.Log(f"Deferring {len(additions)} externalization"
+                     f"{'s' if len(additions) > 1 else ''} until the "
+                     "project is saved", "INFO")
+            additions = []
 
         # Batch locked-content warnings across the whole sweep into ONE
         # combined dialog. A full-project externalization triggers one TDN
@@ -5438,6 +5478,17 @@ class EmbodyExt:
             self._handleTDNAddition(oper)
             return
 
+        # Nothing is written to disk before the project has a real home:
+        # paths root at project.folder, which is TD's default location on
+        # a never-saved project (the fresh-drop externalizations.tsv
+        # orphan). The op stays tagged-but-untracked, so the additions
+        # sweep re-detects it on every Update and externalization
+        # self-heals with the first sweep after the save.
+        if not self._projectSavedOnDisk():
+            self.Log(f"Deferring externalization of '{oper.path}' until "
+                     "the project is saved", "DEBUG")
+            return
+
         abs_folder_path, save_file_path, rel_directory, rel_file_path = \
             self.getOpPaths(oper, self.my.par.Folder.val)
 
@@ -5475,6 +5526,11 @@ class EmbodyExt:
 
     def _handleTDNAddition(self, oper: OP) -> None:
         """Process a newly TDN-tagged COMP for externalization."""
+        # Same save gate as handleAddition (direct callers exist).
+        if not self._projectSavedOnDisk():
+            self.Log(f"Deferring externalization of '{oper.path}' until "
+                     "the project is saved", "DEBUG")
+            return
         rel_path = self._buildTDNRelPath(oper)
         abs_path = self.buildAbsolutePath(rel_path)
 
@@ -11063,6 +11119,14 @@ class EmbodyExt:
         """
         log_folder = self.my.par.Logfolder.eval()
         if not log_folder:
+            return None
+
+        # No file logging until the project is saved: the relative folder
+        # resolves against TD's default location on a never-saved project
+        # and the wizard's save step then orphans it. Ring buffer, FIFO
+        # and textport logging are upstream and unaffected; the first Log
+        # call after the save resumes file logging in the real folder.
+        if not self._projectSavedOnDisk():
             return None
 
         # Ensure folder exists (relative path OK)

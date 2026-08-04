@@ -1397,6 +1397,18 @@ class CatalogManagerExt:
 		except Exception:
 			return str(project.folder)
 
+	def _projectSavedOnDisk(self):
+		"""EmbodyExt's save gate for self-initiated disk writes.
+
+		Fail-closed: if the delegate is unreachable, treat the project as
+		unsaved and skip the write -- the catalog stays in memory and the
+		next open rescans, which only costs time.
+		"""
+		try:
+			return bool(self.ownerComp.ext.Embody._projectSavedOnDisk())
+		except Exception:
+			return False
+
 	# --- In-flight sentinel (palette freeze forensics) -----------------
 
 	def _inflightSentinelPath(self):
@@ -1414,7 +1426,14 @@ class CatalogManagerExt:
 		that was killed or wedged - including wedges that land a frame
 		or two AFTER loadTox returns (geoPanel.tox on TD 2025.33070).
 		Best-effort: a failure here must never break the scan.
+
+		Skipped while the project is unsaved (the write-gate rule):
+		accepted tradeoff -- a legacy-fallback palette scan that wedges
+		TD before the first save leaves no forensics for the next launch.
+		That path needs no toeexpand AND no bootstrap rows, pre-save.
 		"""
+		if not self._projectSavedOnDisk():
+			return
 		try:
 			path = self._inflightSentinelPath()
 			os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -1499,7 +1518,20 @@ class CatalogManagerExt:
 		A TD crash mid-write must not leave a truncated
 		catalog_<build>.json - _readCatalog would fail to parse it and
 		silently trigger a full rescan on the next launch (issue #60).
+
+		On a never-saved project the write is skipped entirely: the path
+		roots at TD's default folder and would be orphaned by the wizard's
+		save step. The scan's in-memory result still serves this session;
+		the catalog is written by the post-save flush (execute.py
+		onProjectPostSave) or rebuilt at the real root on the next open.
 		"""
+		if not self._projectSavedOnDisk():
+			# Keep the newest payload for the post-save flush; each later
+			# skipped write (op-type half, checkpoints, palette finalize)
+			# supersedes the previous one.
+			self._deferred_catalog = dict(catalog)
+			self._log('Project not saved yet - catalog deferred in memory')
+			return
 		try:
 			os.makedirs(os.path.dirname(path), exist_ok=True)
 			content = json.dumps(catalog, separators=(',', ':'),
@@ -1515,6 +1547,28 @@ class CatalogManagerExt:
 			try:
 				os.unlink(path + '.tmp')
 			except OSError:
+				pass
+
+	def _flushDeferredCatalog(self):
+		"""Write a catalog deferred by the unsaved-project gate.
+
+		Called from execute.py onProjectPostSave: the first save gives the
+		project its real root, so the path is recomputed HERE, never
+		reused from the deferred attempt. No-op when nothing was deferred
+		or the project is somehow still unsaved. Never raises.
+		"""
+		try:
+			pending = getattr(self, '_deferred_catalog', None)
+			if not pending or not self._build_str \
+					or not self._projectSavedOnDisk():
+				return
+			self._deferred_catalog = None
+			self._writeCatalog(
+				self._getCatalogPath(self._build_str), pending)
+		except Exception as e:
+			try:
+				self._log(f'Deferred catalog flush failed: {e}')
+			except Exception:
 				pass
 
 	# =================================================================

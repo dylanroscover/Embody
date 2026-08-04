@@ -465,6 +465,27 @@ def onProjectPostSave():
 	except Exception as e:
 		print(f'Embody > project.json update failed: {e}')
 
+	# A catalog scanned while the project was unsaved was held in memory
+	# (the unsaved-project write gate); the project now has its real
+	# root, so land it there.
+	try:
+		parent.Embody.ext.CatalogManager._flushDeferredCatalog()
+	except Exception as e:
+		print(f'Embody > deferred catalog flush failed: {e}')
+
+	# Additions deferred by the same gate (the fresh-install
+	# externalizations table, at minimum) self-heal on the next Update
+	# sweep -- but the post-save Refresh does not process additions, so
+	# on the FIRST save give them one. The never-externalized table
+	# (empty file par) is the marker of that deferred state; on every
+	# ordinary save this is False and nothing extra runs.
+	try:
+		_tbl = parent.Embody.ext.Embody.Externalizations
+		if _tbl is not None and not _tbl.par.file.eval():
+			run(f"op('{parent.Embody}').ext.Embody.Update()", delayFrames=10)
+	except Exception as e:
+		print(f'Embody > deferred additions kick failed: {e}')
+
 	# Walk the envoy.json registry forward across TD's save-time version
 	# bump (e.g. Foo-5.398.toe -> Foo-5.399.toe). When Envoy doesn't
 	# restart (Off/Export modes, no strip), the registry would otherwise

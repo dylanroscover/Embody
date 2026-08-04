@@ -127,18 +127,17 @@ class TestWizardExternalize(EmbodyTestCase):
                               f"step '{step}' points at group '{g}', which is "
                               f'not in GROUPS')
 
-    def test_hint_stays_single_line_like_every_other_step(self):
-        # Final design: externalize uses the standard 16px one-line hint. Its
-        # first iteration used the tall 60px box, which pushed the footer off
-        # the step's baseline (verified by rendered-panel capture against the
-        # git step -- v6.0.165 changelog). Guard the rollback: externalize
-        # must NOT be in the tall-hint tuple, and its hint copy must fit one
-        # line alongside the other single-line steps.
+    def test_hint_stays_compact_like_every_other_step(self):
+        # Current design: every hint auto-sizes via _hintHeight (the old
+        # 16/60 two-tier split clipped long hints and shipped the v6.0.205
+        # footer overflow; the panel-height fit is pinned by
+        # test_every_wizard_step_fits_the_panel_height). Guard here: the
+        # auto-size wiring stays, and externalize's copy stays one
+        # newline-free line so the step reads as compact as its peers.
         src = self._logicDAT.text.replace(' ', '')
-        self.assertNotIn("'externalize'", src.split('par.h=60if', 1)[-1]
-                         .split('else16', 1)[0],
-                         'externalize must NOT be in the tall-hint tuple -- '
-                         'the step uses the standard single-line frame')
+        self.assertIn('par.h=_hintHeight(', src,
+                      'the hint must auto-size to its text -- a hardcoded '
+                      'height reintroduces the clipped-footer class')
         hint = self._logic.DEFS['externalize']['hint']
         self.assertNotIn('\n', hint, 'a single-line hint cannot contain '
                                      'newlines')

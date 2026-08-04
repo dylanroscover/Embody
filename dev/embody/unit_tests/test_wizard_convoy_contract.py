@@ -153,6 +153,50 @@ def test_an_actionable_node_state_outranks_the_host_app_line():
         "_BLOCKING_HOST_TEXTS)")
 
 
+# -- UNSAVED PROJECT: nothing self-initiated writes to disk -----------
+#
+# A fresh never-saved project has no real folder: everything written
+# before the wizard's save step (logs/, .embody/catalog_<build>.json,
+# project1/externalizations.tsv, .embody/local+project.json) landed in
+# TD's default location and was orphaned by the save (field-reported
+# 2026-08-04). Every self-initiated writer now sits behind
+# EmbodyExt._projectSavedOnDisk; these pins keep it that way.
+
+def test_every_self_initiated_writer_is_save_gated():
+    src = (LOGIC.parents[1] / "EmbodyExt.py").read_text(encoding="utf-8")
+    assert "def _projectSavedOnDisk" in src
+    log_fn = src.split("def _get_log_file_path", 1)[1].split("def ", 1)[0]
+    assert log_fn.index("_projectSavedOnDisk") < log_fn.index("os.makedirs")
+    add_fn = src.split("def handleAddition", 1)[1].split(
+        "def _handleTDNAddition", 1)[0]
+    assert "_projectSavedOnDisk" in add_fn
+    tdn_fn = src.split("def _handleTDNAddition", 1)[1].split(
+        "\n    def ", 1)[0]
+    assert "_projectSavedOnDisk" in tdn_fn
+    uh = src.split("def UpdateHandler", 1)[1].split("\n    def ", 1)[0]
+    assert "_projectSavedOnDisk" in uh
+    pj = src.split("def _writeProjectJson", 1)[1].split("\n    def ", 1)[0]
+    assert "_projectSavedOnDisk" in pj
+
+
+def test_catalog_writes_are_save_gated_and_flushed_after_save():
+    cat = (LOGIC.parents[1] / "CatalogManagerExt.py").read_text(
+        encoding="utf-8")
+    wc = cat.split("def _writeCatalog", 1)[1].split("\n\tdef ", 1)[0]
+    assert "_projectSavedOnDisk" in wc and "_deferred_catalog" in wc
+    assert wc.index("_projectSavedOnDisk") < wc.index("os.makedirs")
+    sent = cat.split("def _writeInflightSentinel", 1)[1].split(
+        "\n\tdef ", 1)[0]
+    assert "_projectSavedOnDisk" in sent
+    assert "def _flushDeferredCatalog" in cat
+    # The save is what lands the deferred state: the post-save hook must
+    # flush the catalog AND kick the deferred additions sweep.
+    exe = (LOGIC.parents[1] / "execute.py").read_text(encoding="utf-8")
+    post = exe.split("def onProjectPostSave", 1)[1]
+    assert "_flushDeferredCatalog" in post
+    assert "Update()" in post
+
+
 # -- ROUTING: every option group must be WIRED to the click router -----
 #
 # All wizard clicks route through ONE panelexecute DAT ('clicks') whose
