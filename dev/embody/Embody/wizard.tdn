@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 21
+build: 22
 generator: Embody/6.0.203
 td_build: 099.2025.33070
-source_file: Embody-6.203.toe
-exported_at: '2026-08-04T17:14:47Z'
+source_file: Embody-6.204.toe
+exported_at: '2026-08-04T17:27:23Z'
 network_path: /embody/Embody/wizard
 options:
   include_dat_content: false
@@ -85,23 +85,10 @@ storage:
   step: 0
   sel:
     mode: advanced
-  sel_assistant: claudecode
-  git_missing: false
-  ext_needed: true
-  sel_mode: auto
-  step_id: save
-  sel_client: ''
-  sel_root: gitroot
-  sel_permissions: all
-  sel_git: gitinit
-  sel_externalize: auto
-  sel_convoy: enable
-  needs_save: true
 operators:
 - name: hint
   type: textCOMP
   parameters:
-    text: Saved. Embody will set up inside C:/Users/admin/Documents/Git/Embody/dev -- click Next.
     type: multiline
     wordwrap: true
     callbacks: hint_callbacks
@@ -114,7 +101,6 @@ operators:
     alignx: left
     aligny: top
     w: 452
-    h: 36
     alignorder: 3
     bgcolorr: 0.11
     bgcolorg: 0.12
@@ -134,7 +120,6 @@ operators:
 - name: title
   type: textCOMP
   parameters:
-    text: Save your project first
     wordwrap: true
     callbacks: title_callbacks
     fontsize: 18
@@ -170,7 +155,6 @@ operators:
   - name: fill
     type: containerCOMP
     parameters:
-      w: 64
       h: 4
       bgcolorr: 0.24
       bgcolorg: 0.52
@@ -213,9 +197,6 @@ operators:
     parameters:
       buttontype: momentary
       h: 36
-      bgcolorr: 0.19
-      bgcolorg: 0.2
-      bgcolorb: 0.195
     children:
     - name: out1
       type: outCHOP
@@ -228,16 +209,12 @@ operators:
     - name: text
       type: textCOMP
       parameters:
-        text: Not now
         type: multiline
         callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 13
         linespacing: =parent().par[me.curPar.name] or me.curPar.val
-        fontcolorr: 0.34
-        fontcolorg: 0.35
-        fontcolorb: 0.34
         textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
         textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
         textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
@@ -290,9 +267,6 @@ operators:
     parameters:
       buttontype: momentary
       h: 36
-      bgcolorr: 0.24
-      bgcolorg: 0.52
-      bgcolorb: 0.35
     position: [400, 0]
     children:
     - name: out1
@@ -306,16 +280,12 @@ operators:
     - name: text
       type: textCOMP
       parameters:
-        text: Next
         type: multiline
         callbacks: text_callbacks
         legacyfontselection: true
         scaletofit: =parent().par[me.curPar.name] or me.curPar.val
         fontsize: 13
         linespacing: =parent().par[me.curPar.name] or me.curPar.val
-        fontcolorr: 0.97
-        fontcolorg: 0.99
-        fontcolorb: 0.97
         textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
         textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
         textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
@@ -396,7 +366,6 @@ operators:
     h: 235
     hmode: fill
     alignorder: 4
-    display: false
     bgcolorr: 0.11
     bgcolorg: 0.12
     bgcolorb: 0.115
@@ -645,7 +614,6 @@ operators:
     h: 235
     hmode: fill
     alignorder: 4
-    display: false
     bgcolorr: 0.11
     bgcolorg: 0.12
     bgcolorb: 0.115
@@ -1034,7 +1002,6 @@ operators:
 - name: steplabel
   type: textCOMP
   parameters:
-    text: Step 1 of 7
     callbacks: steplabel_callbacks
     fontsize: 11
     fontcolorr: 0.6
@@ -1069,7 +1036,6 @@ operators:
     w: 473
     h: 235
     alignorder: 4
-    display: false
     align: verttb
     spacing: 8
     marginl: 24
@@ -1894,7 +1860,6 @@ operators:
     h: 190
     hmode: fill
     alignorder: 4
-    display: false
     bgcolorr: 0.11
     bgcolorg: 0.12
     bgcolorb: 0.115
@@ -2143,7 +2108,6 @@ operators:
     h: 235
     hmode: fill
     alignorder: 4
-    display: false
     align: verttb
     spacing: 8
     marginl: 24
@@ -2508,7 +2472,6 @@ operators:
     h: 191
     hmode: fill
     alignorder: 4
-    display: false
     align: verttb
     spacing: 8
     marginl: 24
@@ -2874,7 +2837,6 @@ operators:
     h: 235
     hmode: fill
     alignorder: 4
-    display: false
     bgcolorr: 0.11
     bgcolorg: 0.12
     bgcolorb: 0.115
@@ -3239,7 +3201,6 @@ operators:
     w: 473
     h: 190
     alignorder: 4
-    display: false
     align: verttb
     spacing: 8
     marginl: 24
