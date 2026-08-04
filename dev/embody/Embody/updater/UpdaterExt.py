@@ -67,6 +67,31 @@ import re
 from pathlib import Path
 
 
+def _verified_tls_context():
+    """A VERIFYING SSL context that works on TD's bundled Python.
+
+    Windows resolves CAs from the OS certificate store, so bare urlopen
+    always worked there. macOS's bundled Python has NO default CA path:
+    every HTTPS call from TD failed with CERTIFICATE_VERIFY_FAILED --
+    the field 'Update check failed' on every Mac. certifi ships inside
+    TouchDesigner (a requests dependency); load its bundle IN ADDITION
+    to any system defaults, so both platforms verify. Verification is
+    never disabled or downgraded: this context feeds the SELF-UPDATER,
+    and an unverified download would be a supply-chain hole.
+
+    WORKER-SAFE: pure Python, importable and callable off the main
+    thread with zero TD access.
+    """
+    import ssl
+    context = ssl.create_default_context()
+    try:
+        import certifi
+        context.load_verify_locations(cafile=certifi.where())
+    except Exception:
+        pass  # the OS store may already suffice (Windows)
+    return context
+
+
 class UpdaterExt:
     """Self-updater for the Embody component (check / download / apply)."""
 
@@ -313,11 +338,13 @@ class UpdaterExt:
             out = {'_gen': gen}
             try:
                 import urllib.request
+                tls = _verified_tls_context()
                 req = urllib.request.Request(url, headers={
                     'User-Agent': ua,
                     'Accept': 'application/vnd.github+json',
                 })
-                with urllib.request.urlopen(req, timeout=10) as resp:
+                with urllib.request.urlopen(req, timeout=10,
+                                            context=tls) as resp:
                     release = json.loads(resp.read())
                 out['tag'] = release.get('tag_name', '')
                 out['notes'] = (release.get('body') or '')[:4000]
@@ -332,7 +359,8 @@ class UpdaterExt:
                 if mf and mf.get('url'):
                     req2 = urllib.request.Request(
                         mf['url'], headers={'User-Agent': ua})
-                    with urllib.request.urlopen(req2, timeout=10) as resp2:
+                    with urllib.request.urlopen(req2, timeout=10,
+                                                context=tls) as resp2:
                         out['manifest'] = json.loads(resp2.read())
             except Exception as e:  # network errors are expected, not fatal
                 out['error'] = f'{type(e).__name__}: {e}'
@@ -485,7 +513,9 @@ class UpdaterExt:
                 import urllib.request
                 req = urllib.request.Request(
                     url, headers={'User-Agent': ua})
-                with urllib.request.urlopen(req, timeout=60) as resp:
+                with urllib.request.urlopen(req, timeout=60,
+                                            context=_verified_tls_context()
+                                            ) as resp:
                     # Cap the read at the manifest size (+1 to detect
                     # overrun) so a hostile server can't stream unbounded
                     # bytes into memory.

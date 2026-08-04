@@ -1039,11 +1039,23 @@ class EmbodyExt:
             try:
                 import urllib.request
                 import json
+                import ssl
+                # macOS's bundled Python has no default CA path (Windows
+                # uses the OS store); certifi ships with TD -- load it in
+                # ADDITION to defaults so HTTPS verifies on both. Never
+                # disables verification.
+                tls = ssl.create_default_context()
+                try:
+                    import certifi
+                    tls.load_verify_locations(cafile=certifi.where())
+                except Exception:
+                    pass
                 req = urllib.request.Request(
                     'https://pypi.org/pypi/mcp/json',
                     headers={'Accept': 'application/json'}
                 )
-                with urllib.request.urlopen(req, timeout=5) as resp:
+                with urllib.request.urlopen(req, timeout=5,
+                                            context=tls) as resp:
                     data = json.loads(resp.read())
                 installed_t = _parse(installed) or ()
                 # Newest stable, NON-YANKED release INSIDE the supported major

@@ -3683,8 +3683,27 @@ class EnvoyMCPServer:
             }
         return None
 
+    @staticmethod
+    def _verifiedTlsContext():
+        """A VERIFYING SSL context that works on TD's bundled Python.
+
+        macOS's bundled Python has no default CA path (Windows uses the
+        OS store), so HTTPS from TD failed CERTIFICATE_VERIFY_FAILED
+        there. certifi ships with TD (a requests dependency); load it IN
+        ADDITION to system defaults. Never disables verification.
+        """
+        import ssl
+        context = ssl.create_default_context()
+        try:
+            import certifi
+            context.load_verify_locations(cafile=certifi.where())
+        except Exception:
+            pass  # the OS store may already suffice (Windows)
+        return context
+
     def _docsWeb(self, query):
         try:
+            tls = self._verifiedTlsContext()
             headers = {'User-Agent': 'Embody-Envoy-get_docs'}
             search_params = urllib.parse.urlencode({
                 'action': 'query',
@@ -3695,7 +3714,8 @@ class EnvoyMCPServer:
             })
             search_url = 'https://docs.derivative.ca/api.php?' + search_params
             request = urllib.request.Request(search_url, headers=headers)
-            with urllib.request.urlopen(request, timeout=8) as response:
+            with urllib.request.urlopen(request, timeout=8,
+                                        context=tls) as response:
                 data = json.loads(response.read().decode('utf-8', errors='replace'))
             results = data.get('query', {}).get('search', [])
             if not results:
@@ -3712,7 +3732,8 @@ class EnvoyMCPServer:
             })
             parse_url = 'https://docs.derivative.ca/api.php?' + parse_params
             request = urllib.request.Request(parse_url, headers=headers)
-            with urllib.request.urlopen(request, timeout=8) as response:
+            with urllib.request.urlopen(request, timeout=8,
+                                        context=tls) as response:
                 data = json.loads(response.read().decode('utf-8', errors='replace'))
             html_src = data.get('parse', {}).get('text', {}).get('*')
             if html_src is None:
