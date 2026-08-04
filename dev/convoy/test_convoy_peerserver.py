@@ -12,6 +12,7 @@ import json
 import socket
 import ssl
 import threading
+import time
 
 import pytest
 
@@ -145,7 +146,15 @@ def test_an_unadmitted_peer_cannot_hand_off_work(tmp_path):
         # the exact sentinel is timing-dependent) -- but NEVER a success.
         assert not (isinstance(result, dict) and result.get("ok"))
         # THE property, AFFIRMATIVE and OBSERVED ON THE TARGET (24.7): B
-        # audited the handshake refusal, and nothing was enqueued.
+        # audited the handshake refusal, and nothing was enqueued. POLLED,
+        # not asserted immediately: the client's refusal returns before
+        # B's accept thread finishes writing the audit record on a loaded
+        # runner (flaked on CI 2026-08-04).
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            if any(e == "peer_handshake_refused" for e, _ in m.audit_events):
+                break
+            time.sleep(0.02)
         assert any(e == "peer_handshake_refused" for e, _ in m.audit_events)
         with m.b.lock:
             assert m.b.db.state_counts().get("queued", 0) == 0

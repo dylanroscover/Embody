@@ -131,6 +131,7 @@ def test_post_sends_a_body():
 class _FakeBody:
     def __init__(self, text): self._text = text.encode()
     def read(self): return self._text
+    def close(self): pass  # urllib closes real bodies; the double must too
 
 
 # -- identity confirmation before the token (pid-reuse defense) -----

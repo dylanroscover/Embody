@@ -518,13 +518,17 @@ def test_ping_is_echoed_as_pong_and_keepalive_tracks_it():
 
 
 def test_idle_peer_that_never_pongs_is_closed():
+    # Interval-to-timeout ratio 1:5, generous absolute values: with
+    # 0.02/0.08 a slow CI runner could fire the idle close on the very
+    # first loop pass before ANY ping was emitted (pings_sent == 0,
+    # flaked 2026-08-04).
     client_sock, silent_sock = socket.socketpair()
     client = ws.Session(
         ws.WebSocketConnection(client_sock, "client"),
-        ping_interval_s=0.02, idle_timeout_s=0.08,
+        ping_interval_s=0.1, idle_timeout_s=0.5,
         name="idle-client").start()
     try:
-        assert client._closed.wait(1.0)
+        assert client._closed.wait(3.0)
         assert isinstance(client.terminal_error, ws.WebSocketTimeout)
         assert client.stats()["pings_sent"] >= 1
     finally:

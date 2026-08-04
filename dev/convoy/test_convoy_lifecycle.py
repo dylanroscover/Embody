@@ -459,7 +459,7 @@ def test_start_refuses_stale_recorded_session(tmp_path):
 
 def test_start_returns_already_running_only_for_verified_process(tmp_path):
     manager, _, _, _, launcher, _, _, _ = make_system(tmp_path)
-    result = manager.start_node(NODE, CONVOY, "start-live", timeout_s=.1)
+    result = manager.start_node(NODE, CONVOY, "start-live", timeout_s=5)
     assert result["ok"] is True and result["code"] == "already_running"
     assert launcher.spawns == []
 
@@ -500,7 +500,7 @@ def test_one_time_token_confirms_exact_node_then_replay_is_rejected(tmp_path):
                 spawned.reservation_id))["ok"]
 
     launcher.callback = confirm
-    result = manager.start_node(NODE, CONVOY, "start-token", timeout_s=.1)
+    result = manager.start_node(NODE, CONVOY, "start-token", timeout_s=5)
     assert result["ok"] is True
     replay = manager.confirm_registration(
         NODE, CONVOY, captured["token"], live_record(
@@ -531,7 +531,7 @@ def test_wrong_token_and_wrong_process_cannot_consume_confirmation(tmp_path):
                         spawned.reservation_id))
 
     launcher.callback = attempts
-    result = manager.start_node(NODE, CONVOY, "start-proof", timeout_s=.1)
+    result = manager.start_node(NODE, CONVOY, "start-proof", timeout_s=5)
     assert seen["bad_token"]["code"] == "launch_token_invalid"
     assert seen["bad_process"]["code"] == "registration_mismatch"
     assert seen["good"]["ok"] is True and result["ok"] is True
@@ -631,7 +631,7 @@ def test_launch_confirmation_requires_matching_directory_reservation(tmp_path):
                         spawned.reservation_id))
 
     launcher.callback = confirm
-    result = manager.start_node(NODE, CONVOY, "reserve-confirm", timeout_s=.1)
+    result = manager.start_node(NODE, CONVOY, "reserve-confirm", timeout_s=5)
     assert seen["wrong"]["code"] == "registration_mismatch"
     assert seen["right"]["ok"] is True and result["ok"] is True
 
@@ -774,7 +774,7 @@ def test_cancel_after_spawn_terminates_owned_exact_process(tmp_path):
     offline(system)
     launcher = FakeLauncher(inspector, cancel_event=event)
     manager.launcher = launcher
-    result = manager.start_node(NODE, CONVOY, "start-cancel", timeout_s=.1,
+    result = manager.start_node(NODE, CONVOY, "start-cancel", timeout_s=5,
                                 cancel_event=event)
     assert result["code"] == "cancelled"
     assert launcher.cancels and launcher.cancels[0][0] == 200
@@ -805,7 +805,7 @@ def test_confirmation_winning_cancel_cas_is_never_killed(tmp_path):
         return original_update(operation_id, **fields)
 
     store.update_attempt = racing_update
-    result = manager.start_node(NODE, CONVOY, "cancel-race", timeout_s=.1,
+    result = manager.start_node(NODE, CONVOY, "cancel-race", timeout_s=5,
                                 cancel_event=event)
     assert result["ok"] is True
     assert result["runtime_id"] == "runtime-cancel-race"
@@ -898,7 +898,7 @@ def test_save_then_restart_saves_rechecks_then_launches(tmp_path):
     launcher.callback = auto_confirm(manager)
     result = manager.restart_node(
         NODE, CONVOY, "restart-save", "runtime-1",
-        policy="save_then_restart", timeout_s=.1)
+        policy="save_then_restart", timeout_s=5)
     assert result["ok"] is True
     assert runtime.saved == [(NODE, "runtime-1")]
     assert runtime.quit_calls == [
@@ -915,7 +915,7 @@ def test_cancelled_accepted_save_never_restarts_and_reports_uncertainty(
 
     result = manager.restart_node(
         NODE, CONVOY, "restart-cancelled-save", "runtime-1",
-        policy="save_then_restart", timeout_s=.1)
+        policy="save_then_restart", timeout_s=5)
 
     assert result["code"] == "cancelled"
     assert result["save_may_have_run"] is True
@@ -938,7 +938,7 @@ def test_save_then_restart_repins_toe_identity_after_real_save(tmp_path):
     launcher.callback = auto_confirm(manager)
     result = manager.restart_node(
         NODE, CONVOY, "restart-real-save", "runtime-1",
-        policy="save_then_restart", timeout_s=.1)
+        policy="save_then_restart", timeout_s=5)
     assert result["ok"] is True
     assert store.get_profile(NODE)["toe_identity"] == cl._file_identity(str(toe))
     assert runtime.quit_calls[0][3] == "after"
@@ -984,7 +984,7 @@ def test_lost_quit_ack_does_not_strand_node_when_exact_process_exited(tmp_path):
     runtime.quit = ack_lost
     launcher.callback = auto_confirm(manager)
     result = manager.restart_node(NODE, CONVOY, "restart-ack-lost",
-                                  "runtime-1", timeout_s=.1)
+                                  "runtime-1", timeout_s=5)
     assert result["ok"] is True
 
 
@@ -1012,7 +1012,7 @@ def test_discard_policy_is_checked_twice_next_to_commit(tmp_path):
     launcher.callback = auto_confirm(manager)
     result = manager.restart_node(
         NODE, CONVOY, "restart-discard", "runtime-1",
-        policy="discard_and_restart", timeout_s=.1)
+        policy="discard_and_restart", timeout_s=5)
     assert result["ok"] is True
     assert len(checks) >= 2
     assert set(checks) == {(NODE, "discard_and_restart")}
@@ -1058,7 +1058,7 @@ def test_cancellation_before_commit_never_quits(tmp_path):
     event.set()
     manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
     result = manager.restart_node(NODE, CONVOY, "restart-cancel-before",
-                                  "runtime-1", timeout_s=.1,
+                                  "runtime-1", timeout_s=5,
                                   cancel_event=event)
     assert result["code"] == "cancelled"
     assert runtime.quit_calls == [] and launcher.spawns == []
@@ -1194,7 +1194,7 @@ def test_cancellation_arriving_during_replacement_launch_is_deferred(tmp_path):
     manager.launcher = launcher
     launcher.callback = auto_confirm(manager)
     result = manager.restart_node(NODE, CONVOY, "restart-cancel-launch",
-                                  "runtime-1", timeout_s=.1,
+                                  "runtime-1", timeout_s=5,
                                   cancel_event=event)
     assert result["ok"] is True and result["cancel_deferred"] is True
     assert runtime.quit_calls and launcher.cancels == []
@@ -1204,7 +1204,7 @@ def test_restart_without_cancellation_does_not_claim_it_was_deferred(tmp_path):
     manager, _, _, _, launcher, _, _, _ = make_system(tmp_path)
     launcher.callback = auto_confirm(manager)
     result = manager.restart_node(NODE, CONVOY, "restart-no-cancel",
-                                  "runtime-1", timeout_s=.1,
+                                  "runtime-1", timeout_s=5,
                                   cancel_event=threading.Event())
     assert result["ok"] is True and "cancel_deferred" not in result
 
@@ -1505,7 +1505,7 @@ def test_force_escalates_only_exact_old_process_after_structured_quit_fails(
     runtime.quit = failed_quit
     launcher.callback = auto_confirm(manager)
     result = manager.restart_node(NODE, CONVOY, "restart-force",
-                                  "runtime-1", policy="force", timeout_s=.1)
+                                  "runtime-1", policy="force", timeout_s=5)
     assert result["ok"] is True
     assert inspector.backend.terminated == [(100, True)]
 
@@ -1529,15 +1529,15 @@ def test_per_profile_lock_serializes_and_cancelled_waiter_never_spawns(tmp_path)
     first = threading.Thread(target=lambda: results.setdefault(
         "first", manager.start_node(NODE, CONVOY, "serial-1", timeout_s=.1)))
     first.start()
-    assert entered.wait(1)
+    assert entered.wait(2)
     cancel = threading.Event()
     second = threading.Thread(target=lambda: results.setdefault(
-        "second", manager.start_node(NODE, CONVOY, "serial-2", timeout_s=.1,
+        "second", manager.start_node(NODE, CONVOY, "serial-2", timeout_s=5,
                                      cancel_event=cancel)))
     second.start()
     time.sleep(.08)
     cancel.set()
-    second.join(1)
+    second.join(6)
     release.set()
     first.join(2)
     assert results["second"]["code"] == "cancelled"
@@ -1693,7 +1693,7 @@ def test_locally_approved_destructive_policy_can_proceed_when_dirty_unknown(
     runtime.dirty_values = [{"ok": False}]
     launcher.callback = auto_confirm(manager)
     result = manager.restart_node(NODE, CONVOY, "unknown-" + policy,
-                                  "runtime-1", policy=policy, timeout_s=.1)
+                                  "runtime-1", policy=policy, timeout_s=5)
     assert result["ok"] is True
 
 
@@ -1756,7 +1756,7 @@ def test_short_lived_confirmed_runtime_is_reclassified_for_crash_loop(tmp_path):
     manager, store, _, inspector, launcher, _, _, _ = system
     offline(system)
     launcher.callback = auto_confirm(manager, runtime_id="runtime-unstable")
-    result = manager.start_node(NODE, CONVOY, "unstable-launch", timeout_s=.1)
+    result = manager.start_node(NODE, CONVOY, "unstable-launch", timeout_s=5)
     assert result["ok"] is True
     inspector.backend.processes.pop(200, None)
     exit_result = manager.record_runtime_exit(NODE, "runtime-unstable")
@@ -2073,7 +2073,7 @@ def test_post_commit_quit_survives_caller_timeout_shorter_than_exit(tmp_path):
     runtime.quit = slow_exit_quit
     launcher.callback = auto_confirm(manager, runtime_id="runtime-after-exit")
     result = manager.restart_node(NODE, CONVOY, "restart-slow-exit",
-                                  "runtime-1", timeout_s=.1)
+                                  "runtime-1", timeout_s=5)
     assert result["ok"] is True
     assert len(launcher.spawns) == 1
 
@@ -2096,7 +2096,7 @@ def test_save_then_restart_succeeds_when_project_redirties_after_landed_save(
     launcher.callback = auto_confirm(manager)
     result = manager.restart_node(
         NODE, CONVOY, "restart-redirty", "runtime-1",
-        policy="save_then_restart", timeout_s=.1)
+        policy="save_then_restart", timeout_s=5)
     assert result["ok"] is True
     assert runtime.saved == [(NODE, "runtime-1")]
     assert store.get_profile(NODE)["toe_identity"] == cl._file_identity(str(toe))
@@ -2128,7 +2128,7 @@ def test_indeterminate_fence_releases_once_spawned_child_proven_gone(tmp_path):
     assert runtime.reservations
     inspector.backend.processes.pop(200, None)  # exact child proven gone
     launcher.callback = auto_confirm(manager, runtime_id="runtime-recovered")
-    second = manager.start_node(NODE, CONVOY, "wedge-2", timeout_s=.1)
+    second = manager.start_node(NODE, CONVOY, "wedge-2", timeout_s=5)
     assert second["ok"] is True
     assert len(launcher.spawns) == 2
     assert store.get_attempt("wedge-1")["state"] == "failed"

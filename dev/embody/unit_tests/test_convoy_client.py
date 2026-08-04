@@ -128,6 +128,11 @@ class _FakeBody:
     def read(self):
         return self._text
 
+    def close(self):
+        # urllib closes real response bodies; a double without close()
+        # raises AttributeError from teardown paths on some runners.
+        pass
+
 
 class _FakeKernel32:
     """Just enough of kernel32 to drive both OpenProcess outcomes on any
