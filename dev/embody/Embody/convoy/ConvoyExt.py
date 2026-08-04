@@ -3039,6 +3039,12 @@ class ConvoyExt:
             # it when no signed managed runtime is installed. Resolved on the
             # main thread here; None if the venv is not built or is missing.
             'venv_python': self._convoyVenvPython(),
+            # Every interpreter worth PROVING, best first. The worker probes
+            # each (spawning it to import cryptography and prove TLS 1.3) and
+            # uses the first that passes -- TD's bundled Python is not always
+            # the one that can, notably on Apple Silicon where its venv's
+            # cryptography .dylib would not dlopen at all.
+            'runtime_candidates': self._convoyRuntimeCandidates(),
         }
 
     def _convoyVenvPython(self):
@@ -3686,6 +3692,41 @@ class ConvoyExt:
     # project -- because it describes what Convoy does on THIS MACHINE, and
     # re-asking on every new project is noise the user has already read.
     CONSENT_MARKER = 'consent.json'
+
+    def _convoyRuntimeCandidates(self):
+        """Interpreters worth PROVING, best first. MAIN THREAD.
+
+        Nothing here is a requirement -- it is a list of things to try. The
+        worker probes each by spawning it and making it genuinely import
+        cryptography and prove TLS 1.3, then uses the first that passes. So a
+        machine with only Embody's own venv works (Windows), and so does a
+        machine where that venv cannot load its crypto but another interpreter
+        can (Apple Silicon, where the venv built from TouchDesigner's bundled
+        Python could not dlopen cryptography's arm64 .dylib at all).
+
+        Embody's venv comes first because it is ours and carries our pinned
+        crypto floor. A system python3 follows because macOS ships one and it
+        is frequently the interpreter that actually works there. Resolved
+        through PATH rather than hardcoded, so nothing assumes a layout.
+        """
+        candidates = []
+        venv = self._convoyVenvPython()
+        if venv:
+            candidates.append(venv)
+        try:
+            import shutil
+            for name in ('python3', 'python'):
+                found = shutil.which(name)
+                # Skip Windows' App Execution Alias: it is a stub that can
+                # open the Microsoft Store instead of running Python, which
+                # is not something an install should do behind the user.
+                if found and 'WindowsApps' in found:
+                    continue
+                if found and found not in candidates:
+                    candidates.append(found)
+        except Exception:
+            pass
+        return candidates
 
     def _installConsentPath(self):
         try:
@@ -4625,6 +4666,31 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                      runner=None):
             return installer.probe_runtime(
                 interp, platform, architecture, runner=runner)
+        # PROVE the interpreter, do not assume it. On Apple Silicon the venv
+        # built from TouchDesigner's bundled Python could import nothing:
+        # cryptography's Rust .dylib refused to dlopen (architecture
+        # mismatch), so a venv that pip had just filled successfully was
+        # useless to the daemon. Probing is the only honest test -- it spawns
+        # the candidate and makes it actually import cryptography and prove
+        # TLS 1.3. Take the first that passes; a system python3 is frequently
+        # the one that works when TD's own does not.
+        rejected = []
+        for candidate in ([interpreter] + [
+                c for c in (ctx.get('runtime_candidates') or ())
+                if c != interpreter]):
+            probe = verifier(ctx['data_dir'], candidate,
+                             ctx['platform'], None, None)
+            if isinstance(probe, dict) and probe.get('ok'):
+                interpreter = candidate
+                break
+            rejected.append('%s (%s)' % (
+                candidate, (probe or {}).get('reason') or 'probe failed'))
+        else:
+            return {'ok': False, 'action': 'install',
+                    'reason': 'no_usable_runtime',
+                    'detail': 'no interpreter on this machine could load '
+                              'cryptography and TLS 1.3. Tried: '
+                              + '; '.join(rejected[:4])}
     outcome = installer.install(
         ctx['data_dir'], ctx['version'], modules, interpreter,
         platform=ctx['platform'], home=ctx['home'], uid=ctx['uid'],
