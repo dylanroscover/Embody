@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1096
-generator: Embody/6.0.207
+build: 1097
+generator: Embody/6.0.208
 td_build: 099.2025.33070
-source_file: Embody-6.208.toe
-exported_at: '2026-08-04T21:10:03Z'
+source_file: Embody-6.209.toe
+exported_at: '2026-08-04T21:57:28Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -514,20 +514,20 @@ custom_pars:
     sequence: Convoynodes
   - name: Convoyinstallhost
     style: Pulse
-    label: Repair Host App
+    label: Repair Convoy App
     startSection: true
     help: Reinstall or upgrade the background app for YOUR user account. Enabling Convoy installs it automatically; use this to repair a broken install or apply an update.
   - name: Convoystarthost
     style: Pulse
-    label: Start Host App
+    label: Start Convoy App
     help: Start the installed host app now, without waiting for the next login.
   - name: Convoystophost
     style: Pulse
-    label: Stop Host App
-    help: Stop the host app and keep it stopped. This disables the supervisor first -- otherwise it would restart within a minute and the button would look broken. Jobs already queued stay queued. Use Start Host App to resume.
+    label: Stop Convoy App
+    help: Stop the host app and keep it stopped. This disables the supervisor first -- otherwise it would restart within a minute and the button would look broken. Jobs already queued stay queued. Use Start Convoy App to resume.
   - name: Convoyuninstallhost
     style: Pulse
-    label: Uninstall Host App
+    label: Uninstall Convoy App
     help: Remove the host app and its login registration. Shows you exactly what will be removed and what will be KEPT before doing anything -- this machine's host identity and its job history are kept, so re-installing later rejoins the same convoy rather than becoming a new host.
   UI:
   - name: Openmanager
@@ -817,7 +817,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.207
+    value: 6.0.208
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -906,6 +906,7 @@ sequences:
   - {}
   - {}
   Convoynodes:
+  - {}
   - {}
   - {}
   - {}
