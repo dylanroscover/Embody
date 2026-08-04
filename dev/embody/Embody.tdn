@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1092
+build: 1093
 generator: Embody/6.0.204
 td_build: 099.2025.33070
-source_file: Embody-6.204.toe
-exported_at: '2026-08-04T18:25:57Z'
+source_file: Embody-6.205.toe
+exported_at: '2026-08-04T18:30:04Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -1417,48 +1417,48 @@ operators:
   annotations:
   - name: envoy_bot_arm_l
     mode: networkbox
-    position: [2112, -269]
+    position: [1860, 251]
     size: [10, 26]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_arm_r
     mode: networkbox
-    position: [2112, -269]
+    position: [1860, 251]
     size: [10, 26]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_body
     mode: networkbox
-    position: [2112, -269]
+    position: [1860, 251]
     size: [30, 34]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_eye_l
     mode: networkbox
-    position: [2112, -269]
+    position: [1860, 251]
     size: [10, 10]
     color: [0.0, 0.0, 0.0]
   - name: envoy_bot_eye_r
     mode: networkbox
-    position: [2112, -269]
+    position: [1860, 251]
     size: [10, 10]
     color: [0.0, 0.0, 0.0]
   - name: envoy_bot_head
     mode: networkbox
-    position: [2112, -269]
+    position: [1860, 251]
     size: [34, 26]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_leg_l
     mode: networkbox
-    position: [2112, -269]
+    position: [1860, 251]
     size: [11, 24]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_leg_r
     mode: networkbox
-    position: [2112, -269]
+    position: [1860, 251]
     size: [11, 24]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_speech
     mode: annotate
     title: Embot
-    position: [2112, -269]
+    position: [1860, 251]
     size: [185, 74]
     color: [0.12, 0.12, 0.17]
     backAlpha: 0.95
