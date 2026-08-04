@@ -22,10 +22,10 @@ There is no invitation code or Create/Join decision. Enabled nodes find the Conv
 | Control | What it does |
 |---|---|
 | **Status** | One combined readout: a blocking or in-flight host-app state (`Not installed`, `Installing...`, `Needs repair ...`) wins; otherwise the node's own registration state shows (`Connected`, `Waiting for project save`, ...) |
-| **Repair Host App** | Reinstalls or upgrades the per-user app. Enabling Convoy installs it automatically, so this pulse is the repair and update path |
-| **Start Host App** | Starts the installed app now |
-| **Stop Host App** | Stops it and disables automatic restart; queued job records are retained |
-| **Uninstall Host App** | Removes the app and login registration while retaining the local host identity, job history, the host log, and (on macOS) the dedicated Convoy runtime venv, so a later reinstall rejoins as the same host and reuses the runtime. The confirmation names each retained path before anything is removed |
+| **Repair Convoy App** | Reinstalls or upgrades the per-user app. Enabling Convoy installs it automatically, so this pulse is the repair and update path |
+| **Start Convoy App** | Starts the installed app now |
+| **Stop Convoy App** | Stops it and disables automatic restart; queued job records are retained |
+| **Uninstall Convoy App** | Removes the app and login registration while retaining the local host identity, job history, the host log, and (on macOS) the dedicated Convoy runtime venv, so a later reinstall rejoins as the same host and reuses the runtime. The confirmation names each retained path before anything is removed |
 
 Enabling Convoy installs and starts the host app automatically, because Convoy cannot reach the LAN without it. The consent is carried by the one-time Enable Convoy confirmation (or the wizard's Convoy step), which discloses that the app runs at login, whether or not TouchDesigner is open. The pulses above remain for repair, upgrade, deliberate stop/start, and uninstall.
 
@@ -33,16 +33,16 @@ The host-app portion of **Status** uses these user-facing states:
 
 | Readout | What to do |
 |---|---|
-| `Not installed` | Enable Convoy (or press **Repair Host App**). The app is plain Python; on Windows it normally runs under Embody's own managed Python environment with nothing extra to download. If that environment fails its check, the installer repairs it or builds a dedicated Convoy venv, which may download the pinned cryptography package once (on macOS this venv is built from Homebrew's `python3` -- see below) |
+| `Not installed` | Enable Convoy (or press **Repair Convoy App**). The app is plain Python; on Windows it normally runs under Embody's own managed Python environment with nothing extra to download. If that environment fails its check, the installer repairs it or builds a dedicated Convoy venv, which may download the pinned cryptography package once (on macOS this venv is built from Homebrew's `python3` -- see below) |
 | `Checking...`, `Installing...`, `Installed -- starting...` | Wait for the current local action to finish. If an action ever reports "another Convoy host action is still running" long after the work should have finished, simply retry: a stuck request self-heals -- a finished result is delivered on the next attempt, and a truly dead action releases its slot within about 15 minutes. No TouchDesigner restart is needed |
 | `Running ...` | Ready; the version and process ID may also be shown |
-| `Installed -- not running (restarts within a minute)` | On Windows, the scheduled supervisor may take up to a minute; macOS LaunchAgent recovery is normally prompt. You can press **Start Host App** immediately on either platform. |
-| `Installed -- stopped` | Press **Start Host App** when you want Convoy available again |
-| `Installed -- no supervisor (use Repair Host App)` | Run **Repair Host App** to repair login startup |
-| `Needs repair -- Python not found (reinstall)` | The Python the app was installed against is gone. Run **Repair Host App** to re-resolve the runtime; it is also the repair path if Embody's Python environment was rebuilt |
+| `Installed -- not running (restarts within a minute)` | On Windows, the scheduled supervisor may take up to a minute; macOS LaunchAgent recovery is normally prompt. You can press **Start Convoy App** immediately on either platform. |
+| `Installed -- stopped` | Press **Start Convoy App** when you want Convoy available again |
+| `Installed -- no supervisor (use Repair Convoy App)` | Run **Repair Convoy App** to repair login startup |
+| `Needs repair -- Python not found (reinstall)` | The Python the app was installed against is gone. Run **Repair Convoy App** to re-resolve the runtime; it is also the repair path if Embody's Python environment was rebuilt |
 | `Running ... -- installed by a newer Embody` or `Installed ... -- installed by a newer Embody` | Do not downgrade it from an older Embody; align versions first |
 | `Managed by another supervisor` | Use the studio or Owlette process that owns startup, rather than competing with it |
-| `Install failed -- see log` | Review the Embody log, then retry **Repair Host App** |
+| `Install failed -- see log` | Review the Embody log, then retry **Repair Convoy App** |
 | `Consent required -- enable Convoy again` | The first-enable confirmation was declined or never answered; toggle **Enable Convoy** on again to see it |
 
 If the log says `no interpreter on this machine could load cryptography and TLS 1.3`, the install probed every Python it could find and names each one with why it failed. Three causes are distinguished:
@@ -98,7 +98,7 @@ Work through this list on both computers:
 6. Wait for automatic reconnect; do not repeatedly toggle permissions while a node is converging.
 7. If several established Convoys are reported, stop and use the explicit local recovery path instead of deleting random state.
 
-If the host app was just updated, run **Repair Host App** once more as the repair path, then **Start Host App**. Do not manually copy host identities or settings between computers.
+If the host app was just updated, run **Repair Convoy App** once more as the repair path, then **Start Convoy App**. Repair works while the host app is running: it asks the old daemon to exit gracefully, waits, and replaces it -- no manual stop needed. Do not manually copy host identities or settings between computers.
 
 ## When a node keeps going offline
 
@@ -200,11 +200,11 @@ Project-saved artifacts are not counted against this quota and are never removed
 
 ## Repair, stop, and uninstall
 
-**Repair Host App** is also the repair action. It should preserve the computer's Convoy identity and durable records while refreshing the installed runtime.
+**Repair Convoy App** is also the repair action. It should preserve the computer's Convoy identity and durable records while refreshing the installed runtime.
 
-**Stop Host App** intentionally prevents its login supervisor from immediately starting it again. Existing queued job records remain. Press **Start Host App** to resume.
+**Stop Convoy App** intentionally prevents its login supervisor from immediately starting it again. Existing queued job records remain. Press **Start Convoy App** to resume.
 
-**Uninstall Host App** removes the background app and login registration but retains the local host identity, job history, the host log, and (on macOS) the dedicated Convoy runtime venv, so a later reinstall rejoins as the same host and reuses the already-built runtime without a rebuild. Incomplete or unrecognized payload directories are named but never deleted. The confirmation names each retained path before anything is removed. Explicitly saved project artifacts are project files and are not part of host-app cache cleanup.
+**Uninstall Convoy App** removes the background app and login registration but retains the local host identity, job history, the host log, and (on macOS) the dedicated Convoy runtime venv, so a later reinstall rejoins as the same host and reuses the already-built runtime without a rebuild. Incomplete or unrecognized payload directories are named but never deleted. The confirmation names each retained path before anything is removed. Explicitly saved project artifacts are project files and are not part of host-app cache cleanup.
 
 ## Platform validation status
 

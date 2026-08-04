@@ -71,7 +71,7 @@ VOCABULARY = (
     'Installed -- starting...',
     'Installed -- not running (restarts within a minute)',
     'Installed -- stopped',
-    'Installed -- no supervisor (use Repair Host App)',
+    'Installed -- no supervisor (use Repair Convoy App)',
     'Needs repair -- Python not found (reinstall)',
     'Managed by another supervisor',
     'Install failed -- see log',
@@ -189,11 +189,26 @@ class StubInstaller:
 
     # -- writes (recorded, never performed) --------------------------
     def install(self, data_dir, version, modules, interpreter, **kw):
+        # Exercise the graceful seams like the real install() does on a
+        # repair-over-running: without callable shutdown/is_running the
+        # darwin field failure (bootstrap EIO at a loaded label) comes
+        # back with every test still green.
+        shutdown = kw.get('shutdown')
+        is_running = kw.get('is_running')
+        observed_running = None
+        if callable(is_running):
+            observed_running = bool(is_running())
+            if observed_running and callable(shutdown):
+                shutdown()
         self.calls.append(('install', {'data_dir': data_dir,
                                        'version': version,
                                        'modules': sorted(modules),
                                        'interpreter': interpreter,
-                                       'supervisor': kw.get('supervisor')}))
+                                       'supervisor': kw.get('supervisor'),
+                                       'graceful_seams': (
+                                           callable(shutdown)
+                                           and callable(is_running)),
+                                       'observed_running': observed_running}))
         return dict(self.install_result)
 
     def start(self, **kw):
@@ -322,7 +337,7 @@ class TestHostStatusVocabulary(EmbodyTestCase):
              'Installed -- not running (restarts within a minute)'),
             ({'state': self.install.STATE_STOPPED}, 'Installed -- stopped'),
             ({'state': self.install.STATE_NO_SUPERVISOR},
-             'Installed -- no supervisor (use Repair Host App)'),
+             'Installed -- no supervisor (use Repair Convoy App)'),
             ({'state': self.install.STATE_NEEDS_REPAIR_PYTHON},
              'Needs repair -- Python not found (reinstall)'),
             ({'state': self.install.STATE_EXTERNAL_SUPERVISOR},
@@ -507,6 +522,12 @@ class TestInstallOrchestration(ConvoyHostBase):
                          'a registered supervisor is started immediately -- '
                          'otherwise the first launch waits for the next '
                          'repetition and Install reads as broken')
+        self.assertTrue(sent['graceful_seams'],
+                        'install must receive callable shutdown/is_running '
+                        '-- without them a repair over a RUNNING daemon '
+                        'bootstraps into a loaded label (macOS EIO 5, field '
+                        'failure 2026-08-04) or silently leaves old code '
+                        'running (Windows)')
         self.assertEqual(self.host_texts[0], 'Installing...')
 
     def test_install_asks_first_and_names_what_it_registers(self):

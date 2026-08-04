@@ -3513,6 +3513,32 @@ def _await_exit(is_running, timeout_s=EXIT_WAIT_S, sleep=None, now=None):
         sleep(EXIT_POLL_S)
 
 
+def _await_unregistered(run, platform, uid=None, timeout_s=EXIT_WAIT_S,
+                        sleep=None, now=None):
+    """Poll launchctl until the agent label is no longer registered.
+
+    bootout returns before launchd has actually torn the job down, and
+    bootstrapping while the label is still loaded fails with EIO(5) --
+    the field failure this exists for. `launchctl print` on the label
+    exits non-zero once it is gone. Bounded and injectable like
+    _await_exit; True when the label was observed gone.
+    """
+    sleep = sleep or time.sleep
+    now = now or time.time
+    deadline = now() + max(0.0, timeout_s)
+    while True:
+        try:
+            code, _out, _err = run(
+                supervisor_argv("status", platform, uid=uid))
+        except Exception:
+            return False
+        if code != 0:
+            return True
+        if now() >= deadline:
+            return False
+        sleep(EXIT_POLL_S)
+
+
 def _ok(**fields):
     out = {"ok": True}
     out.update(fields)
@@ -3551,7 +3577,8 @@ def install(data_dir, version, modules, interpreter, platform=None,
             runner=None, home=None, drain_interval=None, installed_by=None,
             supervisor=None, now=None, user=None, env=None, uid=None,
             runtime_verifier=None, runtime_runner=None, architecture=None,
-            runtime_catalog=None, runtime_asset_root=None):
+            runtime_catalog=None, runtime_asset_root=None,
+            shutdown=None, is_running=None, sleep=None):
     """Write the payload, write the launcher, register the supervisor,
     record the install. NEVER RAISES -- it is called from a worker.
 
@@ -3567,6 +3594,16 @@ def install(data_dir, version, modules, interpreter, platform=None,
     `supervisor` forces the kind; the default follows the platform.
     SUPERVISOR_EXTERNAL writes everything and registers NOTHING (A-36:
     never two supervisors).
+
+    REPAIR OVER A RUNNING DAEMON is this same function (the Repair Host
+    App button re-runs a full install by design), so when `shutdown` /
+    `is_running` are supplied and the old daemon is alive it is asked to
+    exit gracefully and waited for -- otherwise (darwin) launchd's label
+    stays loaded and bootstrap fails with EIO(5) (field failure
+    2026-08-04), and (win32) the old process keeps running the old code
+    even after the task definition is force-rewritten. The darwin branch
+    additionally boots the loaded label out and WAITS for launchd to
+    actually drop it before bootstrapping.
     """
     platform = platform or sys.platform
     run = runner or run_command
@@ -3648,6 +3685,32 @@ def install(data_dir, version, modules, interpreter, platform=None,
         # refusal is testable -- without it a test could only fall
         # through to the real environment, which always HAS a username.
         account = user or current_user_account(platform, env)
+        # A repair over a RUNNING daemon: ask the old one to exit and
+        # wait for it, so the register below replaces it instead of
+        # racing it. Graceful only -- a shutdown that cannot complete
+        # falls through to the platform mechanics (darwin additionally
+        # boots the label out below). Gated on the branch preconditions
+        # (win32 account, darwin home): a repair the branch would REFUSE
+        # anyway must not stop a healthy daemon first. The step is
+        # honest: 'stopped_for_repair' only when the exit was observed,
+        # 'stop_timeout' when the old daemon would not go.
+        preconditions_ok = (
+            (kind == SUPERVISOR_TASK and bool(account))
+            or (kind == SUPERVISOR_AGENT and bool(home)))
+        if preconditions_ok and shutdown is not None:
+            try:
+                alive = bool(is_running()) if is_running else False
+            except Exception:
+                alive = False
+            if alive:
+                try:
+                    shutdown()
+                except Exception:
+                    pass
+                if _await_exit(is_running, sleep=sleep):
+                    steps.append("stopped_for_repair")
+                else:
+                    steps.append("stop_timeout")
         if kind == SUPERVISOR_TASK:
             # Refuse BEFORE writing the XML rather than registering a
             # task for "any user": that is an administrator-only
@@ -3680,6 +3743,23 @@ def install(data_dir, version, modules, interpreter, platform=None,
             _atomic_write(agent, render_launch_agent_plist(
                 interpreter, launcher, data_dir))
             steps.append("plist")
+            # A LOADED LABEL CANNOT BE BOOTSTRAPPED: launchctl returns
+            # EIO(5) at a label that is already registered -- exactly
+            # what a repair over a live agent hits (field failure
+            # 2026-08-04: "Bootstrap failed: 5: Input/output error").
+            # So probe first; if loaded, disable (KeepAlive would
+            # resurrect the old daemon within seconds), boot it out, and
+            # WAIT for launchd to actually drop the label -- bootout
+            # returns before the teardown completes. The graceful
+            # shutdown above has already asked the daemon itself to
+            # exit when the caller could observe it.
+            code, _out, _err = run(
+                supervisor_argv("status", platform, uid=uid))
+            if code == 0:
+                run(supervisor_argv("disable", platform, uid=uid))
+                run(supervisor_argv("stop", platform, uid=uid))
+                _await_unregistered(run, platform, uid=uid, sleep=sleep)
+                steps.append("bootout")
             # ENABLE BEFORE BOOTSTRAP, and this is not belt-and-braces.
             # launchctl's disabled state is PERSISTENT, lives OUTSIDE the
             # plist, is keyed by the constant label, and survives boots.

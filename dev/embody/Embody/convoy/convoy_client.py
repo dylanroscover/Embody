@@ -1647,7 +1647,7 @@ def host_status_text(state):
     if name == HOST_STOPPED:
         return "Installed -- stopped"
     if name == HOST_NO_SUPERVISOR:
-        return "Installed -- no supervisor (use Repair Host App)"
+        return "Installed -- no supervisor (use Repair Convoy App)"
     if name == HOST_NEEDS_REPAIR_PYTHON:
         return "Needs repair -- Python not found (reinstall)"
     if name == HOST_NEWER_INSTALL:

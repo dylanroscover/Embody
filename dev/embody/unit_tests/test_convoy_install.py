@@ -211,6 +211,24 @@ class _Runner:
         return code, self.stdout, self.stderr
 
 
+def _launchctl_runner(loaded=False, **kw):
+    """A _Runner whose launchctl `print` answers whether the agent label
+    is loaded, and whose `bootout` unloads it -- the semantics install()
+    now depends on (a loaded label cannot be bootstrapped: EIO 5).
+    Everything else succeeds."""
+    state = {'loaded': loaded}
+
+    def rc(argv):
+        if argv and argv[0] == 'launchctl':
+            if argv[1] == 'print':
+                return 0 if state['loaded'] else 5
+            if argv[1] == 'bootout':
+                state['loaded'] = False
+        return 0
+
+    return _Runner(returncode=rc, **kw)
+
+
 def _approved_runtime(data_dir, interpreter, platform=None,
                       architecture=None, runner=None):
     """Bypass only for tests of installer behavior below the runtime gate.
@@ -3384,7 +3402,8 @@ class TestConvoyInstallActions(EmbodyTestCase):
         requirement there would be a Windows habit leaking across."""
         with _TempDir() as root:
             got = self._install(root, '6.0.171', _MODULES, MAC_PY,
-                                      platform='darwin', runner=_Runner(),
+                                      platform='darwin',
+                                      runner=_launchctl_runner(),
                                       home=os.path.join(root, 'home'),
                                       user=None)
             self.assertTrue(got['ok'], got)
@@ -3447,17 +3466,192 @@ class TestConvoyInstallActions(EmbodyTestCase):
         assertable here without a Mac."""
         with _TempDir() as root:
             home = os.path.join(root, 'home')
-            runner = _Runner()
+            runner = _launchctl_runner()
             got = self._install(root, '6.0.171', _MODULES, MAC_PY,
                                       platform='darwin', runner=runner,
                                       home=home, uid=501)
             self.assertTrue(got['ok'], got)
             self.assertTrue(os.path.isfile(
                 install_mod.plist_path(home, 'darwin')))
+            # The leading `print` is the loaded-label probe; on a fresh
+            # install the label is absent so no bootout runs.
             self.assertEqual([c[1] for c in runner.calls],
-                             ['enable', 'bootstrap'])
+                             ['print', 'enable', 'bootstrap'])
             self.assertIn('gui/501/tools.embody.convoy.host',
                           runner.calls[0])
+
+    def test_a_darwin_repair_over_a_loaded_agent_boots_it_out_first(self):
+        """The field failure (macOS 26, 2026-08-04): Repair Convoy App IS a
+        full install, and bootstrapping a still-loaded label fails with
+        EIO(5) -- 'Bootstrap failed: 5: Input/output error'. A loaded
+        label is now disabled (KeepAlive would resurrect the old daemon),
+        booted out, and WAITED for (bootout returns before launchd drops
+        the label) before the enable/bootstrap pair runs."""
+        with _TempDir() as root:
+            home = os.path.join(root, 'home')
+            runner = _launchctl_runner(loaded=True)
+            got = self._install(root, '6.0.171', _MODULES, MAC_PY,
+                                      platform='darwin', runner=runner,
+                                      home=home, uid=501)
+            self.assertTrue(got['ok'], got)
+            self.assertEqual(
+                [c[1] for c in runner.calls],
+                ['print', 'disable', 'bootout', 'print',
+                 'enable', 'bootstrap'])
+            self.assertIn('bootout', got['steps'])
+            self.assertIsNotNone(install_mod.read_installed(root, 'darwin'))
+
+    def test_a_darwin_repair_asks_the_running_daemon_to_exit_first(self):
+        """With graceful observers supplied (the ConvoyExt worker passes
+        the same shutdown/is_running pair stop() uses), a repair over a
+        RUNNING daemon asks it to exit and waits before touching launchd
+        -- bootout alone would be a hard kill mid-job."""
+        with _TempDir() as root:
+            home = os.path.join(root, 'home')
+            runner = _launchctl_runner(loaded=True)
+            order = []
+            alive = {'running': True}
+
+            def shutdown():
+                order.append('shutdown')
+                alive['running'] = False
+
+            def is_running():
+                return alive['running']
+
+            original = runner.__call__
+
+            def recording(argv, timeout_s=None):
+                order.append(argv[1] if argv[0] == 'launchctl' else argv[0])
+                return original(argv, timeout_s=timeout_s)
+
+            got = self._install(root, '6.0.171', _MODULES, MAC_PY,
+                                      platform='darwin', runner=recording,
+                                      home=home, uid=501,
+                                      shutdown=shutdown,
+                                      is_running=is_running)
+            self.assertTrue(got['ok'], got)
+            self.assertIn('stopped_for_repair', got['steps'])
+            self.assertEqual(order[0], 'shutdown',
+                             'the graceful exit precedes every launchctl call')
+
+    def test_a_darwin_bootstrap_that_still_fails_is_a_real_failure(self):
+        """With the label genuinely gone, a failing bootstrap is a real
+        register_failed -- the stderr reaches the caller verbatim."""
+        with _TempDir() as root:
+            home = os.path.join(root, 'home')
+
+            def rc(argv):
+                if argv[1] == 'print':
+                    return 5           # not loaded
+                if argv[1] == 'bootstrap':
+                    return 5
+                return 0
+
+            runner = _Runner(returncode=rc,
+                             stderr='Bootstrap failed: 5: Input/output '
+                                    'error')
+            got = self._install(root, '6.0.171', _MODULES, MAC_PY,
+                                      platform='darwin', runner=runner,
+                                      home=home, uid=501)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'register_failed')
+            self.assertIn('Input/output error', got['detail'])
+            self.assertIsNone(install_mod.read_installed(root, 'darwin'))
+
+    def test_a_windows_repair_asks_the_running_daemon_to_exit_first(self):
+        """schtasks /Create /F rewrites the DEFINITION of a running task,
+        but the old process keeps running the old code -- the same silent
+        staleness, without an error to notice. The graceful exit applies
+        on win32 too."""
+        with _TempDir() as root:
+            called = []
+            alive = {'running': True}
+
+            def shutdown():
+                called.append('shutdown')
+                alive['running'] = False
+
+            runner = _Runner()
+            original = runner.__call__
+
+            def recording(argv, timeout_s=None):
+                called.append(argv[0])
+                return original(argv, timeout_s=timeout_s)
+
+            got = self._install(root, '6.0.171', _MODULES, WIN_PY,
+                                platform='win32', runner=recording,
+                                user=WIN_USER,
+                                shutdown=shutdown,
+                                is_running=lambda: alive['running'])
+            self.assertTrue(got['ok'], got)
+            self.assertEqual(called[0], 'shutdown',
+                             'the graceful exit precedes the re-register')
+            self.assertIn('schtasks', called)
+            self.assertIn('stopped_for_repair', got['steps'])
+
+    def test_a_label_lingering_after_bootout_is_waited_for(self):
+        """bootout returns before launchd drops the label -- the settle
+        loop exists for exactly that window. Model it: `print` keeps
+        answering loaded for two polls after bootout, then the label is
+        gone and bootstrap proceeds."""
+        with _TempDir() as root:
+            home = os.path.join(root, 'home')
+            state = {'loaded': True, 'linger': 2}
+
+            def rc(argv):
+                if argv[0] != 'launchctl':
+                    return 0
+                if argv[1] == 'print':
+                    if not state['loaded']:
+                        return 5
+                    if state['linger'] <= 0:
+                        state['loaded'] = False
+                        return 5
+                    return 0
+                if argv[1] == 'bootout':
+                    state['linger'] = 2   # teardown is asynchronous
+                return 0
+
+            runner = _Runner(returncode=rc)
+            real_call = runner.__call__
+
+            def counting(argv, timeout_s=None):
+                if argv[0] == 'launchctl' and argv[1] == 'print' \
+                        and state['loaded']:
+                    state['linger'] -= 1
+                return real_call(argv, timeout_s=timeout_s)
+
+            got = self._install(root, '6.0.171', _MODULES, MAC_PY,
+                                      platform='darwin', runner=counting,
+                                      home=home, uid=501,
+                                      sleep=lambda s: None)
+            self.assertTrue(got['ok'], got)
+            prints = [c for c in runner.calls
+                      if c[0] == 'launchctl' and c[1] == 'print']
+            self.assertGreater(len(prints), 2,
+                               'the settle loop polled past the linger')
+            self.assertEqual(runner.calls[-1][1], 'bootstrap')
+
+    def test_await_unregistered_is_bounded_by_fake_time(self):
+        """A label that never unloads must not hang the install: the
+        settle poll gives up at its bound, on injected time."""
+        clock = {'t': 0.0}
+        sleeps = []
+
+        def now():
+            return clock['t']
+
+        def sleep(s):
+            sleeps.append(s)
+            clock['t'] += s
+
+        stuck = _Runner(returncode=0)   # `print` always says loaded
+        gone = install_mod._await_unregistered(
+            stuck, 'darwin', uid=501, timeout_s=1.0,
+            sleep=sleep, now=now)
+        self.assertFalse(gone)
+        self.assertTrue(sleeps, 'it polled before giving up')
 
     def test_a_windows_install_needs_no_enable_step(self):
         """schtasks /Create /F rewrites the whole definition including

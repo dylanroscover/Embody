@@ -94,6 +94,14 @@ from threading import Event
 _BARE_MODULE_NAME = re.compile(r"^[A-Za-z0-9._+-]+\.py$")
 
 
+# Distinct "not passed" marker for pre-resolved context fields: the
+# venv resolution legitimately RETURNS None (broken or absent venv,
+# never-saved project), and treating None as "not passed" made the
+# resolve-once dedup re-resolve -- and re-warn -- in exactly the
+# broken-venv case it existed for (panel finding, 2026-08-04).
+_UNSET = object()
+
+
 class ConvoyExt:
     """Node-side Convoy registration: reconcile, register, heartbeat."""
 
@@ -120,19 +128,22 @@ class ConvoyExt:
 
     # The HOST-APP poll chain is far longer than the registration one and
     # has to be: convoy_install.run_command allows 30 s per supervisor
-    # spawn, install() may issue two and start() three, the install tail
-    # waits up to HEALTH_WAIT_S for /health, and a venv-runtime install
-    # may additionally spend up to six 15 s candidate probes (venv,
-    # daemon venv, two Homebrew paths, two PATH lookups), one
-    # VENV_REPAIR_TIMEOUT_S uv reinstall, one 15 s re-probe, a daemon
-    # venv build (three 15 s base version gates + create 60 s + install
-    # 120 s + one 15 s probe, ~240 s), and install()'s own 15 s verifier
-    # re-probe of the winner. Summed worst case is ~650 s of legitimate
-    # work, so the cap is 2800 x 15 frames (~700 s at 60 fps; slower
-    # frame rates only lengthen it). It is a BOUND on a wedged worker,
-    # not a timer -- the worker's own subprocess timeouts are what
-    # actually end it.
-    HOST_POLL_ATTEMPTS = 2800
+    # spawn, install() may issue two spawns fresh -- or up to six on a
+    # repair over a loaded darwin label (print, disable, bootout, settle
+    # print(s), enable, bootstrap) -- plus a graceful-stop wait of up to
+    # EXIT_WAIT_S (15 s) and a label-settle wait of up to EXIT_WAIT_S,
+    # start() three spawns, the install tail waits up to HEALTH_WAIT_S
+    # for /health, and a venv-runtime install may additionally spend up
+    # to six 15 s candidate probes (venv, daemon venv, two Homebrew
+    # paths, two PATH lookups), one VENV_REPAIR_TIMEOUT_S uv reinstall,
+    # one 15 s re-probe, a daemon venv build (three 15 s base version
+    # gates + create 60 s + install 120 s + one 15 s probe, ~240 s), and
+    # install()'s own 15 s verifier re-probe of the winner. Summed worst
+    # case is ~780 s of legitimate work, so the cap is 3400 x 15 frames
+    # (~850 s at 60 fps; slower frame rates only lengthen it). It is a
+    # BOUND on a wedged worker, not a timer -- the worker's own
+    # subprocess timeouts are what actually end it.
+    HOST_POLL_ATTEMPTS = 3400
 
     # At most one node call and one host-lifecycle call can be outstanding.
     # The long-lived worker serializes them, so two slots are sufficient and
@@ -3116,6 +3127,11 @@ class ConvoyExt:
             project_root = str(self._embody.ext.Embody._findProjectRoot())
         except Exception:
             project_root = str(project.folder)
+        # Resolved ONCE per context: three fields need it, and each
+        # resolution walks the venv folder and warns when it is unusable
+        # -- resolving per-field logged that warning three times per
+        # button press (field log 2026-08-04).
+        venv_python = self._convoyVenvPython()
         return {
             'client': client,
             'installer': installer,
@@ -3132,13 +3148,14 @@ class ConvoyExt:
             # crypto floor (Ed25519/X.509/TLS 1.3), so the host app runs under
             # it when no signed managed runtime is installed. Resolved on the
             # main thread here; None if the venv is not built or is missing.
-            'venv_python': self._convoyVenvPython(),
+            'venv_python': venv_python,
             # Every interpreter worth PROVING, best first. The worker probes
             # each (spawning it to import cryptography and prove TLS 1.3) and
             # uses the first that passes -- TD's bundled Python is not always
             # the one that can, notably on Apple Silicon where its venv's
             # cryptography .dylib would not dlopen at all.
-            'runtime_candidates': self._convoyRuntimeCandidates(),
+            'runtime_candidates': self._convoyRuntimeCandidates(
+                venv_python=venv_python),
             # Repair context, resolved MAIN THREAD like everything else
             # here: uv's location (resolve-only -- never _findOrInstallUv,
             # which can run a blocking pip subprocess), the CONSOLE venv
@@ -3146,7 +3163,8 @@ class ConvoyExt:
             # pin so a repair installs exactly what the venv was built to
             # carry. Any of these being None just means no repair attempt.
             'uv': self._convoyUvPath(),
-            'venv_python_repair': self._convoyVenvPythonConsole(),
+            'venv_python_repair': self._convoyVenvPythonConsole(
+                venv_python=venv_python),
             'venv_crypto_deps': self._convoyCryptoDeps(),
             # The macOS fallback daemon venv (None off darwin): where to
             # build it and which non-TD base interpreters may host it.
@@ -3159,7 +3177,16 @@ class ConvoyExt:
         Reads project.folder via EmbodyExt._venvPaths (a main-thread global),
         so it is resolved here into the plain host context and never touched
         from a worker.
+
+        Quiet on a never-saved project: the derived .venv path roots at
+        TD's default folder and is meaningless by construction, so
+        probing it can only produce a misleading warning (field log
+        2026-08-04 warned about Desktop/.venv before the wizard's save).
         """
+        if not self._savedToe():
+            self._log('project not saved yet -- no venv to resolve for '
+                      'the host app', 'DEBUG')
+            return None
         try:
             path = self._embody.ext.Embody._venvPaths().get('venv_python')
         except Exception:
@@ -3222,14 +3249,17 @@ class ConvoyExt:
         except Exception:
             return None
 
-    def _convoyVenvPythonConsole(self):
+    def _convoyVenvPythonConsole(self, venv_python=_UNSET):
         """The venv interpreter for uv's --python flag. MAIN THREAD.
 
         Same interpreter _convoyVenvPython resolves, minus the Windows
         pythonw.exe swap: uv drives the target over pipes and the console
-        binary is the conventional, known-good target for it.
+        binary is the conventional, known-good target for it. Pass the
+        already-resolved path when building a host context so the venv
+        walk (and its warning) runs once, not per field.
         """
-        path = self._convoyVenvPython()
+        path = (venv_python if venv_python is not _UNSET
+                else self._convoyVenvPython())
         if not path:
             return None
         if sys.platform == 'win32' and path.lower().endswith('pythonw.exe'):
@@ -3946,7 +3976,7 @@ class ConvoyExt:
     # re-asking on every new project is noise the user has already read.
     CONSENT_MARKER = 'consent.json'
 
-    def _convoyRuntimeCandidates(self):
+    def _convoyRuntimeCandidates(self, venv_python=_UNSET):
         """Interpreters worth PROVING, best first. MAIN THREAD.
 
         Nothing here is a requirement -- it is a list of things to try. The
@@ -3968,7 +3998,8 @@ class ConvoyExt:
         interactive install dialog from a background worker.
         """
         candidates = []
-        venv = self._convoyVenvPython()
+        venv = (venv_python if venv_python is not _UNSET
+                else self._convoyVenvPython())
         if venv:
             candidates.append(venv)
         try:
@@ -5213,7 +5244,13 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
         ctx['data_dir'], ctx['version'], modules, interpreter,
         platform=ctx['platform'], home=ctx['home'], uid=ctx['uid'],
         installed_by=ctx['installed_by'], supervisor=supervisor,
-        runtime_verifier=verifier)
+        runtime_verifier=verifier,
+        # Repair over a RUNNING daemon: same graceful observers stop()
+        # uses, so the installer can ask the old daemon to exit and wait
+        # before re-registering (darwin would otherwise EIO at the
+        # still-loaded label; win32 would leave the old code running).
+        shutdown=lambda: _host_shutdown(ctx),
+        is_running=_host_is_running(ctx))
     if not outcome.get('ok'):
         return {'ok': False, 'action': 'install', 'outcome': outcome,
                 'reason': outcome.get('reason'),

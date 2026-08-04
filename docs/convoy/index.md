@@ -41,7 +41,7 @@ Repeat these steps on every participating computer:
 1. Save the TouchDesigner project. A saved `.toe` gives the node a stable project identity and a useful automatic name.
 2. Choose an AI assistant if you want one. Convoy also works with **None**: Embody keeps only its internal local command service enabled and does not configure or launch an AI client.
 3. In the [Setup Wizard](../embody/setup-wizard.md), choose **Enable Convoy**. You can also turn on **Enable Convoy** later from the Embody COMP's **Convoy** page.
-4. Approve the one-time confirmation. Enabling Convoy installs and starts the background host app automatically -- the confirmation (or the wizard's Convoy step) is the consent for the app and its login persistence. Use **Repair Host App** on the Convoy page only to repair a broken install or apply an update, and **Start Host App** after a deliberate stop.
+4. Approve the one-time confirmation. Enabling Convoy installs and starts the background host app automatically -- the confirmation (or the wizard's Convoy step) is the consent for the app and its login persistence. Use **Repair Convoy App** on the Convoy page only to repair a broken install or apply an update, and **Start Convoy App** after a deliberate stop.
 5. Allow the Convoy host app through the operating-system firewall on the **private/trusted network profile only**.
 6. Check **Status** and the **Convoy Nodes** sequence. Other enabled nodes should appear automatically.
 

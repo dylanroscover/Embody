@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.0.209
+
+Convoy: Repair works while the app is running, and the buttons say what they repair.
+
+- **"Host App" buttons renamed to "Convoy App"**: Repair/Start/Stop/Uninstall Convoy App -- "host" was unexplained jargon; the label now says which app it manages. Parameter names are unchanged (only labels, help, status strings, and docs), so nothing scripted against the parameters breaks.
+
+- **"Bootstrap failed: 5: Input/output error" fixed**: Repair Convoy App re-runs a full install by design, but the macOS register step bootstrapped straight onto the still-loaded LaunchAgent label -- which launchctl refuses with EIO -- so repairing a *healthy, running* daemon always failed (repairing a stopped or crashed one worked, which is why this survived until now; the daemon itself was left untouched and kept running the old code behind a false "Install failed" readout). The installer now asks the running daemon to exit gracefully and waits, then disables and boots the loaded label out and waits for launchd to actually drop it, before enabling and bootstrapping the new agent. On Windows the same graceful exit closes a silent twin: `schtasks /Create /F` rewrote the task definition while the old process kept running the old code.
+- **One warning instead of three**: the "no usable interpreter" warning fired three times per host action because the venv path was resolved once per context field; it is resolved once per context now. It also no longer fires at all on a never-saved project, where the derived `.venv` path points into TouchDesigner's default folder and is meaningless by construction.
+- Seven new installer tests: repair over a loaded label (the exact field sequence), a label that lingers after bootout (the async-teardown settle), graceful-exit ordering on both platforms, a genuinely failing bootstrap still surfacing verbatim, and the bounded label-settle wait on injected time -- plus an in-TD pin on the ConvoyExt-to-installer graceful-observer wiring.
+
 ## v6.0.208
 
 Convoy: stale node rows clear themselves.
