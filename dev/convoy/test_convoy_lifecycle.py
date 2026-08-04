@@ -478,7 +478,10 @@ def test_birth_mismatch_means_old_pid_is_not_treated_as_exact_orphan(tmp_path):
     runtime.value = None
     inspector.backend.processes[100]["birth_id"] = "birth:reused"
     launcher.callback = auto_confirm(manager)
-    result = manager.start_node(NODE, CONVOY, "start-reused", timeout_s=.1)
+    # Success path with a threaded confirm: the window is a ceiling the
+    # manager never sits out, but a loaded CI runner can miss 100ms on
+    # thread scheduling alone (flaked 2026-08-04).
+    result = manager.start_node(NODE, CONVOY, "start-reused", timeout_s=5)
     assert result["ok"] is True
     assert len(launcher.spawns) == 1
 
@@ -1699,7 +1702,8 @@ def test_confirm_is_one_atomic_profile_and_attempt_commit(tmp_path):
     manager, store, _, _, launcher, _, _, _ = system
     offline(system)
     launcher.callback = auto_confirm(manager, runtime_id="runtime-atomic")
-    result = manager.start_node(NODE, CONVOY, "atomic-confirm", timeout_s=.1)
+    # Success path with a threaded confirm; 100ms flaked on CI (2026-08-04).
+    result = manager.start_node(NODE, CONVOY, "atomic-confirm", timeout_s=5)
     assert result["ok"] is True
     reloaded = cl.LaunchProfileStore(store.data_dir)
     assert reloaded.get_attempt("atomic-confirm")["state"] == "succeeded"
@@ -1724,8 +1728,11 @@ def test_disable_between_spawn_and_confirmation_cancels_owned_child(tmp_path):
         callback_done.set()
 
     launcher.callback = change_then_confirm
-    result = manager.start_node(NODE, CONVOY, "profile-race", timeout_s=.1)
-    assert callback_done.wait(1)
+    # The callback disables mid-flight and must still get scheduled; a
+    # loaded CI runner missed both the 100ms window and the 1s wait
+    # (flaked 2026-08-04).
+    result = manager.start_node(NODE, CONVOY, "profile-race", timeout_s=5)
+    assert callback_done.wait(5)
     assert seen["result"]["code"] == "launch_token_replayed"
     assert result["code"] == "cancelled"
     assert launcher.cancels and launcher.cancels[0][0] == 200

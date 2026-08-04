@@ -6291,6 +6291,24 @@ class TestBridgeStreamingForward(EmbodyTestCase):
         _result, resp, _capture = self._forward(_ANSWER)
         self.assertEqual(resp.timeouts, [])
 
+    def test_float_sliver_in_the_deadline_never_rearms_the_cap(self):
+        """REGRESSION (CI 2026-08-04): ``deadline = clock() + timeout``
+        rounds UP at some clock magnitudes -- at monotonic()==256.2,
+        (256.2 + 300) - 256.2 == 300.00000000000006 -- so the first
+        arm()'s remaining budget lands a hair ABOVE what urlopen already
+        armed.  The one-sided skip window read that as "needs re-arm" and
+        recorded a spurious settimeout on fresh-boot machines (small
+        monotonic values) while long-uptime dev boxes passed."""
+        sliver_clock = 256.2
+        self.assertGreater((sliver_clock + 300) - sliver_clock, 300,
+                           'fixture magnitude must reproduce the sliver')
+        body = (_PROGRESS % 1) + _ANSWER
+        _result, resp, _capture = self._forward(
+            body, clock=lambda: sliver_clock)
+        self.assertEqual(
+            resp.timeouts, [],
+            'a 1e-14 rounding sliver is not a reason to touch the socket')
+
     def test_every_frame_after_the_first_renews_the_allowance(self):
         """A stream that keeps talking keeps its full inter-frame
         allowance -- the budget is renewed per frame, never clamped once."""

@@ -13,6 +13,7 @@ Author: Dylan Roscover
 from __future__ import annotations
 
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -384,8 +385,11 @@ class EmbodyExt:
         # so pin an explicit floor (matches the bridge-suite CI floor) rather
         # than relying on another package to keep pulling it in. FLOOR, no
         # upper bound -- an exact pin is what broke fresh installs at mcp 2.0.
+        # (The one exception is a ceiling on x86_64 macOS interpreters --
+        # see _cryptographyPin for why that target cannot take 49+.)
         deps = [f'mcp>={self.MCP_MIN_VERSION},<{ceiling_major}', 'attrs<25',
-                'pyyaml', 'cryptography>=3.4']
+                'pyyaml', self._cryptographyPin(sys.platform,
+                                                platform.machine())]
         if sys.platform.startswith('win'):
             site_packages = os.path.join(venv_dir, 'Lib', 'site-packages')
             venv_python = os.path.join(venv_dir, 'Scripts', 'python.exe')
@@ -407,8 +411,75 @@ class EmbodyExt:
             # cryptography, pywin32) are ABI-tied to the interpreter, so a TD
             # upgrade that bumps embedded Python must rebuild the venv.
             'python_tag': f'{sys.version_info.major}.{sys.version_info.minor}',
+            # ... and ARCHITECTURE-tied too: platform.machine() of the TD
+            # process that built the venv. Swapping the Intel TD build for
+            # the Apple Silicon one (or migrating a project between Macs)
+            # leaves wheels the interpreter can no longer dlopen, with
+            # every version check reading clean. (Distinct from macOS
+            # library validation, where TD's signed python refuses even a
+            # correct-arch foreign wheel standalone -- Convoy handles that
+            # with its daemon venv; no stamp can.)
+            'machine': platform.machine(),
             'stamp_path': os.path.join(venv_dir, 'embody-env.json'),
         }
+
+    @staticmethod
+    def _cryptographyPin(platform_name: str, machine: str) -> str:
+        """The venv's cryptography requirement for this interpreter target.
+
+        cryptography 49.0.0 (2026-06) stopped publishing x86_64 macOS
+        wheels -- macOS wheels are arm64-only from there on, while 48.x
+        and older shipped universal2 (loads under BOTH architectures).
+        An x86_64-running interpreter on macOS (the Intel TD build,
+        including under Rosetta) resolving the unbounded pin therefore
+        gets either a wheel it can never dlopen or a source build needing
+        a Rust toolchain. Cap below 49 on that one target so uv resolves
+        the universal2 48.x wheel; everywhere else the pin stays a pure
+        floor (an exact pin is what broke fresh installs at mcp 2.0).
+        """
+        if platform_name == 'darwin' and str(machine).lower() in (
+                'x86_64', 'x64', 'amd64'):
+            return 'cryptography>=3.4,<49'
+        return 'cryptography>=3.4'
+
+    @staticmethod
+    def _stampNeedsArchMigration(stamp_machine: str,
+                                 platform_name: str) -> bool:
+        """Should a stamp with NO recorded machine force one rebuild?
+
+        Pre-arch stamps exist exactly on the fleet that can hold
+        wrong-arch wheels invisibly (macOS: two TD architectures, one
+        Rosetta), so darwin migrates each such venv once to an
+        arch-stamped one. Windows venvs with old stamps stay untouched
+        -- a single supported architecture cannot flip. Static and
+        parameterized so the in-TD suite (which runs on Windows) can
+        exercise the darwin branch.
+        """
+        return not stamp_machine and platform_name == 'darwin'
+
+    @staticmethod
+    def _measureVenvArch(venv_python) -> 'str | None':
+        """The architecture the venv interpreter runs as when spawned
+        FRESH, or None. This is what uv's wheel resolution keyed on and
+        what a login daemon (launchd / Scheduled Task) actually gets --
+        inside TD, platform.machine() reports the TD process instead,
+        and under Rosetta the two can differ. Recorded in the stamp as a
+        diagnostic breadcrumb; the rebuild TRIGGER compares TD-process
+        values only (see _environmentNeedsInstall), which cannot loop.
+
+        WORKER-THREAD SAFE: one bounded subprocess, no TD objects.
+        """
+        try:
+            proc = subprocess.run(
+                [venv_python, '-I', '-c',
+                 'import platform; print(platform.machine())'],
+                capture_output=True, text=True, timeout=15,
+                stdin=subprocess.DEVNULL)
+            if proc.returncode != 0:
+                return None
+            return (proc.stdout or '').strip() or None
+        except Exception:
+            return None
 
     @staticmethod
     def _venvPythonTag(venv_dir) -> 'str | None':
@@ -482,6 +553,27 @@ class EmbodyExt:
             # Secondary to the pyvenv.cfg probe (a cfg-less venv still gets
             # caught here) -- checked before deps so the rebuild verdict wins
             # over the in-place-upgrade verdict when both changed.
+            spec['recreate_venv'] = True
+            return True
+        stamp_machine = str(stamp.get('machine') or '')
+        if stamp_machine and stamp_machine != str(spec.get('machine') or ''):
+            # Binary wheels are ARCHITECTURE-tied as well as ABI-tied.
+            # Swapping the Intel TD build for the Apple Silicon one (or
+            # migrating the project between machines) leaves wheels the
+            # interpreter can no longer dlopen while every version check
+            # reads clean -- cryptography's Rust .dylib refusing to load
+            # was exactly this. Same placement rule as the python check:
+            # BEFORE deps, so recreate wins over in-place install (uv
+            # would resolve wrong-arch-but-present wheels as satisfied).
+            spec['recreate_venv'] = True
+            return True
+        if (spec.get('machine')
+                and self._stampNeedsArchMigration(stamp_machine,
+                                                  sys.platform)):
+            # Guarded on the CURRENT machine value: if platform.machine()
+            # ever returned '' here, a rebuild could not stamp anything
+            # better and the migration would re-fire every start -- a
+            # permanent rebuild loop for zero information gained.
             spec['recreate_venv'] = True
             return True
         if sorted(stamp.get('deps') or []) != sorted(spec['deps']):
@@ -756,6 +848,10 @@ class EmbodyExt:
                 check=True, capture_output=True, text=True,
                 stdin=subprocess.DEVNULL, env=uv_env,
             )
+            # Best-effort: what the venv interpreter runs AS when spawned
+            # fresh (can differ from the TD process under Rosetta). Pure
+            # breadcrumb for the stamp; never blocks the install.
+            spec['venv_arch'] = self._measureVenvArch(venv_python)
             self._writeEnvStamp(spec)
             log('Python environment ready', 'SUCCESS')
             return True
@@ -782,6 +878,14 @@ class EmbodyExt:
             'schema': 1,
             'deps': sorted(spec['deps']),
             'python': spec['python_tag'],
+            # TD-process architecture at build time -- the value the
+            # rebuild trigger compares (loop-free: after a rebuild it
+            # always equals the current process). Older readers ignore
+            # unknown keys, so this is silently backward-compatible.
+            'machine': spec.get('machine') or '',
+            # What the venv interpreter reported when spawned fresh, or
+            # the TD value when that probe failed. Diagnostic only.
+            'arch': spec.get('venv_arch') or spec.get('machine') or '',
         }
         try:
             with open(spec['stamp_path'], 'w', encoding='utf-8') as f:
@@ -812,8 +916,42 @@ class EmbodyExt:
         self.Log(self._importGateFailureMessage(site_packages, message), 'ERROR')
         return False
 
+    @staticmethod
+    def _resolveUv() -> 'str | None':
+        """Locate an existing uv WITHOUT installing one, or None.
+
+        PATH first, then the common pip --user locations. The fallback
+        list matters inside a GUI TouchDesigner: macOS GUI apps get the
+        launchd PATH, which excludes ~/.local/bin and
+        ~/Library/Python/3.x/bin -- exactly where the pip --user install
+        below puts uv. A PATH-only lookup therefore reports 'no uv' on
+        the very machine whose venv uv itself built (that blind spot
+        silently disabled Convoy's venv repair on macOS). Resolve-only
+        and subprocess-free, so main-thread callers may use it.
+        """
+        uv = shutil.which('uv')
+        if uv:
+            return uv
+        if sys.platform.startswith('win'):
+            appdata = os.environ.get('APPDATA', '')
+            if appdata:
+                for candidate in glob(os.path.join(
+                        appdata, 'Python', 'Python*', 'Scripts', 'uv.exe')):
+                    if os.path.isfile(candidate):
+                        return candidate
+        else:
+            home = os.path.expanduser('~')
+            for candidate in (
+                    glob(os.path.join(home, 'Library', 'Python', '3.*',
+                                      'bin', 'uv'))
+                    + [os.path.join(home, '.local', 'bin', 'uv')]):
+                if os.path.isfile(candidate):
+                    return candidate
+        return None
+
     def _findOrInstallUv(self, python_exe, log=None):
-        """Find uv on PATH, or install it via pip --user. Returns path to uv executable or None.
+        """Find uv (PATH or user-install locations), or install it via
+        pip --user. Returns path to uv executable or None.
 
         ``log`` is a ``log(message, level='INFO')`` callback. It defaults to
         self.Log for main-thread callers; worker-thread callers
@@ -821,8 +959,7 @@ class EmbodyExt:
         self.Log writes the FIFO DAT and reads parameters.
         """
         log = log or self.Log
-        # Check PATH first
-        uv = shutil.which('uv')
+        uv = self._resolveUv()
         if uv:
             return uv
 
@@ -838,29 +975,9 @@ class EmbodyExt:
             log(f'Failed to install uv: {e.stderr or e}', 'ERROR')
             return None
 
-        # Find the installed uv binary in user Scripts directories
-        uv = shutil.which('uv')
+        uv = self._resolveUv()
         if uv:
             return uv
-
-        # Search common --user install locations (platform-specific)
-        if sys.platform.startswith('win'):
-            appdata = os.environ.get('APPDATA', '')
-            if appdata:
-                candidates = glob(os.path.join(appdata, 'Python', 'Python*', 'Scripts', 'uv.exe'))
-                for candidate in candidates:
-                    if os.path.isfile(candidate):
-                        return candidate
-        else:
-            # macOS: check common user-local bin directories
-            home = os.path.expanduser('~')
-            mac_candidates = (
-                glob(os.path.join(home, 'Library', 'Python', '3.*', 'bin', 'uv'))
-                + [os.path.join(home, '.local', 'bin', 'uv')]
-            )
-            for candidate in mac_candidates:
-                if os.path.isfile(candidate):
-                    return candidate
 
         log('Could not find uv after install - is Python user Scripts on PATH?', 'ERROR')
         return None

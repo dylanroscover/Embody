@@ -119,12 +119,19 @@ class ConvoyExt:
 
     # The HOST-APP poll chain is far longer than the registration one and
     # has to be: convoy_install.run_command allows 30 s per supervisor
-    # spawn, install() may issue two and start() three, and the install
-    # tail then waits up to HEALTH_WAIT_S for /health. Worst case is
-    # ~170 s of legitimate work, so the cap is 800 x 15 frames (~200 s at
-    # 60 fps). It is a BOUND on a wedged worker, not a timer -- the
-    # worker's own subprocess timeouts are what actually end it.
-    HOST_POLL_ATTEMPTS = 800
+    # spawn, install() may issue two and start() three, the install tail
+    # waits up to HEALTH_WAIT_S for /health, and a venv-runtime install
+    # may additionally spend up to six 15 s candidate probes (venv,
+    # daemon venv, two Homebrew paths, two PATH lookups), one
+    # VENV_REPAIR_TIMEOUT_S uv reinstall, one 15 s re-probe, a daemon
+    # venv build (three 15 s base version gates + create 60 s + install
+    # 120 s + one 15 s probe, ~240 s), and install()'s own 15 s verifier
+    # re-probe of the winner. Summed worst case is ~650 s of legitimate
+    # work, so the cap is 2800 x 15 frames (~700 s at 60 fps; slower
+    # frame rates only lengthen it). It is a BOUND on a wedged worker,
+    # not a timer -- the worker's own subprocess timeouts are what
+    # actually end it.
+    HOST_POLL_ATTEMPTS = 2800
 
     # At most one node call and one host-lifecycle call can be outstanding.
     # The long-lived worker serializes them, so two slots are sufficient and
@@ -571,9 +578,12 @@ class ConvoyExt:
                 return ''
         return name if _BARE_MODULE_NAME.match(name) else ''
 
-    def _log(self, msg, level='INFO'):
+    def _log(self, msg, level='INFO', details=None):
         try:
-            self._embody.Log('Convoy: %s' % (msg,), level)
+            if details:
+                self._embody.Log('Convoy: %s' % (msg,), level, details)
+            else:
+                self._embody.Log('Convoy: %s' % (msg,), level)
         except Exception:
             try:
                 debug('[Convoy/%s] %s' % (level, msg))
@@ -3045,6 +3055,18 @@ class ConvoyExt:
             # the one that can, notably on Apple Silicon where its venv's
             # cryptography .dylib would not dlopen at all.
             'runtime_candidates': self._convoyRuntimeCandidates(),
+            # Repair context, resolved MAIN THREAD like everything else
+            # here: uv's location (resolve-only -- never _findOrInstallUv,
+            # which can run a blocking pip subprocess), the CONSOLE venv
+            # python for uv's --python flag, and Embody's own cryptography
+            # pin so a repair installs exactly what the venv was built to
+            # carry. Any of these being None just means no repair attempt.
+            'uv': self._convoyUvPath(),
+            'venv_python_repair': self._convoyVenvPythonConsole(),
+            'venv_crypto_deps': self._convoyCryptoDeps(),
+            # The macOS fallback daemon venv (None off darwin): where to
+            # build it and which non-TD base interpreters may host it.
+            'daemon_venv': self._convoyDaemonVenvSpec(),
         }
 
     def _convoyVenvPython(self):
@@ -3095,6 +3117,85 @@ class ConvoyExt:
                 if os.path.isfile(windowless):
                     return windowless
             return path
+        except Exception:
+            return None
+
+    def _convoyUvPath(self):
+        """uv's executable for the venv repair, or None. MAIN THREAD.
+
+        Resolve-only by design: EmbodyExt._findOrInstallUv can fall back
+        to a blocking `pip install --user uv` subprocess, which has no
+        place on the main thread mid-install. _resolveUv is its
+        subprocess-free lookup -- PATH plus the pip --user locations a
+        GUI TouchDesigner's PATH does not include (macOS especially:
+        launchd PATH excludes ~/.local/bin and ~/Library/Python/*/bin,
+        where the uv that built this very venv usually lives). A bare
+        shutil.which here made the repair a silent no-op on macOS.
+        Absence simply means the worker skips the repair attempt.
+        """
+        try:
+            return self._embody.ext.Embody._resolveUv()
+        except Exception:
+            return None
+
+    def _convoyVenvPythonConsole(self):
+        """The venv interpreter for uv's --python flag. MAIN THREAD.
+
+        Same interpreter _convoyVenvPython resolves, minus the Windows
+        pythonw.exe swap: uv drives the target over pipes and the console
+        binary is the conventional, known-good target for it.
+        """
+        path = self._convoyVenvPython()
+        if not path:
+            return None
+        if sys.platform == 'win32' and path.lower().endswith('pythonw.exe'):
+            console = os.path.join(os.path.dirname(path), 'python.exe')
+            if os.path.isfile(console):
+                return console
+        return path
+
+    def _convoyCryptoDeps(self):
+        """Embody's cryptography pin(s) from the venv dependency spec.
+
+        Read from _venvPaths so a repair installs EXACTLY what the venv
+        was built to carry (including any platform-conditional ceiling),
+        never a second, driftable copy of the pin. MAIN THREAD --
+        _venvPaths reads the project folder.
+        """
+        try:
+            deps = self._embody.ext.Embody._venvPaths().get('deps') or []
+        except Exception:
+            return []
+        return [str(d) for d in deps if str(d).startswith('cryptography')]
+
+    def _convoyDaemonVenvSpec(self):
+        """Paths for the macOS fallback daemon venv, or None. MAIN THREAD.
+
+        None everywhere but darwin -- the fallback exists because
+        TouchDesigner's bundled python is code-signed with library
+        validation and, spawned standalone, refuses every foreign-signed
+        PyPI wheel; Windows venvs work as-is. Base interpreters are
+        EXPLICIT absolute paths, never PATH (a GUI TD's launchd PATH
+        hides all of them): Homebrew (arm64 then Intel prefix) first,
+        then Apple's CLT python3 -- and that one only when the Command
+        Line Tools are actually installed, because spawning the bare
+        /usr/bin/python3 shim without them pops Apple's interactive
+        install dialog from a background worker.
+        """
+        if sys.platform != 'darwin':
+            return None
+        try:
+            bases = [p for p in ('/opt/homebrew/bin/python3',
+                                 '/usr/local/bin/python3')
+                     if os.path.isfile(p)]
+            if (os.path.isdir('/Library/Developer/CommandLineTools')
+                    and os.path.isfile('/usr/bin/python3')):
+                bases.append('/usr/bin/python3')
+            data_dir = self._client().data_dir()
+            venv_dir = os.path.join(data_dir, 'runtime-venv')
+            return {'dir': venv_dir,
+                    'python': os.path.join(venv_dir, 'bin', 'python3'),
+                    'bases': bases}
         except Exception:
             return None
 
@@ -3190,6 +3291,22 @@ class ConvoyExt:
 
         detail = str(result.get('detail')
                      or result.get('reason') or '').strip()
+        rejected = result.get('rejected')
+        if isinstance(rejected, list) and rejected:
+            # The FULL per-interpreter probe stderr, at DEBUG -- on
+            # SUCCESS as well as failure: a venv that failed its probe
+            # while a later candidate passed (or a repair saved it) must
+            # stay diagnosable. The ring buffer keeps DEBUG entries even
+            # with Verbose off, so `get_logs` recovers the untruncated
+            # dlopen reason a WARNING line cannot afford. Losing this
+            # exact text cost a macOS diagnosis a full round trip.
+            for entry in rejected:
+                if not isinstance(entry, dict):
+                    continue
+                self._log(
+                    'probe rejected %s (%s)'
+                    % (entry.get('candidate'), entry.get('reason')),
+                    'DEBUG', details=entry.get('detail'))
         if not ok:
             if action == 'install':
                 # The one action whose failure has its own word in the
@@ -3388,8 +3505,13 @@ class ConvoyExt:
             '    and restarts it within a minute\n'
             '  - IT RUNS WHENEVER YOU ARE LOGGED IN, WHETHER OR NOT\n'
             '    TOUCHDESIGNER IS OPEN\n'
-            '  - runs it with Convoy\'s managed Python runtime:\n'
-            '    %s\n\n'
+            '  - runs it under the best Python that proves Convoy\'s\n'
+            '    crypto floor, starting with:\n'
+            '    %s\n'
+            '    a failing one is repaired or replaced with a dedicated\n'
+            '    Convoy venv in the folder above (this may download the\n'
+            '    pinned cryptography package); the log names the final\n'
+            '    interpreter\n\n'
             'Network behavior:\n'
             '  - while at least one local node has Enable Convoy On, the\n'
             '    app advertises on the trusted LAN and opens Convoy\'s\n'
@@ -3698,16 +3820,21 @@ class ConvoyExt:
 
         Nothing here is a requirement -- it is a list of things to try. The
         worker probes each by spawning it and making it genuinely import
-        cryptography and prove TLS 1.3, then uses the first that passes. So a
-        machine with only Embody's own venv works (Windows), and so does a
-        machine where that venv cannot load its crypto but another interpreter
-        can (Apple Silicon, where the venv built from TouchDesigner's bundled
-        Python could not dlopen cryptography's arm64 .dylib at all).
+        cryptography and prove TLS 1.3, then uses the first that passes. So
+        a machine with only Embody's own venv works (Windows). On macOS the
+        venv usually CANNOT pass -- its python symlinks TouchDesigner's
+        library-validation-signed binary, which refuses foreign-signed
+        wheels standalone (first read as an architecture mismatch from a
+        truncated log; the full dlopen reason, verified 2026-08-04, is
+        'different Team IDs') -- so the list is really a ladder down to
+        Homebrew python3 and the daemon-venv fallback.
 
         Embody's venv comes first because it is ours and carries our pinned
-        crypto floor. A system python3 follows because macOS ships one and it
-        is frequently the interpreter that actually works there. Resolved
-        through PATH rather than hardcoded, so nothing assumes a layout.
+        crypto floor. Homebrew is probed by ABSOLUTE PATH before PATH
+        lookups -- a GUI TD's launchd PATH does not include /opt/homebrew.
+        On macOS the bare /usr/bin/python3 shim is skipped entirely when
+        the Command Line Tools are absent: spawning it would pop Apple's
+        interactive install dialog from a background worker.
         """
         candidates = []
         venv = self._convoyVenvPython()
@@ -3715,12 +3842,33 @@ class ConvoyExt:
             candidates.append(venv)
         try:
             import shutil
+            if sys.platform == 'darwin':
+                # An ALREADY-BUILT daemon venv is probed right after the
+                # project venv: a healthy prior fallback passes its 15 s
+                # probe and skips a 4-minute rebuild-and-redownload (and
+                # keeps working offline).
+                spec = self._convoyDaemonVenvSpec() or {}
+                existing = spec.get('python')
+                if existing and os.path.isfile(existing):
+                    candidates.append(existing)
+                for path in ('/opt/homebrew/bin/python3',
+                             '/usr/local/bin/python3'):
+                    if os.path.isfile(path) and path not in candidates:
+                        candidates.append(path)
+            clt_present = (sys.platform != 'darwin' or
+                           os.path.isdir('/Library/Developer/'
+                                         'CommandLineTools'))
             for name in ('python3', 'python'):
                 found = shutil.which(name)
                 # Skip Windows' App Execution Alias: it is a stub that can
                 # open the Microsoft Store instead of running Python, which
                 # is not something an install should do behind the user.
                 if found and 'WindowsApps' in found:
+                    continue
+                # Skip the macOS developer-tools shim without the CLT for
+                # the same reason: probing it opens Apple's dialog.
+                if (found and not clt_present
+                        and found.startswith('/usr/bin/python')):
                     continue
                 if found and found not in candidates:
                     candidates.append(found)
@@ -4648,6 +4796,142 @@ def _host_is_running(ctx):
     return observe
 
 
+# One bounded uv reinstall of the cryptography pin. Sized for a cold
+# wheel fetch on a slow link, and accounted for in HOST_POLL_ATTEMPTS --
+# raising this without re-checking that budget makes Install report
+# timed_out over a repair that later succeeds.
+VENV_REPAIR_TIMEOUT_S = 120.0
+
+
+def _host_repair_venv_runtime(ctx, runner=None):
+    """ONE-SHOT venv repair from the WORKER: reinstall the crypto pin.
+
+    `uv pip install --reinstall` of Embody's cryptography pin against the
+    venv interpreter re-resolves the wheel for what that interpreter
+    reports TODAY -- the fix when the wheel on disk was resolved for an
+    architecture the interpreter no longer runs as (a TD build swap or a
+    migrated project). The caller gates this to reasons a reinstall can
+    plausibly fix: it is USELESS for the macOS signature refusal, where
+    the interpreter itself rejects every foreign-signed wheel. Strictly
+    once, never a loop: a repair whose re-probe still fails reports
+    honestly and stops.
+
+    Worker-safe: plain data from ctx only, subprocess via the injected
+    runner. `--link-mode copy` is the CLI spelling of the UV_LINK_MODE
+    env var the environment installer sets (the injected runner takes no
+    env); `--no-cache` keeps a poisoned cached wheel from coming
+    straight back.
+    """
+    installer = ctx['installer']
+    uv = ctx.get('uv')
+    target = ctx.get('venv_python_repair') or ctx.get('venv_python')
+    deps = [str(d) for d in (ctx.get('venv_crypto_deps') or ()) if d]
+    if not uv or not target or not deps:
+        return {'ok': False, 'reason': 'no_repair_context',
+                'detail': 'uv, the venv interpreter, or the cryptography '
+                          'pin is unknown to this session'}
+    call = runner or installer.run_command
+    code, out, err = call(
+        [uv, 'pip', 'install', '--reinstall', '--no-cache',
+         '--link-mode', 'copy'] + deps + ['--python', target],
+        timeout_s=VENV_REPAIR_TIMEOUT_S)
+    if code != 0:
+        text = str(err or out or 'uv exited %s' % (code,)).strip()
+        return {'ok': False, 'reason': 'venv_repair_failed',
+                'detail': text[-400:]}
+    return {'ok': True, 'reason': 'venv_repaired',
+            'detail': 'reinstalled %s into the venv' % ', '.join(deps)}
+
+
+# The dedicated daemon venv build, bounded per step. Machine-scoped like
+# the managed runtime, never project-scoped: one working interpreter
+# serves every Embody project on the box.
+DAEMON_VENV_CREATE_TIMEOUT_S = 60.0
+DAEMON_VENV_INSTALL_TIMEOUT_S = 120.0
+
+
+def _host_build_daemon_venv(ctx, runner=None):
+    """Build a DEDICATED daemon venv from a non-TD base Python. WORKER.
+
+    Why this exists: on macOS, TouchDesigner's bundled Python is signed
+    with the hardened runtime's library-validation flag, so spawned
+    standalone it refuses every PyPI wheel signed by another Team ID --
+    no reinstall can ever fix that interpreter. The daemon instead gets
+    its own venv, built under the per-user Convoy data dir from a Python
+    outside TouchDesigner's signature domain (Homebrew, or Apple's CLT
+    once its python reaches 3.11). ONE base is version-gated and built,
+    no loop; `--clear` makes a stale previous fallback rebuild cleanly;
+    the caller re-probes the result with the same verifier every
+    interpreter faces, so a fallback that cannot prove the crypto floor
+    is still refused.
+    """
+    installer = ctx['installer']
+    uv = ctx.get('uv')
+    deps = [str(d) for d in (ctx.get('venv_crypto_deps') or ()) if d]
+    spec = ctx.get('daemon_venv') or {}
+    venv_dir = spec.get('dir')
+    venv_python = spec.get('python')
+    bases = [str(b) for b in (spec.get('bases') or ()) if b]
+    if not uv or not deps or not venv_dir or not venv_python:
+        return {'ok': False, 'reason': 'no_daemon_venv_context',
+                'detail': 'uv, the cryptography pin, or the daemon venv '
+                          'location is unavailable'}
+    if not bases:
+        return {'ok': False, 'reason': 'no_base_interpreter',
+                'detail': 'no Python outside TouchDesigner exists at '
+                          '/opt/homebrew/bin/python3, '
+                          '/usr/local/bin/python3, or /usr/bin/python3 '
+                          '-- install Homebrew Python (brew install '
+                          'python), then enable Convoy again'}
+    call = runner or installer.run_command
+    base = None
+    for candidate in bases:
+        code, out, err = call(
+            [candidate, '-I', '-c',
+             'import sys; print("%d.%d" % sys.version_info[:2])'],
+            timeout_s=15.0)
+        if code != 0:
+            continue
+        try:
+            major, minor = (int(x) for x in str(out).strip().split('.'))
+        except (TypeError, ValueError):
+            continue
+        if (major, minor) >= (3, 11):
+            base = candidate
+            break
+    if base is None:
+        return {'ok': False, 'reason': 'no_usable_base_python',
+                'detail': 'no Python 3.11+ outside TouchDesigner was '
+                          'found to host the Convoy venv (Apple\'s '
+                          'command-line-tools python3 is older) -- '
+                          'install Homebrew Python (brew install '
+                          'python), then enable Convoy again'}
+    code, out, err = call(
+        [uv, 'venv', venv_dir, '--clear', '--python', base],
+        timeout_s=DAEMON_VENV_CREATE_TIMEOUT_S)
+    if code != 0 and '--clear' in str(err or ''):
+        # Pre-0.8 uv does not know --clear (it replaced venvs by
+        # default); one retry without it keeps ancient user uvs working.
+        code, out, err = call(
+            [uv, 'venv', venv_dir, '--python', base],
+            timeout_s=DAEMON_VENV_CREATE_TIMEOUT_S)
+    if code != 0:
+        text = str(err or out or 'uv venv exited %s' % (code,)).strip()
+        return {'ok': False, 'reason': 'daemon_venv_build_failed',
+                'detail': text[-400:]}
+    code, out, err = call(
+        [uv, 'pip', 'install', '--no-cache', '--link-mode', 'copy']
+        + deps + ['--python', venv_python],
+        timeout_s=DAEMON_VENV_INSTALL_TIMEOUT_S)
+    if code != 0:
+        text = str(err or out or 'uv pip exited %s' % (code,)).strip()
+        return {'ok': False, 'reason': 'daemon_venv_build_failed',
+                'detail': text[-400:]}
+    return {'ok': True, 'reason': 'daemon_venv_built',
+            'python': venv_python, 'base': base,
+            'detail': 'built a dedicated Convoy venv from %s' % (base,)}
+
+
 def _host_install(ctx, modules, interpreter, supervisor=None,
                   venv_runtime=False):
     """Write the payload, register the supervisor, start it, wait.
@@ -4661,36 +4945,139 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
     """
     installer = ctx['installer']
     verifier = None
+    rejected = []
+    success_note = ''
     if venv_runtime:
         def verifier(data_dir, interp, platform=None, architecture=None,
                      runner=None):
             return installer.probe_runtime(
                 interp, platform, architecture, runner=runner)
-        # PROVE the interpreter, do not assume it. On Apple Silicon the venv
-        # built from TouchDesigner's bundled Python could import nothing:
-        # cryptography's Rust .dylib refused to dlopen (architecture
-        # mismatch), so a venv that pip had just filled successfully was
-        # useless to the daemon. Probing is the only honest test -- it spawns
-        # the candidate and makes it actually import cryptography and prove
-        # TLS 1.3. Take the first that passes; a system python3 is frequently
-        # the one that works when TD's own does not.
-        rejected = []
-        for candidate in ([interpreter] + [
-                c for c in (ctx.get('runtime_candidates') or ())
-                if c != interpreter]):
+        # PROVE the interpreter, do not assume it. On macOS the venv built
+        # from TouchDesigner's bundled Python could import nothing: its
+        # library-validation-signed binary refuses foreign-signed wheels
+        # when spawned standalone ('different Team IDs' -- verified
+        # 2026-08-04 after a truncated log was first misread as an
+        # architecture mismatch), so a venv that pip had just filled
+        # successfully was useless to the daemon. Probing is the only
+        # honest test -- it spawns the candidate and makes it actually
+        # import cryptography and prove TLS 1.3. Take the first that
+        # passes; when none do, the repair and daemon-venv rungs below
+        # take over.
+
+        def _probe(candidate):
             probe = verifier(ctx['data_dir'], candidate,
                              ctx['platform'], None, None)
             if isinstance(probe, dict) and probe.get('ok'):
-                interpreter = candidate
+                return True
+            record = probe if isinstance(probe, dict) else {}
+            detail = str(record.get('detail') or '')
+            rejected.append({
+                'candidate': candidate,
+                'reason': record.get('reason') or 'probe failed',
+                'detail': detail,
+                'snippet': installer.probe_detail_snippet(detail),
+            })
+            return False
+
+        chosen = None
+        for candidate in ([interpreter] + [
+                c for c in (ctx.get('runtime_candidates') or ())
+                if c != interpreter]):
+            if _probe(candidate):
+                chosen = candidate
                 break
-            rejected.append('%s (%s)' % (
-                candidate, (probe or {}).get('reason') or 'probe failed'))
-        else:
+        repair_note = ''
+        repaired = False
+        venv_python = ctx.get('venv_python')
+        venv_reasons = [r['reason'] for r in rejected
+                        if r['candidate'] == venv_python]
+        if chosen is None and venv_python and venv_reasons:
+            if any(reason in ('runtime_crypto_broken',
+                              'runtime_missing_cryptography')
+                   for reason in venv_reasons):
+                # The venv failed in a way a reinstall can plausibly fix.
+                # Reinstall the crypto pin once, re-probe once -- rejected
+                # keeps BOTH probe records for the venv so the aggregate
+                # shows before and after honestly.
+                repair = _host_repair_venv_runtime(ctx)
+                if repair.get('ok') and _probe(venv_python):
+                    chosen = venv_python
+                    repaired = True
+                elif repair.get('ok'):
+                    repair_note = (' Repair was attempted (reinstalled '
+                                   'the cryptography pin into the venv) '
+                                   'and the re-probe still failed.')
+                else:
+                    repair_note = ' Venv repair not possible: %s.' % (
+                        repair.get('detail') or repair.get('reason'),)
+            elif 'runtime_crypto_signature_blocked' in venv_reasons:
+                # Code-signing policy is not a package problem: any wheel
+                # a reinstall fetches carries the same foreign signature.
+                repair_note = (' Venv repair skipped: reinstalling cannot '
+                               'change code-signing policy.')
+        if chosen is None and ctx.get('daemon_venv'):
+            # No existing interpreter can serve the daemon -- build one
+            # OUTSIDE TouchDesigner's signature domain and prove it with
+            # the same probe every other candidate faced.
+            built = _host_build_daemon_venv(ctx)
+            if built.get('ok') and _probe(built['python']):
+                chosen = built['python']
+                success_note = (' (daemon runs under a dedicated Convoy '
+                                'venv built from %s)' % (built.get('base'),))
+            elif built.get('ok'):
+                # Built fine, still refused by the probe -- say THAT, not
+                # the build's success line inside a failure message.
+                repair_note += (' Daemon venv: built from %s but its '
+                                'probe still failed.' % (built.get('base'),))
+            else:
+                repair_note += ' Daemon venv: %s.' % (
+                    built.get('detail') or built.get('reason'),)
+        if chosen is None:
+            described = []
+            for entry in rejected[:6]:
+                described.append('%s (%s%s)' % (
+                    entry['candidate'], entry['reason'],
+                    ': ' + entry['snippet'] if entry['snippet'] else ''))
+            guidance = ''
+            if 'brew install python' in repair_note:
+                # The daemon-venv note already names the way out; a second
+                # copy of the same advice is noise.
+                pass
+            elif any(r['reason'] == 'runtime_crypto_signature_blocked'
+                     for r in rejected):
+                guidance = (" macOS refused to load cryptography into "
+                            "TouchDesigner's bundled Python: it is "
+                            'code-signed with library validation and may '
+                            'not load third-party native modules when run '
+                            'standalone. Reinstalling or rebuilding the '
+                            'venv cannot fix this -- Convoy needs a '
+                            'Python outside TouchDesigner: install '
+                            'Homebrew Python (brew install python), then '
+                            'enable Convoy again.')
+            elif any(r['reason'] == 'runtime_crypto_broken'
+                     for r in rejected):
+                guidance = (' A cryptography that is installed but cannot '
+                            'load usually means the venv was built for '
+                            'another CPU architecture -- toggle Envoy off '
+                            'and on to rebuild the environment, then '
+                            'enable Convoy again.')
             return {'ok': False, 'action': 'install',
                     'reason': 'no_usable_runtime',
+                    # 8, not 6: the fullest macOS ladder produces up to
+                    # eight records (six candidates + the repair re-probe
+                    # + the daemon-venv probe), and the LAST one is the
+                    # most decision-relevant -- never slice it away.
+                    'rejected': rejected[:8],
                     'detail': 'no interpreter on this machine could load '
                               'cryptography and TLS 1.3. Tried: '
-                              + '; '.join(rejected[:4])}
+                              + '; '.join(described) + '.'
+                              + repair_note + guidance}
+        interpreter = chosen
+        if repaired:
+            # The venv was MUTATED on the way to success -- say so. A
+            # background reinstall with no record is the next 'why did
+            # my first enable take a minute' diagnosis round trip.
+            success_note = ' (venv cryptography was repaired first)'
     outcome = installer.install(
         ctx['data_dir'], ctx['version'], modules, interpreter,
         platform=ctx['platform'], home=ctx['home'], uid=ctx['uid'],
@@ -4709,11 +5096,19 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
         started = installer.start(platform=ctx['platform'], uid=ctx['uid'],
                                   home=ctx['home'])
         healthy = _host_await_health(ctx, ctx.get('health_wait_s'))
-    return {'ok': True, 'action': 'install', 'outcome': outcome,
-            'started': started, 'healthy': healthy,
-            'detail': 'installed %s under %s'
-                      % (outcome.get('version'), interpreter),
-            'state': _host_snapshot(ctx)}
+    result = {'ok': True, 'action': 'install', 'outcome': outcome,
+              'started': started, 'healthy': healthy,
+              'detail': 'installed %s under %s%s'
+                        % (outcome.get('version'), interpreter,
+                           success_note),
+              'state': _host_snapshot(ctx)}
+    if rejected:
+        # Probe rejections ride along on SUCCESS too: a venv that failed
+        # its probe while a later candidate passed (or was repaired) is
+        # evidence the next diagnosis needs, and dropping it re-creates
+        # the information-loss failure this path exists to end.
+        result['rejected'] = rejected[:8]
+    return result
 
 
 def _host_start(ctx):

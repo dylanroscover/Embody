@@ -45,6 +45,12 @@ The **Host App** readout uses these user-facing states:
 | `Managed by another supervisor` | Use the studio or Owlette process that owns startup, rather than competing with it |
 | `Install failed -- see log` | Review the Embody log, then retry the repair action |
 
+If the log says `no interpreter on this machine could load cryptography and TLS 1.3`, the install probed every Python it could find and names each one with why it failed. Three causes are distinguished:
+
+- `runtime_missing_cryptography` -- that Python simply has no cryptography package (normal for a bare system `python3`).
+- `runtime_crypto_broken` -- cryptography is installed but cannot load, typically a CPU-architecture mismatch in Embody's `.venv` (for example after switching between the Intel and Apple Silicon TouchDesigner builds). The installer automatically attempts one repair (reinstalling the pinned cryptography into the venv); if that still fails, toggle **Enable Envoy** off and on -- Embody detects an architecture change and rebuilds the Python environment -- then enable Convoy again.
+- `runtime_crypto_signature_blocked` -- macOS refused to load cryptography into TouchDesigner's bundled Python: that binary is code-signed with library validation and, run standalone, may not load third-party native modules (`... different Team IDs` in the log). Reinstalling or rebuilding the venv cannot fix this. Convoy handles it by building a dedicated daemon venv from a Python outside TouchDesigner (Homebrew's `python3`, probed at `/opt/homebrew/bin` and `/usr/local/bin`); if no such Python exists, install one (`brew install python`) and enable Convoy again.
+
 Use one dedicated logged-in user for an unattended show machine. The host app is per user, not a system service, so a different user account has a separate identity, settings, jobs, and artifact quota.
 
 ## Network and firewall requirements

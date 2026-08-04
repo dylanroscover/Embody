@@ -101,15 +101,32 @@ def test_client_refuses_wrong_accept_protocol_and_extensions():
 
 
 def test_http_header_limit_is_enforced_before_unbounded_read():
+    # The oversized header is fed from a THREAD: a macOS AF_UNIX
+    # socketpair buffers only ~8 KiB, so a foreground sendall of 16 KiB+
+    # with no reader yet blocks forever -- it hung the whole CI leg into
+    # the 30-minute kill (2026-08-04). The server unblocks the sender by
+    # reading; rejection then closes the socket under the sender, which
+    # is the expected end for a refused flood.
     left, right = socket.socketpair()
+    payload = (b"GET /convoy/ws HTTP/1.1\r\nX: " +
+               b"a" * ws.MAX_HTTP_HEADER_BYTES)
+
+    def feed():
+        try:
+            right.sendall(payload)
+        except OSError:
+            pass
+
+    feeder = threading.Thread(target=feed)
+    feeder.start()
     try:
-        right.sendall(b"GET /convoy/ws HTTP/1.1\r\nX: " +
-                      b"a" * ws.MAX_HTTP_HEADER_BYTES)
         with pytest.raises(ws.UpgradeRejected, match="16 KiB"):
-            ws.server_upgrade(left, timeout_s=1.0)
+            ws.server_upgrade(left, timeout_s=5.0)
     finally:
         left.close()
         right.close()
+        feeder.join(2.0)
+        assert not feeder.is_alive()
 
 
 def test_role_correct_masking_and_bidirectional_text_frames():

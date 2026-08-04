@@ -2659,6 +2659,180 @@ class TestConvoyManagedRuntime(EmbodyTestCase):
                              'runtime-packager-test')
 
 
+# -- 8b. probe failure diagnostics ---------------------------------------
+
+class TestConvoyProbeFailureDiagnostics(EmbodyTestCase):
+    """The dlopen reason must SURVIVE to the log, and be classified.
+
+    The 2026-08-04 macOS field failure was diagnosed blind twice: the
+    probe's stderr was head-truncated at 500 chars (losing the final
+    'ImportError: dlopen(...) incompatible architecture' line), and the
+    aggregate install message then dropped the detail entirely. These
+    tests pin the tail-preserving clip and the missing-vs-broken
+    cryptography classification that ended that blindness.
+    """
+
+    SITE = ('/Users/rosco/Desktop/e1/.venv/lib/python3.11/site-packages/'
+            'cryptography')
+
+    def _dlopen_traceback(self):
+        frames = ''.join(
+            '  File "%s/x509/frame_%d.py", line %d, in <module>\n'
+            '    from cryptography.hazmat.bindings._rust import x509\n'
+            % (self.SITE, n, n) for n in range(12))
+        return (
+            'Traceback (most recent call last):\n' + frames +
+            "ImportError: dlopen(%s/hazmat/bindings/_rust.abi3.so, 0x0002):"
+            " tried: '%s/hazmat/bindings/_rust.abi3.so' (mach-o file, but "
+            "is an incompatible architecture (have 'arm64', need "
+            "'x86_64'))" % (self.SITE, self.SITE))
+
+    def test_missing_cryptography_is_classified(self):
+        for stderr in (
+                "ModuleNotFoundError: No module named 'cryptography'",
+                "Traceback ...\nModuleNotFoundError: No module named "
+                "'cryptography'"):
+            self.assertEqual(
+                install_mod.classify_probe_failure(stderr),
+                'runtime_missing_cryptography')
+
+    def _signature_traceback(self):
+        # The verified field shape (arm64 Mac, 2026-08-04): TouchDesigner's
+        # library-validation-signed python refusing the foreign-signed wheel.
+        return (
+            'Traceback (most recent call last):\n'
+            '  File "<string>", line 8, in <module>\n'
+            "ImportError: dlopen(%s/hazmat/bindings/_rust.abi3.so, 0x0002):"
+            " tried: '%s/hazmat/bindings/_rust.abi3.so' (code signature in "
+            "<65827F6F> '%s/hazmat/bindings/_rust.abi3.so' not valid for "
+            'use in process: mapping process and mapped file (non-platform)'
+            ' have different Team IDs)' % (self.SITE, self.SITE, self.SITE))
+
+    def test_signature_refusal_is_classified_before_broken(self):
+        """The Team-ID text also contains '_rust' -- signature must win,
+        because the two classes need OPPOSITE responses (a reinstall can
+        fix broken; nothing package-level can fix signature policy)."""
+        self.assertEqual(
+            install_mod.classify_probe_failure(self._signature_traceback()),
+            'runtime_crypto_signature_blocked')
+        # The ad-hoc variant macOS emits for unsigned dylibs.
+        self.assertEqual(
+            install_mod.classify_probe_failure(
+                'ImportError: dlopen(.../cryptography/hazmat/bindings/'
+                '_rust.abi3.so): code signature not valid for use in '
+                'process using Library Validation: mapped file has no '
+                'Team ID and is not a platform binary'),
+            'runtime_crypto_signature_blocked')
+
+    def test_signature_refusal_needs_cryptography_context(self):
+        self.assertEqual(
+            install_mod.classify_probe_failure(
+                'dlopen(libwhatever.dylib): code signature not valid for '
+                'use in process: different Team IDs'),
+            'runtime_probe_failed')
+
+    def test_probe_keeps_the_team_id_tail_end_to_end(self):
+        text = self._signature_traceback()
+
+        def runner(argv, timeout_s=None):
+            return 1, '', text
+
+        got = install_mod.probe_runtime('/venv/bin/python', 'darwin',
+                                        'arm64', runner)
+        self.assertEqual(got['reason'], 'runtime_crypto_signature_blocked')
+        self.assertIn('different Team IDs', got['detail'])
+        snippet = install_mod.probe_detail_snippet(got['detail'])
+        self.assertIn('Team ID', snippet)
+
+    def test_broken_cryptography_is_classified(self):
+        self.assertEqual(
+            install_mod.classify_probe_failure(self._dlopen_traceback()),
+            'runtime_crypto_broken')
+        self.assertEqual(
+            install_mod.classify_probe_failure(
+                'ImportError: something about _rust bindings'),
+            'runtime_crypto_broken')
+        # A half-installed wheel: the SUBMODULE is missing, the package
+        # is present -- that is broken, not absent.
+        self.assertEqual(
+            install_mod.classify_probe_failure(
+                "ModuleNotFoundError: No module named "
+                "'cryptography.hazmat.bindings._rust'"),
+            'runtime_crypto_broken')
+
+    def test_unrecognized_failures_keep_the_generic_reason(self):
+        # Including the historical fixture string other suites rely on,
+        # and a dlopen failure with no cryptography context -- 'rebuild
+        # the venv' guidance cannot help an unrelated dylib.
+        for stderr in ('cryptography import failed', '', 'Segmentation '
+                       'fault', None,
+                       'OSError: dlopen(libssl.dylib): image not found'):
+            self.assertEqual(install_mod.classify_probe_failure(stderr),
+                             'runtime_probe_failed')
+
+    def test_probe_detail_keeps_the_dlopen_tail(self):
+        text = self._dlopen_traceback()
+        self.assertGreater(len(text), 1600, 'fixture must force clipping')
+
+        def runner(argv, timeout_s=None):
+            return 1, '', text
+
+        got = install_mod.probe_runtime('/venv/bin/python', 'darwin',
+                                        'arm64', runner)
+        self.assertFalse(got['ok'])
+        self.assertEqual(got['reason'], 'runtime_crypto_broken')
+        self.assertLessEqual(len(got['detail']), 1600)
+        self.assertTrue(got['detail'].startswith('Traceback'),
+                        'the head marker must survive the clip')
+        self.assertIn("incompatible architecture (have 'arm64', need "
+                      "'x86_64')", got['detail'],
+                      'the FINAL line is the diagnosis and must survive')
+
+    def test_probe_missing_cryptography_reason(self):
+        def runner(argv, timeout_s=None):
+            return 1, '', ("Traceback (most recent call last):\n"
+                           '  File "<string>", line 6, in <module>\n'
+                           "ModuleNotFoundError: No module named "
+                           "'cryptography'")
+
+        got = install_mod.probe_runtime('/usr/bin/python3', 'darwin',
+                                        'arm64', runner)
+        self.assertEqual(got['reason'], 'runtime_missing_cryptography')
+        self.assertIn("No module named 'cryptography'", got['detail'])
+
+    def test_clip_detail_keeps_both_ends(self):
+        short = 'a short message'
+        self.assertEqual(install_mod._clip_detail(short), short)
+        long_text = 'HEADSTART ' + ('x' * 4000) + ' TAILEND'
+        clipped = install_mod._clip_detail(long_text)
+        self.assertLessEqual(len(clipped), 1600)
+        self.assertIn('HEADSTART', clipped)
+        self.assertIn('TAILEND', clipped)
+        self.assertIn(' ... ', clipped)
+        # A limit smaller than the head window must still be honored,
+        # never exceeded (the naive arithmetic returned MORE than asked).
+        tiny = install_mod._clip_detail('B' * 300, limit=100)
+        self.assertLessEqual(len(tiny), 100)
+
+    def test_snippet_prefers_the_last_line(self):
+        self.assertEqual(
+            install_mod.probe_detail_snippet('one\ntwo\nfinal diagnosis'),
+            'final diagnosis')
+        self.assertEqual(install_mod.probe_detail_snippet(''), '')
+
+    def test_snippet_centers_on_the_diagnosis_marker(self):
+        snippet = install_mod.probe_detail_snippet(self._dlopen_traceback())
+        self.assertLessEqual(len(snippet), 240)
+        self.assertIn('incompatible architecture', snippet)
+
+    def test_snippet_falls_back_to_the_line_head(self):
+        line = 'Z' * 400
+        snippet = install_mod.probe_detail_snippet('context\n' + line)
+        self.assertTrue(snippet.startswith('Z'))
+        self.assertTrue(snippet.endswith('...'))
+        self.assertLessEqual(len(snippet), 240)
+
+
 # -- 9. plan_install matrix ---------------------------------------------
 
 class TestConvoyInstallPlan(EmbodyTestCase):

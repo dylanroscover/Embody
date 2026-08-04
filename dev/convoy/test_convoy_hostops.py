@@ -340,6 +340,70 @@ def test_real_git_status_and_config_preflight_work_end_to_end(tmp_path):
     assert ops.run_git("node-1", "revision")["code"] == "command_failed"
 
 
+def _fake_lfs_dir(base, name="lfs-standalone"):
+    directory = base / name
+    directory.mkdir(parents=True, exist_ok=True)
+    for filename in ("git-lfs", "git-lfs.exe"):
+        target = directory / filename
+        target.write_bytes(b"#!/bin/sh\nexit 0\n")
+        target.chmod(0o755)
+    return directory
+
+
+def _lfs_gate(root, tmp_path, lfs_dir=None, values=None):
+    """An ops whose LFS gate sees exactly the given config + PATH."""
+    ops, _ = make_ops(root)
+    reviewed = dict(hostops._REVIEWED_LFS_FILTERS)
+    reviewed.update(values or {})
+    ops._git_config_value = (
+        lambda executable, target, key, deadline, cancel_event:
+            reviewed[key])
+    path_value = str(lfs_dir) if lfs_dir else str(tmp_path / "no-such-dir")
+    ops._structured_environment = (
+        lambda target, executables: {"PATH": path_value})
+    return ops
+
+
+def test_lfs_filter_accepts_standalone_directory_install(root, tmp_path):
+    # git-lfs in its OWN directory (not git's) must pass: the standalone
+    # Git LFS installer and GitHub's runner images ship exactly this
+    # layout, and a same-directory-as-git rule refused `status` on every
+    # clean repository of such hosts (CI, 2026-08-04).
+    ops = _lfs_gate(root, tmp_path, _fake_lfs_dir(tmp_path))
+    assert ops._reviewed_lfs_filter(
+        sys.executable, str(root), list(hostops._REVIEWED_LFS_FILTERS),
+        time.monotonic() + 30, None) is True
+
+
+def test_lfs_filter_refuses_binary_inside_the_target_root(root, tmp_path):
+    # The one place a hostile repository can write is the worktree; a
+    # git-lfs resolving there must never be approved.
+    ops = _lfs_gate(root, tmp_path, _fake_lfs_dir(root, "bin"))
+    assert ops._reviewed_lfs_filter(
+        sys.executable, str(root), list(hostops._REVIEWED_LFS_FILTERS),
+        time.monotonic() + 30, None) is False
+
+
+def test_lfs_filter_refuses_any_value_off_the_reviewed_contract(root, tmp_path):
+    ops = _lfs_gate(root, tmp_path, _fake_lfs_dir(tmp_path),
+                    values={"filter.lfs.process": "not-lfs --serve"})
+    assert ops._reviewed_lfs_filter(
+        sys.executable, str(root), list(hostops._REVIEWED_LFS_FILTERS),
+        time.monotonic() + 30, None) is False
+
+
+def test_lfs_filter_refuses_extra_filter_names_and_missing_binary(root, tmp_path):
+    ops = _lfs_gate(root, tmp_path, _fake_lfs_dir(tmp_path))
+    assert ops._reviewed_lfs_filter(
+        sys.executable, str(root),
+        list(hostops._REVIEWED_LFS_FILTERS) + ["filter.attack.process"],
+        time.monotonic() + 30, None) is False
+    absent = _lfs_gate(root, tmp_path, lfs_dir=None)
+    assert absent._reviewed_lfs_filter(
+        sys.executable, str(root), list(hostops._REVIEWED_LFS_FILTERS),
+        time.monotonic() + 30, None) is False
+
+
 def test_target_remap_is_detected_before_dispatch(root, tmp_path):
     other = tmp_path / "other"
     other.mkdir()

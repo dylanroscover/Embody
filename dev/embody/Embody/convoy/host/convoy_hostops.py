@@ -1140,14 +1140,20 @@ class HostOperations:
 
     def _reviewed_lfs_filter(self, executable, root, filter_names, deadline,
                              cancel_event):
-        """Allow only Git for Windows/macOS's exact, installed LFS filter.
+        """Allow only the exact, host-installed Git LFS filter contract.
 
         Git LFS is installed as system-level filter configuration by standard
         Git for Windows, so rejecting every filter would disable even `status`
         on a clean repository.  The exception is deliberately narrow: all
         four effective values must match the reviewed built-in LFS contract,
-        and the executable which the sanitized PATH will resolve must exist
-        outside the target worktree.
+        and the binary the SANITIZED PATH resolves must be a real file outside
+        the target worktree.  The sanitized environment is what makes this
+        sound -- the repository cannot add PATH entries, so whatever git-lfs
+        resolves there is host-owned software.  A same-directory-as-git
+        requirement was tried and dropped: the standalone Git LFS installer
+        (and GitHub's runner images) put git-lfs in its own directory, which
+        refused `status` on every clean repository of a legitimately
+        configured host (CI, 2026-08-04).
         """
         if set(filter_names) != set(_REVIEWED_LFS_FILTERS):
             return False
@@ -1162,8 +1168,7 @@ class HostOperations:
         lfs = os.path.realpath(lfs)
         if _path_within(root, lfs):
             return False
-        return (os.path.isfile(lfs) and
-                _paths_same(os.path.dirname(lfs), os.path.dirname(executable)))
+        return os.path.isfile(lfs)
 
     def _preflight_executable_config(self, executable, root, operation,
                                      deadline, cancel_event):

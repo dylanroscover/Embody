@@ -308,8 +308,25 @@ class TestVenvPaths(EmbodyTestCase):
 		spec = self.ext._venvPaths()
 		for key in ('project_dir', 'venv_dir', 'site_packages', 'venv_python',
 					'python_exe', 'deps', 'mcp_min_version',
-					'mcp_ceiling_major', 'python_tag', 'stamp_path'):
+					'mcp_ceiling_major', 'python_tag', 'machine',
+					'stamp_path'):
 			self.assertIn(key, spec)
+
+	def test_machine_is_this_processes_architecture(self):
+		import platform as platform_mod
+		spec = self.ext._venvPaths()
+		self.assertEqual(spec['machine'], platform_mod.machine())
+
+	def test_cryptography_pin_caps_only_x86_64_darwin(self):
+		"""cryptography 49.0.0 dropped x86_64 macOS wheels (arm64-only from
+		there on; 48.x was universal2). An x86_64 macOS interpreter resolving
+		an unbounded floor gets a wheel it can never dlopen -- the 2026-08-04
+		Convoy install failure. Everywhere else the pin stays a pure floor."""
+		pin = self.ext._cryptographyPin
+		self.assertEqual(pin('darwin', 'x86_64'), 'cryptography>=3.4,<49')
+		self.assertEqual(pin('darwin', 'arm64'), 'cryptography>=3.4')
+		self.assertEqual(pin('win32', 'AMD64'), 'cryptography>=3.4')
+		self.assertEqual(pin('linux', 'x86_64'), 'cryptography>=3.4')
 
 	def test_deps_pin_mcp_floor_and_ceiling(self):
 		"""The mcp dep must carry BOTH a floor and a next-major ceiling: SDK
@@ -529,6 +546,62 @@ class TestEnvironmentNeedsInstall(EmbodyTestCase):
 			f.write('{not json')
 		self.assertTrue(self.ext._environmentNeedsInstall(spec))
 
+	def test_stamp_machine_mismatch_sets_recreate(self):
+		"""Binary wheels are ARCHITECTURE-tied as well as ABI-tied: swapping
+		the Intel TD build for the Apple Silicon one leaves wheels the
+		interpreter can no longer dlopen while every version check reads
+		clean (the 2026-08-04 cryptography dlopen failure)."""
+		spec = self._spec()
+		spec['machine'] = 'arm64'
+		self._make_dist('mcp', '2.0.0')
+		self._make_dist('yaml', '6.0.1')
+		self._write_stamp(spec, machine='x86_64')
+		self.assertTrue(self.ext._environmentNeedsInstall(spec))
+		self.assertTrue(spec.get('recreate_venv'),
+			'an arch flip must REBUILD -- an in-place install resolves '
+			'wrong-arch-but-present wheels as already satisfied')
+
+	def test_stamp_machine_match_stays_neutral(self):
+		spec = self._spec()
+		spec['machine'] = 'AMD64'
+		self._make_dist('mcp', '2.0.0')
+		self._make_dist('yaml', '6.0.1')
+		self._write_stamp(spec, machine='AMD64')
+		self.assertFalse(self.ext._environmentNeedsInstall(spec))
+		self.assertFalse(spec.get('recreate_venv', False))
+
+	def test_stamp_machine_mismatch_wins_over_deps_change(self):
+		"""Mirror of the pyvenv.cfg regression: when arch AND deps both
+		changed, the rebuild verdict must win over in-place install."""
+		spec = self._spec()
+		spec['machine'] = 'arm64'
+		self._make_dist('mcp', '2.0.0')
+		self._make_dist('yaml', '6.0.1')
+		self._write_stamp(spec, machine='x86_64',
+						  deps=sorted(['mcp>=1.26.0']))
+		self.assertTrue(self.ext._environmentNeedsInstall(spec))
+		self.assertTrue(spec.get('recreate_venv'),
+			'arch mismatch must set the rebuild flag even when deps also '
+			'changed')
+
+	def test_pre_arch_stamp_is_neutral_here_and_migrates_on_darwin(self):
+		"""An old stamp with no machine field: Windows keeps returning
+		False (single architecture, nothing to flip); darwin forces one
+		migration rebuild -- exercised via the static helper because this
+		suite runs inside a Windows TD."""
+		spec = self._spec()
+		spec['machine'] = 'AMD64'
+		self._make_dist('mcp', '2.0.0')
+		self._make_dist('yaml', '6.0.1')
+		self._write_stamp(spec)		# no machine field, the whole old fleet
+		self.assertFalse(self.ext._environmentNeedsInstall(spec))
+		self.assertTrue(
+			self.ext._stampNeedsArchMigration('', 'darwin'))
+		self.assertFalse(
+			self.ext._stampNeedsArchMigration('', 'win32'))
+		self.assertFalse(
+			self.ext._stampNeedsArchMigration('arm64', 'darwin'))
+
 	def test_attrs_25_forces_install(self):
 		spec = self._spec()
 		self._make_dist('mcp', '2.0.0')
@@ -640,6 +713,37 @@ class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
 			stamp = json.load(f)
 		self.assertEqual(stamp['deps'], sorted(spec['deps']))
 		self.assertEqual(stamp['python'], spec['python_tag'])
+
+	def test_stamp_records_machine_and_fresh_spawn_arch(self):
+		"""The stamp must carry the TD-process machine (the rebuild
+		comparator) and the venv interpreter's fresh-spawn arch (the
+		diagnostic breadcrumb), measured through the stubbed subprocess."""
+		self.ext._findOrInstallUv = lambda python_exe, log=None: '/fake/uv'
+		spec = self._spec(machine='AMD64')
+
+		class _Result:
+			returncode = 0
+			stdout = 'arm64\n'
+
+		probes = []
+
+		def run_fn(argv, **k):
+			if argv and argv[0] == spec['venv_python']:
+				probes.append(argv)
+				return _Result()
+			return None
+
+		self._stub_subprocess(run_fn)
+		ok = self.ext._installDependencies(spec, log=lambda m, lvl='INFO': None)
+		self.assertTrue(ok)
+		self.assertEqual(len(probes), 1, 'exactly one fresh-spawn arch probe')
+		self.assertIn('-I', probes[0])
+		with open(spec['stamp_path'], 'r', encoding='utf-8') as f:
+			stamp = json.load(f)
+		self.assertEqual(stamp['machine'], 'AMD64')
+		self.assertEqual(stamp['arch'], 'arm64',
+			'the measured fresh-spawn value, not the TD process value')
+		self.assertEqual(self._log_calls, [])
 
 	def test_recreate_flag_rebuilds_venv_with_clear(self):
 		"""spec['recreate_venv'] (stale-ABI venv after a TD Python bump) must

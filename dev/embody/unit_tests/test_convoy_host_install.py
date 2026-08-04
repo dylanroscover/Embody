@@ -419,7 +419,8 @@ class ConvoyHostBase(EmbodyTestCase):
                     lambda fn: (fn(), True)[1])
         self._patch(self.convoy_mod, 'run', self._fakeRun)
         self._patch(self.convoy, '_log',
-                    lambda msg, level='INFO': self._logs.append((msg, level)))
+                    lambda msg, level='INFO', details=None:
+                        self._logs.append((msg, level)))
         self._patch(self.convoy, '_hostStatus', self._recordHostStatus)
         self._patch(self.convoy, '_dialog', self._fakeDialog)
         self._patch(self.convoy, '_session', lambda: self.session)
@@ -911,6 +912,352 @@ class TestHostModuleReading(ConvoyHostBase):
             self.assertTrue(text, '%s vendored empty' % (name,))
 
 
+FAKE_VENV_PY = 'C:/fake/project/.venv/Scripts/python.exe'
+FAKE_SYS_PY = 'C:/fake/usr/bin/python3'
+
+DLOPEN_STDERR = (
+    'Traceback (most recent call last):\n'
+    '  File "<string>", line 8, in <module>\n'
+    'ImportError: dlopen(/fake/.venv/site-packages/cryptography/hazmat/'
+    'bindings/_rust.abi3.so, 0x0002): tried: mach-o file, but is an '
+    "incompatible architecture (have 'arm64', need 'x86_64')")
+
+NO_MODULE_STDERR = ("ModuleNotFoundError: No module named 'cryptography'")
+
+SIGNATURE_STDERR = (
+    'Traceback (most recent call last):\n'
+    '  File "<string>", line 8, in <module>\n'
+    'ImportError: dlopen(/fake/.venv/site-packages/cryptography/hazmat/'
+    'bindings/_rust.abi3.so, 0x0002): code signature not valid for use in '
+    'process: mapping process and mapped file (non-platform) have '
+    'different Team IDs')
+
+
+class TestVenvRuntimeInstall(ConvoyHostBase):
+    """The venv-runtime probe loop, its one-shot repair, and its words.
+
+    Calls the module-level _host_install directly (the worker body), the
+    way _beginHostCall's synchronous stand-in would run it -- the
+    orchestration above it is covered by TestInstallOrchestration. The
+    probe seam is scripted per interpreter so no test ever spawns one.
+    """
+
+    def _ctx(self, **overrides):
+        ctx = {'client': self.client, 'installer': self.installer,
+               'platform': 'win32', 'data_dir': FAKE_DATA_DIR,
+               'version': VERSION, 'home': FAKE_HOME, 'uid': None,
+               'installed_by': 'C:/fake/project (/embody/Embody)',
+               'health_wait_s': 0.0, 'health_poll_s': 0.0,
+               'venv_python': FAKE_VENV_PY,
+               'runtime_candidates': [FAKE_VENV_PY, FAKE_SYS_PY],
+               'uv': 'C:/fake/uv.exe',
+               'venv_python_repair': 'C:/fake/project/.venv/Scripts/'
+                                     'python.exe',
+               'venv_crypto_deps': ['cryptography>=3.4']}
+        ctx.update(overrides)
+        return ctx
+
+    def _script_probes(self, outcomes):
+        """installer.probe_runtime -> scripted per-interpreter results.
+
+        `outcomes[path]` is a list consumed one result per probe of that
+        path (the last repeats), so fail-then-pass sequences can model a
+        repair that worked.
+        """
+        remaining = {k: list(v) for k, v in outcomes.items()}
+        probed = []
+
+        def probe(interp, platform=None, architecture=None, runner=None):
+            probed.append(interp)
+            queue = remaining.get(interp)
+            if not queue:
+                return {'ok': False, 'reason': 'runtime_probe_failed',
+                        'detail': 'unscripted interpreter %s' % (interp,)}
+            result = queue.pop(0) if len(queue) > 1 else queue[0]
+            return dict(result)
+
+        self.installer.probe_runtime = probe
+        return probed
+
+    def _repair_argvs(self):
+        return [argv for name, argv in self.installer.calls
+                if name == 'run_command' and '--reinstall' in argv]
+
+    def _run_install(self, ctx):
+        return self.convoy_mod._host_install(
+            ctx, {'convoy_hostapp.py': 'x'}, ctx['venv_python'], None,
+            venv_runtime=True)
+
+    def test_repair_then_reprobe_recovers_the_venv(self):
+        probed = self._script_probes({
+            FAKE_VENV_PY: [
+                {'ok': False, 'reason': 'runtime_crypto_broken',
+                 'detail': DLOPEN_STDERR},
+                {'ok': True, 'probe': {}}],
+            FAKE_SYS_PY: [
+                {'ok': False, 'reason': 'runtime_missing_cryptography',
+                 'detail': NO_MODULE_STDERR}],
+        })
+        result = self._run_install(self._ctx())
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(probed,
+                         [FAKE_VENV_PY, FAKE_SYS_PY, FAKE_VENV_PY])
+        repairs = self._repair_argvs()
+        self.assertEqual(len(repairs), 1, 'exactly ONE repair, never a loop')
+        argv = repairs[0]
+        self.assertEqual(argv[0], 'C:/fake/uv.exe')
+        self.assertIn('--no-cache', argv)
+        self.assertIn('cryptography>=3.4', argv)
+        self.assertEqual(argv[-2:],
+                         ['--python', self._ctx()['venv_python_repair']])
+        sent = self.installer.last('install')
+        self.assertEqual(sent['interpreter'], FAKE_VENV_PY,
+                         'the REPAIRED venv must be the daemon interpreter')
+
+    def test_failed_reprobe_reports_the_repair_and_every_probe(self):
+        self._script_probes({
+            FAKE_VENV_PY: [{'ok': False, 'reason': 'runtime_crypto_broken',
+                            'detail': DLOPEN_STDERR}],
+            FAKE_SYS_PY: [{'ok': False,
+                           'reason': 'runtime_missing_cryptography',
+                           'detail': NO_MODULE_STDERR}],
+        })
+        result = self._run_install(self._ctx())
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['reason'], 'no_usable_runtime')
+        self.assertEqual(len(self._repair_argvs()), 1)
+        detail = result['detail']
+        self.assertIn('runtime_crypto_broken', detail)
+        self.assertIn('incompatible architecture', detail,
+                      'the dlopen diagnosis must reach the WARNING')
+        self.assertIn('runtime_missing_cryptography', detail)
+        self.assertIn('Repair was attempted', detail)
+        self.assertIn('toggle Envoy off and on', detail,
+                      'the failure must name its one next action')
+        self.assertTrue(isinstance(result.get('rejected'), list)
+                        and result['rejected'],
+                        'the structured probe records must ride along')
+
+    def test_no_repair_context_skips_the_reinstall(self):
+        self._script_probes({
+            FAKE_VENV_PY: [{'ok': False, 'reason': 'runtime_crypto_broken',
+                            'detail': DLOPEN_STDERR}],
+            FAKE_SYS_PY: [{'ok': False,
+                           'reason': 'runtime_missing_cryptography',
+                           'detail': NO_MODULE_STDERR}],
+        })
+        result = self._run_install(self._ctx(uv=None))
+        self.assertFalse(result['ok'])
+        self.assertEqual(self._repair_argvs(), [],
+                         'no uv means no repair subprocess at all')
+        self.assertIn('Venv repair not possible', result['detail'])
+
+    def test_first_passing_candidate_skips_repair_entirely(self):
+        self._script_probes({FAKE_VENV_PY: [{'ok': True, 'probe': {}}]})
+        result = self._run_install(self._ctx())
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(self._repair_argvs(), [])
+
+    def test_signature_failure_skips_the_repair(self):
+        """Code-signing policy is not a wheel problem: no reinstall may
+        run, the note must say why, and the venv-rebuild guidance must
+        NOT appear -- it reproduces the failure exactly."""
+        self._script_probes({
+            FAKE_VENV_PY: [{'ok': False,
+                            'reason': 'runtime_crypto_signature_blocked',
+                            'detail': SIGNATURE_STDERR}],
+            FAKE_SYS_PY: [{'ok': False,
+                           'reason': 'runtime_missing_cryptography',
+                           'detail': NO_MODULE_STDERR}],
+        })
+        result = self._run_install(self._ctx())
+        self.assertFalse(result['ok'])
+        self.assertEqual(self._repair_argvs(), [],
+                         'reinstalling cannot change code-signing policy')
+        detail = result['detail']
+        self.assertIn('Venv repair skipped', detail)
+        self.assertIn('library validation', detail)
+        self.assertIn('brew install python', detail,
+                      'the failure must name a concrete way out')
+        self.assertNotIn('toggle Envoy off and on', detail,
+                         'the rebuild advice reproduces this failure')
+
+    def test_finish_host_dumps_rejected_probes_at_debug(self):
+        details = []
+        self._patch(self.convoy, '_log',
+                    lambda msg, level='INFO', details_=None, **kw:
+                        details.append((msg, level,
+                                        kw.get('details', details_))))
+        self.convoy._finishHost('install', {
+            'ok': False, 'reason': 'no_usable_runtime',
+            'detail': 'no interpreter on this machine could load ...',
+            'rejected': [{'candidate': FAKE_VENV_PY,
+                          'reason': 'runtime_crypto_broken',
+                          'detail': DLOPEN_STDERR}]})
+        debug = [(m, lvl, det) for m, lvl, det in details if lvl == 'DEBUG']
+        self.assertTrue(debug, 'each rejected probe must be DEBUG-logged')
+        self.assertIn(FAKE_VENV_PY, debug[0][0])
+        self.assertIn('incompatible architecture', str(debug[0][2]),
+                      'the FULL stderr must reach the ring buffer')
+
+
+FAKE_DAEMON_VENV = {'dir': 'C:/fake/EmbodyConvoy/runtime-venv',
+                    'python': 'C:/fake/EmbodyConvoy/runtime-venv/bin/'
+                              'python3',
+                    'bases': ['/opt/homebrew/bin/python3']}
+
+
+class TestDaemonVenvFallback(ConvoyHostBase):
+    """The macOS ladder's last rung: build a venv OUTSIDE TouchDesigner.
+
+    Direct calls to the module-level _host_install with a darwin-shaped
+    ctx; run_command is scripted so the base-version gate, uv venv, and
+    uv pip steps are observable without spawning anything.
+    """
+
+    def _ctx(self, **overrides):
+        ctx = {'client': self.client, 'installer': self.installer,
+               'platform': 'darwin', 'data_dir': FAKE_DATA_DIR,
+               'version': VERSION, 'home': FAKE_HOME, 'uid': 501,
+               'installed_by': '/fake/project (/embody/Embody)',
+               'health_wait_s': 0.0, 'health_poll_s': 0.0,
+               'venv_python': FAKE_VENV_PY,
+               'runtime_candidates': [FAKE_VENV_PY],
+               'uv': '/fake/uv',
+               'venv_python_repair': FAKE_VENV_PY,
+               'venv_crypto_deps': ['cryptography>=3.4'],
+               'daemon_venv': dict(FAKE_DAEMON_VENV)}
+        ctx.update(overrides)
+        return ctx
+
+    def _script_probes(self, outcomes):
+        remaining = {k: list(v) for k, v in outcomes.items()}
+        probed = []
+
+        def probe(interp, platform=None, architecture=None, runner=None):
+            probed.append(interp)
+            queue = remaining.get(interp)
+            if not queue:
+                return {'ok': False, 'reason': 'runtime_probe_failed',
+                        'detail': 'unscripted interpreter %s' % (interp,)}
+            result = queue.pop(0) if len(queue) > 1 else queue[0]
+            return dict(result)
+
+        self.installer.probe_runtime = probe
+        return probed
+
+    def _script_run_command(self, base_version='3.12'):
+        """run_command double: version probes answer, uv calls succeed."""
+        def run_command(argv, timeout_s=None, **kw):
+            self.installer.calls.append(('run_command', list(argv)))
+            if argv and argv[0] in ('/opt/homebrew/bin/python3',
+                                    '/usr/local/bin/python3',
+                                    '/usr/bin/python3'):
+                return 0, base_version + '\n', ''
+            return 0, '', ''
+
+        self.installer.run_command = run_command
+
+    def _uv_argvs(self, marker):
+        return [argv for name, argv in self.installer.calls
+                if name == 'run_command' and argv[:2] == ['/fake/uv',
+                                                          marker]]
+
+    def _repair_argvs(self):
+        return [argv for name, argv in self.installer.calls
+                if name == 'run_command' and '--reinstall' in argv]
+
+    def _run_install(self, ctx):
+        return self.convoy_mod._host_install(
+            ctx, {'convoy_hostapp.py': 'x'}, ctx['venv_python'], None,
+            venv_runtime=True)
+
+    def test_signature_blocked_venv_gets_a_daemon_venv(self):
+        self._script_run_command()
+        self._script_probes({
+            FAKE_VENV_PY: [{'ok': False,
+                            'reason': 'runtime_crypto_signature_blocked',
+                            'detail': SIGNATURE_STDERR}],
+            FAKE_DAEMON_VENV['python']: [{'ok': True, 'probe': {}}],
+        })
+        result = self._run_install(self._ctx())
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(self._repair_argvs(), [],
+                         'signature failures never trigger the reinstall')
+        venv_calls = self._uv_argvs('venv')
+        self.assertEqual(len(venv_calls), 1, 'exactly ONE build, no loop')
+        self.assertIn('--clear', venv_calls[0])
+        self.assertIn('/opt/homebrew/bin/python3', venv_calls[0])
+        pip_calls = self._uv_argvs('pip')
+        self.assertEqual(len(pip_calls), 1)
+        self.assertIn('cryptography>=3.4', pip_calls[0])
+        self.assertEqual(pip_calls[0][-2:],
+                         ['--python', FAKE_DAEMON_VENV['python']])
+        sent = self.installer.last('install')
+        self.assertEqual(sent['interpreter'], FAKE_DAEMON_VENV['python'],
+                         'the daemon must run under the dedicated venv')
+        self.assertIn('dedicated Convoy venv', result['detail'])
+
+    def test_no_base_interpreter_names_the_way_out(self):
+        self._script_run_command()
+        self._script_probes({
+            FAKE_VENV_PY: [{'ok': False,
+                            'reason': 'runtime_crypto_signature_blocked',
+                            'detail': SIGNATURE_STDERR}],
+        })
+        daemon = dict(FAKE_DAEMON_VENV, bases=[])
+        result = self._run_install(self._ctx(daemon_venv=daemon))
+        self.assertFalse(result['ok'])
+        self.assertEqual(self._uv_argvs('venv'), [],
+                         'nothing to build from -- no uv subprocess')
+        self.assertIn('brew install python', result['detail'])
+
+    def test_old_base_python_is_version_gated_before_building(self):
+        self._script_run_command(base_version='3.9')
+        self._script_probes({
+            FAKE_VENV_PY: [{'ok': False,
+                            'reason': 'runtime_crypto_signature_blocked',
+                            'detail': SIGNATURE_STDERR}],
+        })
+        result = self._run_install(self._ctx())
+        self.assertFalse(result['ok'])
+        self.assertEqual(self._uv_argvs('venv'), [],
+                         'a 3.9 base must be rejected BEFORE the build')
+        self.assertIn('brew install python', result['detail'])
+
+    def test_build_success_but_probe_failure_is_honest(self):
+        self._script_run_command()
+        self._script_probes({
+            FAKE_VENV_PY: [{'ok': False,
+                            'reason': 'runtime_crypto_signature_blocked',
+                            'detail': SIGNATURE_STDERR}],
+            FAKE_DAEMON_VENV['python']: [{'ok': False,
+                                          'reason': 'runtime_probe_failed',
+                                          'detail': 'daemon venv died'}],
+        })
+        result = self._run_install(self._ctx())
+        self.assertFalse(result['ok'])
+        self.assertEqual(len(self._uv_argvs('venv')), 1,
+                         'one build, never a retry loop')
+        self.assertTrue(any(r.get('candidate') == FAKE_DAEMON_VENV['python']
+                            for r in result.get('rejected', [])),
+                        'the fallback probe record must ride along')
+
+    def test_without_a_daemon_venv_spec_nothing_is_built(self):
+        # The Windows shape: ctx carries no daemon_venv (spec is None off
+        # darwin), so all-candidates-failed ends the story with no build.
+        self._script_run_command()
+        self._script_probes({
+            FAKE_VENV_PY: [{'ok': False, 'reason': 'runtime_crypto_broken',
+                            'detail': DLOPEN_STDERR}],
+        })
+        ctx = self._ctx(platform='win32', daemon_venv=None,
+                        venv_crypto_deps=[])
+        result = self._run_install(ctx)
+        self.assertFalse(result['ok'])
+        self.assertEqual(self._uv_argvs('venv'), [])
+
+
 class TestHostThreadingDiscipline(EmbodyTestCase):
     """The rule that froze TD in the field, pinned at the source level."""
 
@@ -932,7 +1279,8 @@ class TestHostThreadingDiscipline(EmbodyTestCase):
         for name in ('_host_snapshot', '_host_install', '_host_start',
                      '_host_stop', '_host_preview', '_host_uninstall',
                      '_host_shutdown', '_host_await_health',
-                     '_host_is_running'):
+                     '_host_is_running', '_host_repair_venv_runtime',
+                     '_host_build_daemon_venv'):
             self.assertIn('\ndef %s(' % (name,), self.src,
                           '%s must be a module-level function, not a method'
                           % (name,))

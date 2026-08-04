@@ -4477,8 +4477,18 @@ class _ReadBudget:
             budget = self._gap
         if budget is None:
             return
-        if self._armed is not None and 0 <= self._armed - budget < 0.25:
-            return  # Close enough -- skip the syscall on every single read
+        if self._armed is not None and abs(self._armed - budget) < 0.25:
+            # Close enough -- skip the syscall on every single read.
+            # ABSOLUTE, not one-sided: ``deadline = clock() + timeout``
+            # can round UP at some clock magnitudes, so the first arm's
+            # remaining budget lands a few 1e-14 ABOVE the value urlopen
+            # already armed.  The one-sided check read that sliver as
+            # "needs re-arm" on machines with small monotonic values
+            # (fresh-boot CI runners) and skipped it on long-uptime dev
+            # boxes -- a machine-dependent spurious settimeout.  Real
+            # growth cannot occur here: the deadline is fixed, the clock
+            # is monotonic, and renew() resets _armed to force its re-arm.
+            return
         if _tighten_read_timeout(self._resp, budget):
             self._armed = budget
 

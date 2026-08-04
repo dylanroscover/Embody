@@ -1206,6 +1206,97 @@ print(json.dumps({
 '''
 
 
+# macOS Library Validation refusals, in both message variants a hardened
+# interpreter emits: a dylib signed by another team ('different Team
+# IDs') and an ad-hoc one ('no Team ID' / 'Library Validation' /
+# 'library load disallowed').
+_SIGNATURE_MARKERS = (
+    "Team ID",
+    "Library Validation",
+    "library load disallowed",
+    "code signature",
+)
+
+
+def classify_probe_failure(text):
+    """Name WHY a probe's interpreter died, from its stderr.
+
+    Two field failures share the exit code but need opposite responses:
+    an interpreter with NO cryptography at all (Apple's /usr/bin/python3
+    ships zero third-party packages -- expected, unfixable, not a bug)
+    and an interpreter whose cryptography is PRESENT but will not load
+    (a wrong-architecture wheel's dlopen refusal -- Embody's own venv,
+    repairable). Collapsing both into runtime_probe_failed is what made
+    the 13:02 macOS log read as two identical mysteries.
+
+    SIGNATURE-BLOCKED outranks everything: macOS Library Validation.
+    TouchDesigner's bundled python is signed with the hardened runtime's
+    library-validation flag, so spawned STANDALONE it refuses any dylib
+    signed by another Team ID -- the dlopen reason reads 'mapping process
+    and mapped file (non-platform) have different Team IDs' (verified on
+    an arm64 Mac, 2026-08-04, after an earlier truncated log was misread
+    as an architecture mismatch). No reinstall can fix that interpreter;
+    the daemon needs a Python OUTSIDE TouchDesigner's signature domain,
+    so this class must never receive the rebuild-the-venv guidance.
+
+    BROKEN is next and requires cryptography context: any mention of the
+    _rust binding (its dlopen failure, its ImportError, or a
+    missing-submodule error from a half-installed wheel), or a loader
+    complaint that names cryptography. A dlopen failure on some
+    unrelated dylib stays generic -- 'rebuild the venv' guidance cannot
+    help it. MISSING matches only the TOP-LEVEL module, closing quote
+    included: \"No module named 'cryptography.hazmat...'\" is a broken
+    install, not an absent one.
+    """
+    text = str(text or "")
+    if (('cryptography' in text or '_rust' in text)
+            and any(marker in text for marker in _SIGNATURE_MARKERS)):
+        # Matches BOTH macOS refusal variants: 'different Team IDs' (a
+        # really-signed dylib) and 'no Team ID'/'Library Validation' (an
+        # ad-hoc one). Crypto context required, parallel to the broken
+        # class: an unrelated dylib's signature refusal stays generic.
+        return "runtime_crypto_signature_blocked"
+    if '_rust' in text or (
+            'cryptography' in text
+            and ('dlopen' in text or 'incompatible architecture' in text)):
+        return "runtime_crypto_broken"
+    if "No module named 'cryptography'" in text:
+        return "runtime_missing_cryptography"
+    return "runtime_probe_failed"
+
+
+_PROBE_DIAGNOSIS_MARKERS = (
+    "Team ID",
+    "incompatible architecture",
+    "library load disallowed",
+    "code signature",
+    "No module named",
+)
+
+
+def probe_detail_snippet(detail, limit=220):
+    """The one line of a probe failure worth a WARNING's budget.
+
+    Prefers the LAST non-empty line (a traceback's diagnosis line); when
+    even that is too long -- dlopen reasons repeat the dylib path per
+    candidate location and bury the reason clause mid-line -- centers the
+    window on the first known diagnosis marker instead of blind slicing.
+    """
+    lines = [l.strip() for l in str(detail or "").splitlines() if l.strip()]
+    if not lines:
+        return ""
+    last = lines[-1]
+    if len(last) <= limit:
+        return last
+    for marker in _PROBE_DIAGNOSIS_MARKERS:
+        found = last.find(marker)
+        if found >= 0:
+            start = max(0, found - (limit // 4))
+            clipped = last[start:start + limit]
+            return ("..." if start else "") + clipped.strip()
+    return last[:limit].rstrip() + "..."
+
+
 def probe_runtime(interpreter, platform=None, architecture=None, runner=None):
     """Run the candidate in isolated mode and prove Convoy's crypto floor.
 
@@ -1224,10 +1315,8 @@ def probe_runtime(interpreter, platform=None, architecture=None, runner=None):
         return _failed("runtime_probe_failed",
                        "%s: %s" % (type(e).__name__, e))
     if code != 0:
-        return _failed(
-            "runtime_probe_failed",
-            (str(err or out or "managed runtime did not start").strip())[:500],
-            returncode=code)
+        text = str(err or out or "managed runtime did not start").strip()
+        return _failed(classify_probe_failure(text), text, returncode=code)
     lines = [line.strip() for line in str(out or "").splitlines()
              if line.strip()]
     try:
@@ -3361,6 +3450,13 @@ def plan_host_uninstall(data_dir, platform=None, home=None):
     # of WHY a host app was failing -- so it is retained too, and the
     # dialog can say so.
     retain.append(log_path(data_dir, platform))
+    # The dedicated daemon venv (the macOS library-validation fallback).
+    # RETAINED AND SAID SO rather than removed: its hundreds of files are
+    # uv's, not ours to prove we wrote (the manifest rule above), a
+    # reinstall reuses or rebuilds it with --clear, and deleting a live
+    # interpreter out from under a still-stopping daemon is exactly the
+    # class of silent destruction this preview exists to prevent.
+    retain.append(join(root, "runtime-venv"))
     retain_present = [p for p in retain if os.path.exists(p)]
 
     jobs, indeterminate = count_jobs(data_dir, platform)
@@ -3423,8 +3519,30 @@ def _ok(**fields):
     return out
 
 
+def _clip_detail(text, limit=1600):
+    """Bound diagnostic text WITHOUT losing its conclusion.
+
+    A Python traceback puts the diagnosis on its LAST line; the previous
+    head-only [:500] slice kept the stack frames and cut the one line that
+    mattered -- a macOS install failure spent a full diagnosis round trip
+    truncated at 'ImportError: dlopen(/User'. Keep both ends: the head
+    names what ran ('Traceback ...'), the tail carries the verdict.
+    """
+    text = str(text or "").strip()
+    if len(text) <= limit:
+        return text
+    head = text[:120].rstrip()
+    tail_budget = limit - len(head) - 5
+    if tail_budget <= 0:
+        # A caller-supplied limit smaller than the head window: degrade
+        # to a plain head slice rather than returning MORE than asked
+        # (a negative tail slice keeps nearly the whole string).
+        return text[:limit]
+    return head + " ... " + text[-tail_budget:].lstrip()
+
+
 def _failed(reason, detail="", **fields):
-    out = {"ok": False, "reason": reason, "detail": str(detail)[:500]}
+    out = {"ok": False, "reason": reason, "detail": _clip_detail(detail)}
     out.update(fields)
     return out
 
