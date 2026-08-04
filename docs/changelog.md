@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.206
+
+Wizard: the save step's button actually works.
+
+- **Dead "Save the project now" button fixed**: all wizard clicks route through one panel-execute DAT whose panel pattern lists each option group explicitly -- and the new save step's group was never added to it, so on a fresh (never-saved) project the save card rendered but ignored every click, wedging the wizard with Next locked (field-reported on macOS). The group is now wired, verified end-to-end with synthesized real mouse clicks through the panel pipeline -- the earlier screens-only verification called the click handler directly and could not see this.
+- **One dialog per click**: the router fires selection cards on both the press and release edges (idempotent for selections); the save card is an action, so it now fires on the press edge only -- a canceled save dialog no longer immediately reopens.
+- **Routing regression test**: a contract test now pins every option group to a matching entry in the click router's panel pattern (it fails against the v6.0.205 file), plus a source pin on the save card's single-fire exclusion.
+
 ## v6.0.205
 
 Wizard: the Back/Next footer can never leave the panel again.

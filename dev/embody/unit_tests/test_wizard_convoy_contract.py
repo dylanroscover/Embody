@@ -153,6 +153,42 @@ def test_an_actionable_node_state_outranks_the_host_app_line():
         "_BLOCKING_HOST_TEXTS)")
 
 
+# -- ROUTING: every option group must be WIRED to the click router -----
+#
+# All wizard clicks route through ONE panelexecute DAT ('clicks') whose
+# `panels` pattern enumerates the groups explicitly. v6.0.205 shipped
+# grp_save WITHOUT a pattern entry: the save card rendered but clicks
+# died silently, leaving the save step's Next permanently locked on a
+# fresh project (field-reported on macOS; only "Not now" still worked).
+# Handler-level tests cannot catch this (they call click() directly,
+# below the panel pipeline), so this pins the wiring itself.
+
+def test_every_option_group_is_wired_to_the_click_router():
+    import yaml
+    doc = yaml.safe_load(WIZARD_TDN.read_text(encoding="utf-8"))
+    clicks = next(o for o in doc["operators"] if o["name"] == "clicks")
+    panels = clicks["parameters"]["panels"].split()
+    assert "footer/btn_*" in panels
+    logic = _load_logic()
+    for step, d in logic.DEFS.items():
+        g = d.get("g")
+        if not g:
+            continue
+        assert "%s/opt_*" % g in panels, (
+            "group %r (step %r) is not in the clicks DAT's panels pattern --"
+            " its option cards would render but never respond" % (g, step))
+
+
+def test_save_action_card_fires_once_per_click():
+    """opt_savenow opens the OS save dialog, so it must fire on the press
+    edge ONLY -- the release edge would reopen a canceled dialog.
+    Selection cards keep firing on both edges (idempotent by design)."""
+    clicks_py = (LOGIC.parents[1] / "wizard" / "clicks.py").read_text(
+        encoding="utf-8")
+    on_to_off = clicks_py.split("def onOnToOff", 1)[1]
+    assert 'n!="opt_savenow"' in on_to_off.replace(" ", "")
+
+
 # -- LAYOUT: every step must FIT the fixed-height panel ----------------
 #
 # The wizard is a fixed-size verttb stack; hints auto-size to their text

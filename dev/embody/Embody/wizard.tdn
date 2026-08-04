@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 23
-generator: Embody/6.0.204
+build: 24
+generator: Embody/6.0.205
 td_build: 099.2025.33070
-source_file: Embody-6.204.toe
-exported_at: '2026-08-04T18:10:12Z'
+source_file: Embody-6.205.toe
+exported_at: '2026-08-04T18:45:47Z'
 network_path: /embody/Embody/wizard
 options:
   include_dat_content: false
@@ -164,7 +164,7 @@ operators:
 - name: clicks
   type: panelexecuteDAT
   parameters:
-    panels: footer/btn_* grp_mode/opt_* grp_assistant/opt_* grp_client/opt_* grp_permissions/opt_* grp_footprint/opt_* grp_git/opt_* grp_externalize/opt_* grp_convoy/opt_*
+    panels: footer/btn_* grp_save/opt_* grp_mode/opt_* grp_assistant/opt_* grp_client/opt_* grp_permissions/opt_* grp_footprint/opt_* grp_git/opt_* grp_externalize/opt_* grp_convoy/opt_*
     ontooff: true
     file: embody/Embody/wizard/clicks.py
     syncfile: true
