@@ -71,7 +71,7 @@ VOCABULARY = (
     'Installed -- starting...',
     'Installed -- not running (restarts within a minute)',
     'Installed -- stopped',
-    'Installed -- no supervisor (use Install or Update)',
+    'Installed -- no supervisor (use Repair Host App)',
     'Needs repair -- Python not found (reinstall)',
     'Managed by another supervisor',
     'Install failed -- see log',
@@ -322,7 +322,7 @@ class TestHostStatusVocabulary(EmbodyTestCase):
              'Installed -- not running (restarts within a minute)'),
             ({'state': self.install.STATE_STOPPED}, 'Installed -- stopped'),
             ({'state': self.install.STATE_NO_SUPERVISOR},
-             'Installed -- no supervisor (use Install or Update)'),
+             'Installed -- no supervisor (use Repair Host App)'),
             ({'state': self.install.STATE_NEEDS_REPAIR_PYTHON},
              'Needs repair -- Python not found (reinstall)'),
             ({'state': self.install.STATE_EXTERNAL_SUPERVISOR},
@@ -786,8 +786,15 @@ class TestUninstallSafety(ConvoyHostBase):
 class TestHostChainHygiene(ConvoyHostBase):
     """The generation-tagged handoff, on its own slot."""
 
-    def test_a_stale_instance_drops_its_poll(self):
+    def test_a_stale_instance_drops_its_poll_and_clears_its_slot(self):
+        """A stale poll applies nothing and reschedules nothing -- but it
+        DOES clear its own slot. The flags live on the same object the
+        staleness check guards, so a check that ever misfires on the
+        live instance would otherwise orphan the busy flag forever (the
+        Mac first-install wedge, 2026-08-04). A genuinely superseded
+        object's slot is unreachable garbage; clearing it harms nobody."""
         self._patch(self.convoy, '_staleInstance', lambda: True)
+        self.convoy._host_busy = True
         self.convoy._host_result = {'_gen': 7, '_action': 'status',
                                     'result': {'ok': True,
                                                'state': {'state': 'running'}}}
@@ -795,8 +802,10 @@ class TestHostChainHygiene(ConvoyHostBase):
         self.assertEqual(self.host_states, [],
                          'a superseded instance must apply nothing')
         self.assertEqual(self._runs, [], 'and must not reschedule')
-        self.assertIsNotNone(self.convoy._host_result,
-                             'and must not consume the slot')
+        self.assertIsNone(self.convoy._host_result,
+                          'and must clear its own slot')
+        self.assertFalse(self.convoy._host_busy,
+                         'and must never leave its busy flag orphaned')
 
     def test_a_superseded_generation_retries_instead_of_applying(self):
         self.convoy._host_result = {'_gen': 4, '_action': 'status',

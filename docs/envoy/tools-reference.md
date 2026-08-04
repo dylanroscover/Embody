@@ -1,6 +1,8 @@
 # Tools Reference
 
-Envoy exposes 62 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 62 MCP tools for interacting with TouchDesigner, plus 19 bridge meta-tools: 4 TD-lifecycle tools and 15 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+
+Two of the 62 (`convoy_lifecycle_state`, `convoy_lifecycle_quit`) are internal Convoy host-lifecycle tools: they refuse any session other than the Convoy host app's dedicated loopback session and are not for agent use.
 
 Every mutating TD-authoring tool call is wrapped in a TouchDesigner undo block. Press Ctrl+Z in TD to revert an agent change; a `batch_operations` call is one undo step for the whole batch.
 
@@ -183,6 +185,28 @@ These tools run locally on the STDIO bridge script, not inside TouchDesigner. Th
 | `launch_td` | `timeout?`, `project_path?` | Launch TD with the project's `.toe` file. Waits for Envoy to become reachable (default: 120s). Pass `project_path` (absolute, or relative to the git root) to open a different `.toe` |
 | `restart_td` | `timeout?`, `project_path?` | Gracefully quit TD and relaunch. Waits for exit before relaunching (default: 120s). Pass `project_path` to relaunch with a different `.toe`. Targets only the active instance's verified process — other running TouchDesigner instances are never touched |
 | `switch_instance` | `instance?`, `all_sessions?` | List all registered TD instances (omit `instance`) or re-pin **this session's** bridge to a different running instance; other sessions are untouched unless `all_sessions=true`. See [Multiple Instances](architecture.md#multiple-instances) |
+
+### Convoy Tools (LAN work relay)
+
+The remaining 15 meta-tools drive [Convoy](../convoy/index.md), relaying work to Convoy-enabled Embody nodes on the trusted LAN through the local per-user host app. Status and inventory calls never wake TouchDesigner.
+
+| Tool | Description |
+|------|-------------|
+| `get_convoy_status` | Is the local Convoy host app available, and what does it know |
+| `convoy_list_nodes` | Local and reachable remote nodes |
+| `convoy_list_controllers` | Live client sessions, selected targets, leases, and active work |
+| `convoy_ping` | One node's liveness through its host app, without waking TouchDesigner |
+| `convoy_select_node` | Pin this session to one exact node so ordinary Envoy tools run there (`clear=true` to unpin) |
+| `convoy_call` | One-off registered operation on an explicit target, without changing the selection |
+| `convoy_batch` | The same ordered batch on one or more explicit targets, reported per target |
+| `convoy_get_job` | Check durable work that outlives the original call or reconnect |
+| `convoy_ack_job` | Acknowledge a finished delivery so the target can release its protected result artifacts |
+| `convoy_cancel_job` | Request cancellation from the exact owning host |
+| `convoy_get_artifact` | Retrieve and verify a large result into a temporary local file by artifact reference |
+| `convoy_save_artifact` | Verify an artifact and save it into the current project (`overwrite=true` required to replace) |
+| `convoy_start_node` | Reopen a previously registered, currently offline node |
+| `convoy_restart_node` | Safely replace one exact running TouchDesigner process (requires the current runtime id and an idempotency key) |
+| `convoy_owlette` | Optional read-mostly bridge to an Owlette site; fails closed without credentials |
 
 !!! info "Bridge architecture"
     Claude Code connects to Envoy via a STDIO bridge script (`.embody/envoy-bridge.py`). The bridge translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. It handles MCP protocol handshake locally when TD is down, so these meta-tools are always available. See [Architecture](architecture.md) for details.

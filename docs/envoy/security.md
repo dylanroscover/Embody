@@ -10,6 +10,9 @@ Envoy binds exclusively to `127.0.0.1` (localhost). It does **not** listen on `0
 - It is not accessible from the local network or internet
 - Browser-driven cross-site requests, including DNS-rebinding attempts from malicious websites, are rejected by `Host`/`Origin` validation rather than relying on the localhost bind alone
 
+!!! note "Convoy changes the reachability story"
+    Enabling **Convoy** runs a separate per-user host app that opens an authenticated, encrypted LAN listener and relays registered operations into Envoy's loopback server. Envoy itself never binds beyond `127.0.0.1`, but Convoy-admitted peers on the trusted LAN can drive this node -- including `execute_python` when **Allow Execute TD Python** is enabled locally. See [Convoy](../convoy/index.md) for its trust model and safety toggles.
+
 !!! danger "Do not expose Envoy to the network"
     Never use port forwarding, SSH tunnels, reverse proxies, or firewall rules to make Envoy's port accessible from other machines. Envoy has **no authentication** — any process that can reach the port has full control over your TouchDesigner session.
 

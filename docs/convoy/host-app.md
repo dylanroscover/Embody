@@ -3,18 +3,17 @@
 Convoy uses a small background **host app** on each participating computer. One host app serves every Convoy-enabled TouchDesigner project for the logged-in user. It is a local helper, not a central Convoy server: if it stops, only the nodes on that computer become unavailable, while other reachable siblings continue communicating.
 
 !!! warning "Development preview"
-    The controls and runtime are still being completed. **Install or Update Host App** may not have a production-ready package in every build. Windows acceptance testing is in progress; the host app, login supervision, firewall flow, and node-to-node operation have not yet been physically validated on macOS. Use a development test deployment, not a show-critical machine, until the relevant release notes say otherwise.
+    The controls and runtime are still being completed. Windows acceptance testing is in progress. On macOS, host-app install and the daemon runtime have been validated on Apple Silicon hardware; login supervision, the firewall flow, and node-to-node LAN operation have not yet completed physical acceptance there. Use a development test deployment, not a show-critical machine, until the relevant release notes say otherwise.
 
 ## Checklist for each computer
 
 1. Connect the computer to the same trusted LAN as the other Convoy machines.
 2. Save and open each `.toe` that should appear as a node.
 3. Choose an AI assistant if desired, then turn on **Enable Convoy** on each participating Embody COMP. With no assistant selected, Embody runs only the internal loopback command service Convoy needs and does not configure or launch an AI client.
-4. Press **Install or Update Host App** and approve the local installation prompt.
-5. Press **Start Host App** if it is not already running.
-6. Allow the host app on the operating system's private/trusted network profile. Do not open Envoy's local-only port to the LAN.
-7. Confirm **Host App**, **This Node Status**, and the **Convoy Status** sequence on the Embody COMP.
-8. Repeat on the next computer, using the same Embody version.
+4. Approve the one-time confirmation. Enabling Convoy installs and starts the background host app automatically -- the confirmation (or the Setup Wizard's Convoy step) is the consent for the app and its login persistence.
+5. Allow the host app on the operating system's private/trusted network profile. Do not open Envoy's local-only port to the LAN.
+6. Confirm **Status** and the **Convoy Nodes** sequence on the Embody COMP.
+7. Repeat on the next computer, using the same Embody version.
 
 There is no invitation code or Create/Join decision. Enabled nodes find the Convoy automatically and reconnect after ordinary process, address, or network interruptions.
 
@@ -22,34 +21,37 @@ There is no invitation code or Create/Join decision. Enabled nodes find the Conv
 
 | Control | What it does |
 |---|---|
-| **Host App** | Reports whether the background app for this logged-in user is installed, running, stopped, or needs attention |
-| **Install or Update Host App** | Installs, repairs, or updates the per-user app after local confirmation |
+| **Status** | One combined readout: a blocking or in-flight host-app state (`Not installed`, `Installing...`, `Needs repair ...`) wins; otherwise the node's own registration state shows (`Connected`, `Waiting for project save`, ...) |
+| **Repair Host App** | Reinstalls or upgrades the per-user app. Enabling Convoy installs it automatically, so this pulse is the repair and update path |
 | **Start Host App** | Starts the installed app now |
 | **Stop Host App** | Stops it and disables automatic restart; queued job records are retained |
-| **Uninstall Host App** | Removes the app and login registration while retaining the local host identity and job history for a later reinstall |
+| **Uninstall Host App** | Removes the app and login registration while retaining the local host identity, job history, the host log, and (on macOS) the dedicated Convoy runtime venv, so a later reinstall rejoins as the same host and reuses the runtime. The confirmation names each retained path before anything is removed |
 
-Installing the host app is separate from **Enable Convoy** because it runs outside TouchDesigner and may start when the user logs in. Enabling Convoy in the wizard never performs that installation silently.
+Enabling Convoy installs and starts the host app automatically, because Convoy cannot reach the LAN without it. The consent is carried by the one-time Enable Convoy confirmation (or the wizard's Convoy step), which discloses that the app runs at login, whether or not TouchDesigner is open. The pulses above remain for repair, upgrade, deliberate stop/start, and uninstall.
 
-The **Host App** readout uses these user-facing states:
+The host-app portion of **Status** uses these user-facing states:
 
 | Readout | What to do |
 |---|---|
-| `Not installed` | Use **Install or Update Host App**. The app is plain Python and runs under Embody's own managed Python environment, so no extra download is needed |
-| `Checking...`, `Installing...`, `Installed -- starting...` | Wait for the current local action to finish |
+| `Not installed` | Enable Convoy (or press **Repair Host App**). The app is plain Python; on Windows it normally runs under Embody's own managed Python environment with nothing extra to download. If that environment fails its check, the installer repairs it or builds a dedicated Convoy venv, which may download the pinned cryptography package once (on macOS this venv is built from Homebrew's `python3` -- see below) |
+| `Checking...`, `Installing...`, `Installed -- starting...` | Wait for the current local action to finish. If an action ever reports "another Convoy host action is still running" long after the work should have finished, simply retry: a stuck request self-heals -- a finished result is delivered on the next attempt, and a truly dead action releases its slot within about 15 minutes. No TouchDesigner restart is needed |
 | `Running ...` | Ready; the version and process ID may also be shown |
 | `Installed -- not running (restarts within a minute)` | On Windows, the scheduled supervisor may take up to a minute; macOS LaunchAgent recovery is normally prompt. You can press **Start Host App** immediately on either platform. |
 | `Installed -- stopped` | Press **Start Host App** when you want Convoy available again |
-| `Installed -- no supervisor (use Install or Update)` | Run **Install or Update Host App** to repair login startup |
-| `Needs repair -- managed runtime unavailable` | The Python the app was installed against is gone. Run **Install or Update Host App** to repair it; it is also the repair path if Embody's Python environment was rebuilt |
+| `Installed -- no supervisor (use Repair Host App)` | Run **Repair Host App** to repair login startup |
+| `Needs repair -- Python not found (reinstall)` | The Python the app was installed against is gone. Run **Repair Host App** to re-resolve the runtime; it is also the repair path if Embody's Python environment was rebuilt |
 | `Running ... -- installed by a newer Embody` or `Installed ... -- installed by a newer Embody` | Do not downgrade it from an older Embody; align versions first |
 | `Managed by another supervisor` | Use the studio or Owlette process that owns startup, rather than competing with it |
-| `Install failed -- see log` | Review the Embody log, then retry the repair action |
+| `Install failed -- see log` | Review the Embody log, then retry **Repair Host App** |
+| `Consent required -- enable Convoy again` | The first-enable confirmation was declined or never answered; toggle **Enable Convoy** on again to see it |
 
 If the log says `no interpreter on this machine could load cryptography and TLS 1.3`, the install probed every Python it could find and names each one with why it failed. Three causes are distinguished:
 
-- `runtime_missing_cryptography` -- that Python simply has no cryptography package (normal for a bare system `python3`).
+- `runtime_missing_cryptography` -- that Python simply has no cryptography package (normal for a bare system `python3`; when Embody's own venv reports this, the installer attempts the same one-shot repair described below).
 - `runtime_crypto_broken` -- cryptography is installed but cannot load, typically a CPU-architecture mismatch in Embody's `.venv` (for example after switching between the Intel and Apple Silicon TouchDesigner builds). The installer automatically attempts one repair (reinstalling the pinned cryptography into the venv); if that still fails, toggle **Enable Envoy** off and on -- Embody detects an architecture change and rebuilds the Python environment -- then enable Convoy again.
-- `runtime_crypto_signature_blocked` -- macOS refused to load cryptography into TouchDesigner's bundled Python: that binary is code-signed with library validation and, run standalone, may not load third-party native modules (`... different Team IDs` in the log). Reinstalling or rebuilding the venv cannot fix this. Convoy handles it by building a dedicated daemon venv from a Python outside TouchDesigner (Homebrew's `python3`, probed at `/opt/homebrew/bin` and `/usr/local/bin`); if no such Python exists, install one (`brew install python`) and enable Convoy again.
+- `runtime_crypto_signature_blocked` -- macOS refused to load cryptography into TouchDesigner's bundled Python: that binary is code-signed with library validation and, run standalone, may not load third-party native modules (`... different Team IDs` in the log). Reinstalling or rebuilding the venv cannot fix this. Convoy handles it by building a dedicated daemon venv (at the Convoy data directory's `runtime-venv`) from a Python outside TouchDesigner -- Homebrew's `python3`, probed at `/opt/homebrew/bin` and `/usr/local/bin` by absolute path, or Apple's Command Line Tools `python3` once it reaches 3.11 (today's 3.9.6 is version-gated out). If no usable Python exists, install one (`brew install python`) and enable Convoy again.
+
+The daemon venv is built once per user per machine and reused by every later install, update, and repair: a healthy existing venv passes its probe in seconds, works offline, and is retained by uninstall. Only the first build (or a rebuild after deleting it) downloads packages.
 
 Use one dedicated logged-in user for an unattended show machine. The host app is per user, not a system service, so a different user account has a separate identity, settings, jobs, and artifact quota.
 
@@ -96,7 +98,7 @@ Work through this list on both computers:
 6. Wait for automatic reconnect; do not repeatedly toggle permissions while a node is converging.
 7. If several established Convoys are reported, stop and use the explicit local recovery path instead of deleting random state.
 
-If the host app was just updated, run **Install or Update Host App** once more as the repair path, then **Start Host App**. Do not manually copy host identities or settings between computers.
+If the host app was just updated, run **Repair Host App** once more as the repair path, then **Start Host App**. Do not manually copy host identities or settings between computers.
 
 ## When a node keeps going offline
 
@@ -129,7 +131,7 @@ After the final remote operation and edit lease finish, **Remote Wake Idle Grace
 
 ## Controller or edit-lease conflicts
 
-The **Controllers** column is a count of active client sessions reported with the node row, not a list of privileged users. Older preview hosts may display zero until they expose that aggregate. Read-only work can overlap, but mutations acquire an edit lease for the target scope. A lease conflict means another controller currently owns the required mutation scope.
+Per-node controller counts are not a column in the **Convoy Nodes** sequence; use `convoy_list_controllers` for the live client sessions attached to a node. Read-only work can overlap, but mutations acquire an edit lease for the target scope. A lease conflict means another controller currently owns the required mutation scope.
 
 - Do not bypass the refusal by switching to a less specific target name.
 - Check the detailed controller list if `convoy_list_controllers` is present in your build.
@@ -196,11 +198,11 @@ Project-saved artifacts are not counted against this quota and are never removed
 
 ## Repair, stop, and uninstall
 
-**Install or Update Host App** is also the repair action. It should preserve the computer's Convoy identity and durable records while refreshing the installed runtime.
+**Repair Host App** is also the repair action. It should preserve the computer's Convoy identity and durable records while refreshing the installed runtime.
 
 **Stop Host App** intentionally prevents its login supervisor from immediately starting it again. Existing queued job records remain. Press **Start Host App** to resume.
 
-**Uninstall Host App** removes the background app and login registration but retains the local host identity and job history so a later reinstall rejoins as the same host. Review the confirmation shown by your build before proceeding. Explicitly saved project artifacts are project files and are not part of host-app cache cleanup.
+**Uninstall Host App** removes the background app and login registration but retains the local host identity, job history, the host log, and (on macOS) the dedicated Convoy runtime venv, so a later reinstall rejoins as the same host and reuses the already-built runtime without a rebuild. Incomplete or unrecognized payload directories are named but never deleted. The confirmation names each retained path before anything is removed. Explicitly saved project artifacts are project files and are not part of host-app cache cleanup.
 
 ## Platform validation status
 
@@ -210,7 +212,7 @@ At the time of this preview:
 
 - Production runtime packaging is not complete in every build.
 - Windows-to-Windows physical acceptance is in progress.
-- Physical Apple Silicon macOS validation is pending.
+- On macOS, host-app install and the daemon runtime are validated on Apple Silicon hardware; login supervision, the firewall flow, and node-to-node LAN operation have not yet completed physical acceptance.
 - Intel macOS is not the first supported Convoy host target.
 
 Consult the release notes for the combinations certified by the build you plan to deploy.

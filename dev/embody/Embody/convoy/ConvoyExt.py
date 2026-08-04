@@ -3719,7 +3719,7 @@ class ConvoyExt:
         why it re-runs a full install even when plan_install says the
         version is already current: writing the payload again, rewriting
         the launcher and re-registering the supervisor is exactly what
-        fixes 'Needs repair -- managed runtime unavailable' (the runtime is
+        fixes 'Needs repair -- Python not found (reinstall)' (the runtime is
         re-resolved here) and 'Installed -- no supervisor'. Every one of
         those steps is idempotent by construction -- temp + os.replace,
         .complete written last, schtasks /Create /F rewriting the whole

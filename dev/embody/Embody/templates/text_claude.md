@@ -69,6 +69,10 @@ Manual configuration if needed:
 }
 ```
 
+## Convoy (LAN work relay)
+
+When **Enable Convoy** is on, `convoy_*` MCP tools relay work to OTHER Convoy-enabled machines on the trusted LAN (list nodes, pin a session with `convoy_select_node`, relay `run_tests`/`save_project`/screenshots, restart nodes). Two hard rules: give every lifecycle action (`convoy_restart_node`, `convoy_start_node`, command submissions) a unique `idempotency_key` and the node's CURRENT runtime id, so a retried or delayed request can never double-run or hit a replacement process; and fetch remote results only through `convoy_get_artifact` / `convoy_save_artifact` references -- a remote path in a result is descriptive text, never a local file to open.
+
 ## Recommended Permissions
 
 To reduce tool-approval prompts, Embody deploys a `.claude/settings.local.json` that pre-allows the Envoy MCP tools (inspect tools like `get_op`/`query_network` AND write tools like `create_op`, `set_parameter`, `execute_python`, `import_network`, plus `Bash` and `WebFetch`). It is written only if the file is missing -- Embody never overwrites or regenerates your customizations, so edit its `permissions.allow` list to tighten or loosen access:

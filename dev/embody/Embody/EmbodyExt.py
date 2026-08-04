@@ -1556,9 +1556,11 @@ class EmbodyExt:
           convoy:      '' | 'enable' | 'disable' -- the wizard's independent
                        Convoy step. Sets the canonical Convoyenable toggle;
                        '' leaves it unchanged for compatibility with an older
-                       wizard that had no Convoy step. Installing the per-user
-                       host app stays a SEPARATE explicit pulse -- the wizard
-                       only flips the enable flag, never installs it.
+                       wizard that had no Convoy step. Enabling ALSO installs
+                       and starts the per-user host app (Register ->
+                       _ensureHostApp, confirm=False): the wizard records the
+                       install consent first, so the Convoy step's answer IS
+                       the approval and no second dialog appears.
         """
         # Whitelist the assistant token: an unrecognized value (a typo, a
         # mis-cased 'None') must be a safe no-op, never fall through to ENABLING

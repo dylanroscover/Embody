@@ -101,7 +101,7 @@ def _convoyHint():
 def _footprintHint():
 	w=_w()
 	if w.fetch('sel_assistant','')=='none' and w.fetch('sel_convoy','')=='enable':
-		return 'Convoy-only setup adds a Python env (.venv), the internal local Envoy command service, and .embody runtime state. It does not generate AI-client config or launch an AI coding tool. The separate Convoy host-app install remains an explicit action. Everything Embody adds is recorded and reversible via Uninstall.'
+		return 'Convoy-only setup adds a Python env (.venv), the internal local Envoy command service, and .embody runtime state. It does not generate AI-client config or launch an AI coding tool. Enabling Convoy also installs and starts its small per-user host app, consented in the Convoy step. Everything Embody adds is recorded and reversible via Uninstall.'
 	return DEFS['footprint']['hint']
 def render():
 	w=_w(); sp=spine(); cur=w.fetch('step_id','mode')

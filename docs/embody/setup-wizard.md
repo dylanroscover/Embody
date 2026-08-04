@@ -74,7 +74,7 @@ This choice sets **Enable Convoy** (`Convoyenable`). It is both the membership a
 
 Convoy is independent of the AI-assistant choice. If you selected **None** and enable Convoy, Embody starts only Envoy's internal loopback command service so siblings can execute registered TouchDesigner operations. It does not generate `.mcp.json` or AI rules, connect an MCP client, or launch a coding tool.
 
-Only enable Convoy on a LAN you trust. The wizard does **not** install or start the per-user Convoy host app; that remains a separate, locally confirmed action on the Convoy parameter page. **Allow Execute TD Python** and **Allow Full Shell** also remain off unless you enable them locally later. See the [Convoy guide](../convoy/index.md).
+Only enable Convoy on a LAN you trust. Enabling Convoy -- from the wizard or the parameter page -- also installs and starts the small per-user Convoy host app; the wizard's Convoy step is the consent for that install (the app runs at login, whether or not TouchDesigner is open), so no second prompt appears. Convoy identifies a node by its saved project folder, so it cannot enable on a never-saved project: the wizard tells you to save first, and until you do the Convoy **Status** reads `Waiting for project save`. **Allow Execute TD Python** and **Allow Full Shell** remain off unless you enable them locally later. See the [Convoy guide](../convoy/index.md).
 
 ### 7. Git — make this project a repository? *(only when no repo was found)*
 
@@ -119,7 +119,7 @@ Most choices apply in one pass after the final click. **Externalize everything**
 3. **Applies the externalization choice.** New-work mode changes only the auto-externalization preference. Whole-project mode opens its own confirmation and format choice after setup; it never silently rewrites the project.
 4. **If you chose None with Convoy off**: Envoy stays off and you're set up for externalization only.
 5. **If you chose None with Convoy enabled**: Embody enables only Envoy's internal loopback command substrate. Dependencies install in a background thread, but no AI client is configured or launched.
-6. **If you chose an assistant**: AI config files are generated, the MCP server starts on the configured port, and dependencies install in a background thread — TouchDesigner stays responsive. The independent Convoy choice is applied either way; enabling Convoy here does not install its host app. See [Envoy Setup](../envoy/setup.md) and [Convoy Setup](../convoy/host-app.md).
+6. **If you chose an assistant**: AI config files are generated, the MCP server starts on the configured port, and dependencies install in a background thread — TouchDesigner stays responsive. The independent Convoy choice is applied either way; enabling Convoy here also installs and starts its per-user host app (consented at the Convoy step). See [Envoy Setup](../envoy/setup.md) and [Convoy Setup](../convoy/host-app.md).
 7. **On a re-run** with Envoy already running, the command server restarts so a new port, root, or client takes effect. AI config is regenerated only when an AI client is selected.
 
 ## Changing your mind later

@@ -179,6 +179,17 @@ These run locally on the STDIO bridge — they work even when TD is not running.
 | `restart_td` | `timeout?` | Gracefully quit TD and relaunch, wait for Envoy (default: 120s) |
 | `switch_instance` | `instance?`, `all_sessions?` | List all registered TD instances (omit `instance`) or re-pin THIS session's bridge to a different running instance (provide toe basename without `.toe`); peers are untouched unless `all_sessions=true` (writes the registry default and bumps `active_epoch`, moving every session). See `/multi-instance` skill for workflow |
 
+### Convoy Tools (LAN work relay)
+
+Fifteen additional meta-tools drive Convoy, relaying work to Convoy-enabled Embody nodes on the trusted LAN through the local per-user host app. Status and inventory calls (`get_convoy_status`, `convoy_list_nodes`, `convoy_list_controllers`, `convoy_ping`) never wake TouchDesigner.
+
+- `convoy_select_node` pins THIS session to one exact node -- ordinary Envoy tools then run there until `convoy_select_node` with `clear=true`.
+- `convoy_call` / `convoy_batch` run registered operations on explicit one-off targets; pass a unique `idempotency_key` per intended action so a retry reconciles instead of double-running.
+- `convoy_get_job` / `convoy_ack_job` / `convoy_cancel_job` reconcile durable deliveries; acknowledge a finished delivery you have safely observed so the target can release its protected result artifacts.
+- `convoy_get_artifact` / `convoy_save_artifact` fetch results BY ARTIFACT REFERENCE and verify them locally -- never open a remote `C:\...` or `/Users/...` path as if it were local.
+- `convoy_start_node` / `convoy_restart_node` manage node lifecycle; restarts require the node's CURRENT runtime id (from `convoy_list_nodes`) plus a unique `idempotency_key`, and the default policy refuses dirty or unverifiable project state.
+- `convoy_owlette` is an optional read-mostly site bridge that fails closed without credentials.
+
 ## Batch Operations
 
 | Tool | Parameters | Description |
