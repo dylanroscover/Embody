@@ -58,7 +58,11 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # The suite is ~2740 tests and takes ~8 minutes on a fast local box; the
+    # macOS runner has come in at 15m18s against a 15-minute ceiling, i.e.
+    # timing out rather than failing. Convoy keeps adding coverage, so give it
+    # real headroom instead of re-tuning this every few releases.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -77,7 +81,14 @@ jobs:
       # package is absent, so CI tracking the current release is the
       # useful signal. 3.4 is the floor for the modern
       # load_pem_private_key / Ed25519 X.509 surface used here.
+      # PyYAML is the SECOND dependency, and it is a test-only one: the
+      # release-gate contract (test_convoy_parameter_contract.py) reads
+      # Embody.tdn -- the tracked source every release .tox is built from --
+      # to prove no hostname, address, host/convoy id or local path ships, and
+      # that Convoy arrives disabled. That file is YAML. Without this the
+      # module fails to IMPORT, which aborts collection for the whole run
+      # rather than failing one test.
       - name: Install pytest and the host-identity dependency
-        run: python -m pip install --quiet pytest "cryptography>=3.4"
+        run: python -m pip install --quiet pytest "cryptography>=3.4" pyyaml
       - name: Run the bridge suite
         run: python -m pytest -v
