@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 977
-generator: Embody/6.0.203
+generator: Embody/6.0.204
 td_build: 099.2025.33070
 source_file: Embody-6.204.toe
-exported_at: '2026-08-04T17:27:24Z'
+exported_at: '2026-08-04T18:28:23Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -66,6 +66,7 @@ operators:
     - {}
     - {}
     Convoynodes:
+    - {}
     - {}
     - {}
     - {}
@@ -853,7 +854,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.203
+      value: 6.0.204
     - name: Touchbuild
       style: Str
       label: Touch Build

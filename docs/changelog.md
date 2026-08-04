@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.205
+
+Wizard: the Back/Next footer can never leave the panel again.
+
+- **Footer cutoff fixed**: v6.0.204's self-sizing descriptions grew three steps (Enable Convoy, externalize, footprint review) past the wizard's fixed 440px height, clipping the Back/Next buttons off the bottom. The panel is now 520px -- sized to the tallest possible step -- and the previously dormant fill spacer between the options and the footer is active, so the footer sits pinned at the same bottom position on every step instead of floating up under short content.
+- **Layout regression test**: a new contract test recomputes every step's worst-case stack (chrome + gaps + auto-sized hint + option group) straight from `wizard.tdn` geometry and pins it under the panel height, so a future text edit that outgrows the panel fails in CI instead of clipping in the field.
+- Also fixed: a dangling `title_callbacks` reference on the window header's title widget; the wizard geometry and logic files now trigger the CI test run that guards them; the setup-wizard docs document the save step, refresh both screenshots at the new layout, and correct the Convoy save language (the wizard path now guarantees a saved project -- `Waiting for project save` remains the parameter-page path's status).
+
 ## v6.0.204
 
 The Setup Wizard gets a save gate and a consistent layout.

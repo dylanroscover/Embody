@@ -13,7 +13,11 @@ The **setup wizard** is Embody's onboarding surface. It opens the first time you
 
 The wizard adapts to your answers. Conditional screens appear only when they apply, and the progress bar always reflects the current path.
 
-### 1. Mode — how Embody manages your project
+### 1. Save your project *(only when the project has never been saved)*
+
+Everything the wizard sets up — the Python environment (`.venv`), AI config, `.embody` state, the optional git repository — lands relative to your project's folder, and a never-saved project has no folder yet. So on an unsaved project this step comes before all others: **Save the project now…** opens the standard save dialog, and **Next** stays locked until the project is on disk. Saving here also lets the later steps (git, externalization) probe your project's real location. On a project that has ever been saved, this step never appears.
+
+### 2. Mode — how Embody manages your project
 
 | Option | Meaning |
 |---|---|
@@ -22,7 +26,7 @@ The wizard adapts to your answers. Conditional screens appear only when they app
 
 Sets the **Mode** (`Embodymode`) parameter. The choice also governs how Embody handles *later* invasive actions (a startup repair, `InitGit()` / `InitEnvoy()`), not just this setup pass.
 
-### 2. Externalization *(only when the project still has work to externalize)*
+### 3. Externalization *(only when the project still has work to externalize)*
 
 | Option | Meaning |
 |---|---|
@@ -32,9 +36,9 @@ Sets the **Mode** (`Embodymode`) parameter. The choice also governs how Embody h
 
 This step is skipped when the project already looks externalized. The whole-project choice keeps its own confirmation and format choice because it can touch many operators.
 
-### 3. AI assistant — turn on Envoy?
+### 4. AI assistant — turn on Envoy?
 
-![The AI assistant step of the setup wizard, offering Claude Code, no AI assistant, or another AI tool](../assets/embody-setup-wizard-2.png){ width="620" }
+![The AI assistant step of the setup wizard, offering Claude Code, no AI assistant, or another AI tool](../assets/embody-setup-wizard-2.png){ width="500" }
 
 | Option | Meaning |
 |---|---|
@@ -44,15 +48,15 @@ This step is skipped when the project already looks externalized. The whole-proj
 
 Envoy is easy to remove later — see [Removing Embody](getting-started.md#removing-embody).
 
-### 4. Pick your AI tool *(only when "Other AI tool" is selected)*
+### 5. Pick your AI tool *(only when "Other AI tool" is selected)*
 
 Choose which client Embody generates config for: **OpenCode** (`opencode.json` plus shared `.claude/` rules and skills — see [Local Models & Open Clients](../envoy/local-models.md)), **Codex** (`AGENTS.md`), **Cursor** (`.cursor/`), **Gemini** (`GEMINI.md`), **VS Code** (MCP config), **GitHub Copilot** (`.github/`), or **Windsurf** (`.windsurf/`). Sets the **AI Client** (`Aiclient`) parameter. `AGENTS.md` is always written regardless of the client.
 
-### 5. Permissions — how the AI asks *(Claude Code only)*
+### 6. Permissions — how the AI asks *(Claude Code only)*
 
 By default, Claude Code prompts before every MCP tool call. This step chooses how much Embody pre-approves in `.claude/settings.local.json`:
 
-![The permissions step of the setup wizard, choosing how much Embody pre-approves Envoy tools](../assets/embody-setup-wizard-3.png){ width="620" }
+![The permissions step of the setup wizard, choosing how much Embody pre-approves Envoy tools](../assets/embody-setup-wizard-3.png){ width="500" }
 
 | Choice | Effect |
 |---|---|
@@ -63,7 +67,7 @@ By default, Claude Code prompts before every MCP tool call. This step chooses ho
 
 Sets the **Tool Permissions** (`Toolpermissions`) parameter, which you can change anytime without re-running the wizard. If a `settings.local.json` already exists, Embody edits only its Envoy entries and keeps everything else you've set — the wizard tells you so on this screen. See [MCP Tool Permissions](../envoy/setup.md#mcp-tool-permissions) for the full details.
 
-### 6. Convoy — join other Embody nodes?
+### 7. Convoy — join other Embody nodes?
 
 | Option | Meaning |
 |---|---|
@@ -74,9 +78,9 @@ This choice sets **Enable Convoy** (`Convoyenable`). It is both the membership a
 
 Convoy is independent of the AI-assistant choice. If you selected **None** and enable Convoy, Embody starts only Envoy's internal loopback command service so siblings can execute registered TouchDesigner operations. It does not generate `.mcp.json` or AI rules, connect an MCP client, or launch a coding tool.
 
-Only enable Convoy on a LAN you trust. Enabling Convoy -- from the wizard or the parameter page -- also installs and starts the small per-user Convoy host app; the wizard's Convoy step is the consent for that install (the app runs at login, whether or not TouchDesigner is open), so no second prompt appears. Convoy identifies a node by its saved project folder, so it cannot enable on a never-saved project: the wizard tells you to save first, and until you do the Convoy **Status** reads `Waiting for project save`. **Allow Execute TD Python** and **Allow Full Shell** remain off unless you enable them locally later. See the [Convoy guide](../convoy/index.md).
+Only enable Convoy on a LAN you trust. Enabling Convoy -- from the wizard or the parameter page -- also installs and starts the small per-user Convoy host app; the wizard's Convoy step is the consent for that install (the app runs at login, whether or not TouchDesigner is open), so no second prompt appears. Convoy identifies a node by its saved project folder, so it cannot enable on a never-saved project — in the wizard this is guaranteed by the [save step](#1-save-your-project-only-when-the-project-has-never-been-saved); when enabling from the parameter page instead, the Convoy **Status** reads `Waiting for project save` until you save. **Allow Execute TD Python** and **Allow Full Shell** remain off unless you enable them locally later. See the [Convoy guide](../convoy/index.md).
 
-### 7. Git — make this project a repository? *(only when no repo was found)*
+### 8. Git — make this project a repository? *(only when no repo was found)*
 
 If the wizard finds no git repository above your project folder, it asks — this is your decision, not something Embody does silently:
 
@@ -87,7 +91,7 @@ If the wizard finds no git repository above your project folder, it asks — thi
 
 If a repo already exists, this screen never appears — and when an assistant is enabled, Embody adds its entries to your existing `.gitignore` / `.gitattributes` as part of setup. With no assistant, nothing is written automatically unless you initialize Git in this step; run `op.Embody.InitGit()` later to add Embody's git entries. The step is shown for **every** assistant choice, including "None": version control is the point of externalizing.
 
-### 8. Footprint review *(Advanced mode only)*
+### 9. Footprint review *(Advanced mode only)*
 
 In Advanced mode, this screen appears when an assistant is selected or Convoy-only mode needs its internal runtime. It discloses everything it is about to add before you confirm. Convoy-only setup lists `.venv`, the internal command service, and `.embody` runtime state; it does not claim that AI-client files will be generated.
 
@@ -106,7 +110,7 @@ Everything is recorded and reversible via [Uninstall](getting-started.md#the-uni
 
 Sets the **AI Project Root** (`Aiprojectroot`) parameter. In Auto mode this screen is skipped and the git-root default is used — you can change it later; see [Configuration — AI Project Root](configuration.md#envoy).
 
-### 9. Summary
+### 10. Summary
 
 A recap of your mode, externalization, assistant, Convoy, and (when asked) git choices, with the reminder that nothing has changed yet. **Set up Embody** applies it all.
 

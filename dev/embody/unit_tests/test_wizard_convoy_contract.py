@@ -49,7 +49,7 @@ class _Wizard:
 
 def _logic_with(**values):
     logic = _load_logic()
-    wizard = _Wizard(ext_needed=False, git_missing=False, **values)
+    wizard = _Wizard(**{"ext_needed": False, "git_missing": False, **values})
     logic._w = lambda: wizard
     return logic
 
@@ -151,6 +151,63 @@ def test_an_actionable_node_state_outranks_the_host_app_line():
     # and it must be applied AFTER the host line, so it wins
     assert src.index("_ACTIONABLE_NODE_TEXTS)") > src.index(
         "_BLOCKING_HOST_TEXTS)")
+
+
+# -- LAYOUT: every step must FIT the fixed-height panel ----------------
+#
+# The wizard is a fixed-size verttb stack; hints auto-size to their text
+# (_hintHeight). v6.0.204 shipped with the root still at its old height,
+# so the three tallest steps pushed Back/Next off the bottom edge. This
+# recomputes each step's worst-case stack from wizard.tdn geometry plus
+# the REAL hint variants and pins it under the root height.
+
+_CHROME = ("topspacer", "steplabel", "track", "title",
+           "divider", "footer", "botspacer")
+
+
+def test_every_wizard_step_fits_the_panel_height():
+    import yaml
+    doc = yaml.safe_load(WIZARD_TDN.read_text(encoding="utf-8"))
+    ops = {o["name"]: o for o in doc["operators"]}
+
+    def height(name):
+        h = ops[name]["parameters"].get("h")
+        assert h is not None, "wizard.tdn lost the explicit height of %r" % name
+        return h
+
+    root_h = doc["parameters"]["h"]
+    spacing = doc["parameters"]["spacing"]
+    chrome = sum(height(n) for n in _CHROME)
+    # The fill spacer must be IN the align flow: it is what pins the
+    # footer to the bottom on short steps.
+    assert "display" not in ops["spacer"]["parameters"], \
+        "spacer must not carry a display override (default-on)"
+
+    logic = _load_logic()
+    variants = {step: [d["hint"]] for step, d in logic.DEFS.items()}
+    variants["permissions"].append(
+        logic.DEFS["permissions"]["hint"]
+        + "\nA settings.local.json already exists -- Embody edits only its"
+          " Envoy entries, keeping the rest.")
+    convoy_only = _logic_with(sel_assistant="none", sel_convoy="enable")
+    variants["footprint"].append(convoy_only._footprintHint())
+    busy = _logic_with(sel_mode="advanced", sel_assistant="other",
+                       sel_client="windsurf", git_missing=True,
+                       sel_git="gitinit", ext_needed=True,
+                       sel_externalize="full", sel_convoy="enable")
+    busy._projectSaved = lambda: True
+    variants["summary"].append(busy._recap())
+
+    for step, d in logic.DEFS.items():
+        grp = d.get("g")
+        grp_h = height(grp) if grp else 0
+        visible = len(_CHROME) + 2 + (1 if grp else 0)  # + hint + spacer
+        gaps = (visible - 1) * spacing
+        for text in variants[step]:
+            need = chrome + gaps + logic._hintHeight(text) + grp_h
+            assert need <= root_h, (
+                "step %r needs %dpx but the wizard panel is %dpx --"
+                " Back/Next would clip off the bottom" % (step, need, root_h))
 
 
 def test_recap_reports_convoy_plainly_behind_the_save_gate():

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 14
-generator: Embody/6.0.159
+generator: Embody/6.0.204
 td_build: 099.2025.33070
-source_file: Embody-6.159.toe
-exported_at: '2026-07-27T00:41:00Z'
+source_file: Embody-6.204.toe
+exported_at: '2026-08-04T18:25:54Z'
 network_path: /embody/Embody/windowHeader
 options:
   include_dat_content: false
@@ -61,7 +61,6 @@ operators:
   type: textCOMP
   parameters:
     text: =str(parent().par.Headerlabel) + '  ·  Envoy ' + str(parent.Embody.par.Envoystatus)
-    callbacks: title_callbacks
     font: Open Sans
     fontsize: 9
     alignx: left
