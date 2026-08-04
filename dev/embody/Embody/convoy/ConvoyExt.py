@@ -80,6 +80,7 @@ import secrets
 import socket
 import sys
 import time
+import traceback
 from collections import OrderedDict
 from queue import Empty, Full, Queue
 from threading import Event
@@ -965,7 +966,7 @@ class ConvoyExt:
                 par.val = 1 if authoritative else 0
         finally:
             self._projecting_policy = False
-        if getattr(self, '_policy_busy', False):
+        if self._policyBusyBlocked():
             self._log('another Convoy safety-policy request is still in '
                       'progress', 'INFO')
             return {'ok': False, 'reason': 'policy_busy'}
@@ -1001,7 +1002,7 @@ class ConvoyExt:
             return {'ok': False, 'reason': 'invalid_quota'}
         if requested < 0 or requested > 1024 * 1024:
             return {'ok': False, 'reason': 'invalid_quota'}
-        if getattr(self, '_policy_busy', False):
+        if self._policyBusyBlocked():
             return {'ok': False, 'reason': 'policy_busy'}
         self._beginPolicyCall('policy_quota', quota_mb=requested)
         return {'ok': True, 'pending': True}
@@ -2561,6 +2562,7 @@ class ConvoyExt:
         request['node_id'] = node_id
         self._policy_busy = True
         self._policy_result = None
+        self._policy_busy_since = time.time()
         self._policy_gen += 1
         gen = self._policy_gen
 
@@ -2634,22 +2636,76 @@ class ConvoyExt:
 
     def _pollPolicyCall(self, gen, attempts):
         if self._staleInstance():
+            # Even a stale poll must not strand ITS instance's slot: the
+            # flags live on the same object this check guards, and any
+            # misfire (or exception inside the check) that returns here
+            # silently wedges every later policy request -- the exact
+            # first-install wedge that ate a Mac session (2026-08-04:
+            # _policy_busy True with the finished result parked, forever).
+            self._policy_busy = False
+            self._policy_result = None
             return
-        out = self._policy_result
-        if out is None or out.get('_gen') != gen:
-            if attempts < self.POLL_ATTEMPTS:
-                run('args[0]._pollPolicyCall(args[1], args[2])',
-                    self, gen, attempts + 1, delayFrames=self.POLL_FRAMES)
-            else:
-                self._policy_busy = False
-                self._finishPolicyCall(
-                    'policy_timeout',
-                    {'state': 'error', 'reason': 'policy_timeout'}, {})
-            return
-        self._policy_result = None
-        self._policy_busy = False
-        self._finishPolicyCall(
-            out.get('_action'), out.get('result'), out.get('request') or {})
+        try:
+            out = self._policy_result
+            if out is None or out.get('_gen') != gen:
+                if attempts < self.POLL_ATTEMPTS:
+                    run('args[0]._pollPolicyCall(args[1], args[2])',
+                        self, gen, attempts + 1,
+                        delayFrames=self.POLL_FRAMES)
+                else:
+                    self._policy_busy = False
+                    self._finishPolicyCall(
+                        'policy_timeout',
+                        {'state': 'error', 'reason': 'policy_timeout'}, {})
+                return
+            self._policy_result = None
+            self._policy_busy = False
+            self._finishPolicyCall(
+                out.get('_action'), out.get('result'),
+                out.get('request') or {})
+        except Exception as e:
+            # A drain that dies must recover its slot, never orphan it.
+            self._policy_busy = False
+            self._policy_result = None
+            self._log('policy poll crashed (%s); the slot was recovered'
+                      % (e,), 'ERROR', details=traceback.format_exc())
+
+    def _policyBusyBlocked(self):
+        """True when a policy call is LEGITIMATELY in flight. MAIN THREAD.
+
+        A dead slot is recovered instead of refused: busy with the
+        worker's result PARKED means the drain chain died (a healthy
+        chain drains within one 15-frame cycle) -- deliver the result
+        now, exactly as the chain would have; busy past the wall-clock
+        bound with nothing parked means the worker is gone -- clear and
+        say so. The refuse-forever alternative ate a Mac first-install
+        session (2026-08-04): every Allow-toggle answered 'another
+        request is still in progress' for an hour over a call that had
+        finished within seconds.
+        """
+        if not getattr(self, '_policy_busy', False):
+            return False
+        parked = self._policy_result
+        if parked is not None:
+            self._policy_result = None
+            self._policy_busy = False
+            self._log('a finished Convoy policy call was stuck '
+                      'undelivered; delivering it now', 'WARNING')
+            self._finishPolicyCall(parked.get('_action'),
+                                   parked.get('result'),
+                                   parked.get('request') or {})
+            # _finishPolicyCall may legitimately begin a follow-up
+            # (refresh/confirm); report the CURRENT truth either way.
+            return getattr(self, '_policy_busy', False)
+        age = time.time() - getattr(self, '_policy_busy_since',
+                                    time.time())
+        if age > self.SLOT_BUSY_MAX_S:
+            self._policy_busy = False
+            self._log('a Convoy policy call exceeded its %ds budget with '
+                      'no result; the slot was recovered'
+                      % (int(self.SLOT_BUSY_MAX_S),), 'WARNING')
+            return False
+        return True
 
     def _finishPolicyCall(self, action, result, request):
         result = result if isinstance(result, dict) else {
@@ -2822,23 +2878,34 @@ class ConvoyExt:
     def _pollCall(self, action, gen, attempts):
         """Drain the worker slot. MAIN THREAD ONLY."""
         if self._staleInstance():
+            # A stale poll still clears ITS instance's slot -- a misfire
+            # here wedged a Mac first-install session (2026-08-04).
+            self._busy = False
+            self._result = None
             return
-        out = self._result
-        # Only accept the result from THIS call's worker generation.
-        if out is None or out.get('_gen') != gen:
-            if attempts < self.POLL_ATTEMPTS:
-                run('args[0]._pollCall(args[1], args[2], args[3])',
-                    self, action, gen, attempts + 1,
-                    delayFrames=self.POLL_FRAMES)
-            else:
-                self._busy = False
-                self._finish(action, {
-                    'state': 'error',
-                    'detail': 'the %s call timed out' % (action,)}, None)
-            return
-        self._result = None
-        self._busy = False
-        self._finish(action, out.get('result'), out.get('host_id'))
+        try:
+            out = self._result
+            # Only accept the result from THIS call's worker generation.
+            if out is None or out.get('_gen') != gen:
+                if attempts < self.POLL_ATTEMPTS:
+                    run('args[0]._pollCall(args[1], args[2], args[3])',
+                        self, action, gen, attempts + 1,
+                        delayFrames=self.POLL_FRAMES)
+                else:
+                    self._busy = False
+                    self._finish(action, {
+                        'state': 'error',
+                        'detail': 'the %s call timed out' % (action,)}, None)
+                return
+            self._result = None
+            self._busy = False
+            self._finish(action, out.get('result'), out.get('host_id'))
+        except Exception as e:
+            self._busy = False
+            self._result = None
+            self._log('%s poll crashed (%s); the slot was recovered'
+                      % (action, e), 'ERROR',
+                      details=traceback.format_exc())
 
     def _finish(self, action, result, host_id):
         """Apply one call's outcome: session, schedule, status, log."""
@@ -3226,6 +3293,8 @@ class ConvoyExt:
             self._hostStatus(note)
         self._host_busy = True
         self._host_result = None
+        self._host_action = action
+        self._host_busy_since = time.time()
         self._host_gen += 1
         gen = self._host_gen
 
@@ -3258,23 +3327,34 @@ class ConvoyExt:
     def _pollHostCall(self, action, gen, attempts):
         """Drain the host worker slot. MAIN THREAD ONLY."""
         if self._staleInstance():
+            # A stale poll still clears ITS instance's slot -- a misfire
+            # here wedged a Mac first-install session (2026-08-04).
+            self._host_busy = False
+            self._host_result = None
             return
-        out = self._host_result
-        # Only accept the result from THIS call's worker generation.
-        if out is None or out.get('_gen') != gen:
-            if attempts < self.HOST_POLL_ATTEMPTS:
-                run('args[0]._pollHostCall(args[1], args[2], args[3])',
-                    self, action, gen, attempts + 1,
-                    delayFrames=self.POLL_FRAMES)
-            else:
-                self._host_busy = False
-                self._finishHost(action, {
-                    'ok': False, 'reason': 'timed_out',
-                    'detail': 'the host %s call timed out' % (action,)})
-            return
-        self._host_result = None
-        self._host_busy = False
-        self._finishHost(action, out.get('result'))
+        try:
+            out = self._host_result
+            # Only accept the result from THIS call's worker generation.
+            if out is None or out.get('_gen') != gen:
+                if attempts < self.HOST_POLL_ATTEMPTS:
+                    run('args[0]._pollHostCall(args[1], args[2], args[3])',
+                        self, action, gen, attempts + 1,
+                        delayFrames=self.POLL_FRAMES)
+                else:
+                    self._host_busy = False
+                    self._finishHost(action, {
+                        'ok': False, 'reason': 'timed_out',
+                        'detail': 'the host %s call timed out' % (action,)})
+                return
+            self._host_result = None
+            self._host_busy = False
+            self._finishHost(action, out.get('result'))
+        except Exception as e:
+            self._host_busy = False
+            self._host_result = None
+            self._log('host %s poll crashed (%s); the slot was recovered'
+                      % (action, e), 'ERROR',
+                      details=traceback.format_exc())
 
     def _finishHost(self, action, result):
         """Apply one host call's outcome: session, readout, log, next step."""
@@ -3544,13 +3624,47 @@ class ConvoyExt:
         return self._dialog('Embody - Install the Convoy host app', message,
                             ['Cancel', 'Install']) == 1
 
+    # Absolute wall-clock bound on a busy slot with NO parked result.
+    # Independent of frame rate on purpose: the frame-based poll caps
+    # stretch arbitrarily on a throttled/background TD, and a wedged
+    # worker must not turn into a permanent refusal.
+    SLOT_BUSY_MAX_S = 900.0
+
+    def _recoverWedgedHostSlot(self):
+        """Recover a DEAD host slot; True when the flag is now clear.
+
+        Busy with the worker's result PARKED means the drain chain died
+        -- a healthy chain drains within one 15-frame cycle. Busy past
+        the wall-clock bound with nothing parked means the worker itself
+        is gone. Refusing forever is strictly worse than recovering
+        loudly: that exact wedge ate a Mac first-install session
+        (2026-08-04) until a TD restart.
+        """
+        parked = self._host_result
+        if parked is not None:
+            self._host_result = None
+            self._host_busy = False
+            self._log('a finished Convoy host call was stuck undelivered; '
+                      'delivering it now', 'WARNING')
+            self._finishHost(getattr(self, '_host_action', None) or 'call',
+                             parked.get('result'))
+            return not self._host_busy
+        age = time.time() - getattr(self, '_host_busy_since', time.time())
+        if age > self.SLOT_BUSY_MAX_S:
+            self._host_busy = False
+            self._log('a Convoy host call exceeded its %ds budget with no '
+                      'result; the slot was recovered'
+                      % (int(self.SLOT_BUSY_MAX_S),), 'WARNING')
+            return True
+        return False
+
     def _hostActionAllowed(self, what):
         """False (with a stated reason) when a host action must not run."""
         if self._performing():
             self._log('Perform Mode is on -- %s waits until it ends'
                       % (what,), 'INFO')
             return False
-        if self._host_busy:
+        if self._host_busy and not self._recoverWedgedHostSlot():
             self._log('another Convoy host action is still running -- '
                       '%s was ignored' % (what,), 'INFO')
             return False

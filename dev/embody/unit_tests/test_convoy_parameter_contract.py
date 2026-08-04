@@ -87,8 +87,8 @@ def _plain_ext(**values):
     ext = ext_class.__new__(ext_class)
     ext.ownerComp = owner
     ext._contract_logs = []
-    ext._log = lambda message, level="INFO": ext._contract_logs.append(
-        (level, message))
+    ext._log = lambda message, level="INFO", details=None: (
+        ext._contract_logs.append((level, message)))
     return ext, pars
 
 
@@ -313,3 +313,101 @@ def test_release_source_keeps_the_danger_gates_off():
     for name in ("Convoyallowtdpython", "Convoyallowfullshell"):
         assert rows[name].get("value") in (None, False, 0)
         assert rows[name].get("default", False) in (None, False, 0)
+
+
+# -- wedged-slot recovery (the Mac first-install wedge, 2026-08-04) -----
+#
+# A drain chain that dies -- by exception, or a stale-instance misfire --
+# used to orphan its busy flag forever: every later host/policy action
+# answered 'still in progress' over a call that finished within seconds,
+# until a TD restart. These pin the recovery paths.
+
+
+def test_wedged_policy_slot_with_parked_result_is_delivered():
+    ext, _ = _plain_ext()
+    ext._policy_busy = True
+    ext._policy_result = {"_gen": 7, "_action": "policy_refresh",
+                          "request": {}, "result": {"state": "x"}}
+    delivered = []
+    ext._finishPolicyCall = lambda action, result, request: delivered.append(
+        (action, result, request))
+    assert ext._policyBusyBlocked() is False
+    assert delivered == [("policy_refresh", {"state": "x"}, {})]
+    assert ext._policy_busy is False and ext._policy_result is None
+    assert ext._contract_logs[-1][0] == "WARNING"
+
+
+def test_wedged_policy_slot_past_budget_recovers():
+    ext, _ = _plain_ext()
+    ext._policy_busy = True
+    ext._policy_result = None
+    ext._policy_busy_since = 0.0
+    assert ext._policyBusyBlocked() is False
+    assert ext._policy_busy is False
+    assert ext._contract_logs[-1][0] == "WARNING"
+
+
+def test_live_policy_slot_still_blocks():
+    ext, _ = _plain_ext()
+    ext._policy_busy = True
+    ext._policy_result = None
+    ext._policy_busy_since = 10 ** 12  # just started, in effect
+    assert ext._policyBusyBlocked() is True
+    assert ext._policy_busy is True
+
+
+def test_policy_poll_crash_recovers_the_slot():
+    ext, _ = _plain_ext()
+    ext._staleInstance = lambda: False
+    ext._policy_busy = True
+    ext._policy_result = {"_gen": 3, "_action": "policy_refresh",
+                          "request": {}, "result": {"state": "x"}}
+
+    def boom(action, result, request):
+        raise RuntimeError("finish blew up")
+
+    ext._finishPolicyCall = boom
+    ext._pollPolicyCall(3, 0)
+    assert ext._policy_busy is False and ext._policy_result is None
+    assert ext._contract_logs[-1][0] == "ERROR"
+
+
+def test_stale_policy_poll_clears_its_slot():
+    ext, _ = _plain_ext()
+    ext._staleInstance = lambda: True
+    ext._policy_busy = True
+    ext._policy_result = {"_gen": 3}
+    ext._pollPolicyCall(3, 0)
+    assert ext._policy_busy is False and ext._policy_result is None
+
+
+def test_wedged_host_slot_with_parked_result_is_delivered():
+    ext, _ = _plain_ext()
+    ext._host_busy = True
+    ext._host_action = "install"
+    ext._host_result = {"_gen": 2, "result": {"ok": True}}
+    delivered = []
+    ext._finishHost = lambda action, result: delivered.append(
+        (action, result))
+    assert ext._recoverWedgedHostSlot() is True
+    assert delivered == [("install", {"ok": True})]
+    assert ext._host_busy is False and ext._host_result is None
+    assert ext._contract_logs[-1][0] == "WARNING"
+
+
+def test_wedged_host_slot_past_budget_recovers():
+    ext, _ = _plain_ext()
+    ext._host_busy = True
+    ext._host_result = None
+    ext._host_busy_since = 0.0
+    assert ext._recoverWedgedHostSlot() is True
+    assert ext._host_busy is False
+
+
+def test_live_host_slot_still_blocks():
+    ext, _ = _plain_ext()
+    ext._host_busy = True
+    ext._host_result = None
+    ext._host_busy_since = 10 ** 12
+    assert ext._recoverWedgedHostSlot() is False
+    assert ext._host_busy is True
