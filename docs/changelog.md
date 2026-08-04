@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.0.202
+
+The Mac field test's second find: a first-install session could wedge itself.
+
+- **A dead drain chain can no longer wedge Convoy**: the worker side of a host install did everything right, but the frame-side poll chains that deliver worker results had two silent death modes (an unhandled exception in a drain, and the stale-instance early-return), and both exited without clearing their slot's busy flag -- host status froze stale and every safety-policy toggle answered "still in progress" over a call that had finished within seconds, until a TouchDesigner restart. All three slots (registration, host, policy) now recover instead of refusing: a crashing drain logs its full traceback and clears the slot, the busy guards deliver a parked result on the spot, and a flag past its 15-minute wall-clock bound is cleared loudly (wall-clock deliberately: frame-based caps stretch arbitrarily on a throttled or backgrounded TouchDesigner). Nine new contract tests pin every recovery branch.
+
 ## v6.0.201
 
 Convoy enables on macOS. The blocker was never architecture: TouchDesigner's bundled Python is code-signed with macOS library validation, so launched standalone it refuses every PyPI native module -- and the one line of the traceback that said so was being truncated away.
