@@ -95,27 +95,49 @@ def test_none_option_copy_does_not_claim_convoy_has_no_server():
     assert "Convoy can still use its internal command service" in source
     assert "No .venv, server, or config" not in source
 
-# -- UNSAVED PROJECT: the failure a Mac user hit on a fresh install ----
+# -- UNSAVED PROJECT: the save GATE (step 1) ---------------------------
 #
-# Dragged the .tox into a NEW network, chose Enable Convoy in the wizard, and
-# it silently turned itself back off. A node is identified by its project
-# folder, so an unsaved project cannot become one -- correct, but the only
-# explanation was a textport line, and the Status field showed "Not installed"
-# (the host-app line outranking the actionable one). All three are now fixed;
-# these pin them.
+# The original failure: dragged the .tox into a NEW network, chose Enable
+# Convoy in the wizard, and it silently turned itself back off -- a node
+# is identified by its project folder. The first fix warned in text; the
+# real fix is structural: an unsaved project gets a SAVE step before all
+# others (everything the wizard creates -- .venv, AI config, .embody
+# state, the git repo -- lands relative to the project folder), and Next
+# is locked until the project is actually saved on disk.
 
-def test_wizard_warns_when_the_project_has_never_been_saved():
+def test_unsaved_project_gets_the_save_gate_first():
+    logic = _logic_with(needs_save=True, sel_mode="auto",
+                        sel_assistant="none")
+    assert logic.spine()[0] == "save"
+
+
+def test_saved_project_never_shows_the_save_step():
+    logic = _logic_with(needs_save=False, sel_mode="auto",
+                        sel_assistant="none")
+    assert "save" not in logic.spine()
+
+
+def test_save_step_locks_next_until_the_project_is_saved():
+    """Pinned at source level: render() gates Next on _projectSaved()
+    for the save step, and click('next') refuses to advance past it --
+    the ONE gate in the wizard that a click cannot skip."""
+    source = LOGIC.read_text(encoding="utf-8")
+    assert "if cur=='save': ok=_projectSaved()" in source
+    assert "if cur=='save' and not _projectSaved(): return" in source
+    # The save action re-probes the folder-dependent gates so later
+    # steps (git, externalize) see the REAL project location.
+    assert "_findGitRootSync" in source.split("def _saveProjectNow", 1)[1]
+
+
+def test_wizard_convoy_hint_no_longer_shouts_about_saving():
+    """The save gate guarantees a saved project by the Convoy step; the
+    hint is the plain description on saved AND unsaved projects."""
     logic = _load_logic()
-    logic._projectSaved = lambda: False
-    hint = logic._convoyHint()
-    assert "SAVE YOUR PROJECT FIRST" in hint
-    assert "has never been saved" in hint
-
-
-def test_wizard_hint_is_unchanged_on_a_saved_project():
-    logic = _load_logic()
-    logic._projectSaved = lambda: True
-    assert logic._convoyHint() == logic.DEFS["convoy"]["hint"]
+    for saved in (True, False):
+        logic._projectSaved = lambda s=saved: s
+        assert logic._convoyHint() == logic.DEFS["convoy"]["hint"]
+    source = LOGIC.read_text(encoding="utf-8")
+    assert "SAVE YOUR PROJECT FIRST" not in source
 
 
 def test_an_actionable_node_state_outranks_the_host_app_line():
@@ -131,11 +153,12 @@ def test_an_actionable_node_state_outranks_the_host_app_line():
         "_BLOCKING_HOST_TEXTS)")
 
 
-def test_recap_does_not_promise_convoy_on_an_unsaved_project():
-    """The summary said "Convoy: enabled" and then it silently was not."""
+def test_recap_reports_convoy_plainly_behind_the_save_gate():
+    """The summary can promise "Convoy: enabled" unconditionally now:
+    the save gate (step 1) means no unsaved project ever reaches it."""
     logic = _logic_with(sel_mode="auto", sel_assistant="none",
                         sel_convoy="enable")
-    logic._projectSaved = lambda: False
+    logic._projectSaved = lambda: False   # even then: the gate owns this
     recap = logic._recap()
-    assert "SAVE THE PROJECT FIRST" in recap
-    assert "Convoy: enabled" not in recap
+    assert "Convoy: enabled" in recap
+    assert "SAVE THE PROJECT" not in recap

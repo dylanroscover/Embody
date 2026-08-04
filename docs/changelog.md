@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.204
+
+The Setup Wizard gets a save gate and a consistent layout.
+
+- **Save your project first -- as step 1**: everything the wizard sets up (.venv, AI config, .embody state, the optional git repo) lands relative to the project folder, so an unsaved project scattered it into TouchDesigner's default location. A never-saved project now gets a save step before all others: its card opens the OS save dialog (the ctrl-s equivalent), saves the project where you choose, re-probes the folder-dependent steps (git presence, externalization need) against the real location, and keeps **Next** locked until the project is actually on disk. The Convoy step's "SAVE YOUR PROJECT FIRST" warning and the recap's special case are gone -- unreachable behind the gate (the parameter-page enable keeps its own `Waiting for project save` handling).
+- **Wizard descriptions size themselves**: the hint area had a hardcoded two-value height that clipped long descriptions (Convoy) and pushed some pages' option lists lower than others (permissions). It now sizes to its text, so every page's options start the same gap below the description. Every wizard screen was capture-verified after the change.
+- Also fixed: a stale callbacks reference on the toolbar's status widget surfaced by the day's extension reloads.
+
 ## v6.0.203
 
 HTTPS from TouchDesigner finally verifies on macOS.

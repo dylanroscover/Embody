@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 21
-generator: Embody/6.0.25
-td_build: 099.2025.32820
-source_file: Embody-6.25.toe
-exported_at: '2026-06-13T05:52:36Z'
+generator: Embody/6.0.203
+td_build: 099.2025.33070
+source_file: Embody-6.203.toe
+exported_at: '2026-08-04T17:19:06Z'
 network_path: /embody/Embody/toolbar/container_left/status
 options:
   include_dat_content: false
@@ -12,7 +12,7 @@ options:
 type: textCOMP
 parameters:
   text: =str(parent.Embody.DirtyCount()) + ' dirty' if parent.Embody.extensionsReady and parent.Embody.DirtyCount() else ''
-  callbacks: new_status_callbacks
+  callbacks: status_callbacks
   font: Open Sans
   fontsize: 9
   fontsizeunits: points

@@ -1,8 +1,9 @@
 SURF=(0.16,0.17,0.165)
 BACK_ON=(0.19,0.20,0.195); NEXT_ON=(0.24,0.52,0.35); NEXT_OFF=(0.135,0.15,0.14)
 TXT=(0.92,0.92,0.92); TXT_DIM=(0.34,0.35,0.34); NEXT_TXT=(0.97,0.99,0.97)
-GROUPS=['grp_mode','grp_assistant','grp_client','grp_permissions','grp_convoy','grp_git','grp_footprint','grp_externalize']
+GROUPS=['grp_save','grp_mode','grp_assistant','grp_client','grp_permissions','grp_convoy','grp_git','grp_footprint','grp_externalize']
 DEFS={
+ 'save':{'g':'grp_save','sel':None,'title':'Save your project first','hint':"Embody creates its Python env (.venv), AI config, and .embody state in your project's folder -- and an unsaved project has no folder yet. Save first so everything lands beside your .toe.",'hintfn':'_saveHint'},
  'mode':{'g':'grp_mode','sel':'sel_mode','title':'How should Embody manage your project?','hint':'Choose one, then Next.'},
  'convoy':{'g':'grp_convoy','sel':'sel_convoy','title':'Enable Convoy?','hint':'Connects this Embody with other Convoy-enabled instances on the same trusted LAN, so they can discover and control each other. Enable only on a network you trust. Convoy installs a small background app so nodes stay reachable while TouchDesigner is closed.','hintfn':'_convoyHint'},
  'externalize':{'g':'grp_externalize','sel':'sel_externalize','title':'Make your project AI-readable?','hint':'Write your network to diffable files git and AI tools can read.'},
@@ -26,7 +27,12 @@ def _tc(o,c):
 			return
 def spine():
 	w=_w(); m=w.fetch('sel_mode',None); a=w.fetch('sel_assistant',None)
-	s=['mode']
+	# The save gate comes BEFORE everything: .venv, AI config, .embody
+	# state, and the optional git repo all land relative to the project
+	# folder, so an unsaved project would scatter them into TD's default
+	# location. Probed once at start(), so the step (and numbering) is
+	# stable for the whole session even after the user saves mid-wizard.
+	s=(['save'] if w.fetch('needs_save',False) else [])+['mode']
 	# Externalization offer, right after the posture step. Two gates, both
 	# cheap: the option group must EXIST (older wizard panels have no
 	# grp_externalize -- including it then would strand Next, which stays
@@ -38,8 +44,8 @@ def spine():
 	if a=='claudecode': s.append('permissions')
 	# Convoy is also a TouchDesigner-originated sibling API, so it is independent
 	# of the AI-client choice. Default is DISABLED -- turning on remote control
-	# is an explicit, trusted-LAN choice, and installing the host app is a
-	# separate explicit pulse, never the wizard.
+	# is an explicit, trusted-LAN choice; enabling installs and starts the
+	# host app automatically, consented by this step's answer.
 	s.append('convoy')
 	# Git decision only when no repo was found at wizard start -- and for
 	# EVERY assistant choice incl. 'none' (externalization is git's whole
@@ -67,10 +73,7 @@ def _recap():
 	if 'externalize' in spine():
 		g+={'full':' Externalize: whole project now, plus new work.','auto':' Externalize: new work from here on.','skip':' Externalize: skipped for now.'}.get(w.fetch('sel_externalize',''),'')
 	if 'convoy' in spine():
-		if w.fetch('sel_convoy','')=='enable' and not _projectSaved():
-			g+=' Convoy: SAVE THE PROJECT FIRST, then enable it on the Convoy page.'
-		else:
-			g+={'enable':' Convoy: enabled.','disable':' Convoy: off.'}.get(w.fetch('sel_convoy',''),'')
+		g+={'enable':' Convoy: enabled.','disable':' Convoy: off.'}.get(w.fetch('sel_convoy',''),'')
 	if a=='none': return 'Mode: %s. AI assistant: off.%s\nNothing has changed yet - click Set up Embody to apply.'%(m,g)
 	c=w.fetch('sel_client','') if a=='other' else ('Claude Code' if a=='claudecode' else a)
 	return 'Mode: %s. AI assistant: on (%s).%s\nNothing has changed yet - click Set up Embody to apply.'%(m, c or 'your tool', g)
@@ -92,12 +95,46 @@ def _projectSaved():
 			os.path.join(str(project.folder), str(project.name)))
 	except Exception:
 		return False
+def _saveHint():
+	if _projectSaved():
+		try: return 'Saved. Embody will set up inside %s -- click Next.'%(str(project.folder))
+		except Exception: return 'Saved -- click Next.'
+	return DEFS['save']['hint']
+def _saveProjectNow():
+	"""The wizard's step-1 save: the OS save dialog, then project.save().
+
+	Ctrl-s equivalent for a never-saved project: ask WHERE, save THERE.
+	After the save, re-probe the start() gates that depend on the folder
+	(git presence, externalization need) so later steps see the real
+	project. Returns True when the project is saved on disk."""
+	try:
+		if not _projectSaved():
+			path=ui.chooseFile(load=False, fileTypes=['toe'],
+				title='Save your project')
+			if not path: return False
+			project.save(path)
+	except Exception:
+		return False
+	w=_w()
+	try: w.store('git_missing', op.Embody.ext.Embody._findGitRootSync()=='no-git')
+	except Exception: pass
+	try: w.store('ext_needed', not op.Embody.ext.Embody._projectLooksExternalized())
+	except Exception: pass
+	return _projectSaved()
+def _hintHeight(text):
+	"""Panel height that FITS the hint, so every page's option group
+	starts the same gap below the description. The old hardcoded 16/60
+	split clipped long hints (Convoy) and pushed some pages' options
+	lower than others (permissions)."""
+	lines=0
+	for para in str(text or '').split(chr(10)):
+		lines+=max(1,-(-len(para)//62))
+	return lines*15+6
 def _convoyHint():
-	base=DEFS['convoy']['hint']
-	if _projectSaved(): return base
-	return ('SAVE YOUR PROJECT FIRST -- Convoy identifies a node by its project '
-		'folder, so it cannot enable on a project that has never been saved. '
-		'Save the project, then enable Convoy here or on the Convoy page. ')+base
+	# The save gate (step 1) guarantees a saved project by the time this
+	# step shows; the parameter-page enable keeps its own
+	# 'Waiting for project save' handling for non-wizard paths.
+	return DEFS['convoy']['hint']
 def _footprintHint():
 	w=_w()
 	if w.fetch('sel_assistant','')=='none' and w.fetch('sel_convoy','')=='enable':
@@ -113,13 +150,15 @@ def render():
 		g=w.op(gid)
 		if g: g.par.display = 1 if gid==d.get('g') else 0
 	w.op('title').par.text=d['title']
-	w.op('hint').par.text=_permHint() if cur=='permissions' else (_footprintHint() if cur=='footprint' else (_convoyHint() if cur=='convoy' else (_recap() if cur=='summary' else d['hint'])))
-	w.op('hint').par.h = 60 if cur in ('footprint','summary','permissions','convoy') else 16
+	w.op('hint').par.text=_saveHint() if cur=='save' else (_permHint() if cur=='permissions' else (_footprintHint() if cur=='footprint' else (_convoyHint() if cur=='convoy' else (_recap() if cur=='summary' else d['hint']))))
+	w.op('hint').par.h = _hintHeight(w.op('hint').par.text.eval())
 	bb=_nav('back'); nb=_nav('next'); first=idx==0
 	if bb:
 		if bb.op('text'): bb.op('text').par.text='Not now' if first else 'Back'
 		_bg(bb, BACK_ON); _tc(bb.op('text'), TXT_DIM if first else TXT)
-	last=cur=='summary'; ok=last or (d.get('g') is None) or (_chosen(cur) is not None)
+	last=cur=='summary'
+	if cur=='save': ok=_projectSaved()  # the ONE gate Next cannot skip
+	else: ok=last or (d.get('g') is None) or (_chosen(cur) is not None)
 	if nb:
 		if nb.op('text'): nb.op('text').par.text='Set up Embody' if last else 'Next'
 		_bg(nb, NEXT_ON if ok else NEXT_OFF); _tc(nb.op('text'), NEXT_TXT if ok else TXT_DIM)
@@ -132,12 +171,18 @@ def click(name):
 			else: _close()
 		elif 'next' in name:
 			d=DEFS[cur]
-			if d.get('g') and cur!='summary' and _chosen(cur) is None: return
+			if cur=='save' and not _projectSaved(): return
+			if cur!='save' and d.get('g') and cur!='summary' and _chosen(cur) is None: return
 			idx=sp.index(cur) if cur in sp else 0
 			if cur=='summary': finish()
 			elif idx<len(sp)-1: w.store('step_id', sp[idx+1]); render()
 		return
 	d=DEFS[cur]; g=_grp(cur)
+	if cur=='save' and name=='opt_savenow':
+		done=_saveProjectNow()
+		b=g.op('opt_savenow') if g else None
+		if b: b.par.value0 = 1 if done else 0
+		render(); return
 	if g:
 		for c in g.children:
 			if c.family=='COMP' and hasattr(c.par,'value0'): c.par.value0 = 1 if c.name==name else 0
@@ -200,7 +245,9 @@ def finish():
 	# wizard's fixed option set, so repr-interpolation is safe.
 	run('op.Embody.ext.Embody._applyWizardSetup(mode=%r, assistant=%r, client=%r, root=%r, custom_root=%r, permissions=%r, git=%r, externalize=%r, convoy=%r)'%(m,a,c,r,cr,pm,g,x,cv), delayFrames=2)
 def start():
-	w=_w(); w.store('step_id','mode')
+	w=_w()
+	w.store('needs_save', not _projectSaved())
+	w.store('step_id','save' if w.fetch('needs_save',False) else 'mode')
 	for gid in GROUPS:
 		g=w.op(gid)
 		if g:
