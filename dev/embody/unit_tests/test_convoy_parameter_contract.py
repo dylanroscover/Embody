@@ -48,6 +48,9 @@ def _class_assignment(path: Path, class_name: str, assignment: str):
 
 
 def _load_convoy_ext_class():
+    # Builds a FRESH, sys.modules-unregistered module per call -- the
+    # _name_ext fakes inject ParMode/project/socket into the loaded
+    # module's globals and rely on this isolation; do not add caching.
     spec = importlib.util.spec_from_file_location(
         "convoy_parameter_contract_ext", CONVOY_EXT)
     module = importlib.util.module_from_spec(spec)
@@ -112,7 +115,8 @@ def test_agreed_controls_have_safe_defaults_and_detailed_help():
     # It must rest EMPTY, not carry a baked value. It was briefly a
     # parameter EXPRESSION, and TD stores an expression's last evaluated
     # result beside it -- which shipped one developer's computer name in
-    # the release .tox. ConvoyExt fills it per machine at load instead.
+    # the release .tox. ConvoyExt fills it per machine at load instead,
+    # and only once the project is saved (see the node-name fill tests).
     assert rows["Convoynodename"].get("value") in (None, "")
     assert "hostname" in rows["Convoynodename"]["help"]
 
@@ -411,3 +415,82 @@ def test_live_host_slot_still_blocks():
     ext._host_busy_since = 10 ** 12
     assert ext._recoverWedgedHostSlot() is False
     assert ext._host_busy is True
+
+
+# -- Node Name fill: never bake the unsaved placeholder ----------------
+#
+# _ensureNodeName runs at extension init, which on a fresh install is
+# BEFORE the wizard's save step. v6.0.206 and earlier filled the Node
+# Name parameter immediately, baking `hostname / NewProject.1` -- and a
+# non-empty value reads as a user override forever, so the node kept
+# registering under the throwaway name after the project was saved as
+# e3 (field-reported 2026-08-04 on macOS).
+
+
+class _NamePar(_Par):
+    def __init__(self, value, mode="CONSTANT"):
+        super().__init__(value)
+        self.mode = mode
+
+
+def _name_ext(value, saved, project_name, hostname="TEC-MBA.local",
+              mode="CONSTANT"):
+    ext, pars = _plain_ext()
+    par = _NamePar(value, mode=mode)
+    pars.Convoynodename = par
+    ext._savedToe = lambda: saved
+    g = type(ext)._ensureNodeName.__globals__
+    g["ParMode"] = type("ParMode", (), {"CONSTANT": "CONSTANT"})
+    g["project"] = type("Project", (), {"name": project_name})()
+    g["socket"] = type("Socket", (), {
+        "gethostname": staticmethod(lambda: hostname)})()
+    return ext, par
+
+
+def test_node_name_fill_waits_for_a_saved_project():
+    ext, par = _name_ext("", saved=None, project_name="NewProject.1.toe")
+    ext._ensureNodeName()
+    assert par.val == ""
+
+
+def test_node_name_fill_stamps_the_saved_toe_stem():
+    ext, par = _name_ext("", saved="/work/e3.toe", project_name="e3.toe")
+    ext._ensureNodeName()
+    assert par.val == "TEC-MBA.local / e3"
+
+
+def test_baked_default_project_placeholder_is_healed():
+    for baked in ("TEC-MBA.local / NewProject.1",
+                  "TEC-MBA.local / NewProject",
+                  "TEC-MBA.local / NewProject.12"):
+        ext, par = _name_ext(baked, saved="/work/e3.toe",
+                             project_name="e3.toe")
+        ext._ensureNodeName()
+        assert par.val == "TEC-MBA.local / e3", baked
+
+
+def test_baked_placeholder_on_a_still_unsaved_project_waits():
+    """The heal obeys the same gate as the fill: no rewrite until the
+    project is actually on disk."""
+    ext, par = _name_ext("TEC-MBA.local / NewProject.1", saved=None,
+                         project_name="NewProject.1.toe")
+    ext._ensureNodeName()
+    assert par.val == "TEC-MBA.local / NewProject.1"
+
+
+def test_user_override_is_never_clobbered():
+    for value in ("My Booth Node",
+                  "OTHER-HOST / NewProject.1",   # not THIS machine's stamp
+                  "TEC-MBA.local / NewProject.1 (stage)"):
+        ext, par = _name_ext(value, saved="/work/e3.toe",
+                             project_name="e3.toe")
+        ext._ensureNodeName()
+        assert par.val == value, value
+
+
+def test_expression_mode_node_name_is_untouched():
+    ext, par = _name_ext("TEC-MBA.local / NewProject.1",
+                         saved="/work/e3.toe", project_name="e3.toe",
+                         mode="EXPRESSION")
+    ext._ensureNodeName()
+    assert par.val == "TEC-MBA.local / NewProject.1"

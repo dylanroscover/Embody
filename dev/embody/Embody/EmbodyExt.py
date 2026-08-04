@@ -4137,7 +4137,8 @@ class EmbodyExt:
             # The node's display name. It is auto-derived per machine at
             # runtime (hostname / .toe stem), so a baked value ships one
             # developer's COMPUTER NAME to every download -- the A-50 leak
-            # class. Rests empty; ConvoyExt refills it on load.
+            # class. Rests empty; ConvoyExt refills it on load, once the
+            # project is saved (an early fill baked NewProject.1 forever).
             'Convoynodename': None,
             # Read-only network status rows. Sequence registration scrubs
             # every runtime-populated block back to its template defaults

@@ -120,6 +120,10 @@ def _saveProjectNow():
 	except Exception: pass
 	try: w.store('ext_needed', not op.Embody.ext.Embody._projectLooksExternalized())
 	except Exception: pass
+	# The Node Name fill waits for a saved project; now that it exists,
+	# fill immediately so the parameter shows the real name this session.
+	try: op.Embody.op('convoy').ext.ConvoyExt._ensureNodeName()
+	except Exception: pass
 	return _projectSaved()
 def _hintHeight(text):
 	"""Panel height that FITS the hint, so every page's option group

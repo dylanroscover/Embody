@@ -1654,19 +1654,36 @@ class ConvoyExt:
         As a constant it is registered transient, exports empty, and each
         machine refills its own. A user edit is a persistent override that
         this never clobbers. Idempotent.
+
+        NEVER fills while the project is unsaved: this runs at extension
+        init, which on a fresh install is BEFORE the wizard's save step, so
+        an early fill baked `hostname / NewProject.1` into the parameter and
+        the node then registered under the throwaway name forever (field-
+        reported 2026-08-04, saved as e3 during the wizard yet registered as
+        NewProject.1). Unfilled, _nodeName's automatic fallback computes
+        live from the real .toe each register tick. A previously baked
+        default-project stamp for THIS machine is healed in place -- nobody
+        names a node after TD's placeholder on purpose; real overrides
+        never match the pattern and are untouched.
         """
         par = getattr(self._embody.par, 'Convoynodename', None)
         if par is None:
             return
         try:
-            if par.mode != ParMode.CONSTANT or str(par.eval() or '').strip():
-                return
-        except Exception:
-            return
-        try:
             hostname = str(socket.gethostname() or '').strip() or 'localhost'
         except Exception:
             hostname = 'localhost'
+        try:
+            value = str(par.eval() or '').strip()
+            if par.mode != ParMode.CONSTANT:
+                return
+            if value and not re.fullmatch(
+                    re.escape(hostname) + r' / NewProject(\.\d+)?', value):
+                return
+        except Exception:
+            return
+        if not self._savedToe():
+            return
         try:
             toe_stem = str(project.name or '').rsplit('.', 1)[0] or 'Untitled'
         except Exception:

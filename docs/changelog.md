@@ -1,5 +1,12 @@
 # Changelog
 
+## v6.0.207
+
+Convoy: nodes stop registering under TouchDesigner's throwaway project name.
+
+- **`hostname / NewProject.1` node names fixed**: the Node Name parameter is filled once per machine at extension load -- which on a fresh install ran before the wizard's save step, baking the unsaved project's placeholder name in as if the user had typed it. A node saved as `e3` during the wizard then registered as `NewProject.1` forever. The fill now waits until the project is saved (until then the automatic `hostname / toe-stem` is computed live from the real `.toe` at each registration; the wizard's save step fills it the moment the save lands), and an already-baked placeholder for this machine is healed in place on load -- genuine user-typed names never match the placeholder pattern and are untouched. The corrected name re-registers automatically on the next heartbeat.
+- Five new contract tests pin the fill's ordering (waits for save, stamps the saved stem, heals the baked placeholder, never clobbers a real override, leaves expression-mode alone); the heal and wait-for-save tests fail against the previous build.
+
 ## v6.0.206
 
 Wizard: the save step's button actually works.
