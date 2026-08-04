@@ -418,6 +418,22 @@ class HostStore:
         if self._state["nodes"].pop(node_id, None) is not None:
             self._write_host()
 
+    def node_last_seen(self, node_id):
+        """The durable last_seen stamp for a node row, or None.
+
+        last_heartbeat_unix is process-local; this is the stamp that
+        survives daemon restarts (written on every save_node), used by
+        the stale-node eviction sweep to prove silence.
+        """
+        row = self._state["nodes"].get(node_id)
+        if not row:
+            return None
+        try:
+            value = row.get("last_seen")
+            return float(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
     # -- convoy pre-shared keys (Phase 1 group auth, A-8) ----------------
 
     def ensure_convoy_psk(self, convoy_id):

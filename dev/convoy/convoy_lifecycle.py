@@ -667,6 +667,25 @@ class LaunchProfileStore:
             self._commit(state)
             return _clone(clean)
 
+    def delete_profile(self, node_id):
+        """Drop a node's launch profile; True when one existed.
+
+        Used when a node row is forgotten (manual /nodes/forget or the
+        stale-node eviction sweep) -- a profile without its directory row
+        is unreachable by every start path and would otherwise sit in
+        lifecycle.json for ever. Attempt history is untouched: attempts
+        are keyed by operation, and their retention is the job store's
+        concern, not the profile's.
+        """
+        _stable_id(node_id, "node_id")
+        with self._lock:
+            if node_id not in self._state["profiles"]:
+                return False
+            state = _clone(self._state)
+            del state["profiles"][node_id]
+            self._commit(state)
+            return True
+
     def set_enabled(self, node_id, convoy_id, enabled, *, launch_eligible=None):
         _stable_id(node_id, "node_id")
         _bounded_text(convoy_id, "convoy_id", limit=128)

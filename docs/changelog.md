@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.208
+
+Convoy: stale node rows clear themselves.
+
+- **Automatic stale-node eviction**: abandoned projects lingered in the Convoy Nodes list as Offline rows forever -- only a clean unregister ever removed anything. The host app's retention sweep now forgets a node whose `.toe` has been **deleted from disk** (after ~30 minutes of silence) and any node **unseen for 30 days**, while never touching a node that is merely offline (a closed TD stays listed and remotely launchable, as documented) or has unresolved jobs. An unplugged or unmounted drive is never treated as a *deletion* -- though the 30-day horizon still applies to it like any other silent node. Evictions are audited, and the otherwise-orphaned launch profile is cleaned up too -- a gap the manual forget path also had.
+- **New `convoy_forget_node` tool**: the daemon's `/nodes/forget` recovery route existed fully tested but had no caller; it is now exposed as a bridge tool for immediate manual cleanup of a specific stale row (refuses while the node still has work; local host only).
+- Eleven new daemon tests cover the sweep (dead project evicts, existing project survives, grace windows incl. daemon boot, unresolved work, live node, retention horizon, unplugged-volume protection, the reap-cadence chaining, post-restart eviction from the durable stamp, profile deletion). Filesystem probes run outside the app lock, so a hung network volume can stall only the sweep, never the host's routes.
+
 ## v6.0.207
 
 A fresh install stops scattering files into TouchDesigner's default folder before the project is saved.

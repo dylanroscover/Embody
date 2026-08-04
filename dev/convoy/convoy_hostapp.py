@@ -1781,6 +1781,17 @@ class HostApp:
         self.job_retention_s = 24 * 3600.0
         self.reap_interval_s = 300.0
         self._last_reap = 0.0
+        # NODE RETENTION (the stale-row sweep, field report 2026-08-04:
+        # abandoned test projects lingered as Offline rows forever). Two
+        # independent horizons, both guarded by the /nodes/forget idle
+        # rules: a node whose .toe is PROVABLY deleted (absent while a
+        # parent directory is still reachable -- an unmounted volume has
+        # no reachable ancestry and is spared) is evicted once it has
+        # been silent for node_dead_grace_s; any node silent for
+        # node_retention_s is evicted regardless. Offline alone is NEVER
+        # stale -- a closed TD stays listed and remotely launchable.
+        self.node_retention_s = 30 * 24 * 3600.0
+        self.node_dead_grace_s = 1800.0
         # Last time a PASSIVE read path reconciled operation claims. Mutation
         # and dispatch paths still reconcile eagerly; this only bounds the
         # per-claim file I/O the read paths would otherwise do on every call.
@@ -3144,9 +3155,179 @@ class HostApp:
         except Exception as e:
             return self._refuse("forget_node", "forget_failed",
                                 "%s: %s" % (type(e).__name__, e), 500)
+        self._forget_launch_profile(node_id)
         self._invalidate_network_nodes_cache_locked()
         self._audit_best_effort("node_forgotten", {"node_id": node_id})
         return 200, {"ok": True, "forgotten": True, "node_id": node_id}
+
+    def _forget_launch_profile(self, node_id):
+        """Drop the launch profile a forgotten node would orphan.
+
+        Best-effort: the node row is already gone, and a leftover profile
+        is unreachable anyway (every start path resolves the directory row
+        first) -- but leaving it accumulates dead entries in
+        lifecycle.json for ever.
+        """
+        try:
+            if self.lifecycle is not None:
+                self.lifecycle.store.delete_profile(node_id)
+        except Exception:
+            pass
+
+    def _node_last_activity(self, record):
+        """Newest liveness stamp we hold for a node, or None.
+
+        last_heartbeat_unix is process-local (stamped on register and
+        unregister); the durable last_seen in host.json survives daemon
+        restarts. Take the newest of whichever exist.
+        """
+        stamps = []
+        try:
+            beat = record.get("last_heartbeat_unix")
+            if beat is not None:
+                stamps.append(float(beat))
+        except Exception:
+            pass
+        try:
+            seen = self.db.node_last_seen(record.get("node_id"))
+            if seen is not None:
+                stamps.append(float(seen))
+        except Exception:
+            pass
+        return max(stamps) if stamps else None
+
+    # Directories whose direct children are VOLUMES, not folders: a
+    # missing child here means an unplugged/unmounted drive, never a
+    # deletion. (Windows needs no entry -- an unplugged drive letter has
+    # no reachable ancestry at all, which the walk below already spares.)
+    _MOUNT_CONTAINERS = ("/volumes", "/mnt", "/media", "/run/media")
+
+    @classmethod
+    def _path_provably_deleted(cls, path):
+        """True when a path is gone but was demonstrably DELETED.
+
+        Deleted means: some ancestor still exists, and the first missing
+        segment is an ordinary folder -- not a volume sitting directly
+        under a mount container (/Volumes, /mnt, /media...) and not an
+        unreachable drive letter. An unplugged or unmounted project must
+        never evict its node: the row is its launch handle when it
+        returns.
+        """
+        try:
+            # Relative paths (buggy client metadata, or metadata written by
+            # another OS's path rules) prove nothing about deletion.
+            if not path or not os.path.isabs(path) or os.path.exists(path):
+                return False
+            # Walk up to the FIRST MISSING segment whose parent exists.
+            first_missing = path
+            while True:
+                parent = os.path.dirname(first_missing)
+                if not parent or parent == first_missing:
+                    return False        # no reachable ancestry: unplugged
+                if os.path.exists(parent):
+                    break
+                first_missing = parent
+            norm = parent.replace("\\", "/").rstrip("/").lower() or "/"
+            if norm in cls._MOUNT_CONTAINERS:
+                return False            # a whole volume is absent, not a file
+            # /media/<user>/<drive>: the container is one level deeper.
+            if os.path.dirname(norm) in cls._MOUNT_CONTAINERS:
+                return False
+            # The missing segment BEING a mount container (a foreign-OS
+            # path judged here, e.g. /Volumes/... on Windows) proves an
+            # absent volume tree, never a deletion.
+            missing = first_missing.replace("\\", "/").rstrip("/").lower()
+            if missing in cls._MOUNT_CONTAINERS:
+                return False
+            return True
+        except Exception:
+            return False
+
+    def _evict_stale_nodes(self, now):
+        """Forget provably-dead node rows on the reap cadence.
+
+        Offline is NOT stale (a closed TD stays remotely launchable); a row
+        is evicted only when it is silent AND either its .toe is provably
+        deleted (dead_project, after node_dead_grace_s of silence) or it
+        has been silent past node_retention_s (retired_unseen). Every
+        eviction honors the /nodes/forget idle rules: no live Envoy port,
+        no unresolved or unacknowledged work (fail closed on an unreadable
+        job store -- and this is also what spares an in-flight remote
+        start: the start job stays non-terminal for the whole
+        spawn-to-register window), and no live launch reservation. A node
+        with NO liveness stamp at all is spared: age cannot be proven, so
+        staleness cannot be either. Nothing is evicted during the first
+        node_dead_grace_s of daemon uptime, so running TDs get a full
+        heartbeat cycle to re-register after a daemon restart.
+
+        Three phases so filesystem probes NEVER run under the app lock
+        (the reap's own rule, and the snapshot-then-stat convention
+        elsewhere in this file): a hung network volume in a toe_path must
+        stall this sweep, not every route on the host.
+        """
+        if now - self.started < self.node_dead_grace_s:
+            return []
+        # Phase 1: snapshot candidates under the lock -- memory only.
+        with self.lock:
+            candidates = []
+            for record in list(self.directory.nodes()):
+                if record.get("envoy_port"):
+                    continue
+                latest = self._node_last_activity(record)
+                if latest is None:
+                    continue
+                silent_s = now - latest
+                if silent_s < self.node_dead_grace_s:
+                    continue
+                toe = str((record.get("metadata") or {})
+                          .get("toe_path") or "")
+                candidates.append((record.get("node_id"), silent_s, toe))
+        if not candidates:
+            return []
+        # Phase 2: judge OUTSIDE the lock -- this is where stats happen.
+        judged = []
+        for node_id, silent_s, toe in candidates:
+            if silent_s >= self.node_retention_s:
+                judged.append((node_id, "retired_unseen", silent_s))
+            elif toe and os.path.isabs(toe) \
+                    and self._path_provably_deleted(toe):
+                judged.append((node_id, "dead_project", silent_s))
+        if not judged:
+            return []
+        # Phase 3: re-acquire, re-verify every guard, then forget.
+        # Durable delete FIRST: if host.json cannot be written the
+        # directory row survives untouched, instead of a memory-forgotten
+        # row resurrecting on the next daemon start.
+        evicted = []
+        with self.lock:
+            for node_id, cause, silent_s in judged:
+                record = self.directory.lookup(node_id)
+                if record is None or record.get("envoy_port"):
+                    continue
+                latest = self._node_last_activity(record)
+                if latest is None or now - latest < self.node_dead_grace_s:
+                    continue
+                if self._node_has_unresolved_work(node_id):
+                    continue
+                try:
+                    if self.lifecycle_runtime.reservation_for_node(node_id):
+                        continue
+                except Exception:
+                    continue        # unknowable reservation state: spare
+                try:
+                    self.db.delete_node(node_id)
+                except Exception:
+                    continue
+                self.directory.forget(node_id)
+                self._forget_launch_profile(node_id)
+                evicted.append({"node_id": node_id, "cause": cause,
+                                "silent_s": round(silent_s, 1)})
+            if evicted:
+                self._invalidate_network_nodes_cache_locked()
+                self._audit_best_effort(
+                    "nodes_evicted",
+                    {"count": len(evicted), "evicted": evicted[:8]})
+        return evicted
 
     def unregister_node(self, body):
         """Clear a node's live Envoy port -- it is shutting down cleanly.
@@ -7865,6 +8046,18 @@ class HostApp:
             try:
                 with self.lock:
                     self.db.audit("hostapp", "artifact_cleanup_error", {
+                        "error": f"{type(e).__name__}: {e}"})
+            except Exception:
+                pass
+        # Node retention rides the same cadence: forget rows whose project
+        # is provably deleted or that have been silent past the retention
+        # horizon (see _evict_stale_nodes for the idle rules).
+        try:
+            self._evict_stale_nodes(now)
+        except Exception as e:
+            try:
+                with self.lock:
+                    self.db.audit("hostapp", "node_eviction_error", {
                         "error": f"{type(e).__name__}: {e}"})
             except Exception:
                 pass

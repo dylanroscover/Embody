@@ -104,6 +104,8 @@ If the host app was just updated, run **Repair Host App** once more as the repai
 
 An offline row is retained intentionally. Common causes are a closed `.toe`, a sleeping computer, a stopped host app, Wi-Fi roaming, DHCP renewal, or a temporary cable/switch interruption. Convoy reconnects and refreshes the row when the node returns.
 
+Retention has two automatic limits: a node whose `.toe` has been **deleted from disk** is forgotten by the host app's retention sweep after about half an hour of silence, and any node **unseen for 30 days** is forgotten regardless. Both respect the same safety rules as manual forgetting -- a node with unresolved jobs is never removed, and an unplugged or unmounted drive is never treated as a deletion (recognized by drive letters and the standard mount locations `/Volumes`, `/mnt`, `/media`; a volume mounted at a custom path is not distinguishable from a deleted folder, so prefer keeping such projects on standard mounts). For immediate cleanup of a specific stale row, an AI session can call `convoy_forget_node` with the node's id (from `convoy_list_nodes`); it refuses while the node still has work.
+
 For unattended machines:
 
 - Disable sleep where appropriate for the installation.

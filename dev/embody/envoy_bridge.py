@@ -611,6 +611,25 @@ BRIDGE_TOOLS = [
             "required": ["target_host_id", "convoy_id", "delivery_id"],
         },
     },
+    {
+        "name": "convoy_forget_node",
+        "description": (
+            "Advanced local recovery: delete a stale node row from THIS "
+            "machine's Convoy host app (the row a renamed, moved, or "
+            "deleted project left behind). Refuses while the node still "
+            "has unresolved or unacknowledged jobs. Local-only -- it "
+            "cannot forget a node on another machine's host. Dead and "
+            "long-unseen rows are also evicted automatically on the "
+            "host's retention sweep; this is the immediate manual path."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "node_id": {"type": "string", "minLength": 1},
+            },
+            "required": ["node_id"],
+        },
+    },
 ]
 
 BRIDGE_TOOL_NAMES = {t["name"] for t in BRIDGE_TOOLS}
@@ -2756,6 +2775,23 @@ def handle_convoy_cancel_job(params):
     return result
 
 
+def handle_convoy_forget_node(params):
+    """Delete a stale node row on the LOCAL host app (plan 7.5 forget)."""
+    invalid = _convoy_required_text(params, ("node_id",))
+    if invalid:
+        return _convoy_invalid_arguments(invalid)
+    node_id = params["node_id"]
+    if (len(node_id) > 256
+            or any(ord(char) < 32 or ord(char) == 127 for char in node_id)):
+        return _convoy_invalid_arguments(
+            "node_id must be bounded printable text")
+    result = convoy_host_call("POST", "/nodes/forget", {"node_id": node_id})
+    result = dict(result) if isinstance(result, dict) else {
+        "ok": False, "reason": "convoy_host_bad_response"}
+    result["wakes_touchdesigner"] = False
+    return result
+
+
 def handle_convoy_ping(params):
     """Dedicated non-waking wrapper around the host-native ping operation."""
     invalid = _convoy_required_text(
@@ -4156,6 +4192,8 @@ def handle_bridge_tool(name, params, state):
         result = handle_convoy_save_artifact(params, state)
     elif name == "convoy_cancel_job":
         result = handle_convoy_cancel_job(params)
+    elif name == "convoy_forget_node":
+        result = handle_convoy_forget_node(params)
     else:
         result = {"error": f"Unknown bridge tool: {name}"}
 

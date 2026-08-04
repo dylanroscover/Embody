@@ -4659,7 +4659,7 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
                  'convoy_restart_node', 'convoy_call', 'convoy_batch',
                  'convoy_get_job', 'convoy_ack_job', 'convoy_get_artifact',
                  'convoy_save_artifact',
-                 'convoy_cancel_job'}
+                 'convoy_cancel_job', 'convoy_forget_node'}
         self.assertTrue(names.issubset(bridge.BRIDGE_TOOL_NAMES))
         response = {'result': {'tools': []}}
         bridge.augment_tools_list(response)
@@ -4683,6 +4683,7 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
             ('convoy_get_artifact', 'handle_convoy_get_artifact'),
             ('convoy_save_artifact', 'handle_convoy_save_artifact'),
             ('convoy_cancel_job', 'handle_convoy_cancel_job'),
+            ('convoy_forget_node', 'handle_convoy_forget_node'),
         )
         for tool_name, handler_name in handlers:
             with self.subTest(tool_name=tool_name), \

@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 62 MCP tools for interacting with TouchDesigner, plus 19 bridge meta-tools: 4 TD-lifecycle tools and 15 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 62 MCP tools for interacting with TouchDesigner, plus 20 bridge meta-tools: 4 TD-lifecycle tools and 16 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 Two of the 62 (`convoy_lifecycle_state`, `convoy_lifecycle_quit`) are internal Convoy host-lifecycle tools: they refuse any session other than the Convoy host app's dedicated loopback session and are not for agent use.
 
@@ -188,7 +188,7 @@ These tools run locally on the STDIO bridge script, not inside TouchDesigner. Th
 
 ### Convoy Tools (LAN work relay)
 
-The remaining 15 meta-tools drive [Convoy](../convoy/index.md), relaying work to Convoy-enabled Embody nodes on the trusted LAN through the local per-user host app. Status and inventory calls never wake TouchDesigner.
+The remaining 16 meta-tools drive [Convoy](../convoy/index.md), relaying work to Convoy-enabled Embody nodes on the trusted LAN through the local per-user host app. Status and inventory calls never wake TouchDesigner.
 
 | Tool | Description |
 |------|-------------|
@@ -202,6 +202,7 @@ The remaining 15 meta-tools drive [Convoy](../convoy/index.md), relaying work to
 | `convoy_get_job` | Check durable work that outlives the original call or reconnect |
 | `convoy_ack_job` | Acknowledge a finished delivery so the target can release its protected result artifacts |
 | `convoy_cancel_job` | Request cancellation from the exact owning host |
+| `convoy_forget_node` | Delete a stale node row on THIS machine's host app (refuses while the node has unresolved jobs); dead and long-unseen rows are also evicted automatically |
 | `convoy_get_artifact` | Retrieve and verify a large result into a temporary local file by artifact reference |
 | `convoy_save_artifact` | Verify an artifact and save it into the current project (`overwrite=true` required to replace) |
 | `convoy_start_node` | Reopen a previously registered, currently offline node |

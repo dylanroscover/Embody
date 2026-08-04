@@ -6,6 +6,7 @@ Includes the PHASE 1 EXIT criterion:
 
 import json
 import os
+import sys
 import threading
 import time
 import urllib.error
@@ -491,6 +492,155 @@ def test_forget_node_refuses_while_the_node_still_has_work(server):
 def test_forget_of_unknown_node_is_a_named_404(server):
     code, body = server.call("/nodes/forget", {"node_id": "ghost"})
     assert code == 404 and body["reason"] == "unknown_node"
+
+
+# -- automatic stale-node eviction (the retention sweep) ----------------
+#
+# Field report 2026-08-04: abandoned test projects lingered as Offline
+# rows forever -- only a clean unregister ever removed anything, and
+# /nodes/forget had no caller. The sweep forgets a row only when it is
+# silent AND either its .toe is provably deleted or the retention
+# horizon has passed; offline alone is never stale (a closed TD stays
+# remotely launchable, the documented contract).
+
+def _register_with_toe(server, tmp_path, name, port=None):
+    toe = tmp_path / name / (name + ".toe")
+    toe.parent.mkdir(parents=True, exist_ok=True)
+    toe.write_bytes(b"toe")
+    body = {"project_root": str(toe.parent), "convoy_id": "cv",
+            "comp_path": "/Embody", "metadata": {"toe_path": str(toe)}}
+    if port is not None:
+        body["envoy_port"] = port
+    _, node = server.call("/register", body)
+    return node, toe
+
+
+def _sweep(server, ahead_s):
+    return server.app._evict_stale_nodes(time.time() + ahead_s)
+
+
+def test_eviction_forgets_a_deleted_projects_node(server, tmp_path):
+    node, toe = _register_with_toe(server, tmp_path, "scratch", port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    toe.unlink()                       # project deleted, parent remains
+    evicted = _sweep(server, server.app.node_dead_grace_s + 60)
+    assert [e["node_id"] for e in evicted] == [node["node_id"]]
+    assert evicted[0]["cause"] == "dead_project"
+    _, listing = server.call("/nodes")
+    assert node["node_id"] not in [n["node_id"] for n in listing["nodes"]]
+
+
+def test_eviction_spares_a_project_that_still_exists(server, tmp_path):
+    node, _toe = _register_with_toe(server, tmp_path, "keeper", port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    assert _sweep(server, server.app.node_dead_grace_s + 60) == []
+    _, listing = server.call("/nodes")
+    assert node["node_id"] in [n["node_id"] for n in listing["nodes"]], \
+        "an offline node whose project exists is remotely launchable, not stale"
+
+
+def test_eviction_waits_out_the_dead_grace(server, tmp_path):
+    node, toe = _register_with_toe(server, tmp_path, "fresh", port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    toe.unlink()
+    assert _sweep(server, 5) == [], \
+        "a just-silent node must ride out the grace before eviction"
+
+
+def test_eviction_spares_unresolved_work_even_when_the_project_is_gone(
+        server, tmp_path):
+    node, toe = _register_with_toe(server, tmp_path, "busy", port=9981)
+    code, _job = server.call("/jobs", {
+        "idempotency_key": "hold", "node_id": node["node_id"],
+        "operation": "query_network", "arguments": {}})
+    assert code == 200
+    server.call("/unregister", {"node_id": node["node_id"]})
+    toe.unlink()
+    assert _sweep(server, server.app.node_dead_grace_s + 60) == []
+
+
+def test_eviction_never_touches_a_live_node(server, tmp_path):
+    node, toe = _register_with_toe(server, tmp_path, "live", port=9981)
+    toe.unlink()                       # even with the file gone
+    assert _sweep(server, server.app.node_dead_grace_s + 60) == []
+    _, listing = server.call("/nodes")
+    assert node["node_id"] in [n["node_id"] for n in listing["nodes"]]
+
+
+def test_retention_horizon_evicts_a_long_unseen_node(server, tmp_path):
+    node, _toe = _register_with_toe(server, tmp_path, "ancient", port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    evicted = _sweep(server, server.app.node_retention_s + 60)
+    assert [e["node_id"] for e in evicted] == [node["node_id"]]
+    assert evicted[0]["cause"] == "retired_unseen", \
+        "even an intact project ages out past the retention horizon"
+
+
+def test_the_reap_cadence_actually_runs_the_eviction_sweep(server, tmp_path):
+    """The sweep's only production entry point is _maybe_reap on the drain
+    cadence -- pin the chaining, not just the sweep in isolation."""
+    node, toe = _register_with_toe(server, tmp_path, "chained", port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    toe.unlink()
+    server.app.node_dead_grace_s = 0.0     # collapse both grace windows
+    server.app._last_reap = 0.0
+    server.app._maybe_reap()
+    _, listing = server.call("/nodes")
+    assert node["node_id"] not in [n["node_id"] for n in listing["nodes"]], \
+        "eviction must ride the reap cadence, not exist only as a method"
+
+
+def test_eviction_still_works_from_the_durable_stamp_after_restart(
+        server, tmp_path):
+    """After a daemon restart the in-memory heartbeat is gone;
+    load_directory replays rows without it, so eviction depends entirely
+    on host.json's durable last_seen (the dominant real-world path)."""
+    node, toe = _register_with_toe(server, tmp_path, "reborn", port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    toe.unlink()
+    reborn = ha.HostApp(
+        server.app.data_dir,
+        artifact_cache_path=os.path.join(server.app.data_dir,
+                                         "test-artifacts-2"))
+    assert node["node_id"] in [
+        n.get("node_id") for n in reborn.directory.nodes()]
+    reborn.started -= reborn.node_dead_grace_s + 1   # past the boot grace
+    evicted = reborn._evict_stale_nodes(
+        time.time() + reborn.node_dead_grace_s + 60)
+    assert [e["node_id"] for e in evicted] == [node["node_id"]]
+    assert evicted[0]["cause"] == "dead_project"
+
+
+def test_no_eviction_during_the_daemon_boot_grace(server, tmp_path):
+    """Seconds after boot, running TDs have not re-registered yet; the
+    sweep must give them a full heartbeat cycle before judging silence."""
+    node, toe = _register_with_toe(server, tmp_path, "booting", port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    toe.unlink()
+    future = time.time() + server.app.node_retention_s + 60
+    original = server.app.started
+    server.app.started = future - 30       # daemon "booted" 30s before now
+    try:
+        assert server.app._evict_stale_nodes(future) == [], \
+            "a freshly booted daemon must not judge silence yet"
+    finally:
+        server.app.started = original
+
+
+def test_an_unplugged_volume_is_never_a_deletion(tmp_path):
+    """The mount-container rule is platform-shaped: an absent child of
+    /Volumes (macOS) or /media (Linux) is an unplugged drive; on Windows
+    an unplugged drive letter has no reachable ancestry at all. A deleted
+    ordinary folder, by contrast, IS provably deleted."""
+    gone = ha.HostApp._path_provably_deleted
+    if sys.platform == "win32":
+        assert gone("Q:\\nonexistent-drive\\show\\show.toe") is False
+    elif sys.platform == "darwin":
+        assert gone("/Volumes/UnpluggedDrive/show/show.toe") is False
+    deleted = tmp_path / "was-here" / "show.toe"
+    deleted.parent.mkdir()
+    assert gone(str(deleted)) is True, \
+        "a missing file under an existing folder is a deletion"
 
 
 def test_unregister_requires_the_token(server):

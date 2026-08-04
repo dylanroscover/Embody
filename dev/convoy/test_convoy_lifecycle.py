@@ -860,6 +860,17 @@ def test_disabled_and_ineligible_profiles_fail_closed(tmp_path):
         assert result["code"] == code and launcher.spawns == []
 
 
+def test_delete_profile_drops_the_forgotten_nodes_launch_profile(tmp_path):
+    """Forgetting a node (manual /nodes/forget or the eviction sweep)
+    deletes its launch profile too -- an orphaned profile is unreachable
+    by every start path and would sit in lifecycle.json for ever."""
+    _manager, store, _, _, _, _, _, _ = make_system(tmp_path)
+    assert store.get_profile(NODE) is not None
+    assert store.delete_profile(NODE) is True
+    assert store.get_profile(NODE) is None
+    assert store.delete_profile(NODE) is False, "idempotent second delete"
+
+
 def test_reregistration_cannot_undo_local_membership_or_launch_gates(tmp_path):
     manager, store, runtime, _, _, root, toe, exe = make_system(tmp_path)
     manager.set_enabled(NODE, CONVOY, False, launch_eligible=False)

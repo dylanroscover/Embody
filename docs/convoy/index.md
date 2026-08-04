@@ -70,7 +70,7 @@ The read-only **Convoy Nodes** sequence shows one row per known node:
 
 Per-node controller counts and richer detail are deliberately not standing columns; use `convoy_list_controllers` and `convoy_list_nodes` for live sessions and full node records.
 
-Offline rows may remain visible so a temporarily closed or disconnected project does not disappear from the operator's mental map. Convoy routes with stable identities, not names or IP addresses.
+Offline rows may remain visible so a temporarily closed or disconnected project does not disappear from the operator's mental map -- an offline node is still remotely launchable. Convoy routes with stable identities, not names or IP addresses. Genuinely dead rows clear themselves: the host app's retention sweep forgets a node whose project file has been deleted (once it has been silent for half an hour), and any node unseen for 30 days, always sparing nodes with unresolved work. An unplugged or unmounted drive never counts as deleted. To remove a specific row immediately, use the `convoy_forget_node` tool.
 
 ## Use Convoy from an AI client
 
