@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.0.203
+
+HTTPS from TouchDesigner finally verifies on macOS.
+
+- **Self-update works on macOS** (and every other HTTPS call from TD's bundled Python): the updater's check and download, `get_docs`' derivative.ca fallback, and the PyPI version check all used bare `urlopen`. Windows worked only because CPython reads the OS certificate store there; macOS's bundled Python has no default CA path, so every one of these failed with `CERTIFICATE_VERIFY_FAILED` -- the perennial "Update check failed" on Macs. All four sites now use a verifying context that loads certifi's CA bundle (certifi ships inside TouchDesigner) in addition to any system defaults. Verification is never disabled or downgraded -- the same context feeds the self-updater, where an unverified download would be a supply-chain hole.
+
 ## v6.0.202
 
 The Mac field test's second find: a first-install session could wedge itself.
