@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 6
-generator: Embody/6.0.159
+generator: Embody/6.0.206
 td_build: 099.2025.33070
-source_file: Embody-6.159.toe
-exported_at: '2026-07-27T00:41:48Z'
+source_file: Embody-6.207.toe
+exported_at: '2026-08-04T20:06:43Z'
 network_path: /embody/Embody/toolbar/container_left/envoy_toggle
 options:
   include_dat_content: false
@@ -12,7 +12,6 @@ options:
 type: textCOMP
 parameters:
   text: Envoy
-  callbacks: new_envoy_toggle_callbacks
   font: Open Sans
   fontsize: 9
   fontsizeunits: points

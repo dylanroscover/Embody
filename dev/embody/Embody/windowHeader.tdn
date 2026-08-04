@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 14
-generator: Embody/6.0.204
+build: 15
+generator: Embody/6.0.206
 td_build: 099.2025.33070
-source_file: Embody-6.204.toe
-exported_at: '2026-08-04T18:25:54Z'
+source_file: Embody-6.207.toe
+exported_at: '2026-08-04T20:06:45Z'
 network_path: /embody/Embody/windowHeader
 options:
   include_dat_content: false
@@ -72,7 +72,6 @@ operators:
   type: textCOMP
   parameters:
     text: "\U000F05AF"
-    callbacks: button_max_callbacks
     font: Material Design Icons
     fontsize: 10
     w: 32
@@ -88,7 +87,6 @@ operators:
   type: textCOMP
   parameters:
     text: "\U000F05B0"
-    callbacks: button_min_callbacks
     font: Material Design Icons
     fontsize: 10
     w: 32
@@ -120,7 +118,6 @@ operators:
   type: textCOMP
   parameters:
     text: "\U000F05AD"
-    callbacks: button_close_callbacks
     font: Material Design Icons
     fontsize: 10
     w: 32

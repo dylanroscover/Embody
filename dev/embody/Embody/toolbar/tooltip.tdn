@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 40
-generator: Embody/6.0.138
+build: 41
+generator: Embody/6.0.206
 td_build: 099.2025.33070
-source_file: Embody-6.139.toe
-exported_at: '2026-07-20T11:50:55Z'
+source_file: Embody-6.207.toe
+exported_at: '2026-08-04T20:06:44Z'
 network_path: /embody/Embody/toolbar/tooltip
 options:
   include_dat_content: false
@@ -33,7 +33,6 @@ operators:
   type: textCOMP
   parameters:
     text: Clear filter
-    callbacks: text_callbacks
     font: Open Sans
     fontsize: 10
     fontcolorr: 0.8

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 11
-generator: Embody/6.0.25
-td_build: 099.2025.32820
-source_file: Embody-6.25.toe
-exported_at: '2026-06-13T05:52:36Z'
+build: 12
+generator: Embody/6.0.206
+td_build: 099.2025.33070
+source_file: Embody-6.207.toe
+exported_at: '2026-08-04T20:06:40Z'
 network_path: /embody/Embody/toolbar/container_left/save_folder
 options:
   include_dat_content: false
@@ -12,7 +12,6 @@ options:
 type: textCOMP
 parameters:
   text: =f'/{parent.Embody.par.Folder}'
-  callbacks: new_save_folder_callbacks
   font: Open Sans
   fontsize: 9
   fontsizeunits: points

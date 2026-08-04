@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 17
-generator: Embody/6.0.203
+build: 18
+generator: Embody/6.0.206
 td_build: 099.2025.33070
-source_file: Embody-6.204.toe
-exported_at: '2026-08-04T17:27:22Z'
+source_file: Embody-6.207.toe
+exported_at: '2026-08-04T20:06:45Z'
 network_path: /embody/Embody/toolbar/container_left
 options:
   include_dat_content: false
@@ -63,7 +63,6 @@ operators:
   type: textCOMP
   parameters:
     text: =str(parent.Embody.DirtyCount()) + ' dirty' if parent.Embody.extensionsReady and parent.Embody.DirtyCount() else ''
-    callbacks: status_callbacks
     font: Open Sans
     fontsize: 9
     w: 80
@@ -79,7 +78,6 @@ operators:
   type: textCOMP
   parameters:
     text: "\U000F0425"
-    callbacks: new_disable_callbacks
     font: Material Design Icons
     fontsize: 11
     w: 36
@@ -93,7 +91,6 @@ operators:
   type: textCOMP
   parameters:
     text: "\U000F04C5"
-    callbacks: perform_callbacks
     font: Material Design Icons
     fontsize: 11
     w: 36
@@ -108,7 +105,6 @@ operators:
   type: textCOMP
   parameters:
     text: "\U000F0450"
-    callbacks: new_refresh_callbacks
     font: Material Design Icons
     fontsize: 11
     w: 36
@@ -125,7 +121,6 @@ operators:
   type: textCOMP
   parameters:
     text: "\U000F0193"
-    callbacks: new_save_comp_callbacks
     font: Material Design Icons
     fontsize: 11
     w: 36
@@ -141,7 +136,6 @@ operators:
   type: textCOMP
   parameters:
     text: "\U000F0207"
-    callbacks: new_export_tdn_callbacks
     font: Material Design Icons
     fontsize: 11
     w: 36
@@ -157,7 +151,6 @@ operators:
   type: textCOMP
   parameters:
     text: "\U000F02FA"
-    callbacks: new_import_tdn_callbacks
     font: Material Design Icons
     fontsize: 11
     w: 36
@@ -173,7 +166,6 @@ operators:
   type: textCOMP
   parameters:
     text: "\U000F04E6"
-    callbacks: new_initialize_callbacks
     font: Material Design Icons
     fontsize: 11
     w: 36
@@ -195,7 +187,6 @@ operators:
   type: textCOMP
   parameters:
     text: =f'/{parent.Embody.par.Folder}'
-    callbacks: new_save_folder_callbacks
     font: Open Sans
     fontsize: 9
     w: 100
@@ -212,7 +203,6 @@ operators:
   type: textCOMP
   parameters:
     text: Envoy
-    callbacks: new_envoy_toggle_callbacks
     font: Open Sans
     fontsize: 9
     w: 65
@@ -234,7 +224,6 @@ operators:
   type: textCOMP
   parameters:
     text: "\U000F021D"
-    callbacks: new_export_comp_tdn_callbacks
     font: Material Design Icons
     fontsize: 11
     w: 36
