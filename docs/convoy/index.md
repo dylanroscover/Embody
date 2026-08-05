@@ -2,17 +2,30 @@
 
 **Convoy** connects Embody-enabled TouchDesigner projects on the same trusted LAN. Each open project is a **node**: it can be selected as a remote target, and it can originate work for another node. There is no permanent controller, primary machine, or network leader.
 
-The everyday path is:
+The everyday path, drawn with the machine boundary where it actually is:
 
 ```text
-VS Code / Cursor / another AI client
-        -> Envoy in the local Embody
-        -> Convoy
-        -> a selected remote Embody node
-        -> TouchDesigner or an approved computer action
+ YOUR COMPUTER                             REMOTE COMPUTER
++-----------------------------+           +-------------------------------+
+|  VS Code / Cursor /         |           |  TouchDesigner                |
+|  another AI client          |           |    the selected Embody node   |
+|      |                      |           |    runs the operation         |
+|      v  MCP (loopback)      |           |        ^                      |
+|  Envoy in the local Embody  |           |        |  loopback            |
+|      |                      |           |        |                      |
+|      v  loopback            |           |        |                      |
+|  Convoy host app  ==========+===========+==> Convoy host app            |
+|  (per-user background app)  |  trusted  |   (one per computer, serving  |
++-----------------------------+  LAN,     |   every node on it; approved  |
+                                 mutual   |   computer actions run here   |
+                                 TLS      |   even with TouchDesigner     |
+                                          |   closed)                     |
+                                          +-------------------------------+
 ```
 
-Several Embody nodes can run on one computer. They share an IP address but remain separately addressable.
+Only one hop crosses the network: host app to host app, over the mutually authenticated LAN transport. Everything else -- your AI client to Envoy, Envoy to its host app, the remote host app to its nodes -- stays loopback on its own computer. That is also the security shape: Envoy itself is never exposed to the LAN, on either end.
+
+Several Embody nodes can run on one computer. They share that computer's single host app and IP address but remain separately addressable.
 
 !!! warning "Development preview"
     Convoy is under active development. The LAN runtime and user controls are being built and tested, but production host-app packaging is not complete in every build. Windows-to-Windows acceptance testing is in progress. On macOS the enable, install, and daemon-runtime path has been validated on Apple Silicon hardware, but LAN node-to-node operation on macOS has not yet been physically validated. Do not treat this preview as a production certification.
