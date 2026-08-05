@@ -87,6 +87,8 @@ class StubClient:
         self.probe_status = real.STATUS_ABSENT
         self.portfile = None          # {'pid': .., 'port': ..} when live
         self.post_result = (200, {'ok': True, 'stopping': True})
+        self.posted = []              # (path, body) of every host_post
+        self.get_results = []         # queued (code, body) for host_get
 
     def __getattr__(self, name):
         return getattr(self._real, name)
@@ -110,7 +112,18 @@ class StubClient:
 
     def host_post(self, handle, path, body, **kw):
         self.calls.append(('host_post', path))
-        return self.post_result
+        self.posted.append((path, dict(body or {})))
+        result = self.post_result
+        if callable(result):
+            result = result(path, body)
+        return result
+
+    def host_get(self, handle, path, query=None, **kw):
+        self.calls.append(('host_get', path))
+        queue = self.get_results
+        if queue:
+            return queue.pop(0) if len(queue) > 1 else queue[0]
+        return 200, {'ok': True, 'host_id': 'h' * 32, 'nodes': []}
 
     def count(self, kind):
         return sum(1 for name, _ in self.calls if name == kind)
@@ -1343,3 +1356,99 @@ class TestHostThreadingDiscipline(EmbodyTestCase):
         self.assertFalse(getattr(TestInstallOrchestration, 'DESTRUCTIVE',
                                  False))
         self.assertFalse(getattr(TestUninstallSafety, 'DESTRUCTIVE', False))
+
+
+class TestForgetOfflineNodes(ConvoyHostBase):
+    """The human-judgment cleanup path: enumerating consent, then the
+    daemon's own refusal rules per row. Offline retention is the
+    remote-start feature, so nothing here may forget silently."""
+
+    ROWS = (200, {'ok': True, 'host_id': 'h' * 32, 'nodes': [
+        {'host_id': 'h' * 32, 'node_id': 'a' * 32, 'online': False,
+         'node_name': 'TEC-X / e2', 'toe_name': 'e2.1.toe',
+         'last_seen_age_s': 7200.0},
+        {'host_id': 'h' * 32, 'node_id': 'b' * 32, 'online': False,
+         'node_name': 'TEC-X / e3', 'toe_name': 'e3.1.toe',
+         'last_seen_age_s': 3600.0},
+        {'host_id': 'h' * 32, 'node_id': 'c' * 32, 'online': True,
+         'node_name': 'TEC-X / live', 'toe_name': 'live.1.toe',
+         'last_seen_age_s': 3.0},
+        {'host_id': 'p' * 32, 'node_id': 'd' * 32, 'online': False,
+         'node_name': 'PEER / other', 'toe_name': 'other.1.toe',
+         'last_seen_age_s': 9999.0},
+    ]})
+
+    def setUp(self):
+        super().setUp()
+        self.client.probe_status = self.client.STATUS_RUNNING
+        self.client.get_results = [self.ROWS]
+
+    def test_the_dialog_names_offline_rows_and_cancel_touches_nothing(self):
+        self.choice = 0                       # Cancel
+        self.convoy.ForgetOfflineNodes()
+        self.assertLen(self.dialogs, 1)
+        _title, message, buttons = self.dialogs[0]
+        self.assertEqual(buttons[0], 'Cancel', 'the safe answer is button 0')
+        self.assertIn('TEC-X / e2', message)
+        self.assertIn('TEC-X / e3', message)
+        self.assertNotIn('TEC-X / live', message,
+                         'an online row must never be offered')
+        self.assertNotIn('PEER / other', message,
+                         'peer rows are not ours to forget')
+        self.assertIn('NEW identity', message)
+        self.assertEqual(self.client.count('host_post'), 0,
+                         'Cancel must not touch the daemon')
+
+    def test_confirm_forgets_each_offline_row(self):
+        self.choice = 1
+        self.convoy.ForgetOfflineNodes()
+        forgets = [body for path, body in self.client.posted
+                   if path == '/nodes/forget']
+        self.assertEqual([b['node_id'] for b in forgets],
+                         ['a' * 32, 'b' * 32])
+        self.assertTrue(any('forgot 2' in m for m, _l in self._logs),
+                        self._logs)
+
+    def test_a_row_back_online_by_apply_time_is_skipped(self):
+        rows_later = (200, {'ok': True, 'host_id': 'h' * 32, 'nodes': [
+            dict(self.ROWS[1]['nodes'][0]),                  # e2 offline
+            dict(self.ROWS[1]['nodes'][1], online=True),     # e3 came back
+        ]})
+        self.client.get_results = [self.ROWS, rows_later]
+        self.choice = 1
+        self.convoy.ForgetOfflineNodes()
+        forgets = [body for path, body in self.client.posted
+                   if path == '/nodes/forget']
+        self.assertEqual([b['node_id'] for b in forgets], ['a' * 32],
+                         'a row that came back online is never forgotten')
+        self.assertTrue(any('skipped 1' in m for m, _l in self._logs))
+
+    def test_unresolved_work_is_kept_and_reported(self):
+        self.choice = 1
+
+        def refuse_busy(path, body):
+            if body.get('node_id') == 'b' * 32:
+                return 409, {'ok': False, 'reason': 'node_has_work'}
+            return 200, {'ok': True, 'forgotten': True}
+
+        self.client.post_result = refuse_busy
+        self.convoy.ForgetOfflineNodes()
+        self.assertTrue(
+            any('kept 1 with unresolved jobs' in m for m, _l in self._logs),
+            self._logs)
+
+    def test_no_offline_rows_means_no_dialog(self):
+        self.client.get_results = [
+            (200, {'ok': True, 'host_id': 'h' * 32, 'nodes': []})]
+        self.convoy.ForgetOfflineNodes()
+        self.assertLen(self.dialogs, 0)
+        self.assertTrue(any('no offline nodes' in m for m, _l in self._logs))
+
+    def test_a_busy_host_slot_ignores_the_pulse(self):
+        import time as _time
+        self.convoy._host_busy = True
+        self.convoy._host_busy_since = _time.time()
+        got = self.convoy.ForgetOfflineNodes()
+        self.assertEqual(got['state'], 'busy')
+        self.assertLen(self.dialogs, 0)
+        self.convoy._host_busy = False

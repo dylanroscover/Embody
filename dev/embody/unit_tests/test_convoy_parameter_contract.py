@@ -95,6 +95,20 @@ def _plain_ext(**values):
     return ext, pars
 
 
+def test_forget_offline_nodes_pulse_is_present_and_honest():
+    """The manual cleanup path: a Pulse right after the nodes sequence,
+    whose help states the enumerating confirmation and the consequence
+    (new identity, TD Python approval reset) -- the informed-consent
+    contract the button was designed around."""
+    rows = _by_name(_convoy_page(_load_yaml(EMBODY_TDN)))
+    par = rows["Convoyforgetoffline"]
+    assert par["style"] == "Pulse"
+    assert par["label"] == "Forget Offline Nodes..."
+    for phrase in ("confirmation that names", "new identity",
+                   "TD Python approval resets", "unresolved jobs"):
+        assert phrase in par["help"], phrase
+
+
 def test_the_convoy_comp_carries_its_global_shortcut():
     """External call sites address the extension as op.Convoy.ext.ConvoyExt
     -- the shortcut is the API surface, so losing it breaks every example

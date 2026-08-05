@@ -175,7 +175,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **118 test suites** (3,329 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **119 test suites** (3,335 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -206,6 +206,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.211**: **One project, one row** -- a live session's versioned save no longer leaves a ghost duplicate in the Convoy node list (the old row held a port that belonged to its own successor and read as "live" forever); plus the new **Forget Offline Nodes...** button, which names every row in a confirmation before removing this machine's offline entries.
 - **6.0.210**: **`op.Convoy`** -- the convoy COMP carries a global OP shortcut, so scripts and docs address it as `op.Convoy.ext.ConvoyExt...` instead of a path chain; contract-test pinned.
 - **6.0.209**: **Repair Convoy App works over a running daemon** (and the Host App buttons are renamed Convoy App) -- macOS bootstrapped onto the still-loaded LaunchAgent label (launchctl EIO 5), so repairing a healthy host app always failed; the installer now gracefully stops the old daemon, boots the label out, waits for launchd to drop it, then bootstraps. Windows gets the same graceful stop (the old process silently kept running old code). Also: the "no usable interpreter" warning fires once instead of three times, and never on an unsaved project.
 - **6.0.208**: **Convoy stale nodes clear themselves** -- the host app's retention sweep forgets nodes whose `.toe` was deleted (after ~30 min of silence) and nodes unseen for 30 days, never touching merely-offline or busy nodes (an unplugged drive is never read as a deletion); the new `convoy_forget_node` tool wires the daemon's existing recovery route for immediate manual cleanup.

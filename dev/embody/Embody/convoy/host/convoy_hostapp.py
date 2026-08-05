@@ -3047,9 +3047,23 @@ class HostApp:
         still remotely launchable. Same host + root + COMP is the same logical
         node, re-identified.
 
-        A candidate is retired only when it is provably idle: no live Envoy
-        port, and no unresolved work (the /nodes/forget rule, so a superseded
-        record can never take a result nobody has collected with it).
+        A candidate is retired only when it is provably idle OR provably
+        THIS registration's own past self: an old row still holding an
+        envoy_port is normally live and untouchable -- except when that
+        port is the very one the NEW registration carries. A LIVE
+        session that saves (TouchDesigner's versioned save renames the
+        .toe) re-registers under a new identity without ever
+        unregistering the old one, so the predecessor kept a port that
+        now belongs to its successor and ghosted for ever
+        (field-reported 2026-08-05, the third duplicate report). The
+        PORT is the test because it is daemon-owned live state; the
+        metadata process_id is client-supplied display data and is
+        deliberately never authority for a retirement. A successor
+        whose first register has no port yet simply retires its past
+        self one heartbeat later, when the port arrives and matches.
+        Unresolved work still spares the row (the /nodes/forget rule,
+        so a superseded record can never take a result nobody has
+        collected with it).
         """
         retired = []
         try:
@@ -3057,13 +3071,19 @@ class HostApp:
             comp = str(live.get("comp_path") or "")
             if not root or not comp:
                 return retired
+            live_port = live.get("envoy_port")
             for record in list(self.directory.nodes()):
                 node_id = record.get("node_id")
                 if (node_id == live.get("node_id")
                         or record.get("host_id") != live.get("host_id")
                         or str(record.get("project_root") or "") != root
-                        or str(record.get("comp_path") or "") != comp
-                        or record.get("envoy_port")):
+                        or str(record.get("comp_path") or "") != comp):
+                    continue
+                old_port = record.get("envoy_port")
+                if old_port and not (live_port and old_port == live_port):
+                    # A genuinely different live server on the same
+                    # project (a second TD holding the old file open):
+                    # never retire a row that can still answer.
                     continue
                 if self._node_has_unresolved_work(node_id):
                     continue
@@ -3072,6 +3092,11 @@ class HostApp:
                     self.db.delete_node(node_id)
                 except Exception:
                     continue
+                # Same hygiene as forget_node and the eviction sweep: a
+                # retired row's launch profile is unreachable and would
+                # otherwise accumulate in lifecycle.json on every
+                # versioned save of a live session.
+                self._forget_launch_profile(node_id)
                 retired.append(node_id)
             if retired:
                 self._invalidate_network_nodes_cache_locked()

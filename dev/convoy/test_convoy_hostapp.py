@@ -447,6 +447,97 @@ def test_supersession_never_touches_a_different_project_on_the_same_host(server)
     assert other["node_id"] in [n["node_id"] for n in listing["nodes"]],         "a different project must survive -- it is still remotely launchable"
 
 
+def test_a_live_sessions_versioned_save_retires_its_own_old_row(server):
+    """TouchDesigner's versioned save renames the .toe WITHOUT the process
+    exiting: the same TD re-registers under a new identity and the old row
+    keeps an envoy_port that now belongs to its successor -- so it read as
+    'live' and ghosted forever (field report 2026-08-05, duplicate #3).
+    Same port or same recorded process = the same node wearing its
+    previous name; it must be retired on the successor's register."""
+    _, old = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "runtime_id": "rt_live",
+        "metadata": {"process_id": 4242},
+        "node_discriminator": "nd_" + "1" * 32})
+    # No unregister: the process never exited, it just saved.
+    _, new = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "runtime_id": "rt_live",
+        "metadata": {"process_id": 4242},
+        "node_discriminator": "nd_" + "2" * 32})
+    assert new["node_id"] != old["node_id"]
+    _, listing = server.call("/nodes")
+    ids = [n["node_id"] for n in listing["nodes"]]
+    assert new["node_id"] in ids
+    assert old["node_id"] not in ids, \
+        "the pre-save row is the same process and must not ghost"
+
+
+def test_versioned_save_retirement_matches_on_port_alone(server):
+    """Successor and predecessor share only the PORT (the old row never
+    recorded a pid): still the same server, still retired."""
+    _, old = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "runtime_id": "rt_live",
+        "node_discriminator": "nd_" + "1" * 32})
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "runtime_id": "rt_live",
+        "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    assert old["node_id"] not in [n["node_id"] for n in listing["nodes"]]
+
+
+def test_descriptive_pid_alone_never_retires_a_port_bearing_row(server):
+    """metadata process_id is client-supplied display data -- never
+    authority for a retirement. A portless successor register spares the
+    port-bearing old row; convergence comes one heartbeat later, when
+    the successor's register carries the port and it matches."""
+    _, old = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "runtime_id": "rt_live",
+        "metadata": {"process_id": 4242},
+        "node_discriminator": "nd_" + "1" * 32})
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "runtime_id": "rt_live", "metadata": {"process_id": 4242},
+        "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    assert old["node_id"] in [n["node_id"] for n in listing["nodes"]], \
+        "a pid match alone must not retire a row that still holds a port"
+    # The next heartbeat carries the port: NOW it is provably the same
+    # server, and the past self retires.
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "runtime_id": "rt_live",
+        "metadata": {"process_id": 4242},
+        "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    assert old["node_id"] not in [n["node_id"] for n in listing["nodes"]]
+
+
+def test_supersession_spares_a_different_live_server_on_the_same_project(
+        server):
+    """Two genuinely separate TD processes can hold the same project root
+    (one still running an older version file). A port-bearing old row
+    whose port AND process differ from the new registration can still
+    answer -- it must never be retired."""
+    _, old = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "runtime_id": "rt_old",
+        "metadata": {"process_id": 1111},
+        "node_discriminator": "nd_" + "1" * 32})
+    _, new = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9982, "runtime_id": "rt_new",
+        "metadata": {"process_id": 2222},
+        "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    ids = [n["node_id"] for n in listing["nodes"]]
+    assert old["node_id"] in ids and new["node_id"] in ids, \
+        "a different live server is not a ghost"
+
+
 def test_supersession_spares_a_record_that_still_owns_work(server):
     """Retiring a node with an uncollected result would strand it."""
     _, old = server.call("/register", {

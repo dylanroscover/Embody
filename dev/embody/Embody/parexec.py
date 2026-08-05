@@ -283,7 +283,8 @@ def onPulse(par):
 				'(reinstall Embody to enable self-update)', 'WARNING')
 
 	elif par.name in ('Convoyinstallhost', 'Convoystarthost',
-					  'Convoystophost', 'Convoyuninstallhost'):
+					  'Convoystophost', 'Convoyuninstallhost',
+					  'Convoyforgetoffline'):
 		# Convoy host-app lifecycle. Deliberately NOT folded into
 		# Convoyenable and deliberately NOT reachable from the setup
 		# wizard: A-13's consent covers minting a convoy id and
@@ -294,7 +295,10 @@ def onPulse(par):
 		# SILENTLY, which is no way to register an autostarting OS task).
 		# Guarded like Checkforupdate: a partial or pre-Convoy install
 		# where the par exists but the child does not warns once instead
-		# of raising on every press.
+		# of raising on every press. Convoyforgetoffline rides this
+		# branch for the same missing-component guard and the
+		# ConvoyExt-owned confirmation -- it installs nothing, so the
+		# A-13/D-6 login-install grant story above does not apply to it.
 		convoy = parent.Embody.op('convoy')
 		if convoy:
 			getattr(convoy.ext.ConvoyExt, {
@@ -302,6 +306,7 @@ def onPulse(par):
 				'Convoystarthost': 'StartHost',
 				'Convoystophost': 'StopHost',
 				'Convoyuninstallhost': 'UninstallHost',
+				'Convoyforgetoffline': 'ForgetOfflineNodes',
 			}[par.name])()
 		else:
 			parent.Embody.Log(

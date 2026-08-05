@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 982
-generator: Embody/6.0.209
+build: 984
+generator: Embody/6.0.210
 td_build: 099.2025.33070
 source_file: Embody-6.210.toe
-exported_at: '2026-08-05T06:24:42Z'
+exported_at: '2026-08-05T08:07:46Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -66,6 +66,7 @@ operators:
     - {}
     - {}
     Convoynodes:
+    - {}
     - {}
     - {}
   custom_pars:
@@ -540,6 +541,10 @@ operators:
       readOnly: true
       help: How recently the node was seen.
       sequence: Convoynodes
+    - name: Convoyforgetoffline
+      style: Pulse
+      label: Forget Offline Nodes...
+      help: Forget this machine's offline node rows after a confirmation that names them (the first eight, then a count). A forgotten node rejoins as a new identity the next time its project opens, and its TD Python approval resets. Nodes with unresolved jobs are kept, and a node that comes back online before you confirm is skipped. Dead projects and long-unseen rows also clear automatically; this is the immediate, human-judgment path for offline rows whose files still exist.
     - name: Convoyinstallhost
       style: Pulse
       label: Repair Convoy App
@@ -845,7 +850,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.209
+      value: 6.0.210
     - name: Touchbuild
       style: Str
       label: Touch Build

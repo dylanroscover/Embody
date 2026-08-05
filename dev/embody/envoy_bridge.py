@@ -620,7 +620,9 @@ BRIDGE_TOOLS = [
             "has unresolved or unacknowledged jobs. Local-only -- it "
             "cannot forget a node on another machine's host. Dead and "
             "long-unseen rows are also evicted automatically on the "
-            "host's retention sweep; this is the immediate manual path."
+            "host's retention sweep; this is the immediate manual path. "
+            "The Convoy page's Forget Offline Nodes... button is the "
+            "in-TD bulk equivalent, with an enumerating confirmation."
         ),
         "inputSchema": {
             "type": "object",

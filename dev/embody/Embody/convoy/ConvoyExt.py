@@ -3455,6 +3455,22 @@ class ConvoyExt:
             self._logUninstallPreview(result.get('plan'))
             return
 
+        if action == 'forget_offline_plan':
+            # A LISTING is a preview: it must never alter the readout.
+            # The slot is already released, so the confirm can chain the
+            # apply call (the uninstall preview relies on the same fact).
+            if ok:
+                self._confirmForgetOffline(result.get('rows'))
+            return
+
+        if action == 'forget_offline':
+            if ok:
+                self._log('Forget Offline Nodes: %s'
+                          % (result.get('detail') or 'done'), 'SUCCESS')
+            # Rows redraw from the directory on the next register tick;
+            # the readout (host-app state) was never part of this.
+            return
+
         if state is None:
             state = session.get('host_state')
         if state is None and not ok:
@@ -3936,6 +3952,78 @@ class ConvoyExt:
         self._beginHostCall('preview', lambda: _host_preview(ctx))
         return {'state': 'previewing', 'busy': True,
                 'preview': self._session().get('uninstall_preview')}
+
+    def ForgetOfflineNodes(self):
+        """Forget this machine's offline node rows -- after NAMING them.
+
+        The automatic paths (supersede-on-register, dead-project and
+        30-day eviction) cover everything mechanical; what they cannot
+        know is which offline-but-intact project the USER considers
+        dead. This is that judgment call, so the confirmation names the
+        rows that go (the first eight, then a count) and states the
+        consequence (a forgotten node rejoins as a new identity; TD
+        Python approval resets). Two
+        phases on the host slot, mirroring the uninstall preview: list
+        (alters nothing), confirm dialog, apply. Every forget still runs
+        the daemon's own refusal rules -- unresolved work keeps a row,
+        and a row that came back online between the dialog and the apply
+        is skipped, never killed.
+        """
+        if not self._hostActionAllowed('Forget Offline Nodes'):
+            return {'state': 'busy'}
+        ctx = self._safeHostContext()
+        if ctx is None:
+            return {'state': 'unavailable'}
+        self._beginHostCall('forget_offline_plan',
+                            lambda: _host_forget_offline_plan(ctx))
+        return {'state': 'listing'}
+
+    def _confirmForgetOffline(self, rows):
+        """Stage two: name the rows, ask, then apply. MAIN THREAD."""
+        rows = [r for r in (rows or [])
+                if isinstance(r, dict) and r.get('node_id')]
+        if not rows:
+            self._log('no offline nodes to forget on this machine', 'INFO')
+            return
+
+        def _age(row):
+            age = row.get('last_seen_age_s')
+            if not isinstance(age, (int, float)):
+                return 'age unknown'
+            if age >= 3600:
+                return 'offline %dh' % int(age // 3600)
+            if age >= 60:
+                return 'offline %dm' % int(age // 60)
+            return 'offline %ds' % int(age)
+
+        shown = rows[:8]
+        lines = ['- %s (%s)' % (r.get('node_name') or r.get('toe_name')
+                                or r['node_id'][:8], _age(r))
+                 for r in shown]
+        if len(rows) > len(shown):
+            lines.append('- ...and %d more' % (len(rows) - len(shown)))
+        noun = ('This offline node' if len(rows) == 1
+                else 'These offline nodes')
+        message = (
+            '%s on THIS machine will be forgotten:\n'
+            '\n%s\n\n'
+            'A forgotten node rejoins as a NEW identity the next time its '
+            'project opens, and its TD Python approval resets. Nodes with '
+            'unresolved jobs are kept automatically. If any of these is a '
+            'machine or project you still start remotely, Cancel.'
+            % (noun, '\n'.join(lines)))
+        label = 'Forget %d Node%s' % (len(rows),
+                                      's' if len(rows) != 1 else '')
+        if self._dialog('Forget Offline Nodes', message,
+                        ['Cancel', label]) != 1:
+            self._log('Forget Offline Nodes cancelled', 'INFO')
+            return
+        ctx = self._safeHostContext()
+        if ctx is None:
+            return
+        ids = [r['node_id'] for r in rows]
+        self._beginHostCall('forget_offline',
+                            lambda: _host_forget_offline_apply(ctx, ids))
 
     def UninstallHost(self, confirm=True):
         """Remove the host app in two stages: preview, then confirm.
@@ -4940,6 +5028,107 @@ def _host_shutdown(ctx):
         return {'ok': False, 'detail': 'the host app did not answer'}
     ok = isinstance(answer, dict) and answer.get('ok') is not False
     return {'ok': bool(ok), 'http_status': status, 'answer': answer}
+
+
+def _host_offline_rows(ctx):
+    """This host's offline node rows, from the daemon's OWN projection.
+
+    /network/nodes is used rather than the raw /nodes listing so
+    online-ness comes from the daemon's single authority
+    (_node_is_online) instead of a re-implementation here. Rows are
+    filtered to the local host: peer rows are not ours to forget.
+    Returns (rows, None) or (None, detail).
+    """
+    client = ctx['client']
+    try:
+        probe = client.probe(data_dir=ctx['data_dir'])
+    except Exception as e:
+        return None, '%s: %s' % (type(e).__name__, e)
+    if not probe.use_convoy:
+        return None, 'no host app answered (%s)' % (probe.status,)
+    code, body = client.host_get(probe.handle, '/network/nodes')
+    if code != 200 or not isinstance(body, dict):
+        return None, 'node listing failed (HTTP %s)' % (code,)
+    host_id = body.get('host_id')
+    rows = []
+    for row in body.get('nodes') or []:
+        if not isinstance(row, dict) or row.get('host_id') != host_id:
+            continue
+        if row.get('online'):
+            continue
+        node_id = str(row.get('node_id') or '')
+        if not node_id:
+            continue
+        rows.append({'node_id': node_id,
+                     'node_name': str(row.get('node_name') or ''),
+                     'toe_name': str(row.get('toe_name') or ''),
+                     'last_seen_age_s': row.get('last_seen_age_s')})
+    return rows, None
+
+
+def _host_forget_offline_plan(ctx):
+    """List this host's offline rows for the confirmation. Alters nothing."""
+    rows, err = _host_offline_rows(ctx)
+    if rows is None:
+        return {'ok': False, 'action': 'forget_offline_plan',
+                'reason': 'no_host', 'detail': err}
+    return {'ok': True, 'action': 'forget_offline_plan', 'rows': rows,
+            'detail': '%d offline node(s) listed' % len(rows)}
+
+
+def _host_forget_offline_apply(ctx, node_ids):
+    """Forget the confirmed rows, re-verifying each is STILL offline.
+
+    The daemon re-checks its own refusal rules per node (/nodes/forget:
+    unresolved or unacknowledged work is a 409 keep); a row that came
+    back online between the dialog and now is skipped here, never
+    forgotten.
+    """
+    client = ctx['client']
+    rows, err = _host_offline_rows(ctx)
+    if rows is None:
+        return {'ok': False, 'action': 'forget_offline',
+                'reason': 'no_host', 'detail': err}
+    still_offline = {r['node_id'] for r in rows}
+    try:
+        probe = client.probe(data_dir=ctx['data_dir'])
+    except Exception as e:
+        return {'ok': False, 'action': 'forget_offline',
+                'reason': 'no_host',
+                'detail': '%s: %s' % (type(e).__name__, e)}
+    if not probe.use_convoy:
+        return {'ok': False, 'action': 'forget_offline',
+                'reason': 'no_host',
+                'detail': 'no host app answered (%s)' % (probe.status,)}
+    forgotten, kept_busy, skipped, failed = [], [], [], []
+    for node_id in node_ids:
+        if node_id not in still_offline:
+            skipped.append(node_id)
+            continue
+        code, body = client.host_post(probe.handle, '/nodes/forget',
+                                      {'node_id': node_id})
+        if code == 200:
+            forgotten.append(node_id)
+        elif code == 409:
+            kept_busy.append(node_id)
+        elif code == 404:
+            skipped.append(node_id)
+        else:
+            failed.append('%s (HTTP %s: %s)' % (
+                node_id[:8], code,
+                (body or {}).get('reason') or 'unknown'))
+    bits = ['forgot %d' % len(forgotten)]
+    if kept_busy:
+        bits.append('kept %d with unresolved jobs' % len(kept_busy))
+    if skipped:
+        bits.append('skipped %d (online again or already gone)'
+                    % len(skipped))
+    if failed:
+        bits.append('failed %d: %s' % (len(failed), '; '.join(failed[:3])))
+    return {'ok': not failed, 'action': 'forget_offline',
+            'forgotten': forgotten, 'kept_busy': kept_busy,
+            'skipped': skipped, 'failed': failed,
+            'detail': ', '.join(bits)}
 
 
 def _host_is_running(ctx):

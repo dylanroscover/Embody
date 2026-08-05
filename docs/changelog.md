@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.211
+
+Convoy: one project is one row -- and you can clear the rest yourself.
+
+- **Live-save ghost duplicates fixed (duplicate report #3)**: TouchDesigner's versioned save renames the `.toe` without the process exiting, so the same TD re-registered under a new identity while its old row kept an Envoy port that now belonged to its successor -- the supersede sweep read that row as "live" and spared it forever. The sweep now recognizes an old row carrying the *same port or process* as the new registration for what it is -- the same node wearing its previous name -- and retires it on the spot. A genuinely different live server on the same project (a second TD holding an older version file open) is still never touched, and unresolved work still spares any row.
+- **New "Forget Offline Nodes..." button** on the Convoy page, right under the nodes list: names the offline rows it would remove (the first eight, then a count) in a confirmation dialog (with its consequence: a forgotten node rejoins as a new identity and TD Python approval resets), keeps nodes with unresolved jobs, and skips anything that came back online before you confirmed. This is the human-judgment path for offline rows whose project files still exist; everything mechanical already clears automatically.
+- Eleven new tests: four in the daemon suite (versioned-save retirement, its port-only and pid-only variants, the different-live-server spare), six consent-flow tests (naming with cancel-touches-nothing, per-row forget, back-online skip, unresolved-work keep, no-rows-no-dialog, busy-slot ignore), and a parameter-contract pin on the new pulse.
+
 ## v6.0.210
 
 Convoy gets its global OP shortcut.
