@@ -61,3 +61,35 @@ Pushing is ONLY done when the user explicitly asks. When they do:
 - Confirm the target branch: `git branch --show-current`. Never push to `main` without explicit instruction.
 - Check remote state: `git log origin/<branch>..HEAD --oneline` to see what will be pushed.
 - If pushing includes release commits, confirm the version number in the commit message matches the changelog and README badge.
+
+## After Pushing: watch CI, and never leave the branch red
+
+Every push that can trigger a workflow gets a follow-up, in the same
+session:
+
+1. Start a background watcher on the pushed sha's runs (`gh run list`
+   polled, or `gh run watch`). Do not declare the push done while its
+   runs are pending.
+2. A failed run is addressed IMMEDIATELY: read `--log-failed`, root-cause,
+   fix, re-push. Never leave dev red overnight, and never stack more
+   pushes on top of a red run without triaging it first.
+
+## CI runners are slower than this machine -- write stall-proof tests
+
+A local green run does NOT prove a test survives a shared CI runner:
+`windows-latest` and `macos-latest` stall for 100ms+ at arbitrary points,
+which converts any REAL-CLOCK deadline into `deadline_exceeded` wherever
+the stall happens to land. This class has caused repeated CI-only
+failures (2026-08-04/05, three rounds in `test_convoy_lifecycle.py`).
+
+- A test that asserts deadline/timeout SEMANTICS must run on an injected
+  fake clock (`ManualMonotonic` + injected `sleep`, e.g.
+  `manager._monotonic = mm; manager._sleep = mm.advance`), never on
+  real-time budgets -- fake-clock tests are deterministic on any runner
+  and instant.
+- A real-clock timeout is acceptable ONLY as a generous ceiling on a path
+  that completes immediately (a refusal), and then it must be seconds,
+  not tenths.
+- Tests that need REAL thread interleaving keep real time but must give
+  every wait a stall-sized margin (whole seconds), and must not race a
+  fixed sleep against a deadline.

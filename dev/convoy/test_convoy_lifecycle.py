@@ -42,6 +42,20 @@ class ManualMonotonic:
         self.value += float(seconds)
 
 
+def fake_time(manager):
+    """Run a thread-free manager on injected time: deadlines and sleeps
+    both on the fake clock, so deadline SEMANTICS are deterministic on
+    any runner speed (a stalled CI runner converts real-clock budgets
+    into deadline_exceeded wherever the stall lands -- three rounds of
+    windows-latest flakes). Only for tests with NO real threads: a real
+    thread runs on wall time and would race the instantly-advancing
+    fake clock."""
+    mm = ManualMonotonic()
+    manager._monotonic = mm
+    manager._sleep = mm.advance
+    return mm
+
+
 class FakeBackend:
     def __init__(self):
         self.processes = {}
@@ -541,6 +555,7 @@ def test_unconfirmed_launch_is_indeterminate_and_retry_does_not_respawn(tmp_path
     system = make_system(tmp_path)
     manager, _, _, _, launcher, _, _, _ = system
     offline(system)
+    fake_time(manager)
     first = manager.start_node(NODE, CONVOY, "start-timeout", timeout_s=.1)
     second = manager.start_node(NODE, CONVOY, "start-timeout", timeout_s=.1)
     assert first["code"] == "launch_unconfirmed"
@@ -552,6 +567,7 @@ def test_new_operation_cannot_duplicate_live_unconfirmed_child(tmp_path):
     system = make_system(tmp_path)
     manager, _, _, _, launcher, _, _, _ = system
     offline(system)
+    fake_time(manager)
     first = manager.start_node(NODE, CONVOY, "unconfirmed-1", timeout_s=.1)
     second = manager.start_node(NODE, CONVOY, "unconfirmed-2", timeout_s=.1)
     assert first["code"] == "launch_unconfirmed"
@@ -563,6 +579,7 @@ def test_popen_to_pid_persistence_crash_gap_requires_local_reconciliation(tmp_pa
     system = make_system(tmp_path)
     manager, store, _, _, launcher, _, _, _ = system
     offline(system)
+    fake_time(manager)
     content = {"operation": "start", "node_id": NODE,
                "convoy_id": CONVOY, "timeout_s": .1}
     attempt, _ = store.begin_attempt("crash-gap-1", content)
@@ -1277,10 +1294,17 @@ def test_autonomous_recovery_restores_committed_restart_without_client_retry(
     launcher.callback = auto_confirm(manager, runtime_id="runtime-autonomous")
     callbacks = []
 
+    # A real-clock CEILING: recovery completes the moment the synchronous
+    # confirm lands, so only a stalled CI runner ever nears this bound --
+    # and the launch reservation's lifetime is sliced from it, so a tight
+    # value starved the confirm on a stalled runner (the windows-latest
+    # flake). Fake time cannot serve here: it advances instantly and
+    # starves the slice deterministically. The deferred-deadline flag
+    # comes from the durable record's own requested_timeout_s.
     summary = manager.recover_committed_restarts(
         result_callback=lambda durable, result: callbacks.append(
             (durable["operation_id"], result)),
-        recovery_timeout_s=.2)
+        recovery_timeout_s=10)
 
     assert summary["recovered"] == 1
     assert callbacks[0][0] == "restart-autonomous"
@@ -1392,8 +1416,10 @@ def test_autonomous_recovery_waits_for_durable_spawn_registration(tmp_path):
         args=(NODE, CONVOY, TOKEN, record))
     timer.start()
     try:
+        # A ceiling, not a sit-out: recovery returns the moment the
+        # threaded confirm lands, so only a stalled runner ever nears it.
         summary = manager.recover_committed_restarts(
-            recovery_timeout_s=.2)
+            recovery_timeout_s=10)
     finally:
         timer.join(1)
 
@@ -1546,9 +1572,9 @@ def test_per_profile_lock_serializes_and_cancelled_waiter_never_spawns(tmp_path)
     manager.launcher = launcher
     results = {}
     first = threading.Thread(target=lambda: results.setdefault(
-        "first", manager.start_node(NODE, CONVOY, "serial-1", timeout_s=.1)))
+        "first", manager.start_node(NODE, CONVOY, "serial-1", timeout_s=30)))
     first.start()
-    assert entered.wait(2)
+    assert entered.wait(10)
     cancel = threading.Event()
     second = threading.Thread(target=lambda: results.setdefault(
         "second", manager.start_node(NODE, CONVOY, "serial-2", timeout_s=5,
@@ -1556,9 +1582,9 @@ def test_per_profile_lock_serializes_and_cancelled_waiter_never_spawns(tmp_path)
     second.start()
     time.sleep(.08)
     cancel.set()
-    second.join(6)
+    second.join(30)
     release.set()
-    first.join(2)
+    first.join(10)
     assert results["second"]["code"] == "cancelled"
     assert len(launcher.spawns) == 1
 
@@ -2147,7 +2173,7 @@ def test_indeterminate_fence_releases_once_spawned_child_proven_gone(tmp_path):
     assert runtime.reservations
     inspector.backend.processes.pop(200, None)  # exact child proven gone
     launcher.callback = auto_confirm(manager, runtime_id="runtime-recovered")
-    second = manager.start_node(NODE, CONVOY, "wedge-2", timeout_s=5)
+    second = manager.start_node(NODE, CONVOY, "wedge-2", timeout_s=30)
     assert second["ok"] is True
     assert len(launcher.spawns) == 2
     assert store.get_attempt("wedge-1")["state"] == "failed"
@@ -2160,6 +2186,7 @@ def test_quarantined_launch_is_confirmable_by_its_exact_child(tmp_path):
     system = make_system(tmp_path)
     manager, store, runtime, inspector, launcher, _, _, _ = system
     offline(system)
+    fake_time(manager)
     first = manager.start_node(NODE, CONVOY, "late-confirm", timeout_s=.1)
     assert first["code"] == "launch_unconfirmed"
     attempt = store.get_attempt("late-confirm")
