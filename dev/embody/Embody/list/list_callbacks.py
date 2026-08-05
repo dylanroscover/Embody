@@ -521,7 +521,7 @@ def onSelect(comp, startRow, startCol, startCoords,
 		if not rel_fp and not st.startswith('TOX') and not st.startswith('TDN'):
 			return
 		oper = op(path)
-		result = ui.messageBox(
+		result = parent.Embody.ext.Embody._messageBox(
 			'Remove',
 			'Remove this externalization?\n\n'
 			'This will delete the external file from disk, clear the\n'

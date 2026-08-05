@@ -51,7 +51,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 **Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project. The **[Setup Wizard](https://dylanroscover.github.io/Embody/embody/setup-wizard/)** opens and walks you through the choices that matter — how much autonomy Embody gets, what to externalize, whether to enable the AI assistant (Envoy) and for which tool, permissions, whether to join a trusted-LAN Convoy, and where config files live. Nothing changes until the final click, and you can re-run it anytime via the **Setup Wizard** pulse on the Embody COMP.
 
-> **Updating Embody:** delete the old Embody COMP and drag the new `.tox` in its place. Your settings and tracked externalizations live on disk, so the new version picks them up automatically and quietly validates everything it's tracking — no re-scan, no dialogs, no files rewritten.
+> **Updating Embody:** Embody updates itself — pulse **Check for Update** on the About page (or set **Auto-Update** to check at startup), and a verified release is downloaded, backed up against, and swapped in place. Your settings and tracked externalizations live on disk and survive the update untouched. See the [auto-update guide](https://dylanroscover.github.io/Embody/embody/auto-update/). Manual alternative: delete the old Embody COMP and drag the new `.tox` in its place — the new version picks up your on-disk state automatically, no re-scan, no files rewritten.
 
 ### 2. Tag and Work
 
@@ -175,7 +175,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **119 test suites** (3,335 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **120 test suites** (3,340 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -206,6 +206,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.212**: **Readable dialogs** -- every message box wraps its prose to ~70 characters per line through one central choke point (structure and file paths preserved), and Forget Offline Nodes shows a visible all-clear instead of a silent log line when there is nothing to forget.
 - **6.0.211**: **One project, one row** -- a live session's versioned save no longer leaves a ghost duplicate in the Convoy node list (the old row held a port that belonged to its own successor and read as "live" forever); plus the new **Forget Offline Nodes...** button, which names every row in a confirmation before removing this machine's offline entries.
 - **6.0.210**: **`op.Convoy`** -- the convoy COMP carries a global OP shortcut, so scripts and docs address it as `op.Convoy.ext.ConvoyExt...` instead of a path chain; contract-test pinned.
 - **6.0.209**: **Repair Convoy App works over a running daemon** (and the Host App buttons are renamed Convoy App) -- macOS bootstrapped onto the still-loaded LaunchAgent label (launchctl EIO 5), so repairing a healthy host app always failed; the installer now gracefully stops the old daemon, boots the label out, waits for launchd to drop it, then bootstraps. Windows gets the same graceful stop (the old process silently kept running old code). Also: the "no usable interpreter" warning fires once instead of three times, and never on an unsaved project.

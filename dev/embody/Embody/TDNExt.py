@@ -1643,7 +1643,7 @@ class TDNExt:
 			self.ExportNetworkAsync(output_file='auto', embed_all=True)
 			return
 
-		choice = ui.messageBox(
+		choice = self.ownerComp.ext.Embody._messageBox(
 			'Embody \u2014 Export Project TDN',
 			f'This project has {len(tdn_comps)} COMP(s) with their own '
 			f'.tdn files.\n\n'

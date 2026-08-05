@@ -1437,11 +1437,19 @@ class TestForgetOfflineNodes(ConvoyHostBase):
             any('kept 1 with unresolved jobs' in m for m, _l in self._logs),
             self._logs)
 
-    def test_no_offline_rows_means_no_dialog(self):
+    def test_no_offline_rows_shows_a_visible_all_clear(self):
+        """The nothing-to-do case must be VISIBLE (a message box), not a
+        log line -- otherwise the button reads as broken exactly when it
+        worked (field feedback 2026-08-05). Informational only: one OK
+        button, and the daemon is never touched."""
         self.client.get_results = [
             (200, {'ok': True, 'host_id': 'h' * 32, 'nodes': []})]
         self.convoy.ForgetOfflineNodes()
-        self.assertLen(self.dialogs, 0)
+        self.assertLen(self.dialogs, 1)
+        _title, message, buttons = self.dialogs[0]
+        self.assertEqual(buttons, ['OK'])
+        self.assertIn('No offline nodes', message)
+        self.assertEqual(self.client.count('host_post'), 0)
         self.assertTrue(any('no offline nodes' in m for m, _l in self._logs))
 
     def test_a_busy_host_slot_ignores_the_pulse(self):

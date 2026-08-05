@@ -20,6 +20,7 @@ import sys
 import shutil
 import inspect
 import json
+import textwrap
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -1350,6 +1351,29 @@ class EmbodyExt:
         except Exception:
             return False
 
+    @staticmethod
+    def _wrapDialogText(message, width=70):
+        """Wrap dialog prose to ~10-15 words per line (about 70 chars).
+
+        ui.messageBox sizes itself to its longest line, so unwrapped
+        prose makes screen-wide dialogs nobody can scan. Authored
+        newlines are structure (paragraphs, '- ' lists) and are kept;
+        each line wraps independently, with list items getting a hanging
+        indent so a wrapped continuation still reads as one item. Every
+        dialog in the product routes its message through this -- via
+        _messageBox or at the direct ui.messageBox call sites.
+        """
+        wrapped = []
+        for line in str(message).split('\n'):
+            if not line.strip():
+                wrapped.append(line)
+                continue
+            hang = '  ' if line.lstrip().startswith(('-', '*')) else ''
+            wrapped.append(textwrap.fill(
+                line, width=width, break_long_words=False,
+                break_on_hyphens=False, subsequent_indent=hang))
+        return '\n'.join(wrapped)
+
     def _messageBox(self, title, message, buttons):
         """ui.messageBox with auto-response support for headless testing.
 
@@ -1410,7 +1434,8 @@ class EmbodyExt:
                 f'Dialog "{title}" suppressed during save -- using default '
                 f'(-1).', 'DEBUG')
             return -1
-        return ui.messageBox(title, message, buttons=buttons)
+        return ui.messageBox(title, self._wrapDialogText(message),
+                             buttons=buttons)
 
     def _promptEnvoy(self):
         """Prompt user to enable Envoy (AI coding assistant integration)."""
@@ -3255,7 +3280,7 @@ class EmbodyExt:
 
     def DisableHandler(self) -> None:
         """Handle disable button with confirmation dialog."""
-        choice = ui.messageBox('Embody Warning',
+        choice = self._messageBox('Embody Warning',
             'Disable Embody?\nOnly files created by Embody will be deleted.\n'
             '(Non-Embody files in the folder will be preserved)',
             buttons=['No', 'Yes, keep Tags', 'Yes, remove Tags'])
@@ -6708,7 +6733,7 @@ class EmbodyExt:
 
             title = ('Removed Operator Detected' if count == 1
                      else 'Removed Operators Detected')
-            choice = ui.messageBox(
+            choice = self._messageBox(
                 title,
                 msg,
                 buttons=[f'Keep File{s}', f'Delete File{s}',
@@ -7316,11 +7341,11 @@ class EmbodyExt:
             return
 
         if oper.type == 'engine':
-            ui.messageBox('Embody Error', f"'{oper.type}' type not supported.", buttons=['Ok'])
+            self._messageBox('Embody Error', f"'{oper.type}' type not supported.", buttons=['Ok'])
             return
 
         if self.isReplicant(oper) or self.isClone(oper) or self.isInsideClone(oper):
-            ui.messageBox('Embody Warning', 
+            self._messageBox('Embody Warning', 
                 f"'{oper.path}' is a replicant or clone and cannot be externalized.", 
                 buttons=['Ok'])
             return
@@ -7346,7 +7371,7 @@ class EmbodyExt:
                 run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
                 return
         else:
-            ui.messageBox('Embody Error',
+            self._messageBox('Embody Error',
                 'Tags can only be applied to COMPs or supported DATs.',
                 buttons=['Ok'])
             return
@@ -7704,7 +7729,7 @@ class EmbodyExt:
         elif preference == 'delete':
             return True
         else:  # 'ask'
-            choice = ui.messageBox(
+            choice = self._messageBox(
                 'Delete External File?',
                 'Also delete the external file from disk?',
                 buttons=['Keep File', 'Delete File',
@@ -8300,7 +8325,7 @@ class EmbodyExt:
         else:
             strategy = self._getCompStrategy(oper) or 'tox'
 
-        result = ui.messageBox(
+        result = self._messageBox(
             'Reload',
             f'Reload this {strategy.upper()} from disk?\n\n'
             'This will discard any unsaved in-memory changes\n'
@@ -8439,7 +8464,7 @@ class EmbodyExt:
         ok = self.ExportPortableTox(target=oper, save_path=str(path))
         self.Refresh()
         if not ok:
-            ui.messageBox(
+            self._messageBox(
                 'Export portable tox',
                 'Portable export failed -- check the Embody log.\n\n'
                 'Possible causes: a pre_release hook abort (no .tox\n'
@@ -8449,7 +8474,7 @@ class EmbodyExt:
 
     def HandleStrategyRemove(self, oper: OP) -> None:
         """Remove externalization from a COMP or DAT with confirmation dialog."""
-        result = ui.messageBox(
+        result = self._messageBox(
             'Remove',
             'Remove this externalization?\n\n'
             'This will delete the external file from disk, clear the\n'
@@ -8579,7 +8604,7 @@ class EmbodyExt:
         export_combo = str(self.my.par.Shortcutexportproject.eval()).strip()
         export_hint = (f' ({mod.shortcuts.display(export_combo)})'
                        if export_combo else '')
-        choice = ui.messageBox('Embody -- Externalize Full Project',
+        choice = self._messageBox('Embody -- Externalize Full Project',
             'Add all compatible COMPs and DATs to Embody?\n'
             '(Palette components, clones, and replicants will be ignored)\n\n'
             '  TOX: Externalize each COMP as a .tox file.\n'
@@ -10966,7 +10991,7 @@ class EmbodyExt:
             if target_comp and hasattr(target_comp, 'create'):
                 child_count = len(target_comp.children)
                 if child_count > 0:
-                    choice = ui.messageBox('Import TDN',
+                    choice = self._messageBox('Import TDN',
                         f'Target: {network_path}\n'
                         f'Contains {child_count} operator{"s" if child_count != 1 else ""}.\n\n'
                         f'Existing contents will be replaced.',
@@ -10982,7 +11007,7 @@ class EmbodyExt:
                 network_path = None  # COMP doesn't exist, fall through
 
         if not network_path:
-            choice = ui.messageBox('Import TDN',
+            choice = self._messageBox('Import TDN',
                 f'Import into which network?\n\nFile: {path}',
                 buttons=['Current Network', 'Project Root', 'Cancel'])
             if choice == 0:

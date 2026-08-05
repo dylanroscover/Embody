@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.212
+
+Dialogs you can actually read.
+
+- **Every dialog wraps its prose** to roughly 10-15 words per line (~70 characters): `ui.messageBox` sizes itself to its longest line, so unwrapped sentences made screen-wide dialogs. One choke point does it -- authored structure (paragraphs, bulleted lists) is preserved, list items wrap with a hanging indent, and long tokens like file paths are never broken. Every direct `ui.messageBox` call now routes through the central `_messageBox`, which also makes all of them seedable and freeze-proof under the test runner.
+- **Forget Offline Nodes answers visibly when there is nothing to do**: pressing it with no offline rows now shows a small "No offline nodes to forget" message box instead of only a log line that made the button look broken exactly when it had worked.
+- Six new tests: five pinning the wrapping contract (width, structure preservation, hanging indents, unbroken tokens, the choke-point wiring) and the visible all-clear.
+
 ## v6.0.211
 
 Convoy: one project is one row -- and you can clear the rest yourself.

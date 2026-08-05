@@ -3983,7 +3983,16 @@ class ConvoyExt:
         rows = [r for r in (rows or [])
                 if isinstance(r, dict) and r.get('node_id')]
         if not rows:
+            # Visible, not just logged: a button whose nothing-to-do case
+            # answers only into the log reads as a button that did
+            # nothing (field feedback 2026-08-05).
             self._log('no offline nodes to forget on this machine', 'INFO')
+            self._dialog(
+                'Forget Offline Nodes',
+                'No offline nodes to forget on this machine -- every '
+                'node listed here is online, or lives on another '
+                'computer.',
+                ['OK'])
             return
 
         def _age(row):
