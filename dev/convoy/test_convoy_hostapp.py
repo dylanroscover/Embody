@@ -555,6 +555,207 @@ def test_supersession_spares_a_record_that_still_owns_work(server):
     assert old["node_id"] in [n["node_id"] for n in listing["nodes"]],         "a node with unresolved work must not be auto-retired"
 
 
+# -- cross-project supersession: Save As mints a new project root -------
+#
+# Field report 2026-08-05 (the FOURTH duplicate report): a Save As
+# writes the .toe into a NEW folder, so the same live TD re-registers
+# under a new project root. The old row keeps a port nobody can clear
+# and is immune to EVERY cleanup path -- the root-scoped supersede
+# misses it, the eviction sweep skips port-bearing rows, the stale-
+# runtime reconcile sees a live process, and Forget Offline Nodes
+# refuses port-bearing rows. Only daemon-owned live state (runtime_id,
+# the port) may claim a cross-project row.
+
+def test_save_as_into_a_new_folder_retires_the_same_processes_old_row(server):
+    """runtime_id is minted once per TD launch and survives every save:
+    a cross-root re-register with the same runtime and COMP is the same
+    process wearing a new project identity, and its old row must go."""
+    _, old = server.call("/register", {
+        "project_root": "/Work/scratch", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "1" * 32})
+    # No unregister: the process never exited, it just saved elsewhere.
+    _, new = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "2" * 32})
+    assert new["node_id"] != old["node_id"]
+    _, listing = server.call("/nodes")
+    ids = [n["node_id"] for n in listing["nodes"]]
+    assert new["node_id"] in ids
+    assert old["node_id"] not in ids, \
+        "the pre-Save-As row is this process's own past self"
+
+
+def test_save_as_retirement_works_even_before_the_port_arrives(server):
+    """The successor's FIRST register may carry no port yet; the runtime
+    match alone is authority (it is daemon-owned live state)."""
+    _, old = server.call("/register", {
+        "project_root": "/Work/scratch", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "1" * 32})
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv",
+        "comp_path": "/Embody",
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    assert old["node_id"] not in [n["node_id"] for n in listing["nodes"]]
+
+
+def test_two_convoy_comps_in_one_project_survive_each_others_registers(server):
+    """Two Convoy COMPs in ONE .toe share a runtime and a port: each
+    register must spare the sibling (same root, same discriminator,
+    different COMP path) -- both rows are real."""
+    _, a = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "1" * 32})
+    _, b = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv",
+        "comp_path": "/Second", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "1" * 32})
+    # A heartbeat re-register of the first must not evict the second.
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "1" * 32})
+    _, listing = server.call("/nodes")
+    ids = [n["node_id"] for n in listing["nodes"]]
+    assert a["node_id"] in ids and b["node_id"] in ids, \
+        "sibling COMP registrations of one live project are both real"
+
+
+def test_sibling_save_as_converges_in_either_order(server):
+    """The panel-caught order dependence: two sibling COMPs sharing one
+    runtime and port Save-As together. The first sibling's re-register
+    must NOT strip the other old row's port/runtime (clear_envoy_port
+    wipes runtime_id too, which would orphan it as a permanent ghost) --
+    each old row is retired by its OWN successor's register."""
+    _, a_old = server.call("/register", {
+        "project_root": "/Work/scratch", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "1" * 32})
+    _, b_old = server.call("/register", {
+        "project_root": "/Work/scratch", "convoy_id": "cv",
+        "comp_path": "/Second", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "1" * 32})
+    # Save As: sibling A re-registers under the new root FIRST.
+    _, a_new = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    rows = {n["node_id"]: n for n in listing["nodes"]}
+    assert a_old["node_id"] not in rows, "A's past self retires at once"
+    assert b_old["node_id"] in rows, \
+        "B's old row is A's SIBLING mid-transition, not A's ghost"
+    assert rows[b_old["node_id"]]["envoy_port"] == 9981, \
+        "and its port/runtime evidence must survive for B's own register"
+    # Sibling B follows.
+    _, b_new = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv",
+        "comp_path": "/Second", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    ids = [n["node_id"] for n in listing["nodes"]]
+    assert b_old["node_id"] not in ids, "B's past self retires on B's turn"
+    assert a_new["node_id"] in ids and b_new["node_id"] in ids
+    assert len([i for i in ids if i in (a_new["node_id"],
+                                        b_new["node_id"])]) == 2
+
+
+def test_a_reclaimed_port_is_cleared_but_the_row_survives(server):
+    """A crashed TD leaves its row holding a port the OS later hands to a
+    DIFFERENT project's TD. The row is a real node (offline, launchable)
+    and must survive -- but a loopback port is exclusive per host, so its
+    stale claim on the port is cleared, unblocking the eviction sweep and
+    Forget Offline Nodes."""
+    _, old = server.call("/register", {
+        "project_root": "/Work/crashed", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_old", "node_discriminator": "nd_" + "1" * 32})
+    # No unregister: a hard kill never says goodbye.
+    server.call("/register", {
+        "project_root": "/Work/other", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_new", "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    rows = {n["node_id"]: n for n in listing["nodes"]}
+    assert old["node_id"] in rows, \
+        "a different project's row is a real node, not a ghost"
+    assert rows[old["node_id"]]["envoy_port"] is None, \
+        "the reclaimed port's stale claim must be cleared"
+
+
+def test_cross_project_rows_are_never_claimed_by_metadata_alone(server):
+    """A matching client-supplied process_id with a DIFFERENT runtime and
+    no port overlap proves nothing: the cross-project row keeps its port
+    and its place."""
+    _, old = server.call("/register", {
+        "project_root": "/Work/one", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_one", "metadata": {"process_id": 4242},
+        "node_discriminator": "nd_" + "1" * 32})
+    server.call("/register", {
+        "project_root": "/Work/two", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9982,
+        "runtime_id": "rt_two", "metadata": {"process_id": 4242},
+        "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    rows = {n["node_id"]: n for n in listing["nodes"]}
+    assert old["node_id"] in rows
+    assert rows[old["node_id"]]["envoy_port"] == 9981
+
+
+def test_save_as_ghost_with_unresolved_work_is_spared(server):
+    """Even a provably-same-process past self keeps its row while a job
+    result is uncollected -- retiring it would strand the result."""
+    _, old = server.call("/register", {
+        "project_root": "/Work/scratch", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "1" * 32})
+    code, _job = server.call("/jobs", {
+        "idempotency_key": "keep", "node_id": old["node_id"],
+        "operation": "query_network", "arguments": {}})
+    assert code == 200
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    assert old["node_id"] in [n["node_id"] for n in listing["nodes"]], \
+        "unresolved work spares even a same-process past self"
+
+
+# -- the daemon knows what code it is running ---------------------------
+#
+# installed.json can lie (a supervisor rewrite whose restart silently
+# failed leaves it claiming the new version while the OLD process keeps
+# serving -- the hole that let nine releases ship with no deployed
+# daemon updating). The RUNNING code's own app-dir version cannot.
+
+def test_status_reports_the_running_app_version_and_health_does_not(server):
+    code, body = server.call("/status")
+    assert code == 200
+    assert body["app_version"] == "source", \
+        "a source-tree daemon says so explicitly -- absence of the key " \
+        "must remain the unique signature of a pre-6.0.213 daemon"
+    code, health = server.call("/health", token=None)
+    assert code == 200 and "app_version" not in health, \
+        "/health is the one pre-token route: the running version is a " \
+        "fingerprint that must stay behind authentication"
+
+
+def test_running_app_version_reads_the_installed_dir_segment():
+    assert ha._running_app_version(
+        os.path.join("d", "app", "6.0.213", "convoy_hostapp.py")) == "6.0.213"
+    assert ha._running_app_version(
+        os.path.join("d", "dev", "convoy", "convoy_hostapp.py")) == "source"
+    assert ha._running_app_version(
+        os.path.join("d", "app", "6.0.213-rc1", "x.py")) == "source", \
+        "only a plain dotted-numeric segment is a version"
+
+
 def test_forget_node_deletes_a_stale_record(server):
     """/unregister keeps the node on purpose; forgetting is the explicit
     recovery for debris (e.g. a renamed .toe mints a new node_id and the

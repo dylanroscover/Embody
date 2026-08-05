@@ -90,6 +90,34 @@ MAX_BODY_BYTES = 1 * 1024 * 1024
 TOKEN_HEADER = "X-Convoy-Host-Token"
 
 
+def _running_app_version(module_file=None):
+    """The version segment of the app directory THIS code runs from.
+
+    Installed daemons live in app/<version>/convoy_*.py (convoy_install
+    lays them out), so the running module's own directory name IS its
+    version -- the one answer that cannot drift the way installed.json
+    can: a supervisor rewrite whose restart silently failed leaves
+    installed.json claiming the new version while the OLD code keeps
+    serving (the exact hole that let nine releases ship without any
+    deployed daemon updating, found 2026-08-05). "source" means an
+    unversioned checkout (a dev tree), and it is deliberately not None:
+    a /status or /health answer with NO app_version at all can then only
+    mean a daemon too old to report one -- which is itself the signal
+    the TD side uses to update it.
+    """
+    try:
+        path = module_file or os.path.abspath(__file__)
+        segment = os.path.basename(os.path.dirname(path))
+        if re.fullmatch(r"[0-9]+(\.[0-9]+)*", segment):
+            return segment
+    except Exception:
+        pass
+    return "source"
+
+
+APP_VERSION = _running_app_version()
+
+
 class _PeerProjectionTarget:
     """Trust-owned display identity when a live WSS peer has no dial URI."""
 
@@ -2372,6 +2400,7 @@ class HostApp:
             "ok": True,
             "protocol": "convoy-host/1",
             "host_id": self.host_id,
+            "app_version": APP_VERSION,
             "nodes": len(self.directory.nodes()),
             "realm": self._realm_projection_locked(),
             "jobs_queued": counts.get("queued", 0),
@@ -3018,6 +3047,11 @@ class HostApp:
                 "node_id": record["node_id"],
                 "runtime_id": record["runtime_id"],
                 "host_id": self.host_id,
+                # What code THIS daemon actually runs, so the TD that
+                # just registered can update an out-of-date daemon in
+                # place. Absence of this key is itself the signal: a
+                # pre-6.0.213 daemon never sends it.
+                "app_version": APP_VERSION,
                 "convoy_id": authoritative_id,
                 "realm_state": authoritative_state,
                 "envoy_port": record.get("envoy_port"),
@@ -3066,50 +3100,137 @@ class HostApp:
         collected with it).
         """
         retired = []
+        ports_cleared = []
         try:
             root = str(live.get("project_root") or "")
             comp = str(live.get("comp_path") or "")
             if not root or not comp:
                 return retired
             live_port = live.get("envoy_port")
+            live_rt = live.get("runtime_id")
+            live_disc = live.get("node_discriminator")
             for record in list(self.directory.nodes()):
                 node_id = record.get("node_id")
                 if (node_id == live.get("node_id")
-                        or record.get("host_id") != live.get("host_id")
-                        or str(record.get("project_root") or "") != root
-                        or str(record.get("comp_path") or "") != comp):
+                        or record.get("host_id") != live.get("host_id")):
                     continue
+                same_root = str(record.get("project_root") or "") == root
+                same_comp = str(record.get("comp_path") or "") == comp
                 old_port = record.get("envoy_port")
-                if old_port and not (live_port and old_port == live_port):
-                    # A genuinely different live server on the same
-                    # project (a second TD holding the old file open):
-                    # never retire a row that can still answer.
+                if same_root and same_comp:
+                    if old_port and not (live_port
+                                         and old_port == live_port):
+                        # A genuinely different live server on the same
+                        # project (a second TD holding the old file
+                        # open): never retire a row that can still
+                        # answer.
+                        continue
+                    if self._retire_superseded_row_locked(node_id):
+                        retired.append(node_id)
                     continue
-                if self._node_has_unresolved_work(node_id):
+                # Cross-project rows on this host. Same root + COMP was
+                # the original (deliberately narrow) match, and it MISSES
+                # a whole class: a Save As writes the .toe into a NEW
+                # folder, so the same live TD re-registers under a new
+                # project root and its old row keeps a port nobody can
+                # ever clear -- immune to eviction (port guard), to this
+                # sweep (root mismatch), and even to Forget Offline Nodes
+                # (port-bearing refusal). Field-reported 2026-08-05, the
+                # FOURTH duplicate report. A cross-project row is claimed
+                # only on run-identity (runtime_id, asserted once per
+                # launch inside the authenticated same-user IPC boundary)
+                # or on the port this registration just proved it owns;
+                # descriptive metadata (process_id and friends) never
+                # counts.
+                same_process = bool(live_rt) and (
+                    record.get("runtime_id") == live_rt)
+                if (same_process and same_root
+                        and record.get("node_discriminator") == live_disc):
+                    # A sibling COMP registration of the SAME live
+                    # project. Today's client gives every Convoy COMP its
+                    # own runtime_id and port, so this spare is defense
+                    # in depth -- if a future client ever shared them,
+                    # both rows would still be real.
                     continue
-                self.directory.forget(node_id)
-                try:
-                    self.db.delete_node(node_id)
-                except Exception:
+                if same_process and same_comp:
+                    # The same TD process (runtime_id is minted once per
+                    # launch and survives every save) re-registered this
+                    # COMP under a new project identity: the old row is
+                    # this registration's own past self.
+                    if self._retire_superseded_row_locked(node_id):
+                        retired.append(node_id)
                     continue
-                # Same hygiene as forget_node and the eviction sweep: a
-                # retired row's launch profile is unreachable and would
-                # otherwise accumulate in lifecycle.json on every
-                # versioned save of a live session.
-                self._forget_launch_profile(node_id)
-                retired.append(node_id)
-            if retired:
+                if same_process:
+                    # Same run, different COMP AND different project
+                    # identity: another of this process's own rows
+                    # mid-transition. Its OWN successor registration
+                    # retires it through the rule above -- clearing its
+                    # port here would also wipe its runtime_id
+                    # (clear_envoy_port drops all launch presence) and
+                    # destroy the very evidence that retirement needs,
+                    # leaving an order-dependent permanent ghost (panel
+                    # catch, 2026-08-05).
+                    continue
+                if old_port and live_port and old_port == live_port:
+                    # A loopback port is exclusive per host: a DIFFERENT
+                    # process's row claiming the port THIS registration
+                    # just proved it owns cannot answer as that node any
+                    # more. Keep the row -- it may be a real project,
+                    # offline and still remotely launchable -- but clear
+                    # the port so the eviction sweep and Forget Offline
+                    # Nodes can reach it again.
+                    self.directory.clear_envoy_port(node_id)
+                    ports_cleared.append(node_id)
+            if retired or ports_cleared:
                 self._invalidate_network_nodes_cache_locked()
+            if retired:
                 self._audit_best_effort(
                     "nodes_superseded",
                     {"by": live.get("node_id"), "retired": retired[:8],
                      "count": len(retired)})
+            if ports_cleared:
+                self._audit_best_effort(
+                    "stale_ports_cleared",
+                    {"by": live.get("node_id"),
+                     "cleared": ports_cleared[:8],
+                     "count": len(ports_cleared)})
         except Exception as e:
             # Never let tidying break a registration.
             self._audit_best_effort(
                 "supersede_sweep_failed",
                 {"error": f"{type(e).__name__}: {e}"})
         return retired
+
+    def _retire_superseded_row_locked(self, node_id):
+        """Delete ONE superseded row. False means spared (or kept on
+        failure) -- and the row is then left fully intact, memory and
+        disk agreeing, so a later register simply tries again.
+
+        Durable delete FIRST, the eviction sweep's rule: forgetting the
+        directory row before host.json is written would resurrect the
+        ghost on the next daemon start. The launch reservation guard is
+        the eviction sweep's too -- a row being launched right now is
+        not debris, and unknowable reservation state spares (fail
+        closed).
+        """
+        if self._node_has_unresolved_work(node_id):
+            return False
+        try:
+            if self.lifecycle_runtime.reservation_for_node(node_id):
+                return False
+        except Exception:
+            return False
+        try:
+            self.db.delete_node(node_id)
+        except Exception:
+            return False
+        self.directory.forget(node_id)
+        # Same hygiene as forget_node and the eviction sweep: a retired
+        # row's launch profile is unreachable and would otherwise
+        # accumulate in lifecycle.json on every versioned save of a
+        # live session.
+        self._forget_launch_profile(node_id)
+        return True
 
     def _node_has_unresolved_work(self, node_id):
         """True when a node still owns work, or the job store is unreadable.
@@ -11506,6 +11627,10 @@ def make_handler(app):
                 # secrets. host_id lets a client confirm it reached the
                 # right host app (not a recycled pid) BEFORE it sends the
                 # IPC token -- see convoy_hostprobe identity confirmation.
+                # No app_version here: /health is the one pre-token
+                # route, and the running version is a fingerprint other
+                # local users have no business reading. Authenticated
+                # surfaces (/status, the register response) carry it.
                 self._send(200, {"ok": True, "protocol": "convoy-host/1",
                                  "host_id": app.host_id})
                 return

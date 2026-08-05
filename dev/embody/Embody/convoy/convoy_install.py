@@ -505,6 +505,13 @@ def _version_key(text):
     return tuple(key) or None
 
 
+# The public name for callers OUTSIDE the install planner (ConvoyExt's
+# auto-update decision compares the daemon's self-reported running
+# version against ours with the exact same ordering rules -- one
+# comparison function, one set of edge cases).
+orderable_version_key = _version_key
+
+
 def plan_install(installed, version, platform=None):
     """What pulsing Install should DO, given what is already installed.
 

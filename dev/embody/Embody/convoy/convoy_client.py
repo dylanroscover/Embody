@@ -1394,6 +1394,12 @@ def register(handle, payload, opener=None, timeout=REGISTER_TIMEOUT_S):
             "http_status": status,
             "node_id": answer.get("node_id"),
             "host_id": answer.get("host_id") or handle.host_id,
+            # The daemon's own account of the code it RUNS (never
+            # installed.json, which lies exactly when an update failed to
+            # restart the process). None means a pre-6.0.213 daemon that
+            # cannot say -- which is itself the out-of-date signal.
+            "host_app_version": (str(answer["app_version"])
+                                 if answer.get("app_version") else None),
             "convoy_id": authoritative_id,
             "realm_state": realm_state,
             "runtime_id": answer.get("runtime_id"),

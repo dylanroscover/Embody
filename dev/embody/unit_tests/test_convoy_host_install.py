@@ -1460,3 +1460,212 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.assertEqual(got['state'], 'busy')
         self.assertLen(self.dialogs, 0)
         self.convoy._host_busy = False
+
+    def test_all_clear_names_the_computers_that_own_the_offline_rows(self):
+        """'Nothing to forget' while the user is LOOKING at offline rows
+        reads as broken (field report 2026-08-05, the dev box): when the
+        offline rows belong to other machines, the all-clear must say
+        which ones and where to act."""
+        self.client.get_results = [
+            (200, {'ok': True, 'host_id': 'h' * 32, 'nodes': [
+                {'host_id': 'p' * 32, 'node_id': 'd' * 32, 'online': False,
+                 'hostname': 'TEC-B4A', 'node_name': 'TEC-B4A / e1',
+                 'toe_name': 'e1.1.toe', 'last_seen_age_s': 9999.0},
+                {'host_id': 'h' * 32, 'node_id': 'c' * 32, 'online': True,
+                 'node_name': 'TEC-X / live', 'toe_name': 'live.1.toe',
+                 'last_seen_age_s': 3.0},
+            ]})]
+        self.convoy.ForgetOfflineNodes()
+        self.assertLen(self.dialogs, 1)
+        _title, message, buttons = self.dialogs[0]
+        self.assertEqual(buttons, ['OK'])
+        self.assertIn('No offline nodes', message)
+        self.assertIn('TEC-B4A', message,
+                      'the machine that owns the offline rows is named')
+        self.assertIn('run Forget Offline Nodes there', message)
+        self.assertEqual(self.client.count('host_post'), 0)
+
+
+class TestHostAutoUpdate(ConvoyHostBase):
+    """The daemon updates itself the moment an Embody that ships newer
+    code registers with it. Before this, daemons updated ONLY through a
+    manual Repair pulse -- nine releases shipped while every deployed
+    daemon silently kept running old code, so every registry-cleanup fix
+    'did not work' in the field (2026-08-05)."""
+
+    def _decision(self, reported, ours=VERSION):
+        return self.convoy_mod._host_update_decision(
+            reported, ours, self.install_mod.orderable_version_key)
+
+    def test_decision_updates_a_versionless_daemon(self):
+        action, detail = self._decision(None)
+        self.assertEqual(action, 'update')
+        self.assertIn('pre-6.0.213', detail)
+
+    def test_decision_updates_a_strictly_older_daemon(self):
+        action, detail = self._decision('6.0.150')
+        self.assertEqual(action, 'update')
+        self.assertIn('6.0.150', detail)
+        self.assertIn(VERSION, detail)
+
+    def test_decision_skips_current_newer_and_unorderable(self):
+        self.assertIsNone(self._decision(VERSION)[0],
+                          'equal version must never reinstall')
+        self.assertIsNone(self._decision('9.9.9')[0],
+                          'a NEWER daemon is never downgraded')
+        self.assertIsNone(self._decision('source')[0],
+                          'a dev-tree daemon is never touched')
+        self.assertIsNone(self._decision('6.0.150', ours='garbage')[0],
+                          'an unorderable OUR version proves nothing')
+
+    def test_a_versionless_register_answer_updates_the_daemon_once(self):
+        self.client.probe_status = self.client.STATUS_RUNNING
+        self.convoy._maybeUpdateHostApp(None)
+        self.assertEqual(self.installer.count('install'), 1,
+                         'a pre-6.0.213 daemon is updated in place')
+        self.assertTrue(any('Convoy App update' in m for m, _l in self._logs),
+                        self._logs)
+        self.convoy._maybeUpdateHostApp(None)
+        self.assertEqual(self.installer.count('install'), 1,
+                         'ONE attempt per session, never a loop')
+
+    def test_current_newer_or_source_daemons_are_left_alone(self):
+        self.client.probe_status = self.client.STATUS_RUNNING
+        self.convoy._maybeUpdateHostApp(VERSION)
+        self.convoy._maybeUpdateHostApp('9.9.9')
+        self.convoy._maybeUpdateHostApp('source')
+        self.assertEqual(self.installer.count('install'), 0)
+        self.assertNotIn('host_auto_update_done', self.session,
+                         'a non-firing check must not spend the attempt')
+        self.assertEqual(self.session.get('host_update_checked'), 'source',
+                         'every non-update outcome latches its reported '
+                         'version so heartbeats stop re-checking')
+
+    def test_a_busy_slot_deferral_returns_the_attempt(self):
+        """A busy host slot defers the install -- that must not burn the
+        session's one attempt."""
+        import time as _time
+        self.client.probe_status = self.client.STATUS_RUNNING
+        self.convoy._host_busy = True
+        self.convoy._host_busy_since = _time.time()
+        self.convoy._maybeUpdateHostApp('6.0.150')
+        self.assertEqual(self.installer.count('install'), 0)
+        self.assertFalse(self.session.get('host_auto_update_done'),
+                         'a deferral gives the attempt back')
+        self.convoy._host_busy = False
+        self.convoy._maybeUpdateHostApp('6.0.150')
+        self.assertEqual(self.installer.count('install'), 1)
+
+    def test_perform_mode_is_silent_and_spends_nothing(self):
+        """Mid-show, the check returns before ANY logging or context
+        work -- a heartbeat-cadence 'update waits' line during a
+        performance is exactly the noise this guard exists to prevent."""
+        self.client.probe_status = self.client.STATUS_RUNNING
+        self._patch(self.convoy, '_performing', lambda: True)
+        self.convoy._maybeUpdateHostApp('6.0.150')
+        self.assertEqual(self.installer.count('install'), 0)
+        self.assertEqual(self._logs, [], 'not even a log line mid-show')
+        self.assertNotIn('host_auto_update_done', self.session)
+        self.assertNotIn('host_update_checked', self.session,
+                         'nothing latches mid-show; the post-show '
+                         'heartbeat re-checks')
+
+    def test_an_external_supervisor_is_respected_not_overwritten(self):
+        """install() cannot restart an externally-supervised daemon, so
+        an automatic install would log a clean success while old code
+        kept running. Say where to act instead -- once."""
+        self.client.probe_status = self.client.STATUS_RUNNING
+        self.installer.installed = {
+            'supervisor': self.install_mod.SUPERVISOR_EXTERNAL,
+            'version': '6.0.100'}
+        self.convoy._maybeUpdateHostApp(None)
+        self.assertEqual(self.installer.count('install'), 0)
+        self.assertTrue(any('external supervisor' in m
+                            for m, _l in self._logs), self._logs)
+        self.assertEqual(self.session.get('host_update_checked'), '',
+                         'the outcome latches so the log fires once, '
+                         'not per heartbeat')
+
+    def test_register_success_wires_the_version_through(self):
+        """The trigger rides the register drain -- the ONE moment we
+        provably talked to the daemon -- but DEFERRED onto its own frame
+        callback: InstallHost's main-thread prelude must never run
+        inside the register poll (TD crashed seconds after the first
+        in-drain firing, 2026-08-05). Pin the wiring AND the deferral."""
+        src = self.comp.op('ConvoyExt').text
+        registered_branch = src.split(
+            "registered = client is not None", 1)[1].split('def _apply', 1)[0]
+        self.assertIn("_maybeUpdateHostApp(args[1])", registered_branch,
+                      'the update check must be SCHEDULED, not called '
+                      'inline in the drain')
+        self.assertIn("result.get('host_app_version')", registered_branch)
+        self.assertIn('host_update_checked', registered_branch,
+                      'the drain must not even schedule a callback for '
+                      'an already-checked version (heartbeat hygiene)')
+        self.assertNotIn(
+            "self._maybeUpdateHostApp(result", registered_branch,
+            'no inline call may sneak back into the register drain')
+        update_body = src.split('def _maybeUpdateHostApp', 1)[1]
+        update_body = update_body.split('def InstallHost', 1)[0]
+        self.assertIn('_staleInstance', update_body,
+                      'the deferred callback must drop on a reinit-ed '
+                      'instance like every other deferred run() in this '
+                      'file -- a stale instance has no slot mutual '
+                      'exclusion and its poll chain discards results')
+
+    def test_install_warns_when_the_restarted_daemon_is_not_the_new_version(
+            self):
+        """The install's lie detector: this exact flow once wrote a STALE
+        payload (the vendored DATs had not reloaded a changed file) and
+        installed.json claimed the new version while the daemon served
+        old code. The restarted daemon is the one honest witness -- a
+        mismatch must surface as a WARNING, never a clean 'installed'."""
+        self.client.probe_status = self.client.STATUS_RUNNING
+        self.client.get_results = [
+            (200, {'ok': True, 'host_id': 'h' * 32})]   # /health: no version
+        self.convoy.InstallHost(confirm=False)
+        self.assertTrue(any('may be stale' in w for w in self._warnings()),
+                        self._warnings())
+
+    def test_install_is_quiet_when_the_daemon_verifies_at_the_new_version(
+            self):
+        self.client.probe_status = self.client.STATUS_RUNNING
+        self.client.get_results = [
+            (200, {'ok': True, 'host_id': 'h' * 32, 'app_version': VERSION})]
+        self.convoy.InstallHost(confirm=False)
+        self.assertFalse([w for w in self._warnings() if 'stale' in w],
+                         self._warnings())
+
+    def test_client_register_carries_the_daemons_app_version(self):
+        """convoy_client.register curates its result dict -- the daemon's
+        app_version must survive the mapping, and its ABSENCE must map to
+        None (the pre-6.0.213 signature), never to a missing key."""
+        import json as _json
+        real = self.client._real
+        answer = {'ok': True, 'node_id': 'n' * 32, 'host_id': 'h' * 32,
+                  'convoy_id': 'cv', 'realm_state': 'established',
+                  'app_version': '6.0.213'}
+
+        class _Resp:
+            status = 200
+
+            def read(self, *a):
+                return _json.dumps(answer).encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        handle = real.HostHandle(port=1, host_id='h' * 32, token='t' * 16,
+                                 data_dir=FAKE_DATA_DIR)
+        out = real.register(handle, {'convoy_id': 'cv'},
+                            opener=lambda req, timeout=None: _Resp())
+        self.assertEqual(out['state'], real.STATE_REGISTERED)
+        self.assertEqual(out['host_app_version'], '6.0.213')
+        answer.pop('app_version')
+        out = real.register(handle, {'convoy_id': 'cv'},
+                            opener=lambda req, timeout=None: _Resp())
+        self.assertEqual(out['state'], real.STATE_REGISTERED)
+        self.assertIsNone(out['host_app_version'])

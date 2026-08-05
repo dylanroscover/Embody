@@ -22,13 +22,15 @@ There is no invitation code or Create/Join decision. Enabled nodes find the Conv
 | Control | What it does |
 |---|---|
 | **Status** | One combined readout: a blocking or in-flight host-app state (`Not installed`, `Installing...`, `Needs repair ...`) wins; otherwise the node's own registration state shows (`Connected`, `Waiting for project save`, ...) |
-| **Repair Convoy App** | Reinstalls or upgrades the per-user app. Enabling Convoy installs it automatically, so this pulse is the repair and update path |
+| **Repair Convoy App** | Reinstalls or upgrades the per-user app. Enabling Convoy installs it automatically and updates keep themselves current (see below), so this pulse is the manual repair path |
 | **Start Convoy App** | Starts the installed app now |
 | **Stop Convoy App** | Stops it and disables automatic restart; queued job records are retained |
 | **Uninstall Convoy App** | Removes the app and login registration while retaining the local host identity, job history, the host log, and (on macOS) the dedicated Convoy runtime venv, so a later reinstall rejoins as the same host and reuses the runtime. The confirmation names each retained path before anything is removed |
-| **Forget Offline Nodes...** | Removes this machine's offline node rows after a confirmation that names them (the first eight, then a count). A forgotten node rejoins as a new identity (TD Python approval resets); nodes with unresolved jobs are kept, and a node back online before you confirm is skipped. This is the manual path for offline rows whose project files still exist -- deleted projects and long-unseen rows clear automatically |
+| **Forget Offline Nodes...** | Removes this machine's offline node rows after a confirmation that names them (the first eight, then a count). A forgotten node rejoins as a new identity (TD Python approval resets); nodes with unresolved jobs are kept, and a node back online before you confirm is skipped. Each computer can only forget its own rows -- when the offline rows in the list belong to another machine, the dialog names it and says to run Forget Offline Nodes there. This is the manual path for offline rows whose project files still exist -- deleted projects and long-unseen rows clear automatically |
 
-Enabling Convoy installs and starts the host app automatically, because Convoy cannot reach the LAN without it. The consent is carried by the one-time Enable Convoy confirmation (or the wizard's Convoy step), which discloses that the app runs at login, whether or not TouchDesigner is open. The pulses above remain for repair, upgrade, deliberate stop/start, and uninstall.
+Enabling Convoy installs and starts the host app automatically, because Convoy cannot reach the LAN without it. The consent is carried by the one-time Enable Convoy confirmation (or the wizard's Convoy step), which discloses that the app runs at login, whether or not TouchDesigner is open. The pulses above remain for repair, deliberate stop/start, and uninstall.
+
+**The app keeps itself current.** The daemon reports the version of the code it is actually running, and when a project registers with a daemon running *older* code than its own Embody, that Embody updates the app in place automatically -- once per TouchDesigner session, a few seconds after registration settles, logged when it happens. Strictly older only: an equal or newer app is never touched, and a newer app is never downgraded by an older Embody. After every install or repair, the restarted daemon is asked what version it now runs, and a mismatch is a visible warning rather than a silent success.
 
 The host-app portion of **Status** uses these user-facing states:
 

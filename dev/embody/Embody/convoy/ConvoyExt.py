@@ -3025,6 +3025,22 @@ class ConvoyExt:
                 else self.CONVERGING_S))
             self._applyPolicyProjection(result)
             self._applyNetworkNodes(result.get('_network_nodes'))
+            # We provably just talked to the daemon: if its own account
+            # of the code it runs is older than this Embody, update it
+            # in place (once per session; see _maybeUpdateHostApp).
+            # DEFERRED out of this drain onto its own frame callback:
+            # InstallHost's main-thread prelude (interpreter probing,
+            # installed.json reads) has no business inside the register
+            # poll, and TD crashed seconds after the first in-drain
+            # firing (2026-08-05, unattributed -- the install itself
+            # completed and the daemon came back healthy).
+            sess_flags = self._session()
+            reported = result.get('host_app_version')
+            if (not sess_flags.get('host_auto_update_done')
+                    and sess_flags.get('host_update_checked')
+                        != str(reported or '')):
+                run('args[0]._maybeUpdateHostApp(args[1])',
+                    self, reported, delayFrames=600)
         else:
             session['registered'] = False
             session['sent'] = None
@@ -3444,6 +3460,14 @@ class ConvoyExt:
                 state = self.HOST_INSTALL_FAILED
             self._log('host %s failed: %s' % (action, detail or 'unknown'),
                       'WARNING')
+        elif result.get('version_verified') is False:
+            # The install completed but the daemon that came back is NOT
+            # running the version we just wrote -- a stale payload must
+            # be a visible warning, never a quiet DEBUG line (and never
+            # BOTH lines: this branch replaces the DEBUG one).
+            self._log('host %s: %s' % (action, detail or 'the restarted '
+                      'daemon did not verify at the installed version'),
+                      'WARNING')
         elif detail:
             self._log('host %s: %s' % (action, detail), 'DEBUG')
 
@@ -3460,7 +3484,9 @@ class ConvoyExt:
             # The slot is already released, so the confirm can chain the
             # apply call (the uninstall preview relies on the same fact).
             if ok:
-                self._confirmForgetOffline(result.get('rows'))
+                self._confirmForgetOffline(
+                    result.get('rows'),
+                    remote_hosts=result.get('remote_offline_hosts'))
             return
 
         if action == 'forget_offline':
@@ -3777,6 +3803,93 @@ class ConvoyExt:
             out['error'] = '%s: %s' % (type(e).__name__, e)
         return out
 
+    def _maybeUpdateHostApp(self, reported_version):
+        """Update a LIVE but older Convoy App in place, automatically.
+
+        The daemon is the only place node cleanup (supersede, eviction)
+        runs, and it updates ONLY through install() -- before 6.0.213
+        nothing ever compared the running daemon's code to the Embody in
+        front of it, so nine releases shipped while every deployed
+        daemon silently kept running old code, and every registry fix
+        'did not work' in the field. This closes that loop at the
+        moment we provably talked to the daemon: its own register
+        response says what code it runs.
+
+        Guard rails: strictly-older (or version-less pre-6.0.213) only
+        -- _host_update_decision never fires on equal, newer, or
+        unorderable ('source') versions, and plan_install refuses
+        downgrades besides. One attempt per TD session; a slot-busy
+        deferral gives the attempt back so the next heartbeat retries,
+        a real failure does not (it is logged through the normal
+        install status path, and Repair Convoy App stays the manual
+        recovery). Every non-update outcome latches per reported
+        version (host_update_checked), so an up-to-date daemon costs
+        ONE host-context build per session, not one per heartbeat.
+        Concurrent SAME-version TDs racing the update are safe by
+        install()'s own construction (versioned dir, atomic .complete,
+        idempotent supervisor rewrite, graceful stop observers); two
+        DIFFERENT-version Embodies racing from the same old report can
+        interleave into a brief downgrade (plan_install's refusal is
+        checked before the worker writes) -- it self-heals on the newer
+        Embody's next session, and running mixed Embody versions
+        against one daemon is already the NEWER_INSTALL edge the UI
+        names.
+        """
+        if self._staleInstance():
+            # The deferral window (600 frames) is long enough for a
+            # hot-synced source edit to reinit this extension; a stale
+            # instance's host slot gives no mutual exclusion and its
+            # poll chain would discard the install result unseen.
+            return
+        if self._performing():
+            # Never mid-show, and never a per-heartbeat log about it:
+            # nothing is spent, the next heartbeat after the show
+            # re-checks silently.
+            return
+        session = self._session()
+        if session.get('host_auto_update_done'):
+            return
+        marker = str(reported_version or '')
+        if session.get('host_update_checked') == marker:
+            return
+        ctx = self._safeHostContext()
+        if ctx is None:
+            return
+        try:
+            version_key = ctx['installer'].orderable_version_key
+        except Exception:
+            return
+        try:
+            installed = ctx['installer'].read_installed(
+                ctx['data_dir'], ctx['platform'])
+        except Exception:
+            installed = None
+        if ((installed or {}).get('supervisor')
+                == ctx['installer'].SUPERVISOR_EXTERNAL):
+            # An external supervisor owns start/stop: writing a new
+            # payload would not restart the daemon, so an automatic
+            # install would log a clean success while old code kept
+            # running. Say where to act instead -- once.
+            session['host_update_checked'] = marker
+            self._log('the Convoy App here is managed by an external '
+                      'supervisor -- automatic update does not apply; '
+                      'update it through that supervisor', 'INFO')
+            return
+        action, detail = _host_update_decision(
+            reported_version, ctx['version'], version_key)
+        if action != 'update':
+            session['host_update_checked'] = marker
+            return
+        session['host_auto_update_done'] = True
+        self._log('Convoy App update: %s -- updating it in place now '
+                  '(automatic; Repair Convoy App remains the manual '
+                  'path)' % (detail,), 'INFO')
+        out = self.InstallHost(confirm=False)
+        if isinstance(out, dict) and out.get('state') == 'deferred':
+            # The host slot was busy -- that must not spend this
+            # session's one attempt.
+            session['host_auto_update_done'] = False
+
     def InstallHost(self, confirm=True):
         """Install -- or REPAIR -- the Convoy host app for this user.
 
@@ -3978,21 +4091,30 @@ class ConvoyExt:
                             lambda: _host_forget_offline_plan(ctx))
         return {'state': 'listing'}
 
-    def _confirmForgetOffline(self, rows):
+    def _confirmForgetOffline(self, rows, remote_hosts=None):
         """Stage two: name the rows, ask, then apply. MAIN THREAD."""
         rows = [r for r in (rows or [])
                 if isinstance(r, dict) and r.get('node_id')]
         if not rows:
             # Visible, not just logged: a button whose nothing-to-do case
             # answers only into the log reads as a button that did
-            # nothing (field feedback 2026-08-05).
+            # nothing (field feedback 2026-08-05). And when the offline
+            # rows the user is LOOKING AT belong to other machines, say
+            # so by name -- "nothing to forget" while TEC-B4A sits
+            # offline in the list reads as broken (same day, second
+            # report).
             self._log('no offline nodes to forget on this machine', 'INFO')
-            self._dialog(
-                'Forget Offline Nodes',
-                'No offline nodes to forget on this machine -- every '
-                'node listed here is online, or lives on another '
-                'computer.',
-                ['OK'])
+            message = ('No offline nodes to forget on this machine -- '
+                       'every node this machine owns is online.')
+            names = [str(h) for h in (remote_hosts or []) if str(h).strip()]
+            if names:
+                message = (
+                    'No offline nodes to forget on this machine. The '
+                    'offline node(s) in the list belong to %s -- each '
+                    'computer can only forget its own nodes, so run '
+                    'Forget Offline Nodes there (or let that machine\'s '
+                    'own cleanup retire them).' % (', '.join(names[:5]),))
+            self._dialog('Forget Offline Nodes', message, ['OK'])
             return
 
         def _age(row):
@@ -5039,31 +5161,71 @@ def _host_shutdown(ctx):
     return {'ok': bool(ok), 'http_status': status, 'answer': answer}
 
 
+def _host_update_decision(reported_version, our_version, version_key):
+    """Should THIS Embody update the machine's LIVE Convoy App in place?
+
+    reported_version is the daemon's own account of the code it runs
+    (the register response's app_version) -- never installed.json, which
+    lies exactly when an update failed to restart the process. None or
+    empty means a pre-6.0.213 daemon that cannot say, which is itself
+    conclusive: it predates every registry-cleanup fix.
+
+    Strictly-older only: an equal, newer, or UNORDERABLE version (a
+    'source' dev daemon, a future tagging scheme) never fires -- when in
+    doubt, do not reinstall someone's daemon. Returns (action, detail)
+    with action 'update' or None.
+    """
+    if not reported_version:
+        return 'update', ('the running Convoy App predates version '
+                          'reporting (pre-6.0.213)')
+    theirs_text = str(reported_version)
+    ours = version_key(our_version)
+    theirs = version_key(theirs_text)
+    if ours is None or theirs is None:
+        return None, ('running version %r is not orderable against %r'
+                      % (theirs_text, str(our_version)))
+    if theirs < ours:
+        return 'update', ('the running Convoy App is %s, this Embody '
+                          'ships %s' % (theirs_text, our_version))
+    return None, 'running %s is current' % (theirs_text,)
+
+
 def _host_offline_rows(ctx):
     """This host's offline node rows, from the daemon's OWN projection.
 
     /network/nodes is used rather than the raw /nodes listing so
     online-ness comes from the daemon's single authority
     (_node_is_online) instead of a re-implementation here. Rows are
-    filtered to the local host: peer rows are not ours to forget.
-    Returns (rows, None) or (None, detail).
+    filtered to the local host: peer rows are not ours to forget --
+    their hostnames ride back separately so the all-clear dialog can
+    say WHERE to act instead of reading as a button that did nothing
+    (field feedback 2026-08-05: the only offline rows on the dev box
+    belonged to another machine).
+    Returns (rows, remote_hosts, None) or (None, None, detail).
     """
     client = ctx['client']
     try:
         probe = client.probe(data_dir=ctx['data_dir'])
     except Exception as e:
-        return None, '%s: %s' % (type(e).__name__, e)
+        return None, None, '%s: %s' % (type(e).__name__, e)
     if not probe.use_convoy:
-        return None, 'no host app answered (%s)' % (probe.status,)
+        return None, None, 'no host app answered (%s)' % (probe.status,)
     code, body = client.host_get(probe.handle, '/network/nodes')
     if code != 200 or not isinstance(body, dict):
-        return None, 'node listing failed (HTTP %s)' % (code,)
+        return None, None, 'node listing failed (HTTP %s)' % (code,)
     host_id = body.get('host_id')
     rows = []
+    remote_hosts = []
     for row in body.get('nodes') or []:
-        if not isinstance(row, dict) or row.get('host_id') != host_id:
+        if not isinstance(row, dict):
             continue
         if row.get('online'):
+            continue
+        if row.get('host_id') != host_id:
+            name = str(row.get('hostname') or row.get('node_name')
+                       or '').strip()
+            if name and name not in remote_hosts:
+                remote_hosts.append(name)
             continue
         node_id = str(row.get('node_id') or '')
         if not node_id:
@@ -5072,16 +5234,17 @@ def _host_offline_rows(ctx):
                      'node_name': str(row.get('node_name') or ''),
                      'toe_name': str(row.get('toe_name') or ''),
                      'last_seen_age_s': row.get('last_seen_age_s')})
-    return rows, None
+    return rows, sorted(remote_hosts), None
 
 
 def _host_forget_offline_plan(ctx):
     """List this host's offline rows for the confirmation. Alters nothing."""
-    rows, err = _host_offline_rows(ctx)
+    rows, remote_hosts, err = _host_offline_rows(ctx)
     if rows is None:
         return {'ok': False, 'action': 'forget_offline_plan',
                 'reason': 'no_host', 'detail': err}
     return {'ok': True, 'action': 'forget_offline_plan', 'rows': rows,
+            'remote_offline_hosts': remote_hosts,
             'detail': '%d offline node(s) listed' % len(rows)}
 
 
@@ -5094,7 +5257,7 @@ def _host_forget_offline_apply(ctx, node_ids):
     forgotten.
     """
     client = ctx['client']
-    rows, err = _host_offline_rows(ctx)
+    rows, _remote, err = _host_offline_rows(ctx)
     if rows is None:
         return {'ok': False, 'action': 'forget_offline',
                 'reason': 'no_host', 'detail': err}
@@ -5457,6 +5620,8 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                 'detail': outcome.get('detail')}
     started = None
     healthy = None
+    verified = None
+    reported = None
     if outcome.get('registered'):
         # An external supervisor registered nothing, so there is nothing
         # here for us to start -- A-36's rule is never two supervisors,
@@ -5464,11 +5629,44 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
         started = installer.start(platform=ctx['platform'], uid=ctx['uid'],
                                   home=ctx['home'])
         healthy = _host_await_health(ctx, ctx.get('health_wait_s'))
+        # The install's own lie detector (2026-08-05): this exact flow
+        # once wrote a STALE payload -- the vendored DATs had not
+        # reloaded a changed file yet -- and installed.json happily
+        # claimed the new version while the restarted daemon served old
+        # code. The one honest witness is the daemon itself, so ask it
+        # over the authenticated /status (the version never rides the
+        # pre-token /health): a payload at version X reports
+        # app_version X; a pre-6.0.213 payload reports nothing. Either
+        # way a mismatch must never read as a clean install.
+        client = ctx['client']
+        try:
+            probe = client.probe(data_dir=ctx['data_dir'])
+            if probe.use_convoy and probe.handle is not None:
+                code, body = client.host_get(probe.handle, '/status')
+                if code == 200 and isinstance(body, dict) and body.get('ok'):
+                    reported = body.get('app_version')
+                    verified = bool(
+                        reported
+                        and str(reported) == str(ctx['version']))
+        except Exception:
+            verified = None
+    detail = ('installed %s under %s%s'
+              % (outcome.get('version'), interpreter, success_note))
+    if verified is False:
+        detail += (' -- WARNING: the restarted daemon reports %r, not '
+                   'the installed %s: the payload it runs may be stale. '
+                   'Pulse Repair Convoy App to re-run the install.'
+                   % (reported, outcome.get('version')))
+    elif verified is None and outcome.get('registered'):
+        # Not verified is not the same as verified: say the check was
+        # inconclusive rather than letting a slow or unreachable daemon
+        # read as a clean, confirmed install.
+        detail += (' -- version unverified: the restarted daemon did '
+                   'not answer in time')
     result = {'ok': True, 'action': 'install', 'outcome': outcome,
               'started': started, 'healthy': healthy,
-              'detail': 'installed %s under %s%s'
-                        % (outcome.get('version'), interpreter,
-                           success_note),
+              'version_verified': verified,
+              'detail': detail,
               'state': _host_snapshot(ctx)}
     if rejected:
         # Probe rejections ride along on SUCCESS too: a venv that failed

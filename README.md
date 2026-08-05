@@ -175,7 +175,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **120 test suites** (3,340 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **119 test suites** (3,357 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -206,6 +206,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.213**: **The Convoy App updates itself** -- the daemon reports the version of the code it actually runs, an older one is updated in place the moment a newer Embody registers with it (installs verify the daemon they restarted), and the last two duplicate-row ghost classes are gone: a Save-As into a new folder retires the old row, and a reclaimed port's stale claim is cleared.
 - **6.0.212**: **Readable dialogs** -- every message box wraps its prose to ~70 characters per line through one central choke point (structure and file paths preserved), and Forget Offline Nodes shows a visible all-clear instead of a silent log line when there is nothing to forget.
 - **6.0.211**: **One project, one row** -- a live session's versioned save no longer leaves a ghost duplicate in the Convoy node list (the old row held a port that belonged to its own successor and read as "live" forever); plus the new **Forget Offline Nodes...** button, which names every row in a confirmation before removing this machine's offline entries.
 - **6.0.210**: **`op.Convoy`** -- the convoy COMP carries a global OP shortcut, so scripts and docs address it as `op.Convoy.ext.ConvoyExt...` instead of a path chain; contract-test pinned.
