@@ -9,7 +9,7 @@ hide:
 
 Embody puts a team of AI builders inside your live TouchDesigner project. Describe a network in plain language and it gets built — wired, named, annotated, and laid out while you direct. Run several agents in parallel, each scoped to its own part of the network. Branch off the version that works, restore yesterday's state. The tool keeps up with you, instead of the other way around.
 
-Embody is three tools working together — *forward velocity*, *lateral velocity*, and the substrate that makes both possible.
+Embody is four tools working together — *forward velocity*, *lateral velocity*, *outward velocity*, and the substrate that makes it all possible.
 
 <div class="grid cards" markdown>
 
@@ -28,6 +28,14 @@ Embody is three tools working together — *forward velocity*, *lateral velocity
     Tag any operator and Embody externalizes it to files on disk that mirror your network hierarchy. Try a new direction, branch off a good one, restore yesterday's state — all in seconds. Externalized files are the source of truth, so every project opens already in flow.
 
     [:octicons-arrow-right-24: Get started](embody/getting-started.md)
+
+-   :material-lan:{ .lg .middle } **Convoy** — Outward Velocity
+
+    ---
+
+    Convoy-enabled Embody nodes on a trusted LAN discover, inspect, and control each other — one AI session relaying builds, test runs, saves, screenshots, and restarts to every machine in the room. A small per-user background app keeps each node reachable even while TouchDesigner is closed.
+
+    [:octicons-arrow-right-24: Join the Convoy](convoy/index.md)
 
 -   :material-file-document:{ .lg .middle } **TDN** — The Substrate
 
