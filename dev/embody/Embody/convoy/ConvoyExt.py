@@ -3493,8 +3493,16 @@ class ConvoyExt:
             if ok:
                 self._log('Forget Offline Nodes: %s'
                           % (result.get('detail') or 'done'), 'SUCCESS')
-            # Rows redraw from the directory on the next register tick;
-            # the readout (host-app state) was never part of this.
+                # Redraw the node list NOW, not on the ~30-60s heartbeat:
+                # rows the user just confirmed away staying visible for
+                # half a minute reads as a broken button (field feedback
+                # 2026-08-05). Marking the register due and dropping the
+                # tick to its minimum pulls the ONE redraw path forward
+                # -- the next drain re-fetches the directory and rewrites
+                # the rows within a few seconds.
+                session['next_call_at'] = None
+                self._tick_ms = self.TICK_MIN_MS
+            # The readout (host-app state) was never part of this.
             return
 
         if state is None:

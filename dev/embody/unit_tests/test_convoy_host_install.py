@@ -1461,6 +1461,36 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.assertLen(self.dialogs, 0)
         self.convoy._host_busy = False
 
+    def test_a_confirmed_forget_pulls_the_node_list_redraw_forward(self):
+        """The rows redraw only on the register drain -- left on the
+        steady-state heartbeat, nodes the user JUST confirmed away sit
+        visible for up to a minute and the button reads as broken (field
+        feedback 2026-08-05). A successful apply must mark the register
+        due now and drop the tick to its minimum."""
+        import time as _time
+        self.session['next_call_at'] = _time.monotonic() + 999.0
+        self.convoy._tick_ms = self.convoy.TICK_MAX_MS
+        self.choice = 1
+        self.convoy.ForgetOfflineNodes()
+        self.assertTrue(any(path == '/nodes/forget'
+                            for path, _b in self.client.posted),
+                        'the apply must actually have run')
+        self.assertIsNone(self.session.get('next_call_at'),
+                          'the register must be DUE, not heartbeat-away')
+        self.assertEqual(self.convoy._tick_ms, self.convoy.TICK_MIN_MS,
+                         'and the tick must come at its minimum cadence')
+
+    def test_a_cancelled_forget_leaves_the_schedule_alone(self):
+        import time as _time
+        later = _time.monotonic() + 999.0
+        self.session['next_call_at'] = later
+        self.convoy._tick_ms = self.convoy.TICK_MAX_MS
+        self.choice = 0                       # Cancel
+        self.convoy.ForgetOfflineNodes()
+        self.assertEqual(self.session.get('next_call_at'), later,
+                         'nothing was forgotten, nothing redraws early')
+        self.assertEqual(self.convoy._tick_ms, self.convoy.TICK_MAX_MS)
+
     def test_all_clear_names_the_computers_that_own_the_offline_rows(self):
         """'Nothing to forget' while the user is LOOKING at offline rows
         reads as broken (field report 2026-08-05, the dev box): when the

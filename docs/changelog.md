@@ -1,5 +1,9 @@
 # Changelog
 
+## v6.0.215
+
+- **Forget Offline Nodes redraws the list immediately**: the forgetting always happened at once, but the node list only redrew on the next register heartbeat -- up to a minute later -- so rows the user had just confirmed away kept sitting there and the button read as broken. A confirmed forget now marks the register due and drops the tick to its minimum, so the list rewrites within a few seconds; a cancelled dialog leaves the schedule untouched. Two new tests pin both.
+
 ## v6.0.214
 
 - **Manager container alignment fix**: the manager UI's container on the Embody COMP now justifies its children to the top (`justifyv: top`), correcting a minor layout issue in the panel.
