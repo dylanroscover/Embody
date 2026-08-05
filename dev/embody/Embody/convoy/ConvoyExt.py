@@ -259,6 +259,7 @@ class ConvoyExt:
         self._logged = ''        # last logged status class (transitions only)
         self._tick_ms = self.TICK_MIN_MS
         self._network_rows_digest = None
+        self._last_nodes_result = None
         self._wake_record = None
         self._wake_poll_gen = 0
 
@@ -815,6 +816,10 @@ class ConvoyExt:
         """Apply one worker-fetched directory without erasing good stale data."""
         rows = self._nodeStatusRows(result)
         if rows is not None:
+            # The raw node dicts (with node_id) back the readout's
+            # synchronous edits: a confirmed Forget filters THIS cache
+            # and re-projects in the same frame (_dropNodeRowsNow).
+            self._last_nodes_result = result
             # Keep the RAW ages plus the moment they were true, so the tick
             # can age the "Last Seen" column between fetches. Without this the
             # column is a relative time frozen at write time: the directory is
@@ -840,6 +845,34 @@ class ConvoyExt:
                          (result or {}).get('detail') or
                          'status unavailable')[:160]
             self._projectNodeRows([], 'Status unavailable: %s' % reason)
+
+    def _dropNodeRowsNow(self, node_ids):
+        """Remove rows from the Convoy Nodes sequence THIS FRAME.
+
+        The visual contract of a confirmed Forget is immediate: the
+        block the user just dismissed leaves the sequence parameters in
+        the same frame, with NO daemon round trip in the visual path --
+        the row sticking around until the background reconciled it is
+        exactly what read as a broken button (field feedback 2026-08-05,
+        three rounds). The daemon apply runs in the background as
+        reconciliation; a row it refuses to forget (unresolved jobs)
+        honestly reappears on the next directory fetch, because this
+        edits only the projection cache, never the daemon's truth.
+        """
+        cached = getattr(self, '_last_nodes_result', None)
+        if not isinstance(cached, dict):
+            return
+        drop = {str(i) for i in (node_ids or ())}
+        kept = [n for n in (cached.get('nodes') or ())
+                if isinstance(n, dict)
+                and str(n.get('node_id') or '') not in drop]
+        filtered = dict(cached)
+        filtered['nodes'] = kept
+        # One path draws this readout: the same apply the register drain
+        # uses recomputes rows, ages and digest, and re-caches, so a
+        # second Forget in the same session filters the already-filtered
+        # set.
+        self._applyNetworkNodes(filtered)
 
     def _refreshLastSeen(self):
         """Age the Last Seen column between directory fetches. MAIN THREAD.
@@ -4185,6 +4218,10 @@ class ConvoyExt:
         if ctx is None:
             return
         ids = [r['node_id'] for r in rows]
+        # THE VISUAL CONTRACT: the confirmed blocks leave the sequence
+        # NOW, in this frame. The daemon apply below is reconciliation
+        # the user never waits on.
+        self._dropNodeRowsNow(ids)
         self._beginHostCall('forget_offline',
                             lambda: _host_forget_offline_apply(ctx, ids))
 

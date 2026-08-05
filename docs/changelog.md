@@ -1,5 +1,9 @@
 # Changelog
 
+## v6.0.217
+
+- **Forget Offline Nodes clears the blocks in the same frame**: the sequence-parameter blocks now leave the readout synchronously with the confirmation click -- the confirmed rows are filtered out of the cached node set and re-projected through the one path that draws the panel, with no daemon round trip, drain, or tick in the visual path at all. The daemon apply runs behind it purely as reconciliation (a row it refuses to forget, e.g. one with unresolved jobs, honestly reappears on the next directory fetch). Live-measured: the block was gone within the *same frame* as the confirmation (frame-number-identical before and after), with the daemon's "forgot" landing 14 frames later, invisibly. This replaces v6.0.215/216's redraw acceleration, which still routed the visual update through the background loop.
+
 ## v6.0.216
 
 - **Forget Offline Nodes redraws immediately -- actually, this time**: v6.0.215's fix marked the register due and shortened the tick cadence, but the reconcile loop captures its delay *when it schedules* -- so the already-armed tick still fired up to a heartbeat later and the forgotten rows kept sitting in the list (field-caught within the hour). A confirmed forget now supersedes the armed tick outright (the same generation-bump rule a save's reinit storm uses) and arms a fresh one two frames out. Live-measured on a real offline row: pulse to redrawn list in under seven seconds end to end, ~1-3 s after the confirmation click.
