@@ -1447,6 +1447,28 @@ class ConvoyExt:
             % (self.ownerComp.path, gen),
             fromOP=self.ownerComp, delayMilliSeconds=int(self._tick_ms))
 
+    def _kickTick(self):
+        """Fire a reconcile pass NOW, superseding the armed tick chain.
+
+        Shortening _tick_ms cannot accelerate a tick that is ALREADY
+        armed: the loop captures its delay when it schedules (line
+        above: delayMilliSeconds at re-arm time), so the pending firing
+        stays up to a heartbeat away -- the first instant-forget-redraw
+        attempt failed exactly this way in the field (2026-08-05).
+        Bumping the generation makes that pending tick exit unarmed at
+        its gen guard (the same storm-collapse rule a save's reinit
+        storm uses), and this freshly-armed near-immediate tick becomes
+        the one live loop.
+        """
+        try:
+            gen = self.ownerComp.fetch('_convoy_gen', 0) + 1
+            self.ownerComp.store('_convoy_gen', gen)
+            run("o = op(%r)\nif o and o.valid: o.ext.ConvoyExt._convoyTick(%d)"
+                % (self.ownerComp.path, gen),
+                fromOP=self.ownerComp, delayFrames=2)
+        except Exception:
+            pass
+
     def _reconcile(self, force=False):
         """Compare desired state with what was sent; call at most once.
 
@@ -3496,12 +3518,14 @@ class ConvoyExt:
                 # Redraw the node list NOW, not on the ~30-60s heartbeat:
                 # rows the user just confirmed away staying visible for
                 # half a minute reads as a broken button (field feedback
-                # 2026-08-05). Marking the register due and dropping the
-                # tick to its minimum pulls the ONE redraw path forward
-                # -- the next drain re-fetches the directory and rewrites
-                # the rows within a few seconds.
+                # 2026-08-05, twice -- the first fix only shortened the
+                # tick that follows the pending one). Mark the register
+                # due, then supersede the armed tick with an immediate
+                # one (_kickTick): the reconcile fires within frames,
+                # re-fetches the directory, and rewrites the rows.
                 session['next_call_at'] = None
                 self._tick_ms = self.TICK_MIN_MS
+                self._kickTick()
             # The readout (host-app state) was never part of this.
             return
 

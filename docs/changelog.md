@@ -1,5 +1,9 @@
 # Changelog
 
+## v6.0.216
+
+- **Forget Offline Nodes redraws immediately -- actually, this time**: v6.0.215's fix marked the register due and shortened the tick cadence, but the reconcile loop captures its delay *when it schedules* -- so the already-armed tick still fired up to a heartbeat later and the forgotten rows kept sitting in the list (field-caught within the hour). A confirmed forget now supersedes the armed tick outright (the same generation-bump rule a save's reinit storm uses) and arms a fresh one two frames out. Live-measured on a real offline row: pulse to redrawn list in under seven seconds end to end, ~1-3 s after the confirmation click.
+
 ## v6.0.215
 
 - **Forget Offline Nodes redraws the list immediately**: the forgetting always happened at once, but the node list only redrew on the next register heartbeat -- up to a minute later -- so rows the user had just confirmed away kept sitting there and the button read as broken. A confirmed forget now marks the register due and drops the tick to its minimum, so the list rewrites within a few seconds; a cancelled dialog leaves the schedule untouched. Two new tests pin both.

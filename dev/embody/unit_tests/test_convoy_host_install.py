@@ -1462,23 +1462,42 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.convoy._host_busy = False
 
     def test_a_confirmed_forget_pulls_the_node_list_redraw_forward(self):
-        """The rows redraw only on the register drain -- left on the
-        steady-state heartbeat, nodes the user JUST confirmed away sit
-        visible for up to a minute and the button reads as broken (field
-        feedback 2026-08-05). A successful apply must mark the register
-        due now and drop the tick to its minimum."""
+        """The rows redraw only on the register drain, and the armed
+        tick captures its delay WHEN IT SCHEDULES -- so shortening
+        _tick_ms cannot accelerate the pending firing (the first fix
+        failed exactly this way in the field, 2026-08-05, twice
+        reported). A successful apply must mark the register due AND
+        supersede the armed tick with a near-immediate one: the gen
+        bump is what silences the pending tick, the fresh run() is what
+        fires now."""
         import time as _time
         self.session['next_call_at'] = _time.monotonic() + 999.0
         self.convoy._tick_ms = self.convoy.TICK_MAX_MS
-        self.choice = 1
-        self.convoy.ForgetOfflineNodes()
-        self.assertTrue(any(path == '/nodes/forget'
-                            for path, _b in self.client.posted),
-                        'the apply must actually have run')
-        self.assertIsNone(self.session.get('next_call_at'),
-                          'the register must be DUE, not heartbeat-away')
-        self.assertEqual(self.convoy._tick_ms, self.convoy.TICK_MIN_MS,
-                         'and the tick must come at its minimum cadence')
+        orig_gen = self.comp.fetch('_convoy_gen', 0)
+        try:
+            self.choice = 1
+            self.convoy.ForgetOfflineNodes()
+            self.assertTrue(any(path == '/nodes/forget'
+                                for path, _b in self.client.posted),
+                            'the apply must actually have run')
+            self.assertIsNone(self.session.get('next_call_at'),
+                              'the register must be DUE, not '
+                              'heartbeat-away')
+            new_gen = self.comp.fetch('_convoy_gen', 0)
+            self.assertEqual(new_gen, orig_gen + 1,
+                             'the armed tick must be superseded (gen '
+                             'bump), or the pending ~30s firing still '
+                             'owns the redraw')
+            self.assertTrue(
+                any('_convoyTick(%d)' % new_gen in str(a[0])
+                    for a, _kw in self._runs),
+                'and a fresh near-immediate tick must be armed for the '
+                'new generation: %r' % ([a[0] for a, _kw in self._runs],))
+        finally:
+            # The fixture drives the LIVE convoy COMP: put the
+            # generation back so the real session's armed tick chain
+            # (scheduled under orig_gen) survives this test.
+            self.comp.store('_convoy_gen', orig_gen)
 
     def test_a_cancelled_forget_leaves_the_schedule_alone(self):
         import time as _time
