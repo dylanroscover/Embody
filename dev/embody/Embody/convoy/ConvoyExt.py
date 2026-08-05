@@ -6,8 +6,10 @@ reason UpdaterExt lives on 'updater': extension reinit is per-COMP, and
 every extension DAT on the Embody COMP hot-reloads ALL of that COMP's
 extensions when its file changes. Convoy code inside EnvoyExt.py would
 restart the MCP server on every Convoy iteration. A child COMP keeps the
-blast radius here. The cost, accepted: there is no op.Embody.ext.Convoy;
-call sites use op.Embody.op('convoy').ext.ConvoyExt (updater precedent).
+blast radius here. The cost, accepted: there is no op.Embody.ext.Convoy.
+The convoy COMP carries the global OP shortcut ``Convoy``, so external
+call sites use op.Convoy.ext.ConvoyExt (Embody-internal code prefers the
+parent-relative parent.Embody.op('convoy'), per the referencing rules).
 
 The host is reached CONTEXT-FREE (self.ownerComp.parent.Embody), never
 the bare `parent.Embody` global, because the string-form run() callbacks

@@ -122,7 +122,7 @@ def _saveProjectNow():
 	except Exception: pass
 	# The Node Name fill waits for a saved project; now that it exists,
 	# fill immediately so the parameter shows the real name this session.
-	try: op.Embody.op('convoy').ext.ConvoyExt._ensureNodeName()
+	try: op.Convoy.ext.ConvoyExt._ensureNodeName()
 	except Exception: pass
 	return _projectSaved()
 def _hintHeight(text):

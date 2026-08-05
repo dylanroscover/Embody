@@ -164,7 +164,7 @@ TD Python and Full Shell are separate dangerous capabilities. TD Python can use 
 
 ## Optional Owlette API access
 
-Owlette is not required for Convoy LAN communication. In the current preview, its read-only inventory and status bridge uses an `OWLETTE_API_KEY` available to the Convoy host app process. After configuring the host environment, restart the host app and call `convoy_owlette` with `action=capabilities` to verify the connection. `OWLETTE_SITE_ID` may be set as an optional default.
+[Owlette](https://owlette.app) is not required for Convoy LAN communication. In the current preview, its read-only inventory and status bridge uses an `OWLETTE_API_KEY` available to the Convoy host app process. After configuring the host environment, restart the host app and call `convoy_owlette` with `action=capabilities` to verify the connection. `OWLETTE_SITE_ID` may be set as an optional default.
 
 Command submission is off independently. To opt in on that computer, set `EMBODY_CONVOY_ALLOW_OWLETTE_COMMANDS=1` in the same host environment and restart the app. Each submitted command still needs an idempotency key. Remove or set the opt-in false and restart to return the bridge to read-only use. Convoy does not expose Owlette's generic MCP command as a relay.
 

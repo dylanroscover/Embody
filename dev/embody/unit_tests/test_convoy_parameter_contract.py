@@ -95,6 +95,16 @@ def _plain_ext(**values):
     return ext, pars
 
 
+def test_the_convoy_comp_carries_its_global_shortcut():
+    """External call sites address the extension as op.Convoy.ext.ConvoyExt
+    -- the shortcut is the API surface, so losing it breaks every example
+    in the docs (and the wizard's node-name fill)."""
+    document = _load_yaml(EMBODY_TDN)
+    convoy = next(row for row in document["operators"]
+                  if row.get("name") == "convoy")
+    assert convoy["parameters"].get("opshortcut") == "Convoy"
+
+
 def test_source_and_nested_convoy_parameter_pages_match():
     source = _convoy_page(_load_yaml(EMBODY_TDN))
     nested = _convoy_page(_load_yaml(ROOT_TDN), nested=True)

@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.0.210
+
+Convoy gets its global OP shortcut.
+
+- **`op.Convoy`**: the convoy COMP now carries the global OP shortcut `Convoy`, so scripted access is `op.Convoy.ext.ConvoyExt.listNodes(...)` instead of the path chain `op.Embody.op('convoy').ext...` -- shorter, rename-proof, and symmetric with `op.Embody`. Docs examples and the wizard's node-name fill use it; Embody-internal code keeps its parent-relative references per the referencing rules. A contract test pins the shortcut in the exported network.
+
 ## v6.0.209
 
 Convoy: Repair works while the app is running, and the buttons say what they repair.

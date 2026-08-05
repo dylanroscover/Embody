@@ -121,7 +121,7 @@ def on_nodes(event):
     if event.get('event') == 'complete':
         debug(event.get('result'))
 
-request = op.Embody.op('convoy').ext.ConvoyExt.listNodes(callback=on_nodes)
+request = op.Convoy.ext.ConvoyExt.listNodes(callback=on_nodes)
 ```
 
 Use the `host_id` and `node_id` returned by that list for an exact sibling call:
@@ -253,7 +253,7 @@ TouchDesigner also runs on Intel macOS, but Convoy's first macOS target is Apple
 
 ## Owlette
 
-Owlette is optional. Convoy on a LAN does not require an Owlette account, internet access, or an Owlette agent.
+[Owlette](https://owlette.app) is optional. Convoy on a LAN does not require an Owlette account, internet access, or an Owlette agent.
 
 The first Owlette bridge is intentionally small. `convoy_owlette` consumes only Owlette's supported public API for site and machine inventory, online detail, and command status. It is optional and fails closed when credentials or a published API primitive are unavailable.
 
