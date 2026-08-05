@@ -9,17 +9,9 @@ hide:
 
 Embody puts a team of AI builders inside your live TouchDesigner project. Describe a network in plain language and it gets built — wired, named, annotated, and laid out while you direct. Run several agents in parallel, each scoped to its own part of the network. Branch off the version that works, restore yesterday's state. The tool keeps up with you, instead of the other way around.
 
-Embody is four tools working together — *forward velocity*, *lateral velocity*, *outward velocity*, and the substrate that makes it all possible.
+Embody is four tools working together — *lateral velocity*, *forward velocity*, *outward velocity*, and the substrate that makes it all possible.
 
 <div class="grid cards" markdown>
-
--   :material-robot:{ .lg .middle } **Envoy** — Forward Velocity
-
-    ---
-
-    An embedded [MCP](https://modelcontextprotocol.io/) server with **62 tools** that lets Claude Code, Codex, Gemini, Cursor, Windsurf, and GitHub Copilot via VS Code talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen in your live session. Small changes can land in seconds, depending on your model; a complete network is a 5-20 minute autonomous build you can hand off, parallelize across sessions, and check back on.
-
-    [:octicons-arrow-right-24: Setup Envoy](envoy/setup.md)
 
 -   :material-sync:{ .lg .middle } **Embody** — Lateral Velocity
 
@@ -28,6 +20,14 @@ Embody is four tools working together — *forward velocity*, *lateral velocity*
     Tag any operator and Embody externalizes it to files on disk that mirror your network hierarchy. Try a new direction, branch off a good one, restore yesterday's state — all in seconds. Externalized files are the source of truth, so every project opens already in flow.
 
     [:octicons-arrow-right-24: Get started](embody/getting-started.md)
+
+-   :material-robot:{ .lg .middle } **Envoy** — Forward Velocity
+
+    ---
+
+    An embedded [MCP](https://modelcontextprotocol.io/) server with **62 tools** that lets Claude Code, Codex, Gemini, Cursor, Windsurf, and GitHub Copilot via VS Code talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen in your live session. Small changes can land in seconds, depending on your model; a complete network is a 5-20 minute autonomous build you can hand off, parallelize across sessions, and check back on.
+
+    [:octicons-arrow-right-24: Setup Envoy](envoy/setup.md)
 
 -   :material-lan:{ .lg .middle } **Convoy** — Outward Velocity
 
