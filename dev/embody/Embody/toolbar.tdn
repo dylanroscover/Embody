@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 36
-generator: Embody/6.0.206
+build: 37
+generator: Embody/6.0.213
 td_build: 099.2025.33070
-source_file: Embody-6.207.toe
-exported_at: '2026-08-04T20:06:46Z'
+source_file: Embody-6.214.toe
+exported_at: '2026-08-05T12:23:18Z'
 network_path: /embody/Embody/toolbar
 options:
   include_dat_content: false
@@ -69,9 +69,9 @@ operators:
 - name: tooltip
   type: containerCOMP
   parameters:
-    x: 998
+    x: 356
     y: 40
-    w: 80
+    w: 169
     h: 22
     layer: 10
     alignallow: ignore
@@ -98,7 +98,7 @@ operators:
 - name: tip_measure
   type: textTOP
   parameters:
-    text: Clear filter
+    text: Toggle Envoy MCP server
     font: Open Sans
     fontsizex: 10
     fontsizey: 10

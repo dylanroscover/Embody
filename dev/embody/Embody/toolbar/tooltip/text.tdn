@@ -1,17 +1,17 @@
 format: tdn
 version: '2.0'
-build: 30
-generator: Embody/6.0.206
+build: 31
+generator: Embody/6.0.213
 td_build: 099.2025.33070
-source_file: Embody-6.207.toe
-exported_at: '2026-08-04T20:06:39Z'
+source_file: Embody-6.214.toe
+exported_at: '2026-08-05T12:23:17Z'
 network_path: /embody/Embody/toolbar/tooltip/text
 options:
   include_dat_content: false
   include_storage: true
 type: textCOMP
 parameters:
-  text: Clear filter
+  text: Toggle Envoy MCP server
   font: Open Sans
   fontsize: 10
   fontcolorr: 0.8

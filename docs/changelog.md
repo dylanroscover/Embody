@@ -1,5 +1,9 @@
 # Changelog
 
+## v6.0.214
+
+- **Manager container alignment fix**: the manager UI's container on the Embody COMP now justifies its children to the top (`justifyv: top`), correcting a minor layout issue in the panel.
+
 ## v6.0.213
 
 The duplicate-node endgame: the Convoy App updates itself, says what code it runs, and the last two ghost classes are gone.
