@@ -358,7 +358,16 @@ def _write_ready_flag(attempt=0):
     embody_path = me.fetch('embody_path', '/Embody')
     embody = op(embody_path)
 
-    MAX_ATTEMPTS = 40          # ~40 * 60 frames ~= 40s at 60fps
+    # ~N * 60 frames ~= N seconds at 60fps. The one-time venv bootstrap
+    # (pip installing the whole MCP stack into a fresh project) is the
+    # long pole and scales with how loaded the machine is: a 40s budget
+    # produced a false FAIL -- "Envoy not running: 'Installing deps...
+    # (one-time)'" at attempt 40 -- on a box that was simultaneously
+    # running the test matrix, while the very same build settled in 20
+    # attempts when idle (2026-08-06). The attempt cap exists to bound a
+    # genuinely WEDGED start, not to race an install, so give it room:
+    # a real wedge still reports, four minutes later, with the true state.
+    MAX_ATTEMPTS = 240
     if embody is not None:
         settled, envoy_status = _envoy_settled(embody)
         if not settled and attempt < MAX_ATTEMPTS:

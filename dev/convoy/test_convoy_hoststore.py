@@ -1058,3 +1058,64 @@ def test_state_counts_matches_a_full_jobs_scan(db):
     assert counts == scanned
     assert counts == {"queued": 3, "dispatching": 1, "running": 1,
                       "succeeded": 1}
+
+
+def test_reap_removes_an_unreadable_record_past_retention(tmp_path):
+    """An unreadable delivery record used to be immortal: reap skipped it
+    by definition (`get_job -> None`), and every node-cleanup sweep spares
+    a row while any record is unreadable -- so ONE truncated file (a crash
+    mid-write) froze all node cleanup on the host, for ever, invisibly."""
+    store = hdb.HostStore(str(tmp_path / "state"))
+    try:
+        bad = os.path.join(store.jobs_dir, "cj_truncated.json")
+        with open(bad, "w", encoding="utf-8") as f:
+            f.write("{ truncated")
+        assert store.get_job("cj_truncated") is None
+        _jobs, unreadable = store.scan_jobs()
+        assert unreadable == ["cj_truncated"]
+
+        # Inside the retention window it stays: it may still be a record
+        # something is mid-write on.
+        store.reap(24 * 3600.0)
+        assert os.path.exists(bad)
+
+        # Past it, the file is debris by any reading and must go, or the
+        # sweeps it blocks never run again.
+        old = os.path.getmtime(bad) - (48 * 3600.0)
+        os.utime(bad, (old, old))
+        result = store.reap(24 * 3600.0)
+        assert result["jobs"] >= 1
+        assert not os.path.exists(bad)
+        assert store.scan_jobs()[1] == []
+    finally:
+        store.close()
+
+
+def test_delete_node_writes_disk_before_committing_memory(tmp_path, monkeypatch):
+    """A failed host.json write must leave memory and disk AGREEING.
+
+    The old body popped the row from memory first, so a raised write left
+    the row absent in memory, present on disk, and the retry -- finding
+    nothing to pop -- wrote nothing and reported success. The next daemon
+    start replayed the ghost.
+    """
+    store = hdb.HostStore(str(tmp_path / "state"))
+    try:
+        directory = ci.NodeDirectory(store.host_id())
+        record = directory.register("/Work/x", "/Embody", "cv")
+        store.save_node(record)
+        node_id = record["node_id"]
+        assert node_id in store._state["nodes"]
+
+        boom = OSError(32, "sharing violation")
+
+        def _fail(*a, **k):
+            raise boom
+
+        monkeypatch.setattr(store, "_write_host", _fail)
+        with pytest.raises(OSError):
+            store.delete_node(node_id)
+        assert node_id in store._state["nodes"], \
+            "a failed durable write must not have committed in memory"
+    finally:
+        store.close()

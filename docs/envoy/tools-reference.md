@@ -202,7 +202,7 @@ The remaining 16 meta-tools drive [Convoy](../convoy/index.md), relaying work to
 | `convoy_get_job` | Check durable work that outlives the original call or reconnect |
 | `convoy_ack_job` | Acknowledge a finished delivery so the target can release its protected result artifacts |
 | `convoy_cancel_job` | Request cancellation from the exact owning host |
-| `convoy_forget_node` | Delete a stale node row on THIS machine's host app (refuses while the node has unresolved jobs); dead and long-unseen rows are also evicted automatically |
+| `convoy_forget_node` | Delete a stale node row on THIS machine's host app (refuses only while a delivery has not FINISHED, naming the blocking delivery ids; a finished result never holds a row); dead and long-unseen rows are also evicted automatically |
 | `convoy_get_artifact` | Retrieve and verify a large result into a temporary local file by artifact reference |
 | `convoy_save_artifact` | Verify an artifact and save it into the current project (`overwrite=true` required to replace) |
 | `convoy_start_node` | Reopen a previously registered, currently offline node |

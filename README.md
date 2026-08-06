@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.217-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.219-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-62-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -175,7 +175,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **119 test suites** (3,357 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **120 test suites** (3,362 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -206,6 +206,11 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.219**: **Duplicate node rows clear themselves** -- one predicate treated "a delivery that has not finished" and "a finished result nobody collected" as the same thing, and it gated all three cleanup paths, so a single uncollected result made a duplicate row permanent (a field machine had 11 rows and 123 job records, 115 of them exactly that class). A finished result no longer pins a row anywhere; a queued delivery on a superseded identity is durably refused rather than left to haunt it; work past the dispatch boundary is never touched. Forget Offline Nodes stops logging a refusal as a success, names the nodes it kept and the deliveries pinning them, and restores a declined row in the same frame. Two latent ghost-resurrection paths (commit-before-write on both delete paths) closed, and an unreadable job record no longer freezes cleanup forever.
+- **6.0.217**: **Forget Offline Nodes clears the blocks in the same frame** -- the confirmed rows leave the sequence synchronously with the click, with no daemon round trip in the visual path; the daemon apply runs behind it purely as reconciliation.
+- **6.0.216**: **The forget redraw is real** -- a confirmed forget supersedes the already-armed reconcile tick (which captures its delay when it schedules) and arms a fresh one two frames out.
+- **6.0.215**: **Forget Offline Nodes pulls its redraw forward** -- a confirmed forget marks the register due and drops the tick to its minimum instead of waiting out the 30-60 s heartbeat.
+- **6.0.214**: **Manager container alignment fix** -- the manager UI's container justifies its children to the top.
 - **6.0.213**: **The Convoy App updates itself** -- the daemon reports the version of the code it actually runs, an older one is updated in place the moment a newer Embody registers with it (installs verify the daemon they restarted), and the last two duplicate-row ghost classes are gone: a Save-As into a new folder retires the old row, and a reclaimed port's stale claim is cleared.
 - **6.0.212**: **Readable dialogs** -- every message box wraps its prose to ~70 characters per line through one central choke point (structure and file paths preserved), and Forget Offline Nodes shows a visible all-clear instead of a silent log line when there is nothing to forget.
 - **6.0.211**: **One project, one row** -- a live session's versioned save no longer leaves a ghost duplicate in the Convoy node list (the old row held a port that belonged to its own successor and read as "live" forever); plus the new **Forget Offline Nodes...** button, which names every row in a confirmation before removing this machine's offline entries.

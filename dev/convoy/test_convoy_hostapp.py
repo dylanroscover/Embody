@@ -538,21 +538,89 @@ def test_supersession_spares_a_different_live_server_on_the_same_project(
         "a different live server is not a ghost"
 
 
-def test_supersession_spares_a_record_that_still_owns_work(server):
-    """Retiring a node with an uncollected result would strand it."""
+def test_supersession_refuses_a_queued_delivery_and_retires_the_row(server):
+    """A queued delivery provably never left this host, so a superseded
+    row's queue is refused (not invented away) and the row retires.
+
+    This test used to assert the opposite -- that ANY unresolved work
+    spared the row -- which is what pinned the field's eight
+    versioned-save duplicates for ever (2026-08-06). The guarantee it was
+    written to protect is real but narrower, and now lives in the two
+    tests below: work that crossed the dispatch boundary still spares,
+    and an uncollected RESULT never needed its row at all.
+    """
     _, old = server.call("/register", {
         "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
         "envoy_port": 9981, "node_discriminator": "nd_" + "1" * 32})
-    code, _job = server.call("/jobs", {
+    code, created = server.call("/jobs", {
         "idempotency_key": "keep", "node_id": old["node_id"],
         "operation": "query_network", "arguments": {}})
     assert code == 200
+    delivery_id = created["job"]["delivery_id"]
+    server.call("/unregister", {"node_id": old["node_id"]})
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9982, "node_discriminator": "nd_" + "2" * 32})
+
+    _, listing = server.call("/nodes")
+    assert old["node_id"] not in [n["node_id"] for n in listing["nodes"]], \
+        "a queued-only pin must not keep a superseded row alive"
+    # The delivery is durably terminal with the host's own evidence -- it
+    # is not silently dropped, and it is now reapable and ackable.
+    job = server.app.db.get_job(delivery_id)
+    assert job["state"] == "refused"
+    assert job["result"]["reason"] == "node_superseded"
+
+
+def test_supersession_spares_work_past_the_dispatch_boundary(server):
+    """The real guarantee: once a delivery has been claimed for dispatch
+    its verdict belongs to the node, so the host must never terminalise
+    it to tidy a row away."""
+    _, old = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "node_discriminator": "nd_" + "1" * 32})
+    _, created = server.call("/jobs", {
+        "idempotency_key": "keep", "node_id": old["node_id"],
+        "operation": "query_network", "arguments": {}})
+    claimed = server.app.db.claim_for_dispatch(created["job"]["delivery_id"])
+    assert claimed and claimed["state"] == "dispatching"
     server.call("/unregister", {"node_id": old["node_id"]})
     server.call("/register", {
         "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
         "envoy_port": 9982, "node_discriminator": "nd_" + "2" * 32})
     _, listing = server.call("/nodes")
-    assert old["node_id"] in [n["node_id"] for n in listing["nodes"]],         "a node with unresolved work must not be auto-retired"
+    assert old["node_id"] in [n["node_id"] for n in listing["nodes"]], \
+        "a delivery past the dispatch boundary must spare its row"
+
+
+def test_supersession_is_not_blocked_by_an_uncollected_result(server):
+    """A finished-but-unacknowledged outcome never needed its row: it is
+    fetched by delivery_id, and forgetting the row deletes no record.
+
+    115 of the 123 job records pinning the field's duplicate rows were
+    exactly this class.
+    """
+    _, old = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "node_discriminator": "nd_" + "1" * 32})
+    _, created = server.call("/jobs", {
+        "idempotency_key": "keep", "node_id": old["node_id"],
+        "operation": "query_network", "arguments": {}})
+    delivery_id = created["job"]["delivery_id"]
+    # queued -> refused: TERMINAL, and nobody has acknowledged it.
+    server.call("/jobs/cancel", {"delivery_id": delivery_id})
+    server.call("/unregister", {"node_id": old["node_id"]})
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9982, "node_discriminator": "nd_" + "2" * 32})
+
+    _, listing = server.call("/nodes")
+    assert old["node_id"] not in [n["node_id"] for n in listing["nodes"]], \
+        "an uncollected result must not pin a superseded row"
+    # ...and the result is still there, still fetchable by delivery_id.
+    code, body = server.call("/jobs/%s" % delivery_id, method="GET")
+    assert code == 200 and body["job"]["delivery_id"] == delivery_id, \
+        "the result must outlive the row it was addressed to"
 
 
 # -- cross-project supersession: Save As mints a new project root -------
@@ -707,24 +775,163 @@ def test_cross_project_rows_are_never_claimed_by_metadata_alone(server):
     assert rows[old["node_id"]]["envoy_port"] == 9981
 
 
-def test_save_as_ghost_with_unresolved_work_is_spared(server):
-    """Even a provably-same-process past self keeps its row while a job
-    result is uncollected -- retiring it would strand the result."""
+# -- THE FIELD SHAPE (2026-08-06) --------------------------------------
+#
+# A user's node list held ELEVEN rows across two projects: eight
+# versioned saves of one .toe and three of another, every one of them
+# pinned by job records the old guard read as "unresolved work". 115 of
+# the 123 pins were finished-but-unacknowledged results; the other 8
+# were queued deliveries. Nothing was running. "Forget Offline Nodes"
+# answered "forgot 0, kept 8 with unresolved jobs" and the rows came
+# straight back. Every prior supersede test used exactly two rows and
+# one job, which is why the shape survived a large suite.
+
+def _versioned_save_session(server, disc, runtime, port, root, pin):
+    """One TD session on `root`: register, take a job, close the project.
+
+    pin='queued'   -> leaves an unfinished delivery
+    pin='unacked'  -> leaves a finished, uncollected result
+    """
+    _, node = server.call("/register", {
+        "project_root": root, "convoy_id": "cv", "comp_path": "/project1/Embody",
+        "envoy_port": port, "runtime_id": runtime,
+        "node_discriminator": "nd_" + disc * 32})
+    _, created = server.call("/jobs", {
+        "idempotency_key": "job_" + disc, "node_id": node["node_id"],
+        "operation": "query_network", "arguments": {}})
+    if pin == "unacked":
+        server.call("/jobs/cancel",
+                    {"delivery_id": created["job"]["delivery_id"]})
+    server.call("/unregister", {"node_id": node["node_id"]})
+    return node["node_id"]
+
+
+def test_eight_versioned_saves_of_one_project_collapse_to_one_row(server):
+    """The reported shape, end to end: eight siblings, mixed pin classes,
+    all gone the moment the ninth registers."""
+    stale = [
+        _versioned_save_session(
+            server, str(i), "rt_%d" % i, 9980 + i, "/Work/100g",
+            "queued" if i % 3 == 0 else "unacked")
+        for i in range(1, 9)]
+
+    _, live = server.call("/register", {
+        "project_root": "/Work/100g", "convoy_id": "cv",
+        "comp_path": "/project1/Embody", "envoy_port": 9999,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "9" * 32})
+
+    _, listing = server.call("/nodes")
+    ids = [n["node_id"] for n in listing["nodes"]]
+    assert ids == [live["node_id"]], (
+        "%d sibling row(s) survived: %s"
+        % (len([n for n in stale if n in ids]), [n[:8] for n in stale
+                                                 if n in ids]))
+
+
+def test_two_projects_collapse_independently_of_each_other(server):
+    """The field machine held two projects. Collapsing one must never
+    touch the other -- same host, same COMP path, different root.
+
+    Note each project self-collapses AS IT GOES: session 2's register
+    retires session 1's row, so the steady state is one row per project
+    even before the final registration.
+    """
+    a = [_versioned_save_session(server, str(i), "rt_a%d" % i, 9980 + i,
+                                 "/Work/100g", "unacked") for i in (1, 2)]
+    b = [_versioned_save_session(server, str(i + 4), "rt_b%d" % i, 9990 + i,
+                                 "/Work/st2110", "unacked") for i in (1, 2)]
+
+    _, listing = server.call("/nodes")
+    assert sorted(n["node_id"] for n in listing["nodes"]) == sorted(
+        [a[-1], b[-1]]), "one row per project while they accumulate"
+
+    _, live_a = server.call("/register", {
+        "project_root": "/Work/100g", "convoy_id": "cv",
+        "comp_path": "/project1/Embody", "envoy_port": 9870,
+        "runtime_id": "rt_live_a", "node_discriminator": "nd_" + "8" * 32})
+
+    _, listing = server.call("/nodes")
+    ids = [n["node_id"] for n in listing["nodes"]]
+    assert live_a["node_id"] in ids
+    assert not [n for n in a if n in ids], "the registered project collapsed"
+    assert b[-1] in ids, "the OTHER project's row must be untouched"
+
+
+def test_collapsed_rows_stay_gone_across_a_daemon_restart(tmp_path):
+    """'Disappear AND stay gone.' A row forgotten in memory but still on
+    disk resurrects on the next daemon start -- the 2026-08-05 defect
+    class -- so the durable delete is what this proves."""
+    directory = str(tmp_path / "state")
+    first = Server(directory)
+    try:
+        stale = [_versioned_save_session(
+            first, str(i), "rt_%d" % i, 9980 + i, "/Work/100g", "unacked")
+            for i in range(1, 5)]
+        _, live = first.call("/register", {
+            "project_root": "/Work/100g", "convoy_id": "cv",
+            "comp_path": "/project1/Embody", "envoy_port": 9999,
+            "runtime_id": "rt_live", "node_discriminator": "nd_" + "9" * 32})
+        _, listing = first.call("/nodes")
+        assert [n["node_id"] for n in listing["nodes"]] == [live["node_id"]]
+    finally:
+        first.stop()
+
+    second = Server(directory)
+    try:
+        _, listing = second.call("/nodes")
+        ids = [n["node_id"] for n in listing["nodes"]]
+        assert ids == [live["node_id"]], (
+            "retired rows came back from host.json after a restart: %s"
+            % [n[:8] for n in stale if n in ids])
+    finally:
+        second.stop()
+
+
+def test_save_as_ghost_past_the_dispatch_boundary_is_spared(server):
+    """A same-process past self still keeps its row while a delivery it
+    already handed to the node is unfinished -- that verdict is the
+    node's to give.
+
+    (Its queued-delivery sibling case is the test below: queued work is
+    refused with evidence and the row goes, because a queued delivery
+    provably never left this host.)
+    """
     _, old = server.call("/register", {
         "project_root": "/Work/scratch", "convoy_id": "cv",
         "comp_path": "/Embody", "envoy_port": 9981,
         "runtime_id": "rt_live", "node_discriminator": "nd_" + "1" * 32})
-    code, _job = server.call("/jobs", {
+    _, created = server.call("/jobs", {
         "idempotency_key": "keep", "node_id": old["node_id"],
         "operation": "query_network", "arguments": {}})
-    assert code == 200
+    assert server.app.db.claim_for_dispatch(created["job"]["delivery_id"])
     server.call("/register", {
         "project_root": "/Work/show", "convoy_id": "cv",
         "comp_path": "/Embody", "envoy_port": 9981,
         "runtime_id": "rt_live", "node_discriminator": "nd_" + "2" * 32})
     _, listing = server.call("/nodes")
     assert old["node_id"] in [n["node_id"] for n in listing["nodes"]], \
-        "unresolved work spares even a same-process past self"
+        "work past the dispatch boundary spares even a same-process past self"
+
+
+def test_save_as_ghost_with_only_queued_work_is_retired(server):
+    """The same past self, pinned only by a queued delivery, retires --
+    and the delivery is refused with the host's evidence, never dropped."""
+    _, old = server.call("/register", {
+        "project_root": "/Work/scratch", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "1" * 32})
+    _, created = server.call("/jobs", {
+        "idempotency_key": "keep", "node_id": old["node_id"],
+        "operation": "query_network", "arguments": {}})
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv",
+        "comp_path": "/Embody", "envoy_port": 9981,
+        "runtime_id": "rt_live", "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    assert old["node_id"] not in [n["node_id"] for n in listing["nodes"]]
+    job = server.app.db.get_job(created["job"]["delivery_id"])
+    assert job["state"] == "refused"
+    assert job["result"]["reason"] == "node_superseded"
 
 
 # -- the daemon knows what code it is running ---------------------------
@@ -1099,3 +1306,103 @@ def test_refusals_are_audited(server):
     assert "register_refused" in events, (
         "A-39: refusals must leave a trace -- visibility is the "
         "compensating control while there is no admission control")
+
+
+# -- what a QUEUED delivery means for retirement -----------------------
+
+def test_queued_host_native_work_tracks_the_dispatchers_own_rule(server):
+    """A queued delivery may only be refused when retiring its row would
+    actually strand it. The dispatcher decides that, at
+    convoy_hostapp.py: needs_td_endpoint = (op not in HOST_NATIVE_OPERATIONS
+    or op == 'convoy_restart_node'). Pin the two to each other so they
+    cannot drift: refusing host-native work (which runs on the HOST and
+    would have succeeded) destroys it, and sparing convoy_restart_node
+    (which needs an endpoint that will never exist again) pins the row for
+    ever.
+    """
+    app = server.app
+    for operation in sorted(ha.HOST_NATIVE_OPERATIONS) + ["query_network"]:
+        needs_td_endpoint = (operation not in ha.HOST_NATIVE_OPERATIONS
+                             or operation == "convoy_restart_node")
+        assert app._queued_delivery_survives_retirement(operation) is (
+            not needs_td_endpoint), operation
+    # The two cases that matter, stated outright.
+    assert app._queued_delivery_survives_retirement("convoy_start_node")
+    assert not app._queued_delivery_survives_retirement("convoy_restart_node")
+
+
+def test_a_queue_larger_than_the_display_cap_still_retires(server, monkeypatch):
+    """The census NAMES at most _CENSUS_NAMED_CAP deliveries to a human,
+    but must COLLECT all of them: a gate that spared any row whose queue
+    exceeded the cap would be a display constant deciding correctness, and
+    would recreate the permanently-unretirable row this change exists to
+    remove.
+
+    The cap is monkeypatched DOWN so the test actually crosses it. An
+    earlier version of this test queued 12 deliveries against a cap of
+    512 and never entered the branch at all -- it would have passed with
+    the guard present, absent or inverted.
+    """
+    monkeypatch.setattr(ha, "_CENSUS_NAMED_CAP", 2)
+    _, old = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "node_discriminator": "nd_" + "1" * 32})
+    deliveries = []
+    for i in range(5):
+        code, created = server.call("/jobs", {
+            "idempotency_key": "k%d" % i, "node_id": old["node_id"],
+            "operation": "query_network", "arguments": {}})
+        assert code == 200
+        deliveries.append(created["job"]["delivery_id"])
+    server.call("/unregister", {"node_id": old["node_id"]})
+
+    # The refusal names only the cap, and says how many there really are.
+    code, body = server.call("/nodes/forget", {"node_id": old["node_id"]})
+    assert code == 409
+    assert len(body["blocking"]) == 2, "only the cap is NAMED"
+    assert body["pending_count"] == 5, "but the count is exact"
+
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9982, "node_discriminator": "nd_" + "2" * 32})
+
+    _, listing = server.call("/nodes")
+    assert old["node_id"] not in [n["node_id"] for n in listing["nodes"]], \
+        "a queue larger than the display cap must not pin the row"
+    for delivery_id in deliveries:
+        job = server.app.db.get_job(delivery_id)
+        assert job["state"] == "refused", \
+            "every queued delivery is resolved, not just the named ones"
+
+
+def test_an_unreadable_job_record_spares_every_row_but_says_so(server):
+    """Fail closed on an unreadable store -- a record nobody can parse
+    might be a pending delivery for the row being retired. It must be
+    LOUD (the ids are audited) and BOUNDED (reap clears it past
+    retention), never a silent permanent freeze."""
+    _, old = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9981, "node_discriminator": "nd_" + "1" * 32})
+    server.call("/unregister", {"node_id": old["node_id"]})
+    bad = os.path.join(server.app.db.jobs_dir, "cj_corrupt.json")
+    with open(bad, "w", encoding="utf-8") as f:
+        f.write("{ truncated")
+
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9982, "node_discriminator": "nd_" + "2" * 32})
+    _, listing = server.call("/nodes")
+    assert old["node_id"] in [n["node_id"] for n in listing["nodes"]], \
+        "an unreadable record must spare (fail closed)"
+
+    # ...and the refusal names the file, so it can be found and removed.
+    code, body = server.call("/nodes/forget", {"node_id": old["node_id"]})
+    assert code == 503 and body["reason"] == "job_state_unreadable"
+
+    # Removing it un-freezes cleanup on the very next register.
+    os.unlink(bad)
+    server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9983, "node_discriminator": "nd_" + "3" * 32})
+    _, listing = server.call("/nodes")
+    assert old["node_id"] not in [n["node_id"] for n in listing["nodes"]]

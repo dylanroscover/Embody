@@ -415,8 +415,27 @@ class HostStore:
             convoy_id, binding_state=binding_state, expected=expected)
 
     def delete_node(self, node_id):
-        if self._state["nodes"].pop(node_id, None) is not None:
-            self._write_host()
+        """Remove one node row, DISK FIRST -- the save_nodes contract.
+
+        The old body popped the row out of self._state and only then
+        wrote host.json, which inverted every caller's durability
+        argument. A raised write (a Windows sharing violation surviving
+        all of _write_private's retries) left the row absent from
+        memory, present on disk and present in the directory; the
+        caller's retry then found nothing to pop, wrote NOTHING, and
+        returned success, so the next daemon start replayed the ghost
+        from host.json. Build the next state, persist it, and only then
+        commit in memory: a failed write raises with memory and disk
+        still agreeing, and the retry does the whole thing again.
+        """
+        if node_id not in self._state["nodes"]:
+            return
+        nodes = dict(self._state["nodes"])
+        nodes.pop(node_id, None)
+        next_state = dict(self._state)
+        next_state["nodes"] = nodes
+        self._write_host(next_state)
+        self._state = next_state
 
     def node_last_seen(self, node_id):
         """The durable last_seen stamp for a node row, or None.
@@ -1562,7 +1581,38 @@ class HostStore:
                 break
             job = self.get_job(delivery_id)
             if job is None:
-                continue    # gone or unreadable; not ours to force
+                # Gone, or UNREADABLE. An unreadable record used to live
+                # here for ever: reap skipped it by definition, and it
+                # blocks every node-cleanup sweep (a record nobody can
+                # parse might be a pending delivery for the row being
+                # retired), so one truncated file -- a crash mid-write --
+                # froze all node cleanup on the host permanently. Past
+                # retention it is debris by any reading, so remove it on
+                # the same horizon as a terminal record, with an audit
+                # naming it. Its markers go too: _markers_for needs the
+                # record's fields, which is exactly what cannot be read,
+                # so an unreferenced marker is left for the next pass
+                # rather than guessed at.
+                if not self.job_file_exists(delivery_id):
+                    continue
+                try:
+                    mtime = os.path.getmtime(self._job_path(delivery_id))
+                except OSError:
+                    continue
+                if mtime > cutoff:
+                    continue
+                try:
+                    os.unlink(self._job_path(delivery_id))
+                except OSError:
+                    continue
+                reaped_jobs += 1
+                try:
+                    self.audit("hoststore", "unreadable_job_reaped",
+                               {"delivery_id": delivery_id,
+                                "age_s": round(now - mtime, 1)})
+                except Exception:
+                    pass
+                continue
             if job.get("state") not in TERMINAL_STATES:
                 continue
             # `indeterminate` is the only durable proof that a command may

@@ -618,6 +618,23 @@ HOST_NATIVE_OPERATIONS = frozenset(
 HOST_CANCELABLE_OPERATIONS = frozenset(
     set(HOST_SUBPROCESS_OPERATIONS) | set(HOST_LIFECYCLE_OPERATIONS))
 
+# How many pending deliveries a census NAMES to a human. Display only:
+# the census itself collects every pending delivery, because the
+# retirement gate cannot refuse a queue it cannot see and would have to
+# spare any row whose queue exceeded a cap -- a constant silently
+# deciding correctness, and permanently unretirable rows for exactly the
+# reason this whole change exists to remove. The tuples are (id, state,
+# operation) and the count of PENDING deliveries on one node is small in
+# any real deployment (the 2026-08-06 field machine's worst row held
+# one); the scan that produces them is already O(all jobs) either way.
+_CENSUS_NAMED_CAP = 8
+
+# "no census was supplied", distinct from "the scan FAILED" (index None).
+# Overloading None for both made a failed hoisted scan re-run the whole
+# listing once per candidate row, under the app lock, on the one path
+# where the listing is already failing.
+_CENSUS_UNSET = object()
+
 # The strict reading of a registry entry: anything a registry entry does
 # not say is assumed to be the most dangerous answer. `executes_arbitrary
 # _code` True is A-1 verbatim; `mutating` True demands the exclusive
@@ -3095,9 +3112,12 @@ class HostApp:
         deliberately never authority for a retirement. A successor
         whose first register has no port yet simply retires its past
         self one heartbeat later, when the port arrives and matches.
-        Unresolved work still spares the row (the /nodes/forget rule,
-        so a superseded record can never take a result nobody has
-        collected with it).
+        UNFINISHED work still spares the row (the /nodes/forget rule) --
+        but a finished result nobody has collected does NOT, because it
+        was never held by the row: results are fetched by delivery_id and
+        outlive it. Treating the two as one thing is what pinned the
+        field's duplicate rows for ever (2026-08-06); see
+        _node_work_census and _retire_superseded_row_locked.
         """
         retired = []
         ports_cleared = []
@@ -3109,6 +3129,25 @@ class HostApp:
             live_port = live.get("envoy_port")
             live_rt = live.get("runtime_id")
             live_disc = live.get("node_discriminator")
+            # ONE jobs scan for the whole sweep -- and only once a
+            # candidate actually exists. Building it up front put a full
+            # parse of the jobs directory on EVERY register, inside the
+            # app lock, for every host, including the overwhelmingly
+            # common case of a heartbeat with nothing to collapse
+            # (measured: 0.05s at 500 job records, 0.48s at 5000, worse
+            # cold). The predicate this replaced was reachable only from
+            # inside the retire call, so it charged nothing there; this
+            # keeps that property while still scanning at most once per
+            # sweep.
+            scan = {}
+
+            def _census(node_id):
+                if "index" not in scan:
+                    scan["index"], scan["unreadable"] = \
+                        self._job_census_index()
+                return self._node_work_census(
+                    node_id, scan["index"], scan["unreadable"])
+
             for record in list(self.directory.nodes()):
                 node_id = record.get("node_id")
                 if (node_id == live.get("node_id")
@@ -3123,9 +3162,24 @@ class HostApp:
                         # A genuinely different live server on the same
                         # project (a second TD holding the old file
                         # open): never retire a row that can still
-                        # answer.
-                        continue
-                    if self._retire_superseded_row_locked(node_id):
+                        # answer. A live server HEARTBEATS, though, and
+                        # this spare used to key on the port alone -- so
+                        # a session that died without a clean
+                        # /unregister (a crash, a kill) left a port
+                        # nobody can clear, and the row was spared for
+                        # ever exactly like the rows this sweep exists
+                        # to collapse. Silence past the dead grace is
+                        # the evidence, taken from the DURABLE last_seen
+                        # (never a socket probe: a closed-port refusal
+                        # costs ~2s on Windows and this runs inline on
+                        # every register, under the lock).
+                        latest = self._node_last_activity(record)
+                        if (latest is None
+                                or (self._now() - latest)
+                                < self.node_dead_grace_s):
+                            continue
+                    if self._retire_superseded_row_locked(
+                            node_id, live=live, census=_census(node_id)):
                         retired.append(node_id)
                     continue
                 # Cross-project rows on this host. Same root + COMP was
@@ -3157,7 +3211,8 @@ class HostApp:
                     # launch and survives every save) re-registered this
                     # COMP under a new project identity: the old row is
                     # this registration's own past self.
-                    if self._retire_superseded_row_locked(node_id):
+                    if self._retire_superseded_row_locked(
+                            node_id, live=live, census=_census(node_id)):
                         retired.append(node_id)
                     continue
                 if same_process:
@@ -3201,7 +3256,7 @@ class HostApp:
                 {"error": f"{type(e).__name__}: {e}"})
         return retired
 
-    def _retire_superseded_row_locked(self, node_id):
+    def _retire_superseded_row_locked(self, node_id, live=None, census=None):
         """Delete ONE superseded row. False means spared (or kept on
         failure) -- and the row is then left fully intact, memory and
         disk agreeing, so a later register simply tries again.
@@ -3212,17 +3267,86 @@ class HostApp:
         the eviction sweep's too -- a row being launched right now is
         not debris, and unknowable reservation state spares (fail
         closed).
+
+        GATE ORDER IS LOAD-BEARING. Every SPARE is evaluated before any
+        write, so a row spared by a guard is never left with work this
+        method resolved on its way to sparing it -- the in-flight remote
+        start being the case that matters (its delivery would have been
+        terminalised and the row kept anyway).
+
+        What is NOT atomic, and must not be claimed to be: the queue is
+        refused before the durable node delete, so a delete that RAISES
+        (a Windows sharing violation outliving _write_private's retries)
+        leaves the row present with its queue already terminal. That
+        state is consistent and self-healing rather than corrupt -- the
+        deliveries are honestly refused (their identity really was
+        superseded), the row now has no pending work at all, and the next
+        heartbeat's sweep walks straight to the delete. It is audited
+        (`superseded_retire_failed`) rather than returned as a silent
+        False, because "the row is still here and its work is gone" is
+        exactly the state an operator would otherwise have to infer.
+
+        Work only spares a row it can still carry to a verdict:
+          - unreadable job store          -> spare (fail closed)
+          - a reservation is live         -> spare (a launch is in flight)
+          - a forward is out right now    -> spare (a verdict may land)
+          - anything past `queued` pends  -> spare (a delivery that crossed
+                                             the dispatch boundary is the
+                                             node's verdict to give, never
+                                             the host's to invent)
+          - a queued delivery would still
+            RUN without this row          -> spare (see
+                                             _queued_delivery_survives_
+                                             retirement -- host-native work
+                                             does not need the node's
+                                             endpoint, and refusing it would
+                                             destroy work that was going to
+                                             succeed)
+          - the rest of the queue         -> refuse it and retire; those
+                                             deliveries provably never left
+                                             this host, which is exactly
+                                             what mark_refused is CAS'd to
+        A finished-but-unacknowledged outcome no longer spares anything --
+        see _node_work_census.
+
+        There is deliberately no "is the row still pollable" term. It
+        would only earn its keep if this method terminalised deliveries
+        that had crossed the dispatch boundary -- work whose verdict is
+        still collectible from a live endpoint. It never does: that
+        class always spares, so the distinction cannot change an
+        outcome, and a `queued` delivery has no node_job_id to poll with
+        in the first place.
         """
-        if self._node_has_unresolved_work(node_id):
+        if census is None:
+            census = self._node_work_census(node_id)
+        if census.get("unreadable"):
             return False
         try:
             if self.lifecycle_runtime.reservation_for_node(node_id):
                 return False
         except Exception:
-            return False
+            return False        # unknowable reservation state: spare
+        pending = census.get("pending") or ()
+        if pending:
+            if any(did in self._in_flight for did, _s, _op in pending):
+                return False
+            if any(state != "queued" for _d, state, _op in pending):
+                return False
+            if any(self._queued_delivery_survives_retirement(op)
+                   for _d, _s, op in pending):
+                return False
+            if not self._refuse_superseded_queued_locked(node_id, live,
+                                                         pending):
+                return False
         try:
             self.db.delete_node(node_id)
-        except Exception:
+        except Exception as exc:
+            self._audit_best_effort(
+                "superseded_retire_failed",
+                {"node_id": node_id, "superseded_by": (live or {}).get(
+                    "node_id"),
+                 "queue_already_refused": bool(pending),
+                 "error": "%s: %s" % (type(exc).__name__, exc)})
             return False
         self.directory.forget(node_id)
         # Same hygiene as forget_node and the eviction sweep: a retired
@@ -3230,25 +3354,219 @@ class HostApp:
         # accumulate in lifecycle.json on every versioned save of a
         # live session.
         self._forget_launch_profile(node_id)
+        self._drop_retired_node_policy(node_id)
         return True
 
-    def _node_has_unresolved_work(self, node_id):
-        """True when a node still owns work, or the job store is unreadable.
+    def _queued_delivery_survives_retirement(self, operation):
+        """True when a QUEUED delivery would still run after its node row
+        is retired -- so retiring must spare the row instead of refusing it.
 
-        Fail CLOSED: an unreadable store must never license a deletion.
+        The dispatcher decides this, and it is not "is it a lifecycle
+        operation": `needs_td_endpoint` is False for every HOST_NATIVE
+        operation EXCEPT convoy_restart_node. So convoy_git / convoy_gh /
+        convoy_shell / convoy_ping / convoy_start_node execute on the HOST
+        and would have succeeded; refusing them as "the node was
+        superseded" destroys work that was going to run. Sparing costs
+        nothing and is bounded -- the drain executes them within a tick and
+        they terminalise on their own, after which the row retires.
+
+        convoy_restart_node is the deliberate exception the dispatcher
+        itself carves out: it DOES need the endpoint, so on a superseded
+        row it can only defer, for ever. Refusing it is both honest (the
+        identity it was addressed to is gone) and the only thing that stops
+        it pinning the row permanently -- pressing Start/Restart on a
+        duplicate offline row must not make that row undeletable.
+        """
+        return (operation in HOST_NATIVE_OPERATIONS
+                and operation != "convoy_restart_node")
+
+    def _refuse_superseded_queued_locked(self, node_id, live, pending):
+        """Refuse the queued deliveries of a row being superseded RIGHT NOW.
+
+        True only when every one of them is durably terminal. A queued
+        delivery has provably never left this host (that is precisely the
+        state mark_refused is CAS'd to, convoy_hoststore.py), so calling
+        it refused invents no execution verdict and cannot contradict a
+        node -- A-15 holds. Without this the delivery is immortal: the
+        drain can never route it (its node row is about to stop existing,
+        and already answers node_endpoint_unknown), the reaper only
+        unlinks TERMINAL records, and ack refuses a non-terminal one.
+
+        A failure part-way through does NOT roll back -- there is no
+        primitive to un-refuse a delivery, and inventing one would be a
+        second way to rewrite history. The deliveries already refused
+        stay refused (their identity really was superseded, so the
+        verdict is honest either way), the row is spared, and the next
+        heartbeat retries the remainder. The partial state is audited
+        rather than silent.
+        """
+        successor = (live or {}).get("node_id")
+        done = []
+        for delivery_id, state, _operation in pending:
+            if state != "queued":
+                return False
+            evidence = {
+                "reason": "node_superseded",
+                "detail": ("the node identity this delivery was addressed "
+                           "to was superseded by its own successor and can "
+                           "never answer again; the delivery never left "
+                           "this host"),
+                "superseded_by": successor,
+                "at": self._now(),
+            }
+            try:
+                updated = self.db.mark_refused(delivery_id, evidence)
+            except Exception as exc:
+                self._audit_partial_refusal(node_id, successor, done, pending,
+                                            "%s: %s" % (type(exc).__name__,
+                                                        exc))
+                return False
+            if not updated:
+                # CAS lost it: the delivery left `queued` between the
+                # census and the write. Spare, retry next pass.
+                self._audit_partial_refusal(node_id, successor, done, pending,
+                                            "cas_lost:%s" % delivery_id)
+                return False
+            done.append(delivery_id)
+            self._release_operation_claim_locked(updated)
+        self._audit_best_effort(
+            "superseded_work_refused",
+            {"node_id": node_id, "superseded_by": successor,
+             "deliveries": done[:8], "count": len(done)})
+        return True
+
+    def _audit_partial_refusal(self, node_id, successor, done, pending,
+                               error):
+        """Record a queue that was only partly refused, so the state is
+        legible instead of inferred. No-op when nothing was written."""
+        if not done:
+            return
+        self._audit_best_effort(
+            "superseded_work_partly_refused",
+            {"node_id": node_id, "superseded_by": successor,
+             "refused": done[:8], "refused_count": len(done),
+             "queue_size": len(pending), "error": error})
+
+    def _drop_retired_node_policy(self, node_id):
+        """Forget a retired row's TD-Python approval.
+
+        /remint already does this when it re-keys a row, on the same
+        argument: an approval is consent for one identity, and the
+        identity is gone. Without it every collapsed duplicate leaves a
+        stale grant in policy.json for ever -- harmless in isolation
+        (node_ids are randomly minted, so nothing can land on one again)
+        but unbounded, and this change retires rows automatically.
+
+        Audited like every other revocation of this grant (/remint records
+        `node_reminted`): silently dropping an arbitrary-code-execution
+        approval is not something to leave only in a diff. The
+        allow_td_python check first means the common case (no grant) does
+        no write at all, so it cannot bump the policy generation and
+        invalidate someone's in-flight approval challenge.
         """
         try:
-            for job in self.db.jobs():
-                if (job or {}).get("node_id") != node_id:
-                    continue
-                state = str((job or {}).get("state") or "")
-                if state not in hoststore.TERMINAL_STATES:
-                    return True
-                if (job or {}).get("outcome_acknowledged_at") is None:
-                    return True
+            if not self.policy.allow_td_python(node_id):
+                return      # nothing granted: no write, no generation bump
         except Exception:
-            return True
-        return False
+            return
+        try:
+            self.policy.disable_td_python(node_id)
+            self._audit_best_effort("node_policy_dropped",
+                                    {"node_id": node_id,
+                                     "td_python_approved": False})
+        except Exception:
+            pass        # best effort: the row is already gone
+
+    def _job_census_index(self):
+        """(index, unreadable) -- ONE jobs scan for a whole sweep.
+
+        index maps node_id -> {'pending': [(delivery_id, state, operation)]
+        for EVERY unfinished delivery, 'pending_count': int, 'unacked': int}.
+        'pending' is deliberately uncapped -- the retirement gate has to
+        act on the whole queue, and a cap there would spare any row that
+        exceeded it. _CENSUS_NAMED_CAP slices it at the point of DISPLAY.
+
+        Read through scan_jobs, NOT jobs(): scan_jobs RAISES on a listing
+        failure and reports unreadable records separately, so "could not
+        read" stops being the same answer as "found nothing". jobs()
+        collapses both into an empty list, which made the old guard fail
+        OPEN on an unreadable store -- the exact opposite of the
+        fail-closed contract its docstring claimed.
+
+        Hoisted deliberately: the predicate this replaces re-parsed the
+        entire jobs directory once PER CANDIDATE ROW, so eight duplicate
+        rows cost eight full scans on every heartbeat register, under the
+        app lock.
+        """
+        index = {}
+        try:
+            jobs, unreadable_ids = self.db.scan_jobs()
+        except Exception:
+            return None, ["*"]
+        if unreadable_ids:
+            # NAME them. An unreadable record blocks every cleanup path
+            # below, and nothing else in the daemon ever reports one: reap
+            # skips it (`job is None: continue`), so without this the
+            # operator sees three sweeps and a button silently doing
+            # nothing, with no way to learn which file to remove.
+            self._audit_best_effort(
+                "job_store_unreadable",
+                {"count": len(unreadable_ids),
+                 "delivery_ids": list(unreadable_ids)[:8]})
+        for job in jobs:
+            node_id = (job or {}).get("node_id")
+            if not node_id:
+                continue
+            entry = index.setdefault(
+                node_id, {"pending": [], "pending_count": 0, "unacked": 0})
+            state = str((job or {}).get("state") or "")
+            if state not in hoststore.TERMINAL_STATES:
+                entry["pending_count"] += 1
+                entry["pending"].append(
+                    (job.get("delivery_id"), state, job.get("operation")))
+            elif job.get("outcome_acknowledged_at") is None:
+                entry["unacked"] += 1
+        return index, list(unreadable_ids)
+
+    def _node_work_census(self, node_id, index=_CENSUS_UNSET, unreadable=()):
+        """What work, if any, one node still owns -- as three separable
+        facts rather than one collapsed boolean.
+
+        THE DISTINCTION THE OLD PREDICATE LOST: a delivery that has not
+        finished ('pending') genuinely needs its node, because only that
+        node can produce the verdict. A finished-but-unacknowledged
+        outcome does not: GET /jobs/<delivery_id> and POST /jobs/ack
+        both resolve purely by delivery_id and never consult the node
+        directory, and forgetting a row does not delete a single job
+        record. Collapsing the two meant one uncollected result pinned a
+        duplicate row for ever, against ALL THREE cleanup paths -- the
+        field's eight versioned-save siblings (2026-08-06), 115 of whose
+        123 pins were exactly this class.
+
+        'unreadable' fails closed for every caller: a record nobody can
+        parse might be this node's, and might be pending, so it must never
+        license a deletion. It carries the offending DELIVERY IDS rather
+        than a bare flag -- an unreadable record cannot be attributed to a
+        node (that is what unreadable means), so the block is unavoidably
+        host-wide, and the only thing that keeps it from being an
+        invisible, permanent freeze of every cleanup path is naming the
+        files. reap() removes one past retention (see convoy_hoststore),
+        so the state is bounded rather than for ever.
+        """
+        if index is _CENSUS_UNSET:
+            index, unreadable = self._job_census_index()
+        unreadable = list(unreadable or ())
+        if index is None or unreadable:
+            return {"pending": [], "pending_count": 0, "unacked": 0,
+                    "unreadable": True, "unreadable_ids": unreadable}
+        entry = index.get(node_id) or {}
+        return {
+            "pending": list(entry.get("pending") or ()),
+            "pending_count": int(entry.get("pending_count") or 0),
+            "unacked": int(entry.get("unacked") or 0),
+            "unreadable": False,
+            "unreadable_ids": [],
+        }
 
     def forget_node(self, body):
         """ADVANCED RECOVERY: delete a stale node record entirely.
@@ -3260,10 +3578,17 @@ class HostApp:
         the old row lingers offline forever with no way to clear it (the plan's
         "Forget Stale Node" action, section 7.5).
 
-        Refuses while the node still has work, because forgetting it would
-        strand jobs whose results nobody can collect: any non-terminal
-        delivery, or a terminal one still waiting to be acknowledged. Force is
-        deliberately NOT offered here -- clear or cancel the work first.
+        Refuses while the node still has work it can carry to a verdict: an
+        UNFINISHED delivery, because only this node can answer it. A finished
+        outcome nobody has acknowledged no longer refuses -- it never needed
+        the row (results are fetched by delivery_id, and forgetting a row
+        deletes no job record), and treating it as a blocker is what pinned
+        the field's duplicate rows for ever. Force is deliberately NOT offered
+        here -- cancel the unfinished work first, or wait for it to answer.
+
+        The refusal NAMES the deliveries in its body: `_refuse`'s own `extra`
+        lands in the audit record only, so the caller could previously see a
+        de-duplicated list of state WORDS and had no way to find the jobs.
         """
         try:
             node_id = text_field(body, "node_id")
@@ -3272,36 +3597,46 @@ class HostApp:
         record = self.directory.lookup(node_id)
         if record is None:
             return self._refuse("forget_node", "unknown_node", node_id, 404)
-        blocking = []
-        try:
-            for job in self.db.jobs():
-                if (job or {}).get("node_id") != node_id:
-                    continue
-                state = str((job or {}).get("state") or "")
-                if state not in hoststore.TERMINAL_STATES:
-                    blocking.append(state or "unknown")
-                elif (job or {}).get("outcome_acknowledged_at") is None:
-                    blocking.append("%s (unacknowledged)" % state)
-        except Exception:  # noqa: BLE001 - fail closed, see below
+        census = self._node_work_census(node_id)
+        if census["unreadable"]:
             # Never delete on an unreadable job store: fail closed.
             return self._refuse(
                 "forget_node", "job_state_unreadable",
                 "the durable job records could not be read; not forgetting",
                 503)
-        if blocking:
-            return self._refuse(
+        if census["pending"]:
+            blocking = [
+                {"delivery_id": did, "state": state, "operation": operation}
+                for did, state, operation in
+                census["pending"][:_CENSUS_NAMED_CAP]]
+            code, payload = self._refuse(
                 "forget_node", "node_has_work",
-                "this node still has %d job(s) to resolve (%s); cancel or "
-                "acknowledge them first"
-                % (len(blocking), ", ".join(sorted(set(blocking))[:4])),
+                "this node still has %d delivery(s) that have not finished "
+                "(%s); cancel a queued one or wait for the node to answer"
+                % (census["pending_count"],
+                   ", ".join(sorted({s for _d, s, _o in census["pending"]}))),
                 409)
-        self.directory.forget(node_id)
+            payload["blocking"] = blocking
+            payload["pending_count"] = census["pending_count"]
+            # Context, not a reason: finished results do NOT hold the row
+            # any more, and saying how many are uncollected stops the
+            # count being mistaken for the blocker it used to be.
+            payload["uncollected_results"] = census["unacked"]
+            return code, payload
+        # Durable delete FIRST -- the rule _retire_superseded_row_locked
+        # documents and the eviction sweep follows. This path had it
+        # backwards: it forgot the row in memory and only then wrote
+        # host.json, so a failed write returned 500 with the row gone
+        # from the directory, still on disk, and resurrecting on the next
+        # daemon start.
         try:
             self.db.delete_node(node_id)
         except Exception as e:
             return self._refuse("forget_node", "forget_failed",
                                 "%s: %s" % (type(e).__name__, e), 500)
+        self.directory.forget(node_id)
         self._forget_launch_profile(node_id)
+        self._drop_retired_node_policy(node_id)
         self._invalidate_network_nodes_cache_locked()
         self._audit_best_effort("node_forgotten", {"node_id": node_id})
         return 200, {"ok": True, "forgotten": True, "node_id": node_id}
@@ -3446,6 +3781,8 @@ class HostApp:
         # row resurrecting on the next daemon start.
         evicted = []
         with self.lock:
+            # ONE jobs scan for the whole phase, not one per candidate.
+            evict_index, evict_unreadable = self._job_census_index()
             for node_id, cause, silent_s in judged:
                 record = self.directory.lookup(node_id)
                 if record is None or record.get("envoy_port"):
@@ -3453,7 +3790,15 @@ class HostApp:
                 latest = self._node_last_activity(record)
                 if latest is None or now - latest < self.node_dead_grace_s:
                     continue
-                if self._node_has_unresolved_work(node_id):
+                census = self._node_work_census(
+                    node_id, evict_index, evict_unreadable)
+                if census["unreadable"] or census["pending"]:
+                    # NO resolution on this path: an evicted row has no
+                    # successor claiming its identity, so nothing
+                    # licenses the host to terminalise its work. Only
+                    # UNFINISHED work spares now -- an uncollected
+                    # result never needed its row (see
+                    # _node_work_census).
                     continue
                 try:
                     if self.lifecycle_runtime.reservation_for_node(node_id):
@@ -3466,6 +3811,7 @@ class HostApp:
                     continue
                 self.directory.forget(node_id)
                 self._forget_launch_profile(node_id)
+                self._drop_retired_node_policy(node_id)
                 evicted.append({"node_id": node_id, "cause": cause,
                                 "silent_s": round(silent_s, 1)})
             if evicted:

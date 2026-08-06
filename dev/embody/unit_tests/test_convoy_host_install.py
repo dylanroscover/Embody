@@ -1424,6 +1424,16 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.assertTrue(any('skipped 1' in m for m, _l in self._logs))
 
     def test_unresolved_work_is_kept_and_reported(self):
+        """A kept row must be SAID OUT LOUD, not just logged.
+
+        The 2026-08-06 field failure was silence here: the daemon refused
+        every row, the panel logged a green SUCCESS reading 'forgot 0',
+        and the rows -- removed from the sequence on the click -- came
+        back seconds later with nothing on screen. This refusal body
+        carries no `blocking`/`pending_count`, which is also the shape an
+        OLDER daemon sends during the upgrade window, so it exercises the
+        fallback prose path too.
+        """
         self.choice = 1
 
         def refuse_busy(path, body):
@@ -1436,6 +1446,23 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.assertTrue(
             any('kept 1 with unresolved jobs' in m for m, _l in self._logs),
             self._logs)
+        # One row forgotten, one kept -> a partial run, never SUCCESS.
+        levels = [l for m, l in self._logs
+                  if 'Forget Offline Nodes:' in m and 'kept 1' in m]
+        self.assertTrue(levels and levels[0] != 'SUCCESS',
+                        'a run that kept a row must not log SUCCESS: %r'
+                        % (levels,))
+        # ...and the keep is on screen, under its own title so it cannot
+        # consume the confirmation's seeded response.
+        reports = [d for d in self.dialogs
+                   if d[0] == 'Forget Offline Nodes - Nodes Kept']
+        self.assertLen(reports, 1)
+        _title, message, buttons = reports[0]
+        self.assertEqual(buttons, ['OK'])
+        self.assertIn('KEPT', message)
+        # No structured fields came back, so the row must NOT be reported
+        # as "0 delivery(s)" -- the fallback prose stands in.
+        self.assertNotIn('0 delivery(s)', message)
 
     def test_no_offline_rows_shows_a_visible_all_clear(self):
         """The nothing-to-do case must be VISIBLE (a message box), not a

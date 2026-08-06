@@ -260,6 +260,10 @@ class ConvoyExt:
         self._tick_ms = self.TICK_MIN_MS
         self._network_rows_digest = None
         self._last_nodes_result = None
+        # Rows a confirmed Forget removed from the sequence optimistically,
+        # held only until the daemon's verdict lands (_restoreNodeRowsNow
+        # puts back whatever was not actually forgotten, then clears this).
+        self._optimistically_dropped = []
         self._wake_record = None
         self._wake_poll_gen = 0
 
@@ -855,17 +859,24 @@ class ConvoyExt:
         the row sticking around until the background reconciled it is
         exactly what read as a broken button (field feedback 2026-08-05,
         three rounds). The daemon apply runs in the background as
-        reconciliation; a row it refuses to forget (unresolved jobs)
-        honestly reappears on the next directory fetch, because this
-        edits only the projection cache, never the daemon's truth.
+        reconciliation; a row it refuses to forget is put BACK
+        synchronously by _restoreNodeRowsNow, with the reason on screen,
+        rather than silently reappearing seconds later (field feedback
+        2026-08-06: "it clears and after 2-3 sec they show up again").
         """
         cached = getattr(self, '_last_nodes_result', None)
         if not isinstance(cached, dict):
             return
         drop = {str(i) for i in (node_ids or ())}
+        dropped = [n for n in (cached.get('nodes') or ())
+                   if isinstance(n, dict)
+                   and str(n.get('node_id') or '') in drop]
         kept = [n for n in (cached.get('nodes') or ())
                 if isinstance(n, dict)
                 and str(n.get('node_id') or '') not in drop]
+        # Remember what was optimistically removed, so a daemon refusal
+        # can restore exactly those rows without waiting for a fetch.
+        self._optimistically_dropped = dropped
         filtered = dict(cached)
         filtered['nodes'] = kept
         # One path draws this readout: the same apply the register drain
@@ -873,6 +884,48 @@ class ConvoyExt:
         # second Forget in the same session filters the already-filtered
         # set.
         self._applyNetworkNodes(filtered)
+
+    def _restoreNodeRowsNow(self, node_ids):
+        """Put optimistically-dropped rows BACK, this frame. MAIN THREAD.
+
+        The synchronous twin of _dropNodeRowsNow, for the rows the daemon
+        refused to forget. Without it the only correction was the next
+        background fetch, so a refused row vanished on click and
+        reappeared two or three seconds later with nothing on screen
+        explaining why -- which reads as the button being broken twice
+        over.
+
+        _network_rows_digest MUST be invalidated first: drop-then-restore
+        of the same set round-trips the digest back to its pre-drop
+        value, and _projectNodeRows suppresses a write whose digest is
+        unchanged, so the restore would be swallowed and the rows would
+        stay missing until the next fetch. It is set to () rather than
+        None on purpose -- None is a DIFFERENT sentinel in this class
+        ("nothing has ever been drawn", the only state in which
+        _applyNetworkNodes may paint the Status-unavailable placeholder
+        over the list), and borrowing it here would let a transient
+        directory failure blank a list that is showing real rows.
+        """
+        restore = {str(i) for i in (node_ids or ())}
+        cached = getattr(self, '_last_nodes_result', None)
+        dropped = getattr(self, '_optimistically_dropped', None) or ()
+        coming_back = [n for n in dropped
+                       if isinstance(n, dict)
+                       and str(n.get('node_id') or '') in restore]
+        # One Forget owns this snapshot; release it either way so a later
+        # run can never restore rows from a previous one.
+        self._optimistically_dropped = []
+        if not isinstance(cached, dict) or not coming_back:
+            return
+        present = {str(n.get('node_id') or '')
+                   for n in (cached.get('nodes') or ()) if isinstance(n, dict)}
+        merged = list(cached.get('nodes') or ())
+        merged.extend(n for n in coming_back
+                      if str(n.get('node_id') or '') not in present)
+        restored = dict(cached)
+        restored['nodes'] = merged
+        self._network_rows_digest = ()
+        self._applyNetworkNodes(restored)
 
     def _refreshLastSeen(self):
         """Age the Last Seen column between directory fetches. MAIN THREAD.
@@ -3545,20 +3598,47 @@ class ConvoyExt:
             return
 
         if action == 'forget_offline':
-            if ok:
-                self._log('Forget Offline Nodes: %s'
-                          % (result.get('detail') or 'done'), 'SUCCESS')
-                # Redraw the node list NOW, not on the ~30-60s heartbeat:
-                # rows the user just confirmed away staying visible for
-                # half a minute reads as a broken button (field feedback
-                # 2026-08-05, twice -- the first fix only shortened the
-                # tick that follows the pending one). Mark the register
-                # due, then supersede the armed tick with an immediate
-                # one (_kickTick): the reconcile fires within frames,
-                # re-fetches the directory, and rewrites the rows.
-                session['next_call_at'] = None
-                self._tick_ms = self.TICK_MIN_MS
-                self._kickTick()
+            # ARM THE REDRAW FIRST, always -- before any modal and
+            # regardless of `ok`. Mark the register due, then supersede
+            # the armed tick with an immediate one (_kickTick): the
+            # reconcile fires within frames and re-fetches the
+            # directory. Doing this ahead of the dialog matters twice
+            # over: a dialog blocks the main-thread drain while it is
+            # up, and a host that went away after the optimistic drop
+            # would otherwise leave the rows missing until the next
+            # 30-60s heartbeat.
+            session['next_call_at'] = None
+            self._tick_ms = self.TICK_MIN_MS
+            self._kickTick()
+            kept = [k for k in (result.get('kept_busy') or ())]
+            forgotten = list(result.get('forgotten') or ())
+            # EVERY row that was not actually forgotten goes back, not
+            # just the refused ones: `skipped` holds rows that came back
+            # ONLINE between the dialog and the apply (a live node -- the
+            # worst one to leave missing) and `failed` holds rows whose
+            # forget errored. Derive the restore set from what was
+            # dropped MINUS what the daemon confirmed gone, rather than
+            # from the three outcome lists: `failed` carries formatted
+            # strings, not ids, and a future outcome bucket would
+            # silently stop being restored.
+            forgotten_set = {str(f) for f in forgotten}
+            self._restoreNodeRowsNow([
+                str(n.get('node_id') or '')
+                for n in (getattr(self, '_optimistically_dropped', None) or ())
+                if isinstance(n, dict)
+                and str(n.get('node_id') or '') not in forgotten_set])
+            # Grade by OUTCOME, not by the absence of a hard failure:
+            # `ok` is "nothing errored", so a run that forgot NOTHING
+            # used to log green while the user watched every row come
+            # back (field report 2026-08-06). This runs OUTSIDE `if ok`
+            # -- a batch with one hard failure still forgot and kept
+            # rows the user needs told about.
+            level = ('SUCCESS' if forgotten and not kept and ok
+                     else 'INFO' if forgotten else 'WARNING')
+            self._log('Forget Offline Nodes: %s'
+                      % (result.get('detail') or 'done'), level)
+            if kept:
+                self._reportKeptNodes(kept, forgotten)
             # The readout (host-app state) was never part of this.
             return
 
@@ -4204,9 +4284,10 @@ class ConvoyExt:
             '%s on THIS machine will be forgotten:\n'
             '\n%s\n\n'
             'A forgotten node rejoins as a NEW identity the next time its '
-            'project opens, and its TD Python approval resets. Nodes with '
-            'unresolved jobs are kept automatically. If any of these is a '
-            'machine or project you still start remotely, Cancel.'
+            'project opens, and its TD Python approval resets. A node with '
+            'a delivery still unfinished is kept -- it will be named '
+            'afterwards. If any of these is a machine or project you still '
+            'start remotely, Cancel.'
             % (noun, '\n'.join(lines)))
         label = 'Forget %d Node%s' % (len(rows),
                                       's' if len(rows) != 1 else '')
@@ -4224,6 +4305,61 @@ class ConvoyExt:
         self._dropNodeRowsNow(ids)
         self._beginHostCall('forget_offline',
                             lambda: _host_forget_offline_apply(ctx, ids))
+
+    def _reportKeptNodes(self, kept, forgotten):
+        """Say WHICH rows the daemon kept and why. MAIN THREAD.
+
+        The field's exact failure was silence here: the apply answered
+        "forgot 0, kept 8 with unresolved jobs", that line was logged
+        SUCCESS, and the eight rows -- optimistically removed on the
+        click -- reappeared two or three seconds later with nothing on
+        screen. A keep is a real outcome and gets said out loud, with
+        the delivery ids the daemon named, so the work can actually be
+        found and cancelled.
+        """
+        shown = list(kept)[:8]
+        lines = []
+        for entry in shown:
+            if not isinstance(entry, dict):
+                lines.append('- %s' % str(entry)[:8])
+                continue
+            label = (entry.get('name')
+                     or str(entry.get('node_id') or '')[:8] or 'node')
+            blocking = [b for b in (entry.get('blocking') or ())
+                        if isinstance(b, dict)]
+            ids = ', '.join(str(b.get('delivery_id') or '')[:12]
+                            for b in blocking[:3])
+            count = entry.get('pending_count') or len(blocking)
+            if count:
+                lines.append(
+                    '- %s: %s delivery(s) still unfinished%s'
+                    % (label, count, (' (%s)' % ids) if ids else ''))
+                continue
+            # No count and no ids: an OLDER daemon, which answers 409 with
+            # prose only. Every user passes through that window -- the
+            # panel updates with the .tox, the daemon a few seconds later
+            # via the once-per-session auto-update -- so print the
+            # daemon's own sentence rather than "0 delivery(s)".
+            detail = str(entry.get('detail') or '').strip()
+            lines.append('- %s: %s' % (label, detail) if detail
+                         else '- %s: still has work to finish' % label)
+        if len(kept) > len(shown):
+            lines.append('- ...and %d more' % (len(kept) - len(shown)))
+        header = ('Forgot %d node(s). ' % len(forgotten)) if forgotten else ''
+        message = (
+            '%s%d node(s) were KEPT because they still have work that has '
+            'not finished:\n'
+            '\n%s\n\n'
+            'A node is only kept while a delivery it was given has not '
+            'reached a verdict -- a finished result never holds a node, '
+            'because results are fetched by delivery id and outlive the '
+            'row. Cancel a queued delivery, or wait for the node to answer, '
+            'then run Forget Offline Nodes again.'
+            % (header, len(kept), '\n'.join(lines)))
+        # A DISTINCT title: _messageBox keys its seeded auto-responses by
+        # title, so sharing one with the confirmation would let this
+        # report eat the confirmation's seeded answer in a scripted run.
+        self._dialog('Forget Offline Nodes - Nodes Kept', message, ['OK'])
 
     def UninstallHost(self, confirm=True):
         """Remove the host app in two stages: preview, then confirm.
@@ -5321,9 +5457,13 @@ def _host_forget_offline_apply(ctx, node_ids):
     """Forget the confirmed rows, re-verifying each is STILL offline.
 
     The daemon re-checks its own refusal rules per node (/nodes/forget:
-    unresolved or unacknowledged work is a 409 keep); a row that came
-    back online between the dialog and now is skipped here, never
-    forgotten.
+    an UNFINISHED delivery is a 409 keep -- an uncollected result is
+    not, since it outlives the row); a row that came back online between
+    the dialog and now is skipped here, never forgotten.
+
+    A 409 keeps the daemon's own explanation AND the delivery ids that
+    pin the row, so the panel can say which node was kept and why. That
+    prose was previously read off the wire and thrown away.
     """
     client = ctx['client']
     rows, _remote, err = _host_offline_rows(ctx)
@@ -5341,6 +5481,11 @@ def _host_forget_offline_apply(ctx, node_ids):
         return {'ok': False, 'action': 'forget_offline',
                 'reason': 'no_host',
                 'detail': 'no host app answered (%s)' % (probe.status,)}
+    names = {}
+    for row in rows:
+        label = str(row.get('node_name') or row.get('toe_name') or '').strip()
+        if label:
+            names[row['node_id']] = label
     forgotten, kept_busy, skipped, failed = [], [], [], []
     for node_id in node_ids:
         if node_id not in still_offline:
@@ -5351,7 +5496,13 @@ def _host_forget_offline_apply(ctx, node_ids):
         if code == 200:
             forgotten.append(node_id)
         elif code == 409:
-            kept_busy.append(node_id)
+            kept_busy.append({
+                'node_id': node_id,
+                'name': names.get(node_id, ''),
+                'detail': str((body or {}).get('detail') or ''),
+                'pending_count': (body or {}).get('pending_count'),
+                'blocking': list((body or {}).get('blocking') or ()),
+            })
         elif code == 404:
             skipped.append(node_id)
         else:
