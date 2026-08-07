@@ -2167,7 +2167,18 @@ def test_indeterminate_fence_releases_once_spawned_child_proven_gone(tmp_path):
     system = make_system(tmp_path)
     manager, store, runtime, inspector, launcher, _, _, _ = system
     offline(system)
-    first = manager.start_node(NODE, CONVOY, "wedge-1", timeout_s=.1)
+    # A GENEROUS REAL ceiling, not .1s and not an injected clock. This
+    # test is reservation-coupled: the launch reservation's lifetime is
+    # sliced from the start budget, so fake time starves the SECOND
+    # call's confirm exactly the way a stalled runner does (tried, and
+    # it fails deterministically). Meanwhile .1s of real budget is what
+    # a stalled windows-latest runner spends before the spawn even
+    # lands, turning launch_unconfirmed into deadline_exceeded -- how
+    # this failed on main at 8ed43b7 while the same sha passed on dev.
+    # Seconds, not tenths: nothing here confirms, so the budget still
+    # expires and the attempt still goes indeterminate; the wait just
+    # cannot be consumed by a stall first.
+    first = manager.start_node(NODE, CONVOY, "wedge-1", timeout_s=3)
     assert first["code"] == "launch_unconfirmed"
     assert store.get_attempt("wedge-1")["state"] == "indeterminate"
     assert runtime.reservations
