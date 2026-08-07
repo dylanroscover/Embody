@@ -1656,6 +1656,58 @@ class TestHostAutoUpdate(ConvoyHostBase):
                          'every non-update outcome latches its reported '
                          'version so heartbeats stop re-checking')
 
+    def test_upgrading_embody_in_a_live_session_re_arms_the_attempt(self):
+        """THE DELIVERY HOLE. Both guards live in the session store, which
+        hangs off `sys` and is keyed by COMP path -- it survives an
+        extension reinit AND the COMP being replaced, dying only with the
+        TD process. Upgrading Embody does neither (the self-updater swaps
+        the COMP in place; a drag-and-drop lands at the same path), so
+        the marker set before the upgrade kept matching the daemon's
+        unchanged report and the check was skipped for the rest of the
+        session: new Embody, old daemon, no cleanup fixes, and nothing
+        on screen saying why.
+        """
+        self.client.probe_status = self.client.STATUS_RUNNING
+        # Steady state BEFORE the upgrade: the daemon matches, so no
+        # update is due and the reported version is latched. The version
+        # is INJECTED -- never write to the live Version parameter, which
+        # drives the release bake.
+        self.convoy._resetHostUpdateLatchOnUpgrade(self.session, VERSION)
+        self.convoy._maybeUpdateHostApp(VERSION)
+        self.assertEqual(self.installer.count('install'), 0)
+        self.assertEqual(self.session.get('host_update_checked'), VERSION)
+
+        # The user upgrades Embody. Same TD process, same session dict.
+        self.convoy._resetHostUpdateLatchOnUpgrade(self.session, '9.9.9')
+        self.assertNotIn('host_update_checked', self.session,
+                         'an upgrade must clear the stale marker')
+        self.assertNotIn('host_auto_update_done', self.session,
+                         'an upgrade must return the spent attempt')
+
+        # ...so the check is LIVE again -- the stale marker no longer
+        # short-circuits it -- and the re-armed attempt is usable: a
+        # daemon older than the upgraded Embody now gets installed,
+        # where before the upgrade nothing could fire at all.
+        self.convoy._maybeUpdateHostApp('6.0.150')
+        self.assertEqual(self.installer.count('install'), 1,
+                         'the upgraded Embody must be able to update its '
+                         'daemon in the same session')
+
+    def test_the_re_armed_attempt_is_still_only_one_per_version(self):
+        """Re-arming on upgrade must not re-open the retry storm the
+        latch exists to prevent: the budget is one attempt per (Embody
+        version, session), so a FAILED install still does not loop."""
+        self.client.probe_status = self.client.STATUS_RUNNING
+        self.convoy._resetHostUpdateLatchOnUpgrade(self.session, '9.9.9')
+        self.convoy._maybeUpdateHostApp('6.0.150')
+        self.assertEqual(self.installer.count('install'), 1)
+        # Same version, more heartbeats -> nothing further.
+        for _ in range(3):
+            self.convoy._resetHostUpdateLatchOnUpgrade(self.session, '9.9.9')
+            self.convoy._maybeUpdateHostApp('6.0.150')
+        self.assertEqual(self.installer.count('install'), 1,
+                         'still ONE attempt per Embody version per session')
+
     def test_a_busy_slot_deferral_returns_the_attempt(self):
         """A busy host slot defers the install -- that must not burn the
         session's one attempt."""

@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.0.220
+
+Upgrading Embody can now update the Convoy App without restarting TouchDesigner.
+
+- **An upgrade gets its own daemon-update attempt**: the Convoy App is the process where every node-cleanup sweep actually runs, and since v6.0.213 a TouchDesigner running newer code updates an older daemon in place automatically. That check is deliberately budgeted -- one attempt per TD session -- and both of its guards live in a session store that survives an extension reinit *and* the Embody COMP being replaced, dying only with the TouchDesigner process. Upgrading Embody does neither: the self-updater swaps the COMP in place, and a drag-and-drop replacement lands at the same path. So the marker recorded before an upgrade ("this daemon's version needs nothing") kept matching the daemon's unchanged report afterwards, and the check was skipped for the rest of the session -- new Embody, old daemon, none of the fixes it was upgraded for, and nothing on screen saying why. The budget is now keyed on the Embody version as well as the session, so an upgrade re-arms exactly one attempt. A failed install still does not retry until the next upgrade or restart, which is what the budget existed to guarantee.
+- Two new tests: the upgrade-in-a-live-session sequence end to end, and a pin that re-arming does not re-open the retry loop. The version is injected rather than read from the live parameter -- the first draft of that test wrote `9.9.9` into the running project's Version and would have baked a garbage release on the next save.
+
+Verified on a real deployment rather than in a harness: a fresh install of this build, with Convoy enabled, took the machine's daemon from 6.0.212 to 6.0.220 on its own -- graceful stop, new payload, restart, no button pressed.
+
 ## v6.0.219
 
 Duplicate node rows clear themselves -- the guard that made them permanent is gone.

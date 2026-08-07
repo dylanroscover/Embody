@@ -3143,6 +3143,7 @@ class ConvoyExt:
             # firing (2026-08-05, unattributed -- the install itself
             # completed and the daemon came back healthy).
             sess_flags = self._session()
+            self._resetHostUpdateLatchOnUpgrade(sess_flags)
             reported = result.get('host_app_version')
             if (not sess_flags.get('host_auto_update_done')
                     and sess_flags.get('host_update_checked')
@@ -3947,6 +3948,51 @@ class ConvoyExt:
         except Exception as e:
             out['error'] = '%s: %s' % (type(e).__name__, e)
         return out
+
+    def _resetHostUpdateLatchOnUpgrade(self, session, version=None):
+        """Give a NEWLY UPGRADED Embody its own daemon-update attempt.
+
+        Both guards on the automatic update live in the session store,
+        which hangs off `sys` and is keyed by COMP path -- so it survives
+        an extension reinit AND the COMP being replaced, dying only with
+        the TouchDesigner process. Upgrading Embody does neither: the
+        self-updater swaps the COMP in place without restarting TD, and a
+        drag-and-drop replacement lands at the same path.
+
+        The result was that upgrading in a live session could never
+        update the Convoy App. The steady state before an upgrade is
+        `host_update_checked == <daemon version>` (the daemon matched, so
+        no update was due); after it the daemon reports that SAME
+        version, the marker still matches, and the check is skipped for
+        the rest of the session. The user gets new Embody on an old
+        daemon -- and the daemon is where every node-cleanup sweep
+        actually runs, so nothing they were promised changes and the
+        update looks inert. That is the same hole v6.0.213 closed, one
+        step further along.
+
+        Keying the latch on THIS Embody's version fixes it without
+        re-opening the retry storm the latch exists to prevent: the
+        budget is one attempt per (Embody version, TD session), so a
+        failed install still does not retry until the next upgrade or
+        restart.
+
+        `version` is injectable ONLY so a test can drive an upgrade
+        without writing to the live Version parameter -- which is not a
+        hypothetical: the first draft of the test for this method did
+        exactly that, left the running project reporting 9.9.9, and
+        would have baked a garbage release on the next save.
+        """
+        if version is None:
+            try:
+                version = str(self._embody.par.Version.eval() or '')
+            except Exception:
+                return      # never break a registration over bookkeeping
+        version = str(version)
+        if session.get('host_update_embody_version') == version:
+            return
+        session['host_update_embody_version'] = version
+        session.pop('host_auto_update_done', None)
+        session.pop('host_update_checked', None)
 
     def _maybeUpdateHostApp(self, reported_version):
         """Update a LIVE but older Convoy App in place, automatically.
