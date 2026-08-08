@@ -215,5 +215,89 @@ def writeReleaseManifest(comp, tox_path, version, build):
         # manifest-less releases loudly on its own.
         debug(f'[execute_src_ctrl] release manifest write failed: {e!r}')
 
+def syncVersionIntoTDN():
+    """Re-export the .tdn rows that carry par.Version, AFTER the bump.
+
+    THE LAG THIS REMOVES. A single project.save fires onProjectPreSave on
+    two different Execute DATs. The Embody COMP's own execute DAT runs
+    first and exports every dirty TDN row -- reading par.Version as it
+    stands, V. Only afterwards does THIS DAT bump the par to V+1 and bake
+    release/Embody-v{V+1}.tox. So every release shipped a .tdn stamped one
+    version behind its own .tox, provably: Embody.tdn's header carried
+    `generator: Embody/6.0.222` beside `source_file: Embody-6.223.toe`.
+
+    Nothing shipped wrong -- the .tox is built from the LIVE comp -- but
+    the committed .tdn never matched the release it shipped with, and a
+    COMP reconstructed from it came up a version behind. It also left both
+    Embody rows permanently dirty, because the fingerprint of the live
+    parameters no longer matched the file just written.
+
+    Re-exporting here rather than after the bump inside pre-save is
+    deliberate: that body has no fail-safe boundary, and an exception in
+    it truncates the .toe to zero bytes (issue #21). This runs after the
+    save is already on disk, so the worst case is a stale .tdn -- exactly
+    what we have today.
+    """
+    try:
+        embody = op.Embody
+        if embody is None:
+            return
+        # The strip/restore cycle may still be putting COMPs back; a row
+        # exported mid-restore would capture a hollow network.
+        if embody.fetch('_tdn_stripped_paths', [], search=False):
+            run("op('/embody/execute_src_ctrl').module.syncVersionIntoTDN()",
+                delayFrames=5)
+            return
+        version = str(embody.par.Version.eval() or '')
+        if not version:
+            return
+        ext = embody.ext.Embody
+        table = ext.Externalizations
+        if table is None:
+            return
+        headers = [table[0, c].val for c in range(table.numCols)]
+        try:
+            path_col = headers.index('path')
+            strategy_col = headers.index('strategy')
+        except ValueError:
+            return
+        marker = 'generator: Embody/%s' % version
+        for r in range(1, table.numRows):
+            row_path = str(table[r, path_col].val or '')
+            if str(table[r, strategy_col].val or '') != 'tdn':
+                continue
+            # Only the rows that CONTAIN the Embody COMP carry its Version.
+            # '/' is excluded deliberately: re-exporting the whole project
+            # root here would be a far larger write than this warrants.
+            if not row_path or row_path == '/':
+                continue
+            if not (row_path == embody.path
+                    or embody.path.startswith(row_path + '/')):
+                continue
+            try:
+                rel = str(table[r, headers.index('rel_file_path')].val or '')
+                abs_path = ext.buildAbsolutePath(rel) if rel else None
+                if abs_path and abs_path.is_file():
+                    with open(str(abs_path), 'r', encoding='utf-8') as handle:
+                        head = ''.join(handle.readline() for _ in range(12))
+                    if marker in head:
+                        continue        # already current -- idempotent
+            except Exception:
+                pass                    # unreadable: re-export rather than skip
+            # bump_build=False: the release manifest already recorded
+            # par.Build, so a second bump would put the manifest one
+            # behind the .tdn -- the same drift, one size smaller.
+            ext.SaveTDN(row_path, bump_build=False)
+    except Exception as e:
+        debug(f'[execute_src_ctrl] version sync into .tdn failed: {e!r}')
+
+
 def onProjectPostSave():
-    return
+    # Deferred, and never allowed to raise: this runs after the .toe is
+    # already on disk, and Embody's own post-save restore loop may still
+    # be running whichever Execute DAT fired first.
+    try:
+        run("op('/embody/execute_src_ctrl').module.syncVersionIntoTDN()",
+            delayFrames=5)
+    except Exception as e:
+        debug(f'[execute_src_ctrl] could not schedule the version sync: {e!r}')

@@ -3758,8 +3758,16 @@ class EmbodyExt:
         except Exception as e:
             self.Log("Save failed", "ERROR", str(e))
 
-    def SaveTDN(self, opPath: str) -> None:
-        """Save a TDN-strategy COMP by re-exporting its .tdn file."""
+    def SaveTDN(self, opPath: str, bump_build: bool = True) -> None:
+        """Save a TDN-strategy COMP by re-exporting its .tdn file.
+
+        bump_build=False re-exports WITHOUT advancing par.Build. The
+        post-save version sync needs that: the release manifest records
+        par.Build before the sync runs, so a second bump would leave the
+        manifest one behind the .tdn -- a smaller copy of the very drift
+        the sync exists to remove. Checkpoint() already skips the bump
+        for the same class of reason.
+        """
         if self._performMode:
             return
         if not self._tdnEnabled():
@@ -3795,7 +3803,7 @@ class EmbodyExt:
                     self.Log(f"Updated root TDN path: {rel_path}", "INFO")
 
             # Update build info
-            if hasattr(oper.par, 'Build'):
+            if bump_build and hasattr(oper.par, 'Build'):
                 new_build = oper.par.Build.val + 1
                 oper.par.Build = new_build
                 self.Externalizations[opPath, 'build'] = str(new_build)

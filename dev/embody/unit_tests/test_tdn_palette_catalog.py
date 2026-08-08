@@ -637,3 +637,43 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 					return found
 			return None
 		return walk(tdn_doc.get('operators'))
+
+
+	def test_an_aborted_scan_publishes_a_terminal_status(self):
+		"""A dead scan must not keep showing a live-looking number.
+
+		All three abort handlers cleared the in-flight flag and logged,
+		then left par.Status reading `Scanning defaults (12/240)` for the
+		rest of the session -- indistinguishable from a slow machine, and
+		the log line is DEBUG-suppressed unless Verbose is on, so for most
+		users there was no signal at all. Same disease as a Convoy daemon
+		sitting on old code while the panel says nothing.
+		"""
+		manager = self.embody.ext.CatalogManager
+		saved = self.embody.par.Status.eval()
+		try:
+			manager._setScanStatus('Scanning defaults (12/240)')
+			self.assertEqual('Scanning defaults (12/240)',
+							 str(self.embody.par.Status.eval()))
+			manager._setScanAborted('Scanning defaults')
+			after = str(self.embody.par.Status.eval())
+			self.assertIn('failed', after.lower(),
+						  'an aborted scan must say so: %r' % after)
+			self.assertNotIn('/240', after,
+							 'the frozen fraction must not survive: %r' % after)
+		finally:
+			self.embody.par.Status = saved
+
+	def test_an_aborted_scan_still_respects_the_disabled_guard(self):
+		"""The abort readout goes through _setScanStatus, so it must not
+		overwrite a user's Disabled Embody -- the same panel finding the
+		guard was added for."""
+		manager = self.embody.ext.CatalogManager
+		saved = self.embody.par.Status.eval()
+		try:
+			self.embody.par.Status = 'Disabled'
+			manager._setScanAborted('Scanning defaults')
+			self.assertEqual('Disabled', str(self.embody.par.Status.eval()),
+							 'a Disabled Embody must stay Disabled')
+		finally:
+			self.embody.par.Status = saved

@@ -276,6 +276,20 @@ class CatalogManagerExt:
 		if self.ownerComp.par.Status != 'Disabled':
 			self.ownerComp.par.Status = text
 
+	def _setScanAborted(self, what):
+		"""Publish an ABORTED scan, instead of freezing mid-count.
+
+		All three abort handlers cleared the in-flight flag and logged --
+		and left par.Status reading `Scanning defaults (12/240)` for the
+		rest of the session. The scan was dead; the readout still showed a
+		number that would never move again, which is indistinguishable
+		from a very slow machine. (The log line is DEBUG-suppressed unless
+		Verbose is on, so for most users there was no signal at all.)
+
+		Goes through _setScanStatus so the Disabled guard still holds.
+		"""
+		self._setScanStatus(f'{what} failed -- see log')
+
 	def _processChunk(self):
 		"""Drive one op-type scan chunk; a fatal error must not wedge the scan.
 
@@ -290,6 +304,7 @@ class CatalogManagerExt:
 			self._processChunkInner()
 		except Exception as e:
 			self._log(f'Op-type scan aborted: {e}', 'ERROR')
+			self._setScanAborted('Scanning defaults')
 			self._cleanupWorkspace()
 			self._scan_in_flight = False
 
@@ -744,6 +759,7 @@ class CatalogManagerExt:
 				delayFrames=self.TOEEXPAND_POLL_FRAMES)
 		except Exception as e:
 			self._log(f'Background palette scan aborted: {e}', 'ERROR')
+			self._setScanAborted('Scanning palette')
 			try:
 				if self._tox_scan_stop is not None:
 					self._tox_scan_stop.set()
@@ -880,6 +896,7 @@ class CatalogManagerExt:
 			self._processPaletteChunkInner()
 		except Exception as e:
 			self._log(f'Palette scan aborted: {e}', 'ERROR')
+			self._setScanAborted('Scanning palette')
 			try:
 				self._checkpointPaletteScan()
 			except Exception:

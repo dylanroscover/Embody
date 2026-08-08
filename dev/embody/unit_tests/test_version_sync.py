@@ -57,6 +57,82 @@ class TestVersionSync(EmbodyTestCase):
     # Doc consistency (the tripwire)
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # The .tdn version lag (fixed 2026-08-08)
+    # ------------------------------------------------------------------
+
+    def _tdn_head(self, rel):
+        path = Path(project.folder) / rel
+        with open(path, 'r', encoding='utf-8') as handle:
+            return ''.join(handle.readline() for _ in range(14))
+
+    def test_tdn_files_carry_the_current_version(self):
+        """Both Embody-covering .tdn files must stamp the version that is
+        actually shipping.
+
+        A single project.save fires onProjectPreSave on two Execute DATs.
+        The Embody COMP's own DAT exports every dirty TDN row FIRST,
+        reading par.Version as it stands; only then does
+        /embody/execute_src_ctrl bump it and bake the .tox. So every
+        release shipped a .tdn one version behind its own .tox --
+        `generator: Embody/6.0.222` beside `source_file:
+        Embody-6.223.toe` -- and a COMP reconstructed from that .tdn came
+        up a version behind. onProjectPostSave now re-exports those rows
+        after the bump.
+        """
+        version = str(self.embody.par.Version.eval())
+        for rel in ('embody/Embody.tdn', 'embody.tdn'):
+            head = self._tdn_head(rel)
+            self.assertIn(
+                'generator: Embody/%s' % version, head,
+                '%s is stamped with a stale version (the pre-save export '
+                'ran before the bump): %r' % (rel, head[:200]))
+
+    def test_the_post_save_version_sync_hook_is_enabled(self):
+        """The fix reaches production through ONE toggle. Without it the
+        sync never runs and every other assertion here still passes on a
+        tree that happens to be current."""
+        dat = op('/embody/execute_src_ctrl')
+        self.assertIsNotNone(dat, 'the build/release Execute DAT is missing')
+        self.assertTrue(
+            bool(dat.par.projectpostsave.eval()),
+            'projectpostsave is off, so syncVersionIntoTDN never fires')
+        self.assertTrue(hasattr(dat.module, 'syncVersionIntoTDN'))
+
+    def test_the_version_sync_selects_only_embody_covering_tdn_rows(self):
+        """It must re-export the rows that CONTAIN the Embody COMP, and
+        never '/' -- re-exporting the whole project root on every save
+        would be a far larger write than this warrants."""
+        embody_path = self.embody.path
+        table = self.embody_ext.Externalizations
+        headers = [table[0, c].val for c in range(table.numCols)]
+        path_col = headers.index('path')
+        strategy_col = headers.index('strategy')
+        picked = [
+            str(table[r, path_col].val)
+            for r in range(1, table.numRows)
+            if str(table[r, strategy_col].val or '') == 'tdn'
+            and str(table[r, path_col].val or '') not in ('', '/')
+            and (str(table[r, path_col].val) == embody_path
+                 or embody_path.startswith(str(table[r, path_col].val) + '/'))
+        ]
+        self.assertIn(embody_path, picked)
+        self.assertNotIn('/', picked, "'/' must never be re-exported here")
+
+    def test_save_tdn_can_re_export_without_bumping_build(self):
+        """The sync runs AFTER the release manifest recorded par.Build, so
+        a second bump would leave the manifest one behind the .tdn -- the
+        same drift, one size smaller."""
+        # Read the DAT text: inspect.getsource cannot see an extension's
+        # source inside TouchDesigner.
+        dat = self.embody.op('EmbodyExt')
+        self.assertIsNotNone(dat, 'EmbodyExt DAT is missing')
+        source = dat.text
+        self.assertIn('def SaveTDN(self, opPath: str, bump_build: bool = True)',
+                      source, 'SaveTDN must accept bump_build')
+        self.assertIn('if bump_build and hasattr(oper.par, ', source,
+                      'the Build bump must be guarded by bump_build')
+
     def test_readme_badge_matches_par_version(self):
         text = self._read('README.md')
         match = re.search(r'badge/version-([0-9][0-9.]*)-', text)
