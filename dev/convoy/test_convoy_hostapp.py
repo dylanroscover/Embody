@@ -1406,3 +1406,73 @@ def test_an_unreadable_job_record_spares_every_row_but_says_so(server):
         "envoy_port": 9983, "node_discriminator": "nd_" + "3" * 32})
     _, listing = server.call("/nodes")
     assert old["node_id"] not in [n["node_id"] for n in listing["nodes"]]
+
+
+# -- the OTHER two paths the unacked relaxation had to reach -----------
+#
+# Mutation testing (2026-08-07) proved these were unprotected: reverting
+# forget_node's guard at convoy_hostapp.py to `census["pending"] or
+# census["unacked"]`, or adding `or census["unacked"]` to the eviction
+# sweep's guard, left the whole 153-test daemon suite green. forget_node
+# is the exact path that produced the field symptom ("forgot 0, kept 8
+# with unresolved jobs"), so it had no test at all where it mattered
+# most.
+
+def _row_pinned_only_by_an_uncollected_result(server, disc, port):
+    """A node whose only job is FINISHED and unacknowledged."""
+    _, node = server.call("/register", {
+        "project_root": "/Work/show", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": port, "node_discriminator": "nd_" + disc * 32})
+    _, created = server.call("/jobs", {
+        "idempotency_key": "k" + disc, "node_id": node["node_id"],
+        "operation": "query_network", "arguments": {}})
+    delivery_id = created["job"]["delivery_id"]
+    # queued -> refused: TERMINAL, and nobody has acknowledged it.
+    server.call("/jobs/cancel", {"delivery_id": delivery_id})
+    job = server.app.db.get_job(delivery_id)
+    assert job["state"] in ha.hoststore.TERMINAL_STATES
+    assert job.get("outcome_acknowledged_at") is None
+    return node["node_id"], delivery_id
+
+
+def test_forget_node_is_not_blocked_by_an_uncollected_result(server):
+    """The field path. A row pinned ONLY by a finished-but-unacknowledged
+    result must be forgettable -- the result is fetched by delivery_id and
+    outlives the row, so it never needed it."""
+    node_id, delivery_id = _row_pinned_only_by_an_uncollected_result(
+        server, "1", 9981)
+    server.call("/unregister", {"node_id": node_id})
+
+    code, body = server.call("/nodes/forget", {"node_id": node_id})
+    assert code == 200 and body.get("ok") is True, (
+        "an uncollected result must not refuse the button (%s: %s)"
+        % (code, (body or {}).get("reason")))
+    _, listing = server.call("/nodes")
+    assert node_id not in [n["node_id"] for n in listing["nodes"]]
+    # ...and the result is still there, addressed the way it always was.
+    code, body = server.call("/jobs/%s" % delivery_id, method="GET")
+    assert code == 200 and body["job"]["delivery_id"] == delivery_id
+
+
+def test_eviction_is_not_blocked_by_an_uncollected_result(server, tmp_path):
+    """The automatic path, where a refusal message would never even be
+    seen: a dead project's row must still be evicted when its only work is
+    a finished result nobody collected."""
+    toe = tmp_path / "gone.toe"
+    toe.write_text("x", encoding="utf-8")
+    _, node = server.call("/register", {
+        "project_root": "/Work/dead", "convoy_id": "cv", "comp_path": "/Embody",
+        "envoy_port": 9985, "node_discriminator": "nd_" + "7" * 32,
+        "metadata": {"toe_path": str(toe), "toe_name": "gone.toe"}})
+    node_id = node["node_id"]
+    _, created = server.call("/jobs", {
+        "idempotency_key": "ev", "node_id": node_id,
+        "operation": "query_network", "arguments": {}})
+    server.call("/jobs/cancel", {"delivery_id": created["job"]["delivery_id"]})
+    server.call("/unregister", {"node_id": node_id})
+    toe.unlink()                      # the project is provably deleted
+
+    app = server.app
+    evicted = app._evict_stale_nodes(app._now() + app.node_dead_grace_s + 60)
+    assert node_id in [e["node_id"] for e in evicted], (
+        "a dead project's row must not be pinned by an uncollected result")

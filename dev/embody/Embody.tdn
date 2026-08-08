@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1119
-generator: Embody/6.0.219
+build: 1121
+generator: Embody/6.0.221
 td_build: 099.2025.33070
-source_file: Embody-6.220.toe
-exported_at: '2026-08-07T13:56:32Z'
+source_file: Embody-6.222.toe
+exported_at: '2026-08-08T00:24:10Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -515,7 +515,7 @@ custom_pars:
   - name: Convoyforgetoffline
     style: Pulse
     label: Forget Offline Nodes...
-    help: Forget this machine's offline node rows after a confirmation that names them (the first eight, then a count). A forgotten node rejoins as a new identity the next time its project opens, and its TD Python approval resets. Nodes with unresolved jobs are kept, and a node that comes back online before you confirm is skipped. Dead projects and long-unseen rows also clear automatically; this is the immediate, human-judgment path for offline rows whose files still exist.
+    help: Remove this machine's offline Convoy node rows. Names the rows it would forget (the first eight, then a count) in a confirmation before anything is removed. A forgotten node rejoins as a NEW identity the next time its project opens, and its TD Python approval resets. A node with a delivery that has not finished is kept and named afterwards -- a finished result never holds a row, because results are fetched by delivery id and outlive it. A node that comes back online before you confirm is skipped. Each computer can only forget its own rows.
   - name: Convoyinstallhost
     style: Pulse
     label: Repair Convoy App
@@ -821,7 +821,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.219
+    value: 6.0.221
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -908,9 +908,6 @@ sequences:
   - {}
   - {}
   - {}
-  - {}
-  - {}
-  Convoynodes:
   - {}
   - {}
 flags:

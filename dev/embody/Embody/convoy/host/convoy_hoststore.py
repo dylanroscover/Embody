@@ -42,6 +42,14 @@ HOST_FILE = "host.json"
 JOBS_DIR = "jobs"
 AUDIT_FILE = "audit.jsonl"
 
+# A delivery record that cannot be PARSED is renamed aside rather than
+# deleted: the suffix takes it out of _delivery_ids (which lists only
+# *.json) so it stops blocking node cleanup, while leaving the bytes on
+# disk for a human. Bounded per pass so one bad sweep -- or one global
+# read failure misclassified as corruption -- can never empty the queue.
+_QUARANTINE_SUFFIX = ".corrupt"
+_MAX_QUARANTINE_PER_PASS = 5
+
 # Audit rotation. A supervised host runs unattended for WEEKS, and the
 # killswitch-backlog path can append at ~200 KB/s (measured), so an
 # append-only audit with no ceiling fills the disk -- 118 GB/week in the
@@ -1543,6 +1551,52 @@ class HostStore:
                 paths.append(legacy)
         return paths
 
+    def _classify_unreadable(self, delivery_id, cutoff):
+        """Why get_job answered None -- ('absent'|'young'|'transient'|
+        'corrupt', mtime).
+
+        Only 'corrupt' licenses touching the file, and it requires
+        PROOF: the bytes were read successfully and json refused them.
+        Every failure to read is 'transient', because at this layer a
+        lock and a truncation are the same errno -- get_job collapses
+        OSError and ValueError into one None, which is exactly how a
+        valid record came to be deleted.
+
+        The read is retried the way _read_marker's is: an antivirus or
+        backup handle, or the os.replace of a concurrent writer (this
+        pass holds no lock), is a window of milliseconds, and spending
+        a few of them is much cheaper than being wrong.
+        """
+        path = self._job_path(delivery_id)
+        if not self.job_file_exists(delivery_id):
+            return "absent", 0.0
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            return "transient", 0.0
+        if mtime > cutoff:
+            return "young", mtime
+        raw = None
+        for attempt in range(4):
+            try:
+                with open(path, "r", encoding="utf-8") as handle:
+                    raw = handle.read()
+                break
+            except OSError:
+                if attempt == 3:
+                    return "transient", mtime
+                time.sleep(0.05 * (attempt + 1))
+        try:
+            json.loads(raw)
+        except ValueError:
+            return "corrupt", mtime
+        except Exception:
+            return "transient", mtime
+        # It parses NOW, so whatever get_job hit has passed. Leave it:
+        # the next pass reads it normally and reaps it on the ordinary
+        # rules, with both safety gates applied.
+        return "transient", mtime
+
     def reap(self, retention_s, now=None, max_delete=None, on_reap=None):
         """Delete retention-eligible TERMINAL records older than
         retention_s, and the idempotency markers that name them. An
@@ -1571,11 +1625,12 @@ class HostStore:
             raise ValueError("on_reap must be callable")
         now = self._now() if now is None else now
         cutoff = now - retention_s
-        reaped_jobs = reaped_markers = 0
+        reaped_jobs = reaped_markers = quarantined = 0
         try:
             ids = self._delivery_ids()
         except OSError:
-            return {"jobs": 0, "markers": 0, "listing_failed": True}
+            return {"jobs": 0, "markers": 0, "quarantined": 0,
+                    "listing_failed": True}
         for delivery_id in ids:
             if max_delete is not None and reaped_jobs >= max_delete:
                 break
@@ -1586,30 +1641,44 @@ class HostStore:
                 # blocks every node-cleanup sweep (a record nobody can
                 # parse might be a pending delivery for the row being
                 # retired), so one truncated file -- a crash mid-write --
-                # froze all node cleanup on the host permanently. Past
-                # retention it is debris by any reading, so remove it on
-                # the same horizon as a terminal record, with an audit
-                # naming it. Its markers go too: _markers_for needs the
-                # record's fields, which is exactly what cannot be read,
-                # so an unreferenced marker is left for the next pass
-                # rather than guessed at.
-                if not self.job_file_exists(delivery_id):
+                # froze all node cleanup on the host permanently.
+                #
+                # It is NEVER deleted, and never on one failed read.
+                # get_job answers None for a torn file AND for a file it
+                # merely could not open this instant (an antivirus or
+                # backup handle, fd exhaustion, or -- since this pass is
+                # LOCK-FREE while writers hold the app lock -- a
+                # concurrent os.replace). Deleting on that evidence
+                # destroyed valid records, including the one class this
+                # store must never lose: an unacknowledged
+                # `indeterminate`, the sole may-have-run proof. The
+                # branch also sits above both of reap's safety gates, so
+                # a misread bypassed them entirely (reproduced with a
+                # transient EMFILE, 2026-08-07).
+                #
+                # So: prove corruption, then QUARANTINE. A renamed file
+                # leaves _delivery_ids (which lists only *.json) and
+                # stops blocking cleanup, while still being on disk for
+                # a human -- the outcome is recoverable either way the
+                # classification errs.
+                if quarantined >= _MAX_QUARANTINE_PER_PASS:
                     continue
+                verdict, mtime = self._classify_unreadable(
+                    delivery_id, cutoff)
+                if verdict != "corrupt":
+                    continue
+                path = self._job_path(delivery_id)
                 try:
-                    mtime = os.path.getmtime(self._job_path(delivery_id))
+                    os.replace(path, path + _QUARANTINE_SUFFIX)
                 except OSError:
                     continue
-                if mtime > cutoff:
-                    continue
+                quarantined += 1
                 try:
-                    os.unlink(self._job_path(delivery_id))
-                except OSError:
-                    continue
-                reaped_jobs += 1
-                try:
-                    self.audit("hoststore", "unreadable_job_reaped",
+                    self.audit("hoststore", "unreadable_job_quarantined",
                                {"delivery_id": delivery_id,
-                                "age_s": round(now - mtime, 1)})
+                                "age_s": round(now - mtime, 1),
+                                "renamed_to": os.path.basename(
+                                    path + _QUARANTINE_SUFFIX)})
                 except Exception:
                     pass
                 continue
@@ -1672,7 +1741,7 @@ class HostStore:
             except Exception:
                 pass
         return {"jobs": reaped_jobs, "markers": reaped_markers,
-                "listing_failed": False}
+                "quarantined": quarantined, "listing_failed": False}
 
     # -- audit (A-40: host-side, never the Embody logger) ---------------
 

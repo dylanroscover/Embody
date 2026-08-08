@@ -103,7 +103,7 @@ def test_a_refusal_keeps_the_daemons_explanation_and_delivery_ids():
 
 def test_the_summary_still_counts_kept_rows():
     """The summary phrasing is load-bearing elsewhere (the parameter help
-    and the in-TD assertion both read 'unresolved jobs'), and len() must
+    and the in-TD assertion both read it), and len() must
     keep working now that kept_busy holds dicts rather than ids."""
     mod = _module()
     nodes = [_row('n1', 'alpha'), _row('n2', 'beta')]
@@ -113,7 +113,7 @@ def test_the_summary_still_counts_kept_rows():
     result = mod._host_forget_offline_apply(ctx, ['n1', 'n2'])
 
     assert 'forgot 0' in result['detail']
-    assert 'kept 2 with unresolved jobs' in result['detail']
+    assert 'kept 2 with unfinished deliveries' in result['detail']
 
 
 def test_a_mixed_run_reports_both_halves():

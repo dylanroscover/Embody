@@ -1079,13 +1079,15 @@ def test_reap_removes_an_unreadable_record_past_retention(tmp_path):
         store.reap(24 * 3600.0)
         assert os.path.exists(bad)
 
-        # Past it, the file is debris by any reading and must go, or the
-        # sweeps it blocks never run again.
+        # Past it, a PROVEN-corrupt record is renamed aside -- never
+        # deleted -- so it stops blocking the sweeps while its bytes stay
+        # on disk for a human.
         old = os.path.getmtime(bad) - (48 * 3600.0)
         os.utime(bad, (old, old))
         result = store.reap(24 * 3600.0)
-        assert result["jobs"] >= 1
-        assert not os.path.exists(bad)
+        assert result["quarantined"] == 1
+        assert not os.path.exists(bad), "the blocking name must be gone"
+        assert os.path.exists(bad + hdb._QUARANTINE_SUFFIX),             "the bytes must survive: a misclassification must be recoverable"
         assert store.scan_jobs()[1] == []
     finally:
         store.close()
@@ -1117,5 +1119,70 @@ def test_delete_node_writes_disk_before_committing_memory(tmp_path, monkeypatch)
             store.delete_node(node_id)
         assert node_id in store._state["nodes"], \
             "a failed durable write must not have committed in memory"
+    finally:
+        store.close()
+
+
+def test_reap_never_loses_a_record_it_merely_could_not_open(tmp_path,
+                                                            monkeypatch):
+    """THE DATA-LOSS REGRESSION (reproduced 2026-08-07, then fixed).
+
+    get_job answers None for a torn file AND for one it could not open
+    this instant -- an antivirus handle, fd exhaustion, or the
+    os.replace of a concurrent writer, since reap holds no lock. Acting
+    on that None by deleting destroyed valid records, and because the
+    branch sat above reap's two safety gates it took the one class this
+    store must never lose with it: an unacknowledged `indeterminate`,
+    the sole may-have-run proof.
+    """
+    import builtins
+    store = hdb.HostStore(str(tmp_path / "state"))
+    try:
+        directory = ci.NodeDirectory(store.host_id())
+        record = directory.register("/Work/x", "/Embody", "cv")
+        store.save_node(record)
+        job, _created = store.create_job(
+            idempotency_key="k", node_id=record["node_id"],
+            operation="query_network", arguments={}, convoy_id="cv")
+        delivery_id = job["delivery_id"]
+        store.mark_indeterminate(delivery_id,
+                                 {"reason": "interrupted_dispatch",
+                                  "detail": "forward lost"})
+        path = store._job_path(delivery_id)
+        stale = os.path.getmtime(path) - (48 * 3600.0)
+        os.utime(path, (stale, stale))
+
+        real_open = builtins.open
+
+        def transiently_locked(name, *a, **k):
+            if isinstance(name, str) and "cj_" in os.path.basename(name):
+                raise OSError(24, "Too many open files")
+            return real_open(name, *a, **k)
+
+        monkeypatch.setattr(builtins, "open", transiently_locked)
+        result = store.reap(24 * 3600.0)
+        monkeypatch.undo()
+
+        assert result["quarantined"] == 0, "a lock is not corruption"
+        assert os.path.exists(path), "a readable-later record must survive"
+        assert store.get_job(delivery_id)["state"] == "indeterminate"
+        assert store.get_job(delivery_id)["outcome_acknowledged_at"] is None
+    finally:
+        store.close()
+
+
+def test_reap_bounds_how_many_records_one_pass_can_quarantine(tmp_path):
+    """A global read failure must not be able to empty the queue in one
+    pass -- reap is called with no max_delete."""
+    store = hdb.HostStore(str(tmp_path / "state"))
+    try:
+        for i in range(hdb._MAX_QUARANTINE_PER_PASS + 3):
+            bad = os.path.join(store.jobs_dir, "cj_bad%02d.json" % i)
+            with open(bad, "w", encoding="utf-8") as f:
+                f.write("{ truncated")
+            stale = os.path.getmtime(bad) - (48 * 3600.0)
+            os.utime(bad, (stale, stale))
+        result = store.reap(24 * 3600.0)
+        assert result["quarantined"] == hdb._MAX_QUARANTINE_PER_PASS
     finally:
         store.close()

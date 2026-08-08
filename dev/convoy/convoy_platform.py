@@ -64,6 +64,25 @@ def data_dir(platform=None, env=None, home=None):
     return join(base, "embody-convoy")
 
 
+def _fsync_directory(path):
+    """Make a rename itself durable. No-op on Windows (no directory fd)
+    and best-effort everywhere: a filesystem that refuses the sync must
+    not turn an otherwise-successful write into a failure."""
+    if os.name == "nt":
+        return
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError:
+        pass
+    finally:
+        os.close(descriptor)
+
+
 def _write_private(path, data):
     """Create/replace a file readable only by the owner, atomically.
 
@@ -87,6 +106,20 @@ def _write_private(path, data):
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
             f.write(data)
+            # FLUSH AND SYNC BEFORE THE RENAME. os.replace is atomic for
+            # the NAME; it says nothing about the DATA reaching the disk.
+            # Without this, a power loss or hard kill can leave the new
+            # name pointing at unwritten (zero-filled) content -- and this
+            # is the sole writer for host.json, every delivery record and
+            # marker, policy.json, realm.json, peers.json, the TLS
+            # material, the portfile and the IPC token. Three sibling
+            # modules in this daemon already do it (convoy_lifecycle,
+            # convoy_artifacts, convoy_peerclient), so its absence here
+            # was an inconsistency rather than a decision -- and one that
+            # got sharper when node retirement and job terminalisation
+            # became automatic, heartbeat-driven multi-file writes.
+            f.flush()
+            os.fsync(f.fileno())
     except Exception:
         try:
             os.unlink(tmp)
@@ -106,6 +139,7 @@ def _write_private(path, data):
     for attempt in range(8):
         try:
             os.replace(tmp, path)
+            _fsync_directory(directory)
             return
         except PermissionError:
             if attempt == 7:

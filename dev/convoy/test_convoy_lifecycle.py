@@ -1319,7 +1319,7 @@ def test_autonomous_recovery_rewinds_pre_reservation_launching_boundary(
         tmp_path)
     content = {"operation": "restart", "node_id": NODE,
                "convoy_id": CONVOY, "expected_runtime_id": "runtime-1",
-               "policy": "require_clean", "timeout_s": .1}
+               "policy": "require_clean", "timeout_s": 5}
     attempt, _ = store.begin_attempt("restart-rewind-launching", content)
     profile = store.get_profile(NODE)
     store.update_attempt(
@@ -1328,7 +1328,7 @@ def test_autonomous_recovery_rewinds_pre_reservation_launching_boundary(
         old_process=profile["last_runtime"]["process"],
         old_runtime_id="runtime-1", dirty_revision="revision:1",
         profile_fingerprint=cl._profile_fingerprint(profile),
-        restart_policy="require_clean", requested_timeout_s=.1,
+        restart_policy="require_clean", requested_timeout_s=5,
         token_hash=cl._token_hash(TOKEN), token_consumed=False,
         launch_unit_id=cl._launch_unit_id(profile),
         launch_started_at=manager._clock())
@@ -1336,7 +1336,13 @@ def test_autonomous_recovery_rewinds_pre_reservation_launching_boundary(
     runtime.value = None
     launcher.callback = auto_confirm(manager, runtime_id="runtime-rewound")
 
-    summary = manager.recover_committed_restarts(recovery_timeout_s=.2)
+    # A GENEROUS CEILING on a path that completes immediately (the
+    # launcher auto-confirms), which is the one real-clock budget the
+    # CI-flake doctrine allows -- but it must be seconds, not tenths.
+    # Recovery does several durable writes, and every atomic write got ~1.5 ms
+    # slower when _write_private started fsyncing, so a 200 ms budget
+    # under full-matrix disk contention no longer had margin.
+    summary = manager.recover_committed_restarts(recovery_timeout_s=5)
 
     assert summary["recovered"] == 1
     assert store.get_attempt(attempt["operation_id"])["state"] == "succeeded"

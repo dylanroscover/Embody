@@ -1546,14 +1546,24 @@ class ConvoyExt:
         storm uses), and this freshly-armed near-immediate tick becomes
         the one live loop.
         """
+        # ARM FIRST, COMMIT SECOND. The generation is what makes an
+        # already-armed tick stand down, so publishing a number that no
+        # armed tick carries kills the loop outright: the pending tick
+        # fires, sees gen != stored, and returns WITHOUT rescheduling --
+        # and nothing re-arms until the extension reinitializes. Storing
+        # before the run() put that failure one swallowed exception away,
+        # inside a bare `except: pass` that said nothing at any level.
+        # Ordered this way, a failed run() leaves the OLD generation
+        # authoritative and the existing chain still owns the loop.
         try:
             gen = self.ownerComp.fetch('_convoy_gen', 0) + 1
-            self.ownerComp.store('_convoy_gen', gen)
             run("o = op(%r)\nif o and o.valid: o.ext.ConvoyExt._convoyTick(%d)"
                 % (self.ownerComp.path, gen),
                 fromOP=self.ownerComp, delayFrames=2)
-        except Exception:
-            pass
+            self.ownerComp.store('_convoy_gen', gen)
+        except Exception as e:
+            self._log('could not accelerate the reconcile tick (%s); the '
+                      'existing chain still owns it' % (e,), 'WARNING')
 
     def _reconcile(self, force=False):
         """Compare desired state with what was sent; call at most once.
@@ -1573,11 +1583,21 @@ class ConvoyExt:
             # A call is already in flight; its poll owns the next schedule.
             self._tick_ms = self.TICK_MIN_MS
             return
-        if self._host_busy:
+        if self._host_busy and not self._recoverWedgedHostSlot():
             # One long-lived worker deliberately serializes registration
             # with install/start/stop. Do not queue a short registration
             # behind a potentially long installer and then time out its
             # shorter poll budget before execution even begins.
+            #
+            # ...but ASK FIRST whether the slot is merely wedged.
+            # _recoverWedgedHostSlot exists precisely to unstick a dead
+            # slot -- its docstring cites the Mac first-install session
+            # this ate in 2026-08-04 -- and its only caller was a user
+            # pressing a host button. So the one loop that runs
+            # continuously, and the one that actually starves when the
+            # slot wedges, was the single path that could not heal it:
+            # a wedged flag stopped registration, heartbeat and the node
+            # list indefinitely while the recovery sat unreachable.
             self._tick_ms = self.TICK_MIN_MS
             return
 
@@ -5557,7 +5577,7 @@ def _host_forget_offline_apply(ctx, node_ids):
                 (body or {}).get('reason') or 'unknown'))
     bits = ['forgot %d' % len(forgotten)]
     if kept_busy:
-        bits.append('kept %d with unresolved jobs' % len(kept_busy))
+        bits.append('kept %d with unfinished deliveries' % len(kept_busy))
     if skipped:
         bits.append('skipped %d (online again or already gone)'
                     % len(skipped))

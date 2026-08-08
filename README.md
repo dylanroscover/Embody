@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.220-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.222-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-62-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -175,7 +175,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **120 test suites** (3,364 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **120 test suites** (3,368 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -206,6 +206,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.222**: **A review of 219/220 found a data-loss defect in the release itself** -- the reaper could delete a delivery record it had merely failed to *open* (an antivirus handle, fd exhaustion, a concurrent rename), including the unacknowledged `indeterminate` that is the sole may-have-run proof. Corruption must now be proven and a proven-corrupt record is quarantined rather than deleted. Plus: everything the Convoy App writes is flushed before the rename that publishes it; two silent ways the reconcile loop could stop until TD restarted; the button's help and log line now match the contract the code enforces; and the two paths of the 219 fix that mutation testing showed were untested.
 - **6.0.220**: **Upgrading Embody can update the Convoy App without restarting TouchDesigner** -- the automatic daemon update is budgeted one attempt per TD session, and both its guards live in a session store that survives the Embody COMP being replaced. So an upgrade in a live session could never update the daemon: new Embody, old daemon, none of the fixes it was upgraded for. The budget is now keyed on the Embody version too, so an upgrade re-arms exactly one attempt without re-opening the retry loop. Live-verified: a fresh install took this machine's daemon from 6.0.212 to 6.0.220 on its own.
 - **6.0.219**: **Duplicate node rows clear themselves** -- one predicate treated "a delivery that has not finished" and "a finished result nobody collected" as the same thing, and it gated all three cleanup paths, so a single uncollected result made a duplicate row permanent (a field machine had 11 rows and 123 job records, 115 of them exactly that class). A finished result no longer pins a row anywhere; a queued delivery on a superseded identity is durably refused rather than left to haunt it; work past the dispatch boundary is never touched. Forget Offline Nodes stops logging a refusal as a success, names the nodes it kept and the deliveries pinning them, and restores a declined row in the same frame. Two latent ghost-resurrection paths (commit-before-write on both delete paths) closed, and an unreadable job record no longer freezes cleanup forever.
 - **6.0.217**: **Forget Offline Nodes clears the blocks in the same frame** -- the confirmed rows leave the sequence synchronously with the click, with no daemon round trip in the visual path; the daemon apply runs behind it purely as reconciliation.

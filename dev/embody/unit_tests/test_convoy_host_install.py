@@ -1444,7 +1444,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.client.post_result = refuse_busy
         self.convoy.ForgetOfflineNodes()
         self.assertTrue(
-            any('kept 1 with unresolved jobs' in m for m, _l in self._logs),
+            any('kept 1 with unfinished deliveries' in m for m, _l in self._logs),
             self._logs)
         # One row forgotten, one kept -> a partial run, never SUCCESS.
         levels = [l for m, l in self._logs

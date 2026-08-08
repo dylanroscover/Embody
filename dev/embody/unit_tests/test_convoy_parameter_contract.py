@@ -104,9 +104,19 @@ def test_forget_offline_nodes_pulse_is_present_and_honest():
     par = rows["Convoyforgetoffline"]
     assert par["style"] == "Pulse"
     assert par["label"] == "Forget Offline Nodes..."
-    for phrase in ("confirmation that names", "new identity",
-                   "TD Python approval resets", "unresolved jobs"):
-        assert phrase in par["help"], phrase
+    help_text = par["help"].lower()
+    for phrase in ("confirmation", "names", "new identity",
+                   "td python approval resets",
+                   # The CONTRACT, in the words the daemon now enforces:
+                   # only an unfinished delivery keeps a row. The old
+                   # phrasing ("unresolved jobs") described the predicate
+                   # that CAUSED the 2026-08-06 field bug, and pinning it
+                   # here is part of what kept it in front of users after
+                   # the behaviour had changed underneath.
+                   "has not finished"):
+        assert phrase in help_text, phrase
+    assert "unresolved jobs" not in help_text, \
+        "the pre-6.0.219 contract must not be described to the user"
 
 
 def test_the_convoy_comp_carries_its_global_shortcut():
