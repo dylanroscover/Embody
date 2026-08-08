@@ -1444,6 +1444,9 @@ def configure_gitignore(ext, git_root):
         # Embody / Envoy
         '.venv/',
         '.mcp.json',
+        # Rotated .tdn crash-recovery copies (.bak/.bak2) -- machine-local
+        # scratch, superseded by the committed .tdn on every write.
+        '.tdn_backup/',
         # OpenCode client config (embeds absolute venv/bridge paths)
         'opencode.json',
         # Ignore .embody/ runtime files but keep committed project.json

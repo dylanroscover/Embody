@@ -212,6 +212,30 @@ class TestConfigMigration(EmbodyTestCase):
             self.assertIn(own, text)
         self.assertEqual(1, self._header_count())
 
+    def test_tdn_backup_is_ignored(self):
+        """Issue #85: `.tdn_backup/` holds rotated .bak/.bak2 crash-recovery
+        copies of every .tdn -- machine-local scratch that git must not
+        track. The changelog claimed it was git-ignored from v5.0.227, but
+        the entry only ever existed in Embody's own hand-written
+        .gitignore; generated projects never got it and picked the backups
+        up as untracked files.
+
+        Existing projects get it through the same backfill path, so this
+        asserts BOTH a fresh write and a second run against a file that
+        predates the entry.
+        """
+        self._configure()
+        self.assertIn('.tdn_backup/', [ln.strip() for ln in self._lines()])
+
+        lines = [ln for ln in self._lines() if ln.strip() != '.tdn_backup/']
+        self.gitignore.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+        self._configure()
+        self.assertIn(
+            '.tdn_backup/', [ln.strip() for ln in self._lines()],
+            f'a project predating the entry must be backfilled: '
+            f'{self._lines()}')
+        self.assertEqual(1, self._header_count())
+
     # --- .gitattributes: same class ---------------------------------------
 
     def test_gitattributes_backfills_entries_added_by_later_releases(self):

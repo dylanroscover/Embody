@@ -133,6 +133,36 @@ The comparison is **semantic, not byte-level**: both sides normalize through the
 
 ---
 
+## Crash safety and `.tdn_backup`
+
+Every `.tdn` write is **atomic** — the content goes to a temp file in the same directory, is flushed and `fsync`ed, then `os.replace()`s the target. A crash or power loss mid-write leaves either the complete old file or the complete new one, never a half-written one.
+
+Before each write, Embody also rotates two generations of the previous content into a `.tdn_backup/` folder at your project root, mirroring the `.tdn`'s relative path:
+
+```
+my-project/
+├── embody/
+│   └── Foo/
+│       └── bar.tdn          ← current
+└── .tdn_backup/
+    └── embody/
+        └── Foo/
+            ├── bar.tdn.bak   ← previous write
+            └── bar.tdn.bak2  ← the one before that
+```
+
+After each write the file is read back and re-parsed; if that validation fails, the `.bak` is restored automatically. `ReconstructTDNComps` and the post-save export roll back from `.bak` the same way if reconstruction fails.
+
+**`.tdn_backup/` is machine-local scratch and should not be committed.** It is superseded on every write and carries no history git does not already have — the `.tdn` files themselves are the versioned record. Envoy adds `.tdn_backup/` to your project's auto-managed [`.gitignore`](../embody/getting-started.md#auto-managed-gitignore) on startup. If your repo predates that entry and already tracks the folder, untrack it once:
+
+```bash
+git rm -r --cached .tdn_backup
+```
+
+Deleting `.tdn_backup/` at any time is safe — it is recreated on the next export.
+
+---
+
 ## Error Handling
 
 TDN import is **best-effort** — individual failures don't abort the entire operation.
