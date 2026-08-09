@@ -92,6 +92,11 @@ APP_SUBDIR = "app"
 BIN_SUBDIR = "bin"
 LOGS_SUBDIR = "logs"
 RUNTIME_SUBDIR = "runtime"
+# The per-user venv the daemon runs under when no signed managed runtime
+# is installed. Same name on every platform, and unchanged from the macOS
+# fallback that introduced it -- an existing macOS runtime-venv keeps
+# working rather than being rebuilt beside itself.
+RUNTIME_VENV_SUBDIR = "runtime-venv"
 INSTALLED_FILE = "installed.json"
 COMPLETE_FILE = ".complete"
 RUNTIME_MANIFEST_FILE = "convoy-runtime.json"
@@ -248,6 +253,12 @@ ACTION_UPGRADE = "upgrade"
 ACTION_CURRENT = "current"
 ACTION_REFUSE_DOWNGRADE = "refuse_downgrade"
 ACTION_EXTERNAL = "external"
+# Re-resolve the RUNTIME of an install this project may not replace.
+# Writes NO payload and preserves the record's version and file list, so
+# it is not a downgrade in any sense A-36 cares about -- see
+# repair_runtime(), which cannot even express one (it takes no version
+# and no modules).
+ACTION_REPAIR_RUNTIME = "repair_runtime"
 
 _VERSION_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
 # -- paths -------------------------------------------------------------
@@ -512,7 +523,8 @@ def _version_key(text):
 orderable_version_key = _version_key
 
 
-def plan_install(installed, version, platform=None):
+def plan_install(installed, version, platform=None, *,
+                 interpreter_exists=None):
     """What pulsing Install should DO, given what is already installed.
 
     Returns {"action", "version", "installed_version", "supervisor",
@@ -528,6 +540,22 @@ def plan_install(installed, version, platform=None):
                                  host). This outranks even the external
                                  opt-out -- "someone else supervises it"
                                  is not permission to downgrade it.
+      3a. ...UNLESS the recorded Python is gone (interpreter_exists is
+                                 False) -> repair_runtime. The newer
+                                 host app is not running and cannot
+                                 start: its interpreter does not exist.
+                                 Refusing here is what made host_state's
+                                 "Install re-resolves it" a lie -- the
+                                 status named a button that answered
+                                 refuse_downgrade, and pressing it
+                                 REPLACED the actionable warning with
+                                 "installed by a newer Embody". This is
+                                 not a downgrade: repair_runtime writes
+                                 no payload and keeps the record's
+                                 version and files, so the newer daemon
+                                 code is what comes back up. Strictly
+                                 `is False` -- an unknown (None) is not
+                                 evidence and keeps the refusal.
       4. supervisor external     -> external. Write the payload, register
                                  NOTHING, never two supervisors.
       5. either side UNORDERABLE -> upgrade. Cannot compare, so repair.
@@ -564,6 +592,24 @@ def plan_install(installed, version, platform=None):
         return result(ACTION_INSTALL,
                       "no Convoy host app is installed for this user")
     if theirs is not None and ours is not None and ours < theirs:
+        if interpreter_exists is False and supervisor != SUPERVISOR_EXTERNAL:
+            # A dead interpreter outranks the downgrade refusal: the
+            # newer host app is already not running, and only a runtime
+            # re-resolve can bring it back. Its VERSION is untouched.
+            #
+            # NOT for an EXTERNAL supervisor. repair_runtime refuses one
+            # anyway, so without this guard the plan would authorise a
+            # repair, ConvoyExt would ask the user to confirm it, spend
+            # minutes building a venv -- and only THEN refuse. That is
+            # the same 'named a button that refuses' defect this branch
+            # exists to remove, moved one layer down and past consent.
+            # Falling through to the downgrade refusal is correct and is
+            # the documented ordering: rule 3 outranks rule 4.
+            return result(
+                ACTION_REPAIR_RUNTIME,
+                "version %s was installed by a newer Embody and the Python "
+                "it recorded is gone; the runtime will be re-resolved and "
+                "the installed version left alone" % (theirs_text,))
         return result(
             ACTION_REFUSE_DOWNGRADE,
             "version %s is already installed by a newer Embody; %s will "
@@ -1454,6 +1500,188 @@ def choose_interpreter(candidates, prefer_windowless=True):
     usable.sort(key=lambda c: (c.get("build") or (),
                                c.get("runtime_id") or ""), reverse=True)
     return usable[0]["path"]
+
+
+# -- the per-user daemon venv -------------------------------------------
+
+# The floor a daemon-venv BASE interpreter must clear. The authoritative
+# gate is spawning the candidate (a directory name is a claim, not
+# proof -- _host_build_daemon_venv asks it for its own version_info), but
+# names that cannot possibly qualify are dropped here so a machine with
+# an old python.org install does not pay a subprocess to learn that.
+DAEMON_VENV_MIN_PYTHON = (3, 11)
+
+# How far ahead to look for python.org install directories (Python311,
+# Python312, ...). These are GENERATED rather than discovered because
+# Program Files is far too large to list; a minor outside the window is
+# simply not offered as a base, and the project venv still backstops.
+DAEMON_VENV_MINOR_WINDOW = 10
+
+
+def _default_listdir(path):
+    """os.listdir that answers [] instead of raising. Never raises."""
+    try:
+        return os.listdir(path)
+    except OSError:
+        return []
+
+
+def _uv_python_bases(root, platform, exists, listdir):
+    """uv-managed CPythons under `root`, lowest usable minor first.
+
+    A real uv python dir carries BOTH the exact-version directory
+    (cpython-3.11.15-windows-x86_64-none) and the minor alias
+    (cpython-3.11-windows-x86_64-none), so it is LISTED rather than
+    guessed. Free-threaded builds ('+freethreaded') are skipped: the
+    daemon needs exactly one third-party wheel and that variant is the
+    least likely to have one.
+    """
+    join = _join(platform)
+    found = []
+    for name in sorted(listdir(root)):
+        if not name.startswith("cpython-") or "+" in name:
+            continue
+        try:
+            chunks = name.split("-")[1].split(".")
+            key = (int(chunks[0]), int(chunks[1]))
+        except (IndexError, ValueError):
+            continue
+        if key < DAEMON_VENV_MIN_PYTHON:
+            continue
+        path = (join(root, name, "python.exe") if platform == "win32"
+                else join(root, name, "bin", "python3"))
+        if exists(path):
+            found.append((key, path))
+    found.sort(key=lambda item: item[0])
+    return [path for _key, path in found]
+
+
+def daemon_venv_spec(data_dir, platform=None, exists=None, isdir=None,
+                     listdir=None, env=None, base_prefix=None):
+    """Where the per-user daemon venv lives, and what may host it.
+
+    PURE AND INJECTABLE ON PURPOSE. This platform decision used to live
+    inside a TouchDesigner extension method, where no CI runner could
+    reach it -- the whole venv ladder is covered only by a TD-only suite
+    that pytest skips. Here the windows+macos matrix exercises it with
+    literal paths and a fake filesystem, and ConvoyExt supplies only the
+    data dir.
+
+    WHY THE FALLBACK EXISTS DIFFERS BY PLATFORM, and both reasons are
+    real:
+      darwin  TouchDesigner's bundled python is code-signed with library
+              validation and, spawned standalone, refuses every
+              foreign-signed PyPI wheel -- so a venv built on it can
+              never serve the daemon, no matter how healthy it looks.
+      win32   nothing refuses to load, but with an empty runtime catalog
+              the daemon otherwise runs under the CALLING PROJECT'S venv:
+              a machine-scoped daemon pinned to one project's
+              directory. Delete, move or rebuild that project and the
+              machine's daemon dies at the next logon, with the recorded
+              interpreter baked into the Scheduled Task.
+    Returns None where neither story applies (no fallback is better than
+    an invented one).
+
+    Keys:
+      dir            the venv directory
+      python         the CONSOLE interpreter -- what uv's --python flag
+                     gets and what a probe spawns
+      daemon_python  what the SUPERVISOR launches and installed.json
+                     records. Windows splits the two (pythonw.exe runs
+                     without a console window on the user's desktop);
+                     posix has one interpreter for both. Recording the
+                     wrong half of a Windows pair is invisible rather
+                     than loud: the launcher refuses to start unless the
+                     recorded interpreter realpath-matches the one
+                     executing, and the task simply retries every
+                     minute -- a silent death loop, not an error.
+      bases          absolute paths to non-TouchDesigner interpreters
+                     that may host it, best first. NEVER a PATH lookup:
+                     a GUI TouchDesigner's PATH hides Homebrew on macOS,
+                     and on Windows PATH's `python3` is routinely the
+                     Microsoft Store alias stub, which opens the Store
+                     instead of running Python.
+
+    Base ORDER is lowest-supported-minor first, which is deliberate and
+    the opposite of the usual newest-wins. The builder picks ONE base and
+    does not retry, and the single thing it must then install is a
+    `cryptography` wheel; the oldest supported minor is the one most
+    likely to have one. A brand-new minor with no wheel yet would fail
+    the whole fallback and drop the daemon back onto a project venv.
+    """
+    platform = platform or sys.platform
+    exists = os.path.isfile if exists is None else exists
+    isdir = os.path.isdir if isdir is None else isdir
+    listdir = _default_listdir if listdir is None else listdir
+    env = os.environ if env is None else env
+    base_prefix = sys.base_prefix if base_prefix is None else base_prefix
+    if not data_dir:
+        return None
+    join = _join(platform)
+    venv_dir = join(install_root(data_dir), RUNTIME_VENV_SUBDIR)
+
+    bases = []
+    if platform == "win32":
+        # MINOR-MAJOR ORDER, GLOBALLY -- the minor loop is OUTSIDE the
+        # root loop on purpose. Scanning each root to exhaustion first
+        # would rank an all-users 3.14 above a per-user 3.11, and since
+        # exactly ONE base is tried and never retried, a brand-new minor
+        # with no cryptography wheel yet would sink the whole fallback
+        # and drop the daemon back onto a project venv -- the defect this
+        # spec exists to prevent.
+        roots = []
+        for root_var in ("ProgramFiles", "LOCALAPPDATA"):
+            root = env.get(root_var) or ""
+            if not root:
+                continue
+            roots.append(join(root, "Programs", "Python")
+                         if root_var == "LOCALAPPDATA" else root)
+        for minor in range(DAEMON_VENV_MIN_PYTHON[1],
+                           DAEMON_VENV_MIN_PYTHON[1]
+                           + DAEMON_VENV_MINOR_WINDOW):
+            name = "Python%d%d" % (DAEMON_VENV_MIN_PYTHON[0], minor)
+            for parent in roots:
+                candidate = join(parent, name, "python.exe")
+                if exists(candidate) and candidate not in bases:
+                    bases.append(candidate)
+    if platform == "darwin":
+        # Homebrew (arm64 prefix, then Intel), then Apple's CLT python3 --
+        # and that one ONLY when the Command Line Tools are actually
+        # installed, because spawning the bare /usr/bin/python3 shim
+        # without them pops Apple's interactive install dialog from a
+        # background worker.
+        # Deliberately UNCHANGED from the fallback that shipped: this
+        # ladder is exercised on real Macs and nowhere else, so it is not
+        # the place to add untested candidates (uv-managed CPythons under
+        # ~/.local/share/uv/python would qualify -- a separate change,
+        # with a Mac in front of it).
+        bases = [p for p in ("/opt/homebrew/bin/python3",
+                             "/usr/local/bin/python3") if exists(p)]
+        if (isdir("/Library/Developer/CommandLineTools")
+                and exists("/usr/bin/python3")):
+            bases.append("/usr/bin/python3")
+        python = join(venv_dir, "bin", "python3")
+        daemon_python = python
+    elif platform == "win32":
+        bases.extend(_uv_python_bases(
+            join(env.get("APPDATA") or "", "uv", "python"),
+            platform, exists, listdir))
+        # TouchDesigner's own base python, LAST and deliberately included.
+        # A venv built on it dies at the next TD upgrade -- which is a
+        # state Convoy already detects and reports (needs_repair_python) --
+        # whereas a venv built in a project directory dies at THAT plus
+        # every project move, rename and rebuild. Strictly the better
+        # floor, never the preference.
+        td_python = join(base_prefix or "", "python.exe")
+        if base_prefix and exists(td_python) and td_python not in bases:
+            bases.append(td_python)
+        python = join(venv_dir, "Scripts", "python.exe")
+        daemon_python = join(venv_dir, "Scripts", "pythonw.exe")
+    else:
+        return None
+
+    return {"dir": venv_dir, "python": python,
+            "daemon_python": daemon_python, "bases": bases}
 
 
 def _actual_inside(directory, path):
@@ -3293,10 +3521,19 @@ def host_state(installed=None, probe_status=None, supervisor=None,
 
     if interpreter_exists is False:
         out["state"] = STATE_NEEDS_REPAIR_PYTHON
-        out["detail"] = (
-            "the recorded Python (%s) is gone -- a TouchDesigner upgrade "
-            "or uninstall usually does this; Install re-resolves it"
-            % (record.get("interpreter"),))
+        if record.get("supervisor") == SUPERVISOR_EXTERNAL:
+            # Embody must not rewrite another supervisor's definition
+            # (A-36), so naming Embody's own button here would be the
+            # same lie in a different place.
+            out["detail"] = (
+                "the recorded Python (%s) is gone, and another supervisor "
+                "manages this host app -- repair it through that supervisor"
+                % (record.get("interpreter"),))
+        else:
+            out["detail"] = (
+                "the recorded Python (%s) is gone -- a TouchDesigner upgrade "
+                "or uninstall usually does this; Install re-resolves it"
+                % (record.get("interpreter"),))
         return out
 
     ours = _version_key(version)
@@ -3457,13 +3694,15 @@ def plan_host_uninstall(data_dir, platform=None, home=None):
     # of WHY a host app was failing -- so it is retained too, and the
     # dialog can say so.
     retain.append(log_path(data_dir, platform))
-    # The dedicated daemon venv (the macOS library-validation fallback).
-    # RETAINED AND SAID SO rather than removed: its hundreds of files are
-    # uv's, not ours to prove we wrote (the manifest rule above), a
-    # reinstall reuses or rebuilds it with --clear, and deleting a live
-    # interpreter out from under a still-stopping daemon is exactly the
-    # class of silent destruction this preview exists to prevent.
-    retain.append(join(root, "runtime-venv"))
+    # The dedicated per-user daemon venv (the macOS library-validation
+    # fallback, and on Windows the durable default -- see
+    # daemon_venv_spec). RETAINED AND SAID SO rather than removed: its
+    # hundreds of files are uv's, not ours to prove we wrote (the
+    # manifest rule above), a reinstall reuses or rebuilds it with
+    # --clear, and deleting a live interpreter out from under a
+    # still-stopping daemon is exactly the class of silent destruction
+    # this preview exists to prevent.
+    retain.append(join(root, RUNTIME_VENV_SUBDIR))
     retain_present = [p for p in retain if os.path.exists(p)]
 
     jobs, indeterminate = count_jobs(data_dir, platform)
@@ -3580,6 +3819,159 @@ def _failed(reason, detail="", **fields):
     return out
 
 
+def _stamp_runtime_shape(record, runtime_check, platform, architecture):
+    """Record WHICH KIND of runtime was verified. Mutates in place.
+
+    A managed runtime carries a receipt the launcher re-verifies (hash of
+    the bundle, of its interpreter, crypto loaded from inside it). The
+    venv runtime has no bundle, so it records no receipt at all and is
+    marked explicitly -- the launcher then proves the recorded
+    interpreter is the one executing plus a live crypto/TLS check. The
+    two shapes are MUTUALLY EXCLUSIVE by construction: a record can never
+    claim managed verification it did not get, and a repair that changes
+    the shape must not leave the old claim behind.
+    """
+    record.pop("runtime", None)
+    record.pop("venv_runtime", None)
+    if runtime_check.get("runtime_id"):
+        record["runtime"] = {
+            "format": runtime_check.get("receipt_format",
+                                        RUNTIME_RECEIPT_FORMAT),
+            "runtime_id": runtime_check.get("runtime_id"),
+            "platform": runtime_check.get("platform", platform),
+            "architecture": runtime_check.get(
+                "architecture", normalize_architecture(architecture)),
+            "python_version": runtime_check.get("python_version"),
+            "cryptography_version": runtime_check.get(
+                "cryptography_version"),
+            "source_revision": runtime_check.get("source_revision"),
+            "archive_sha256": runtime_check.get("archive_sha256"),
+        }
+    else:
+        record["venv_runtime"] = True
+    return record
+
+
+def _write_and_register_supervisor(data_dir, interpreter, launcher, kind,
+                                   platform, run, account, home, uid,
+                                   steps, shutdown=None, is_running=None,
+                                   sleep=None):
+    """Write the supervisor definition and register it. NEVER RAISES.
+
+    ONE copy of the launchd/schtasks correctness argument, shared by
+    install() and repair_runtime(): the graceful stop before a
+    re-register, the win32 refusal when the account cannot be named, and
+    the darwin bootout-then-enable-then-bootstrap ordering. Every rule
+    below is a field failure that was paid for once; a second copy of
+    them is how one of them comes back on the path that was not
+    maintained.
+
+    Returns (registered, failure). `failure` is a _failed() dict the
+    caller must return as-is, or None. `steps` is appended IN PLACE so
+    the caller's progress record stays honest either way.
+    """
+    registered = False
+    # A repair over a RUNNING daemon: ask the old one to exit and
+    # wait for it, so the register below replaces it instead of
+    # racing it. Graceful only -- a shutdown that cannot complete
+    # falls through to the platform mechanics (darwin additionally
+    # boots the label out below). Gated on the branch preconditions
+    # (win32 account, darwin home): a repair the branch would REFUSE
+    # anyway must not stop a healthy daemon first. The step is
+    # honest: 'stopped_for_repair' only when the exit was observed,
+    # 'stop_timeout' when the old daemon would not go.
+    preconditions_ok = (
+        (kind == SUPERVISOR_TASK and bool(account))
+        or (kind == SUPERVISOR_AGENT and bool(home)))
+    if preconditions_ok and shutdown is not None:
+        try:
+            alive = bool(is_running()) if is_running else False
+        except Exception:
+            alive = False
+        if alive:
+            try:
+                shutdown()
+            except Exception:
+                pass
+            if _await_exit(is_running, sleep=sleep):
+                steps.append("stopped_for_repair")
+            else:
+                steps.append("stop_timeout")
+    if kind == SUPERVISOR_TASK:
+        # Refuse BEFORE writing the XML rather than registering a
+        # task for "any user": that is an administrator-only
+        # registration and schtasks answers Access is denied
+        # (measured 2026-08-01 -- see render_task_xml).
+        if not account:
+            return registered, _failed(
+                "no_user_account",
+                "could not determine this Windows account (USERNAME "
+                "is unset), and a Scheduled Task must name the user "
+                "whose logon starts it",
+                steps=steps)
+        xml_file = task_xml_path(data_dir, platform)
+        os.makedirs(os.path.dirname(xml_file), exist_ok=True)
+        with open(xml_file, "wb") as f:
+            f.write(render_task_xml(interpreter, launcher, account))
+        steps.append("task_xml")
+        code, out, err = run(supervisor_argv(
+            "register", platform, xml_path=xml_file))
+        if code != 0:
+            return registered, _failed("register_failed",
+                                       (err or out or "").strip(),
+                                       steps=steps, returncode=code)
+        registered = True
+    elif kind == SUPERVISOR_AGENT:
+        if not home:
+            return registered, _failed(
+                "no_home", "a LaunchAgent needs the user's home dir")
+        agent = plist_path(home, platform)
+        _atomic_write(agent, render_launch_agent_plist(
+            interpreter, launcher, data_dir))
+        steps.append("plist")
+        # A LOADED LABEL CANNOT BE BOOTSTRAPPED: launchctl returns
+        # EIO(5) at a label that is already registered -- exactly
+        # what a repair over a live agent hits (field failure
+        # 2026-08-04: "Bootstrap failed: 5: Input/output error").
+        # So probe first; if loaded, disable (KeepAlive would
+        # resurrect the old daemon within seconds), boot it out, and
+        # WAIT for launchd to actually drop the label -- bootout
+        # returns before the teardown completes. The graceful
+        # shutdown above has already asked the daemon itself to
+        # exit when the caller could observe it.
+        code, _out, _err = run(
+            supervisor_argv("status", platform, uid=uid))
+        if code == 0:
+            run(supervisor_argv("disable", platform, uid=uid))
+            run(supervisor_argv("stop", platform, uid=uid))
+            _await_unregistered(run, platform, uid=uid, sleep=sleep)
+            steps.append("bootout")
+        # ENABLE BEFORE BOOTSTRAP, and this is not belt-and-braces.
+        # launchctl's disabled state is PERSISTENT, lives OUTSIDE the
+        # plist, is keyed by the constant label, and survives boots.
+        # stop() and uninstall() both disable (they must -- KeepAlive
+        # would otherwise resurrect the agent in about a second), so
+        # without this the plan's designated repair path (Stop ->
+        # Install, Uninstall -> Install) leaves the agent permanently
+        # unloadable. The Windows twin is safe only by accident of
+        # mechanism: schtasks /Create /F rewrites the whole
+        # definition including <Enabled>true</Enabled>, so the
+        # asymmetry is invisible on the platform we can test.
+        # A failure here is tolerated: enabling an already-enabled
+        # label reports differently across macOS versions, and it
+        # must not turn a good install into a failed one.
+        run(supervisor_argv("enable", platform, uid=uid))
+        steps.append("enable")
+        code, out, err = run(supervisor_argv(
+            "register", platform, plist_path=agent))
+        if code != 0:
+            return registered, _failed("register_failed",
+                                       (err or out or "").strip(),
+                                       steps=steps, returncode=code)
+        registered = True
+    return registered, None
+
+
 def install(data_dir, version, modules, interpreter, platform=None,
             runner=None, home=None, drain_interval=None, installed_by=None,
             supervisor=None, now=None, user=None, env=None, uid=None,
@@ -3684,7 +4076,6 @@ def install(data_dir, version, modules, interpreter, platform=None,
         # dialog in front of the user, instead of silently at 3am.
         os.makedirs(logs_dir(data_dir, platform), exist_ok=True)
 
-        registered = False
         # Recorded on every platform (it is what the task was registered
         # for, and the first thing to check when a supervisor stops
         # firing after an account change), required only on win32.
@@ -3692,104 +4083,12 @@ def install(data_dir, version, modules, interpreter, platform=None,
         # refusal is testable -- without it a test could only fall
         # through to the real environment, which always HAS a username.
         account = user or current_user_account(platform, env)
-        # A repair over a RUNNING daemon: ask the old one to exit and
-        # wait for it, so the register below replaces it instead of
-        # racing it. Graceful only -- a shutdown that cannot complete
-        # falls through to the platform mechanics (darwin additionally
-        # boots the label out below). Gated on the branch preconditions
-        # (win32 account, darwin home): a repair the branch would REFUSE
-        # anyway must not stop a healthy daemon first. The step is
-        # honest: 'stopped_for_repair' only when the exit was observed,
-        # 'stop_timeout' when the old daemon would not go.
-        preconditions_ok = (
-            (kind == SUPERVISOR_TASK and bool(account))
-            or (kind == SUPERVISOR_AGENT and bool(home)))
-        if preconditions_ok and shutdown is not None:
-            try:
-                alive = bool(is_running()) if is_running else False
-            except Exception:
-                alive = False
-            if alive:
-                try:
-                    shutdown()
-                except Exception:
-                    pass
-                if _await_exit(is_running, sleep=sleep):
-                    steps.append("stopped_for_repair")
-                else:
-                    steps.append("stop_timeout")
-        if kind == SUPERVISOR_TASK:
-            # Refuse BEFORE writing the XML rather than registering a
-            # task for "any user": that is an administrator-only
-            # registration and schtasks answers Access is denied
-            # (measured 2026-08-01 -- see render_task_xml).
-            if not account:
-                return _failed(
-                    "no_user_account",
-                    "could not determine this Windows account (USERNAME "
-                    "is unset), and a Scheduled Task must name the user "
-                    "whose logon starts it",
-                    steps=steps)
-            xml_file = task_xml_path(data_dir, platform)
-            os.makedirs(os.path.dirname(xml_file), exist_ok=True)
-            with open(xml_file, "wb") as f:
-                f.write(render_task_xml(interpreter, launcher, account))
-            steps.append("task_xml")
-            code, out, err = run(supervisor_argv(
-                "register", platform, xml_path=xml_file))
-            if code != 0:
-                return _failed("register_failed",
-                               (err or out or "").strip(),
-                               steps=steps, returncode=code)
-            registered = True
-        elif kind == SUPERVISOR_AGENT:
-            if not home:
-                return _failed("no_home",
-                               "a LaunchAgent needs the user's home dir")
-            agent = plist_path(home, platform)
-            _atomic_write(agent, render_launch_agent_plist(
-                interpreter, launcher, data_dir))
-            steps.append("plist")
-            # A LOADED LABEL CANNOT BE BOOTSTRAPPED: launchctl returns
-            # EIO(5) at a label that is already registered -- exactly
-            # what a repair over a live agent hits (field failure
-            # 2026-08-04: "Bootstrap failed: 5: Input/output error").
-            # So probe first; if loaded, disable (KeepAlive would
-            # resurrect the old daemon within seconds), boot it out, and
-            # WAIT for launchd to actually drop the label -- bootout
-            # returns before the teardown completes. The graceful
-            # shutdown above has already asked the daemon itself to
-            # exit when the caller could observe it.
-            code, _out, _err = run(
-                supervisor_argv("status", platform, uid=uid))
-            if code == 0:
-                run(supervisor_argv("disable", platform, uid=uid))
-                run(supervisor_argv("stop", platform, uid=uid))
-                _await_unregistered(run, platform, uid=uid, sleep=sleep)
-                steps.append("bootout")
-            # ENABLE BEFORE BOOTSTRAP, and this is not belt-and-braces.
-            # launchctl's disabled state is PERSISTENT, lives OUTSIDE the
-            # plist, is keyed by the constant label, and survives boots.
-            # stop() and uninstall() both disable (they must -- KeepAlive
-            # would otherwise resurrect the agent in about a second), so
-            # without this the plan's designated repair path (Stop ->
-            # Install, Uninstall -> Install) leaves the agent permanently
-            # unloadable. The Windows twin is safe only by accident of
-            # mechanism: schtasks /Create /F rewrites the whole
-            # definition including <Enabled>true</Enabled>, so the
-            # asymmetry is invisible on the platform we can test.
-            # A failure here is tolerated: enabling an already-enabled
-            # label reports differently across macOS versions, and it
-            # must not turn a good install into a failed one.
-            run(supervisor_argv("enable", platform, uid=uid))
-            steps.append("enable")
-            code, out, err = run(supervisor_argv(
-                "register", platform, plist_path=agent))
-            if code != 0:
-                return _failed("register_failed",
-                               (err or out or "").strip(),
-                               steps=steps, returncode=code)
-            registered = True
+        registered, failure = _write_and_register_supervisor(
+            data_dir, interpreter, launcher, kind, platform, run, account,
+            home, uid, steps, shutdown=shutdown, is_running=is_running,
+            sleep=sleep)
+        if failure is not None:
+            return failure
 
         record = {
             "version": version,
@@ -3803,29 +4102,7 @@ def install(data_dir, version, modules, interpreter, platform=None,
             "files": manifest.get("files", []),
             "format": "convoy-install/1",
         }
-        # A managed runtime carries a receipt the launcher re-verifies (hash
-        # of the bundle, of its interpreter, crypto loaded from inside it).
-        # The venv runtime has no bundle, so it records no receipt at all and
-        # is marked explicitly -- the launcher then proves the recorded
-        # interpreter is the one executing plus a live crypto/TLS check. The
-        # two shapes are mutually exclusive by construction: a record can
-        # never claim managed verification it did not get.
-        if runtime_check.get("runtime_id"):
-            record["runtime"] = {
-                "format": runtime_check.get("receipt_format",
-                                            RUNTIME_RECEIPT_FORMAT),
-                "runtime_id": runtime_check.get("runtime_id"),
-                "platform": runtime_check.get("platform", platform),
-                "architecture": runtime_check.get(
-                    "architecture", normalize_architecture(architecture)),
-                "python_version": runtime_check.get("python_version"),
-                "cryptography_version": runtime_check.get(
-                    "cryptography_version"),
-                "source_revision": runtime_check.get("source_revision"),
-                "archive_sha256": runtime_check.get("archive_sha256"),
-            }
-        else:
-            record["venv_runtime"] = True
+        _stamp_runtime_shape(record, runtime_check, platform, architecture)
         write_installed(data_dir, record, platform)      # LAST
         steps.append("installed.json")
         return _ok(version=version, supervisor=kind, registered=registered,
@@ -3833,6 +4110,141 @@ def install(data_dir, version, modules, interpreter, platform=None,
                    steps=steps, record=record)
     except Exception as e:
         return _failed("install_failed", "%s: %s" % (type(e).__name__, e),
+                       steps=steps)
+
+
+def repair_runtime(data_dir, interpreter, platform=None, runner=None,
+                   home=None, uid=None, user=None, env=None,
+                   installed_by=None, runtime_verifier=None,
+                   runtime_runner=None, architecture=None, shutdown=None,
+                   is_running=None, sleep=None, now=None):
+    """Point an EXISTING install at a new interpreter. NEVER RAISES.
+
+    The narrow repair for one specific dead end: the recorded Python is
+    gone -- host_state says needs_repair_python, "Install re-resolves
+    it" -- but this project may not run a full install, because the
+    record was written by a NEWER Embody and plan_install answers
+    refuse_downgrade. The status named a button that refused, and
+    pressing it REPLACED the actionable warning with "installed by a
+    newer Embody". Meanwhile the machine's daemon stays dead: Start
+    re-registers the same missing interpreter and reports success.
+
+    WHAT IT DELIBERATELY CANNOT DO. There is no `version` parameter and
+    no `modules` parameter, so a downgrade is not merely untested here,
+    it is UNREPRESENTABLE. No payload is written, app/<version>/ is not
+    touched, and the record's version and file list are copied through
+    verbatim. render_launcher resolves the payload from installed.json
+    at run time, so the NEWER daemon code is exactly what comes back up
+    -- A-36 is honoured literally, not tolerated.
+
+    THE LAUNCHER IS REWRITTEN ONLY IF MISSING. An older Embody rewriting
+    the launcher that drives a newer payload is a cross-version contract
+    bet with no test behind it. The dead interpreter lives in the
+    supervisor definition and in installed.json; those are all this
+    touches.
+    """
+    platform = platform or sys.platform
+    run = runner or run_command
+    if not interpreter:
+        return _failed("no_interpreter",
+                       "a runtime repair needs an interpreter to point at")
+    record = read_installed(data_dir, platform)
+    if not isinstance(record, dict) or not record.get("version"):
+        return _failed("not_installed",
+                       "there is no installed Convoy host app to repair")
+    kind = record.get("supervisor") or (SUPERVISOR_TASK
+                                        if platform == "win32"
+                                        else SUPERVISOR_AGENT)
+    if kind == SUPERVISOR_EXTERNAL:
+        # A-36's opt-out is not weaker here than in install(): never two
+        # supervisors, and never rewrite someone else's.
+        return _failed(
+            "external_supervisor",
+            "another supervisor manages this host app; Embody will not "
+            "rewrite it -- repair it through that supervisor")
+    if kind not in (SUPERVISOR_TASK, SUPERVISOR_AGENT):
+        # Refuse rather than fall through _write_and_register_supervisor
+        # taking NO branch, which would return ok=True with nothing
+        # registered -- a repair that reports success and re-points
+        # nothing. install() cannot write such a record, but repair
+        # reads records other Embodies wrote.
+        return _failed(
+            "unknown_supervisor",
+            "the installed record names a supervisor this Embody does "
+            "not know how to re-register (%r)" % (kind,))
+
+    # THE SAME GATE install() USES. A repair is still a decision to run a
+    # program at every logon, so the interpreter earns it the same way:
+    # our receipt for a managed runtime, or a live crypto/TLS probe for a
+    # venv. Tests inject a verifier because cross-platform CI must never
+    # execute a target binary.
+    verifier = runtime_verifier or verify_managed_runtime
+    try:
+        runtime_check = verifier(
+            data_dir, interpreter, platform=platform,
+            architecture=normalize_architecture(architecture),
+            runner=runtime_runner)
+    except Exception as e:
+        return _failed("runtime_verification_failed",
+                       "%s: %s" % (type(e).__name__, e))
+    if not isinstance(runtime_check, dict) or not runtime_check.get("ok"):
+        runtime_check = (runtime_check if isinstance(runtime_check, dict)
+                         else {"reason": "runtime_verification_failed",
+                               "detail": "runtime verifier returned no "
+                                         "result"})
+        return _failed(
+            runtime_check.get("reason") or "runtime_verification_failed",
+            runtime_check.get("detail") or
+            "the replacement interpreter did not pass verification",
+            runtime=runtime_check)
+
+    steps = []
+    try:
+        # THE CANONICAL PATH, never the record's. installed.json is a
+        # file another Embody wrote; letting it name the write target
+        # would let a foreign record decide where this process writes a
+        # launcher and what the supervisor is registered to run. install()
+        # always uses launcher_path, and so does this.
+        launcher = launcher_path(data_dir, platform)
+        if not os.path.isfile(launcher):
+            # Only when it is actually gone -- see the docstring.
+            _atomic_write(launcher, render_launcher(platform, data_dir))
+            steps.append("launcher")
+        os.makedirs(logs_dir(data_dir, platform), exist_ok=True)
+        # THE LIVE ACCOUNT FIRST, exactly as install() resolves it. A
+        # repair IS the "something about this machine changed" path, so
+        # preferring the account recorded by a previous install is
+        # backwards: after a rename or domain migration it would register
+        # a logon task for a user who never logs on -- which fails
+        # silently, the worst shape. The record is only a last resort for
+        # an environment that cannot name the account at all.
+        account = (user or current_user_account(platform, env)
+                   or record.get("account"))
+        registered, failure = _write_and_register_supervisor(
+            data_dir, interpreter, launcher, kind, platform, run, account,
+            home, uid, steps, shutdown=shutdown, is_running=is_running,
+            sleep=sleep)
+        if failure is not None:
+            return failure
+
+        updated = dict(record)
+        updated["interpreter"] = str(interpreter)
+        updated["launcher"] = launcher
+        updated["account"] = account or ""
+        updated["repaired_at"] = (now or time.time)()
+        updated["repaired_by"] = str(installed_by or "")
+        _stamp_runtime_shape(updated, runtime_check, platform, architecture)
+        # LAST, exactly as in install(): the launcher reads this file to
+        # find its payload, so a crash before here leaves the previous
+        # record -- pointing at the old interpreter -- intact.
+        write_installed(data_dir, updated, platform)
+        steps.append("installed.json")
+        return _ok(version=updated.get("version"), supervisor=kind,
+                   registered=registered, launcher=launcher,
+                   interpreter=str(interpreter), steps=steps,
+                   record=updated, repaired=True)
+    except Exception as e:
+        return _failed("repair_failed", "%s: %s" % (type(e).__name__, e),
                        steps=steps)
 
 

@@ -36,6 +36,7 @@ import ast
 import builtins
 import hashlib
 import importlib.util
+import inspect
 import json
 import os
 import plistlib
@@ -1827,6 +1828,249 @@ class TestConvoyInstallInterpreterDiscovery(EmbodyTestCase):
             'darwin', env={}, home='/Users/x'), MAC_DATA)
 
 
+class TestConvoyDaemonVenvSpec(EmbodyTestCase):
+    """Where the per-user daemon venv lives, and what may host it.
+
+    This decision spent a release inside ConvoyExt._convoyDaemonVenvSpec,
+    a TouchDesigner extension method reachable only by the TD-only suite
+    that pytest skips -- so its Windows half had no test on any runner at
+    all. Injected exists/isdir/listdir/env/base_prefix bring it here, to
+    the windows+macos matrix, with LITERAL path strings per this file's
+    convention (os.path.join would answer the darwin cases in backslashes
+    on the Windows runner and prove nothing).
+    """
+
+    WIN_DATA = r'C:\Users\dev\AppData\Local\EmbodyConvoy'
+    MAC_DATA = '/Users/dev/Library/Application Support/EmbodyConvoy'
+    WIN_ENV = {'ProgramFiles': r'C:\Program Files',
+               'LOCALAPPDATA': r'C:\Users\dev\AppData\Local',
+               'APPDATA': r'C:\Users\dev\AppData\Roaming'}
+    UV_DIR = r'C:\Users\dev\AppData\Roaming\uv\python'
+
+    def _spec(self, platform, present=(), dirs=(), listing=None, env=None,
+              base_prefix=None, data_dir=None):
+        present = set(present)
+        dirs = set(dirs)
+        listing = listing or {}
+        if data_dir is None:
+            data_dir = self.WIN_DATA if platform == 'win32' else self.MAC_DATA
+        if env is None:
+            env = self.WIN_ENV if platform == 'win32' else {}
+        return install_mod.daemon_venv_spec(
+            data_dir, platform=platform,
+            exists=lambda p: p in present,
+            isdir=lambda p: p in dirs,
+            listdir=lambda p: list(listing.get(p, ())),
+            env=env, base_prefix=base_prefix)
+
+    # -- the interpreter pair -------------------------------------------
+
+    def test_windows_splits_the_console_and_daemon_interpreters(self):
+        """pythonw.exe is what the supervisor launches and what
+        installed.json records; python.exe is what uv is driven with.
+        Swapping them is invisible -- the launcher refuses to start
+        unless the recorded interpreter realpath-matches the running one,
+        and the Scheduled Task just retries every minute."""
+        spec = self._spec('win32')
+        self.assertEqual(
+            spec['dir'],
+            r'C:\Users\dev\AppData\Local\EmbodyConvoy\runtime-venv')
+        self.assertEqual(
+            spec['python'],
+            r'C:\Users\dev\AppData\Local\EmbodyConvoy'
+            r'\runtime-venv\Scripts\python.exe')
+        self.assertEqual(
+            spec['daemon_python'],
+            r'C:\Users\dev\AppData\Local\EmbodyConvoy'
+            r'\runtime-venv\Scripts\pythonw.exe')
+        self.assertNotEqual(spec['python'], spec['daemon_python'])
+
+    def test_macos_uses_one_interpreter_for_both(self):
+        """posix has no windowless twin, so the two keys collapse -- and
+        callers may read daemon_python unconditionally."""
+        spec = self._spec('darwin')
+        expected = ('/Users/dev/Library/Application Support/EmbodyConvoy'
+                    '/runtime-venv/bin/python3')
+        self.assertEqual(spec['python'], expected)
+        self.assertEqual(spec['daemon_python'], expected)
+
+    def test_a_platform_with_no_fallback_story_gets_no_spec(self):
+        """Better no fallback than an invented one."""
+        self.assertIsNone(self._spec('linux'))
+        self.assertIsNone(self._spec('win32', data_dir=''))
+
+    # -- which interpreters may host it ---------------------------------
+
+    def test_windows_bases_are_python_org_then_uv_then_touchdesigner(self):
+        spec = self._spec(
+            'win32',
+            present=[r'C:\Program Files\Python311\python.exe',
+                     r'C:\Users\dev\AppData\Local\Programs\Python'
+                     r'\Python312\python.exe',
+                     self.UV_DIR + r'\cpython-3.13.2-windows-x86_64-none'
+                                   r'\python.exe',
+                     r'C:\Program Files\Derivative\TD\bin\python.exe'],
+            listing={self.UV_DIR: ['cpython-3.13.2-windows-x86_64-none']},
+            base_prefix=r'C:\Program Files\Derivative\TD\bin')
+        self.assertEqual(spec['bases'], [
+            r'C:\Program Files\Python311\python.exe',
+            r'C:\Users\dev\AppData\Local\Programs\Python\Python312'
+            r'\python.exe',
+            self.UV_DIR + r'\cpython-3.13.2-windows-x86_64-none\python.exe',
+            r'C:\Program Files\Derivative\TD\bin\python.exe',
+        ])
+
+    def test_touchdesigner_python_is_the_LAST_base_never_the_first(self):
+        """The whole point of the per-user venv is surviving things that
+        kill the project venv. A venv built on TouchDesigner's own python
+        dies at the next TD upgrade, so it is the floor, not the
+        preference -- it still beats a project directory, which dies at
+        that PLUS every move, rename and rebuild."""
+        spec = self._spec(
+            'win32',
+            present=[r'C:\Program Files\Python311\python.exe',
+                     r'C:\Program Files\Derivative\TD\bin\python.exe'],
+            base_prefix=r'C:\Program Files\Derivative\TD\bin')
+        self.assertEqual(spec['bases'][-1],
+                         r'C:\Program Files\Derivative\TD\bin\python.exe')
+        self.assertEqual(spec['bases'][0],
+                         r'C:\Program Files\Python311\python.exe')
+
+    def test_the_touchdesigner_base_is_never_listed_twice(self):
+        """TD's own python can also be the uv-managed one that built the
+        environment; a duplicate would cost a second 15 s probe."""
+        uv_python = (self.UV_DIR
+                     + r'\cpython-3.11-windows-x86_64-none\python.exe')
+        spec = self._spec(
+            'win32', present=[uv_python],
+            listing={self.UV_DIR: ['cpython-3.11-windows-x86_64-none']},
+            base_prefix=self.UV_DIR + r'\cpython-3.11-windows-x86_64-none')
+        self.assertEqual(spec['bases'], [uv_python])
+
+    def test_windows_bases_climb_from_the_lowest_supported_minor(self):
+        """Deliberately NOT newest-wins. The builder picks ONE base and
+        does not retry, and the one thing it must then install is a
+        cryptography wheel -- the oldest supported minor is the likeliest
+        to have one."""
+        spec = self._spec(
+            'win32',
+            present=[r'C:\Program Files\Python314\python.exe',
+                     r'C:\Program Files\Python311\python.exe'])
+        self.assertEqual(spec['bases'], [
+            r'C:\Program Files\Python311\python.exe',
+            r'C:\Program Files\Python314\python.exe',
+        ])
+
+    def test_the_minor_order_is_GLOBAL_not_per_install_root(self):
+        """The version wins, not the install root. Ranking a whole root
+        before the next puts an all-users 3.14 above a per-user 3.11 --
+        and since exactly ONE base is built on and never retried, that
+        hands the fallback to the minor least likely to have a
+        cryptography wheel. The first draft used two ProgramFiles paths
+        and so pinned the per-root order without noticing."""
+        spec = self._spec(
+            'win32',
+            present=[r'C:\Program Files\Python314\python.exe',
+                     r'C:\Users\dev\AppData\Local\Programs\Python'
+                     r'\Python311\python.exe'])
+        self.assertEqual(spec['bases'][0],
+                         r'C:\Users\dev\AppData\Local\Programs\Python'
+                         r'\Python311\python.exe')
+
+    def test_an_interpreter_below_the_floor_is_never_offered(self):
+        """3.9 is on this repo's own dev box. Offering it would spend a
+        subprocess to be told what the directory name already said."""
+        spec = self._spec(
+            'win32',
+            present=[r'C:\Program Files\Python39\python.exe',
+                     self.UV_DIR + r'\cpython-3.9.25-windows-x86_64-none'
+                                   r'\python.exe'],
+            listing={self.UV_DIR: ['cpython-3.9.25-windows-x86_64-none']})
+        self.assertEqual(spec['bases'], [])
+
+    def test_uv_variants_that_cannot_carry_the_wheel_are_skipped(self):
+        """Free-threaded, pypy and graalpy builds are real entries in a
+        real uv python dir and the least likely to have a cryptography
+        wheel."""
+        listing = {self.UV_DIR: [
+            'cpython-3.13.14+freethreaded-windows-x86_64-none',
+            'pypy-3.11.15-windows-x86_64-none',
+            'graalpy-3.12.0-windows-x86_64-none',
+            'cpython-3.12.13-windows-x86_64-none',
+        ]}
+        present = [self.UV_DIR + '\\' + name + r'\python.exe'
+                   for name in listing[self.UV_DIR]]
+        spec = self._spec('win32', present=present, listing=listing)
+        self.assertEqual(
+            spec['bases'],
+            [self.UV_DIR
+             + r'\cpython-3.12.13-windows-x86_64-none\python.exe'])
+
+    def test_uv_bases_climb_from_the_lowest_supported_minor_too(self):
+        """The same lowest-first rule the python.org window follows. A
+        real uv python dir also carries the minor ALIAS beside the exact
+        version (cpython-3.11-... and cpython-3.11.15-...), and both are
+        usable bases, so ties must stay stable rather than reorder."""
+        listing = {self.UV_DIR: [
+            'cpython-3.13.2-windows-x86_64-none',
+            'cpython-3.11-windows-x86_64-none',
+            'cpython-3.11.15-windows-x86_64-none',
+        ]}
+        present = [self.UV_DIR + '\\' + name + r'\python.exe'
+                   for name in listing[self.UV_DIR]]
+        spec = self._spec('win32', present=present, listing=listing)
+        self.assertEqual(spec['bases'], [
+            self.UV_DIR + r'\cpython-3.11-windows-x86_64-none\python.exe',
+            self.UV_DIR + r'\cpython-3.11.15-windows-x86_64-none\python.exe',
+            self.UV_DIR + r'\cpython-3.13.2-windows-x86_64-none\python.exe',
+        ])
+
+    def test_a_uv_directory_that_is_only_a_name_is_not_a_base(self):
+        """The listing is a claim; the file has to be there."""
+        spec = self._spec(
+            'win32', present=[],
+            listing={self.UV_DIR: ['cpython-3.12.13-windows-x86_64-none']})
+        self.assertEqual(spec['bases'], [])
+
+    def test_no_base_at_all_is_an_empty_list_not_a_crash(self):
+        """A machine with only the Store alias stub. The caller falls
+        back to the project venv; nothing here may raise."""
+        spec = self._spec('win32')
+        self.assertEqual(spec['bases'], [])
+        self.assertTrue(spec['dir'])
+
+    # -- macOS, unchanged -----------------------------------------------
+
+    def test_macos_bases_are_homebrew_arm64_then_intel(self):
+        spec = self._spec('darwin',
+                          present=['/opt/homebrew/bin/python3',
+                                   '/usr/local/bin/python3'])
+        self.assertEqual(spec['bases'], ['/opt/homebrew/bin/python3',
+                                         '/usr/local/bin/python3'])
+
+    def test_macos_offers_apples_python3_only_with_the_tools_installed(self):
+        """Spawning the bare /usr/bin/python3 shim WITHOUT the Command
+        Line Tools pops Apple's interactive installer -- from a
+        background worker, behind the user."""
+        without = self._spec('darwin', present=['/usr/bin/python3'])
+        self.assertEqual(without['bases'], [])
+        with_tools = self._spec(
+            'darwin', present=['/usr/bin/python3'],
+            dirs=['/Library/Developer/CommandLineTools'])
+        self.assertEqual(with_tools['bases'], ['/usr/bin/python3'])
+
+    def test_macos_does_not_gain_windows_bases(self):
+        """The darwin ladder is exercised on real Macs and nowhere else,
+        so the Windows enumeration must not leak into it."""
+        spec = self._spec(
+            'darwin',
+            present=[r'C:\Program Files\Python311\python.exe'],
+            env={'ProgramFiles': r'C:\Program Files',
+                 'APPDATA': r'C:\Users\dev\AppData\Roaming'},
+            base_prefix='/Applications/TouchDesigner.app/Contents/MacOS')
+        self.assertEqual(spec['bases'], [])
+
+
 class TestConvoyManagedRuntime(EmbodyTestCase):
 
     PLATFORM = 'win32'
@@ -2881,6 +3125,76 @@ class TestConvoyInstallPlan(EmbodyTestCase):
         self.assertEqual(got['action'], 'refuse_downgrade')
         self.assertIn('6.0.180', got['detail'])
 
+    def test_a_dead_interpreter_authorises_a_runtime_repair(self):
+        """host_state says 'Install re-resolves it' the moment the
+        recorded Python is gone. Before this branch existed, Install
+        answered refuse_downgrade instead -- so the status named a
+        button that refused, and pressing it REPLACED the warning with
+        'installed by a newer Embody'."""
+        got = install_mod.plan_install(self._record('6.0.230'), '6.0.223',
+                                       interpreter_exists=False)
+        self.assertEqual(got['action'], 'repair_runtime')
+        self.assertIn('6.0.230', got['detail'])
+
+    def test_a_LIVE_interpreter_still_refuses_the_downgrade(self):
+        """The A-36 guard, and it sits here beside its exception on
+        purpose: nothing about a healthy install authorises a
+        downgrade."""
+        got = install_mod.plan_install(self._record('6.0.230'), '6.0.223',
+                                       interpreter_exists=True)
+        self.assertEqual(got['action'], 'refuse_downgrade')
+
+    def test_an_UNKNOWN_interpreter_still_refuses_the_downgrade(self):
+        """None is not evidence. A caller that could not look must not
+        get the permissive answer -- and the default must be the safe
+        one, because every existing caller uses it."""
+        for plan in (install_mod.plan_install(self._record('6.0.230'),
+                                              '6.0.223',
+                                              interpreter_exists=None),
+                     install_mod.plan_install(self._record('6.0.230'),
+                                              '6.0.223')):
+            self.assertEqual(plan['action'], 'refuse_downgrade')
+
+    def test_a_dead_interpreter_does_not_authorise_taking_over(self):
+        """An external supervisor owns start/stop. A missing interpreter
+        is not permission to rewrite someone else's definition.
+
+        OURS OLDER, deliberately. The first draft of this test used the
+        SAME version on both sides, so `ours < theirs` was False and the
+        branch it names was never entered -- it passed with the whole
+        repair branch deleted, and with it returning literal nonsense.
+        It is the newer-external record that must not plan a repair,
+        because repair_runtime refuses one anyway: without the guard the
+        user is asked to confirm a repair, waits through a venv build,
+        and is refused afterwards.
+        """
+        got = install_mod.plan_install(
+            self._record('6.0.230', 'external'), '6.0.223',
+            interpreter_exists=False)
+        self.assertEqual(got['action'], 'refuse_downgrade')
+        self.assertNotEqual(got['action'], 'repair_runtime')
+
+    def test_an_external_supervisor_at_the_same_version_is_still_external(
+            self):
+        """The neighbouring cell of the same truth table: no downgrade in
+        play, so the external opt-out answers as it always did."""
+        got = install_mod.plan_install(
+            self._record('6.0.223', 'external'), '6.0.223',
+            interpreter_exists=False)
+        self.assertEqual(got['action'], 'external')
+
+    def test_interpreter_exists_is_keyword_only(self):
+        """ARITY GUARD. plan_install's `platform` parameter is passed
+        POSITIONALLY by ConvoyExt and is unread in the body, so a new
+        third positional would silently bind 'win32' to this boolean and
+        every branch would flip with the tests still green."""
+        params = inspect.signature(install_mod.plan_install).parameters
+        self.assertEqual(params['interpreter_exists'].kind,
+                         inspect.Parameter.KEYWORD_ONLY)
+        with self.assertRaises(TypeError):
+            install_mod.plan_install(self._record('6.0.230'), '6.0.223',
+                                     'win32', False)
+
     def test_numeric_not_lexical_ordering(self):
         self.assertEqual(
             install_mod.plan_install(self._record('6.0.9'),
@@ -3189,6 +3503,25 @@ class TestConvoyInstallHostState(EmbodyTestCase):
     def test_nothing_installed(self):
         got = install_mod.host_state(None, 'absent')
         self.assertEqual(got['state'], 'not_installed')
+
+    def test_a_dead_python_under_an_external_supervisor_says_so(self):
+        """Embody must not rewrite another supervisor's definition, so
+        pointing that user at Embody's own Repair button would be the
+        same 'names a button that refuses' lie in a different place --
+        and plan_install answers external/refuse there, never repair."""
+        record = dict(self.RECORD, supervisor='external')
+        got = install_mod.host_state(record, 'absent', None, '6.0.171',
+                                     False)
+        self.assertEqual(got['state'], 'needs_repair_python')
+        self.assertIn('another supervisor', got['detail'])
+        self.assertNotIn('Install re-resolves it', got['detail'])
+
+    def test_a_dead_python_under_OUR_supervisor_names_install(self):
+        """The sibling half: here Install really does re-resolve it."""
+        got = install_mod.host_state(self.RECORD, 'absent', None,
+                                     '6.0.171', False)
+        self.assertEqual(got['state'], 'needs_repair_python')
+        self.assertIn('Install re-resolves it', got['detail'])
 
     def test_running(self):
         got = install_mod.host_state(self.RECORD, 'running',
@@ -3883,6 +4216,259 @@ class TestConvoyInstallActions(EmbodyTestCase):
 
 
 # -- 13. the module's own constraints ----------------------------------
+
+class TestConvoyRepairRuntime(EmbodyTestCase):
+    """Re-point an existing install at a new interpreter, changing nothing
+    else.
+
+    THE DEAD END THIS EXISTS FOR: the recorded Python is gone, so
+    host_state says 'Needs repair -- Python not found (reinstall)', but
+    the record was written by a NEWER Embody, so plan_install answers
+    refuse_downgrade and InstallHost overwrites the warning with
+    'installed by a newer Embody'. The machine's daemon stays dead with
+    no route back through the UI.
+
+    The invariant every test here defends is A-36: the newer host app
+    must still be the code that comes back up.
+    """
+
+    NEWER = '6.0.230'
+    OURS = '6.0.223'
+
+    def _installed(self, root, runner=None):
+        """A real install by a NEWER Embody, on disk."""
+        got = install_mod.install(
+            root, self.NEWER, _MODULES, WIN_PY, platform='win32',
+            runner=runner or _Runner(), env=WIN_ENV,
+            runtime_verifier=_approved_runtime)
+        self.assertTrue(got['ok'], got)
+        return install_mod.read_installed(root, 'win32')
+
+    def _repair(self, root, interpreter, **kw):
+        kw.setdefault('platform', 'win32')
+        kw.setdefault('runner', _Runner())
+        kw.setdefault('env', WIN_ENV)
+        kw.setdefault('runtime_verifier', _approved_runtime)
+        return install_mod.repair_runtime(root, interpreter, **kw)
+
+    # -- the A-36 invariant ---------------------------------------------
+
+    def test_the_installed_version_and_payload_are_untouched(self):
+        with _TempDir() as root:
+            before = self._installed(root)
+            payload = install_mod.app_dir(root, self.NEWER, 'win32')
+            names_before = sorted(os.listdir(payload))
+            got = self._repair(root, r'C:\new\pythonw.exe')
+            self.assertTrue(got['ok'], got)
+            after = install_mod.read_installed(root, 'win32')
+            self.assertEqual(after['version'], self.NEWER,
+                             'a runtime repair must NEVER change the '
+                             'installed version -- that is the downgrade '
+                             'A-36 forbids')
+            self.assertEqual(after['files'], before['files'])
+            self.assertEqual(sorted(os.listdir(payload)), names_before,
+                             'no payload may be written by a repair')
+
+    def test_a_downgrade_is_unrepresentable_in_the_signature(self):
+        """The strongest guarantee available: not 'untested', but
+        impossible to ask for. repair_runtime takes no version and no
+        modules, so no caller can express one."""
+        params = inspect.signature(install_mod.repair_runtime).parameters
+        self.assertNotIn('version', params)
+        self.assertNotIn('modules', params)
+
+    def test_the_interpreter_is_what_changes(self):
+        with _TempDir() as root:
+            self._installed(root)
+            got = self._repair(root, r'C:\new\pythonw.exe')
+            self.assertTrue(got['ok'], got)
+            record = install_mod.read_installed(root, 'win32')
+            self.assertEqual(record['interpreter'], r'C:\new\pythonw.exe')
+            self.assertIn('repaired_at', record)
+
+    def test_the_supervisor_is_re_registered_at_the_new_interpreter(self):
+        with _TempDir() as root:
+            self._installed(root)
+            runner = _Runner()
+            got = self._repair(root, r'C:\new\pythonw.exe', runner=runner)
+            self.assertTrue(got['ok'], got)
+            self.assertTrue(got['registered'])
+            self.assertEqual(runner.calls[0][:2], ['schtasks', '/Create'])
+            with open(install_mod.task_xml_path(root, 'win32'), 'rb') as f:
+                xml = f.read().decode('utf-16')
+            self.assertIn(r'C:\new\pythonw.exe', xml)
+            self.assertNotIn(WIN_PY, xml,
+                             'the dead interpreter must be gone from the '
+                             'task definition, not merely accompanied')
+
+    # -- the refusals ----------------------------------------------------
+
+    def test_an_external_supervisor_is_never_rewritten(self):
+        """A-36's opt-out is not weaker on the repair path."""
+        with _TempDir() as root:
+            install_mod.install(
+                root, self.NEWER, _MODULES, WIN_PY, platform='win32',
+                runner=_Runner(), env=WIN_ENV,
+                supervisor=install_mod.SUPERVISOR_EXTERNAL,
+                runtime_verifier=_approved_runtime)
+            runner = _Runner()
+            got = self._repair(root, r'C:\new\pythonw.exe', runner=runner)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'external_supervisor')
+            self.assertEqual(runner.calls, [],
+                             'never poke another supervisor')
+            self.assertEqual(
+                install_mod.read_installed(root, 'win32')['interpreter'],
+                WIN_PY, 'and never rewrite its record either')
+
+    def test_a_refused_interpreter_writes_nothing(self):
+        def refuse(data_dir, interpreter, platform=None, architecture=None,
+                   runner=None):
+            return {'ok': False, 'reason': 'runtime_crypto_broken',
+                    'detail': 'cannot load cryptography'}
+
+        with _TempDir() as root:
+            self._installed(root)
+            runner = _Runner()
+            got = self._repair(root, r'C:\new\pythonw.exe',
+                               runner=runner, runtime_verifier=refuse)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'runtime_crypto_broken')
+            self.assertEqual(runner.calls, [])
+            self.assertEqual(
+                install_mod.read_installed(root, 'win32')['interpreter'],
+                WIN_PY, 'a refused repair leaves the old record intact')
+
+    def test_an_unknown_supervisor_kind_is_refused_not_silently_skipped(
+            self):
+        """A kind with no branch would fall through the shared registrar
+        taking NO action, and repair would return ok=True having
+        registered nothing -- success over a daemon still pointed at a
+        dead Python. install() cannot write such a record, but repair
+        reads records other Embodies wrote."""
+        with _TempDir() as root:
+            self._installed(root)
+            record = install_mod.read_installed(root, 'win32')
+            record['supervisor'] = 'systemd-ish-from-the-future'
+            install_mod.write_installed(root, record, 'win32')
+            runner = _Runner()
+            got = self._repair(root, r'C:\new\pythonw.exe', runner=runner)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'unknown_supervisor')
+            self.assertEqual(runner.calls, [])
+
+    def test_the_launcher_path_is_ours_never_the_records(self):
+        """installed.json is a file another Embody wrote. Letting it name
+        the write target would let a foreign record decide where this
+        process writes a launcher and what the supervisor then runs."""
+        with _TempDir() as root:
+            self._installed(root)
+            record = install_mod.read_installed(root, 'win32')
+            record['launcher'] = os.path.join(root, 'elsewhere',
+                                              'evil_launch.py')
+            install_mod.write_installed(root, record, 'win32')
+            got = self._repair(root, r'C:\new\pythonw.exe')
+            self.assertTrue(got['ok'], got)
+            canonical = install_mod.launcher_path(root, 'win32')
+            self.assertEqual(got['launcher'], canonical)
+            self.assertFalse(os.path.exists(record['launcher']),
+                             'nothing may be written at the path the '
+                             'record named')
+            with open(install_mod.task_xml_path(root, 'win32'), 'rb') as f:
+                self.assertIn(canonical, f.read().decode('utf-16'))
+
+    def test_the_LIVE_account_wins_over_the_recorded_one(self):
+        """A repair is the 'something changed' path. Re-registering a
+        logon task for a renamed account fails silently -- the worst
+        shape -- so the live account is resolved exactly as install()
+        resolves it, and the record is only a last resort."""
+        with _TempDir() as root:
+            self._installed(root)
+            record = install_mod.read_installed(root, 'win32')
+            record['account'] = r'OLDDOMAIN\renamed_away'
+            install_mod.write_installed(root, record, 'win32')
+            got = self._repair(root, r'C:\new\pythonw.exe',
+                               env={'USERDOMAIN': 'TEC-B4A',
+                                    'USERNAME': 'admin'})
+            self.assertTrue(got['ok'], got)
+            with open(install_mod.task_xml_path(root, 'win32'), 'rb') as f:
+                xml = f.read().decode('utf-16')
+            self.assertIn(WIN_USER, xml)
+            self.assertNotIn('renamed_away', xml)
+
+    def test_the_returned_version_is_the_installed_one(self):
+        """ConvoyExt compares the restarted daemon's reported version
+        against exactly this field to decide whether the payload is
+        stale. Unpinned, that lie detector could be fed anything."""
+        with _TempDir() as root:
+            self._installed(root)
+            got = self._repair(root, r'C:\new\pythonw.exe')
+            self.assertEqual(got['version'], self.NEWER)
+
+    def test_repairing_nothing_is_a_stated_refusal(self):
+        with _TempDir() as root:
+            got = self._repair(root, r'C:\new\pythonw.exe')
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'not_installed')
+
+    def test_it_never_raises(self):
+        for interpreter in ('', None, r'C:\new\pythonw.exe'):
+            got = install_mod.repair_runtime(
+                '/nonexistent/data/dir', interpreter, platform='win32',
+                runner=_Runner(), env=WIN_ENV,
+                runtime_verifier=_approved_runtime)
+            self.assertIn('ok', got)
+            self.assertFalse(got['ok'])
+
+    # -- the launcher bet it deliberately does not take ------------------
+
+    def test_an_existing_launcher_is_left_alone(self):
+        """An OLDER Embody rewriting the launcher that drives a NEWER
+        payload is a cross-version contract bet with no test behind it.
+        The dead interpreter is not in the launcher."""
+        with _TempDir() as root:
+            self._installed(root)
+            launcher = install_mod.launcher_path(root, 'win32')
+            with open(launcher, 'w', encoding='utf-8') as f:
+                f.write('# a NEWER launcher this project must not replace\n')
+            self._repair(root, r'C:\new\pythonw.exe')
+            with open(launcher, encoding='utf-8') as f:
+                self.assertEqual(
+                    f.read(),
+                    '# a NEWER launcher this project must not replace\n')
+
+    def test_a_MISSING_launcher_is_restored(self):
+        """The one exception: absent is not a version conflict."""
+        with _TempDir() as root:
+            self._installed(root)
+            launcher = install_mod.launcher_path(root, 'win32')
+            os.remove(launcher)
+            got = self._repair(root, r'C:\new\pythonw.exe')
+            self.assertTrue(got['ok'], got)
+            self.assertTrue(os.path.isfile(launcher))
+            self.assertIn('launcher', got['steps'])
+
+    def test_the_runtime_shape_may_change_and_never_doubles_up(self):
+        """A repair can move a venv install onto a managed runtime or the
+        reverse; the two claims are mutually exclusive and the stale one
+        must not survive."""
+        def venv_verifier(data_dir, interpreter, platform=None,
+                          architecture=None, runner=None):
+            return {'ok': True, 'probe': {'python': [3, 11, 15]}}
+
+        with _TempDir() as root:
+            self._installed(root)          # managed: has a 'runtime' key
+            self.assertIn('runtime',
+                          install_mod.read_installed(root, 'win32'))
+            got = self._repair(root, r'C:\new\pythonw.exe',
+                               runtime_verifier=venv_verifier)
+            self.assertTrue(got['ok'], got)
+            record = install_mod.read_installed(root, 'win32')
+            self.assertTrue(record.get('venv_runtime'))
+            self.assertNotIn('runtime', record,
+                             'a venv repair must not keep a managed '
+                             'receipt it did not earn')
+
 
 class TestConvoyInstallIsTouchDesignerFree(EmbodyTestCase):
 

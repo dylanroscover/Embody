@@ -51,6 +51,8 @@ Coverage:
 
 import os
 import re
+import shutil
+import tempfile
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
@@ -164,6 +166,10 @@ class StubInstaller:
         self.install_result = {'ok': True, 'version': VERSION,
                                'supervisor': 'scheduled_task',
                                'registered': True, 'steps': ['payload']}
+        self.repair_result = {'ok': True, 'version': '6.0.180',
+                              'supervisor': 'scheduled_task',
+                              'registered': True, 'repaired': True,
+                              'steps': ['task_xml', 'installed.json']}
         self.start_result = {'ok': True, 'results': []}
         self.stop_result = {'ok': True, 'results': [], 'exited': True}
         self.uninstall_result = {'ok': True, 'removed': [], 'kept': [],
@@ -223,6 +229,18 @@ class StubInstaller:
                                            and callable(is_running)),
                                        'observed_running': observed_running}))
         return dict(self.install_result)
+
+    def repair_runtime(self, data_dir, interpreter, **kw):
+        # Recorded, never performed -- and it must NOT fall through to
+        # the real module, which would read the machine's actual data
+        # dir. The result keeps the INSTALLED version deliberately: that
+        # is the whole point of the repair, and it is what the version
+        # lie-detector is then checked against.
+        self.calls.append(('repair_runtime', {
+            'data_dir': data_dir, 'interpreter': interpreter,
+            'graceful_seams': (callable(kw.get('shutdown'))
+                               and callable(kw.get('is_running')))}))
+        return dict(self.repair_result)
 
     def start(self, **kw):
         self.calls.append(('start', dict(kw)))
@@ -613,6 +631,98 @@ class TestInstallOrchestration(ConvoyHostBase):
         self.assertEqual(self.host_texts[-1],
                          'Installed 6.0.180 -- installed by a newer Embody')
         self.assertLen(self._warnings(), 1)
+
+    def test_a_dead_python_on_a_newer_install_REPAIRS_instead_of_refusing(
+            self):
+        """THE DEAD END. host_state said 'Needs repair -- Python not
+        found (reinstall)'; this button answered refuse_downgrade and
+        then OVERWROTE that warning with 'installed by a newer Embody'.
+        The machine's daemon had no route back through the UI."""
+        self.installer.installed = {'version': '6.0.180',
+                                    'supervisor': 'scheduled_task',
+                                    'interpreter': 'C:/gone/pythonw.exe'}
+        result = self.convoy.InstallHost()
+        self.assertEqual(result['state'], 'installing')
+        self.assertEqual(result['action'],
+                         self.install_mod.ACTION_REPAIR_RUNTIME)
+        self.assertEqual(self.installer.count('repair_runtime'), 1)
+        self.assertEqual(self.installer.count('install'), 0,
+                         'a repair must never write an older payload over '
+                         'a newer host app (A-36)')
+
+    def test_the_repair_asks_first_and_promises_no_version_change(self):
+        self.installer.installed = {'version': '6.0.180',
+                                    'supervisor': 'scheduled_task',
+                                    'interpreter': 'C:/gone/pythonw.exe'}
+        self.convoy.InstallHost()
+        self.assertLen(self.dialogs, 1)
+        title, message, buttons = self.dialogs[0]
+        self.assertEqual(buttons[0], 'Cancel', 'the safe answer is button 0')
+        self.assertIn('6.0.180', message)
+        self.assertIn('does not write, replace or downgrade', message)
+        self.assertIn(FAKE_INTERPRETER, message,
+                      'the dialog must name the interpreter that will run '
+                      'at login')
+
+    def test_declining_the_repair_touches_nothing(self):
+        self.choice = 0
+        self.installer.installed = {'version': '6.0.180',
+                                    'supervisor': 'scheduled_task',
+                                    'interpreter': 'C:/gone/pythonw.exe'}
+        result = self.convoy.InstallHost()
+        self.assertEqual(result['state'], 'declined')
+        self.assertEqual(self.installer.count('repair_runtime'), 0)
+        self.assertEqual(self.installer.argvs(), [])
+
+    def test_a_LIVE_python_on_a_newer_install_still_refuses(self):
+        """The A-36 guard is unchanged for a healthy install: only a
+        MISSING interpreter authorises the second route."""
+        alive = tempfile.mkdtemp(prefix='embody-live-python-')
+        interpreter = os.path.join(alive, 'pythonw.exe')
+        with open(interpreter, 'wb') as f:
+            f.write(b'x')
+        try:
+            self.installer.installed = {'version': '6.0.180',
+                                        'supervisor': 'scheduled_task',
+                                        'interpreter': interpreter}
+            result = self.convoy.InstallHost()
+            self.assertEqual(result['state'], 'refused')
+            self.assertEqual(self.installer.count('repair_runtime'), 0)
+            self.assertEqual(self.installer.count('install'), 0)
+            self.assertEqual(
+                self.host_texts[-1],
+                'Installed 6.0.180 -- installed by a newer Embody')
+        finally:
+            shutil.rmtree(alive, ignore_errors=True)
+
+    def test_the_repair_does_not_need_the_vendored_modules(self):
+        """It writes no payload, so refusing it for their absence would
+        reintroduce the dead end by another door."""
+        self._patch(self.convoy, '_hostModules', lambda: {})
+        self.installer.installed = {'version': '6.0.180',
+                                    'supervisor': 'scheduled_task',
+                                    'interpreter': 'C:/gone/pythonw.exe'}
+        result = self.convoy.InstallHost()
+        self.assertEqual(result['state'], 'installing')
+        self.assertEqual(self.installer.count('repair_runtime'), 1)
+
+    def test_a_successful_repair_does_not_cry_stale_payload(self):
+        """The install's lie detector compares the daemon's reported
+        version against the INSTALLED one. Compared against ours, every
+        successful repair would emit 'the payload it runs may be stale'
+        -- making the lie detector lie."""
+        self.installer.installed = {'version': '6.0.180',
+                                    'supervisor': 'scheduled_task',
+                                    'interpreter': 'C:/gone/pythonw.exe'}
+        ctx = self._fakeContext()
+        ctx['installer'] = self.installer
+        result = self.convoy_mod._host_install(
+            ctx, {}, FAKE_INTERPRETER, None, venv_runtime=False,
+            repair_only=True)
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(result['action'], 'repair_runtime')
+        self.assertNotIn('may be stale', result['detail'])
+        self.assertIn('6.0.180', result['detail'])
 
     def test_an_external_supervisor_is_never_given_a_second_one(self):
         self.installer.installed = {'version': '6.0.100',
@@ -1287,18 +1397,335 @@ class TestDaemonVenvFallback(ConvoyHostBase):
                         'the fallback probe record must ride along')
 
     def test_without_a_daemon_venv_spec_nothing_is_built(self):
-        # The Windows shape: ctx carries no daemon_venv (spec is None off
-        # darwin), so all-candidates-failed ends the story with no build.
+        # No spec at all -- the ONE guard under test. daemon_venv=None is
+        # no longer "the Windows shape" (win32 gets a spec now, see
+        # TestWindowsDaemonVenvPreference); it is the machine where
+        # daemon_venv_spec found no story to tell. venv_crypto_deps is
+        # deliberately left POPULATED: _host_build_daemon_venv
+        # short-circuits on missing deps too, and the earlier version of
+        # this test cleared both, so its single assertion held even when
+        # the branch it named was entered.
         self._script_run_command()
         self._script_probes({
             FAKE_VENV_PY: [{'ok': False, 'reason': 'runtime_crypto_broken',
                             'detail': DLOPEN_STDERR}],
         })
-        ctx = self._ctx(platform='win32', daemon_venv=None,
-                        venv_crypto_deps=[])
+        ctx = self._ctx(platform='win32', daemon_venv=None)
         result = self._run_install(ctx)
         self.assertFalse(result['ok'])
         self.assertEqual(self._uv_argvs('venv'), [])
+
+
+WIN_DAEMON_VENV = {
+    'dir': 'C:/fake/EmbodyConvoy/runtime-venv',
+    'python': 'C:/fake/EmbodyConvoy/runtime-venv/Scripts/python.exe',
+    'daemon_python': 'C:/fake/EmbodyConvoy/runtime-venv/Scripts/pythonw.exe',
+    'bases': ['C:/Program Files/Python311/python.exe'],
+}
+WIN_BASE_PY = 'C:/Program Files/Python311/python.exe'
+
+
+class TestWindowsDaemonVenvPreference(ConvoyHostBase):
+    """On Windows the PER-USER daemon venv outranks the project venv.
+
+    THE DEFECT THIS PINS, measured on the dev box at 6.0.223: with an
+    empty runtime catalog the daemon ran under the calling project's
+    .venv, and that path was written into a MACHINE-scoped
+    installed.json AND into the Scheduled Task's <Command>
+    (`C:/Users/.../Embody/dev/.venv/Scripts/pythonw.exe`). One machine
+    has one Convoy daemon; pinning it to one project's directory means
+    moving, renaming or deleting that project kills it at the next
+    logon, silently.
+
+    Every test here FAILS against the ladder that shipped, where the
+    project venv probes clean on Windows and wins the first rung -- so
+    the daemon-venv rung below it was unreachable code.
+
+    The venv paths are real files under a temp dir because the ladder
+    asks the filesystem whether a venv is already built; the uv double
+    below creates them, the way uv would.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.tmp = tempfile.mkdtemp(prefix='embody-daemon-venv-')
+        self.venv_dir = os.path.join(self.tmp, 'runtime-venv')
+        self.scripts = os.path.join(self.venv_dir, 'Scripts')
+        self.console_py = os.path.join(self.scripts, 'python.exe')
+        self.daemon_py = os.path.join(self.scripts, 'pythonw.exe')
+        self.spec = {'dir': self.venv_dir, 'python': self.console_py,
+                     'daemon_python': self.daemon_py,
+                     'bases': [WIN_BASE_PY]}
+
+    def tearDown(self):
+        # NOT addCleanup: it does not fire under TestRunnerExt, and this
+        # suite runs there as well as under pytest.
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        super().tearDown()
+
+    def _build_the_venv(self):
+        """What a successful `uv venv` leaves behind on Windows."""
+        os.makedirs(self.scripts, exist_ok=True)
+        for path in (self.console_py, self.daemon_py):
+            with open(path, 'wb') as f:
+                f.write(b'not really python')
+
+    def _ctx(self, **overrides):
+        ctx = {'client': self.client, 'installer': self.installer,
+               'platform': 'win32', 'data_dir': FAKE_DATA_DIR,
+               'version': VERSION, 'home': FAKE_HOME, 'uid': None,
+               'installed_by': 'C:/fake/project (/embody/Embody)',
+               'health_wait_s': 0.0, 'health_poll_s': 0.0,
+               'venv_python': FAKE_VENV_PY,
+               'runtime_candidates': [FAKE_VENV_PY],
+               'uv': 'C:/fake/uv.exe',
+               'venv_python_repair': FAKE_VENV_PY,
+               'venv_crypto_deps': ['cryptography>=3.4'],
+               'daemon_venv': dict(self.spec)}
+        ctx.update(overrides)
+        return ctx
+
+    def _script_probes(self, outcomes):
+        probed = []
+
+        def probe(interp, platform=None, architecture=None, runner=None):
+            probed.append(interp)
+            if interp in outcomes:
+                return dict(outcomes[interp])
+            return {'ok': False, 'reason': 'runtime_probe_failed',
+                    'detail': 'unscripted interpreter %s' % (interp,)}
+
+        self.installer.probe_runtime = probe
+        return probed
+
+    def _script_run_command(self, base_version='3.11', venv_ok=True):
+        """uv double: the base answers its version, `uv venv` BUILDS."""
+        def run_command(argv, timeout_s=None, **kw):
+            self.installer.calls.append(('run_command', list(argv)))
+            if argv and argv[0] == WIN_BASE_PY:
+                return 0, base_version + '\n', ''
+            if argv[:2] == ['C:/fake/uv.exe', 'venv']:
+                if not venv_ok:
+                    return 1, '', 'uv venv exploded'
+                self._build_the_venv()
+                return 0, '', ''
+            return 0, '', ''
+
+        self.installer.run_command = run_command
+
+    def _uv_argvs(self, marker):
+        return [argv for name, argv in self.installer.calls
+                if name == 'run_command'
+                and argv[:2] == ['C:/fake/uv.exe', marker]]
+
+    def _run_install(self, ctx):
+        return self.convoy_mod._host_install(
+            ctx, {'convoy_hostapp.py': 'x'}, ctx['venv_python'], None,
+            venv_runtime=True)
+
+    # -- the preference -------------------------------------------------
+
+    def test_the_daemon_venv_wins_even_though_the_project_venv_passes(self):
+        """THE regression pin. The project venv is healthy on Windows --
+        it probes clean -- and must still lose to the per-user venv."""
+        self._script_run_command()
+        probed = self._script_probes({
+            FAKE_VENV_PY: {'ok': True, 'probe': {}},
+            self.daemon_py: {'ok': True, 'probe': {}},
+        })
+        result = self._run_install(self._ctx())
+        self.assertTrue(result['ok'], result)
+        sent = self.installer.last('install')
+        self.assertEqual(sent['interpreter'], self.daemon_py)
+        self.assertNotIn(FAKE_VENV_PY, probed,
+                         'the project venv must not even be probed once a '
+                         'per-user venv is available')
+
+    def test_uv_gets_the_console_python_but_pythonw_is_recorded(self):
+        """The two exes of a Windows venv are not interchangeable. uv is
+        driven over pipes and gets python.exe; the SUPERVISOR launches --
+        and installed.json records -- pythonw.exe, or the user gets a
+        console window on their desktop for the whole session. Recording
+        the wrong one is worse than either: the launcher refuses to start
+        unless the recorded path realpath-matches the running one, and
+        the task just retries every minute, forever, in silence."""
+        self._script_run_command()
+        self._script_probes({self.daemon_py: {'ok': True, 'probe': {}}})
+        result = self._run_install(self._ctx())
+        self.assertTrue(result['ok'], result)
+        pip_calls = self._uv_argvs('pip')
+        self.assertEqual(len(pip_calls), 1)
+        self.assertEqual(pip_calls[0][-2:], ['--python', self.console_py])
+        self.assertEqual(self.installer.last('install')['interpreter'],
+                         self.daemon_py)
+
+    def test_an_already_built_daemon_venv_is_reused_not_rebuilt(self):
+        """A healthy venv from a previous install must cost one probe,
+        not a rebuild -- which would also need a network every time."""
+        self._build_the_venv()
+        self._script_run_command()
+        self._script_probes({self.daemon_py: {'ok': True, 'probe': {}}})
+        result = self._run_install(self._ctx())
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(self._uv_argvs('venv'), [],
+                         'an existing venv must never be rebuilt')
+        self.assertEqual(self.installer.last('install')['interpreter'],
+                         self.daemon_py)
+
+    def test_the_daemon_venv_is_never_probed_twice(self):
+        """It is also in runtime_candidates (that list still owns the
+        FALLBACK order), so the main loop must skip what the preference
+        rung already tried -- no second 15 s spawn, and no duplicate
+        rejection record making one failure read as two.
+
+        bases=[] deliberately: with no base there can be no
+        rebuild-and-re-probe, so the ONLY route to a second probe is the
+        main loop failing to skip it. (A broken existing venv WITH a
+        base is rebuilt and legitimately probed again -- that is the
+        repair, not a duplicate.) The project venv must FAIL too, or the
+        loop short-circuits on it and never reaches the entry the guard
+        exists to skip -- which is exactly how the first draft of this
+        test stayed green with the guard deleted."""
+        self._build_the_venv()
+        self._script_run_command()
+        probed = self._script_probes({
+            self.daemon_py: {'ok': False, 'reason': 'runtime_probe_failed',
+                             'detail': 'daemon venv is broken'},
+            FAKE_VENV_PY: {'ok': False, 'reason': 'runtime_probe_failed',
+                           'detail': 'project venv is broken too'},
+            FAKE_SYS_PY: {'ok': True, 'probe': {}},
+        })
+        ctx = self._ctx(daemon_venv=dict(self.spec, bases=[]),
+                        runtime_candidates=[FAKE_VENV_PY, self.daemon_py,
+                                            FAKE_SYS_PY])
+        result = self._run_install(ctx)
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(probed.count(self.daemon_py), 1)
+
+    def test_a_total_failure_still_builds_only_once(self):
+        """The daemon-venv rung used to be LAST; on Windows it is now
+        FIRST. If the old rung is not suppressed, a machine where
+        nothing works pays for two full builds before refusing."""
+        self._script_run_command()
+        self._script_probes({
+            self.daemon_py: {'ok': False, 'reason': 'runtime_probe_failed',
+                             'detail': 'built but broken'},
+            FAKE_VENV_PY: {'ok': False, 'reason': 'runtime_probe_failed',
+                           'detail': 'project venv is broken'},
+        })
+        result = self._run_install(self._ctx())
+        self.assertFalse(result['ok'])
+        self.assertEqual(len(self._uv_argvs('venv')), 1)
+
+    def test_macos_ordering_is_NOT_changed_by_this_preference(self):
+        """The preference is Windows-only. On macOS the project venv is
+        still tried FIRST and the daemon venv stays the last resort --
+        the rung order a real Mac exercises and this box cannot."""
+        mac_venv = '/fake/project/.venv/bin/python'
+
+        def run_command(argv, timeout_s=None, **kw):
+            self.installer.calls.append(('run_command', list(argv)))
+            if argv and argv[0] == '/opt/homebrew/bin/python3':
+                return 0, '3.12\n', ''
+            return 0, '', ''
+
+        self.installer.run_command = run_command
+        self._script_probes({mac_venv: {'ok': True, 'probe': {}}})
+        ctx = self._ctx(platform='darwin', venv_python=mac_venv,
+                        runtime_candidates=[mac_venv],
+                        daemon_venv=dict(FAKE_DAEMON_VENV))
+        result = self.convoy_mod._host_install(
+            ctx, {'convoy_hostapp.py': 'x'}, mac_venv, None,
+            venv_runtime=True)
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(self.installer.last('install')['interpreter'],
+                         mac_venv)
+        self.assertEqual(self._uv_argvs('venv'), [],
+                         'macOS must not build a daemon venv while the '
+                         'project venv is healthy')
+
+    def test_a_broken_existing_venv_is_rebuilt(self):
+        """The other half of the rule above: an existing venv that fails
+        its probe is not a dead end -- `uv venv --clear` rebuilds it."""
+        self._build_the_venv()
+        self._script_run_command()
+        self._script_probes({
+            self.daemon_py: {'ok': True, 'probe': {}},
+        })
+        # First probe fails, the post-rebuild probe passes.
+        outcomes = iter([{'ok': False, 'reason': 'runtime_probe_failed',
+                          'detail': 'daemon venv is broken'},
+                         {'ok': True, 'probe': {}}])
+        probed = []
+
+        def probe(interp, platform=None, architecture=None, runner=None):
+            probed.append(interp)
+            if interp == self.daemon_py:
+                return dict(next(outcomes))
+            return {'ok': False, 'reason': 'runtime_probe_failed',
+                    'detail': 'unscripted %s' % (interp,)}
+
+        self.installer.probe_runtime = probe
+        result = self._run_install(self._ctx())
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(len(self._uv_argvs('venv')), 1)
+        self.assertIn('--clear', self._uv_argvs('venv')[0])
+        self.assertEqual(self.installer.last('install')['interpreter'],
+                         self.daemon_py)
+
+    # -- and it stays a preference, never a requirement ------------------
+
+    def test_a_failed_build_falls_back_to_the_project_venv(self):
+        """THE OFFLINE GUARANTEE. Building needs uv, a 3.11+ base and a
+        network for the cryptography wheel. A show LAN or a locked-down
+        studio has none of those -- which is why the daemon is vendored
+        at all -- so a failed build must degrade to the working project
+        venv, never refuse the install."""
+        self._script_run_command(venv_ok=False)
+        self._script_probes({FAKE_VENV_PY: {'ok': True, 'probe': {}}})
+        result = self._run_install(self._ctx())
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(self.installer.last('install')['interpreter'],
+                         FAKE_VENV_PY)
+
+    def test_the_fallback_says_what_it_costs(self):
+        """Falling back is not free and the cost is invisible until the
+        day it bites, so the outcome must name it rather than read as an
+        ordinary success."""
+        self._script_run_command(venv_ok=False)
+        self._script_probes({FAKE_VENV_PY: {'ok': True, 'probe': {}}})
+        result = self._run_install(self._ctx())
+        self.assertIn('moved or deleted', result.get('detail', ''))
+
+    def test_no_uv_on_the_machine_still_installs(self):
+        self._script_run_command()
+        self._script_probes({FAKE_VENV_PY: {'ok': True, 'probe': {}}})
+        result = self._run_install(self._ctx(uv=None))
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(self.installer.last('install')['interpreter'],
+                         FAKE_VENV_PY)
+        self.assertEqual(self._uv_argvs('venv'), [])
+
+    def test_no_base_python_names_the_way_out_for_WINDOWS(self):
+        """Telling a Windows user to `brew install python` is worse than
+        saying nothing: a confident instruction that cannot be followed."""
+        self._script_run_command()
+        self._script_probes({FAKE_VENV_PY: {'ok': True, 'probe': {}}})
+        ctx = self._ctx(daemon_venv=dict(self.spec, bases=[]))
+        result = self._run_install(ctx)
+        self.assertTrue(result['ok'], result)
+        self.assertIn('python.org', result.get('detail', ''))
+        self.assertNotIn('brew install', result.get('detail', ''))
+
+    def test_an_old_base_python_is_gated_before_any_build(self):
+        self._script_run_command(base_version='3.9')
+        self._script_probes({FAKE_VENV_PY: {'ok': True, 'probe': {}}})
+        result = self._run_install(self._ctx())
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(self._uv_argvs('venv'), [],
+                         'a 3.9 base must be rejected BEFORE the build')
+        self.assertEqual(self.installer.last('install')['interpreter'],
+                         FAKE_VENV_PY)
 
 
 class TestHostThreadingDiscipline(EmbodyTestCase):

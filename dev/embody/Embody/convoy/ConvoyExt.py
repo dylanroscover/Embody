@@ -3313,8 +3313,10 @@ class ConvoyExt:
             'venv_python_repair': self._convoyVenvPythonConsole(
                 venv_python=venv_python),
             'venv_crypto_deps': self._convoyCryptoDeps(),
-            # The macOS fallback daemon venv (None off darwin): where to
-            # build it and which non-TD base interpreters may host it.
+            # The per-user daemon venv: where to build it and which
+            # non-TouchDesigner base interpreters may host it. Present on
+            # darwin (escaping library validation) AND on win32 (escaping
+            # a project-scoped interpreter); None elsewhere.
             'daemon_venv': self._convoyDaemonVenvSpec(),
         }
 
@@ -3430,33 +3432,19 @@ class ConvoyExt:
         return [str(d) for d in deps if str(d).startswith('cryptography')]
 
     def _convoyDaemonVenvSpec(self):
-        """Paths for the macOS fallback daemon venv, or None. MAIN THREAD.
+        """Paths for the per-user daemon venv, or None. MAIN THREAD.
 
-        None everywhere but darwin -- the fallback exists because
-        TouchDesigner's bundled python is code-signed with library
-        validation and, spawned standalone, refuses every foreign-signed
-        PyPI wheel; Windows venvs work as-is. Base interpreters are
-        EXPLICIT absolute paths, never PATH (a GUI TD's launchd PATH
-        hides all of them): Homebrew (arm64 then Intel prefix) first,
-        then Apple's CLT python3 -- and that one only when the Command
-        Line Tools are actually installed, because spawning the bare
-        /usr/bin/python3 shim without them pops Apple's interactive
-        install dialog from a background worker.
+        THIN BY DESIGN. The platform decision itself -- which
+        interpreters may host the venv, where it lives, and which of a
+        Windows python.exe/pythonw.exe pair is the daemon -- lives in
+        convoy_install.daemon_venv_spec, where it is pure, injectable and
+        reachable by the windows+macos CI matrix. It sat here for one
+        release and no runner could test it. All this method owes it is
+        the data dir, which needs a live client.
         """
-        if sys.platform != 'darwin':
-            return None
         try:
-            bases = [p for p in ('/opt/homebrew/bin/python3',
-                                 '/usr/local/bin/python3')
-                     if os.path.isfile(p)]
-            if (os.path.isdir('/Library/Developer/CommandLineTools')
-                    and os.path.isfile('/usr/bin/python3')):
-                bases.append('/usr/bin/python3')
-            data_dir = self._client().data_dir()
-            venv_dir = os.path.join(data_dir, 'runtime-venv')
-            return {'dir': venv_dir,
-                    'python': os.path.join(venv_dir, 'bin', 'python3'),
-                    'bases': bases}
+            return self._installer().daemon_venv_spec(
+                self._client().data_dir())
         except Exception:
             return None
 
@@ -3831,8 +3819,95 @@ class ConvoyExt:
         return ('per-user Scheduled Task' if platform == 'win32'
                 else 'per-user LaunchAgent')
 
-    def _confirmInstall(self, ctx, interpreter, plan, modules):
+    def _confirmRepairRuntime(self, ctx, interpreter, plan,
+                              venv_runtime=False):
+        """The A-6 dialog for a RUNTIME-ONLY repair.
+
+        Its own dialog rather than a relaxed install one, because the
+        install dialog's sentences would be false here: no files are
+        written, no version changes, and the thing being fixed belongs
+        to a newer Embody than this project. It still asks, because it
+        still rewrites a program that runs at every logon.
+        """
+        # SAME ACCURACY RULE AS _confirmInstall. On Windows with a venv
+        # runtime the ladder prefers (or builds) the per-user Convoy
+        # venv, so naming `interpreter` -- the project venv resolved
+        # before the ladder runs -- as the thing that will run at login
+        # is exactly the sentence _confirmInstall was rewritten to stop
+        # saying. Only promise a specific interpreter where one is
+        # actually settled.
+        if ctx['platform'] == 'win32' and venv_runtime:
+            target = (
+                '  - re-registers the %s that starts it at login, under\n'
+                '    a dedicated per-user Convoy venv in the folder\n'
+                '    below, building it if needed (this may download the\n'
+                '    pinned cryptography package). If it cannot be\n'
+                '    built, it falls back to this project Python:\n'
+                '    %s\n'
+                % (self._supervisorNoun(ctx['platform']), interpreter))
+        else:
+            target = (
+                '  - re-registers the %s that starts it at login, pointing\n'
+                '    at:\n'
+                '    %s\n'
+                % (self._supervisorNoun(ctx['platform']), interpreter))
+        message = (
+            'Re-point the Convoy host app at a working Python?\n\n'
+            'The host app installed for this user is version %s -- '
+            'installed by a NEWER Embody than this project (%s). The '
+            'Python it was installed against no longer exists, so it '
+            'cannot start.\n\n'
+            'What this does:\n'
+            '%s'
+            '  - updates the recorded interpreter in\n'
+            '    %s\n\n'
+            'What this does NOT do:\n'
+            '  - it does not write, replace or downgrade the host app.\n'
+            '    Version %s and its files are left exactly as they are,\n'
+            '    and that newer code is what starts back up.\n\n'
+            '%s'
+            % (plan.get('installed_version'), ctx['version'], target,
+               ctx['data_dir'], plan.get('installed_version'),
+               plan.get('detail') or ''))
+        return self._dialog('Embody - Repair the Convoy host app runtime',
+                            message, ['Cancel', 'Repair']) == 1
+
+    def _confirmInstall(self, ctx, interpreter, plan, modules,
+                        venv_runtime=False):
         """The A-6 dialog. Every sentence in 1.6, none of them softened."""
+        # WHICH PYTHON, said accurately per platform. On Windows the
+        # dedicated per-user venv is now the PREFERENCE, not the
+        # last-resort repair, and the old wording ('a failing one is
+        # repaired or replaced') would describe the exception as if it
+        # were the rule -- while naming the project venv as the thing
+        # that will run at login, which is precisely what it will not
+        # be when the build succeeds.
+        # ...and only when a venv runtime is what will actually be
+        # resolved. With a signed managed runtime installed, venv_runtime
+        # is False, the whole daemon-venv ladder is skipped, and this
+        # branch would both promise a build that never happens and call
+        # that managed runtime "this project's Python".
+        if ctx['platform'] == 'win32' and venv_runtime:
+            runtime_note = (
+                '  - runs it under a dedicated per-user Convoy venv in the\n'
+                '    folder above, built on the first install (this may\n'
+                '    download the pinned cryptography package). If that\n'
+                '    cannot be built, it falls back to this project\'s\n'
+                '    Python:\n'
+                '    %s\n'
+                '    which stops working if this project is moved or\n'
+                '    deleted; the log names the final interpreter\n\n'
+                % (interpreter,))
+        else:
+            runtime_note = (
+                '  - runs it under the best Python that proves Convoy\'s\n'
+                '    crypto floor, starting with:\n'
+                '    %s\n'
+                '    a failing one is repaired or replaced with a dedicated\n'
+                '    Convoy venv in the folder above (this may download the\n'
+                '    pinned cryptography package); the log names the final\n'
+                '    interpreter\n\n'
+                % (interpreter,))
         message = (
             'Install the Convoy host app for THIS user on THIS machine?\n\n'
             'What this does:\n'
@@ -3842,13 +3917,7 @@ class ConvoyExt:
             '    and restarts it within a minute\n'
             '  - IT RUNS WHENEVER YOU ARE LOGGED IN, WHETHER OR NOT\n'
             '    TOUCHDESIGNER IS OPEN\n'
-            '  - runs it under the best Python that proves Convoy\'s\n'
-            '    crypto floor, starting with:\n'
-            '    %s\n'
-            '    a failing one is repaired or replaced with a dedicated\n'
-            '    Convoy venv in the folder above (this may download the\n'
-            '    pinned cryptography package); the log names the final\n'
-            '    interpreter\n\n'
+            '%s'
             'Network behavior:\n'
             '  - while at least one local node has Enable Convoy On, the\n'
             '    app advertises on the trusted LAN and opens Convoy\'s\n'
@@ -3876,7 +3945,7 @@ class ConvoyExt:
             '    record unless you separately ask for it to be deleted.\n\n'
             '%s'
             % (len(modules), ctx['data_dir'],
-               self._supervisorNoun(ctx['platform']), interpreter,
+               self._supervisorNoun(ctx['platform']), runtime_note,
                plan.get('detail') or ''))
         return self._dialog('Embody - Install the Convoy host app', message,
                             ['Cancel', 'Install']) == 1
@@ -4115,7 +4184,15 @@ class ConvoyExt:
         definition.
 
         The ONE refusal is a downgrade: a host app installed by a NEWER
-        Embody is never replaced by an older project (A-36).
+        Embody is never replaced by an older project (A-36) -- UNLESS
+        the Python it recorded is gone, in which case that host app is
+        not running and cannot start. Then this takes the second route:
+        installer.repair_runtime re-resolves the interpreter, rewrites
+        the supervisor definition and leaves the installed version and
+        payload untouched. Without it the readout said 'Needs repair --
+        Python not found (reinstall)' while this button answered
+        refuse_downgrade and overwrote that warning with 'installed by a
+        newer Embody' -- a dead daemon with no route back in the UI.
 
         Registering a program that runs at LOGIN is a different grant
         from enabling Convoy (A-13 covers minting an id and registering
@@ -4128,18 +4205,33 @@ class ConvoyExt:
         if ctx is None:
             return {'state': 'error', 'detail': 'installer module missing'}
 
+        installer = ctx['installer']
+        installed = installer.read_installed(ctx['data_dir'], ctx['platform'])
+        # Ask the SAME question host_state asks, and hand the answer to
+        # the planner. Without it plan_install is structurally incapable
+        # of seeing the condition the status readout just reported, which
+        # is how 'Install re-resolves it' and 'will not downgrade it'
+        # came to be printed about the same install.
+        recorded = (installed or {}).get('interpreter')
+        interpreter_exists = None
+        if recorded:
+            try:
+                interpreter_exists = os.path.isfile(str(recorded))
+            except Exception:
+                interpreter_exists = None
+        plan = installer.plan_install(installed, ctx['version'],
+                                      ctx['platform'],
+                                      interpreter_exists=interpreter_exists)
+        repair_only = (plan.get('action')
+                       == installer.ACTION_REPAIR_RUNTIME)
+
         modules = self._hostModules()
-        if not modules:
+        if not modules and not repair_only:
             self._log('the vendored host-app modules are missing from the '
                       "convoy COMP's `host` child -- this .tox cannot "
                       'install a host app; reinstall Embody', 'WARNING')
             self._hostStatus(self.HOST_INSTALL_FAILED)
             return {'state': 'error', 'detail': 'no vendored host modules'}
-
-        installer = ctx['installer']
-        installed = installer.read_installed(ctx['data_dir'], ctx['platform'])
-        plan = installer.plan_install(installed, ctx['version'],
-                                      ctx['platform'])
         if plan.get('action') == installer.ACTION_REFUSE_DOWNGRADE:
             self._log('install refused: %s' % (plan.get('detail'),), 'WARNING')
             # TWO DIFFERENT FAILURES ARRIVE AS refuse_downgrade, and they
@@ -4192,12 +4284,18 @@ class ConvoyExt:
             self._hostStatus(self.HOST_INSTALL_FAILED)
             return {'state': 'error', 'detail': 'no interpreter'}
 
-        if confirm and not self._confirmInstall(ctx, interpreter, plan,
-                                                modules):
-            self._log('host app install cancelled -- nothing was written '
-                      'and no task or agent was registered', 'INFO')
-            self._restoreHostStatus()
-            return {'state': 'declined'}
+        if confirm:
+            asked = (self._confirmRepairRuntime(ctx, interpreter, plan,
+                                                venv_runtime)
+                     if repair_only
+                     else self._confirmInstall(ctx, interpreter, plan,
+                                               modules, venv_runtime))
+            if not asked:
+                self._log('host app install cancelled -- nothing was '
+                          'written and no task or agent was registered',
+                          'INFO')
+                self._restoreHostStatus()
+                return {'state': 'declined'}
 
         # A-36's escape hatch: an install already marked external keeps
         # its own supervisor. Passing the kind through is what stops
@@ -4209,7 +4307,8 @@ class ConvoyExt:
         self._beginHostCall(
             'install',
             lambda: _host_install(ctx, modules, interpreter, supervisor,
-                                  venv_runtime=venv_runtime),
+                                  venv_runtime=venv_runtime,
+                                  repair_only=repair_only),
             note=self.HOST_INSTALLING)
         return {'state': 'installing', 'action': plan.get('action'),
                 'interpreter': interpreter, 'venv_runtime': venv_runtime,
@@ -4482,6 +4581,12 @@ class ConvoyExt:
         'different Team IDs') -- so the list is really a ladder down to
         Homebrew python3 and the daemon-venv fallback.
 
+        THIS LIST IS NOT THE PRIORITY ORDER ON WINDOWS. _host_install
+        promotes an existing-or-buildable per-user daemon venv ABOVE the
+        project venv there, because the project venv is machine-scoped
+        state living in one project's directory. What this list still
+        owns is the FALLBACK order once that promotion has failed.
+
         Embody's venv comes first because it is ours and carries our pinned
         crypto floor. Homebrew is probed by ABSOLUTE PATH before PATH
         lookups -- a GUI TD's launchd PATH does not include /opt/homebrew.
@@ -4496,15 +4601,18 @@ class ConvoyExt:
             candidates.append(venv)
         try:
             import shutil
+            # An ALREADY-BUILT daemon venv is a candidate on EVERY
+            # platform: a healthy prior fallback passes its 15 s probe and
+            # skips a multi-minute rebuild-and-redownload (and keeps
+            # working offline). Probe the exe that will actually be
+            # RECORDED -- on Windows that is pythonw.exe, and proving
+            # python.exe instead would prove a file the supervisor never
+            # launches.
+            spec = self._convoyDaemonVenvSpec() or {}
+            existing = spec.get('daemon_python') or spec.get('python')
+            if existing and os.path.isfile(existing):
+                candidates.append(existing)
             if sys.platform == 'darwin':
-                # An ALREADY-BUILT daemon venv is probed right after the
-                # project venv: a healthy prior fallback passes its 15 s
-                # probe and skips a 4-minute rebuild-and-redownload (and
-                # keeps working offline).
-                spec = self._convoyDaemonVenvSpec() or {}
-                existing = spec.get('python')
-                if existing and os.path.isfile(existing):
-                    candidates.append(existing)
                 for path in ('/opt/homebrew/bin/python3',
                              '/usr/local/bin/python3'):
                     if os.path.isfile(path) and path not in candidates:
@@ -5675,25 +5783,49 @@ def _host_build_daemon_venv(ctx, runner=None):
     the caller re-probes the result with the same verifier every
     interpreter faces, so a fallback that cannot prove the crypto floor
     is still refused.
+
+    WINDOWS BUILDS IT FOR A DIFFERENT REASON: nothing there refuses to
+    load, so the venv the daemon would otherwise use is Embody's own --
+    which lives inside the CALLING PROJECT. A machine-scoped daemon then
+    holds a project-scoped interpreter in its Scheduled Task, and
+    deleting or moving that project kills the daemon at the next logon.
+    The build is the same; only the motive differs. The two exes of a
+    Windows venv are NOT interchangeable here: uv is driven over pipes
+    and gets the CONSOLE python.exe, while what is probed, returned and
+    ultimately recorded is the windowless pythonw.exe the supervisor
+    actually launches.
     """
     installer = ctx['installer']
+    platform = ctx.get('platform') or sys.platform
     uv = ctx.get('uv')
     deps = [str(d) for d in (ctx.get('venv_crypto_deps') or ()) if d]
     spec = ctx.get('daemon_venv') or {}
     venv_dir = spec.get('dir')
     venv_python = spec.get('python')
+    daemon_python = spec.get('daemon_python') or venv_python
     bases = [str(b) for b in (spec.get('bases') or ()) if b]
     if not uv or not deps or not venv_dir or not venv_python:
         return {'ok': False, 'reason': 'no_daemon_venv_context',
                 'detail': 'uv, the cryptography pin, or the daemon venv '
                           'location is unavailable'}
     if not bases:
+        # NAME THE REMEDY FOR THIS PLATFORM. Telling a Windows user to
+        # `brew install python` is worse than saying nothing: it is a
+        # confident instruction that cannot be followed.
+        if platform == 'win32':
+            detail = ('no Python 3.11+ was found outside TouchDesigner '
+                      '(looked in Program Files, the per-user '
+                      'Programs\\Python folder, and uv\'s managed '
+                      'pythons) -- install Python from python.org, then '
+                      'enable Convoy again')
+        else:
+            detail = ('no Python outside TouchDesigner exists at '
+                      '/opt/homebrew/bin/python3, '
+                      '/usr/local/bin/python3, or /usr/bin/python3 '
+                      '-- install Homebrew Python (brew install '
+                      'python), then enable Convoy again')
         return {'ok': False, 'reason': 'no_base_interpreter',
-                'detail': 'no Python outside TouchDesigner exists at '
-                          '/opt/homebrew/bin/python3, '
-                          '/usr/local/bin/python3, or /usr/bin/python3 '
-                          '-- install Homebrew Python (brew install '
-                          'python), then enable Convoy again'}
+                'names_remedy': True, 'detail': detail}
     call = runner or installer.run_command
     base = None
     for candidate in bases:
@@ -5711,12 +5843,18 @@ def _host_build_daemon_venv(ctx, runner=None):
             base = candidate
             break
     if base is None:
+        if platform == 'win32':
+            detail = ('none of the interpreters found outside '
+                      'TouchDesigner reported Python 3.11+ -- install '
+                      'Python from python.org, then enable Convoy again')
+        else:
+            detail = ('no Python 3.11+ outside TouchDesigner was '
+                      'found to host the Convoy venv (Apple\'s '
+                      'command-line-tools python3 is older) -- '
+                      'install Homebrew Python (brew install '
+                      'python), then enable Convoy again')
         return {'ok': False, 'reason': 'no_usable_base_python',
-                'detail': 'no Python 3.11+ outside TouchDesigner was '
-                          'found to host the Convoy venv (Apple\'s '
-                          'command-line-tools python3 is older) -- '
-                          'install Homebrew Python (brew install '
-                          'python), then enable Convoy again'}
+                'names_remedy': True, 'detail': detail}
     code, out, err = call(
         [uv, 'venv', venv_dir, '--clear', '--python', base],
         timeout_s=DAEMON_VENV_CREATE_TIMEOUT_S)
@@ -5738,14 +5876,32 @@ def _host_build_daemon_venv(ctx, runner=None):
         text = str(err or out or 'uv pip exited %s' % (code,)).strip()
         return {'ok': False, 'reason': 'daemon_venv_build_failed',
                 'detail': text[-400:]}
+    # What the caller probes and records is the SUPERVISOR's interpreter,
+    # not uv's target. They differ only on Windows (pythonw.exe vs
+    # python.exe) and uv builds both -- but if a future uv ever stops
+    # shipping the windowless one, fall back to the console binary rather
+    # than record a path that does not exist. A console window is a
+    # visible annoyance; a recorded-but-absent interpreter is a launcher
+    # refusal every minute, forever, with nothing on screen.
+    chosen = daemon_python
+    if chosen != venv_python and not os.path.isfile(chosen):
+        chosen = venv_python
     return {'ok': True, 'reason': 'daemon_venv_built',
-            'python': venv_python, 'base': base,
+            'python': chosen, 'console_python': venv_python, 'base': base,
             'detail': 'built a dedicated Convoy venv from %s' % (base,)}
 
 
 def _host_install(ctx, modules, interpreter, supervisor=None,
-                  venv_runtime=False):
+                  venv_runtime=False, repair_only=False):
     """Write the payload, register the supervisor, start it, wait.
+
+    With ``repair_only`` it does everything EXCEPT write a payload: the
+    same probe ladder chooses an interpreter, then
+    installer.repair_runtime re-points an existing install at it and
+    leaves the recorded version alone. That is the one case install()
+    must refuse (a record written by a NEWER Embody) and it shares this
+    ladder deliberately -- a second copy of the probe/repair/build rungs
+    is how the two paths would drift.
 
     WORKER-SAFE. When ``venv_runtime`` is set the interpreter is Embody's own
     uv-managed venv python, not a signed managed-runtime bundle, so it is
@@ -5758,6 +5914,19 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
     verifier = None
     rejected = []
     success_note = ''
+    action = 'repair_runtime' if repair_only else 'install'
+    # SEPARATE from repair_note, and initialised OUT here beside
+    # success_note because the detail line below reads it on every path.
+    # It must survive a SUCCESS: falling back still installs a working
+    # daemon, so without its own channel the explanation would be
+    # dropped exactly when the outcome looks fine.
+    #
+    # Says only WHY the per-user venv was not used. It must NOT claim
+    # what was used instead: on a failure nothing was installed at all,
+    # and on a success the winner may be a system Python rather than the
+    # project venv. That sentence is added below, once, where the
+    # chosen interpreter is actually known.
+    daemon_note = ''
     if venv_runtime:
         def verifier(data_dir, interp, platform=None, architecture=None,
                      runner=None):
@@ -5791,14 +5960,71 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
             return False
 
         chosen = None
-        for candidate in ([interpreter] + [
-                c for c in (ctx.get('runtime_candidates') or ())
-                if c != interpreter]):
-            if _probe(candidate):
-                chosen = candidate
-                break
         repair_note = ''
         repaired = False
+        remedy_named = False
+
+        # ORDER IS THE CORRECTNESS ARGUMENT ON WINDOWS, and it inverts the
+        # macOS one. There, the project venv is tried first and the daemon
+        # venv is the LAST resort, because the daemon venv only exists to
+        # escape library validation -- a rare, diagnosable failure.
+        #
+        # On Windows nothing fails: the project venv probes clean, wins on
+        # the first rung, and gets recorded into a MACHINE-scoped
+        # installed.json and into the Scheduled Task's <Command>. That is
+        # the defect. One machine has one Convoy daemon, and it ends up
+        # pinned to whichever project happened to install it; move,
+        # rename, rebuild or delete that project and the daemon dies at
+        # the next logon, with nothing on screen to say why. So a per-user
+        # venv is preferred here even though the project venv would work
+        # today -- durability, not capability.
+        #
+        # It stays a PREFERENCE, never a requirement: building needs uv, a
+        # 3.11+ base and (for the cryptography wheel) a network. A show
+        # LAN or a locked-down studio has none of those, which is exactly
+        # why the daemon is vendored in the first place -- so a failed
+        # build falls through to the ladder below rather than refusing.
+        daemon_spec = ctx.get('daemon_venv') or {}
+        daemon_python = (daemon_spec.get('daemon_python')
+                         or daemon_spec.get('python'))
+        prefer_daemon_venv = (ctx['platform'] == 'win32'
+                              and bool(daemon_python))
+        if prefer_daemon_venv:
+            if os.path.isfile(daemon_python) and _probe(daemon_python):
+                # A healthy venv from a previous install: seconds, and it
+                # works offline. Never rebuild what already proves itself.
+                chosen = daemon_python
+            else:
+                built = _host_build_daemon_venv(ctx)
+                if built.get('ok') and _probe(built['python']):
+                    chosen = built['python']
+                    success_note = (
+                        ' (daemon runs under a dedicated per-user Convoy '
+                        'venv built from %s)' % (built.get('base'),))
+                else:
+                    if built.get('ok'):
+                        why = 'the venv was built but its probe failed'
+                    else:
+                        why = str(built.get('detail')
+                                  or built.get('reason') or 'unknown')
+                        remedy_named = bool(built.get('names_remedy'))
+                    # Not fatal -- but say plainly WHY, because the cost
+                    # of the fallback is invisible until the day it bites.
+                    daemon_note = (
+                        ' A dedicated per-user Convoy venv could not be '
+                        'used (%s).' % (why,))
+
+        if chosen is None:
+            for candidate in ([interpreter] + [
+                    c for c in (ctx.get('runtime_candidates') or ())
+                    if c != interpreter]):
+                if prefer_daemon_venv and candidate == daemon_python:
+                    # Already probed above; a second 15 s spawn would only
+                    # add a duplicate rejection record.
+                    continue
+                if _probe(candidate):
+                    chosen = candidate
+                    break
         venv_python = ctx.get('venv_python')
         venv_reasons = [r['reason'] for r in rejected
                         if r['candidate'] == venv_python]
@@ -5826,10 +6052,12 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                 # a reinstall fetches carries the same foreign signature.
                 repair_note = (' Venv repair skipped: reinstalling cannot '
                                'change code-signing policy.')
-        if chosen is None and ctx.get('daemon_venv'):
+        if chosen is None and ctx.get('daemon_venv') and not prefer_daemon_venv:
             # No existing interpreter can serve the daemon -- build one
             # OUTSIDE TouchDesigner's signature domain and prove it with
-            # the same probe every other candidate faced.
+            # the same probe every other candidate faced. Skipped when the
+            # build was already attempted as the FIRST rung above: a
+            # second attempt would repeat a failure that has not changed.
             built = _host_build_daemon_venv(ctx)
             if built.get('ok') and _probe(built['python']):
                 chosen = built['python']
@@ -5841,6 +6069,7 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                 repair_note += (' Daemon venv: built from %s but its '
                                 'probe still failed.' % (built.get('base'),))
             else:
+                remedy_named = remedy_named or bool(built.get('names_remedy'))
                 repair_note += ' Daemon venv: %s.' % (
                     built.get('detail') or built.get('reason'),)
         if chosen is None:
@@ -5850,9 +6079,12 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                     entry['candidate'], entry['reason'],
                     ': ' + entry['snippet'] if entry['snippet'] else ''))
             guidance = ''
-            if 'brew install python' in repair_note:
-                # The daemon-venv note already names the way out; a second
-                # copy of the same advice is noise.
+            if remedy_named:
+                # The daemon-venv note already names the way out for THIS
+                # platform; a second copy of the same advice is noise.
+                # (A flag, not a substring match on 'brew install python':
+                # that match silently stopped working the moment the
+                # Windows branch started naming python.org instead.)
                 pass
             elif any(r['reason'] == 'runtime_crypto_signature_blocked'
                      for r in rejected):
@@ -5872,7 +6104,7 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                             'another CPU architecture -- toggle Envoy off '
                             'and on to rebuild the environment, then '
                             'enable Convoy again.')
-            return {'ok': False, 'action': 'install',
+            return {'ok': False, 'action': action,
                     'reason': 'no_usable_runtime',
                     # 8, not 6: the fullest macOS ladder produces up to
                     # eight records (six candidates + the repair re-probe
@@ -5882,26 +6114,36 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                     'detail': 'no interpreter on this machine could load '
                               'cryptography and TLS 1.3. Tried: '
                               + '; '.join(described) + '.'
-                              + repair_note + guidance}
+                              + repair_note + daemon_note + guidance}
         interpreter = chosen
         if repaired:
             # The venv was MUTATED on the way to success -- say so. A
             # background reinstall with no record is the next 'why did
             # my first enable take a minute' diagnosis round trip.
             success_note = ' (venv cryptography was repaired first)'
-    outcome = installer.install(
-        ctx['data_dir'], ctx['version'], modules, interpreter,
-        platform=ctx['platform'], home=ctx['home'], uid=ctx['uid'],
-        installed_by=ctx['installed_by'], supervisor=supervisor,
-        runtime_verifier=verifier,
-        # Repair over a RUNNING daemon: same graceful observers stop()
-        # uses, so the installer can ask the old daemon to exit and wait
-        # before re-registering (darwin would otherwise EIO at the
-        # still-loaded label; win32 would leave the old code running).
-        shutdown=lambda: _host_shutdown(ctx),
-        is_running=_host_is_running(ctx))
+    if repair_only:
+        # NO version, NO modules -- the signature is what makes a
+        # downgrade unrepresentable rather than merely untested.
+        outcome = installer.repair_runtime(
+            ctx['data_dir'], interpreter,
+            platform=ctx['platform'], home=ctx['home'], uid=ctx['uid'],
+            installed_by=ctx['installed_by'], runtime_verifier=verifier,
+            shutdown=lambda: _host_shutdown(ctx),
+            is_running=_host_is_running(ctx))
+    else:
+        outcome = installer.install(
+            ctx['data_dir'], ctx['version'], modules, interpreter,
+            platform=ctx['platform'], home=ctx['home'], uid=ctx['uid'],
+            installed_by=ctx['installed_by'], supervisor=supervisor,
+            runtime_verifier=verifier,
+            # Repair over a RUNNING daemon: same graceful observers stop()
+            # uses, so the installer can ask the old daemon to exit and wait
+            # before re-registering (darwin would otherwise EIO at the
+            # still-loaded label; win32 would leave the old code running).
+            shutdown=lambda: _host_shutdown(ctx),
+            is_running=_host_is_running(ctx))
     if not outcome.get('ok'):
-        return {'ok': False, 'action': 'install', 'outcome': outcome,
+        return {'ok': False, 'action': action, 'outcome': outcome,
                 'reason': outcome.get('reason'),
                 'detail': outcome.get('detail')}
     started = None
@@ -5931,13 +6173,26 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                 code, body = client.host_get(probe.handle, '/status')
                 if code == 200 and isinstance(body, dict) and body.get('ok'):
                     reported = body.get('app_version')
+                    # Against the INSTALLED version, not ours. They are
+                    # the same thing for an install; for a runtime repair
+                    # the record keeps a NEWER version than this project,
+                    # and comparing against ctx would make the lie
+                    # detector itself lie on every successful repair.
                     verified = bool(
                         reported
-                        and str(reported) == str(ctx['version']))
+                        and str(reported) == str(outcome.get('version')))
         except Exception:
             verified = None
-    detail = ('installed %s under %s%s'
-              % (outcome.get('version'), interpreter, success_note))
+    detail = ('%s %s under %s%s%s'
+              % ('re-pointed the installed' if repair_only else 'installed',
+                 outcome.get('version'), interpreter, success_note,
+                 daemon_note))
+    if daemon_note and interpreter == ctx.get('venv_python'):
+        # ONLY when the project venv actually won. A system Python that
+        # wins the ladder is not project-scoped, and saying so would be
+        # a new false statement in place of the one just removed.
+        detail += (' The daemon is running from this project and will '
+                   'stop working if the project is moved or deleted.')
     if verified is False:
         detail += (' -- WARNING: the restarted daemon reports %r, not '
                    'the installed %s: the payload it runs may be stale. '
@@ -5949,7 +6204,7 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
         # read as a clean, confirmed install.
         detail += (' -- version unverified: the restarted daemon did '
                    'not answer in time')
-    result = {'ok': True, 'action': 'install', 'outcome': outcome,
+    result = {'ok': True, 'action': action, 'outcome': outcome,
               'started': started, 'healthy': healthy,
               'version_verified': verified,
               'detail': detail,
