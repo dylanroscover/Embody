@@ -4293,7 +4293,7 @@ class ConvoyExt:
             # did not exist yet, because Envoy builds it on a worker that
             # runs for minutes after the wizard moves on.
             if self._envoyBuildingItsEnvironment():
-                self._log('Convoy: the Python environment Convoy shares is '
+                self._log('the Python environment Convoy shares is '
                           'still being built by Envoy -- the host app cannot '
                           'install until it exists. This resolves itself; the '
                           'install retries automatically.', 'INFO')
@@ -4938,7 +4938,7 @@ class ConvoyExt:
             if ctx is None:
                 return
             if self._hostRuntimeResolvable(ctx):
-                self._log('Convoy: the shared Python environment is ready -- '
+                self._log('the shared Python environment is ready -- '
                           'installing the host app now', 'INFO')
                 self.InstallHost(confirm=False)
                 return
@@ -4946,13 +4946,13 @@ class ConvoyExt:
             if attempt == 0:
                 if building:
                     self._log(
-                        'Convoy: waiting for Envoy to finish building the '
+                        'waiting for Envoy to finish building the '
                         'Python environment Convoy shares -- the host app '
                         'installs on its own as soon as it is ready. Nothing '
                         'to do.', 'INFO')
                 else:
                     self._log(
-                        'Convoy: no Python runtime is available for the host '
+                        'no Python runtime is available for the host '
                         'app yet. Enable Envoy (it builds the environment '
                         'Convoy shares) and the host app installs itself.',
                         'WARNING')
@@ -4963,7 +4963,7 @@ class ConvoyExt:
                 return
             if attempt >= self._HOST_RUNTIME_WAIT_TRIES:
                 self._log(
-                    'Convoy: gave up waiting for the shared Python '
+                    'gave up waiting for the shared Python '
                     'environment after %d attempts -- the host app is not '
                     'installed. Use Install Host App once Envoy has finished.'
                     % (attempt,), 'WARNING')

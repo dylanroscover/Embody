@@ -22,7 +22,16 @@ panel redraw for nothing. An unchanged readout writes nothing and
 therefore cooks nothing.
 """
 
-TICK_FRAMES = 30        # elapsed-clock cadence WHILE a step is running
+# Two cadences, because the panel has two reasons to re-tick.
+# SLOW is the elapsed clock ("2m ago" ticking over) -- half a second is
+# plenty and costs nothing to keep armed.
+# FAST is the busy-mark ANIMATION during an install: 8 frames is ~7.5 Hz
+# at 60 fps, which reads as motion. One publish is ~0.65 ms, so the
+# animation costs about 5 ms per second WHILE INSTALLING and exactly
+# nothing afterwards -- the tick only re-arms while the rows would
+# actually differ a tick from now.
+TICK_FRAMES = 30
+TICK_FRAMES_ANIMATING = 8
 
 
 def _table():
@@ -47,7 +56,7 @@ def Refresh():
     except Exception:
         return 0
     written = _write(table, rows, mod)
-    _arm(mod)
+    _arm(mod, rows)
     return written
 
 
@@ -71,7 +80,7 @@ def _write(table, rows, mod):
     return written
 
 
-def _arm(mod):
+def _arm(mod, rows=None):
     """Re-arm ONLY while something is genuinely about to move.
 
     Not "is a step running": a healthy session reports Envoy Connected and
@@ -83,13 +92,23 @@ def _arm(mod):
     """
     try:
         viz = me.parent()
+        rate = max(1.0, project.cookRate)
+        # Ask at the FAST horizon: an 8-frame-ahead difference catches the
+        # spinner, and anything slower (the elapsed clock) still differs
+        # over the slow horizon below.
+        frames = TICK_FRAMES_ANIMATING
+        width = viz.par.w.eval()
         if not mod.will_change(op.Embody, now=absTime.seconds,
-                               ahead=TICK_FRAMES / max(1.0, project.cookRate),
-                               panel_width=viz.par.w.eval()):
-            return
+                               ahead=frames / rate, panel_width=width,
+                               rows=rows):
+            frames = TICK_FRAMES
+            if not mod.will_change(op.Embody, now=absTime.seconds,
+                                   ahead=frames / rate, panel_width=width,
+                                   rows=rows):
+                return
     except Exception:
         return
-    run("me.module.Refresh()", fromOP=me, delayFrames=TICK_FRAMES,
+    run("me.module.Refresh()", fromOP=me, delayFrames=frames,
         group='embody_status_tick')
 
 

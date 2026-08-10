@@ -1153,6 +1153,46 @@ def font_for_width(panel_width, target_chars=TARGET_ROW_CHARS,
 # U+2713/U+2717 are deliberate. U+2714 (heavy check) falls back to an
 # emoji font in Consolas and renders in the wrong colour and weight --
 # verified by capture, not assumed.
+# The busy mark ANIMATES while work is actually in flight, because a
+# static mark cannot distinguish "installing" from "hung" -- which is the
+# whole reason this readout exists. ASCII on purpose: the cells render in
+# Consolas and these four are guaranteed present in it. A braille or block
+# spinner looks smoother but falls back to another font when a glyph is
+# missing, and a fallback glyph is not the same advance width -- which
+# would resize the column, the font and the whole panel on every frame of
+# the animation. Every frame here is exactly ONE character, so the layout
+# cannot move: widths come from len(text) (see MONO_ADVANCE).
+SPINNER_FRAMES = ("|", "/", "-", "\\")
+
+# Slow enough to be cheap, fast enough to read as motion. One publish per
+# step (~0.65 ms measured) is the animation's entire cost, and it is paid
+# ONLY while a step is genuinely running: the panel re-arms its tick only
+# while its own rows would differ a tick from now, so the animation stops
+# when the work does and a settled project cooks nothing at all.
+SPINNER_FPS = 8.0
+
+
+def spinner_frame(now=None, fps=SPINNER_FPS):
+    """The busy mark for this instant. Pure; always ONE character."""
+    try:
+        return SPINNER_FRAMES[int(float(now or 0.0) * float(fps))
+                              % len(SPINNER_FRAMES)]
+    except (TypeError, ValueError):
+        return SPINNER_FRAMES[0]
+
+
+def busy_glyph(now=None, animate=False):
+    """The RUNNING mark: animated while installing, static otherwise.
+
+    `animate` is the caller's answer to "is this an installation, or a
+    settled project merely reporting state?". Settled, the ellipsis is
+    both correct and free -- an unchanging cell publishes nothing, so the
+    panel returns to zero cooks the moment startup ends.
+    """
+    return spinner_frame(now) if animate else GLYPH_BUSY
+
+
+
 GLYPH_OK = "\u2713"
 GLYPH_BAD = "\u2717"
 GLYPH_WAIT = "!"
@@ -1179,7 +1219,7 @@ _REDUNDANT_OK = ("enabled", "connected", "up to date", "running", "ok",
 _ALWAYS_SHOW = ()
 
 
-def cell_text(key, step, verbose=False, now=None):
+def cell_text(key, step, verbose=False, now=None, animate=False):
     """One cell: mark, name, and a reason ONLY when there is one.
 
     On the happy path the detail is suppressed -- a tick beside "Convoy"
@@ -1194,6 +1234,11 @@ def cell_text(key, step, verbose=False, now=None):
     step = step or {}
     state = step.get("state")
     glyph = STATE_GLYPH.get(state, " ")
+    if state == RUNNING:
+        # Animated ONLY while something is installing. In a settled
+        # project the mark is static, which is what keeps the panel at
+        # zero cooks once startup is over.
+        glyph = busy_glyph(now, animate=animate)
     label = (step.get("label") or STATUS_LABELS.get(key, key))
     clock = stuck_clock(step, now)
     if clock:
@@ -1331,6 +1376,15 @@ def live_grid(embody, verbose=False, now=None):
     # than news about the project -- and a real failure persists, while
     # activity does not.
     healthy = not persistent_problem(steps, now)
+    # Animate the busy mark ONLY while an install is genuinely in flight.
+    # `startup_snapshot` returning None above means startup is over, so the
+    # only animating case left here is a subsystem still installing (a
+    # Convoy host app coming up after the open sequence). A settled project
+    # gets the static ellipsis and therefore publishes nothing.
+    animate = any((step or {}).get("state") == RUNNING
+                  and (step or {}).get("detail", "").lower().startswith(
+                      ("install", "building", "preparing", "starting"))
+                  for _k, step in steps)
     by_key = dict(steps)
     # ONE column containing every key -- not one column PER key. The
     # latter reads the same in a tuple literal and is catastrophically
@@ -1346,7 +1400,8 @@ def live_grid(embody, verbose=False, now=None):
             step = by_key[STATUS_AUTOSAVE]
             age = compact_status(step.get("detail"))
             return (key, "  %s" % age if age else "", step)
-        return (key, cell_text(key, by_key[key], show_detail, now=now),
+        return (key, cell_text(key, by_key[key], show_detail, now=now,
+                               animate=animate),
                 by_key[key])
 
     columns = [[cell(key) for key in col
@@ -1537,7 +1592,8 @@ PANEL_COLS = 2          # cells per rowbox
 TABLE_HEADER = ("name", "value", "r", "g", "b", "show")
 
 
-def will_change(embody, now=None, ahead=1.0, panel_width=600):
+def will_change(embody, now=None, ahead=1.0, panel_width=600,
+                rows=None):
     """Would the readout LOOK different `ahead` seconds from now?
 
     The publisher is event-driven and must go completely silent when
@@ -1554,9 +1610,16 @@ def will_change(embody, now=None, ahead=1.0, panel_width=600):
     about to move, and it needs no table of which states own clocks.
     """
     try:
-        return (table_rows(embody, panel_width, now=now)
-                != table_rows(embody, panel_width,
-                              now=(now or 0.0) + float(ahead)))
+        # `rows` lets the caller hand in what it JUST computed. Without it
+        # every arm check rebuilt the readout twice, and the two-horizon
+        # check did it four times -- five full rebuilds per publish to
+        # decide whether to publish again, which is the same
+        # recompute-per-frame waste this whole design removed from the
+        # cells.
+        current = rows if rows is not None else table_rows(
+            embody, panel_width, now=now)
+        return current != table_rows(embody, panel_width,
+                                     now=(now or 0.0) + float(ahead))
     except Exception:
         return False
 
