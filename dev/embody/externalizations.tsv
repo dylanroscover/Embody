@@ -91,7 +91,7 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/unit_tests/test_tag_lifecycle	text	py	embody/unit_tests/test_tag_lifecycle.py	2026-06-20 20:36:02 UTC				0	-600	0.9000,0.3000,0.4000
 /embody/unit_tests/test_strategy_handlers	text	py	embody/unit_tests/test_strategy_handlers.py	2026-06-20 20:36:02 UTC				600	0	0.9000,0.3000,0.4000
 /embody/unit_tests/test_server_lifecycle	text	py	embody/unit_tests/test_server_lifecycle.py	2026-06-20 20:36:02 UTC				0	-2600	0.9000,0.3000,0.4000
-/embody/unit_tests/test_sandbox	base	tdn	embody/unit_tests/test_sandbox.tdn	2026-08-05 12:10:43 UTC		1575	099.2025.33070	400	0	0.3000,0.5000,0.9000
+/embody/unit_tests/test_sandbox	base	tdn	embody/unit_tests/test_sandbox.tdn	2026-08-10 00:22:49 UTC		1597	099.2025.33070	400	0	0.3000,0.5000,0.9000
 /embody/unit_tests/test_rename_move_lifecycle	text	py	embody/unit_tests/test_rename_move_lifecycle.py	2026-06-20 20:36:03 UTC				200	-600	0.9000,0.3000,0.4000
 /embody/unit_tests/test_path_utils	text	py	embody/unit_tests/test_path_utils.py	2026-06-20 20:36:03 UTC				200	-800	0.9000,0.3000,0.4000
 /embody/unit_tests/test_param_tracker	text	py	embody/unit_tests/test_param_tracker.py	2026-06-20 20:36:03 UTC				400	-800	0.9000,0.3000,0.4000
@@ -123,7 +123,7 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/unit_tests/test_catalog_bootstrap_palette	text	py	embody/unit_tests/test_catalog_bootstrap_palette.py	2026-06-20 20:36:03 UTC				900	0	0.9000,0.3000,0.4000
 /embody/unit_tests/results	table	tsv	embody/unit_tests/results.tsv	2026-06-20 20:36:03 UTC				0	0	0.9000,0.3000,0.4000
 /embody/unit_tests/TestRunnerExt	text	py	embody/unit_tests/TestRunnerExt.py	2026-06-20 20:36:03 UTC				200	0	0.9000,0.3000,0.4000
-/embody/unit_tests	base	tdn	embody/unit_tests.tdn	2026-08-08 00:11:56 UTC		105	099.2025.33070	400	102	0.3000,0.5000,0.9000
+/embody/unit_tests	base	tdn	embody/unit_tests.tdn	2026-08-10 01:12:54 UTC		106	099.2025.33070	400	102	0.3000,0.5000,0.9000
 /embody/execute_src_ctrl	execute	py	embody/execute_src_ctrl.py	2026-06-20 20:36:03 UTC				-625	120	0.9000,0.3000,0.4000
 /embody/Embody/window_tagging_menu	window	tdn	embody/Embody/window_tagging_menu.tdn	2026-06-20 20:36:04 UTC		24	099.2025.32820	900	675	0.3000,0.5000,0.9000
 /embody/Embody/window_manager	window	tdn	embody/Embody/window_manager.tdn	2026-06-20 20:36:04 UTC		13	099.2025.32820	500	675	0.3000,0.5000,0.9000
@@ -135,8 +135,8 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/Embody/windowHeader/WindowHeaderExt	text	py	embody/Embody/windowHeader/WindowHeaderExt.py	2026-06-20 20:36:04 UTC				0	-200	0.9000,0.3000,0.4000
 /embody/Embody/windowHeader	container	tdn	embody/Embody/windowHeader.tdn	2026-08-04 20:06:45 UTC		15	099.2025.33070	300	300	0.3000,0.5000,0.9000
 /embody/Embody/toolbar/tooltip/text_callbacks	text	py	embody/Embody/toolbar/tooltip/text_callbacks.py	2026-06-20 20:36:04 UTC				0	-160	0.9000,0.3000,0.4000
-/embody/Embody/toolbar/tooltip/text	text	tdn	embody/Embody/toolbar/tooltip/text.tdn	2026-08-05 12:23:17 UTC		31	099.2025.33070	0	0	0.3000,0.5000,0.9000
-/embody/Embody/toolbar/tooltip	container	tdn	embody/Embody/toolbar/tooltip.tdn	2026-08-05 12:23:18 UTC		42	099.2025.33070	800	-200	0.3000,0.5000,0.9000
+/embody/Embody/toolbar/tooltip/text	text	tdn	embody/Embody/toolbar/tooltip/text.tdn	2026-08-09 17:27:19 UTC		34	099.2025.33070	0	0	0.3000,0.5000,0.9000
+/embody/Embody/toolbar/tooltip	container	tdn	embody/Embody/toolbar/tooltip.tdn	2026-08-09 17:27:19 UTC		45	099.2025.33070	800	-200	0.3000,0.5000,0.9000
 /embody/Embody/toolbar/toolbar_config	table	tsv	embody/Embody/toolbar/toolbar_config.tsv	2026-06-20 20:36:04 UTC				0	-200	0.9000,0.3000,0.4000
 /embody/Embody/toolbar/parexec_responsive	parexec	py	embody/Embody/toolbar/parexec_responsive.py	2026-06-20 20:36:04 UTC				400	-200	0.9000,0.3000,0.4000
 /embody/Embody/toolbar/parexec_filter	parexec	py	embody/Embody/toolbar/parexec_filter.py	2026-06-20 20:36:04 UTC				600	-200	0.9000,0.3000,0.4000
@@ -173,7 +173,7 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/Embody/toolbar/container_left/disable	text	tdn	embody/Embody/toolbar/container_left/disable.tdn	2026-08-04 20:06:43 UTC		12	099.2025.33070	0	0	0.3000,0.5000,0.9000
 /embody/Embody/toolbar/container_left	container	tdn	embody/Embody/toolbar/container_left.tdn	2026-08-04 20:06:45 UTC		18	099.2025.33070	0	0	0.3000,0.5000,0.9000
 /embody/Embody/toolbar/ToolbarExt	text	py	embody/Embody/toolbar/ToolbarExt.py	2026-06-20 20:36:04 UTC				200	-200	0.9000,0.3000,0.4000
-/embody/Embody/toolbar	container	tdn	embody/Embody/toolbar.tdn	2026-08-05 12:23:18 UTC		37	099.2025.33070	300	200	0.3000,0.5000,0.9000
+/embody/Embody/toolbar	container	tdn	embody/Embody/toolbar.tdn	2026-08-09 17:27:19 UTC		40	099.2025.33070	300	200	0.3000,0.5000,0.9000
 /embody/Embody/timer_callbacks	text	py	embody/Embody/timer_callbacks.py	2026-06-20 20:36:05 UTC				-625	-375	0.9000,0.3000,0.4000
 /embody/Embody/templates/text_tdn_textconv	text	py	embody/Embody/templates/text_tdn_textconv.py	2026-06-20 20:36:05 UTC				900	-600	0.9000,0.3000,0.4000
 /embody/Embody/templates/text_skill_visual_aesthetics	text	md	embody/Embody/templates/text_skill_visual_aesthetics.md	2026-06-20 20:36:05 UTC				2100	-400	0.9000,0.3000,0.4000
@@ -226,8 +226,8 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/Embody/Collection/CollectionExt	text	py	embody/Embody/Collection/CollectionExt.py	2026-06-20 20:36:05 UTC				200	0	0.9000,0.3000,0.4000
 /embody/Embody/Collection	base	tdn	embody/Embody/Collection.tdn	2026-07-20 11:16:09 UTC		2	099.2025.33070	200	-550	0.3000,0.5000,0.9000
 /embody/Embody/CatalogManagerExt	text	py	embody/Embody/CatalogManagerExt.py	2026-06-20 20:36:05 UTC				-300	300	0.9000,0.3000,0.4000
-/embody/Embody	container	tdn	embody/Embody.tdn	2026-08-08 00:24:10 UTC	True	1121	099.2025.33070	0	0	0.3000,0.5000,0.9000
-/embody	container	tdn	embody.tdn	2026-08-08 00:24:11 UTC	True	1006	099.2025.33070	100	50	0.3000,0.5000,0.9000
+/embody/Embody	container	tdn	embody/Embody.tdn	2026-08-10 01:13:18 UTC		1134	099.2025.33070	0	0	0.3000,0.5000,0.9000
+/embody	container	tdn	embody.tdn	2026-08-10 01:13:18 UTC		1015	099.2025.33070	100	50	0.3000,0.5000,0.9000
 /embody/unit_tests/test_tdn_diff_engine	text	py	embody/unit_tests/test_tdn_diff_engine.py	2026-06-22 21:36:58 UTC				200	-3200	0.9000,0.3000,0.4000
 /embody/unit_tests/test_tdn_diff	text	py	embody/unit_tests/test_tdn_diff.py	2026-06-22 21:37:00 UTC				0	-3200	0.9000,0.3000,0.4000
 /embody/unit_tests/test_git_status	text	py	embody/unit_tests/test_git_status.py	2026-06-22 23:29:58 UTC				400	-3200	0.9000,0.3000,0.4000
@@ -298,3 +298,4 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/Embody/convoy/host/convoy_discovery	text	py	embody/Embody/convoy/host/convoy_discovery.py	2026-08-03 11:22:30 UTC				1000	-1600	0.6700,0.6700,0.6700
 /embody/Embody/convoy/host/convoy_artifacts	text	py	embody/Embody/convoy/host/convoy_artifacts.py	2026-08-03 11:22:30 UTC				600	-1600	0.6700,0.6700,0.6700
 /embody/Embody/convoy/host/convoy_artifact_http	text	py	embody/Embody/convoy/host/convoy_artifact_http.py	2026-08-03 11:22:30 UTC				200	-1600	0.6700,0.6700,0.6700
+/embody/Embody/startup_progress	text	py	embody/Embody/startup_progress.py	2026-08-09 13:53:05 UTC				-700	400	0.9000,0.3000,0.4000

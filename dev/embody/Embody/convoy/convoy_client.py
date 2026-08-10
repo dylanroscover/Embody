@@ -127,13 +127,22 @@ HOST_NEEDS_REPAIR_PYTHON = "needs_repair_python"
 HOST_NEWER_INSTALL = "newer_install"
 HOST_EXTERNAL_SUPERVISOR = "external_supervisor"
 
-# The four TRANSIENT states. convoy_install never computes these -- they
+# The five TRANSIENT states. convoy_install never computes these -- they
 # describe what the EXTENSION is doing right now, not what is on disk,
 # so they are owned here outright.
 HOST_CHECKING = "checking"
 HOST_INSTALLING = "installing"
 HOST_STARTING = "starting"
 HOST_INSTALL_FAILED = "install_failed"
+# The runtime-only repair (plan_install's repair_runtime action) rode
+# HOST_INSTALLING and so read 'Installing...' -- which is false in the
+# one way this field exists to prevent. A repair writes NO payload: it
+# re-resolves the interpreter and rewrites the supervisor definition,
+# leaving the installed version and files exactly as they were. Telling
+# the user it is installing invites them to expect a version change that
+# is never going to happen, on the one path they reached BECAUSE the
+# version may not be replaced.
+HOST_REPAIRING = "repairing"
 
 HEALTH_TIMEOUT_S = 3.0
 REGISTER_TIMEOUT_S = 10.0
@@ -1608,11 +1617,11 @@ def status_text(result):
 def host_status_text(state):
     """The Convoy Host string for one host-app state. TOTAL, never raises.
 
-    THE SINGLE SOURCE of that field's vocabulary -- twelve strings, and
-    no thirteenth. `state` is either convoy_install.host_state()'s dict
-    or a bare transient name ('checking', 'installing', 'starting',
-    'install_failed'), because the extension needs to say what it is
-    doing before there is anything on disk to describe.
+    THE SINGLE SOURCE of that field's vocabulary -- thirteen strings, and
+    no fourteenth. `state` is either convoy_install.host_state()'s dict
+    or a bare transient name ('checking', 'installing', 'repairing',
+    'starting', 'install_failed'), because the extension needs to say
+    what it is doing before there is anything on disk to describe.
 
     ASCII ONLY, deliberately: '--' and '...' are the repo rule, and this
     string is written into a TD parameter that a Windows textport may
@@ -1644,6 +1653,8 @@ def host_status_text(state):
         return "Checking..."
     if name == HOST_INSTALLING:
         return "Installing..."
+    if name == HOST_REPAIRING:
+        return "Repairing runtime..."
     if name == HOST_STARTING:
         return "Installed -- starting..."
     if name == HOST_RUNNING:

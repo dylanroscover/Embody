@@ -64,7 +64,50 @@ def data_dir(platform=None, env=None, home=None):
     return join(base, "embody-convoy")
 
 
-def _write_private(path, data):
+def _fsync_directory(path):
+    """Make a rename itself durable. No-op on Windows (no directory fd)
+    and best-effort everywhere: a filesystem that refuses the sync must
+    not turn an otherwise-successful write into a failure."""
+    if os.name == "nt":
+        return
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError:
+        pass
+    finally:
+        os.close(descriptor)
+
+
+# The replace retry schedule. SHAPE IDENTICAL to convoy_lifecycle's
+# _atomic_replace (attempt 0 immediate, then a 5 ms linear backoff), and
+# deliberately so -- one contract for "a Windows reader is holding the
+# destination", written twice because these two modules do not import
+# each other.
+#
+# The ATTEMPT COUNT is the one place they differ, and the divergence is
+# the point. _atomic_replace rewrites one lifecycle file occasionally;
+# this function is the daemon's sole writer for every job record, and a
+# peer revocation drives it 250+ times back to back. At 8 attempts the
+# budget was 105 ms, which is smaller than the 100 ms+ stall a shared CI
+# runner takes at arbitrary points and smaller than a scanner's hold on
+# a file it has just seen written -- and that is what surfaced as 7
+# per-record errors in a 250-record revocation on windows-latest.
+#
+# The ceiling is just as real: _revoke_peer_work calls this INSIDE the
+# host lock, one record at a time, and a revocation may not stall the
+# host (test_new6_a_revocation_does_not_stall_the_whole_host holds the
+# worst lock wait under 1 s). 12 attempts sleeps 275 ms in total --
+# 2.6x the old budget, and still comfortably inside that bound.
+_REPLACE_ATTEMPTS = 12
+_REPLACE_BACKOFF_S = 0.005
+
+
+def _write_private(path, data, *, replace=None, sleep=None):
     """Create/replace a file readable only by the owner, atomically.
 
     0600 before content lands: open with O_CREAT|O_EXCL on a temp name,
@@ -72,7 +115,17 @@ def _write_private(path, data):
     the mode bits are advisory (NTFS ACLs inherit from the profile dir,
     which is already per-user), so this is belt-and-braces there and the
     real protection on POSIX.
+
+    `replace` and `sleep` are INJECTION SEAMS, mirroring _atomic_replace
+    down to being keyword-only: the retry loop below is a deadline, and a
+    deadline tested against a real clock on a shared runner measures the
+    runner. Both default to the real thing and no production caller
+    passes either -- all nineteen call this with exactly (path, data),
+    which is also why a third POSITIONAL parameter must never be added
+    here: it would bind silently at every one of them.
     """
+    replace = replace or os.replace
+    sleep = sleep or time.sleep
     directory = os.path.dirname(path)
     os.makedirs(directory, exist_ok=True)
     # UNPREDICTABLE name + O_EXCL: with a fixed temp path and O_TRUNC the
@@ -87,6 +140,28 @@ def _write_private(path, data):
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
             f.write(data)
+            # FLUSH AND SYNC BEFORE THE RENAME. os.replace is atomic for
+            # the NAME; it says nothing about the DATA reaching the disk.
+            # Without this, a power loss or hard kill can leave the new
+            # name pointing at unwritten (zero-filled) content -- and this
+            # is the sole writer for host.json, every delivery record and
+            # marker, policy.json, realm.json, peers.json, the TLS
+            # material, the portfile and the IPC token. Three sibling
+            # modules in this daemon already do it (convoy_lifecycle,
+            # convoy_artifacts, convoy_peerclient), so its absence here
+            # was an inconsistency rather than a decision.
+            #
+            # THIS FD IS THE TEMP FILE'S, NOT THE DESTINATION'S. Syncing
+            # it cannot lengthen the window in which the destination is
+            # held open -- this function never opens the destination at
+            # all; the concurrent READER does. That is why withdrawing
+            # the sync was not the fix for the sharing violations it was
+            # blamed for (16ca52c): the real cost is elapsed time, which
+            # is paid for above in _REPLACE_ATTEMPTS, and proved by
+            # test_convoy_platform's mass rewrite under injected
+            # contention -- the test that commit said it was owed.
+            f.flush()
+            os.fsync(f.fileno())
     except Exception:
         try:
             os.unlink(tmp)
@@ -102,20 +177,21 @@ def _write_private(path, data):
     # json.load -- immediate retries alone provably lost that race under
     # load (review probe, 2026-07-31). Short growing sleeps cover the
     # reader's full window; the first retry stays immediate so the hot
-    # path is not slowed.
-    for attempt in range(8):
+    # path is not slowed. The budget itself is _REPLACE_ATTEMPTS above.
+    for attempt in range(_REPLACE_ATTEMPTS):
         try:
-            os.replace(tmp, path)
+            replace(tmp, path)
+            _fsync_directory(directory)
             return
         except PermissionError:
-            if attempt == 7:
+            if attempt == _REPLACE_ATTEMPTS - 1:
                 try:
                     os.unlink(tmp)
                 except OSError:
                     pass
                 raise
             if attempt:
-                time.sleep(0.005 * attempt)
+                sleep(_REPLACE_BACKOFF_S * attempt)
 
 
 def ensure_ipc_token(directory):

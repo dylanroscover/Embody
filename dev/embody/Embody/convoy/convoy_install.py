@@ -261,6 +261,28 @@ ACTION_EXTERNAL = "external"
 ACTION_REPAIR_RUNTIME = "repair_runtime"
 
 _VERSION_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
+
+
+def _supervisor_is_repairable(supervisor):
+    """Can repair_runtime actually RE-REGISTER this recorded kind?
+
+    ONE predicate, read by plan_install (which offers the button) and by
+    repair_runtime (which honours it), so a plan can never authorise a
+    repair the repair itself refuses. That is the ask-then-refuse class
+    the EXTERNAL guard in plan_install already removed for one kind and
+    left open for the rest: a record naming 'none', or naming anything a
+    newer Embody wrote that this one does not know, earned a
+    confirmation dialog and a venv build and only THEN
+    'unknown_supervisor'.
+
+    An EMPTY field is repairable: repair_runtime defaults a record with
+    no supervisor to the platform's own kind, so there is a definition
+    to write. It is the NAMED-but-unhandled kinds that are not.
+    """
+    return not supervisor or supervisor in (SUPERVISOR_TASK,
+                                            SUPERVISOR_AGENT)
+
+
 # -- paths -------------------------------------------------------------
 
 def _join(platform=None):
@@ -555,7 +577,12 @@ def plan_install(installed, version, platform=None, *,
                                  version and files, so the newer daemon
                                  code is what comes back up. Strictly
                                  `is False` -- an unknown (None) is not
-                                 evidence and keeps the refusal.
+                                 evidence and keeps the refusal -- and
+                                 strictly for a supervisor kind
+                                 repair_runtime can re-register
+                                 (_supervisor_is_repairable): planning
+                                 one it would refuse is the very
+                                 ask-then-refuse this rule removes.
       4. supervisor external     -> external. Write the payload, register
                                  NOTHING, never two supervisors.
       5. either side UNORDERABLE -> upgrade. Cannot compare, so repair.
@@ -576,7 +603,12 @@ def plan_install(installed, version, platform=None, *,
     theirs_text = (record or {}).get("version")
     theirs = _version_key(theirs_text)
     ours = _version_key(version)
-    supervisor = (record or {}).get("supervisor") or SUPERVISOR_NONE
+    # The RAW field as well as the reported one: repair_runtime defaults
+    # an empty supervisor to the platform's kind, and 'none' is this
+    # function's report of an empty field -- not a kind anything can
+    # re-register. Collapsing them is what would re-open the gap below.
+    recorded_supervisor = (record or {}).get("supervisor")
+    supervisor = recorded_supervisor or SUPERVISOR_NONE
 
     def result(action, detail):
         return {"action": action, "version": str(version or ""),
@@ -592,19 +624,22 @@ def plan_install(installed, version, platform=None, *,
         return result(ACTION_INSTALL,
                       "no Convoy host app is installed for this user")
     if theirs is not None and ours is not None and ours < theirs:
-        if interpreter_exists is False and supervisor != SUPERVISOR_EXTERNAL:
+        if interpreter_exists is False and _supervisor_is_repairable(
+                recorded_supervisor):
             # A dead interpreter outranks the downgrade refusal: the
             # newer host app is already not running, and only a runtime
             # re-resolve can bring it back. Its VERSION is untouched.
             #
-            # NOT for an EXTERNAL supervisor. repair_runtime refuses one
-            # anyway, so without this guard the plan would authorise a
-            # repair, ConvoyExt would ask the user to confirm it, spend
-            # minutes building a venv -- and only THEN refuse. That is
-            # the same 'named a button that refuses' defect this branch
-            # exists to remove, moved one layer down and past consent.
-            # Falling through to the downgrade refusal is correct and is
-            # the documented ordering: rule 3 outranks rule 4.
+            # ONLY FOR A SUPERVISOR repair_runtime CAN RE-REGISTER, which
+            # is EXTERNAL's exclusion and every other unhandled kind's
+            # too -- one predicate, so the two cannot drift. Without it
+            # the plan authorises a repair, ConvoyExt asks the user to
+            # confirm it, spends minutes building a venv -- and only THEN
+            # refuses. That is the 'named a button that refuses' defect
+            # this branch exists to remove, moved one layer down and past
+            # consent. Falling through to the downgrade refusal is
+            # correct and is the documented ordering: rule 3 outranks
+            # rule 4.
             return result(
                 ACTION_REPAIR_RUNTIME,
                 "version %s was installed by a newer Embody and the Python "
@@ -1663,9 +1698,16 @@ def daemon_venv_spec(data_dir, platform=None, exists=None, isdir=None,
         python = join(venv_dir, "bin", "python3")
         daemon_python = python
     elif platform == "win32":
-        bases.extend(_uv_python_bases(
-            join(env.get("APPDATA") or "", "uv", "python"),
-            platform, exists, listdir))
+        # GUARDED THE SAME WAY THE TouchDesigner RUNG BELOW IS. With
+        # APPDATA unset the join yields the RELATIVE 'uv\python', and
+        # _uv_python_bases listdirs whatever that resolves to under the
+        # process's current directory -- which for a TD session is the
+        # user's project. A missing environment variable must produce no
+        # candidate, never a candidate rooted somewhere else.
+        appdata = env.get("APPDATA")
+        if appdata:
+            bases.extend(_uv_python_bases(
+                join(appdata, "uv", "python"), platform, exists, listdir))
         # TouchDesigner's own base python, LAST and deliberately included.
         # A venv built on it dies at the next TD upgrade -- which is a
         # state Convoy already detects and reports (needs_repair_python) --
@@ -4162,12 +4204,16 @@ def repair_runtime(data_dir, interpreter, platform=None, runner=None,
             "external_supervisor",
             "another supervisor manages this host app; Embody will not "
             "rewrite it -- repair it through that supervisor")
-    if kind not in (SUPERVISOR_TASK, SUPERVISOR_AGENT):
+    if not _supervisor_is_repairable(kind):
         # Refuse rather than fall through _write_and_register_supervisor
         # taking NO branch, which would return ok=True with nothing
         # registered -- a repair that reports success and re-points
         # nothing. install() cannot write such a record, but repair
         # reads records other Embodies wrote.
+        #
+        # THE SAME PREDICATE plan_install ASKS, so this refusal can only
+        # ever be reached by a caller that skipped the plan -- never by
+        # the Install button, which is what made the refusal a dead end.
         return _failed(
             "unknown_supervisor",
             "the installed record names a supervisor this Embody does "

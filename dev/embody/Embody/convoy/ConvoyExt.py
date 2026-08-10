@@ -212,11 +212,12 @@ class ConvoyExt:
     HEALTH_POLL_S = 1.0
 
     # Mirrors convoy_client.HOST_* -- that module owns the vocabulary and
-    # a test pins these four against it. They are the TRANSIENT states,
+    # a test pins these five against it. They are the TRANSIENT states,
     # which convoy_install never computes because they describe what this
     # extension is doing rather than what is on disk.
     HOST_CHECKING = 'checking'
     HOST_INSTALLING = 'installing'
+    HOST_REPAIRING = 'repairing'
     HOST_STARTING = 'starting'
     HOST_INSTALL_FAILED = 'install_failed'
     RUNTIME_CATALOG_FILENAME = 'convoy_runtime_catalog.json'
@@ -4212,13 +4213,7 @@ class ConvoyExt:
         # of seeing the condition the status readout just reported, which
         # is how 'Install re-resolves it' and 'will not downgrade it'
         # came to be printed about the same install.
-        recorded = (installed or {}).get('interpreter')
-        interpreter_exists = None
-        if recorded:
-            try:
-                interpreter_exists = os.path.isfile(str(recorded))
-            except Exception:
-                interpreter_exists = None
+        interpreter_exists = _host_recorded_interpreter_exists(installed)
         plan = installer.plan_install(installed, ctx['version'],
                                       ctx['platform'],
                                       interpreter_exists=interpreter_exists)
@@ -4309,7 +4304,13 @@ class ConvoyExt:
             lambda: _host_install(ctx, modules, interpreter, supervisor,
                                   venv_runtime=venv_runtime,
                                   repair_only=repair_only),
-            note=self.HOST_INSTALLING)
+            # A runtime repair writes NO payload -- the installed version
+            # and file list are copied through verbatim -- so reporting
+            # 'Installing...' over it promises a version change that
+            # cannot happen, on the one path reached BECAUSE the version
+            # may not be replaced.
+            note=(self.HOST_REPAIRING if repair_only
+                  else self.HOST_INSTALLING))
         return {'state': 'installing', 'action': plan.get('action'),
                 'interpreter': interpreter, 'venv_runtime': venv_runtime,
                 'modules': sorted(modules)}
@@ -5428,6 +5429,30 @@ def _run_sibling_api_request(client, kind, context, request, progress,
 # because a worker that dies leaves the poll spinning to its cap.
 
 
+def _host_recorded_interpreter_exists(installed):
+    """Does the Python installed.json recorded still exist?
+
+    ONE probe, asked by _host_snapshot (which feeds host_state, and so
+    the status readout) and by InstallHost (which feeds plan_install, and
+    so the button). THEIR AGREEMENT IS THE ENTIRE POINT: the readout
+    saying 'Needs repair -- Python not found' while the planner answers
+    refuse_downgrade is the dead end b73fcd0 removed, and two verbatim
+    copies of the question are exactly how that comes back.
+
+    Returns None for UNKNOWN -- no recorded path, or a stat that itself
+    failed -- never False. plan_install's repair branch is strictly
+    `is False` for the same reason: an answer nobody could look up is
+    not evidence.
+    """
+    recorded = (installed or {}).get('interpreter')
+    if not recorded:
+        return None
+    try:
+        return os.path.isfile(str(recorded))
+    except Exception:
+        return None
+
+
 def _host_snapshot(ctx):
     """THE host status computation, assembled from its four inputs.
 
@@ -5474,13 +5499,7 @@ def _host_snapshot(ctx):
             # honest reading when we genuinely did not find out.
             supervisor = None
 
-    interpreter_exists = None
-    interpreter = (installed or {}).get('interpreter')
-    if interpreter:
-        try:
-            interpreter_exists = os.path.isfile(str(interpreter))
-        except Exception:
-            interpreter_exists = None
+    interpreter_exists = _host_recorded_interpreter_exists(installed)
 
     return installer.host_state(installed=installed,
                                 probe_status=probe_status,

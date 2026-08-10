@@ -1062,8 +1062,20 @@ def test_new6_a_revocation_does_not_stall_the_whole_host(server):
     watcher.join(timeout=10)
 
     assert code == 200
-    assert body["revocation"]["refused"] == jobs, (
-        "every queued job must actually transition: %r" % body["revocation"])
+    summary = body["revocation"]
+    assert summary["refused"] == jobs, (
+        "every queued job must actually transition: %r" % summary)
+    # AND THE SUMMARY MUST ADD UP, which is what made the one CI failure
+    # of this test so hard to read: it reported examined 250 against
+    # buckets summing to 14 and said nothing about the other 236, so the
+    # sharing violations it DID measure could not be told apart from
+    # records the sweep simply never counted. If this ever goes red
+    # again, the printed summary now names every state it saw.
+    assert sum(summary[name] for name in
+               ("refused", "errors", "left_in_flight", "left_running",
+                "already_terminal", "left_queued", "unknown_state")
+               ) == summary["examined"], (
+        "the sweep lost records out of its own summary: %r" % summary)
     assert worst[0] < 1.0, (
         "the global lock was held for %.2fs by the revocation sweep -- it "
         "must not be held across O(jobs) file writes" % worst[0])
@@ -1199,3 +1211,131 @@ def test_minor_f_the_burn_vs_defer_reason_is_stated_correctly():
         "the real distinction -- a membership decision was taken, and "
         "re-admitting does not resurrect terminalised work -- must be "
         "the one written down")
+
+
+# =====================================================================
+# NEW 11 -- the revocation summary must account for every record it saw
+# =====================================================================
+
+def _peer_record(server, key, node, operation="query_network"):
+    """One delivery record owned by PEER, straight through the store.
+
+    The submission ROUTE is exercised elsewhere; what these two tests
+    need is a POPULATION in specific states, several of which no route
+    can produce on demand.
+    """
+    job, _ = server.app.db.create_job(
+        key, node["node_id"], operation, {}, CONVOY,
+        origin_host_id=PEER, controller_id="peer:%s:c" % PEER)
+    return job["delivery_id"]
+
+
+def test_new11_every_examined_record_is_accounted_for(server):
+    """THE ACCOUNTING INVARIANT. queued/dispatching/running were the only
+    states this loop could count, so a record in any OTHER state fell
+    out of the summary silently: a windows-latest run reported examined
+    250 against buckets summing to 14, and neither the operator's
+    response nor the `peer_revoked` audit line said where the remaining
+    236 went. `examined` is evidence, and evidence that does not add up
+    is worse than none -- it reads as a containment that was measured.
+    """
+    node = register(server)
+    admit(server)
+    with server.app.lock:
+        db = server.app.db
+        for index in range(3):                       # -> refused
+            _peer_record(server, "acct-q%d" % index, node)
+        for index in range(2):                       # -> left_in_flight
+            db.claim_for_dispatch(
+                _peer_record(server, "acct-d%d" % index, node))
+        for index in range(2):                       # -> left_running
+            db.record_node_verdict(
+                _peer_record(server, "acct-r%d" % index, node),
+                "running", node_job_id="job_0000ab%02d" % index,
+                observed_at=100.0)
+        # ...and all four TERMINALS, which the sweep could not count.
+        db.record_node_verdict(_peer_record(server, "acct-ok", node),
+                               "done", node_job_id="job_0000cc01",
+                               observed_at=101.0)
+        db.record_node_verdict(_peer_record(server, "acct-err", node),
+                               "error", node_job_id="job_0000cc02",
+                               observed_at=102.0)
+        db.mark_indeterminate(_peer_record(server, "acct-ind", node),
+                              {"reason": "the node could not be observed"})
+        db.mark_refused(_peer_record(server, "acct-ref", node),
+                        {"reason": "refused before this sweep ran"})
+
+    code, body = server.call("/peers/block", {"host_id": PEER})
+    assert code == 200
+    summary = body["revocation"]
+
+    buckets = ("refused", "errors", "left_in_flight", "left_running",
+               "already_terminal", "left_queued", "unknown_state")
+    accounted = sum(summary[name] for name in buckets)
+    assert accounted == summary["examined"], (
+        "%d of %d examined records are unaccounted for: %r"
+        % (summary["examined"] - accounted, summary["examined"], summary))
+
+    assert summary["examined"] == 11
+    assert summary["refused"] == 3
+    assert summary["left_in_flight"] == 2
+    assert summary["left_running"] == 2
+    assert summary["already_terminal"] == 4
+    assert summary["unknown_state"] == 0
+    # BY STATE, because 4 is a number and this is an answer. Note the
+    # two senses of 'refused' sitting side by side and staying apart:
+    # three records this sweep refused, one that already was.
+    assert summary["untouched_states"] == {
+        "succeeded": 1, "failed": 1, "indeterminate": 1, "refused": 1}
+
+
+def test_new11_the_new_bucket_reaches_the_peer_revoked_audit_line(server):
+    """The summary is spread into `peer_revoked` (**summary), and that
+    line is the only account a later reader has of what a revocation
+    contained. A bucket missing from it is a record missing from it.
+    """
+    node = register(server)
+    admit(server)
+    with server.app.lock:
+        server.app.db.record_node_verdict(
+            _peer_record(server, "acct-audit", node), "done",
+            node_job_id="job_0000dd01", observed_at=103.0)
+
+    code, _ = server.call("/peers/block", {"host_id": PEER})
+    assert code == 200
+
+    with server.app.lock:
+        lines = [e for e in server.app.db.audit_tail(limit=600)
+                 if e["event"] == "peer_revoked"]
+    assert lines, "no peer_revoked line was written at all"
+    detail = lines[-1]["detail"]
+    assert detail["examined"] == 1
+    assert detail["already_terminal"] == 1, (
+        "the settled record is missing from the audit payload: %r" % detail)
+    assert detail["untouched_states"] == {"succeeded": 1}
+
+
+def test_new11_an_observe_only_narrowing_still_adds_up(server):
+    """The other caller, and the arm it needs. observe_peer sweeps with
+    mutating_only=True, and a queued READ is deliberately left queued --
+    a right answer that is NOT 'contained', so it is counted rather than
+    skipped out of the arithmetic.
+    """
+    node = register(server)
+    admit(server)
+    with server.app.lock:
+        _peer_record(server, "acct-read", node, operation="query_network")
+
+    code, body = server.call("/peers/observe", {"host_id": PEER})
+    assert code == 200, body
+    summary = body["revocation"]
+
+    buckets = ("refused", "errors", "left_in_flight", "left_running",
+               "already_terminal", "left_queued", "unknown_state")
+    assert sum(summary[name] for name in buckets) == summary["examined"], (
+        "an observe-only sweep lost a record out of its summary: %r"
+        % (summary,))
+    assert summary["examined"] == 1
+    assert summary["left_queued"] == 1
+    assert summary["refused"] == 0
+    assert summary["untouched_states"] == {"queued": 1}

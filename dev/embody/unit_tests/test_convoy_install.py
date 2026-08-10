@@ -1848,7 +1848,17 @@ class TestConvoyDaemonVenvSpec(EmbodyTestCase):
     UV_DIR = r'C:\Users\dev\AppData\Roaming\uv\python'
 
     def _spec(self, platform, present=(), dirs=(), listing=None, env=None,
-              base_prefix=None, data_dir=None):
+              base_prefix='', data_dir=None):
+        # base_prefix defaults to '' (inert), NOT None. daemon_venv_spec
+        # reads sys.base_prefix when it gets None, which silently drags the
+        # RUNNING interpreter into a test whose whole premise is a faked
+        # filesystem -- the TouchDesigner-base-python rung then offers it.
+        # That is invisible until the runner's own base prefix happens to
+        # collide with a path the test fakes: on this repo's dev box
+        # sys.base_prefix IS 'C:\\Program Files\\Python39', so the
+        # below-the-floor test failed under a 3.9 runner and passed under
+        # 3.11+. '' is falsy, so the TD rung is skipped for every test that
+        # does not care about it; the four that DO still pass one explicitly.
         present = set(present)
         dirs = set(dirs)
         listing = listing or {}
@@ -1986,6 +1996,44 @@ class TestConvoyDaemonVenvSpec(EmbodyTestCase):
                      self.UV_DIR + r'\cpython-3.9.25-windows-x86_64-none'
                                    r'\python.exe'],
             listing={self.UV_DIR: ['cpython-3.9.25-windows-x86_64-none']})
+        self.assertEqual(spec['bases'], [])
+
+    def test_an_unset_APPDATA_scans_nothing_instead_of_the_CWD(self):
+        """The uv root used to be joined unguarded, so an empty APPDATA
+        produced the RELATIVE 'uv\\python' and _uv_python_bases listdir'd
+        whatever that resolves to under the process's current directory
+        -- which for a TouchDesigner session is the user's project. The
+        TouchDesigner rung two lines below was already guarded this way;
+        this one was not.
+
+        The listing is keyed on the relative path on purpose: if the
+        guard goes, this is exactly what the scan reaches, and it has to
+        be a test failure rather than a silent CWD read.
+        """
+        env = dict(self.WIN_ENV)
+        env['APPDATA'] = ''
+        relative = r'uv\python'
+        listing = {relative: ['cpython-3.12.13-windows-x86_64-none']}
+        present = [relative + r'\cpython-3.12.13-windows-x86_64-none'
+                              r'\python.exe']
+        spec = self._spec('win32', present=present, listing=listing, env=env)
+        self.assertEqual(
+            spec['bases'], [],
+            'an unset APPDATA scanned a CWD-relative uv root: %r'
+            % (spec['bases'],))
+
+    def test_a_MISSING_APPDATA_key_is_the_same_as_an_empty_one(self):
+        """`env.get` returns None rather than '' when the variable was
+        never set at all -- the commoner case in a service context, and
+        the one a truthiness guard has to cover too."""
+        env = {key: value for key, value in self.WIN_ENV.items()
+               if key != 'APPDATA'}
+        relative = r'uv\python'
+        spec = self._spec(
+            'win32', env=env,
+            present=[relative + r'\cpython-3.12.13-windows-x86_64-none'
+                                r'\python.exe'],
+            listing={relative: ['cpython-3.12.13-windows-x86_64-none']})
         self.assertEqual(spec['bases'], [])
 
     def test_uv_variants_that_cannot_carry_the_wheel_are_skipped(self):
@@ -3182,6 +3230,60 @@ class TestConvoyInstallPlan(EmbodyTestCase):
             self._record('6.0.223', 'external'), '6.0.223',
             interpreter_exists=False)
         self.assertEqual(got['action'], 'external')
+
+    def test_a_dead_interpreter_does_not_authorise_an_UNREPAIRABLE_kind(
+            self):
+        """The neighbouring hole, and the same defect one kind over.
+        `external` was excluded by name; every OTHER kind repair_runtime
+        cannot re-register was still authorised -- so the plan offered a
+        repair, ConvoyExt asked the user to confirm it, spent minutes
+        building a venv, and repair_runtime then answered
+        'unknown_supervisor'. Ask-then-refuse, moved past consent.
+
+        `none` is the reachable one (plan_install reports an empty field
+        as exactly that string), and an unknown kind stands for whatever
+        a newer Embody writes next.
+        """
+        for kind in ('none', 'systemd', 'owlette', 'launchd'):
+            got = install_mod.plan_install(
+                self._record('6.0.230', kind), '6.0.223',
+                interpreter_exists=False)
+            self.assertEqual(
+                got['action'], 'refuse_downgrade',
+                'supervisor %r was offered a repair repair_runtime '
+                'refuses' % (kind,))
+
+    def test_the_repairable_kinds_still_get_their_repair(self):
+        """The guard must not close the door it was written to open.
+        Both kinds repair_runtime handles, plus a record with NO
+        supervisor field -- which repair_runtime defaults to the
+        platform's own kind, so there IS a definition to write."""
+        for record in ({'version': '6.0.230', 'supervisor': 'scheduled_task'},
+                       {'version': '6.0.230', 'supervisor': 'launch_agent'},
+                       {'version': '6.0.230'}):
+            got = install_mod.plan_install(record, '6.0.223',
+                                           interpreter_exists=False)
+            self.assertEqual(got['action'], 'repair_runtime',
+                             'record %r lost its repair' % (record,))
+
+    def test_the_plan_and_the_repair_ask_the_SAME_question(self):
+        """They agreed by coincidence before, in two places, on one kind.
+        The point of b73fcd0's fix is that they cannot drift -- so they
+        read one predicate, and this asserts they still do rather than
+        that they currently happen to match."""
+        for kind in ('scheduled_task', 'launch_agent', '', None,
+                     'none', 'external', 'systemd', 'nonsense'):
+            planned = install_mod.plan_install(
+                {'version': '6.0.230', 'supervisor': kind}, '6.0.223',
+                interpreter_exists=False)['action'] == 'repair_runtime'
+            # 'external' needs no special case: it is not a kind the
+            # predicate accepts either, so the two answers coincide
+            # whichever branch actually refuses it.
+            accepted = install_mod._supervisor_is_repairable(kind)
+            self.assertEqual(
+                planned, accepted,
+                'plan_install and repair_runtime disagree about %r'
+                % (kind,))
 
     def test_interpreter_exists_is_keyword_only(self):
         """ARITY GUARD. plan_install's `platform` parameter is passed

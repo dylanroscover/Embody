@@ -1339,9 +1339,12 @@ def test_autonomous_recovery_rewinds_pre_reservation_launching_boundary(
     # A GENEROUS CEILING on a path that completes immediately (the
     # launcher auto-confirms), which is the one real-clock budget the
     # CI-flake doctrine allows -- but it must be seconds, not tenths.
-    # Recovery does several durable writes, and every atomic write got ~1.5 ms
-    # slower when _write_private started fsyncing, so a 200 ms budget
-    # under full-matrix disk contention no longer had margin.
+    # Recovery does several durable writes, and _write_private fsyncs each
+    # one (~1.5 ms apiece), so a 200 ms budget under full-matrix disk
+    # contention had no margin. That sync was withdrawn once (16ca52c) and
+    # reinstated with the rename budget it needed, so the cost is real
+    # again -- but this ceiling is deliberately far above it either way,
+    # and must never be tightened back toward the measurement.
     summary = manager.recover_committed_restarts(recovery_timeout_s=5)
 
     assert summary["recovered"] == 1

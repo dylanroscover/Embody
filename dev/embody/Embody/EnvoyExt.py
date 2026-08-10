@@ -4205,6 +4205,16 @@ class EnvoyExt:
         self._viz_mutation_frame: int = -10 ** 6      # absTime.frame of the last mutating op (settle gate)
         self._viz_session_warm: bool = False          # False until a cold activation's hold has elapsed
         self._viz_cold_since: int = -1                # absTime.frame the cold hold began; -1 = not started
+        # Issue #86 relocation gates (see envoy_viz: netRelocationOK). Embot
+        # rebuilds cost 150-230ms of MAIN-THREAD copyOPs; an unbounded relocation
+        # rate measured at 28% of all wall clock. These few clocks bound it, and
+        # they are the ENTIRE state cost of the fix -- no per-network bookkeeping,
+        # no cached operators, nothing that can outlive a vizCleanup.
+        self._viz_home: Optional[tuple] = None           # (netpath, absTime.seconds committed) viz is committed to
+        self._viz_net_candidate: Optional[tuple] = None  # (netpath, absTime.seconds entered) not yet committed to
+        self._viz_relocate_blocked_since: Optional[float] = None  # when the gate started refusing (starvation ceiling)
+        self._viz_relocate_blocked_last: Optional[float] = None    # last refusal-eligible gate call; a long gap ends the streak
+        self._viz_write_suppress: dict = {}              # {comp_path: expiry} nets a .tox write just retired him out of
         self._crash_trace_enabled: bool = False       # diagnostic: flush a breadcrumb per viz annotation-graph op
         self._crash_trace_f = None                    # open handle to the breadcrumb file
 
@@ -6351,6 +6361,18 @@ class EnvoyExt:
                         op.Embody.ext.Embody._preRiskyCheckpoint(operation, params)
                     except Exception:
                         pass
+                elif operation in self._COARSE_CHECKPOINT_OPS:
+                    # Same ordering argument as the delete above, minus the path:
+                    # arbitrary code can crash TD, and a root queued by an earlier
+                    # tool sits unwritten for up to the settle window. Flush what
+                    # is ALREADY known dirty first. It does not sweep for new dirt
+                    # (that is the coarse post-arm below, debounced), so when
+                    # nothing is queued -- the steady state -- this costs an
+                    # empty-set check.
+                    try:
+                        op.Embody.ext.Embody.FlushPendingCheckpoints()
+                    except Exception:
+                        pass
                 undo_open = self._beginUndoBlock(operation)
                 try:
                     result = handler(**params)
@@ -6433,8 +6455,10 @@ class EnvoyExt:
     # Ops that change exported .tdn content and should arm an auto-save checkpoint.
     # BROADER than _VIZ_MUTATING_OPS: includes delete/disconnect/layout/annotation
     # ops (which mutate structure but have no camera target). execute_python /
-    # exec_op_method are deliberately EXCLUDED (A1 skip+document -- the touched COMP
-    # is unknowable; their edits are captured by the next typed op / Ctrl+S).
+    # exec_op_method are excluded from THIS set because it is the PATH-RESOLVING
+    # one and neither can name what it touched -- not because they are unwatched.
+    # They arm COARSELY instead (_noteCheckpointActivity), which is what stopped a
+    # whole agent session working through them from checkpointing nothing at all.
     _CHECKPOINT_MUTATING_OPS = frozenset({
         'create_op', 'delete_op', 'set_parameter', 'connect_ops', 'disconnect_op',
         'copy_op', 'rename_op', 'set_op_flags', 'set_op_position', 'layout_children',
@@ -6443,10 +6467,28 @@ class EnvoyExt:
         'remove_externalization_tag',
     })
 
+    # The two tools that run arbitrary code. They arm the COARSE sweep (which
+    # root changed is discovered at the settle) and pre-flush whatever is already
+    # queued, because either can crash TD and take an unwritten checkpoint with
+    # it. Kept as a set so the two paths that must agree -- the arm and the
+    # pre-flush -- cannot drift apart into "one tool is guarded, the other is not".
+    _COARSE_CHECKPOINT_OPS = frozenset({'execute_python', 'exec_op_method'})
+
     def _noteCheckpointActivity(self, operation: str, params: dict, result) -> None:
         """Arm the auto-save touched-set off the single MCP chokepoint. Best-effort,
         never raises -- a failure here must never affect the tool response."""
         try:
+            if operation in self._COARSE_CHECKPOINT_OPS:
+                # No path to resolve -- arbitrary code touches whatever it likes,
+                # which is why these tools used to arm nothing at all and left a
+                # whole agent session uncheckpointed. exec_op_method belongs here
+                # for the same reason and not the obvious one: it HAS an op_path,
+                # but the method it calls is arbitrary, so the op named is where
+                # the call lands, not the bound on what it changed. Arm coarsely;
+                # the drain discovers which roots actually changed, once, after
+                # the burst.
+                op.Embody.ext.Embody.NoteCoarseCheckpointTouch()
+                return
             if operation not in self._CHECKPOINT_MUTATING_OPS:
                 return
             path = self._resolveActiveOp(operation, params, result)
@@ -6569,6 +6611,30 @@ class EnvoyExt:
         """Advance queued follow hops one at a time -- see envoy_viz."""
         return mod.envoy_viz.vizPumpQueue(self, now)
 
+    def _pendingHopsIn(self, queue, netpath) -> int:
+        """Queued hops targeting one network (batch evidence) -- see envoy_viz."""
+        return mod.envoy_viz.pendingHopsIn(queue, netpath)
+
+    def _netRelocationOK(self, netpath, queue, now) -> bool:
+        """True when Embot + camera may relocate to a network -- see envoy_viz."""
+        return mod.envoy_viz.netRelocationOK(self, netpath, queue, now)
+
+    def _commitRelocation(self, netpath, now) -> None:
+        """Stamp a network as viz's home after a landed spawn -- see envoy_viz."""
+        return mod.envoy_viz.commitRelocation(self, netpath, now)
+
+    def _pathInsideSubtree(self, netpath, root_path) -> bool:
+        """True if a path is at or under a subtree root -- see envoy_viz."""
+        return mod.envoy_viz.pathInsideSubtree(netpath, root_path)
+
+    def _noteWriteRetire(self, path, now) -> None:
+        """Bar re-entry into a just-serialized COMP -- see envoy_viz."""
+        return mod.envoy_viz.noteWriteRetire(self, path, now)
+
+    def _writeSuppressed(self, netpath, now) -> bool:
+        """True while a net is barred after a .tox write retire -- see envoy_viz."""
+        return mod.envoy_viz.writeSuppressed(self, netpath, now)
+
     def _trackActive(self, now: float, follow: bool, show_bot: bool) -> None:
         """Stand Embot on / pan camera to the active op -- see envoy_viz."""
         return mod.envoy_viz.trackActive(self, now, follow, show_bot)
@@ -6629,6 +6695,20 @@ class EnvoyExt:
         """True if a network-editor pane shows the net -- see envoy_viz."""
         return mod.envoy_viz.netIsDisplayed(self, net)
 
+    def _spawnWouldBeSeen(self, displayed, follow_on, takeover_active,
+                          has_neteditor) -> bool:
+        """Truth table behind the visibility spawn gate -- see envoy_viz."""
+        return mod.envoy_viz.spawnWouldBeSeen(displayed, follow_on,
+                                              takeover_active, has_neteditor)
+
+    def _botWouldBeSeen(self, net: 'COMP') -> bool:
+        """True if a spawn into the net would be visible -- see envoy_viz."""
+        return mod.envoy_viz.botWouldBeSeen(self, net)
+
+    def _botWritesNeeded(self, net: 'COMP') -> bool:
+        """True if botDance should write to the editor -- see envoy_viz."""
+        return mod.envoy_viz.botWritesNeeded(self, net)
+
     def _blockSpawn(self, net: 'COMP') -> None:
         """One-shot block copy of all parts into an off-screen net -- see envoy_viz."""
         return mod.envoy_viz.blockSpawn(self, net)
@@ -6664,6 +6744,18 @@ class EnvoyExt:
     def _vizCleanup(self) -> None:
         """Retire all live visualization artifacts -- see envoy_viz."""
         return mod.envoy_viz.vizCleanup(self)
+
+    def _destroyPartsIn(self, netpath) -> int:
+        """Destroy the Embot parts sitting in one network -- see envoy_viz."""
+        return mod.envoy_viz.destroyPartsIn(self, netpath)
+
+    def _purgeVizArtifacts(self, root=None) -> int:
+        """Structural sweep of loose Embot parts (save path) -- see envoy_viz."""
+        return mod.envoy_viz.purgeVizArtifacts(self, root)
+
+    def _vizRetireForWrite(self, path: str) -> bool:
+        """Retire Embot if he is inside a COMP about to be written -- see envoy_viz."""
+        return mod.envoy_viz.vizRetireForWrite(self, path)
 
     def _viewTuple(self, pane) -> tuple:
         """Comparable snapshot of a pane's view state -- see envoy_viz."""

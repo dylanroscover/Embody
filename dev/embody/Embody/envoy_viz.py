@@ -77,6 +77,23 @@ _VIZ_JUMP_ARC = 55.0      # hop arc height (network units)
 # uses _VIZ_ENTRANCE_DUR (slower than a normal hop, since it covers a big distance).
 _VIZ_STAGE_MARGIN = 700.0   # network units past the viewport edge for the staging point
 _VIZ_ENTRANCE_DUR = 0.95    # seconds for the swoop-in from staging (vs _VIZ_JUMP_DUR hops)
+# Canonical resting coordinates for the TEMPLATE's parts (issue #86). The
+# staging trick above parks the SOURCE part off-view before copying it, and the
+# template lives inside the Embody COMP -- a TDN-strategy COMP -- so a staging
+# coordinate left on the source is written straight into Embody.tdn on the next
+# export (verified: all nine template parts were committed at [1860, 251], a
+# leaked staging point). (0, 0) is deliberate: TDNExt._exportAnnotations omits
+# `position` entirely when both nodeX and nodeY are 0, so the parked coordinate
+# cannot drift back into the file at all.
+_VIZ_TEMPLATE_PARK = (0.0, 0.0)
+# Name of the shipped template COMP (a child of the Embody COMP). This module is
+# the SOURCE OF TRUTH for both bot-artifact literals: TDNExt mirrors
+# _VIZ_BOT_PREFIX / _VIZ_TEMPLATE_COMP as VIZ_BOT_ANNOTATION_PREFIX /
+# VIZ_BOT_TEMPLATE_COMP so its export filter takes no dependency on this module
+# DAT. Drift between the two is silent (the filter simply stops matching and
+# live bot parts reach .tdn again), so
+# test_viz_bot_constants_match_the_tdn_exporter asserts they are equal.
+_VIZ_TEMPLATE_COMP = 'embot_template'
 # Stepping cadence: how long Embot dwells on each queued op before advancing to
 # the next. >= the jump so a hop lands before the next begins. When the queue
 # backs up (a fat batch) the dwell shrinks toward _VIZ_HOP_MIN so he races to
@@ -160,6 +177,72 @@ _VIZ_MUTATING_OPS = frozenset({
 _VIZ_MUTATION_SETTLE_FRAMES = 2   # frames a mutation must settle before viz editor work
 _VIZ_COLD_HOLD_FRAMES = 30        # ~0.5s @60fps of pulse-only on a cold activation
 
+# Issue #86 relocation gate. Embot has no identity across networks: any active
+# op in a DIFFERENT network tears him down and rebuilds him by copying the 9
+# template parts on the MAIN THREAD -- 150-230ms in ONE frame into an off-screen
+# net (blockSpawn), or 9 x 61-129ms spread over ~4.8s into a displayed one
+# (assembleStep). Measured over a 6.3s synthetic mutation stream: 10 blockSpawn
+# calls, 178ms average, 28% of ALL wall clock. Frame-rate measurements from the
+# same harness: 41.8 fps on mixed hops (worst frame 308.8ms), 21.3 fps when
+# every hop crosses a network (p90 182.1ms, worst 367.3ms), and -- the severity
+# argument -- 44.1 fps at an ORDINARY 1 op / 1.5s pace (worst 226.9ms). Baseline
+# with Embot off is a flat 60 fps / 16.7ms.
+#
+# The per-event cost is NOT reducible here: it is the editor's annotation-layer
+# relayout (verified by stripping the annotate's internals to no effect), the
+# work must stay on the main thread, and the block path is a documented TD
+# hard-crash path. So these constants attack the RATE instead -- Embot settles
+# where the work actually lives instead of chasing every network the work merely
+# passes through. Reasoned from the measured pacing rows above, not measured
+# directly: re-measure against the same stream when tuning.
+_VIZ_NET_DWELL_S = 2.0        # seconds work must sit CONTINUOUSLY in a new net before Embot commits
+                              # (deliberately above the 1.5s relaxed-pace row, so an ordinary
+                              # cross-network drip is never chased)
+_VIZ_RELOCATE_MIN_S = 2.5     # hard floor between relocations -- THE cost bound: at most one
+                              # ~180ms event per 2.5s, i.e. ~7% of wall clock vs the measured 28%
+_VIZ_NET_EVIDENCE_HOPS = 2    # pending hops already queued for a net that prove a real batch and
+                              # bypass the dwell, so a genuine 10-op build in a fresh COMP is not
+                              # left behind
+# Starvation ceiling. The dwell clock RESTARTS whenever the candidate network
+# changes, so work alternating between two networks that are both away from home
+# would never accumulate a dwell and the gate would refuse FOREVER -- Embot
+# frozen on a stale node while every op lights up elsewhere, with no escape hatch
+# (activity keeps refreshing _viz_last_activity, so the 30s idle retire never
+# fires either). That is a total loss of the feature, not a rate limit. So a
+# refusal streak this long forces the next relocation through the dwell -- still
+# subject to the cooldown, which remains THE cost bound. 2 x the dwell: it must
+# be long enough that an ordinary cross-network drip is still not chased on every
+# hop, short enough that Embot visibly follows a stream that never settles.
+_VIZ_NET_STARVE_S = 2.0 * _VIZ_NET_DWELL_S
+# ...and the streak has to be able to EXPIRE, or the escape hatch leaks into the
+# ordinary case. _viz_relocate_blocked_since outlives the work that set it: the
+# refused branch releases the follow target when the queue is empty, so the gate
+# simply stops being called and the clock keeps running against wall time. One
+# stray cross-network hop later (anything under the 30s idle retire, which is the
+# only other thing that clears it) then arrives ALREADY past the ceiling and
+# skips the dwell on first sight -- exactly the "ordinary cross-network drip"
+# the dwell exists to refuse. So a gap this long between two gate calls ends the
+# streak: it means viz was not being held back, it was not asking. Equal to the
+# starvation window itself, deliberately -- the streak must survive every stream
+# the ceiling exists to rescue (alternating work still asks every frame it has a
+# target, and a drip slower than the whole ceiling is one the dwell should be
+# refusing anyway).
+_VIZ_NET_STREAK_GAP_S = _VIZ_NET_STARVE_S
+# After a .tox write retires Embot out of a COMP (vizRetireForWrite), he may not
+# re-enter that subtree for this long. Without it the retire is self-feeding:
+# his nine parts are what mark the COMP dirty, so respawn -> dirty -> the next
+# Update() saves it -> retire -> respawn, at MCP-call cadence and outside every
+# cooldown. Equal to the relocation floor on purpose -- a retire must not be able
+# to buy a spawn the ordinary gate would have refused.
+_VIZ_WRITE_SUPPRESS_S = _VIZ_RELOCATE_MIN_S
+# Root-level subtrees a PROJECT-WIDE purge sweep skips. /sys and /ui are
+# TouchDesigner's own trees (thousands of operators, loaded from the install and
+# never saved with the .toe), and the sweep runs inside the pre-save window where
+# cost matters and an exception truncates the file (issue #21). A bot part cannot
+# reach them: they are never an active op's parent network. Everything a user
+# actually saves -- including /local and /perform -- is still swept.
+_VIZ_PURGE_SKIP_ROOTS = ('/sys', '/ui')
+
 
 def vizSettled(mutation_frame, frame_now) -> bool:
     """True once at least _VIZ_MUTATION_SETTLE_FRAMES have passed since the
@@ -171,6 +254,210 @@ def coldHoldElapsed(cold_since, frame_now) -> bool:
     """True once a cold activation's pulse-only hold has expired. `cold_since`
     is -1 until the first cold-tracked frame stamps it. Pure -- unit-tested."""
     return cold_since >= 0 and (frame_now - cold_since) >= _VIZ_COLD_HOLD_FRAMES
+
+
+def pendingHopsIn(queue, netpath) -> int:
+    """How many already-queued hops target ops in `netpath` -- the EVIDENCE that
+    a real batch of work has landed in a network, as opposed to the stream merely
+    touching one op there in passing. Pure: `queue` is the list of (op_path,
+    caption) tuples, and the parent network is derived by string split, so this
+    needs no TD access and is unit-tested outside a live session.
+
+    Known imprecision, and why it is harmless: trackActive redirects a DOCKED DAT
+    to its dock host, so a queued docked-DAT path can name a different network
+    than the one Embot will actually stand in. This count is EVIDENCE only, never
+    a correctness input -- a miscount can only delay a relocation by the dwell, or
+    hasten one that the cooldown still bounds."""
+    n = 0
+    for entry in (queue or ()):
+        try:
+            p = entry[0]
+            i = p.rfind('/')
+            par = p[:i] if i > 0 else '/'
+            if par == netpath:
+                n += 1
+        except Exception:
+            continue        # malformed entry -- never raise on the hot path
+    return n
+
+
+def netRelocationOK(ext, netpath, queue, now) -> bool:
+    """True when Embot + the camera may RELOCATE to `netpath` (issue #86).
+
+    A PREDICATE, not a commit. It advances the candidate/starvation clocks (they
+    have to persist across frames) but it deliberately does NOT stamp
+    `_viz_home`: only commitRelocation does that, and trackActive calls it ONLY
+    after the bot actually landed in the net. That ordering is load-bearing --
+    ensureBot can still refuse a spawn (botUnsafeNet on any TDN-strategy COMP,
+    botWouldBeSeen with the follow off, a write suppression), and an eager commit
+    would leave `_viz_home` naming a network Embot never entered. Every later hop
+    to the net he IS standing in would then be charged the full gate for a
+    relocation that needs zero copyOPs -- Embot frozen on a stale node in front
+    of the user, which is the failure this feature must never produce.
+
+    Every input is an argument or a plain ext attribute -- no op(), no ui, no
+    absTime -- so the whole gate is driveable from a stub and unit-tested on an
+    injected clock. Five rules, cheapest first:
+
+      - where he already is (`_viz_bot_net`) is always allowed, and so is the net
+        already committed as home: neither needs a rebuild, so no rate limit can
+        apply. ensureBot returns True at its first line for the former.
+      - in-flight assembly blocks: the DISPLAYED-net spawn is a 9-part spread
+        _VIZ_ASSEMBLE_INTERVAL frames apart (~4.8s @60fps), which is LONGER than
+        the cooldown. Letting a new commit reassign the build queue mid-spread
+        restarts it, so he never finishes assembling while the copies keep
+        costing. The cooldown alone does not bound this; refusing while the queue
+        is non-empty does (assembleTick always drains it, so the block is
+        bounded by the assembly itself).
+      - dwell (_VIZ_NET_DWELL_S): the work must sit CONTINUOUSLY in the new net.
+        A different candidate net restarts the clock, so a stream merely passing
+        through is not chased.
+      - two dwell bypasses, neither of which touches the cooldown: a queued batch
+        (_VIZ_NET_EVIDENCE_HOPS) proving the work has really landed somewhere,
+        and a CONTINUOUS _VIZ_NET_STARVE_S refusal streak (continuous meaning
+        the gate kept being asked -- a _VIZ_NET_STREAK_GAP_S gap between calls
+        restarts it, so a clock left running by work that stopped cannot buy a
+        later stray hop a free relocation). The streak is the escape hatch
+        without which alternating work would restart the candidate clock forever
+        and Embot would never move again -- see the constant.
+      - cooldown (_VIZ_RELOCATE_MIN_S): a hard floor between relocations,
+        checked LAST and unconditionally. Nothing bypasses it -- it is THE cost
+        bound.
+
+    Candidate bookkeeping runs BEFORE the cooldown check on purpose, so the
+    worst-case relocation latency is max(dwell, cooldown), never their sum.
+
+    Stale home: if the home COMP is deleted, _viz_home is deliberately NOT
+    validated with op() (that would cost this function its TD-free property).
+    `netpath` then simply never matches home, and after max(dwell, cooldown) viz
+    re-commits elsewhere -- self-correcting, bounded, never wedging."""
+    if netpath == ext._viz_bot_net:
+        # He is standing here. ensureBot returns True at its first line without
+        # copying anything, so gating this would buy nothing and cost the
+        # feature.
+        ext._viz_net_candidate = None
+        ext._viz_relocate_blocked_since = None
+        return True
+    home = ext._viz_home
+    if home is not None and netpath == home[0]:
+        # Committed here already (he may have been retired out of it by a .tox
+        # write). This branch MUST NOT touch _viz_home: re-stamping its timestamp
+        # every frame would restart the cooldown forever and freeze Embot in
+        # place permanently (test_same_net_never_restamps_home).
+        ext._viz_net_candidate = None
+        ext._viz_relocate_blocked_since = None
+        return True
+    if home is None:
+        # First appearance is NEVER delayed -- Embot shows up immediately.
+        ext._viz_net_candidate = None
+        ext._viz_relocate_blocked_since = None
+        return True
+    if ext._viz_bot_build_queue:
+        # Still assembling -- see above. Checked BEFORE the starvation clock is
+        # stamped on purpose: "the gate has been refusing to follow the work"
+        # must not include "he was busy building himself", or a 4.8s spread would
+        # arrive at its own finish line already starved and immediately buy
+        # another one.
+        return False
+    # Starvation counts a CONTINUOUS refusal streak, so the clock restarts when
+    # the gate has not been asked for _VIZ_NET_STREAK_GAP_S -- see the constant.
+    # getattr, not attribute access: envoy_viz is a module DAT that hot-reloads
+    # on its own, so it can run for a few frames against an EnvoyExt instance
+    # built before this field existed, and an AttributeError here would take the
+    # whole viz tick down.
+    last_blocked = getattr(ext, '_viz_relocate_blocked_last', None)
+    if (ext._viz_relocate_blocked_since is None or last_blocked is None
+            or (now - last_blocked) > _VIZ_NET_STREAK_GAP_S):
+        ext._viz_relocate_blocked_since = now
+    ext._viz_relocate_blocked_last = now      # only read while ..._since is set
+    cand = ext._viz_net_candidate
+    if cand is None or cand[0] != netpath:
+        cand = (netpath, now)
+        ext._viz_net_candidate = cand
+    dwelled = (now - cand[1]) >= _VIZ_NET_DWELL_S
+    batch = pendingHopsIn(queue, netpath) >= _VIZ_NET_EVIDENCE_HOPS
+    starved = (now - ext._viz_relocate_blocked_since) >= _VIZ_NET_STARVE_S
+    if not dwelled and not batch and not starved:
+        return False
+    if (now - home[1]) < _VIZ_RELOCATE_MIN_S:
+        return False
+    ext._viz_relocate_blocked_since = None
+    return True
+
+
+def commitRelocation(ext, netpath, now) -> None:
+    """Stamp `netpath` as viz's home -- the ONLY writer of `_viz_home`, called by
+    trackActive only once Embot has actually landed there (issue #86). Keeping
+    the commit downstream of the spawn is what preserves the invariant
+    `_viz_home == _viz_bot_net`, and with it blockSpawn's cost bound: a spawn
+    happens if and only if a commit does.
+
+    Re-committing the SAME net is a deliberate no-op. Re-stamping the timestamp
+    every frame while he stands at home would restart the cooldown forever and
+    freeze him in place permanently (test_same_net_never_restamps_home)."""
+    home = ext._viz_home
+    if home is not None and home[0] == netpath:
+        return
+    ext._viz_home = (netpath, now)
+    ext._viz_net_candidate = None
+    ext._viz_relocate_blocked_since = None
+
+
+def spawnWouldBeSeen(displayed, follow_on, takeover_active, has_neteditor) -> bool:
+    """Decision core of botWouldBeSeen (issue #86), split out so its truth table
+    is testable without faking ui.panes. A spawn is worth paying for when the
+    destination is already displayed, or when the camera is about to navigate
+    into it -- which requires the follow to be ON, a network-editor pane to
+    exist, and the user's takeover window to be closed. Pure."""
+    if displayed:
+        return True
+    return bool(follow_on and has_neteditor and not takeover_active)
+
+
+def pathInsideSubtree(netpath, root_path) -> bool:
+    """True if `netpath` is `root_path` or lives underneath it. Used by
+    vizRetireForWrite to fire ONLY when the COMP about to be serialized actually
+    contains Embot. Pure; guards the classic prefix trap ('/ab' is NOT inside
+    '/a') by comparing against root_path + '/'."""
+    if not netpath or not root_path:
+        return False
+    if netpath == root_path:
+        return True
+    if root_path == '/':
+        return True
+    return netpath.startswith(root_path + '/')
+
+
+def noteWriteRetire(ext, path, now) -> None:
+    """Remember that the COMP at `path` was just serialized with Embot retired
+    out of it, so no spawn may re-enter that subtree for _VIZ_WRITE_SUPPRESS_S
+    (issue #86). Expired entries are pruned here -- the map only ever holds the
+    COMPs written in the last couple of seconds. Pure w.r.t. TD."""
+    sup = ext._viz_write_suppress
+    for k in [k for k, until in sup.items() if until <= now]:
+        sup.pop(k, None)
+    sup[path] = now + _VIZ_WRITE_SUPPRESS_S
+
+
+def writeSuppressed(ext, netpath, now) -> bool:
+    """True while `netpath` sits inside a subtree that was just written to a
+    .tox with Embot retired out of it (issue #86).
+
+    Without this the retire is SELF-FEEDING: his nine annotateCOMPs are what mark
+    the COMP dirty, so respawn -> dirty -> the next Update() calls Save() ->
+    retire -> respawn. dirtyHandler saves on every Update(), and Update() fires
+    from every auto-externalizing MCP call, so that loop runs at MCP-call cadence
+    and -- because the respawn goes to a net `_viz_home` already names -- outside
+    the relocation cooldown entirely. It would re-create the exact 150-230ms
+    main-thread event this whole gate exists to bound, plus a .tox rewrite and a
+    Build increment per cycle."""
+    try:
+        for root_path, until in ext._viz_write_suppress.items():
+            if now < until and pathInsideSubtree(netpath, root_path):
+                return True
+    except Exception:
+        pass
+    return False
 
 
 def noteVizActivity(ext, operation: str, params: dict, result) -> None:
@@ -307,10 +594,52 @@ def trackActive(ext, now: float, follow: bool, show_bot: bool) -> None:
         if not coldHoldElapsed(ext._viz_cold_since, absTime.frame):
             return
         ext._viz_session_warm = True
+    # Issue #86 relocation gate. Embot + the camera relocate together only once
+    # the work has genuinely SETTLED in a new network (or a queued batch proves
+    # it), and never more often than _VIZ_RELOCATE_MIN_S. Holding them TOGETHER
+    # is load-bearing: placeBot/ensureBot must stay ahead of navigateAndFrame so
+    # a to-be-visited net is still OFF-SCREEN at spawn time and takes the cheap,
+    # crash-safe blockSpawn path. Gating only the bot would let the pane cut land
+    # first and push every eventual spawn onto the displayed-net spread
+    # (9 x 61-129ms). Camera-only users (show_bot False) skip the gate entirely
+    # -- with no bot there is no copyOPs to bound, and the measured camera-only
+    # row is degraded, not frozen.
+    #
+    # The pending state is deliberately IDENTICAL to the cold hold above: pulse
+    # the node colour, return. vizPumpQueue still drains hops meanwhile, so
+    # _viz_action_text keeps advancing and Embot keeps narrating the current op
+    # from where he stands -- he does not go silent, he just does not chase. And
+    # the refusal is never permanent: _VIZ_NET_STARVE_S forces the move through
+    # once the gate has been refusing for long enough, so work that never settles
+    # anywhere still ends up with Embot standing in it.
+    #
+    # Note the asymmetry with the block below: the gate REFUSING parks the camera
+    # too (they must move together, see above), but a gate that ALLOWS and a
+    # spawn that then refuses does NOT -- the camera follows on, because with no
+    # rebuild to bound there is nothing to gate.
+    if show_bot and not netRelocationOK(ext, net.path, ext._viz_target_queue, now):
+        pulseStart(ext, target, now)
+        # RELEASE the follow target exactly as glideStep does once it has caught
+        # up. Without this the gated path never reaches glideStep, so
+        # _viz_target_op stays set, trackActive re-runs every frame, and
+        # pulseStart re-arms the moment pulseTick's 0.45s fade clears it -- a
+        # node in a network nobody is viewing strobing forever, with a colour
+        # write every frame. The queue check matters: mid-batch there IS more to
+        # visit, and the next pump replaces the target anyway.
+        if not ext._viz_target_queue:
+            ext._viz_target_op = None
+        return
     # --- the character (Embotenable) ---
     if show_bot:
         pulseStart(ext, target, now)    # ping the node colour
         placeBot(ext, net, target, now) # bring the dancing bot to the op
+        # Commit only if he ACTUALLY landed. ensureBot can still refuse
+        # (botUnsafeNet on a TDN-strategy COMP, botWouldBeSeen with the follow
+        # off, a write suppression); committing anyway would point _viz_home at
+        # a net he never entered and charge every later hop to the net he IS in
+        # for a relocation that costs nothing. See netRelocationOK.
+        if ext._viz_bot_net == net.path:
+            commitRelocation(ext, net.path, now)
     # --- the camera (Envoyfollow) -- frames the op, bot-independent ---
     if not follow:
         return
@@ -428,6 +757,27 @@ def highlightOp(ext, target: 'OP') -> None:
     marked. Only deselects the op WE previously highlighted -- the user's own
     selections elsewhere are left alone. Best-effort; never raises."""
     try:
+        # Issue #86: already marked -> at most re-assert the marker. trackActive
+        # runs EVERY frame while a follow target is set, so unconditionally
+        # rewriting .selected + .current hit a node in the DISPLAYED network 60
+        # times a second -- the same class of redundant editor write the freeze
+        # measurements implicate.
+        #
+        # But the cache must not be trusted blindly: _viz_selected_op described
+        # a selection the user can drop (clicking empty canvas) and a path that
+        # can be deleted and recreated, and a bare early return then left
+        # Envoy's focus marker silently missing for that op for the rest of the
+        # session. So VERIFY .selected and re-assert it when it has genuinely
+        # been lost -- a no-op read on the common path.
+        #
+        # .current is deliberately NOT re-asserted here: there is exactly one
+        # current op per network, so re-taking it every frame is precisely the
+        # fight-the-user behaviour this early return exists to stop. It is set
+        # once, when we first target the op.
+        if ext._viz_selected_op == target.path:
+            if not target.selected:
+                target.selected = True
+            return
         prev = ext._viz_selected_op
         if prev and prev != target.path:
             po = op(prev)
@@ -500,11 +850,17 @@ def placeBot(ext, net: 'COMP', target: 'OP', now: float) -> None:
     on top of the active op (feet on the node's top edge). A new node triggers
     a hop; a network change snaps. Motion + colour come from _botDance."""
     prev_net = ext._viz_bot_net
-    if not ensureBot(ext, net):
-        return
+    # Compute + publish the standing point BEFORE ensureBot (issue #86): a
+    # blockSpawn needs it to lay the nine copies out as a FIGURE on arrival
+    # rather than leaving them piled on the template's parked coordinates and
+    # waiting for botDance to arrange them. Publishing early is safe -- the only
+    # other reader, startEntrance, is reachable only after a spawn that this same
+    # call re-stamps.
     dest = (target.nodeX + target.nodeWidth / 2.0,
             target.nodeY + target.nodeHeight + botFootGap(ext))
     ext._viz_bot_dest = dest           # current op standing point (swoop target)
+    if not ensureBot(ext, net):
+        return
     if ext._viz_bot_pos is None or prev_net != ext._viz_bot_net:
         ext._viz_jump_dur = _VIZ_JUMP_DUR
         if ext._viz_bot_build_queue:
@@ -563,17 +919,37 @@ def ensureTemplate(ext):
     into Embody on save, so shipped builds never pay it at all). Every COMP switch
     then just copyOPs the parts forward -- far cheaper than recreating them. The
     template lives inside Embody on purpose: it is a saved static asset, never an
-    animated/live bot, so _botUnsafeNet (which forbids a LIVE bot here) is moot."""
+    animated/live bot, so _botUnsafeNet (which forbids a LIVE bot here) is moot.
+
+    Issue #86: this is also where the template's staging-position leak heals.
+    assembleStep parks the SOURCE part off-view before copying it, and a source
+    left parked there is exported into Embody.tdn (all nine parts were committed
+    at a leaked [1860, 251]). Both paths below pin every part to
+    _VIZ_TEMPLATE_PARK -- on create, and on the reuse path when it has drifted --
+    so the committed drift self-heals on the next spawn + export, with no hand
+    edit of the .tdn, and any future leak of the same class is absorbed too."""
     try:
         host = ext.ownerComp
-        tmpl = host.op('embot_template')
+        tmpl = host.op(_VIZ_TEMPLATE_COMP)
         if tmpl and tmpl.op(_VIZ_BOT_PREFIX + 'body') and \
                 tmpl.op(_VIZ_BOT_PREFIX + 'speech'):
+            # Self-heal a drifted park: cheap reads, and only on a spawn. Write
+            # ONLY when it differs, so steady state stays write-free.
+            names = [s for (s, _ox, _oy, _w, _h, _e) in _VIZ_BOT_PARTS]
+            names.append('speech')
+            for suffix in names:
+                p = tmpl.op(_VIZ_BOT_PREFIX + suffix)
+                if p and p.valid and \
+                        (p.nodeX, p.nodeY) != _VIZ_TEMPLATE_PARK:
+                    try:
+                        p.nodeX, p.nodeY = _VIZ_TEMPLATE_PARK
+                    except Exception:
+                        pass
             return tmpl
         if tmpl:
             tmpl.destroy()                  # partial/stale -> rebuild clean
         ext._crashTrace('ensureTemplate BUILD (creating annotateCOMPs)')
-        tmpl = host.create(baseCOMP, 'embot_template')
+        tmpl = host.create(baseCOMP, _VIZ_TEMPLATE_COMP)
         tmpl.nodeX, tmpl.nodeY = -1400, -1400   # parked out of the way
         skin = colorsys.hsv_to_rgb(_VIZ_COOL_HUE, 0.95, 1.0)  # default cool
         for (suffix, ox, oy, w, h, is_eye) in _VIZ_BOT_PARTS:
@@ -594,6 +970,7 @@ def ensureTemplate(ext):
                 p.par.Backcolorr, p.par.Backcolorg, p.par.Backcolorb = skin
             p.nodeWidth = w
             p.nodeHeight = h
+            p.nodeX, p.nodeY = _VIZ_TEMPLATE_PARK   # born canonical (issue #86)
         sp = tmpl.create(annotateCOMP)      # the speech bubble (titled)
         sp.name = _VIZ_BOT_PREFIX + 'speech'
         sp.selected = False
@@ -606,6 +983,7 @@ def ensureTemplate(ext):
         sp.par.Bodyfontsize = 11
         sp.nodeWidth = 185
         sp.nodeHeight = 74
+        sp.nodeX, sp.nodeY = _VIZ_TEMPLATE_PARK     # born canonical (issue #86)
         return tmpl
     except Exception:
         return None
@@ -620,6 +998,32 @@ def ensureBot(ext, net: 'COMP') -> bool:
     netpath = net.path
     if ext._viz_bot_net == netpath:
         return True                         # already here (assembled or assembling)
+    # Issue #86: a COMP that was JUST serialized with him retired out of it is
+    # off limits briefly -- his own parts are what re-dirty it, so re-entering
+    # immediately means the next Update() saves, retires and respawns again, at
+    # MCP-call cadence. Checked FIRST: it is a dict lookup, cheaper than either
+    # gate below. See writeSuppressed.
+    if writeSuppressed(ext, netpath, absTime.seconds):
+        return False
+    # Issue #86: never build 9 annotateCOMPs into a network nobody is looking at
+    # and nobody is about to look at (follow OFF with the user parked elsewhere,
+    # or inside the 6s takeover window). It sits AFTER the "already here" return,
+    # so a bot that already exists keeps tracking normally when the user
+    # navigates away -- only NEW spawns are suppressed. It MUST precede
+    # botUnsafeNet, which reaches EmbodyExt._getTDNPaths() ->
+    # _getTDNStrategyComps(): a full externalizations-table scan with a per-row
+    # op() plus an exclude-tag lookup. In the suppressed state ensureBot runs its
+    # prefix EVERY frame, so the wrong order would add a per-frame table scan.
+    #
+    # Invariant this creates (botWritesNeeded relies on it): a blockSpawn now
+    # happens only when the destination is off-screen AND the camera is about to
+    # navigate into it in the SAME frame -- ensureBot -> blockSpawn -> placeBot
+    # sets pos -> navigateAndFrame sets pane.owner. blockSpawn lays the parts out
+    # as a figure on arrival (from _viz_bot_dest, published by placeBot before
+    # this call), so nothing depends on botDance getting a writing frame first
+    # and there is no "was it arranged yet" flag -- the user never sees a pile.
+    if not botWouldBeSeen(ext, net):
+        return False
     if botUnsafeNet(ext, net):
         return False
     ext._crashTrace('ensureBot NET-CHANGE %s -> %s' % (ext._viz_bot_net, netpath))
@@ -680,6 +1084,42 @@ def netIsDisplayed(ext, net: 'COMP') -> bool:
     return False
 
 
+def botWouldBeSeen(ext, net: 'COMP') -> bool:
+    """True if spawning Embot into `net` would actually be VISIBLE to the user --
+    either the net is displayed now, or the camera follow is live and about to
+    navigate into it (issue #86). Gathers the four live readings and hands them
+    to the pure spawnWouldBeSeen.
+
+    Reads _viz_takeover_until DIRECTLY and deliberately does NOT call
+    pickFollowPane: that would re-baseline _viz_last_view and re-arm takeover
+    detection as a side effect of a read.
+
+    Any exception returns True (fail-open, mirroring netIsDisplayed) so a bug
+    here can only ever cost performance -- never Embot's visibility, which is the
+    whole point of the feature."""
+    try:
+        displayed = netIsDisplayed(ext, net)
+        follow_on = bool(ext.ownerComp.par.Envoyfollow.eval())
+        takeover_active = absTime.seconds < ext._viz_takeover_until
+        has_neteditor = any(str(p.type) == 'PaneType.NETWORKEDITOR'
+                            for p in ui.panes)
+        return spawnWouldBeSeen(displayed, follow_on, takeover_active,
+                                has_neteditor)
+    except Exception:
+        return True
+
+
+def botWritesNeeded(ext, net: 'COMP') -> bool:
+    """True if botDance should perform its TD writes this frame (issue #86). The
+    figure's STATE always advances; only the editor writes are skipped. Off-view
+    during the spread assembly he is a pile at the staging point that nobody can
+    see, and an assembly runs _VIZ_ASSEMBLE_INTERVAL x 9 frames (~4.8s @60fps) --
+    that is ~145 full-figure repaints of 9 annotates delivering zero delight."""
+    if ext._viz_bot_pending_entrance:
+        return False          # parked off-view at the staging point mid-assembly
+    return netIsDisplayed(ext, net)
+
+
 def blockSpawn(ext, net: 'COMP') -> None:
     """Copy ALL 9 parts into `net` in ONE copyOPs (~180ms, one frame -- vs the
     ~9-frame, ~464ms spread). ONLY called by _ensureBot when `net` is OFF-SCREEN
@@ -687,7 +1127,24 @@ def blockSpawn(ext, net: 'COMP') -> None:
     a DISPLAYED net hard-crashes TD (the editor redraw -- pinpointed via crash
     trace), and the off-screen owner-swap that once dodged that crash broke the
     pane render, so displayed nets use the safe spread instead. Clears orphans;
-    colours on arrival."""
+    colours on arrival.
+
+    Issue #86 cost bound -- DO NOT BREAK: a spawn (this, or a spread queue) is
+    reachable ONLY from ensureBot's net-change branch, which is reachable only
+    from placeBot, which is reachable only from trackActive AFTER
+    netRelocationOK allowed the move -- and trackActive commits _viz_home
+    immediately after, if and only if the spawn actually happened. When
+    netpath == _viz_bot_net ensureBot returns without copying. So spawn <-> net
+    change <-> commit, and every commit is stamped under a
+    >= _VIZ_RELOCATE_MIN_S test.
+
+    The honest bound is once per max(_VIZ_RELOCATE_MIN_S, assembly time), not
+    flatly once per _VIZ_RELOCATE_MIN_S: the DISPLAYED-net path is a 9-part
+    spread _VIZ_ASSEMBLE_INTERVAL frames apart (~4.8s @60fps), longer than the
+    cooldown, which is why netRelocationOK also refuses while
+    _viz_bot_build_queue is non-empty. Off-screen (this function) the whole
+    spawn is one frame, so there the cooldown alone is the bound. Any future
+    edit that adds a spawn path not gated by a commit breaks it."""
     tmpl = ensureTemplate(ext)
     if tmpl is None:
         return
@@ -712,9 +1169,32 @@ def blockSpawn(ext, net: 'COMP') -> None:
     hue = round((_VIZ_COOL_HUE +
                  (_VIZ_WARM_HUE - _VIZ_COOL_HUE) * f) * 36.0) / 36.0
     skin = colorsys.hsv_to_rgb(hue, 0.95, 1.0)
+    # Arrange the copies into the FIGURE right here (issue #86). copyOPs lands
+    # every part on the template's own coordinates -- now the canonical
+    # _VIZ_TEMPLATE_PARK origin -- so without this the nine parts sit stacked at
+    # the destination network's (0, 0) until botDance's next writing frame. That
+    # frame is not guaranteed: botDance is throttled to ~30fps and its writes are
+    # gated on netIsDisplayed, so a pane.owner read-back that lags by a frame, or
+    # a takeover armed in the same frame as the spawn, showed the user a pile of
+    # annotation boxes at the origin of the network they were just cut into.
+    # Same formula as botDance's resting layout (sx = sy = 1, no gesture).
+    dest = ext._viz_bot_dest
+    offsets = {_VIZ_BOT_PREFIX + s: (ox, oy, w, h)
+               for (s, ox, oy, w, h, _e) in _VIZ_BOT_PARTS}
     for n in new:
         n.selected = False
         bn = n.name
+        if dest is not None:
+            try:
+                if bn.endswith('speech'):
+                    n.nodeX = dest[0] - n.nodeWidth / 2.0
+                    n.nodeY = dest[1] + 58.0
+                else:
+                    ox, oy, w, h = offsets[bn]
+                    n.nodeX = (dest[0] + ox) - w / 2.0
+                    n.nodeY = (dest[1] + oy) - h / 2.0
+            except Exception:
+                pass
         if bn.endswith('speech'):
             continue
         if bn.endswith('eye_l') or bn.endswith('eye_r'):
@@ -743,12 +1223,20 @@ def assembleStep(ext, net: 'COMP') -> None:
     # whether THAT landing spot is in the viewport. So park the source at the off-view
     # staging point first -> the copy lands off-view and pays ~100ms, not ~280ms.
     # (_botDance then arranges the copies into the figure wherever the bot stands.)
+    #
+    # Issue #86: the source is the TEMPLATE part, which lives inside the Embody
+    # COMP -- a TDN-strategy COMP. A staging coordinate left on it is exported
+    # into Embody.tdn (all nine parts were committed at a leaked [1860, 251]), so
+    # every on-screen assembly silently dirtied a tracked file. Snapshot the
+    # source position and restore it in a finally that survives the except below.
     stage = ext._viz_bot_stage
+    orig = None
     if stage:
         try:
+            orig = (src.nodeX, src.nodeY)
             src.nodeX, src.nodeY = stage[0], stage[1]
         except Exception:
-            pass
+            orig = None
     try:
         ext._crashTrace('assembleStep COPY %s -> %s' % (name, net.path))
         new = net.copyOPs([src])
@@ -775,6 +1263,12 @@ def assembleStep(ext, net: 'COMP') -> None:
                 n.par.Backcolorr, n.par.Backcolorg, n.par.Backcolorb = skin
     except Exception:
         pass
+    finally:
+        if orig is not None:
+            try:
+                src.nodeX, src.nodeY = orig     # never leave the template parked
+            except Exception:
+                pass
 
 
 def assembleTick(ext) -> None:
@@ -847,6 +1341,11 @@ def botDance(ext, now: float) -> None:
     if (now - ext._viz_last_paint) < 0.033:    # cap figure repaint at ~30fps
         return
     ext._viz_last_paint = now
+    # Issue #86: do not animate what nobody can see. Computed AFTER the throttle
+    # so a throttled frame never pays for a pane scan. All the STATE below still
+    # advances (gesture / blink / squint schedules are plain floats), so he does
+    # not resume with a burst of queued gestures -- only the editor writes stop.
+    writes = botWritesNeeded(ext, net)
     t = (now - ext._viz_bot_jump_t0) / ext._viz_jump_dur
     sx = sy = 1.0
     if t < 1.0:                                   # mid-hop
@@ -892,8 +1391,11 @@ def botDance(ext, now: float) -> None:
     f = min(1.0, max(0.0, idle / _VIZ_WARM_S))
     hue = round((_VIZ_COOL_HUE + (_VIZ_WARM_HUE - _VIZ_COOL_HUE) * f) * 36.0) / 36.0
     skin = colorsys.hsv_to_rgb(hue, 0.95, 1.0)
-    recolor = (skin != ext._viz_last_skin)
-    ext._viz_last_skin = skin
+    recolor = writes and (skin != ext._viz_last_skin)
+    # Clearing the remembered skin while invisible is what FORCES a recolor -- and
+    # therefore a full position + size + colour rewrite of all nine parts -- on
+    # the first frame he becomes visible again. Without it he would render stale.
+    ext._viz_last_skin = skin if writes else None
     # Only repaint when actually animating (a jump or a gesture) or when the
     # quantized colour ticks -- otherwise leave the parts untouched so idle
     # frames cost nothing.
@@ -906,7 +1408,10 @@ def botDance(ext, now: float) -> None:
         ext._viz_blink_end = now + 0.13                          # blink lasts ~0.13s
         ext._viz_next_blink = now + 2.0 + random.random() * 3.5  # next blink in 2-5.5s
     blinking = now < ext._viz_blink_end
-    if blinking != ext._viz_eyes_closed:
+    # Issue #86: while invisible _viz_eyes_closed can go stale (the transition is
+    # skipped). Harmless and self-correcting -- the forced recolor above rewrites
+    # eye colour per the CURRENT `blinking` value on the first visible frame.
+    if writes and blinking != ext._viz_eyes_closed:
         if blinking:
             # match the body's ACTUAL current colour (recolor lags the computed
             # skin) so the eyes truly vanish into the face.
@@ -934,7 +1439,7 @@ def botDance(ext, now: float) -> None:
     squint_changed = (squinting != ext._viz_squinting)
     ext._viz_squinting = squinting
     moving = (t < 1.0) or active or bool(ext._viz_bot_build_queue)
-    if moving or recolor or squint_changed:
+    if writes and (moving or recolor or squint_changed):
         ext._crashTrace('botDance PARTS moving=%d recolor=%d t=%.2f %s' %
                         (int(moving), int(recolor), t, np))
         for (suffix, ox, oy, w, h, is_eye) in _VIZ_BOT_PARTS:
@@ -977,7 +1482,7 @@ def botDance(ext, now: float) -> None:
     # Speech bubble: follow + a Claude-Code-style typewriter -> spinner + dots.
     # The spinner only runs while actively building (idle < a few sec) so an
     # idle Embot does not churn redraws.
-    sp = net.op(_VIZ_BOT_PREFIX + 'speech')
+    sp = net.op(_VIZ_BOT_PREFIX + 'speech') if writes else None
     if sp and sp.valid:
         # Anchor the bubble to Embot's BASE position (_viz_bot_pos, captured before
         # the dance sway is added to px/py), NOT the animated px/py. So it follows
@@ -1054,6 +1559,28 @@ def destroyBot(ext) -> None:
     ext._viz_bot_build_queue = []
 
 
+def destroyPartsIn(ext, netpath) -> int:
+    """Destroy every Embot part sitting directly in the network at `netpath` and
+    return how many went. The one-network unit shared by the deferred-teardown
+    flush and the .tox write retire, so neither has to reach for the blanket
+    vizCleanup to remove parts from ONE net."""
+    removed = 0
+    try:
+        net = op(netpath)
+        if not net or not net.valid:
+            return 0
+        for c in list(net.children):
+            if c.name.startswith(_VIZ_BOT_PREFIX) and c.valid:
+                try:
+                    c.destroy()
+                    removed += 1
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return removed
+
+
 def vizCleanup(ext) -> None:
     """Retire all live visualization artifacts (restore pulse, destroy bot).
     Idempotent and safe to call from the save path."""
@@ -1062,22 +1589,221 @@ def vizCleanup(ext) -> None:
     # Flush any deferred off-screen teardowns NOW -- the save path must leave no
     # bot parts behind in any network.
     for netpath in list(ext._viz_bot_pending_cleanup):
-        net = op(netpath)
-        if net and net.valid:
-            for c in list(net.children):
-                if c.name.startswith(_VIZ_BOT_PREFIX) and c.valid:
-                    try:
-                        c.destroy()
-                    except Exception:
-                        pass
+        destroyPartsIn(ext, netpath)
     ext._viz_bot_pending_cleanup = set()
     ext._viz_target_queue = []
     ext._viz_hop_until = 0.0
     ext._viz_follow_net = None   # re-establish zoom next time we follow somewhere
+    # The highlight is a follow artifact, not a bot part, but it is still OURS:
+    # highlightOp only ever deselects the op it is replacing, so dropping the
+    # cache without dropping the selection retires viz while leaving the last
+    # op it touched selected for the rest of the session -- a marker for a
+    # follow that is no longer running, and one nothing will ever clear (the
+    # next highlightOp deselects `prev`, which is now None). Best-effort: a
+    # deleted or renamed op is exactly what a retire sweep expects to find.
+    # On the pre-save path this is restorePulse's reasoning applied to the other
+    # marker viz leaves on a node -- what gets written to the file should not be
+    # our highlight -- and it is the same class of write restorePulse already
+    # performs there.
+    #
+    # _viz_selected_op is also load-bearing for the cache itself: highlightOp
+    # early-returns on it, so a value that outlives the selection it describes
+    # would leave Envoy's focus marker silently missing for that op.
+    if ext._viz_selected_op:
+        try:
+            prev = op(ext._viz_selected_op)
+            if prev is not None and prev.valid and prev.selected:
+                prev.selected = False
+        except Exception:
+            pass
+    ext._viz_selected_op = None
     # Issue #57: retiring makes the NEXT activation cold again -- its first hop
     # pulses only, and the bot/camera machinery re-engages after the hold.
     ext._viz_session_warm = False
     ext._viz_cold_since = -1
+    # Issue #86: retiring makes the NEXT activation a first appearance again, so
+    # stale hysteresis can never make Embot late after an idle retire, a save,
+    # perform mode, or the _suppress_dialogs window. NOTE: vizRetireForWrite
+    # deliberately does NOT come through here -- resetting the clocks on a .tox
+    # write is what made the retire self-feeding (see writeSuppressed).
+    ext._viz_home = None
+    ext._viz_net_candidate = None
+    ext._viz_relocate_blocked_since = None
+    ext._viz_relocate_blocked_last = None
+    ext._viz_write_suppress = {}
+
+
+def purgeVizArtifacts(ext, root=None) -> int:
+    """Destroy every LOOSE Embot part under `root` (default: the whole project)
+    and return how many were removed. The structural backstop for constraint "no
+    bot part may ever bake into a saved file", run from onProjectPreSave right
+    after vizCleanup and, scoped to one COMP, before every .tox write.
+
+    vizCleanup / vizRetireForWrite are the fast bookkeeping flushes and handle
+    the normal case; this catches the orphans no bookkeeping CAN know about,
+    because every _viz_* field is a plain instance attribute that
+    EnvoyExt.__init__ resets:
+
+      - an extension reinit (every .py edit in this repo hot-syncs and reinits)
+        while Embot stands somewhere -- onDestroyTD deliberately only sets the
+        shutdown event, so nine annotateCOMPs are orphaned with nothing pointing
+        at them;
+      - a COMP rename, which invalidates _viz_bot_pending_cleanup's path key and
+        makes cleanupDeadBots' op(netpath) return None;
+      - a Ctrl+Z resurrection, or a crash-recovered session.
+
+    A registry of "nets we spawned into" would only know about orphans it
+    recorded; a structural sweep is one function and strictly more complete.
+
+    Two deliberate costs, stated rather than hidden:
+      - a USER annotation literally named envoy_bot_* outside the template is
+        DESTROYED, not merely skipped (TDNExt's export filter only omits it).
+        The caller logs any non-zero count, so a deletion is never silent.
+      - the project-wide sweep walks the tree. It skips _VIZ_PURGE_SKIP_ROOTS
+        (TD's own /sys and /ui) precisely because it runs inside the pre-save
+        window; everything the user actually saves is still swept.
+
+    The template's parts are SKIPPED -- they are the shipped source asset, not a
+    live bot. The carve-out is by NAME, not by path, on purpose: it must also
+    shelter template parts in a copy of the Embody COMP (a second install, a
+    staged copy, an older release .tox restored elsewhere), and it must shelter
+    them when this function is called SCOPED to the Embody COMP itself during a
+    portable export. Sheltering an extra static asset is harmless; deleting the
+    shipped one forces a nine-annotateCOMP rebuild on every open.
+
+    Fully guarded: returns 0 on any failure, because it runs while TD already has
+    the .toe open for writing (issue #21)."""
+    scoped = root is not None
+    found = []
+    try:
+        if root is None:
+            root = ext.ownerComp.ext.Embody.root
+        if scoped:
+            found = root.findChildren(name=_VIZ_BOT_PREFIX + '*',
+                                      type=annotateCOMP, includeUtility=True)
+        else:
+            # Project-wide: descend per root child so TD's own trees can be
+            # skipped. A root-level part is a direct child, so it is collected
+            # here rather than by the findChildren below it.
+            for c in root.children:
+                try:
+                    if c.path in _VIZ_PURGE_SKIP_ROOTS:
+                        continue
+                    # Type-filtered exactly like the findChildren calls around
+                    # it: a bot part is always an annotateCOMP, so the name
+                    # alone must not condemn (say) a user's TOP named
+                    # envoy_bot_*. Anything else keeps falling through to the
+                    # descent below, so a COMP with that name is still swept
+                    # INSIDE rather than deleted.
+                    if (c.name.startswith(_VIZ_BOT_PREFIX)
+                            and c.type == 'annotate'):
+                        found.append(c)
+                        continue
+                    if not c.isCOMP:
+                        continue
+                    found.extend(c.findChildren(name=_VIZ_BOT_PREFIX + '*',
+                                                type=annotateCOMP,
+                                                includeUtility=True))
+                except Exception:
+                    continue
+    except Exception as e:
+        try:
+            ext._log('purgeVizArtifacts scan failed: %s: %s'
+                     % (type(e).__name__, e), 'DEBUG')
+        except Exception:
+            pass
+        return 0
+    removed = 0
+    for c in found:
+        try:
+            if not c.valid:
+                continue
+            host = c.parent()
+            if host is not None and host.name == _VIZ_TEMPLATE_COMP:
+                continue                    # the shipped template asset -- keep
+            c.destroy()
+            removed += 1
+        except Exception:
+            pass
+    return removed
+
+
+def vizRetireForWrite(ext, path: str) -> bool:
+    """Retire Embot out of the COMP at `path`, which is about to be serialized to
+    a .tox / a staged copy. Returns True if he was standing inside it or anything
+    was swept out of it.
+
+    The hole this closes: EmbodyExt.dirtyHandler calls Save(oper.path) for dirty
+    TOX COMPs, and Save calls oper.saveExternalTox(). Adding children marks a
+    COMP dirty and Update() fires on init, from the manager, and from every
+    externalize_op MCP call -- so Embot standing in a TOX COMP can be written
+    into that COMP's .tox with no user action at all. Issue #86 lengthens his
+    residency in one network, which makes that more likely, so this is in scope
+    because of that design choice.
+
+    Four properties, each of them load-bearing:
+
+    1. SUBTREE-SCOPED. dirtyHandler can call Save for many COMPs on every
+       Update(); a blanket retire would make Embot flicker on writes that never
+       touch him. A stale deferred-teardown entry inside `path` removes only THAT
+       net's parts -- the live bot elsewhere is not collateral.
+
+    2. NOT a vizCleanup. Routing through it reset _viz_home, _viz_session_warm
+       and the hop queue. Clearing _viz_home put the very next relocation on the
+       "first appearance is never delayed" branch, so the respawn -- into the
+       same COMP, whose dirtiness his parts caused -- was exempt from the
+       cooldown, and the whole thing looped at MCP-call cadence. It also
+       re-armed the issue-57 cold hold and threw away the rest of a batch's
+       narration hops for a write he was not even in.
+
+    3. STRUCTURAL FALLBACK. Bookkeeping alone cannot see orphans (an extension
+       reinit wipes every _viz_* field while nine annotateCOMPs stay in the
+       network), and this is the one save path that fires with no project save
+       behind it. So the subtree is also swept structurally; it is a scan of one
+       COMP, on a path that is already writing a whole .tox.
+
+    4. SUPPRESSES RE-ENTRY. Removing him is only half the loop: his own parts are
+       what mark the COMP dirty, so walking straight back in re-dirties it and
+       the next Update() writes, retires and respawns again. noteWriteRetire bars
+       the subtree for _VIZ_WRITE_SUPPRESS_S -- see writeSuppressed."""
+    now = absTime.seconds
+    matched = False
+    removed = 0
+    try:
+        # Deferred teardowns inside the subtree: remove those nets' parts only.
+        for netpath in list(ext._viz_bot_pending_cleanup):
+            if pathInsideSubtree(netpath, path):
+                matched = True
+                removed += destroyPartsIn(ext, netpath)
+                ext._viz_bot_pending_cleanup.discard(netpath)
+        # The live bot, only when he is genuinely inside.
+        if ext._viz_bot_net and pathInsideSubtree(ext._viz_bot_net, path):
+            matched = True
+            if ext._viz_pulse_op and pathInsideSubtree(ext._viz_pulse_op, path):
+                restorePulse(ext)   # a mid-fade accent colour would serialize
+            removed += destroyPartsIn(ext, ext._viz_bot_net)
+            destroyBot(ext)
+    except Exception:
+        pass
+    # Structural backstop for orphans no bookkeeping knows about (see above).
+    try:
+        root = op(path)
+        if root is not None and root.valid and root.isCOMP:
+            removed += purgeVizArtifacts(ext, root=root)
+    except Exception:
+        pass
+    if matched or removed:
+        try:
+            noteWriteRetire(ext, path, now)
+        except Exception:
+            pass
+    if removed:
+        try:
+            ext._log('Retired %d Embot part(s) out of %s before serializing it'
+                     % (removed, path), 'DEBUG')
+        except Exception:
+            pass
+    return matched or removed > 0
 
 
 def viewTuple(ext, pane) -> tuple:

@@ -31,7 +31,7 @@ Every seam that could reach it is replaced:
 
 Coverage:
   - THE VOCABULARY: every convoy_install.STATE_* constant maps to one of
-    the twelve plan strings, all of them distinct, none of them the
+    the thirteen plan strings, all of them distinct, none of them the
     unrecognised-state default, and all of them ASCII.
   - Install: the happy path writes the payload and starts the
     supervisor; re-running over a broken install REPAIRS it rather than
@@ -70,6 +70,7 @@ VOCABULARY = (
     'Not installed',
     'Checking...',
     'Installing...',
+    'Repairing runtime...',
     'Installed -- starting...',
     'Installed -- not running (restarts within a minute)',
     'Installed -- stopped',
@@ -352,6 +353,7 @@ class TestHostStatusVocabulary(EmbodyTestCase):
         ext = comp.ext.ConvoyExt
         for name, expected in (('HOST_CHECKING', 'Checking...'),
                                ('HOST_INSTALLING', 'Installing...'),
+                               ('HOST_REPAIRING', 'Repairing runtime...'),
                                ('HOST_STARTING', 'Installed -- starting...'),
                                ('HOST_INSTALL_FAILED',
                                 'Install failed -- see log')):
@@ -409,7 +411,8 @@ class TestHostStatusVocabulary(EmbodyTestCase):
         # ellipsis. This string is written into a TD parameter a Windows
         # textport may render through a legacy codepage.
         states = list(self._states().values()) + [
-            'checking', 'installing', 'starting', 'install_failed']
+            'checking', 'installing', 'repairing', 'starting',
+            'install_failed']
         for value in states:
             text = self.client.host_status_text(
                 {'state': value, 'installed_version': VERSION, 'pid': 1})
@@ -426,7 +429,8 @@ class TestHostStatusVocabulary(EmbodyTestCase):
         """
         produced = set()
         for value in list(self._states().values()) + [
-                'checking', 'installing', 'starting', 'install_failed']:
+                'checking', 'installing', 'repairing', 'starting',
+            'install_failed']:
             produced.add(self.client.host_status_text({'state': value}))
             produced.add(self.client.host_status_text(
                 {'state': value, 'installed_version': VERSION, 'pid': 7,

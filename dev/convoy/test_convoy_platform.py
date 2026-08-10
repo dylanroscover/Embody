@@ -98,6 +98,200 @@ def test_no_temp_file_is_left_behind(tmp_path):
     assert leftovers == []
 
 
+# -- _write_private: the rename retry, and the sync ----------------------
+#
+# THE SEAMS ARE THE POINT. This loop is a deadline, and a deadline
+# asserted against a real clock on a shared CI runner measures the
+# runner, not the code -- so `replace` and `sleep` are injected here
+# exactly as convoy_lifecycle._atomic_replace injects them, and not one
+# assertion below waits on wall time.
+
+
+class _HeldOpen:
+    """A destination a reader is holding open, as Windows reports it.
+
+    os.replace onto a file another process has open raises
+    PermissionError (WinError 32) -- the sharing violation the retry loop
+    exists for. Each destination refuses a FIXED number of attempts and
+    then succeeds, so a whole population's contention is deterministic
+    and replayable rather than a race with a real reader.
+    """
+
+    def __init__(self, holds=None):
+        self.holds = dict(holds or {})
+        self.attempts = {}
+
+    def __call__(self, source, destination):
+        seen = self.attempts.get(destination, 0)
+        self.attempts[destination] = seen + 1
+        if seen < self.holds.get(destination, 0):
+            raise PermissionError(
+                32, "The process cannot access the file because it is "
+                    "being used by another process")
+        os.replace(source, destination)
+
+
+def test_the_rename_retries_a_windows_style_sharing_violation(tmp_path):
+    """Same contract as _atomic_replace, and the same schedule: the
+    first retry is immediate (the hot path pays nothing), then a 5 ms
+    linear backoff."""
+    target = str(tmp_path / "host.json")
+    replace = _HeldOpen({target: 3})
+    sleeps = []
+
+    cp._write_private(target, "payload\n", replace=replace,
+                      sleep=sleeps.append)
+
+    assert replace.attempts[target] == 4
+    assert sleeps == [.005, .010]
+    with open(target, encoding="utf-8") as handle:
+        assert handle.read() == "payload\n"
+
+
+def test_the_seams_are_KEYWORD_ONLY(tmp_path):
+    """ARITY GUARD, same as _atomic_replace's `*`. Every one of the
+    nineteen production call sites passes exactly (path, data)
+    positionally, so a seam reachable positionally is a seam a future
+    third parameter binds to silently -- and `replace` is the one
+    parameter that decides whether the file is written at all."""
+    import inspect
+    params = inspect.signature(cp._write_private).parameters
+    for name in ("replace", "sleep"):
+        assert params[name].kind == inspect.Parameter.KEYWORD_ONLY, (
+            "%s must be keyword-only" % (name,))
+    with pytest.raises(TypeError):
+        cp._write_private(str(tmp_path / "x.json"), "data", os.replace)
+
+
+def test_a_reader_that_never_lets_go_raises_and_leaves_no_temp(tmp_path):
+    """Exhaustion RAISES. The caller has to hear that the write did not
+    land -- and the temp file it opened must not survive the failure."""
+    directory = str(tmp_path)
+    target = os.path.join(directory, "host.json")
+    sleeps = []
+
+    def never(source, destination):
+        raise PermissionError(32, "still open")
+
+    with pytest.raises(PermissionError):
+        cp._write_private(target, "payload\n", replace=never,
+                          sleep=sleeps.append)
+
+    assert not os.path.exists(target)
+    assert [n for n in os.listdir(directory) if n.endswith(".tmp")] == []
+    assert len(sleeps) == cp._REPLACE_ATTEMPTS - 2, (
+        "attempt 0 is immediate and the last attempt raises instead of "
+        "sleeping, so there is one sleep for every attempt between")
+
+
+def test_the_retry_budget_outlasts_a_runner_stall(tmp_path):
+    """THE NUMBER, pinned. 8 attempts bought 105 ms, which is less than
+    the 100 ms+ a shared runner stalls for at arbitrary points -- and
+    that is what surfaced as per-record errors in a 250-record
+    revocation on windows-latest. A silent trim back to that budget must
+    fail here rather than on someone else's CI run."""
+    sleeps = []
+
+    def never(source, destination):
+        raise PermissionError(32, "still open")
+
+    with pytest.raises(PermissionError):
+        cp._write_private(str(tmp_path / "host.json"), "x",
+                          replace=never, sleep=sleeps.append)
+
+    assert sum(sleeps) >= .25, (
+        "the rename budget is %.3fs, which does not cover a runner stall"
+        % (sum(sleeps),))
+
+
+def test_the_content_is_SYNCED_before_the_rename(tmp_path, monkeypatch):
+    """os.replace is atomic for the NAME and says nothing about the DATA
+    reaching the disk. The sync therefore has to happen while the TEMP
+    file is still open -- before the rename, never after it.
+
+    The destination's existence at sync time is the proof of ordering:
+    this is a first write, so a sync that ran before the rename cannot
+    see it.
+    """
+    target = str(tmp_path / "state" / "host.json")
+    order = []
+    real_fsync = os.fsync
+
+    def spy_fsync(fd):
+        order.append(("fsync", os.path.exists(target)))
+        return real_fsync(fd)
+
+    def replace(source, destination):
+        order.append(("replace", os.path.exists(target)))
+        os.replace(source, destination)
+
+    monkeypatch.setattr(cp.os, "fsync", spy_fsync)
+    cp._write_private(target, "durable\n", replace=replace)
+
+    assert order[0] == ("fsync", False), (
+        "the data was not synced before the rename: %r" % (order,))
+    assert order[1][0] == "replace"
+    with open(target, encoding="utf-8") as handle:
+        assert handle.read() == "durable\n"
+
+
+def test_a_MASS_rewrite_completes_under_intermittent_contention(tmp_path):
+    """THE TEST 16ca52c OWED, and the condition it set for the sync
+    coming back: a mass rewrite under contention.
+
+    A peer revocation rewrites every affected delivery record through
+    this function, back to back, inside the host lock. The withdrawal
+    commit measured 250 records with 7 per-record errors on
+    windows-latest and blamed the sync for holding the DESTINATION open
+    longer -- but this function never opens the destination at all; the
+    concurrent reader does. What the sync actually costs is elapsed
+    time, and what a hold costs is retries. So the population here is
+    held open for up to 10 attempts -- PAST the 8 the loop used to
+    allow -- and every record must still land, with no exception
+    reaching the caller.
+    """
+    directory = str(tmp_path / "jobs")
+    os.makedirs(directory)
+    records = [os.path.join(directory, "job-%03d.json" % index)
+               for index in range(250)]
+
+    # Clean first pass: this is a REwrite test, so there has to be
+    # something to rewrite.
+    for path in records:
+        cp._write_private(path, '{"state": "queued"}\n')
+
+    # Every fifth record is held, and the hold deepens 1..10 so the
+    # population straddles the old budget instead of sitting under it.
+    holds = {path: 1 + (index // 5) % 10
+             for index, path in enumerate(records) if index % 5 == 0}
+    assert max(holds.values()) > 8, (
+        "the deepest hold must outlast the 8-attempt loop, or this "
+        "proves nothing about the budget")
+    replace = _HeldOpen(holds)
+    sleeps = []
+
+    errors = []
+    for path in records:
+        try:
+            cp._write_private(path, '{"state": "refused"}\n',
+                              replace=replace, sleep=sleeps.append)
+        except Exception as e:                       # noqa: BLE001
+            errors.append((path, repr(e)))
+
+    assert errors == [], (
+        "%d of %d records failed to rewrite under contention -- exactly "
+        "the per-record errors a revocation reports as a failed "
+        "containment: %r" % (len(errors), len(records), errors[:3]))
+    for path in records:
+        with open(path, encoding="utf-8") as handle:
+            assert handle.read() == '{"state": "refused"}\n'
+    assert [n for n in os.listdir(directory)
+            if n.endswith(".tmp")] == []
+    assert sleeps, "the held records must have gone round the retry loop"
+    assert set(sleeps) <= {cp._REPLACE_BACKOFF_S * n
+                           for n in range(1, cp._REPLACE_ATTEMPTS)}
+
+
 # -- portfile ------------------------------------------------------------
 
 def test_portfile_round_trips(tmp_path):

@@ -28,6 +28,16 @@ class TestAutosave(EmbodyTestCase):
         ext = self.embody_ext
         ext._pending_checkpoint_roots.clear()
         ext._autosave_armed = False
+        ext._coarse_checkpoint_due = False
+        # Several tests below reach code that early-returns when auto-save is
+        # off, so they would pass or fail on a USER PREFERENCE rather than on
+        # the behaviour under test. Force it on for the suite and put the
+        # user's setting back in tearDown.
+        self._autosave_par_was = None
+        par = getattr(self.embody.par, 'Autosave', None)
+        if par is not None:
+            self._autosave_par_was = par.eval()
+            par.val = True
 
     def tearDown(self):
         ext = self.embody_ext
@@ -50,6 +60,19 @@ class TestAutosave(EmbodyTestCase):
                 pass
         ext._pending_checkpoint_roots.clear()
         ext._autosave_armed = False
+        # DISARM, do not merely un-flag. Arming schedules a real run() drain
+        # against the LIVE project, and clearing the flags does not cancel it:
+        # a drain that fires after the suite has moved on sweeps every tracked
+        # root and can write .tdn files mid-run -- with Filecleanup forced to
+        # 'delete' by the runner, which is the amplifier behind the 2026-07-01
+        # data loss. Bumping the generation is the invalidation the code itself
+        # provides (_autosaveDrain returns immediately on a stale gen).
+        ext._coarse_checkpoint_due = False
+        ext._autosave_gen += 1
+        if getattr(self, '_autosave_par_was', None) is not None:
+            par = getattr(self.embody.par, 'Autosave', None)
+            if par is not None:
+                par.val = self._autosave_par_was
         super().tearDown()
 
     def _make_tdn(self, name):
@@ -110,6 +133,134 @@ class TestAutosave(EmbodyTestCase):
         ext.NoteCheckpointTouch('/no/such/op')
         self.assertEqual(len(ext._pending_checkpoint_roots), 0)
 
+    # --- Stage 2b: the COARSE arm (execute_python has no path to resolve) ---
+
+    def test_coarse_arm_sets_the_flag_and_arms_the_drain(self):
+        """execute_python cannot name what it touched, so it arms a FLAG rather
+        than a root -- the drain does the discovery once, after the burst."""
+        ext = self.embody_ext
+        ext._coarse_checkpoint_due = False
+        ext._autosave_armed = False
+        ext.NoteCoarseCheckpointTouch()
+        self.assertTrue(ext._coarse_checkpoint_due,
+                        'coarse touch must mark a sweep due')
+        self.assertTrue(ext._autosave_armed,
+                        'coarse touch must arm the settle-drain')
+        self.assertEqual(len(ext._pending_checkpoint_roots), 0,
+                         'coarse touch queues NO root -- that is the point')
+
+    def test_coarse_expansion_queues_only_dirty_roots(self):
+        """The sweep must not enqueue every tracked root: writing a .tdn per
+        agent call is the churn this design exists to avoid."""
+        comp, _ = self._make_tdn('coarse_dirty')
+        ext = self.embody_ext
+        # Scoped to OUR sandbox root, never a project-wide count: the live
+        # project legitimately carries dirty roots from other work, and an
+        # assertion of global cleanliness fails for reasons that have nothing
+        # to do with the sweep (observed: 3 unrelated dirty roots).
+        ext._pending_checkpoint_roots.clear()
+        ext._queueDirtyTDNRoots()
+        self.assertNotIn(comp.path, ext._pending_checkpoint_roots,
+                         'a freshly externalized (clean) root must NOT be queued')
+        comp.op('n1').par.period = 9.0          # now genuinely dirty
+        ext._pending_checkpoint_roots.clear()
+        ext._queueDirtyTDNRoots()
+        self.assertIn(comp.path, ext._pending_checkpoint_roots,
+                      'a changed root must be discovered by the sweep')
+
+    def test_coarse_sweep_is_bounded(self):
+        """One sweep can never become the frame cost it exists to avoid.
+
+        Asserting the constant exists proves nothing -- the property is that
+        the sweep RESPECTS it. Two genuinely dirty roots against a cap of one:
+        drop the slice and both are queued.
+        """
+        ext = self.embody_ext
+        a, _ = self._make_tdn('cap_a')
+        b, _ = self._make_tdn('cap_b')
+        a.op('n1').par.period = 4.0
+        b.op('n1').par.period = 5.0
+        ext._pending_checkpoint_roots.clear()
+        ext._COARSE_SWEEP_CAP = 1        # instance shadow; removed below
+        try:
+            queued = ext._queueDirtyTDNRoots()
+        finally:
+            del ext._COARSE_SWEEP_CAP    # back to the class attribute
+        self.assertLessEqual(queued, 1,
+                             'the sweep examined more roots than its cap allows')
+        self.assertGreater(type(ext)._COARSE_SWEEP_CAP, 0,
+                           'the shipped cap must still bound a real sweep')
+
+    # --- Stage 2d: the WIRING (the chokepoint must actually call all this) ---
+
+    def test_arbitrary_code_tools_arm_the_coarse_sweep(self):
+        """The wiring, not the helper: the MCP chokepoint must arm coarsely for
+        BOTH tools that run arbitrary code. Deleting the branch leaves an agent
+        session checkpointing nothing, which is the bug this whole stage fixes."""
+        ext = self.embody_ext
+        for operation in ('execute_python', 'exec_op_method'):
+            ext._coarse_checkpoint_due = False
+            ext._autosave_armed = False
+            op.Embody.ext.Envoy._noteCheckpointActivity(operation, {}, None)
+            self.assertTrue(ext._coarse_checkpoint_due,
+                            f'{operation} must arm the coarse sweep')
+            self.assertTrue(ext._autosave_armed,
+                            f'{operation} must arm the settle-drain')
+            self.assertEqual(len(ext._pending_checkpoint_roots), 0,
+                             f'{operation} must queue NO root -- it has no path')
+
+    def test_a_typed_op_still_arms_by_path_not_coarsely(self):
+        """The coarse arm must not swallow the path-resolving branch: a tool
+        that CAN name its root still queues that root and sweeps nothing."""
+        comp, _ = self._make_tdn('wired_typed')
+        ext = self.embody_ext
+        ext._coarse_checkpoint_due = False
+        ext._pending_checkpoint_roots.clear()
+        op.Embody.ext.Envoy._noteCheckpointActivity(
+            'set_parameter', {'op_path': comp.op('n1').path}, None)
+        self.assertIn(comp.path, ext._pending_checkpoint_roots,
+                      'a typed op must queue the root it touched')
+        self.assertFalse(ext._coarse_checkpoint_due,
+                         'a typed op must NOT trigger the project-wide sweep')
+
+    def test_both_arbitrary_code_tools_share_one_guard_set(self):
+        """The arm and the pre-flush read the SAME set. Two literals would drift
+        into 'one tool is guarded, the other is not' -- which is how
+        exec_op_method sat unwatched while execute_python was fixed."""
+        coarse = op.Embody.ext.Envoy._COARSE_CHECKPOINT_OPS
+        self.assertIn('execute_python', coarse)
+        self.assertIn('exec_op_method', coarse)
+        # Read the DAT, not inspect.getsource: an extension class backed by a
+        # DAT has no file the inspect module can find ("source code not
+        # available"), which is why this assertion has to go to the source of
+        # truth TD actually loaded.
+        src = op.Embody.op('EnvoyExt').text
+        self.assertIn('elif operation in self._COARSE_CHECKPOINT_OPS:', src,
+                      'the pre-flush must gate on the shared set, not a literal')
+
+    # --- Stage 2c: the pre-flush (ordering guard before arbitrary code) ---
+
+    def test_flush_writes_queued_roots_and_clears_them(self):
+        """A root queued by an earlier tool sits unwritten for up to the settle
+        window; execute_python can crash TD inside it. Flush first."""
+        comp, abs_tdn = self._make_tdn('flush_q')
+        ext = self.embody_ext
+        comp.op('n1').par.period = 3.0
+        ext._pending_checkpoint_roots.clear()
+        ext._pending_checkpoint_roots.add(comp.path)
+        written = ext.FlushPendingCheckpoints()
+        self.assertGreaterEqual(written, 1, 'a queued root must be written')
+        self.assertNotIn(comp.path, ext._pending_checkpoint_roots,
+                         'a written root must leave the queue')
+
+    def test_flush_is_a_no_op_when_nothing_is_queued(self):
+        """The steady state: this runs before EVERY execute_python, so it must
+        cost an empty-set check and never sweep for new dirt."""
+        ext = self.embody_ext
+        ext._pending_checkpoint_roots.clear()
+        self.assertEqual(ext.FlushPendingCheckpoints(), 0)
+        self.assertEqual(len(ext._pending_checkpoint_roots), 0)
+
     # --- Stage 6: export-mode missing-only recovery ---
 
     def test_recover_missing_rebuilds_crash_lost_comp(self):
@@ -145,7 +296,9 @@ class TestAutosave(EmbodyTestCase):
         for o in ('create_op', 'delete_op', 'disconnect_op', 'layout_children',
                   'set_annotation', 'set_parameter', 'import_network'):
             self.assertIn(o, s)
-        # execute_python / exec_op_method are A1 skip+document -- excluded
+        # The two arbitrary-code tools stay out of THIS set because it resolves
+        # a path and they have none to resolve -- they are armed coarsely
+        # instead (see the Stage 2d wiring tests), not left unwatched.
         self.assertNotIn('execute_python', s)
         self.assertNotIn('exec_op_method', s)
 

@@ -223,17 +223,37 @@ class TestConfigMigration(EmbodyTestCase):
         Existing projects get it through the same backfill path, so this
         asserts BOTH a fresh write and a second run against a file that
         predates the entry.
+
+        EXACTLY ONCE, not merely present. `assertIn` is true of a writer
+        that appends `.tdn_backup/` on every single run, so it cannot
+        tell the backfill from a file that grows an identical line each
+        time Embody starts -- and the third run below is the one that
+        catches it, because that is the ordinary case: the entry is
+        already there and nothing should be written.
         """
+        def occurrences():
+            return [ln.strip() for ln in self._lines()].count('.tdn_backup/')
+
         self._configure()
-        self.assertIn('.tdn_backup/', [ln.strip() for ln in self._lines()])
+        self.assertEqual(1, occurrences(),
+                         f'a fresh write must produce one entry: '
+                         f'{self._lines()}')
 
         lines = [ln for ln in self._lines() if ln.strip() != '.tdn_backup/']
         self.gitignore.write_text('\n'.join(lines) + '\n', encoding='utf-8')
         self._configure()
-        self.assertIn(
-            '.tdn_backup/', [ln.strip() for ln in self._lines()],
-            f'a project predating the entry must be backfilled: '
+        self.assertEqual(
+            1, occurrences(),
+            f'a project predating the entry must be backfilled, once: '
             f'{self._lines()}')
+        self.assertEqual(1, self._header_count())
+
+        # The run that changes nothing. A writer that re-appends what is
+        # already present stays green on every assertion above.
+        self._configure()
+        self.assertEqual(
+            1, occurrences(),
+            f'a second run duplicated the entry: {self._lines()}')
         self.assertEqual(1, self._header_count())
 
     # --- .gitattributes: same class ---------------------------------------

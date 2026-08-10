@@ -435,3 +435,82 @@ class TestMacOSOrderingIsUnchanged(_LadderBase):
         self.assertEqual(self.installer.recorded, MAC_DAEMON)
         self.assertEqual(len(self.uvArgs('venv')), 1)
         self.assertIn('/opt/homebrew/bin/python3', self.uvArgs('venv')[0])
+
+
+class TestTheInterpreterProbeIsSharedNotCopied(_LadderBase):
+    """b73fcd0's fix is an AGREEMENT between two questions, and it was
+    kept by having the same six lines written twice.
+
+    host_state decides the readout ('Needs repair -- Python not found');
+    plan_install decides the button (repair_runtime, or
+    refuse_downgrade). They must answer the same question about the same
+    recorded path -- that identity IS the fix -- and two verbatim copies
+    are exactly how it drifts back apart.
+    """
+
+    def test_the_probe_answers_the_filesystem(self):
+        with tempfile.TemporaryDirectory() as root:
+            live = os.path.join(root, 'python.exe')
+            with open(live, 'w', encoding='utf-8') as handle:
+                handle.write('')
+            self.assertIs(
+                convoy_mod._host_recorded_interpreter_exists(
+                    {'interpreter': live}), True)
+            self.assertIs(
+                convoy_mod._host_recorded_interpreter_exists(
+                    {'interpreter': os.path.join(root, 'gone.exe')}), False)
+
+    def test_an_unaskable_question_is_UNKNOWN_not_absent(self):
+        """None, never False. plan_install's repair branch is strictly
+        `is False` for this reason: an answer nobody could look up is
+        not evidence, and treating it as 'the Python is gone' would
+        authorise a repair off a failed stat."""
+        for installed in (None, {}, {'interpreter': ''},
+                          {'interpreter': None}):
+            self.assertIsNone(
+                convoy_mod._host_recorded_interpreter_exists(installed),
+                'a record with no recorded interpreter must read UNKNOWN')
+
+    def test_a_stat_that_raises_is_UNKNOWN_too(self):
+        class Hostile(str):
+            def __str__(self):
+                raise OSError('the path itself is unusable')
+
+        self.assertIsNone(convoy_mod._host_recorded_interpreter_exists(
+            {'interpreter': Hostile('x')}))
+
+    def test_the_probe_exists_exactly_ONCE_in_the_source(self):
+        """The structural half. Both call sites must reach the helper,
+        so `os.path.isfile` may appear against the recorded interpreter
+        in one place only -- the helper's own body."""
+        path = os.path.join(_CONVOY_DIR, 'ConvoyExt.py')
+        with open(path, encoding='utf-8') as handle:
+            source = handle.read()
+        self.assertEqual(
+            source.count('_host_recorded_interpreter_exists'), 3,
+            'expected one definition and two call sites')
+        self.assertEqual(
+            source.count("interpreter_exists = os.path.isfile"), 0,
+            'an inline copy of the probe is back in ConvoyExt.py')
+
+
+class TestARepairDoesNotSayItIsInstalling(_LadderBase):
+    """A runtime repair writes no payload and cannot change the
+    installed version, so 'Installing...' over it states something that
+    is not going to happen -- on the one path the user reached BECAUSE
+    the version may not be replaced."""
+
+    def test_the_extension_mirrors_the_new_transient_state(self):
+        self.assertEqual(convoy_mod.ConvoyExt.HOST_REPAIRING, 'repairing')
+
+    def test_it_is_a_DIFFERENT_state_from_installing(self):
+        self.assertNotEqual(convoy_mod.ConvoyExt.HOST_REPAIRING,
+                            convoy_mod.ConvoyExt.HOST_INSTALLING)
+
+    def test_the_install_button_picks_the_note_from_repair_only(self):
+        """Read InstallHost itself: the note handed to _beginHostCall is
+        chosen by `repair_only`, not fixed at HOST_INSTALLING."""
+        import inspect
+        source = inspect.getsource(convoy_mod.ConvoyExt.InstallHost)
+        self.assertIn('self.HOST_REPAIRING if repair_only', source)
+        self.assertIn('else self.HOST_INSTALLING', source)

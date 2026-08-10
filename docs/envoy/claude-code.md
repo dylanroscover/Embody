@@ -127,6 +127,10 @@ With **Embot** on:
 
 - A small **builder-bot** ("embot") — a figure made of minimal network-box annotations — **hops between the nodes** being worked on, hovers when idle, and throws an occasional gesture (a wave, a reach, a pump, the odd robot dance). Its color tracks "thinking time": cool cyan-green right after Envoy acts, warming toward red the longer the gap. The node Envoy just touched pulses the Envoy accent.
 
+Embot **settles rather than chases**: rebuilding him in a new network is real main-thread work, so when the agent is hopping between networks he stays where the work actually lives, keeps hopping between the operators *there*, and keeps narrating the current op from where he stands. He relocates once the work has genuinely settled somewhere new (or a queued batch proves it is about to), and if the work never settles anywhere he still moves in after a few seconds rather than standing on a stale node forever. The node-colour pulse still fires on every operator Envoy touches, in every network. With **Embot** off, **Envoy Follow** cuts to every hop exactly as before.
+
+With **Envoy Follow** off but **Embot** on, he appears only in the network you are already viewing — building nine annotations into a network the camera will never travel to costs real frame time for something nobody can see. Navigate to where the agent is working and he arrives there.
+
 It **yields the instant you pan, zoom, or navigate** the view yourself, and resumes only once you stop — it never yanks the view mid-interaction. The bot and pulse retire after a stretch of quiet.
 
 This is purely a viewing aid: it writes only pane/view state (which TouchDesigner never externalizes), the bot is destroyed before every save, and it runs entirely on the main thread, so it adds nothing to your saved files and never affects a build. Leave it off if you'd rather your view never move on its own.

@@ -11727,7 +11727,7 @@ class HostApp:
                           lease_modes=None):
         """Apply A-7 revocation to work ALREADY IN THE MESH.
 
-        FOUR CASES, FOUR DIFFERENT RIGHT ANSWERS -- and three of them are
+        FIVE CASES, FIVE DIFFERENT RIGHT ANSWERS -- and four of them are
         "do not touch it", which is the part that is easy to get wrong:
 
           queued      -> TERMINALISE `refused`, with evidence. It
@@ -11745,9 +11745,22 @@ class HostApp:
                          job and holds its verdict for 24h. Abandoning it
                          would manufacture a false indeterminate and
                          destroy a real answer that still exists.
+          settled     -> COUNTED, AND BY STATE. A record that is already
+                         terminal (or carries a state this store does not
+                         know) is nothing a revocation can change -- but
+                         it is still a record this sweep EXAMINED, and
+                         the summary is evidence, so it has to add up.
+                         See _account_untouched for what silence cost.
           leases      -> RELEASED IMMEDIATELY. A revoked peer's exclusive
                          hold must not keep blocking local mutations for
                          the rest of its TTL.
+
+        THE ACCOUNTING INVARIANT: `examined` equals the sum of refused,
+        errors, left_in_flight, left_running, already_terminal,
+        left_queued and unknown_state. The one entry it cannot cover is
+        a scan that failed OUTRIGHT: that path examined no records at
+        all (examined stays 0) and its single `errors` is the failure to
+        enumerate, not a record.
 
         SELF-LOCKING, and called WITHOUT self.lock. The scan runs
         lock-free (jobs() is O(every job file on disk); drain_once was
@@ -11762,8 +11775,37 @@ class HostApp:
         """
         summary = {"refused": 0, "left_in_flight": 0, "left_running": 0,
                    "leases_released": 0, "errors": 0, "unreadable": 0,
-                   "examined": 0}
+                   "examined": 0,
+                   # THE ARMS THAT DID NOT EXIST. queued/dispatching/
+                   # running were the only states this loop could count,
+                   # so every OTHER record fell out of the summary
+                   # silently: a windows-latest run measured examined
+                   # 250 against buckets summing to 14, and neither the
+                   # operator's response nor the `peer_revoked` audit
+                   # line said where the remaining 236 went.
+                   "already_terminal": 0,
+                   "left_queued": 0,
+                   "unknown_state": 0,
+                   # ...and 236 is a number, where "succeeded: 236" is
+                   # an answer. Carried in the summary rather than a
+                   # separate audit line because the summary IS the
+                   # audit payload (**summary) as well as the response.
+                   "untouched_states": {}}
         scan_failed = False
+
+        def _account_untouched(bucket, state):
+            """Count a record this sweep deliberately left alone, by state.
+
+            Every arm that does not transition a record calls this, so
+            the summary can never claim a containment it did not
+            perform. `state` is whatever was on disk, which is not
+            necessarily a string -- a record with no state at all is
+            still a record, and must still be counted.
+            """
+            summary[bucket] += 1
+            name = state if isinstance(state, str) and state else "<none>"
+            summary["untouched_states"][name] = (
+                summary["untouched_states"].get(name, 0) + 1)
         try:
             records, unreadable = self.db.scan_jobs()
         except Exception as e:
@@ -11805,6 +11847,11 @@ class HostApp:
                     # An operation no longer in the registry counts as
                     # mutating: strict default, same as gating_of.
                     if entry is not None and not gating_of(entry)["mutating"]:
+                        # A READ survives observe-only and will still
+                        # dispatch. That is the right answer, and it is
+                        # not the same answer as "contained" -- so it is
+                        # counted, never skipped out of the arithmetic.
+                        _account_untouched("left_queued", state)
                         continue
                 try:
                     with self.lock:
@@ -11858,6 +11905,25 @@ class HostApp:
                      "node_job_id": job.get("node_job_id"),
                      "detail": "the node owns this job and still holds its "
                                "verdict; polling continues to a terminal"})
+            elif state in hoststore.TERMINAL_STATES:
+                # SETTLED BEFORE THE SWEEP SAW IT. Nothing to contain and
+                # nothing to rewrite -- a terminal is the record of what
+                # already happened -- but it was examined, so it counts.
+                _account_untouched("already_terminal", state)
+            else:
+                # Not a JOB_STATE at all. Unreachable through this store's
+                # own writers; reachable through a hand-edited or damaged
+                # record, which is exactly when an operator needs the
+                # arithmetic to hold rather than quietly lose the row.
+                _account_untouched("unknown_state", state)
+        if summary["untouched_states"]:
+            self._audit_best_effort(
+                "peer_revocation_left_untouched",
+                {"origin_host_id": host_id,
+                 "states": dict(summary["untouched_states"]),
+                 "detail": "these records were examined and deliberately "
+                           "not transitioned; they are counted so the "
+                           "summary accounts for every record it saw"})
         with self.lock:
             controller_ids = self._controllers_for_origin(host_id, records)
             if scan_failed:

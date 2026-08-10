@@ -275,6 +275,34 @@ class CatalogManagerExt:
 		"""
 		if self.ownerComp.par.Status != 'Disabled':
 			self.ownerComp.par.Status = text
+		self._publishScanProgress(text)
+
+	def _publishScanProgress(self, text):
+		"""Hand the scan's own line to the startup viewer, guard or no guard.
+
+		This is the one step with a real denominator, and it is the only
+		code running while it sweeps (hundreds of consecutive main-thread
+		frames), so the viewer reads it from the choke point rather than
+		from the parameter. Publishing SEPARATELY from the par write is
+		the point: the Disabled guard above exists so a scan cannot
+		re-enable a disabled Embody, and it left a running scan with no
+		readout at all. Best-effort -- a viewer problem must never abort a
+		catalog scan.
+		"""
+		try:
+			dat = self.ownerComp.op('startup_progress')
+			if dat is None:
+				return
+			dat.module.publish_catalog(self.ownerComp, text,
+			                           now=absTime.seconds)
+			# The readout cooks on EVENTS, not on a clock, and a scan line
+			# published straight into the module has no parameter change
+			# behind it for the panel's parameter-execute DAT to catch.
+			publisher = self.ownerComp.op('viz_status/status_publish')
+			if publisher is not None:
+				publisher.module.Refresh()
+		except Exception:
+			pass
 
 	def _setScanAborted(self, what):
 		"""Publish an ABORTED scan, instead of freezing mid-count.

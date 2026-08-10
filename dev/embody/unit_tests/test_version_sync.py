@@ -12,6 +12,7 @@ Also drives the pure line-rewriter directly so the anchored-substitution
 logic is covered without touching files.
 """
 
+import os
 import re
 from pathlib import Path
 
@@ -102,36 +103,92 @@ class TestVersionSync(EmbodyTestCase):
     def test_the_version_sync_selects_only_embody_covering_tdn_rows(self):
         """It must re-export the rows that CONTAIN the Embody COMP, and
         never '/' -- re-exporting the whole project root on every save
-        would be a far larger write than this warrants."""
-        embody_path = self.embody.path
-        table = self.embody_ext.Externalizations
-        headers = [table[0, c].val for c in range(table.numCols)]
-        path_col = headers.index('path')
-        strategy_col = headers.index('strategy')
-        picked = [
-            str(table[r, path_col].val)
-            for r in range(1, table.numRows)
-            if str(table[r, strategy_col].val or '') == 'tdn'
-            and str(table[r, path_col].val or '') not in ('', '/')
-            and (str(table[r, path_col].val) == embody_path
-                 or embody_path.startswith(str(table[r, path_col].val) + '/'))
-        ]
-        self.assertIn(embody_path, picked)
-        self.assertNotIn('/', picked, "'/' must never be re-exported here")
+        would be a far larger write than this warrants.
 
-    def test_save_tdn_can_re_export_without_bumping_build(self):
+        Drives the REAL syncVersionIntoTDN and records what it asks to be
+        written. Re-implementing the row filter here instead would pass
+        even if the function were deleted, which is what it used to do.
+        """
+        embody_path = self.embody.path
+        ext = self.embody_ext
+        calls = []
+        # Shadow on the INSTANCE, restored by `del` (the class attribute is
+        # untouched). buildAbsolutePath is shadowed too so the idempotency
+        # skip cannot fire: the live .tdn files are already stamped with the
+        # current version, so every row would otherwise be skipped and this
+        # would assert on an empty list.
+        ext.SaveTDN = lambda path, bump_build=True: calls.append(
+            (path, bump_build))
+        ext.buildAbsolutePath = lambda rel: Path('/no/such/tdn/file')
+        try:
+            op('/embody/execute_src_ctrl').module.syncVersionIntoTDN()
+        finally:
+            del ext.SaveTDN
+            del ext.buildAbsolutePath
+        picked = [path for path, _bump in calls]
+        self.assertIn(embody_path, picked,
+                      'the row holding the Embody COMP must be re-exported')
+        self.assertNotIn('/', picked, "'/' must never be re-exported here")
+        for path in picked:
+            self.assertTrue(
+                path == embody_path or embody_path.startswith(path + '/'),
+                f'{path} does not contain the Embody COMP')
+
+    def test_the_version_sync_never_bumps_the_build(self):
         """The sync runs AFTER the release manifest recorded par.Build, so
         a second bump would leave the manifest one behind the .tdn -- the
         same drift, one size smaller."""
-        # Read the DAT text: inspect.getsource cannot see an extension's
-        # source inside TouchDesigner.
-        dat = self.embody.op('EmbodyExt')
-        self.assertIsNotNone(dat, 'EmbodyExt DAT is missing')
-        source = dat.text
-        self.assertIn('def SaveTDN(self, opPath: str, bump_build: bool = True)',
-                      source, 'SaveTDN must accept bump_build')
-        self.assertIn('if bump_build and hasattr(oper.par, ', source,
-                      'the Build bump must be guarded by bump_build')
+        ext = self.embody_ext
+        calls = []
+        ext.SaveTDN = lambda path, bump_build=True: calls.append(
+            (path, bump_build))
+        ext.buildAbsolutePath = lambda rel: Path('/no/such/tdn/file')
+        try:
+            op('/embody/execute_src_ctrl').module.syncVersionIntoTDN()
+        finally:
+            del ext.SaveTDN
+            del ext.buildAbsolutePath
+        self.assertTrue(calls, 'the sync re-exported nothing to assert on')
+        for path, bump in calls:
+            self.assertIs(bump, False,
+                          f'{path} was re-exported with the Build bump on')
+
+    def test_save_tdn_honours_bump_build_on_a_comp_that_has_one(self):
+        """The flag has to reach par.Build, not merely exist in the signature.
+
+        A sandbox COMP with its own Build par is the only way to observe
+        this without moving the real Embody build number.
+        """
+        ext = self.embody_ext
+        comp = self.sandbox.create(baseCOMP, 'bumpguard')
+        comp.create(noiseTOP, 'n1')
+        page = comp.appendCustomPage('Test')
+        page.appendInt('Build')[0].val = 5
+        ext.applyTagToOperator(comp, 'tdn')
+        ext.ExternalizeImmediate(comp)
+        rel = ext._getStrategyFilePath(comp.path, 'tdn')
+        abs_tdn = str(ext.buildAbsolutePath(rel)) if rel else None
+        try:
+            # Baseline AFTER externalization: the first export writes the file
+            # and advances the counter itself, so the starting value is
+            # whatever that left behind, not the 5 seeded above.
+            base = comp.par.Build.eval()
+            ext.SaveTDN(comp.path, bump_build=False)
+            self.assertEqual(comp.par.Build.eval(), base,
+                             'bump_build=False still advanced par.Build')
+            ext.SaveTDN(comp.path, bump_build=True)
+            self.assertEqual(comp.par.Build.eval(), base + 1,
+                             'the default must still bump par.Build')
+        finally:
+            try:
+                ext._removeTDNStrategy(comp.path, delete_file=True)
+            except Exception:
+                pass
+            if abs_tdn and os.path.isfile(abs_tdn):
+                try:
+                    os.remove(abs_tdn)
+                except OSError:
+                    pass
 
     def test_readme_badge_matches_par_version(self):
         text = self._read('README.md')

@@ -2657,3 +2657,46 @@ class TestConvoyClientIsTouchDesignerFree(EmbodyTestCase):
                      'status_text'):
             self.assertTrue(callable(getattr(client, name, None)),
                             'missing public function %r' % (name,))
+
+
+class TestConvoyHostRepairVocabulary(EmbodyTestCase):
+    """The runtime-only repair had no words of its own.
+
+    plan_install's repair_runtime action writes NO payload -- it
+    re-resolves the interpreter and rewrites the supervisor definition,
+    leaving the installed version and file list verbatim -- but the
+    extension reported HOST_INSTALLING while it ran, so the field read
+    'Installing...'. On the one path reached BECAUSE the version may not
+    be replaced, that promises a version change that cannot happen.
+    """
+
+    def test_repairing_has_its_own_string(self):
+        self.assertEqual(client.host_status_text(client.HOST_REPAIRING),
+                         'Repairing runtime...')
+
+    def test_it_is_not_the_installing_string(self):
+        self.assertNotEqual(
+            client.host_status_text(client.HOST_REPAIRING),
+            client.host_status_text(client.HOST_INSTALLING),
+            'a repair that reads exactly like an install is the defect')
+
+    def test_it_did_not_fall_through_to_the_default(self):
+        """A transient name convoy_client does not know reads
+        'Install failed -- see log'. That is the failure mode a new
+        constant introduces if the vocabulary is not extended with it."""
+        self.assertNotEqual(client.host_status_text(client.HOST_REPAIRING),
+                            'Install failed -- see log')
+
+    def test_every_transient_string_is_distinct_and_ascii(self):
+        seen = {}
+        for name in ('HOST_CHECKING', 'HOST_INSTALLING', 'HOST_REPAIRING',
+                     'HOST_STARTING', 'HOST_INSTALL_FAILED'):
+            text = client.host_status_text(getattr(client, name))
+            text.encode('ascii')
+            for glyph in ('\u2014', '\u2013', '\u2026', '\u2019'):
+                self.assertNotIn(glyph, text)
+            if name != 'HOST_INSTALL_FAILED':
+                self.assertNotIn(
+                    text, seen,
+                    '%s and %s both read %r' % (name, seen.get(text), text))
+            seen[text] = name

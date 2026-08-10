@@ -261,6 +261,11 @@ class EmbodyExt:
         self._last_checkpoint_activity = 0.0   # time.monotonic()
         self._autosave_gen = 0
         self._autosave_armed = False
+        # An op ran that could have touched ANY tracked root (execute_python),
+        # so the drain must discover which ones actually changed. A flag, not a
+        # queued set: the sweep is deferred to the settle so a burst of agent
+        # calls costs ONE sweep, not one per call.
+        self._coarse_checkpoint_due = False
 
         # COMP paths the user answered plain-Ignore for in the dropped-.tox
         # dialog this session -- subsequent sweeps skip them instead of
@@ -2626,9 +2631,141 @@ class EmbodyExt:
         """Write one template file, respecting the Embody/Envoy marker -- see embody_git."""
         return mod.embody_git.write_template(self, target_dir, rel_path, content)
 
+    # ==========================================================================
+    # STARTUP PROGRESS (what the node viewer shows while the user waits)
+    # ==========================================================================
+    #
+    # The open sequence publishes INTO Embody/startup_progress rather than into
+    # a status string. A phase that restores nothing writes no string at all,
+    # and a phase that dies writes its last count forever -- both of which read
+    # on the panel as a startup still in progress. Publishing is the only way a
+    # step reaches a TERMINAL state on every path, including the ones that do
+    # no work. Every call here is best-effort: a viewer problem must never
+    # abort an open.
+
+    # The discrete phases this extension owns. NOT the catalog: its scan
+    # legitimately outlives every startup callback and publishes its own
+    # terminal state from _setScanStatus.
+    _STARTUP_PHASE_STEPS = ('repo', 'restore')
+
+    def _startupProgress(self):
+        """The startup_progress module, or None on a .tox that predates it."""
+        try:
+            dat = self.my.op('startup_progress')
+            return dat.module if dat is not None else None
+        except Exception:
+            return None
+
+    def _publishStartupStep(self, key: str, state: str, done: int = 0,
+                            total: int = 0, detail: str = '',
+                            add: bool = False) -> None:
+        """Hand one startup phase's REAL state to the node viewer.
+
+        absTime.seconds because that is the clock the readout is rendered
+        against -- an elapsed time is only meaningful against the clock that
+        draws it.
+        """
+        module = self._startupProgress()
+        if module is None:
+            return
+        try:
+            module.publish(self.my, key, state, done=done, total=total,
+                           detail=detail, add=add, now=absTime.seconds)
+        except Exception:
+            pass
+        self._republishStatusPanel()
+
+    def _republishStatusPanel(self) -> None:
+        """Redraw the status readout, because THIS was an event.
+
+        The panel is event-driven: it holds no clock of its own and cooks
+        nothing until something tells it a value moved (see
+        viz_status/status_publish). A parameter the readout shows is caught
+        by its parameter-execute DAT; a step published straight into the
+        module -- which is every startup phase -- has no parameter behind
+        it, so it has to say so here or the row it just wrote is never
+        drawn. Best-effort: a viewer that cannot redraw must never break
+        the startup it is reporting on."""
+        try:
+            publisher = self.my.op('viz_status/status_publish')
+            if publisher is not None:
+                publisher.module.Refresh()
+        except Exception:
+            pass
+
+    def _finishStartupStep(self, key: str, failed: bool = False,
+                           detail: str = '') -> None:
+        """Close a phase: DONE if it did work, SKIPPED if there was none."""
+        module = self._startupProgress()
+        if module is None:
+            return
+        try:
+            module.finish(self.my, key, failed=failed, detail=detail,
+                          now=absTime.seconds)
+        except Exception:
+            pass
+
+    def _beginStartupProgress(self) -> None:
+        """Declare the open sequence OPEN, and put the project step in flight.
+
+        Frame one reads Envoy Disabled, Convoy Disabled and the catalog
+        Enabled -- a perfectly settled snapshot, ten frames before any of it
+        runs. Inferring from that latched the viewer into its settled mode
+        before the first phase, which is why the startup bars were never seen.
+        """
+        module = self._startupProgress()
+        if module is None:
+            return
+        try:
+            module.begin_startup(self.my, now=absTime.seconds)
+        except Exception:
+            pass
+        # The project/config work starts NOW (settings restore at frame 5,
+        # the table at 15, the config pass at 30), so the step is in flight
+        # from here rather than snapping to DONE at frame 30 after reading
+        # as finished for the whole preceding window.
+        self._publishStartupStep('repo', 'running', total=1)
+
+    def _completeStartupConfigStep(self) -> None:
+        """The project/config step is over -- the dropped-.tox path.
+
+        A normal open closes it inside _upgradeEnvoy; onCreate never calls
+        that, and a step nobody closes is a bar that animates forever.
+        """
+        self._publishStartupStep('repo', 'done', done=1, total=1)
+
+    def _closeStartupPhases(self) -> None:
+        """End the open sequence and fail anything that never reported.
+
+        An exception inside a deferred run() callback kills the rest of that
+        chain silently, so a phase can stop existing between its RUNNING and
+        its terminal publish. A bar left animating forever is the exact lie
+        this viewer was built against: if a phase cannot say how it ended,
+        the panel says it did not end.
+        """
+        module = self._startupProgress()
+        if module is None:
+            return
+        try:
+            closed = module.close_unreported(
+                self.my, self._STARTUP_PHASE_STEPS, now=absTime.seconds)
+            module.end_startup(self.my)
+        except Exception:
+            return
+        for key in closed:
+            self.Log(f'Startup phase "{key}" never reported a result -- '
+                     f'shown as failed on the startup viewer', 'WARNING')
+
     def _upgradeEnvoy(self):
         """Restore AI config on open if Envoy is enabled but files are missing -- see embody_git."""
-        return mod.embody_git.upgrade_envoy(self)
+        try:
+            result = mod.embody_git.upgrade_envoy(self)
+        except Exception as e:
+            self._publishStartupStep('repo', 'failed', done=0, total=1,
+                                     detail=str(e))
+            raise
+        self._publishStartupStep('repo', 'done', done=1, total=1)
+        return result
 
     def _clientFilesMissing(self, target_dir, client):
         """True if the primary config files for the selected client are absent -- see embody_git."""
@@ -3715,6 +3852,32 @@ class EmbodyExt:
     # SAVE & DIRTY HANDLING
     # ==========================================================================
 
+    def _retireVizBeforeWrite(self, path: str) -> None:
+        """Retire Embot out of the COMP at `path` before its subtree is
+        serialized (issue #86).
+
+        EVERY call site that writes a COMP's whole subtree to disk goes through
+        here -- Save (saveExternalTox), _setupCompForExternalization (the FIRST
+        .tox for a newly tagged COMP), updateMovedOp (the rename re-save),
+        ExportPortableTox (the live path) and _exportPortableViaCopy (before the
+        staging copy is taken, since the copy snapshots whatever is standing in
+        the live tree). One helper rather than five inline blocks so a sixth
+        writer added later is an obvious omission rather than a silent leak:
+        Embot's nine annotateCOMPs shipping inside a tracked or released .tox is
+        a data defect, not a cosmetic one -- RestoreTOXComps then re-materialises
+        them on every open.
+
+        Subtree-scoped inside envoy_viz, so the many unrelated Save() calls
+        dirtyHandler issues on an Update() never touch him. A no-op when Envoy is
+        absent (it is optional in shipped Embody) and fully guarded -- retiring a
+        viewing aid must never be able to fail a save."""
+        try:
+            _envoy = getattr(self.my.ext, 'Envoy', None)
+            if _envoy is not None:
+                _envoy._vizRetireForWrite(path)
+        except Exception:
+            pass
+
     def Save(self, opPath: str) -> None:
         """Save a TOX-strategy COMP and update tracking."""
         if self._performMode:
@@ -3738,6 +3901,10 @@ class EmbodyExt:
             if hasattr(oper.par, 'Touchbuild'):
                 oper.par.Touchbuild = app.build
                 self.Externalizations[opPath, 'touch_build'] = app.build
+
+            # Issue #86: saveExternalTox() would otherwise write Embot's
+            # annotation parts into the .tox -- see _retireVizBeforeWrite.
+            self._retireVizBeforeWrite(opPath)
 
             oper.saveExternalTox()
 
@@ -3883,8 +4050,7 @@ class EmbodyExt:
             # (not the .tdn), so keep them current or a moved/recolored COMP
             # recovers at stale coordinates (SaveTDN does the same).
             self._updatePositionInTable(oper, opPath)
-            self._setAutosaveStatus(
-                'Saved ' + datetime.utcnow().strftime('%H:%M:%S') + ' UTC')
+            self._setAutosaveStatus('Saved ' + self._autosaveClock())
             # delayFrames=2 staggers the ~40ms re-baseline off F+1, where the
             # drain schedules the NEXT root's checkpoint -- so they never co-fire.
             run(f"op({self.my.path!r}).ext.Embody._reBaselineCheckpoint({opPath!r})",
@@ -3954,6 +4120,83 @@ class EmbodyExt:
         except Exception:
             pass
 
+    _COARSE_SWEEP_CAP = 60   # roots examined in one coarse sweep (bounded work)
+
+    def NoteCoarseCheckpointTouch(self) -> None:
+        """Arm a checkpoint after an op that could have touched ANY tracked root.
+
+        `execute_python` runs arbitrary code, so Envoy cannot hand us a path the
+        way the other mutating tools do -- which is why it was left out of the
+        checkpoint chokepoint entirely. The cost was silent and total: a session
+        doing its work through execute_python (most non-trivial agent work)
+        checkpointed nothing and rotated no .tdn_backup, while the status readout
+        kept displaying the last real checkpoint as though nothing were wrong
+        (measured 2026-08-09: 2h46m stale, still reading 'Saved 14:53:05 UTC').
+
+        This ARMS only. Checkpointing every tracked root here would write and
+        churn every .tdn on every agent call; instead the settle-drain discovers
+        which roots actually changed, once, after the burst.
+        """
+        try:
+            import time
+            if self._performMode or not self._autosaveEnabled():
+                return
+            self._coarse_checkpoint_due = True
+            self._last_checkpoint_activity = time.monotonic()
+            if not self._autosave_armed:
+                self._armAutosaveDrain()
+        except Exception:
+            pass
+
+    def _queueDirtyTDNRoots(self) -> int:
+        """Expand a coarse arm into the roots that ACTUALLY changed.
+
+        Unions the externalizations table's TDN rows with the fingerprint
+        baselines, because `_getTDNStrategyComps` deliberately omits Embody and
+        its descendants (reconstructing inside Embody is self-destruction) while
+        the baselines DO cover them -- and the Embody COMP is exactly where an
+        agent editing the manager UI does its work. Bounded by _COARSE_SWEEP_CAP
+        so one sweep can never become the frame cost it exists to avoid."""
+        queued = 0
+        try:
+            tdn_paths = self._getTDNPaths()
+            roots = set(tdn_paths) | set(self._tdn_fingerprints.keys())
+            for path in sorted(roots)[:self._COARSE_SWEEP_CAP]:
+                if path in self._pending_checkpoint_roots:
+                    continue
+                comp = op(path)
+                if comp is None or not comp.valid:
+                    continue
+                if self._isTDNDirty(comp, tdn_paths=tdn_paths):
+                    self._pending_checkpoint_roots.add(path)
+                    queued += 1
+        except Exception:
+            pass
+        return queued
+
+    def FlushPendingCheckpoints(self) -> int:
+        """Write ALREADY-QUEUED checkpoints now, before risky code runs.
+
+        Same ordering argument as _preRiskyCheckpoint: a root queued by an
+        earlier tool sits unwritten for up to _AUTOSAVE_IDLE_SECONDS, and
+        execute_python can crash TD inside that window and take it with it.
+        This deliberately does NOT sweep for new dirt -- discovery is the
+        post-arm's job, debounced -- so in the steady state it is an
+        empty-set check costing nothing."""
+        written = 0
+        try:
+            if self._performMode or not self._autosaveEnabled():
+                return 0
+            if self.my.fetch('_suppress_dialogs', False, search=False):
+                return 0
+            for path in list(self._pending_checkpoint_roots):
+                if self.Checkpoint(path):
+                    self._pending_checkpoint_roots.discard(path)
+                    written += 1
+        except Exception:
+            pass
+        return written
+
     def _queueCheckpoint(self, comp_path: str) -> None:
         import time
         self._pending_checkpoint_roots.add(comp_path)
@@ -3979,7 +4222,7 @@ class EmbodyExt:
         if self.my.ext.Embody is not self or gen != self._autosave_gen:
             return
         self._autosave_armed = False
-        if not self._pending_checkpoint_roots:
+        if not self._pending_checkpoint_roots and not self._coarse_checkpoint_due:
             return
         if not self._autosaveEnabled() or self._performMode:
             self._setAutosaveStatus(
@@ -3995,6 +4238,14 @@ class EmbodyExt:
         if not self._autosavePerfOk():
             self._armAutosaveDrain()  # perf danger -- don't pile onto a hot frame
             return
+        # Coarse arm (execute_python): discover WHICH roots changed, now that we
+        # are settled and off a hot frame. Cleared before the sweep so a failure
+        # cannot re-sweep forever; a later touch simply re-arms.
+        if self._coarse_checkpoint_due:
+            self._coarse_checkpoint_due = False
+            self._queueDirtyTDNRoots()
+            if not self._pending_checkpoint_roots:
+                return   # nothing actually changed -- the common case
         try:
             root = self._pending_checkpoint_roots.pop()
         except KeyError:
@@ -4021,6 +4272,32 @@ class EmbodyExt:
             return fps >= self._AUTOSAVE_FPS_FLOOR_FRAC * target
         except Exception:
             return True
+
+    def _autosaveClock(self) -> str:
+        """The auto-save time, in the timezone the user reads in.
+
+        Honours the EXISTING Localtimestamps toggle (default on) rather
+        than inventing a second preference: the externalizations table
+        already converts its UTC stamps that way, and a readout that
+        says 14:53 while the table beside it says 07:53 is the same
+        value reported two ways. The tz abbreviation is shortened the
+        way list_callbacks does, because macOS returns full names like
+        'Pacific Daylight Time'.
+        """
+        try:
+            local = self.my.par.Localtimestamps.eval()
+        except Exception:
+            local = True
+        if not local:
+            return datetime.utcnow().strftime('%H:%M:%S') + ' UTC'
+        try:
+            now = datetime.now().astimezone()
+            abbr = now.strftime('%Z')
+            if len(abbr) > 5:
+                abbr = ''.join(word[0] for word in abbr.split())
+            return now.strftime('%H:%M:%S') + (' ' + abbr if abbr else '')
+        except Exception:
+            return datetime.utcnow().strftime('%H:%M:%S') + ' UTC'
 
     def _setAutosaveStatus(self, msg: str) -> None:
         """Set the read-only Autosavestatus readout (no-op if the param is absent)."""
@@ -4628,6 +4905,10 @@ class EmbodyExt:
             # remain the real record; Phase 4 puts the rows back.
             log_snapshot = self._scrubLogBuffers(target)
 
+            # Issue #86: this save writes the whole subtree, so Embot's
+            # annotation parts would ship in the portable .tox.
+            self._retireVizBeforeWrite(target.path)
+
             # Phase 3: Save the .tox.
             target.save(str(save_path))
             try:
@@ -4914,6 +5195,17 @@ class EmbodyExt:
             return self.ExportPortableTox(
                 target=target, save_path=save_path, run_hooks=True,
                 hook_mode='live')
+
+        # Issue #86: retire Embot BEFORE the snapshot. This branch never reaches
+        # the guard in ExportPortableTox's live path in time -- the copy below
+        # freezes whatever is standing in the live tree, and the recursive export
+        # then guards the CANDIDATE's path under /sys/quiet, which no live bot is
+        # ever inside. So without this, a release export run right after an agent
+        # build inside `target` (the case the relocation gate makes more likely,
+        # since queued-batch evidence deliberately commits him into a COMP where
+        # a batch is happening) ships nine envoy_bot_* annotateCOMPs in the
+        # released artifact.
+        self._retireVizBeforeWrite(target.path)
 
         try:
             candidate = quiet.copy(target)
@@ -5692,8 +5984,13 @@ class EmbodyExt:
         oper.par.externaltox.readOnly = True
         oper.par.enableexternaltox = True
         
-        # Save file
+        # Save file. Issue #86: this is the FIRST .tox for a newly tagged COMP,
+        # and it serializes the whole subtree exactly like Save() does. The
+        # canonical agent workflow reaches it with Embot inside -- create a
+        # container, build ops in it (queued-batch evidence commits him there),
+        # then externalize_op the container -> handleAddition -> here.
         save_path_str = str(save_file_path)
+        self._retireVizBeforeWrite(oper.path)
         try:
             oper.save(save_path_str)
         except Exception as e:
@@ -6807,7 +7104,11 @@ class EmbodyExt:
             # Remove old file (SAFELY - this file is tracked)
             self._removeOldFile(old_rel_file_path)
 
-            # Save to new location
+            # Save to new location. Issue #86: the rename re-save serializes the
+            # whole subtree too, and a rename is precisely the event that
+            # invalidates viz's own path bookkeeping -- so the retire's
+            # structural subtree sweep is what actually catches him here.
+            self._retireVizBeforeWrite(new_op.path)
             try:
                 new_op.save(str(save_file_path))
                 self.Log(f"Saved new file: {new_rel_file_path}", "SUCCESS")
@@ -8860,11 +9161,16 @@ class EmbodyExt:
         # SAVE's network; the network is freshly restored now, so drop them
         # and let the first sweep re-seed against the current live state.
         self.my.unstore('_tdn_fingerprints')
+        # This method OWNS the terminal state of the shared restore bar --
+        # RestoreTOXComps only accumulates into it -- so every return below
+        # closes it, including the ones that do no work at all.
         mode = self._tdnMode()
         if mode == 'off':
             self.Log('TDN mode=off -- skipping reconstruction', 'INFO')
+            self._finishStartupStep('restore')
             return
         if not self.my.par.Tdncreateonstart.eval():
+            self._finishStartupStep('restore')
             return
         if mode == 'export':
             # .toe is the source of truth for COMPs that EXIST in it, so we do
@@ -8875,18 +9181,27 @@ class EmbodyExt:
             # row is invisible. (Spike-verified 2026-06-27.)
             self.Log('TDN mode=export -- additive recovery only, existing '
                      'COMPs kept (no full reconstruction)', 'INFO')
-            self._recoverMissingTDNComps()
+            recovered = self._recoverMissingTDNComps()
+            if recovered:
+                self._publishStartupStep('restore', 'running', done=recovered,
+                                         total=recovered, add=True)
+            self._finishStartupStep('restore')
             return
         # mode == 'full' -- repopulate ALL TDN COMPs (loop below)
 
         tdn_comps = self._getTDNStrategyComps()
         if not tdn_comps:
+            self._finishStartupStep('restore')
             return
 
         self.Log(f'Reconstructing {len(tdn_comps)} TDN COMP(s)...', 'INFO')
         errors_total = 0
+        self._publishStartupStep('restore', 'running',
+                                 total=len(tdn_comps), add=True)
 
         for comp_path, rel_tdn_path in tdn_comps:
+            # Counted on entry -- see RestoreTOXComps for why.
+            self._publishStartupStep('restore', 'running', done=1, add=True)
             # Re-check per row: at enumeration time the stripped .toe may
             # not contain a legacy row's annotate yet, so the enumerator's
             # filter can miss it (unresolvable -> not filtered). Parents
@@ -8993,8 +9308,12 @@ class EmbodyExt:
 
         # Build report
         self._logReconstructionReport(tdn_comps, errors_total)
+        self._finishStartupStep(
+            'restore', failed=bool(errors_total),
+            detail=f'{errors_total} error(s) -- see log' if errors_total
+            else '')
 
-    def _recoverMissingTDNComps(self) -> None:
+    def _recoverMissingTDNComps(self) -> int:
         """Export-mode auto-save recovery: rebuild TDN COMPs that are tracked and
         have a .tdn on disk but are ABSENT from the just-opened .toe.
 
@@ -9006,10 +9325,15 @@ class EmbodyExt:
         _getTDNStrategyComps, which excludes Embody + ancestors/descendants), so an
         orphan .tdn with no row is invisible -- a deleted COMP is never
         resurrected. Spike-verified 2026-06-27 (children + connections round-trip).
+
+        Returns how many COMPs it rebuilt, so the caller can report real
+        counts on the startup viewer's restore bar. Export mode is a whole
+        startup path, and a path that reports nothing is a bar that never
+        moves.
         """
         tdn_comps = self._getTDNStrategyComps()
         if not tdn_comps:
-            return
+            return 0
         # Snapshot missing-at-start BEFORE any import, so a parent import that
         # creates a child shell mid-pass doesn't make us skip a child still
         # needing its own .tdn populated.
@@ -9021,7 +9345,7 @@ class EmbodyExt:
             if abs_path.is_file():
                 missing.append((comp_path, abs_path))
         if not missing:
-            return
+            return 0
         # Parent-before-child so an ancestor shell exists before its children.
         missing.sort(key=lambda m: m[0].count('/'))
         recovered = 0
@@ -9066,6 +9390,7 @@ class EmbodyExt:
         if recovered:
             self.Log(f'Auto-save recovery: rebuilt {recovered} unsaved COMP(s) '
                      f'from .tdn (crash-before-save)', 'SUCCESS')
+        return recovered
 
     def RecoverOrphanShells(self, auto: bool = False) -> dict:
         """Detect and restore TDN-tagged empty COMPs that lost their table row.
@@ -10372,7 +10697,18 @@ class EmbodyExt:
         restored = 0
         errors = 0
 
+        # The restore BAR is shared with ReconstructTDNComps: two methods,
+        # fifteen frames apart, answering one question ("how much of my
+        # project came back?"), so both accumulate into it and only the
+        # second one closes it. No terminal state here.
+        self._publishStartupStep('restore', 'running',
+                                 total=len(to_restore), add=True)
+
         for comp_path, rel_tox_path, comp_type in to_restore:
+            # Counted on entry rather than at each of the eight exits from
+            # this body; the close clamps done to total, so the only cost
+            # is the bar leading by one row while that row is in flight.
+            self._publishStartupStep('restore', 'running', done=1, add=True)
             # Check if it appeared (e.g. loaded as child of a parent .tox)
             if op(comp_path):
                 restored += 1

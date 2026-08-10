@@ -188,6 +188,40 @@ DEFAULT_NODE_SIZE = (200, 100)
 DEFAULT_COLOR = (0.545, 0.545, 0.545)
 COLOR_TOLERANCE = 0.01
 
+# Issue #86: Embot's LIVE parts are ephemeral annotateCOMPs named with this
+# prefix (envoy_viz._VIZ_BOT_PREFIX -- kept as a literal here so TDNExt takes no
+# dependency on the viz module DAT). They must never be captured by a .tdn
+# export, and both walks are what make that structural: the SYNC walk
+# (_exportChildren) and the ASYNC one (_collectAllPaths) each skip annotate ops
+# entirely, so every annotation reaches disk through _exportAnnotations and
+# nothing else -- which is where this filter lives. That covers SaveTDN, the
+# autosave checkpoint, ExportNetwork('/'), ExportNetworkAsync's project-wide
+# snapshot and the export_network MCP tool, including the one case botUnsafeNet
+# cannot see: a project-wide export from root that walks networks which are
+# individually safe to park in. (Until the async walk was fixed it collected
+# annotates as ordinary operators, so the project-wide snapshot -- the ONE
+# export that runs over networks Embot is free to stand in -- bypassed this
+# filter completely.)
+#
+# The carve-out is MANDATORY, not optional: the SHIPPED template
+# (Embody/embot_template) is a legitimate saved asset whose nine parts live in
+# Embody.tdn. Filtering it too would strip the asset from the file and force a
+# ~1s nine-annotateCOMP rebuild on every fresh open -- exactly what
+# envoy_viz.ensureTemplate exists to avoid.
+#
+# Cost: a USER annotation literally named envoy_bot_* outside the template is
+# omitted from .tdn export.
+#
+# SOURCE OF TRUTH: envoy_viz._VIZ_BOT_PREFIX and envoy_viz._VIZ_TEMPLATE_COMP.
+# These are mirrored literals, deliberately -- TDNExt must not import the viz
+# module DAT (Envoy is optional in a shipped Embody, and .tdn export must work
+# without it). Drift is SILENT: rename the prefix in envoy_viz and this filter
+# simply stops matching, so live bot parts start reaching .tdn again with no
+# error and no failing test. test_viz_bot_constants_match_the_tdn_exporter
+# asserts equality so the drift fails loudly instead.
+VIZ_BOT_ANNOTATION_PREFIX = 'envoy_bot_'
+VIZ_BOT_TEMPLATE_COMP = 'embot_template'
+
 # System/internal paths to exclude from export
 SYSTEM_PATHS = ('/local', '/sys', '/perform', '/ui')
 
@@ -2106,7 +2140,11 @@ class TDNExt:
 						child.destroy()
 					except Exception as e:
 						self._log(f'Failed to destroy {child.path}: {e}', 'WARNING')
-				# Also destroy utility operators (annotations) which .children skips
+				# Sweep annotations explicitly. NOT because .children skips them
+				# -- it does not, which is exactly why both export walks have to
+				# filter them out by hand -- but because the loop above skips
+				# anything in excluded_children, and a utility op that landed
+				# outside that set still has to go.
 				try:
 					for u_op in dest.findChildren(depth=1, includeUtility=True):
 						if u_op.type == 'annotate':
@@ -3491,8 +3529,21 @@ class TDNExt:
 		if not annotations:
 			return []
 
+		# Issue #86: the shipped Embot template keeps its parts; a LIVE bot
+		# standing anywhere else never reaches disk. See
+		# VIZ_BOT_ANNOTATION_PREFIX for why the carve-out is mandatory.
+		try:
+			is_bot_template = (parent_op.name == VIZ_BOT_TEMPLATE_COMP)
+		except Exception:
+			is_bot_template = False
+
 		result = []
+		omitted_bot = []
 		for ann in sorted(annotations, key=lambda a: a.name):
+			if not is_bot_template and \
+					ann.name.startswith(VIZ_BOT_ANNOTATION_PREFIX):
+				omitted_bot.append(ann.name)
+				continue
 			data = {'name': ann.name}
 
 			mode = ann.par.Mode.eval()
@@ -3536,6 +3587,23 @@ class TDNExt:
 				data['bodyFontSize'] = bodyFontSize
 
 			result.append(data)
+
+		# The filter above cannot tell a live Embot part from a USER annotation
+		# that happens to carry the reserved prefix, and for the second the
+		# omission is data loss. One aggregated line per COMP per export (nine
+		# parts of a live bot are one message, not nine), in the same voice as
+		# execute.py's save-time purge warning -- a filter that drops user
+		# content silently is indistinguishable from a bug.
+		if omitted_bot:
+			try:
+				self._log(
+					f'Omitted {len(omitted_bot)} annotation(s) named '
+					f'"{VIZ_BOT_ANNOTATION_PREFIX}*" from the .tdn export of '
+					f'{parent_op.path} ({", ".join(omitted_bot)}) -- that '
+					f'prefix is reserved for Embot\'s live parts. Rename them '
+					f'to keep them in the file.', 'WARNING')
+			except Exception:
+				pass
 
 		return result
 
@@ -5065,6 +5133,20 @@ class TDNExt:
 			# Skip system/internal paths (exact match or children)
 			if child.path in SYSTEM_PATHS or child.path.startswith(
 					_SYSTEM_PATH_PREFIXES):
+				continue
+			# Annotations are captured exclusively by the `annotations:` section
+			# (_onExportRefresh calls _exportAnnotations for the root and every
+			# collected COMP), exactly as the sync walk reasons in
+			# _exportChildren -- one seam per walk, so the policy is not
+			# duplicated into _exportSingleOp. Collecting them as ordinary
+			# operators double-captured each annotation as ~180 lines of default
+			# Opviewer*/Body* pars, and -- the reason this is a correctness bug
+			# and not just noise -- routed Embot's live parts AROUND the bot
+			# filter, which lives in _exportAnnotations (see
+			# VIZ_BOT_ANNOTATION_PREFIX). The shipped template's parts still
+			# export: its COMP is still collected, and the carve-out that keeps
+			# them is by parent name.
+			if child.type == 'annotate':
 				continue
 			# Skip excluded COMPs and their whole subtree -- invisible to TDN.
 			if self._hasExcludeTag(child):

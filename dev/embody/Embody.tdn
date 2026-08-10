@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1121
-generator: Embody/6.0.221
+build: 1134
+generator: Embody/6.0.230
 td_build: 099.2025.33070
-source_file: Embody-6.222.toe
-exported_at: '2026-08-08T00:24:10Z'
+source_file: Embody-6.230.toe
+exported_at: '2026-08-10T01:13:18Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -14,28 +14,17 @@ type_defaults:
     parameters:
       resizecomp: =me
       repocomp: =me
-  textDAT:
-    parameters:
-      language: python
   baseCOMP:
     size: [160, 130]
   parameterexecuteDAT:
     parameters:
       fromop: =parent()
-      op: ..
-      defaultreadencoding: cp1252
-  tableDAT:
-    parameters:
-      syncfile: true
-    size: [130, 90]
-    color: [0.9, 0.3, 0.4]
-    tags:
-    - tsv
   textCOMP:
     parameters:
       resizecomp: =me
       repocomp: =me
-      bgalpha: 1
+  tableDAT:
+    size: [130, 90]
   panelexecuteDAT:
     parameters:
       fromop: =parent()
@@ -391,12 +380,12 @@ custom_pars:
     label: Embot
     startSection: true
     default: true
-    help: Show the Embot builder mascot. He appears on each operator Envoy creates or edits and narrates what it does. Off hides him entirely (no character, no camera movement).
+    help: Show the Embot builder mascot. He appears on each operator Envoy creates or edits and narrates what it does. He settles where the work is rather than chasing it -- when the agent is hopping between networks he stays put and keeps narrating from where he stands, and he moves once the work has actually settled somewhere new. With Envoy Follow off he only ever appears in the network you are already viewing (building him into one you cannot see costs real time for nothing). Off hides him entirely (no character, no camera movement).
   - name: Envoyfollow
     style: Toggle
     label: Envoy Follow
     default: true
-    help: Camera follows the operator Envoy is working on, panning the network editor to it. Works with or without the Embot character shown.
+    help: Camera follows the operator Envoy is working on, panning the network editor to it. Works with or without the Embot character shown. With Embot on, the camera settles with him rather than cutting to every network the work merely passes through; with Embot off it follows every hop as before.
   - name: Autoexternalize
     style: Menu
     label: Auto-Externalize New Ops
@@ -821,7 +810,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.221
+    value: 6.0.230
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -865,6 +854,7 @@ custom_pars:
     - Check and Notify
     - Check and Install
     help: 'Startup self-update behavior. Off: never checks (nothing leaves your machine). Check and Notify: checks GitHub once at startup and shows availability in Update Status without installing. Check and Install: installs a verified newer release automatically at startup -- a check that can''t complete is logged quietly, but any failure during the install itself always raises a dialog. Persisted setting -- survives the update it triggers. See the Auto-Update docs page.'
+    value: notify
   - name: Checkforupdate
     style: Pulse
     label: Check for Update
@@ -887,7 +877,8 @@ parameters:
   justifyv: top
   parentshortcut: Embody
   opshortcut: Embody
-  opviewer: ./text_bg
+  nodeview: opviewer
+  opviewer: ./viz_status
   reloadbuiltin: false
 sequences:
   ext:
@@ -910,8 +901,12 @@ sequences:
   - {}
   - {}
   - {}
+  Convoynodes:
+  - {}
+  - {}
 flags:
 - display
+- viewer
 color: [0.3, 0.5, 0.9]
 tags:
 - tdn
@@ -986,6 +981,7 @@ operators:
   parameters:
     file: embody/Embody/TDNExt.py
     syncfile: true
+    language: python
   position: [-700, 600]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1118,8 +1114,10 @@ operators:
 - name: parexec
   type: parameterexecuteDAT
   parameters:
+    op: ..
     pars: '*'
     file: embody/Embody/parexec.py
+    defaultreadencoding: cp1252
     syncfile: true
     language: input
   position: [-275, 300]
@@ -1187,12 +1185,13 @@ operators:
   parameters:
     file: embody/Embody/EnvoyExt.py
     syncfile: true
+    language: python
   position: [-700, 700]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
-  - TDExtension
   - py
+  - TDExtension
 - name: mousein1
   type: mouseinCHOP
   parameters:
@@ -1208,6 +1207,7 @@ operators:
     file: embody/Embody/EmbodyExt.py
     defaultreadencoding: cp1252
     syncfile: true
+    language: python
     extension: py
   position: [-700, 800]
   size: [130, 90]
@@ -1219,6 +1219,7 @@ operators:
   parameters:
     file: embody/Embody/envoy_ops.py
     syncfile: true
+    language: python
   position: [-500, 400]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1229,6 +1230,7 @@ operators:
   parameters:
     file: embody/Embody/envoy_viz.py
     syncfile: true
+    language: python
   position: [-500, 600]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1239,6 +1241,7 @@ operators:
   parameters:
     file: embody/Embody/shortcuts.py
     syncfile: true
+    language: python
   position: [-500, -375]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1268,6 +1271,7 @@ operators:
   parameters:
     file: embody/Embody/embody_git.py
     syncfile: true
+    language: python
   position: [-700, 100]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1278,16 +1282,279 @@ operators:
   parameters:
     file: embody/Embody/envoy_read.py
     syncfile: true
+    language: python
   position: [-500, 800]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
   - py
+- name: viz_status
+  type: containerCOMP
+  parameters:
+    w: =min(2000, max(300, op.Embody.nodeWidth * 3))
+    h: =int(me.par.w * op.Embody.nodeHeight / op.Embody.nodeWidth)
+    bgcolorr: =parent.Embody.par.Backgroundcolorr
+    bgcolorg: =parent.Embody.par.Backgroundcolorg
+    bgcolorb: =parent.Embody.par.Backgroundcolorb
+    bgalpha: 1
+    align: verttb
+    marginb: =int(me.par.w * 0.03)
+    margint: =int(me.par.w * 0.03)
+    justifyh: center
+    justifyv: center
+  position: [1200, 475]
+  size: [160, 130]
+  color: [0.67, 0.67, 0.67]
+  children:
+  - name: rowbox_0
+    type: containerCOMP
+    parameters:
+      h: =float(parent().op('status_table')['rowh','value'].val or 0)
+      hmode: fill
+      display: =int(parent().op('status_table')['row0','show'].val or 0)
+      align: horizlr
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    children:
+    - name: cell_0
+      type: textCOMP
+      parameters:
+        text: =parent().parent().op('status_table')['r0c0','value'].val
+        font: Consolas
+        fontsize: =float(parent().parent().op('status_table')['font','value'].val or 10)
+        fontcolorr: =float(parent().parent().op('status_table')['r0c0','r'].val or 0)
+        fontcolorg: =float(parent().parent().op('status_table')['r0c0','g'].val or 0)
+        fontcolorb: =float(parent().parent().op('status_table')['r0c0','b'].val or 0)
+        textpaddingl: =float(parent().parent().op('status_table')['pad','value'].val or 0)
+        alignx: left
+        w: =float(parent().parent().op('status_table')['col0w','value'].val or 100)
+        vmode: fill
+        display: =int(parent().parent().op('status_table')['r0c0','show'].val or 0)
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: cell_1
+      type: textCOMP
+      parameters:
+        text: =parent().parent().op('status_table')['r0c1','value'].val
+        font: Consolas
+        fontsize: =float(parent().parent().op('status_table')['font','value'].val or 10)
+        fontcolorr: =float(parent().parent().op('status_table')['r0c1','r'].val or 0)
+        fontcolorg: =float(parent().parent().op('status_table')['r0c1','g'].val or 0)
+        fontcolorb: =float(parent().parent().op('status_table')['r0c1','b'].val or 0)
+        textpaddingl: =int(parent().parent().par.w * 0.03) if 1 == 0 else 0
+        alignx: left
+        hmode: fill
+        vmode: fill
+        alignorder: 1
+        display: =int(parent().parent().op('status_table')['r0c1','show'].val or 0)
+      position: [260, 0]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+  - name: rowbox_1
+    type: containerCOMP
+    parameters:
+      h: =float(parent().op('status_table')['rowh','value'].val or 0)
+      hmode: fill
+      alignorder: 1
+      display: =int(parent().op('status_table')['row1','show'].val or 0)
+      align: horizlr
+    position: [0, -260]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    children:
+    - name: cell_0
+      type: textCOMP
+      parameters:
+        text: =parent().parent().op('status_table')['r1c0','value'].val
+        font: Consolas
+        fontsize: =float(parent().parent().op('status_table')['font','value'].val or 10)
+        fontcolorr: =float(parent().parent().op('status_table')['r1c0','r'].val or 0)
+        fontcolorg: =float(parent().parent().op('status_table')['r1c0','g'].val or 0)
+        fontcolorb: =float(parent().parent().op('status_table')['r1c0','b'].val or 0)
+        textpaddingl: =float(parent().parent().op('status_table')['pad','value'].val or 0)
+        alignx: left
+        w: =float(parent().parent().op('status_table')['col0w','value'].val or 100)
+        vmode: fill
+        display: =int(parent().parent().op('status_table')['r1c0','show'].val or 0)
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: cell_1
+      type: textCOMP
+      parameters:
+        text: =parent().parent().op('status_table')['r1c1','value'].val
+        font: Consolas
+        fontsize: =float(parent().parent().op('status_table')['font','value'].val or 10)
+        fontcolorr: =float(parent().parent().op('status_table')['r1c1','r'].val or 0)
+        fontcolorg: =float(parent().parent().op('status_table')['r1c1','g'].val or 0)
+        fontcolorb: =float(parent().parent().op('status_table')['r1c1','b'].val or 0)
+        textpaddingl: =int(parent().parent().par.w * 0.03) if 1 == 0 else 0
+        alignx: left
+        hmode: fill
+        vmode: fill
+        alignorder: 1
+        display: =int(parent().parent().op('status_table')['r1c1','show'].val or 0)
+      position: [260, 0]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+  - name: rowbox_2
+    type: containerCOMP
+    parameters:
+      h: =float(parent().op('status_table')['rowh','value'].val or 0)
+      hmode: fill
+      alignorder: 2
+      display: =int(parent().op('status_table')['row2','show'].val or 0)
+      align: horizlr
+    position: [0, -520]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    children:
+    - name: cell_0
+      type: textCOMP
+      parameters:
+        text: =parent().parent().op('status_table')['r2c0','value'].val
+        font: Consolas
+        fontsize: =float(parent().parent().op('status_table')['font','value'].val or 10)
+        fontcolorr: =float(parent().parent().op('status_table')['r2c0','r'].val or 0)
+        fontcolorg: =float(parent().parent().op('status_table')['r2c0','g'].val or 0)
+        fontcolorb: =float(parent().parent().op('status_table')['r2c0','b'].val or 0)
+        textpaddingl: =float(parent().parent().op('status_table')['pad','value'].val or 0)
+        alignx: left
+        w: =float(parent().parent().op('status_table')['col0w','value'].val or 100)
+        vmode: fill
+        display: =int(parent().parent().op('status_table')['r2c0','show'].val or 0)
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: cell_1
+      type: textCOMP
+      parameters:
+        text: =parent().parent().op('status_table')['r2c1','value'].val
+        font: Consolas
+        fontsize: =float(parent().parent().op('status_table')['font','value'].val or 10)
+        fontcolorr: =float(parent().parent().op('status_table')['r2c1','r'].val or 0)
+        fontcolorg: =float(parent().parent().op('status_table')['r2c1','g'].val or 0)
+        fontcolorb: =float(parent().parent().op('status_table')['r2c1','b'].val or 0)
+        textpaddingl: =int(parent().parent().par.w * 0.03) if 1 == 0 else 0
+        alignx: left
+        hmode: fill
+        vmode: fill
+        alignorder: 1
+        display: =int(parent().parent().op('status_table')['r2c1','show'].val or 0)
+      position: [260, 0]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+  - name: rowbox_3
+    type: containerCOMP
+    parameters:
+      h: =float(parent().op('status_table')['rowh','value'].val or 0)
+      hmode: fill
+      alignorder: 3
+      display: =int(parent().op('status_table')['row3','show'].val or 0)
+      align: horizlr
+    position: [0, -780]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    children:
+    - name: cell_0
+      type: textCOMP
+      parameters:
+        text: =parent().parent().op('status_table')['r3c0','value'].val
+        font: Consolas
+        fontsize: =float(parent().parent().op('status_table')['font','value'].val or 10)
+        fontcolorr: =float(parent().parent().op('status_table')['r3c0','r'].val or 0)
+        fontcolorg: =float(parent().parent().op('status_table')['r3c0','g'].val or 0)
+        fontcolorb: =float(parent().parent().op('status_table')['r3c0','b'].val or 0)
+        textpaddingl: =float(parent().parent().op('status_table')['pad','value'].val or 0)
+        alignx: left
+        w: =float(parent().parent().op('status_table')['col0w','value'].val or 100)
+        vmode: fill
+        display: =int(parent().parent().op('status_table')['r3c0','show'].val or 0)
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: cell_1
+      type: textCOMP
+      parameters:
+        text: =parent().parent().op('status_table')['r3c1','value'].val
+        font: Consolas
+        fontsize: =float(parent().parent().op('status_table')['font','value'].val or 10)
+        fontcolorr: =float(parent().parent().op('status_table')['r3c1','r'].val or 0)
+        fontcolorg: =float(parent().parent().op('status_table')['r3c1','g'].val or 0)
+        fontcolorb: =float(parent().parent().op('status_table')['r3c1','b'].val or 0)
+        alignx: left
+        hmode: fill
+        vmode: fill
+        alignorder: 1
+        display: =int(parent().parent().op('status_table')['r3c1','show'].val or 0)
+      position: [260, 0]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+  - name: rowbox_4
+    type: containerCOMP
+    parameters:
+      h: =float(parent().op('status_table')['rowh','value'].val or 0)
+      hmode: fill
+      alignorder: 4
+      display: =int(parent().op('status_table')['row4','show'].val or 0)
+      align: horizlr
+    position: [0, -1040]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    children:
+    - name: cell_0
+      type: textCOMP
+      parameters:
+        text: =parent().parent().op('status_table')['r4c0','value'].val
+        font: Consolas
+        fontsize: =float(parent().parent().op('status_table')['font','value'].val or 10)
+        fontcolorr: =float(parent().parent().op('status_table')['r4c0','r'].val or 0)
+        fontcolorg: =float(parent().parent().op('status_table')['r4c0','g'].val or 0)
+        fontcolorb: =float(parent().parent().op('status_table')['r4c0','b'].val or 0)
+        textpaddingl: =float(parent().parent().op('status_table')['pad','value'].val or 0)
+        alignx: left
+        w: =float(parent().parent().op('status_table')['col0w','value'].val or 100)
+        vmode: fill
+        display: =int(parent().parent().op('status_table')['r4c0','show'].val or 0)
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: cell_1
+      type: textCOMP
+      parameters:
+        text: =parent().parent().op('status_table')['r4c1','value'].val
+        font: Consolas
+        fontsize: =float(parent().parent().op('status_table')['font','value'].val or 10)
+        fontcolorr: =float(parent().parent().op('status_table')['r4c1','r'].val or 0)
+        fontcolorg: =float(parent().parent().op('status_table')['r4c1','g'].val or 0)
+        fontcolorb: =float(parent().parent().op('status_table')['r4c1','b'].val or 0)
+        alignx: left
+        hmode: fill
+        vmode: fill
+        alignorder: 1
+        display: =int(parent().parent().op('status_table')['r4c1','show'].val or 0)
+      position: [260, 0]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+  - name: status_table
+    type: tableDAT
+    position: [300, 0]
+    color: [0.67, 0.67, 0.67]
+  - name: parexec_status
+    type: parameterexecuteDAT
+    parameters:
+      op: ../..
+      pars: Status Autosavestatus Envoystatus Convoystatus Version Updatestatus Autoupdate
+    position: [600, 0]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  - name: status_publish
+    type: textDAT
+    position: [450, 0]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
 - name: envoy_setup
   type: textDAT
   parameters:
     file: embody/Embody/envoy_setup.py
     syncfile: true
+    language: python
   position: [-500, 700]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1306,6 +1573,7 @@ operators:
   parameters:
     file: embody/Embody/embody_admin.py
     syncfile: true
+    language: python
   position: [-700, 300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1316,6 +1584,7 @@ operators:
   parameters:
     file: embody/Embody/envoy_layout.py
     syncfile: true
+    language: python
   position: [-500, 500]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1363,6 +1632,7 @@ operators:
   parameters:
     file: embody/Embody/embody_launch.py
     syncfile: true
+    language: python
   position: [-700, 200]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1411,48 +1681,39 @@ operators:
   annotations:
   - name: envoy_bot_arm_l
     mode: networkbox
-    position: [1860, 251]
     size: [10, 26]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_arm_r
     mode: networkbox
-    position: [1860, 251]
     size: [10, 26]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_body
     mode: networkbox
-    position: [1860, 251]
     size: [30, 34]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_eye_l
     mode: networkbox
-    position: [1860, 251]
     size: [10, 10]
     color: [0.0, 0.0, 0.0]
   - name: envoy_bot_eye_r
     mode: networkbox
-    position: [1860, 251]
     size: [10, 10]
     color: [0.0, 0.0, 0.0]
   - name: envoy_bot_head
     mode: networkbox
-    position: [1860, 251]
     size: [34, 26]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_leg_l
     mode: networkbox
-    position: [1860, 251]
     size: [11, 24]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_leg_r
     mode: networkbox
-    position: [1860, 251]
     size: [11, 24]
     color: [0.05, 0.544, 1.0]
   - name: envoy_bot_speech
     mode: annotate
     title: Embot
-    position: [1860, 251]
     size: [185, 74]
     color: [0.12, 0.12, 0.17]
     backAlpha: 0.95
@@ -1481,6 +1742,7 @@ operators:
   parameters:
     file: embody/Embody/fifo1_callbacks.py
     syncfile: true
+    language: python
   position: [-275, 100]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1491,24 +1753,41 @@ operators:
   type: tableDAT
   parameters:
     file: embody/Embody/palette_catalog.tsv
+    syncfile: true
     rows: 1054
   position: [-500, 100]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - tsv
 - name: timer_callbacks
   type: textDAT
   parameters:
     file: embody/Embody/timer_callbacks.py
     syncfile: true
+    language: python
   position: [-700, -375]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
   - py
   dock: timer1
+- name: startup_progress
+  type: textDAT
+  parameters:
+    file: embody/Embody/startup_progress.py
+    syncfile: true
+    language: python
+  position: [-700, 400]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
 - name: CatalogManagerExt
   type: textDAT
   parameters:
     file: embody/Embody/CatalogManagerExt.py
     syncfile: true
+    language: python
   position: [-700, 500]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1518,8 +1797,12 @@ operators:
   type: tableDAT
   parameters:
     file: embody/Embody/divergent_defaults.tsv
+    syncfile: true
     rows: 502
   position: [-500, 200]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - tsv
 - name: tdn_export_progress
   type: baseCOMP
   position: [1000, 475]
@@ -1567,6 +1850,7 @@ operators:
         bgcolorr: 0.11
         bgcolorg: 0.12
         bgcolorb: 0.115
+        bgalpha: 1
       position: [200, 0]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1612,6 +1896,7 @@ operators:
         bgcolorr: 0.11
         bgcolorg: 0.12
         bgcolorb: 0.115
+        bgalpha: 1
       position: [200, -200]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1677,6 +1962,7 @@ operators:
           bgcolorr: 0.16
           bgcolorg: 0.17
           bgcolorb: 0.165
+          bgalpha: 1
           borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
           borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
           borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
@@ -1692,8 +1978,10 @@ operators:
       - name: parexec1
         type: parameterexecuteDAT
         parameters:
+          op: ..
           pars: value0
           onpulse: false
+          defaultreadencoding: cp1252
           loadonstart: true
         flags:
         - viewer
@@ -1714,6 +2002,8 @@ operators:
         size: [126, 62]
     - name: title_callbacks
       type: textDAT
+      parameters:
+        language: python
       flags:
       - viewer
       position: [200, -160]
@@ -1722,6 +2012,8 @@ operators:
       dock: title
     - name: status_callbacks
       type: textDAT
+      parameters:
+        language: python
       flags:
       - viewer
       position: [200, -360]
@@ -1773,6 +2065,7 @@ operators:
   parameters:
     file: embody/Embody/keyboardin_callbacks.py
     syncfile: true
+    language: python
   position: [-300, -375]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]

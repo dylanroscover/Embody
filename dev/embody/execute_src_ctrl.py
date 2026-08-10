@@ -206,8 +206,13 @@ def writeReleaseManifest(comp, tox_path, version, build):
         }
         manifest_path = Path(tox_path).parent / 'embody-release.json'
         tmp = Path(str(manifest_path) + '.tmp')
-        tmp.write_text(json.dumps(manifest, indent=1) + '\n',
-                       encoding='utf-8')
+        # newline='' pins LF. Path.write_text goes through text mode, which on
+        # Windows translates every \n to \r\n -- the manifest is fetched and
+        # hashed as bytes by the updater, and .gitattributes normalization
+        # hides the CRLF locally, so the drift is invisible right up until it
+        # matters. (Same class the v6.0.168 fix closed for the other manifests.)
+        with open(str(tmp), 'w', encoding='utf-8', newline='') as handle:
+            handle.write(json.dumps(manifest, indent=1) + '\n')
         import os
         os.replace(str(tmp), str(manifest_path))
     except Exception as e:
@@ -215,7 +220,14 @@ def writeReleaseManifest(comp, tox_path, version, build):
         # manifest-less releases loudly on its own.
         debug(f'[execute_src_ctrl] release manifest write failed: {e!r}')
 
-def syncVersionIntoTDN():
+# How many 5-frame waits the sync will spend on a TDN restore that has not
+# finished before it gives up and says so. ~2.5s at 60fps: longer than any
+# observed strip/restore, short enough that a stuck flag is reported inside
+# the same save the user is watching.
+_SYNC_MAX_WAITS = 30
+
+
+def syncVersionIntoTDN(attempt=0):
     """Re-export the .tdn rows that carry par.Version, AFTER the bump.
 
     THE LAG THIS REMOVES. A single project.save fires onProjectPreSave on
@@ -245,14 +257,24 @@ def syncVersionIntoTDN():
         # The strip/restore cycle may still be putting COMPs back; a row
         # exported mid-restore would capture a hollow network.
         if embody.fetch('_tdn_stripped_paths', [], search=False):
-            run("op('/embody/execute_src_ctrl').module.syncVersionIntoTDN()",
-                delayFrames=5)
+            # BOUNDED. A flag left set by an interrupted restore would other-
+            # wise re-run this every 5 frames for the rest of the session, and
+            # silently: the sync that never happens is exactly the lag this
+            # exists to stop, so give up loudly instead.
+            if attempt >= _SYNC_MAX_WAITS:
+                op.Embody.Warn(
+                    'Version sync into .tdn gave up after %d waits: the TDN '
+                    'restore flag is still set, so the .tdn files may lag the '
+                    '.toe by one version. A manual save will re-run it.'
+                    % _SYNC_MAX_WAITS)
+                return
+            run('me.module.syncVersionIntoTDN(attempt=%d)' % (attempt + 1),
+                fromOP=me, delayFrames=5)
             return
         version = str(embody.par.Version.eval() or '')
         if not version:
             return
-        ext = embody.ext.Embody
-        table = ext.Externalizations
+        table = embody.ext.Embody.Externalizations
         if table is None:
             return
         headers = [table[0, c].val for c in range(table.numCols)]
@@ -276,18 +298,23 @@ def syncVersionIntoTDN():
                 continue
             try:
                 rel = str(table[r, headers.index('rel_file_path')].val or '')
-                abs_path = ext.buildAbsolutePath(rel) if rel else None
+                abs_path = (embody.ext.Embody.buildAbsolutePath(rel)
+                            if rel else None)
                 if abs_path and abs_path.is_file():
                     with open(str(abs_path), 'r', encoding='utf-8') as handle:
-                        head = ''.join(handle.readline() for _ in range(12))
-                    if marker in head:
+                        head = [handle.readline() for _ in range(12)]
+                    # LINE-EXACT, not `marker in head`: a substring test makes
+                    # every version that is a strict PREFIX of the stamped one
+                    # look current (6.0.22 against a file stamped 6.0.228), so
+                    # the skip fires on the one release where the lag matters.
+                    if any(line.strip() == marker for line in head):
                         continue        # already current -- idempotent
             except Exception:
                 pass                    # unreadable: re-export rather than skip
             # bump_build=False: the release manifest already recorded
             # par.Build, so a second bump would put the manifest one
             # behind the .tdn -- the same drift, one size smaller.
-            ext.SaveTDN(row_path, bump_build=False)
+            embody.ext.Embody.SaveTDN(row_path, bump_build=False)
     except Exception as e:
         debug(f'[execute_src_ctrl] version sync into .tdn failed: {e!r}')
 
@@ -297,7 +324,6 @@ def onProjectPostSave():
     # already on disk, and Embody's own post-save restore loop may still
     # be running whichever Execute DAT fired first.
     try:
-        run("op('/embody/execute_src_ctrl').module.syncVersionIntoTDN()",
-            delayFrames=5)
+        run('me.module.syncVersionIntoTDN()', fromOP=me, delayFrames=5)
     except Exception as e:
         debug(f'[execute_src_ctrl] could not schedule the version sync: {e!r}')

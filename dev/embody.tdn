@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1006
-generator: Embody/6.0.221
+build: 1015
+generator: Embody/6.0.230
 td_build: 099.2025.33070
-source_file: Embody-6.222.toe
-exported_at: '2026-08-08T00:24:10Z'
+source_file: Embody-6.230.toe
+exported_at: '2026-08-10T01:13:18Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -43,7 +43,8 @@ operators:
     justifyv: top
     parentshortcut: Embody
     opshortcut: Embody
-    opviewer: ./text_bg
+    nodeview: opviewer
+    opviewer: ./viz_status
     reloadbuiltin: false
   sequences:
     ext:
@@ -64,6 +65,9 @@ operators:
     - {}
     - {}
     - {}
+    - {}
+    - {}
+    Convoynodes:
     - {}
     - {}
   custom_pars:
@@ -417,12 +421,12 @@ operators:
       label: Embot
       startSection: true
       default: true
-      help: Show the Embot builder mascot. He appears on each operator Envoy creates or edits and narrates what it does. Off hides him entirely (no character, no camera movement).
+      help: Show the Embot builder mascot. He appears on each operator Envoy creates or edits and narrates what it does. He settles where the work is rather than chasing it -- when the agent is hopping between networks he stays put and keeps narrating from where he stands, and he moves once the work has actually settled somewhere new. With Envoy Follow off he only ever appears in the network you are already viewing (building him into one you cannot see costs real time for nothing). Off hides him entirely (no character, no camera movement).
     - name: Envoyfollow
       style: Toggle
       label: Envoy Follow
       default: true
-      help: Camera follows the operator Envoy is working on, panning the network editor to it. Works with or without the Embot character shown.
+      help: Camera follows the operator Envoy is working on, panning the network editor to it. Works with or without the Embot character shown. With Embot on, the camera settles with him rather than cutting to every network the work merely passes through; with Embot off it follows every hop as before.
     - name: Autoexternalize
       style: Menu
       label: Auto-Externalize New Ops
@@ -847,7 +851,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.221
+      value: 6.0.230
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -891,6 +895,7 @@ operators:
       - Check and Notify
       - Check and Install
       help: 'Startup self-update behavior. Off: never checks (nothing leaves your machine). Check and Notify: checks GitHub once at startup and shows availability in Update Status without installing. Check and Install: installs a verified newer release automatically at startup -- a check that can''t complete is logged quietly, but any failure during the install itself always raises a dialog. Persisted setting -- survives the update it triggers. See the Auto-Update docs page.'
+      value: notify
     - name: Checkforupdate
       style: Pulse
       label: Check for Update
@@ -904,6 +909,7 @@ operators:
       value: Disabled
   flags:
   - display
+  - viewer
   size: [160, 98]
   color: [0.3, 0.5, 0.9]
   tags:
@@ -931,6 +937,7 @@ operators:
   parameters:
     fromop: =parent()
     projectpresave: true
+    projectpostsave: true
     file: embody/execute_src_ctrl.py
     syncfile: true
   flags:
@@ -945,7 +952,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 300
+    rows: 301
     cols: 11
   flags:
   - viewer
