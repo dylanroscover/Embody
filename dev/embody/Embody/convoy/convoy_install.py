@@ -1350,7 +1350,7 @@ def classify_probe_failure(text):
         return "runtime_crypto_broken"
     if "No module named 'cryptography'" in text:
         return "runtime_missing_cryptography"
-    if _is_spawn_failure(text):
+    if is_spawn_failure(text):
         # THE INTERPRETER IS NOT THE PROBLEM: this process could not spawn
         # ANY child. A TouchDesigner launched by the Envoy bridge inherits
         # a NUL stdin, and every subprocess it attempts then dies with
@@ -1375,8 +1375,13 @@ _SPAWN_FAILURE_MARKERS = (
 )
 
 
-def _is_spawn_failure(text):
-    """True when the probe never reached Python at all."""
+def is_spawn_failure(text):
+    """True when the call never reached Python at all.
+
+    PUBLIC because ConvoyExt asks it too: every host action spawns a
+    process, so start/stop/uninstall need the same "this is the session,
+    not your setup" answer the install probe gives.
+    """
     text = str(text or "")
     return any(marker in text for marker in _SPAWN_FAILURE_MARKERS)
 

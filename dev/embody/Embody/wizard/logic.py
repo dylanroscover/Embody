@@ -125,6 +125,65 @@ def _saveProjectNow():
 	try: op.Convoy.ext.ConvoyExt._ensureNodeName()
 	except Exception: pass
 	return _projectSaved()
+# How long the release gate waits before opening the dialog anyway. A
+# CEILING, not the mechanism -- see _afterRelease.
+_RELEASE_WAIT_FRAMES=120
+def _pressed(o):
+	"""True while `o` is under a held left mouse button.
+
+	`lselect` is TouchDesigner's documented panel value for "left mouse
+	button is pressed" (docs.derivative.ca/PanelValue_Class). Fails to
+	False: a question we cannot answer must not be able to withhold the
+	dialog forever."""
+	try: return bool(o) and bool(o.panel.lselect)
+	except Exception: return False
+def _afterRelease(button, fn, waited=0):
+	"""Run fn() once `button` is no longer held. Bounded.
+
+	NEVER OPEN A MODAL FROM INSIDE THE CLICK CALLBACK. The OS dialog takes
+	the input, so TouchDesigner never delivers the mouse-UP that ends the
+	click: the panel is left mid-press, and the user's NEXT click merely
+	completes that phantom press instead of registering on the button under
+	the cursor. That is the two-clicks-to-continue bug -- the first Next
+	after choosing the folder did nothing while looking perfectly enabled.
+
+	WAITING ON THE RELEASE IS THE POINT, AND A FRAME COUNT IS NOT IT. A
+	fixed deferral is a guess about how long a human holds a button: two
+	frames is ~33 ms at 60 fps against a press that normally lasts 80-150
+	ms, so the dialog opened with the button still down and the bug
+	survived its own fix. _RELEASE_WAIT_FRAMES is only the ceiling, so a
+	button that never reports a release (no panel, a fake COMP) still gets
+	its dialog rather than never getting one."""
+	if _pressed(button) and waited<_RELEASE_WAIT_FRAMES:
+		run('args[0](args[1], args[2], args[3])', _afterRelease,
+			button, fn, waited+1, delayFrames=1)
+		return
+	fn()
+def _saveStepDeferred():
+	"""The save step's dialog, run off the click edge -- see _afterRelease."""
+	w=_w()
+	try:
+		if not w or w.fetch('step_id','')!='save':
+			# The wizard closed, or moved on, while we waited for the
+			# release. render() past that point writes the step label,
+			# title, hint and button colours back over the _resetUI() that
+			# has already run -- and those are ordinary parameters that
+			# Embody's own .tdn export captures and ships in the release
+			# .tox (see _resetUI).
+			return
+		done=_saveProjectNow()
+		try:
+			b=_grp('save').op('opt_savenow') if _grp('save') else None
+			if b: b.par.value0 = 1 if done else 0
+		except Exception: pass
+		render()
+	finally:
+		# Cleared on EVERY path, including the cancel: leaving it set
+		# would make the save card dead for the rest of the session.
+		try:
+			if w: w.unstore('save_pending')
+		except Exception: pass
+
 def _hintHeight(text):
 	"""Panel height that FITS the hint, so every page's option group
 	starts the same gap below the description. The old hardcoded 16/60
@@ -178,15 +237,35 @@ def click(name):
 			if cur=='save' and not _projectSaved(): return
 			if cur!='save' and d.get('g') and cur!='summary' and _chosen(cur) is None: return
 			idx=sp.index(cur) if cur in sp else 0
-			if cur=='summary': finish()
+			# finish() can open ui.chooseFolder (the custom-root footprint
+			# choice), which is a modal from inside the click callback --
+			# exactly what the save card had to stop doing.
+			nb=_nav('next')
+			if cur=='summary':
+				# Same one-dialog-per-click guard the save card has, for
+				# the same reason: a click queued while chooseFolder is up
+				# is delivered after dismissal, the wizard's step is still
+				# 'summary', and a second finish() schedules a second
+				# _applyWizardSetup. Never cleared here -- finish() closes
+				# the wizard, and start() clears it on the next open.
+				if w.fetch('finish_pending',False): return
+				w.store('finish_pending',True)
+				_afterRelease(nb, finish)
 			elif idx<len(sp)-1: w.store('step_id', sp[idx+1]); render()
 		return
 	d=DEFS[cur]; g=_grp(cur)
 	if cur=='save' and name=='opt_savenow':
-		done=_saveProjectNow()
-		b=g.op('opt_savenow') if g else None
-		if b: b.par.value0 = 1 if done else 0
-		render(); return
+		# The dialog opens on the mouse-UP -- see _afterRelease for why a
+		# frame deferral is not good enough. ONE dialog per click: a
+		# repeat press while the first is up is queued by TouchDesigner
+		# and delivered after dismissal, and without this flag it
+		# scheduled a second dialog that reopened the one the user had
+		# just cancelled (the same symptom clicks.py closes off for the
+		# release edge).
+		if w.fetch('save_pending',False): return
+		w.store('save_pending',True)
+		_afterRelease(g.op('opt_savenow') if g else None, _saveStepDeferred)
+		return
 	if g:
 		for c in g.children:
 			if c.family=='COMP' and hasattr(c.par,'value0'): c.par.value0 = 1 if c.name==name else 0
@@ -250,6 +329,11 @@ def finish():
 	run('op.Embody.ext.Embody._applyWizardSetup(mode=%r, assistant=%r, client=%r, root=%r, custom_root=%r, permissions=%r, git=%r, externalize=%r, convoy=%r)'%(m,a,c,r,cr,pm,g,x,cv), delayFrames=2)
 def start():
 	w=_w()
+	# A wizard closed mid-dialog would otherwise reopen with its save
+	# card (or its Set up Embody button) permanently refusing to fire.
+	for _flag in ('save_pending','finish_pending'):
+		try: w.unstore(_flag)
+		except Exception: pass
 	w.store('needs_save', not _projectSaved())
 	w.store('step_id','save' if w.fetch('needs_save',False) else 'mode')
 	for gid in GROUPS:

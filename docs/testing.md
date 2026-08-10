@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **122 test suites** and **3,766 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **122 test suites** and **3,732 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -39,11 +39,11 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 
 ## Test Coverage
 
-### Core Embody (36 suites, 752 tests)
+### Core Embody (36 suites, 701 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_startup_progress` | 165 | The status readout's signals: step states, the one real denominator, the elapsed clock a wedged step must show, the published record the panel draws from, and the rows `viz_status` renders (including the predicate that decides whether the panel may re-arm a tick at all). Pure module, so it also runs under plain pytest on the CI matrix |
+| `test_startup_progress` | 114 | The status readout's signals: the state each subsystem's status string maps to (including the idle states that used to read as work in progress), the age an auto-save stamp becomes, the elapsed clock a wedged step must show, and the rows `viz_status` renders -- including the predicate that decides whether the panel may re-arm a tick at all, and the mutation guard over the removed publish machinery. Pure module, so it also runs under plain pytest on the CI matrix |
 | `test_duplicate_handling` | 43 | Duplicate / clone / replicant resolution |
 | `test_custom_parameters` | 32 | Custom parameter behavior (Folder, Disable/Enable, Update, TDN controls, Logs, Envoy) |
 | `test_tag_management` | 29 | Tagging operators for externalization |
@@ -162,7 +162,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_job_layer` | 25 | Background-job layer backing `get_job_status` / `save_project` / `run_tests background=True` -- the operations that outlive the 30 s MCP timeout |
 | `test_task_ledger` | 15 | Shared task ledger (`.embody/tasks.json`): work-STATE across AI sessions, including `done_uncommitted` |
 
-### Convoy (8 suites, 696 tests)
+### Convoy (8 suites, 713 tests)
 
 The LAN work relay: the node-side reconciler, the host-app client and installer, and the panel contracts. The host app itself is stdlib-only by design, so most of this tier also runs under plain pytest on the windows+macos CI matrix -- see `pytest.ini`.
 
@@ -173,8 +173,8 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_convoy_host_install` | 105 | ConvoyExt's host-app orchestration (install plan) |
 | `test_convoy_ext` | 73 | ConvoyExt, the node-side Convoy reconciler |
 | `test_convoy_parameter_contract` | 33 | Off-TD contract for Convoy's user-facing parameter scaffold |
-| `test_convoy_host_ladder` | 29 | The runtime ladder that decides WHICH interpreter the daemon runs under |
-| `test_wizard_convoy_contract` | 16 | Plain-Python contracts for Convoy's setup-wizard routing |
+| `test_convoy_host_ladder` | 42 | The runtime ladder that decides WHICH interpreter the daemon runs under |
+| `test_wizard_convoy_contract` | 20 | Plain-Python contracts for Convoy's setup-wizard routing |
 | `test_convoy_forget_ux` | 5 | The Forget Offline Nodes daemon -> panel contract |
 
 ### Install, Uninstall & Release (13 suites, 248 tests)

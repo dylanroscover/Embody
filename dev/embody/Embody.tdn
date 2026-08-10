@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 1139
-generator: Embody/6.0.233
+generator: Embody/6.0.234
 td_build: 099.2025.33070
-source_file: Embody-6.233.toe
-exported_at: '2026-08-10T04:38:06Z'
+source_file: Embody-6.234.toe
+exported_at: '2026-08-10T17:29:44Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -814,7 +814,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.233
+    value: 6.0.234
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -1029,7 +1029,7 @@ operators:
 - name: timer1
   type: timerCHOP
   parameters:
-    active: always
+    active: never
     deferpars: true
     length: 30
     lengthunits: frames

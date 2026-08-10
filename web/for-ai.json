@@ -10,7 +10,7 @@
   "docs": "https://dylanroscover.github.io/Embody/",
   "repository": "https://github.com/dylanroscover/Embody",
   "download": "https://github.com/dylanroscover/Embody/releases/latest",
-  "version": "6.0.233",
+  "version": "6.0.234",
   "requirements": "TouchDesigner 2025.33070 or later. Windows or macOS.",
   "ai_clients": [
     "Claude Code (recommended; auto-configured)",

@@ -275,29 +275,25 @@ class CatalogManagerExt:
 		"""
 		if self.ownerComp.par.Status != 'Disabled':
 			self.ownerComp.par.Status = text
-		self._publishScanProgress(text)
+		self._publishScanProgress()
 
-	def _publishScanProgress(self, text):
-		"""Hand the scan's own line to the startup viewer, guard or no guard.
+	def _publishScanProgress(self):
+		"""Redraw the status readout after a scan status write.
 
-		This is the one step with a real denominator, and it is the only
-		code running while it sweeps (hundreds of consecutive main-thread
-		frames), so the viewer reads it from the choke point rather than
-		from the parameter. Publishing SEPARATELY from the par write is
-		the point: the Disabled guard above exists so a scan cannot
-		re-enable a disabled Embody, and it left a running scan with no
-		readout at all. Best-effort -- a viewer problem must never abort a
-		catalog scan.
+		The scan occupies hundreds of consecutive main-thread frames, so
+		the redraw is told from this choke point rather than trusted to
+		the panel's parameter-execute DAT alone (that DAT's callback body
+		lives only in the .toe, so the choke-point call is the redraw
+		path that version control can actually vouch for).
+
+		Stated plainly: on a DISABLED Embody the guard above skips the
+		par write, the readout keeps saying Disabled, and this call
+		redraws nothing new -- a disabled Embody's scan is invisible by
+		contract, not by accident.
+
+		Best-effort -- a viewer problem must never abort a catalog scan.
 		"""
 		try:
-			dat = self.ownerComp.op('startup_progress')
-			if dat is None:
-				return
-			dat.module.publish_catalog(self.ownerComp, text,
-			                           now=absTime.seconds)
-			# The readout cooks on EVENTS, not on a clock, and a scan line
-			# published straight into the module has no parameter change
-			# behind it for the panel's parameter-execute DAT to catch.
 			publisher = self.ownerComp.op('viz_status/status_publish')
 			if publisher is not None:
 				publisher.module.Refresh()

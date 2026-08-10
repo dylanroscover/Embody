@@ -551,10 +551,12 @@ class TestEnablingWaitsForTheSharedEnvironment(EmbodyTestCase):
     def _resolvable(self, managed=None, venv_python=None, explode=False):
         ctx = {'installer': self._Installer(managed, explode),
                'platform': 'win32', 'venv_python': venv_python}
-        # Unbound on purpose: the predicate reads ctx and nothing else, so it
-        # is drivable without a live COMP -- which is the whole reason it can
-        # be tested on a CI runner instead of only inside TouchDesigner.
-        return convoy_mod.ConvoyExt._hostRuntimeResolvable(None, ctx)
+        # A @staticmethod, so it is called with the argument it actually
+        # reads and nothing else -- no live COMP, and no fake `self` passed
+        # positionally to make an unbound call type-check. That is the whole
+        # reason this predicate has CI coverage rather than
+        # TouchDesigner-only coverage.
+        return convoy_mod.ConvoyExt._hostRuntimeResolvable(ctx)
 
     def test_no_runtime_yet_is_not_a_failure(self):
         """Envoy still building its venv: nothing to install UNDER yet."""
@@ -636,3 +638,156 @@ class TestABlockedSpawnIsNotABadInterpreter(EmbodyTestCase):
         self.assertEqual(
             install_mod.classify_probe_failure('some other stderr'),
             'runtime_probe_failed')
+
+
+class TestTheBlockedSpawnMessageIsSaidONCE(EmbodyTestCase):
+    """Naming the cause is right; naming it twice in one line is not.
+
+    When every interpreter candidate dies before Python runs, the install
+    path ALREADY returns a detail that is the whole explanation -- "this
+    TouchDesigner process cannot start ANY child process ... Quit
+    TouchDesigner, open the project yourself, and enable Convoy again".
+    Wrapping that in a second copy of the same paragraph logged the advice
+    twice in one WARNING, ending in two different instructions.
+
+    The three gates are asserted here rather than in a live session
+    because the branch is inside _finishHost, which needs a COMP; the
+    predicate itself needs nothing.
+    """
+
+    def _ask(self, action, result, text):
+        # Unbound: _isBlockedSpawn reads self only to reach _installer(),
+        # which this stand-in supplies. That keeps the whole decision
+        # drivable without TouchDesigner.
+        class _Self:
+            _SPAWNING_HOST_ACTIONS = \
+                convoy_mod.ConvoyExt._SPAWNING_HOST_ACTIONS
+
+            def _installer(self):
+                return install_mod
+
+        return convoy_mod.ConvoyExt._isBlockedSpawn(_Self(), action,
+                                                    result, text)
+
+    _BLOCKED = 'OSError: [WinError 50] The request is not supported'
+
+    def test_a_blocked_start_is_named(self):
+        """The case the branch exists for: nothing else explains it."""
+        self.assertTrue(self._ask('start', {'ok': False}, self._BLOCKED))
+
+    def test_stop_and_uninstall_spawn_too(self):
+        for action in ('stop', 'uninstall'):
+            self.assertTrue(self._ask(action, {'ok': False}, self._BLOCKED),
+                            action)
+
+    def test_the_install_path_already_said_it(self):
+        """probe_runtime returns reason='spawn_blocked' with a detail that
+        IS this paragraph, so a second copy is pure duplication."""
+        self.assertFalse(
+            self._ask('install', {'ok': False, 'reason': 'spawn_blocked'},
+                      'this TouchDesigner process cannot start ANY child '
+                      'process, so no interpreter could be tested'))
+
+    def test_an_install_that_failed_for_ANOTHER_reason_is_still_named(self):
+        """The gate is the reason, not the action: an install whose own
+        detail does NOT already explain a blocked spawn still needs it."""
+        self.assertTrue(
+            self._ask('install', {'ok': False, 'reason': 'no_usable_runtime'},
+                      self._BLOCKED))
+
+    def test_an_audit_is_never_told_it_cannot_launch_the_app(self):
+        """preview and the forget-offline calls spawn NOTHING -- one is a
+        plan, the others are daemon HTTP. Two of the four spawn markers
+        ('WinError 6', 'The handle is invalid') are generic Windows handle
+        errors that an HTTP call can raise for unrelated reasons, so an
+        unscoped branch would tell a user to quit TouchDesigner over a
+        socket error."""
+        for action in ('preview', 'uninstall_preview', 'forget_offline',
+                       'forget_offline_plan'):
+            self.assertFalse(
+                self._ask(action, {'ok': False},
+                          'OSError: [WinError 6] The handle is invalid'),
+                action)
+
+    def test_an_ordinary_failure_gets_the_ordinary_line(self):
+        self.assertFalse(self._ask('start', {'ok': False},
+                                   'the daemon refused: port in use'))
+
+    def test_the_marker_list_is_ASKED_never_copied(self):
+        """A second copy here had already drifted to two of the four
+        markers within one release. Every marker convoy_install knows must
+        reach this decision, including the ones the old copy lost."""
+        for text in ('OSError: [WinError 50] The request is not supported',
+                     'OSError: [WinError 6] The handle is invalid'):
+            self.assertTrue(self._ask('start', {'ok': False}, text), text)
+        # And no SECOND COPY of the list: a marker used in a membership
+        # test inside ConvoyExt is the drift starting over. Prose that
+        # merely mentions WinError 50 is fine and is why this is an AST
+        # check rather than a substring one.
+        import ast
+        source = open(os.path.join(_CONVOY_DIR, 'ConvoyExt.py'),
+                      encoding='utf-8').read()
+        markers = set(install_mod._SPAWN_FAILURE_MARKERS)
+        copied = []
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.Compare):
+                continue
+            for sub in ast.walk(node):
+                if (isinstance(sub, ast.Constant)
+                        and sub.value in markers):
+                    copied.append((sub.lineno, sub.value))
+        self.assertEqual([], copied,
+                         'ConvoyExt tests a spawn marker itself again -- '
+                         'the list lives in convoy_install and is reached '
+                         'through is_spawn_failure(): %r' % (copied,))
+        self.assertIn('is_spawn_failure', source)
+
+
+class TestEnvoyEnabledButNotYetStarted(EmbodyTestCase):
+    """"Enable Envoy" is the wrong thing to say to someone who just did.
+
+    THE FIELD SEQUENCE (2026-08-09): the wizard sets Convoyenable BEFORE
+    it enables Envoy, and Envoy's Start -- the only thing that sets its
+    `_bootstrapping` flag -- is deferred 30 frames by parexec. So attempt
+    0 of Convoy's runtime wait ALWAYS lands in the window where Envoy is
+    enabled and has not started, and a predicate that required
+    `_bootstrapping` read that as "Envoy is off" and printed the one
+    message the whole ladder was written to eliminate.
+    """
+
+    class _Par:
+        def __init__(self, value):
+            self._value = value
+
+        def eval(self):
+            return self._value
+
+    class _Embody:
+        def __init__(self, enabled):
+            self.par = type('P', (), {})()
+            self.par.Envoyenable = \
+                TestEnvoyEnabledButNotYetStarted._Par(enabled)
+
+    def _ask(self, embody):
+        class _Self:
+            pass
+        me = _Self()
+        me._embody = embody
+        return convoy_mod.ConvoyExt._envoyIsBringingTheEnvironment(me)
+
+    def test_enabled_but_not_bootstrapping_yet_still_counts_as_coming(self):
+        """No `_bootstrapping` attribute at all: exactly the 30-frame
+        window the wizard's own ordering guarantees."""
+        self.assertTrue(self._ask(self._Embody(1)))
+
+    def test_switched_off_is_the_one_case_that_needs_the_user(self):
+        self.assertFalse(self._ask(self._Embody(0)))
+
+    def test_an_unreadable_parameter_does_not_promise_an_environment(self):
+        """Fail toward the actionable message rather than toward waiting
+        five minutes for something that may never arrive."""
+        class _Broken:
+            @property
+            def par(self):
+                raise RuntimeError('no COMP')
+        self.assertFalse(self._ask(_Broken()))

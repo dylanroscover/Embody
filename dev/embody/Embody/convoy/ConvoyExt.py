@@ -3476,6 +3476,49 @@ class ConvoyExt:
             self._hostStatus(self.HOST_INSTALL_FAILED)
             return None
 
+    # The host actions that actually START A PROCESS. The rest -- the
+    # uninstall/forget previews and the forget itself -- are audits and
+    # daemon HTTP calls, so a 'WinError 6'/'The handle is invalid' in one
+    # of THEIR failures is an ordinary handle error and must not be
+    # reported as "TouchDesigner cannot launch the Convoy app".
+    # 'status' belongs here too: the host-state refresh queries the
+    # supervisor via installer.run_command(supervisor_argv('status', ...))
+    # -- a real schtasks/launchctl child -- and it runs UNPROMPTED, so in
+    # a spawn-blocked session it is the failure a user sees first.
+    _SPAWNING_HOST_ACTIONS = ('install', 'start', 'stop', 'uninstall',
+                              'status')
+
+    def _isBlockedSpawn(self, action, result, text):
+        """Does this failure need the cannot-start-any-child explanation?
+
+        Three gates, and each one exists because it was wrong without it:
+
+        1. The action must actually spawn (_SPAWNING_HOST_ACTIONS). The
+           markers include two generic Windows handle errors, which an
+           HTTP call can raise for reasons that have nothing to do with
+           child processes.
+        2. The install path must NOT get it. When every candidate died
+           before Python ran, probe_runtime already returns
+           reason='spawn_blocked' with a detail that IS this paragraph,
+           word for word -- so adding it again logged the same advice
+           twice in one line, ending in two different instructions.
+        3. The marker list is asked, never copied. It lives in
+           convoy_install._SPAWN_FAILURE_MARKERS and is reached through
+           the public is_spawn_failure(); a second copy here had already
+           drifted to two of its four markers. If the module cannot be
+           reached at all, this call has larger problems than its
+           wording, so it falls back to the plain failure line rather
+           than to a stale duplicate of the question.
+        """
+        if action not in self._SPAWNING_HOST_ACTIONS:
+            return False
+        if isinstance(result, dict) and result.get('reason') == 'spawn_blocked':
+            return False        # the detail already says all of this
+        try:
+            return bool(self._installer().is_spawn_failure(text))
+        except Exception:
+            return False
+
     def _beginHostCall(self, action, fn, note=None):
         """Kick ONE bounded host worker plus its poll chain. MAIN THREAD.
 
@@ -3593,8 +3636,26 @@ class ConvoyExt:
                 # vocabulary, because it is the one a user pulsed and is
                 # waiting on.
                 state = self.HOST_INSTALL_FAILED
-            self._log('host %s failed: %s' % (action, detail or 'unknown'),
-                      'WARNING')
+            text = str(detail or 'unknown')
+            if self._isBlockedSpawn(action, result, text):
+                # THE ACTIONS THAT SPAWN. When this TD cannot start ANY
+                # child process -- a session launched by a tool rather
+                # than opened normally inherits a stdin that breaks every
+                # subprocess -- the raw OSError says nothing a user can
+                # act on, and they click the button again. Name the cause
+                # instead, ONCE: the install path already says all of this
+                # in its own detail (see _isBlockedSpawn), so this line is
+                # for the actions that do not.
+                self._log(
+                    'host %s cannot run: this TouchDesigner process cannot '
+                    'start ANY child process, so the Convoy app cannot be '
+                    'launched from it. This is the session, not Convoy or '
+                    'your Python -- it happens when TouchDesigner was '
+                    'started by a tool rather than opened normally. Quit '
+                    'TouchDesigner, open the project yourself, and try '
+                    'again. (%s)' % (action, text), 'WARNING')
+            else:
+                self._log('host %s failed: %s' % (action, text), 'WARNING')
         elif result.get('version_verified') is False:
             # The install completed but the daemon that came back is NOT
             # running the version we just wrote -- a stale payload must
@@ -4292,7 +4353,7 @@ class ConvoyExt:
             # install read as broken (field log 2026-08-09): the venv simply
             # did not exist yet, because Envoy builds it on a worker that
             # runs for minutes after the wizard moves on.
-            if self._envoyBuildingItsEnvironment():
+            if self._envoyIsBringingTheEnvironment():
                 self._log('the Python environment Convoy shares is '
                           'still being built by Envoy -- the host app cannot '
                           'install until it exists. This resolves itself; the '
@@ -4881,16 +4942,25 @@ class ConvoyExt:
         self._reconcile(force=True)
         return self.ConvoyStatus()
 
-    # How long the host install will wait for Envoy to finish building the
+    # How long the host install waits for Envoy to finish building the
     # Python environment it shares, and how often it looks. A fresh install
     # pip-installs the whole MCP stack into a new venv: minutes on a loaded
-    # machine, and the wizard enables Convoy seconds after Envoy. 2 s x 150
-    # is ~5 minutes -- long enough for a slow first install, bounded so a
-    # genuinely absent runtime still reports instead of polling forever.
+    # machine, and the wizard enables Convoy seconds after Envoy.
+    #
+    # THE BUDGET IS IN FRAMES, NOT SECONDS, so every wall-clock figure here
+    # is "at 60 fps" and a 30 fps project waits twice as long in seconds
+    # (and a 120 fps one, half). 120 x 150 is ~5 minutes at 60 -- long
+    # enough for a slow first install, bounded so a genuinely absent
+    # runtime reports instead of polling forever. The give-up most users
+    # would ever reach is the OTHER one, in _awaitHostRuntime: five
+    # attempts (~10 s at 60 fps) once it is clear Envoy is not coming at
+    # all, because waiting five minutes for something switched off is not
+    # patience, it is silence.
     _HOST_RUNTIME_WAIT_FRAMES = 120
     _HOST_RUNTIME_WAIT_TRIES = 150
 
-    def _hostRuntimeResolvable(self, ctx):
+    @staticmethod
+    def _hostRuntimeResolvable(ctx):
         """Could the host app actually be run right now?
 
         The SAME resolution the install performs (a signed managed runtime
@@ -4899,6 +4969,12 @@ class ConvoyExt:
         than a failure. Kept next to that resolution deliberately: two copies
         of this question drifting apart is how the status came to name a
         button that refused.
+
+        STATIC because it reads `ctx` and nothing else. Both callers reach
+        it through `self`, which works unchanged; what the decorator buys
+        is that the suite can drive it without a live COMP and without
+        passing a fake `self` -- which is the whole reason this predicate
+        has CI coverage instead of TouchDesigner-only coverage.
         """
         try:
             installer = ctx['installer']
@@ -4909,16 +4985,25 @@ class ConvoyExt:
         except Exception:
             return False
 
-    def _envoyBuildingItsEnvironment(self):
-        """True while Envoy is still installing the venv Convoy shares."""
+    def _envoyIsBringingTheEnvironment(self):
+        """Is Envoy going to produce the venv Convoy shares?
+
+        THE QUESTION IS "IS IT COMING", NOT "IS IT BUILDING RIGHT NOW",
+        and the difference is the whole bug. This used to require Envoy's
+        `_bootstrapping` flag, which is set inside Start() -- and parexec
+        defers Start by 30 frames while the wizard turns Convoy on BEFORE
+        Envoy. So attempt 0 of the wait ALWAYS landed in that window, read
+        an enabled Envoy as an absent one, and logged "Enable Envoy",
+        which is precisely what the user had just done (field log
+        2026-08-09, the same clean install this whole ladder came from).
+
+        The parameter is the honest signal: Envoyenable ON means the
+        environment is on its way, whether or not the worker has started
+        yet. Envoyenable OFF means nobody is going to build it, which is
+        the one case that genuinely needs the user.
+        """
         try:
-            if not bool(self._embody.par.Envoyenable.eval()):
-                return False
-        except Exception:
-            return False
-        try:
-            return bool(getattr(self._embody.ext.Envoy, '_bootstrapping',
-                                False))
+            return bool(self._embody.par.Envoyenable.eval())
         except Exception:
             return False
 
@@ -4942,7 +5027,7 @@ class ConvoyExt:
                           'installing the host app now', 'INFO')
                 self.InstallHost(confirm=False)
                 return
-            building = self._envoyBuildingItsEnvironment()
+            building = self._envoyIsBringingTheEnvironment()
             if attempt == 0:
                 if building:
                     self._log(
@@ -4957,8 +5042,15 @@ class ConvoyExt:
                         'Convoy shares) and the host app installs itself.',
                         'WARNING')
             if not building and attempt >= 5:
-                # Envoy is not coming: stop waiting for something that will
-                # never arrive, and leave a status the user can act on.
+                # Envoy is switched OFF: stop waiting for something nobody
+                # is going to build, and leave a status the user can act
+                # on. ~10 s at 60 fps -- see _HOST_RUNTIME_WAIT_FRAMES for
+                # why that is a frame count and not a duration.
+                self._log(
+                    'giving up on the host app install: Envoy is off, so '
+                    'the shared Python environment is never going to be '
+                    'built. Enable Envoy and Convoy installs itself.',
+                    'WARNING')
                 self._hostStatus(self.HOST_INSTALL_FAILED)
                 return
             if attempt >= self._HOST_RUNTIME_WAIT_TRIES:

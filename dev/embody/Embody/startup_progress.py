@@ -1,72 +1,54 @@
-"""What Embody's startup is actually doing, as data.
+"""What the Embody node's status readout shows, as data.
 
-ONE dict per Embody COMP, published INTO this module by the code that
-does the work, so the startup viewer draws from a single honest source
-instead of scraping status strings itself.
+ONE VIEW, ONE QUESTION: what is the state of each subsystem right now?
+Embody, the auto-save, Envoy, Convoy and the version each get a row, and
+a row is a MARK plus a name. There was a second view -- a column of
+progress bars drawn while the project opened -- and it is gone. For the
+subsystems it drew, "how far along is this?" had no honest answer (a
+dependency install is one opaque `uv pip install`), so the bars swept
+without measuring anything, and every state that could pin them on
+screen was another way for the panel to get stuck. The startup states
+are still reported; they are reported in the same one view as
+everything else.
 
-THE RULE THIS MODULE EXISTS TO ENFORCE: never fake a percentage. Exactly
-one startup step has a real denominator -- the catalog scan knows how
-many types and .tox files it has to get through. Envoy's dependency
-install is one opaque `uv pip install`; Convoy is a handful of discrete
-states; the repo/config work is discrete. For those, `total` is 0 and the
-viewer shows an ELAPSED CLOCK, not a bar creeping to an invented 80%. A
-measured 0:42 proves the step is alive; a fabricated percentage is a lie
-that happens to look reassuring.
+THE RULE THE BARS LEAVE BEHIND: never fake a measurement. Nothing here
+renders a percentage, because nothing here has a denominator to render
+one from. A busy row shows an ELAPSED CLOCK instead, and only once it
+has been busy longer than STUCK_DWELL_S -- a measured 2:14 proves the
+step is alive rather than wedged, which is the one thing a mark cannot
+do: it reads the same at four seconds and at forty minutes.
 
-`skipped` is load-bearing, not a rounding of `done`. The catalog
-early-returns in a single frame when a complete catalog for this TD build
-already exists, Envoy can be Disabled or in Perform Mode, and Convoy is
-off in most projects. A bar sitting at 0% for something that legitimately
-never ran is its own small lie -- the whole reason this viewer exists is
-that this week's failures were invisible.
+IT DERIVES FROM PARAMETERS; NOTHING PUBLISHES INTO IT. Every row comes
+from a parameter on the Embody COMP -- Status, Autosavestatus,
+Envoystatus, Convoystatus, Version, Updatestatus, Autoupdate -- read at
+render time by _live_steps. There was a second source: a module-level
+record the startup phases published their counts into. When the bars
+went, that record's last reader went with them, and it is DELETED
+rather than kept warm, because a write-only record is indistinguishable
+from a working one until somebody trusts it. Deriving from the
+parameters cannot drift from what the user reads, and every writer of
+those parameters is a writer of this readout for free.
 
-WHY IT PARSES STATUS TEXT for envoy and convoy, and PUBLISHES for the
-rest. `Envoystatus` is written from about twenty places across EnvoyExt,
-EmbodyExt and execute.py; threading a publish call through all of them
-would be a wide edit, and every missed writer would be a step that
-silently stops updating. The parameter is already the single value the
-panel shows, so deriving from it cannot drift from what the user reads.
-The catalog, the config pass and the restore phases are the opposite
-case: they have real counters or no status string at all (a restore that
-restores nothing writes nothing, and a phase that dies writes its last
-count forever), so they publish from their own choke points -- which is
-the only way a step reaches a TERMINAL state on every path, including
-the ones that do no work.
+THE CLOCK IS OBSERVED, NOT READ. A parameter carries no timestamp, so
+_stamp records when a row entered its current non-terminal state, keyed
+on state AND detail so two phases of one sequence are two measurements.
+That record and _SESSION's problem dwell are the only state this module
+keeps. Module-level on purpose: COMP storage recooks on every write and
+serializes into the .toe and into Embody's own .tdn, so last session's
+observations would come back on disk and be replayed as this session's.
 
-STARTUP IS DECLARED, NOT INFERRED. begin_startup()/end_startup() bracket
-the open sequence because the derived view cannot tell "has not begun"
-from "is over": at frame one Envoy and Convoy read Disabled and the
-catalog reads Enabled -- a perfectly settled snapshot, ten frames before
-any of it starts. Inferring from that latched the viewer into its
-settled mode before the first phase ran, which is why the bars were
-never seen.
+RENDERING IS COMPUTED ONCE PER EVENT. table_rows() turns the readout
+into finished strings for viz_status/status_publish to write into a
+table; the panel's cells read that table and never call in here. The
+other way round cost 90 module calls per cook, all time-dependent, on a
+panel showing values that change a handful of times per session.
 
-Pure and TouchDesigner-free by construction -- it takes strings and
-numbers and returns a dict, and the COMP it is handed is only ever read
-through getattr -- so the whole mapping is unit-tested on the CI matrix
-rather than only in a live session.
+No `import td` and nothing at import time: the COMP is an argument and
+its parameters are read through getattr, so the whole mapping is
+unit-tested on the CI matrix rather than only in a live session. The one
+exception is _panel_row_budget, which reaches for the panel COMP itself
+to read a height -- guarded, and returning None headless.
 """
-
-# Step keys, in display order. RESTORE is conditional: it only appears
-# when the project actually has externalized COMPs to restore.
-STEP_REPO = "repo"
-STEP_CATALOG = "catalog"
-STEP_ENVOY = "envoy"
-STEP_CONVOY = "convoy"
-STEP_RESTORE = "restore"
-
-STEPS = (STEP_REPO, STEP_CATALOG, STEP_ENVOY, STEP_CONVOY, STEP_RESTORE)
-
-# The four bars the viewer always draws, plus the fifth when relevant.
-BASE_STEPS = (STEP_REPO, STEP_CATALOG, STEP_ENVOY, STEP_CONVOY)
-
-LABELS = {
-    STEP_REPO: "Project",
-    STEP_CATALOG: "Catalog",
-    STEP_ENVOY: "Envoy",
-    STEP_CONVOY: "Convoy",
-    STEP_RESTORE: "Restore",
-}
 
 # States. STALLED is distinct from RUNNING on purpose: it means the step
 # is waiting on something a user must do (save the project, answer a
@@ -78,15 +60,6 @@ FAILED = "failed"
 SKIPPED = "skipped"
 STALLED = "stalled"
 
-STATES = (IDLE, RUNNING, DONE, FAILED, SKIPPED, STALLED)
-
-# A step is IN PLAY if it can still change. The halo counts
-# successfully-complete over in-play, never over all four: counting
-# terminals would show 4/4 with a red wedge and read as success.
-_TERMINAL = (DONE, FAILED, SKIPPED)
-
-FORMAT = "embody-startup-progress/1"
-
 
 def _entry(state, done=0, total=0, detail="", started=None):
     return {"state": state, "done": int(done or 0), "total": int(total or 0),
@@ -97,64 +70,12 @@ def _text(value):
     return str(value or "").strip()
 
 
-def _parse_counts(text):
-    """The (N/T) the scan already wrote into its own status line.
-
-    A FALLBACK for callers that cannot pass the counters directly. These
-    are still the scan's real numbers -- merely transported through the
-    status string instead of handed over -- so using them is not the
-    fabrication this module forbids. Returns (0, 0) when absent, which
-    correctly yields an indeterminate bar rather than a guess.
-    """
-    left = text.rfind("(")
-    right = text.rfind(")")
-    if left < 0 or right < left:
-        return 0, 0
-    chunk = text[left + 1:right]
-    if chunk.count("/") != 1:
-        return 0, 0
-    a, b = chunk.split("/")
-    try:
-        return int(a.strip()), int(b.strip())
-    except ValueError:
-        return 0, 0
-
-
-def catalog_step(status, done=0, total=0, started=None):
-    """The one step with a real denominator.
-
-    `done`/`total` come from CatalogManagerExt's own counters when the
-    caller can supply them, so the bar cannot disagree with the scan;
-    otherwise they are read back out of the status line the scan wrote.
-    """
-    text = _text(status)
-    low = text.lower()
-    if not total:
-        done, total = _parse_counts(text)
-    if not text or low == "idle":
-        return _entry(IDLE)
-    if low == "disabled":
-        return _entry(SKIPPED, detail="disabled")
-    if low.startswith("enabled") or low.startswith("complete"):
-        # A catalog already complete for this TD build returns in ONE
-        # frame. That is a legitimate skip, not instant work -- but it is
-        # still DONE: the catalog is there.
-        return _entry(DONE, done=done, total=total)
-    if "failed" in low or low.startswith("error"):
-        return _entry(FAILED, done=done, total=total, detail=text)
-    if low.startswith("scanning"):
-        return _entry(RUNNING, done=done, total=total, detail=text,
-                      started=started)
-    return _entry(RUNNING, done=done, total=total, detail=text,
-                  started=started)
-
-
 def envoy_step(status, started=None):
     """Derived from the Envoystatus parameter -- see the module docstring.
 
-    No denominator exists: the dependency install is a single opaque uv
-    call, so a RUNNING envoy step carries total=0 and the viewer shows
-    elapsed time.
+    No measurement exists to report: the dependency install is a single
+    opaque uv call, so a RUNNING envoy step shows a busy mark and, once
+    it has been busy past STUCK_DWELL_S, an elapsed clock.
     """
     text = _text(status)
     low = text.lower()
@@ -175,10 +96,28 @@ def envoy_step(status, started=None):
 def convoy_step(status, started=None):
     """Derived from the Convoystatus parameter.
 
-    Convoy is discrete states, never a fraction. The blocking readouts
-    ('Not installed', 'Needs repair ...', 'Install failed ...') are
-    FAILED rather than running: this whole viewer exists because those
-    were invisible.
+    ONE readout, TWO producers, and the classification enumerates BOTH.
+    The node line comes from convoy_client.status_text (Connected /
+    Registering... / Waiting for project save / Refused: <reason> /
+    Error: <detail> / No Convoy host app / Host app stale) plus
+    ConvoyExt's own literals (Consent required, Error: convoy_client
+    module missing); the host-app line from convoy_client.
+    host_status_text (the five 'Installed -- ...' variants, Checking...,
+    Installing..., Repairing runtime..., Needs repair, Install failed,
+    Managed by another supervisor, installed-by-a-newer-Embody).
+    Enumerating only one producer is how an Error state rendered as a
+    busy spinner with a climbing clock.
+
+    The vocabulary is CLOSED -- both producers are finite string tables
+    -- so the fallback for an unknown string is IDLE-with-text, never
+    RUNNING: showing the words without animation cannot fabricate
+    activity, which is the failure mode this readout keeps growing back.
+    A new status is a deliberate edit here, not something a default
+    silently absorbs into "busy".
+
+    Per convoy_client's own doctrine, ABSENCE IS NOT AN ERROR: absent /
+    stale / no-host-app are the normal state of a machine without the
+    host app running and read as resting, not failure.
     """
     text = _text(status)
     low = text.lower()
@@ -186,96 +125,53 @@ def convoy_step(status, started=None):
         return _entry(IDLE)
     if low == "disabled":
         return _entry(SKIPPED, detail=text)
-    if low.startswith(("not installed", "needs repair", "install failed",
-                       "consent required")):
+    if low.startswith(("error", "refused")):
+        # A host-side crash, an unreadable result, a policy refusal: all
+        # actionable, none of them progress.
         return _entry(FAILED, detail=text)
-    if low.startswith(("waiting for", "managed by another supervisor")):
-        # Blocked on the user (or on another supervisor), which is not
-        # progress and must not animate like it.
+    if low.startswith(("not installed", "needs repair", "install failed",
+                       "installed -- no supervisor")):
+        # 'Installed -- no supervisor (use Repair Convoy App)' names a
+        # button the user has to press. A defect with a remedy.
+        return _entry(FAILED, detail=text)
+    if "installed by a newer embody" in low:
         return _entry(STALLED, detail=text)
-    if low.startswith(("connected", "running")):
+    if low.startswith(("waiting for", "consent required",
+                       "managed by another supervisor",
+                       "no convoy host app", "host app stale")):
+        # Blocked on the user (or on another supervisor): not progress,
+        # must not animate like it. The absent/stale pair belongs HERE,
+        # not in the resting branch below: Convoystatus only ever
+        # carries them while Convoy is ENABLED (disabled reads
+        # 'Disabled'), and an enabled mesh with no live host app is a
+        # wait with a remedy -- the supervisor restart, or Start Convoy
+        # App. Classified as resting they rendered a blank mark and no
+        # words, and the user had to hunt the parameter page to learn
+        # why their mesh was dead. STALLED is still not FAILED, which
+        # keeps convoy_client's absence-is-not-an-error doctrine intact.
+        return _entry(STALLED, detail=text)
+    if low.startswith(("checking", "installing", "repairing",
+                       "installed -- starting", "registering",
+                       "registered --")):
+        # Genuinely in flight: an install, a repair, a start that has
+        # not finished, a registration waiting on its Envoy port.
+        return _entry(RUNNING, detail=text, started=started)
+    if low.startswith(("connected", "running", "host app found")):
         return _entry(DONE, detail=text)
-    return _entry(RUNNING, detail=text, started=started)
-
-
-def simple_step(state, done=0, total=0, detail="", started=None):
-    """A discrete step the caller already knows the state of."""
-    state = state if state in STATES else IDLE
-    return _entry(state, done=done, total=total, detail=detail,
-                  started=started)
-
-
-def snapshot(repo=None, catalog=None, envoy=None, convoy=None,
-             restore=None, now=None):
-    """Assemble the stored dict. Never raises.
-
-    `restore` is omitted entirely when None -- the fifth bar appears only
-    when the project has externalized COMPs to restore, rather than
-    showing an empty bar every startup.
-    """
-    steps = {
-        STEP_REPO: repo or _entry(IDLE),
-        STEP_CATALOG: catalog or _entry(IDLE),
-        STEP_ENVOY: envoy or _entry(IDLE),
-        STEP_CONVOY: convoy or _entry(IDLE),
-    }
-    if restore is not None:
-        steps[STEP_RESTORE] = restore
-    order = [k for k in STEPS if k in steps]
-    return {"format": FORMAT, "order": order, "steps": steps,
-            "updated": now, "summary": summarize(steps)}
-
-
-def summarize(steps):
-    """Counts the halo and the one-line readout are built from.
-
-    `complete` counts steps that SUCCEEDED. `in_play` counts everything
-    that is not terminal PLUS the successes -- i.e. the denominator is
-    "steps that could still end well", so a failure removes itself from
-    the denominator instead of quietly counting as progress.
-    """
-    values = list(steps.values())
-    complete = sum(1 for s in values if s.get("state") == DONE)
-    skipped = sum(1 for s in values if s.get("state") == SKIPPED)
-    failed = sum(1 for s in values if s.get("state") == FAILED)
-    stalled = sum(1 for s in values if s.get("state") == STALLED)
-    running = sum(1 for s in values if s.get("state") == RUNNING)
-    in_play = complete + running + stalled
-    return {"complete": complete, "in_play": in_play, "failed": failed,
-            "skipped": skipped, "stalled": stalled, "running": running,
-            "settled": (running == 0 and stalled == 0)}
-
-
-def fraction(step):
-    """0.0-1.0 for a bar, or None when there is no honest denominator.
-
-    None is the whole point: the caller must render an elapsed clock
-    rather than invent a width. A terminal step is full (or empty, for a
-    failure that never started) regardless of counters.
-    """
-    if not isinstance(step, dict):
-        return None
-    state = step.get("state")
-    if state in (DONE, SKIPPED):
-        return 1.0
-    if state == IDLE:
-        return 0.0
-    total = int(step.get("total") or 0)
-    if total <= 0:
-        return None
-    done = int(step.get("done") or 0)
-    if done < 0:
-        done = 0
-    if done > total:
-        done = total
-    return float(done) / float(total)
+    if low.startswith(("installed -- not running", "installed -- stopped",
+                       "stopped", "not running", "idle")):
+        # Resting, per the absence doctrine above. Falling through to a
+        # busy default here is what pinned the old bars view after Stop
+        # Convoy App.
+        return _entry(IDLE, detail=text)
+    return _entry(IDLE, detail=text)
 
 
 def elapsed_text(step, now):
     """'0:42' since the step started, or '' when it has not.
 
-    Real measurement, no implied denominator: it proves the step is alive
-    rather than hung, which is exactly what a fake bar cannot do.
+    A real measurement with no implied denominator: it proves the step
+    is alive rather than hung, which is exactly what a mark cannot do.
     """
     started = (step or {}).get("started")
     if started is None or now is None:
@@ -284,29 +180,9 @@ def elapsed_text(step, now):
     return "%d:%02d" % (seconds // 60, seconds % 60)
 
 
-# -- the bar, rendered in FONT --------------------------------------------
-#
-# The bar IS text. Block glyphs give eighth-of-a-character precision, stay
-# crisp at any size (a Text COMP is resolution independent -- a fixed
-# texture is not, and a node tile gets scaled), and, the part that earns
-# its keep here, make the bar a pure string this suite can assert on
-# instead of a rendered image somebody has to squint at.
-#
-# WRITTEN AS \u ESCAPES, NEVER LITERAL GLYPHS. Every file in this repo
-# stays ASCII (rules/ascii-punctuation.md): a raw block character read
-# back through a legacy codepage is mojibake, and this module is imported
-# by a TouchDesigner DAT whose text round-trips on every save.
-BLOCK_FULL = "\u2588"       # full block -- filled
-BLOCK_MED = "\u2592"        # medium shade -- the indeterminate sweep
-BLOCK_TRACK = "\u2591"      # light shade -- the unfilled track
-# Left one-eighth .. seven-eighths, for sub-character precision, so a
-# 20-cell bar actually resolves 160 steps rather than 20.
-EIGHTHS = ("", "\u258f", "\u258e", "\u258d", "\u258c", "\u258b", "\u258a",
-           "\u2589")
-
 # Per-state colour for the row, as TD 0..1 floats. Colour carries the
-# state; the glyphs carry the quantity. Neither is asked to do both,
-# which is what keeps a red bar from also reading as "80% done".
+# state; the glyph carries whether anything is moving. Neither is asked
+# to do both.
 STATE_RGB = {
     IDLE: (0.30, 0.32, 0.36),
     RUNNING: (0.30, 0.68, 0.95),
@@ -317,100 +193,17 @@ STATE_RGB = {
 }
 
 
-def bar_text(step, width=20, phase=0.0):
-    """The bar as characters. Cannot express a fraction it does not have.
-
-    A step with no denominator returns a SWEEP, not a fill: the glyphs
-    move but never accumulate, so nothing in the string implies a
-    percentage. That is the whole contract, and it is asserted directly
-    because the string is the artifact.
-    """
-    width = max(1, int(width))
-    state = (step or {}).get("state")
-    if state == FAILED:
-        # Solid, full width. A failure is not partial success and must
-        # never render as a part-filled bar.
-        return BLOCK_FULL * width
-    if state == SKIPPED:
-        # The track alone: the row exists and legitimately did not run.
-        return BLOCK_TRACK * width
-    value = fraction(step)
-    if value is None:
-        span = max(1, width // 5)
-        head = int((phase % 1.0) * width)
-        return "".join(
-            BLOCK_MED if ((i - head) % width) < span else BLOCK_TRACK
-            for i in range(width))
-    filled = value * width
-    full = int(filled)
-    if full >= width:
-        return BLOCK_FULL * width
-    head = EIGHTHS[int((filled - full) * 8)]
-    body = BLOCK_FULL * full + head
-    return body + BLOCK_TRACK * (width - len(body))
-
-
-def value_text(step, now=None):
-    """The right-hand column: a real measurement or a real word.
-
-    Never a percentage for a step that has no denominator -- that column
-    shows the elapsed clock instead, which proves the step is alive
-    rather than implying how far along it is.
-    """
-    state = (step or {}).get("state")
-    if state == DONE:
-        return "done"
-    if state == FAILED:
-        return "failed"
-    if state == SKIPPED:
-        return "skipped"
-    if state == STALLED:
-        return "waiting"
-    if state == IDLE:
-        return ""
-    total = int((step or {}).get("total") or 0)
-    if total > 0:
-        return "%d/%d" % (int((step or {}).get("done") or 0), total)
-    return elapsed_text(step, now) or "..."
-
-
-def row_text(key, step, now=None, phase=0.0, label_width=9, bar_width=20):
-    """One monospace line: label, bar, value."""
-    label = LABELS.get(key, key)[:label_width].ljust(label_width)
-    return "%s %s  %s" % (label, bar_text(step, bar_width, phase),
-                          value_text(step, now))
-
-
-def rows(snap, now=None, phase=0.0, label_width=9, bar_width=20):
-    """Every row of a snapshot, ready to hand to Text COMPs.
-
-    Returns a list of (key, text, rgb) -- one entry per bar, in display
-    order, so the panel builder never re-derives ordering or colour.
-    """
-    out = []
-    for key in (snap or {}).get("order", ()):
-        step = (snap or {}).get("steps", {}).get(key) or {}
-        out.append((key, row_text(key, step, now, phase, label_width,
-                                  bar_width),
-                    STATE_RGB.get(step.get("state"), STATE_RGB[IDLE])))
-    return out
-
-
-# -- what the startup phases publish --------------------------------------
+# When a step entered its current non-terminal state. The parameter
+# carries no timestamp, so the clock has to be OBSERVED rather than read:
+# without it a wedged step shows a busy mark forever, and a busy mark
+# looks identical after four seconds and after forty minutes.
 #
 # Module-level rather than COMP storage on purpose. store() recooks on
-# every write (the catalog scan writes hundreds of times), and storage is
-# serialized into the .toe and into Embody's own .tdn -- so a startup
-# that finished LAST session would come back on disk and be replayed as
-# this session's progress, which is precisely the frozen readout this
-# module exists to stop. The record is per-COMP-path so two Embody COMPs
-# in one process cannot overwrite each other's steps.
-_PUBLISHED = {}
-
-# When a DERIVED step entered its current non-terminal state. The
-# parameter carries no timestamp, so the clock has to be observed rather
-# than read: without it a wedged step renders "..." forever, and "..."
-# looks identical after four seconds and after forty minutes.
+# every write, and storage is serialized into the .toe and into Embody's
+# own .tdn -- so LAST session's observations would come back on disk and
+# be replayed as this session's, which is precisely the frozen readout
+# this module exists to stop. Keyed per COMP path so two Embody COMPs in
+# one process cannot overwrite each other's clocks.
 _SINCE = {}
 
 
@@ -422,161 +215,14 @@ def _comp_key(embody):
         return ""
 
 
-def published_steps(embody):
-    """Everything published for this COMP, as {step key: entry}."""
-    return dict(_PUBLISHED.get(_comp_key(embody), {}))
-
-
-def clear_published(embody):
-    """Forget this COMP's published startup (a genuine re-open, or tests)."""
-    _PUBLISHED.pop(_comp_key(embody), None)
-    for slot in [s for s in _SINCE if s[0] == _comp_key(embody)]:
-        _SINCE.pop(slot, None)
-
-
-def publish(embody, key, state, done=0, total=0, detail="", now=None,
-            add=False):
-    """Record one startup step's REAL state. Never raises.
-
-    `add` accumulates the counters instead of replacing them, because
-    ONE bar can be fed by more than one phase -- the TOX restore and the
-    TDN reconstruction are separate methods, run fifteen frames apart,
-    that together answer "how much of my project came back?".
-
-    Returns False for a key or state this module does not define, so a
-    caller that drifts from the vocabulary fails a contract test instead
-    of silently publishing nothing.
-    """
-    if key not in STEPS or state not in STATES:
-        return False
-    try:
-        slot = _PUBLISHED.setdefault(_comp_key(embody), {})
-        old = slot.get(key) or {}
-        if add:
-            done = int(done or 0) + int(old.get("done") or 0)
-            total = int(total or 0) + int(old.get("total") or 0)
-        entry = _entry(state, done=done, total=total, detail=detail)
-        # The start time is stamped HERE, on the transition into a
-        # non-terminal state, so no caller can forget it -- a RUNNING
-        # step with no start renders no clock, which is the wedge going
-        # invisible again.
-        if state in (RUNNING, STALLED):
-            started = old.get("started")
-            if started is None or old.get("state") not in (RUNNING, STALLED):
-                started = now
-            entry["started"] = started
-        slot[key] = entry
-        return True
-    except Exception:
-        return False
-
-
-def finish(embody, key, failed=False, detail="", now=None):
-    """Close a step: DONE when it did work, SKIPPED when there was none.
-
-    One rule in one place rather than a decision at each of the return
-    points that reach it. SKIPPED is not a rounding of DONE here: a
-    startup with nothing to restore must say so, and a phase that ran
-    nothing must not erase the counts a sibling phase really earned.
-    """
-    if key not in STEPS:
-        return False
-    try:
-        slot = _PUBLISHED.setdefault(_comp_key(embody), {})
-        old = slot.get(key) or {}
-        done = int(old.get("done") or 0)
-        total = int(old.get("total") or 0)
-        if failed:
-            state = FAILED
-        elif done or total:
-            state = DONE
-            done = total if total else done
-        else:
-            state = SKIPPED
-        slot[key] = _entry(state, done=done, total=total,
-                           detail=detail or old.get("detail", ""))
-        return True
-    except Exception:
-        return False
-
-
-def close_unreported(embody, keys, detail="did not report", now=None):
-    """Fail every named step still non-terminal. The last-resort net.
-
-    An exception inside a deferred run() callback kills the rest of that
-    chain silently, so a phase can stop existing between its RUNNING and
-    its terminal publish. A step left animating forever is the exact lie
-    this module was written against -- if the phase cannot say how it
-    ended, the viewer says it did not end.
-    """
-    closed = []
-    slot = _PUBLISHED.get(_comp_key(embody), {})
-    for key in keys:
-        entry = slot.get(key)
-        if entry and entry.get("state") in (RUNNING, STALLED, IDLE):
-            publish(embody, key, FAILED, done=entry.get("done", 0),
-                    total=entry.get("total", 0), detail=detail, now=now)
-            closed.append(key)
-    return closed
-
-
-def publish_catalog(embody, status, now=None):
-    """The scan's own choke point, with the counters it is counting with.
-
-    Routed through catalog_step so the (N/T) the scan wrote is read back
-    by the same parser the fallback uses -- these are the scan's real
-    numbers, merely transported through its status line, which is what
-    keeps the bar from ever disagreeing with the sweep.
-    """
-    step = catalog_step(status)
-    return publish(embody, STEP_CATALOG, step["state"], done=step["done"],
-                   total=step["total"], detail=step["detail"], now=now)
-
-
 # -- live assembly --------------------------------------------------------
 #
 # Takes the Embody COMP as an ARGUMENT rather than reaching for a global,
 # so it stays testable with a stand-in object and this module keeps its
 # no-TouchDesigner-import property: nothing here imports td, and none of
 # it runs at import time.
-def live_snapshot(embody, now=None, catalog=None):
-    """Read the live parameters and build the snapshot. Never raises.
-
-    `catalog` lets CatalogManagerExt hand in its REAL counters from
-    inside the scan -- the one step with a true denominator, and the one
-    moment when nothing else on the main thread is running.
-
-    THE PARAMETER THE FALLBACK READS IS `Status`, not a catalog-specific
-    one: there has never been a Catalogstatus par on this COMP, and
-    reading a name that does not exist returned "" and then fabricated
-    "Enabled", so the catalog bar reported DONE for the entire life of a
-    scan. `_setScanStatus` writes the scan's line into par.Status, which
-    is why the same string also drives the Embody row.
-    """
-    def par(name):
-        try:
-            value = getattr(embody.par, name, None)
-            return value.eval() if value is not None else ""
-        except Exception:
-            return ""
-
-    pub = published_steps(embody)
-    if catalog is None:
-        catalog = pub.get(STEP_CATALOG) or catalog_step(par("Status"))
-    return snapshot(
-        repo=pub.get(STEP_REPO)
-        or simple_step(DONE if par("Version") else IDLE),
-        catalog=catalog,
-        envoy=_stamp(embody, STEP_ENVOY,
-                     envoy_step(par("Envoystatus")), now),
-        convoy=_stamp(embody, STEP_CONVOY,
-                      convoy_step(par("Convoystatus")), now),
-        restore=pub.get(STEP_RESTORE),
-        now=now)
-
-
 def _stamp(embody, key, step, now=None):
-    """Give a DERIVED step the clock its parameter cannot carry.
+    """Give a step the clock its parameter cannot carry.
 
     Keyed on (state, detail) so each phase of a long sequence times
     itself -- "Preparing Python environment" finishing and "Installing
@@ -602,67 +248,21 @@ def _stamp(embody, key, step, now=None):
     return step
 
 
-def live_row(embody, key, now=None, phase=0.0, catalog=None):
-    """(text, rgb) for one row, straight from the live parameters."""
-    snap = live_snapshot(embody, now=now, catalog=catalog)
-    step = snap.get("steps", {}).get(key) or _entry(IDLE)
-    return (row_text(key, step, now, phase),
-            STATE_RGB.get(step.get("state"), STATE_RGB[IDLE]))
-
-
 # -- responsive layout ----------------------------------------------------
 #
-# The row is monospace, so how many bar cells fit is arithmetic rather
+# The row is monospace, so how many characters fit is arithmetic rather
 # than guesswork: character advance is a fixed fraction of the font size.
 # Consolas measures ~0.55; the constant is named so a font change is a
 # one-line correction instead of a hunt through expressions.
 MONO_ADVANCE = 0.55
 
-# Separator spaces in row_text: one after the label, two before the value.
-_SEPARATORS = 3
-
-# The value column is sized to the LONGEST thing it renders, measured
-# rather than rounded up: "skipped" and "142/344" are both 7. Reserving 8
-# cost a character of bar at the smallest panel size for nothing. A
-# four-digit catalog total ("1420/3440") would exceed it, which costs two
-# cells of bar on that one row and nothing else.
-VALUE_WIDTH = 7
-
-
-def fit_bar_width(panel_width, fontsize, label_width=9, value_width=VALUE_WIDTH,
-                  padding=48, minimum=6, maximum=120):
-    """Bar cells that fit `panel_width`, so the row fills the container.
-
-    Clamped at both ends: a panel squeezed to nothing still renders a
-    readable stub rather than a zero-length bar (or a negative one), and
-    a very wide panel stops growing the bar long before the string cost
-    matters.
-    """
-    try:
-        usable = float(panel_width) - float(padding)
-        cell = max(1.0, float(fontsize) * MONO_ADVANCE)
-    except (TypeError, ValueError):
-        return minimum
-    chars = int(usable / cell) - int(label_width) - int(value_width) \
-        - _SEPARATORS
-    return max(minimum, min(maximum, chars))
-
-
-# The row we want to fit at minimum: label + a bar worth reading + value
-# + separators. Below this the bar stops being a bar and becomes a few
-# fat cells, which looks broken even though it technically fills.
-#
-# THIS NUMBER IS THE FONT SIZE. It is the width constraint that binds at
-# node-tile sizes, so every character the layout stops spending buys
-# legibility directly: 46 -> 33 is a ~39% larger glyph at the same panel
-# width. 32 is DERIVED, not guessed. When width is the binding
-# constraint the font scales with the panel too, so the cell count lands
-# at a constant (1 - 2*pad) * TARGET - 18 regardless of panel size --
-# 32 is the smallest budget that still yields the 12-cell bar floor.
-# It is set by BAR mode, the tighter of the two:
-# label(9) + bar(12) + value(7) + separators(3).
-# Settled mode fits comfortably inside it because compact_status stops
-# the value repeating the label -- "Running on port 9870" becomes "port
+# The widest row the readout is allowed to want, and THEREFORE the font
+# size: width is the constraint that binds at node-tile sizes, so every
+# character the layout stops spending buys legibility directly (46 -> 33
+# is a ~39% larger glyph at the same panel width). Nothing here is
+# clipped to it -- font_for_rows sizes to the content it is actually
+# handed, and this is the budget that content is DESIGNED against.
+# compact_status is what keeps it: "Running on port 9870" becomes "port
 # 9870", which is what bought the last two font increases.
 TARGET_ROW_CHARS = 33
 
@@ -678,30 +278,11 @@ ROW_FONT_RATIO = 0.52
 LINE_SPACING = 0.5
 
 
-def fit_font_size(panel_width, row_height, target_chars=TARGET_ROW_CHARS,
-                  minimum=7.0, maximum=40.0):
-    """Font size that satisfies BOTH the row height and the width.
-
-    Sizing off height alone is the obvious mistake and it looks wrong
-    immediately: a short wide panel yields huge glyphs and a bar of about
-    nine fat cells with dead space beside it. The width constraint keeps
-    enough characters on the line for the bar to still read as a bar.
-    """
-    try:
-        by_height = float(row_height) * ROW_FONT_RATIO
-        by_width = float(panel_width) / (float(target_chars) * MONO_ADVANCE)
-    except (TypeError, ValueError, ZeroDivisionError):
-        return minimum
-    return max(minimum, min(maximum, by_height, by_width))
-
-
-# == mode two: the settled status list ====================================
+# == the rows: one per subsystem ==========================================
 #
-# Bars answer "how far along is this?", which is only a real question
-# while something is installing. Once startup settles, a bar is four
-# identical full-width blocks saying nothing -- so the viewer switches to
-# what the user actually wants at that point: WHAT IS THE STATE OF EACH
-# SUBSYSTEM RIGHT NOW. Same panel, same rows, different question.
+# These keys ARE the readout. There is no second set and no second view:
+# the one question the panel answers, during an install and after it, is
+# WHAT IS THE STATE OF EACH SUBSYSTEM RIGHT NOW.
 STATUS_EMBODY = "embody"
 STATUS_AUTOSAVE = "autosave"
 STATUS_ENVOY = "envoy"
@@ -774,6 +355,59 @@ def clock_seconds(text):
     return None
 
 
+def dated_stamp(text):
+    """A 'YYYY-MM-DD HH:MM:SS' inside `text` as a naive datetime, or None.
+
+    TWO SHAPES REACH THE AUTO-SAVE ROW and only one carries a date. The
+    live auto-save writes a wall clock ('Saved 14:53:05 PDT') because
+    the save it reports happened seconds ago. The startup seed reads the
+    externalizations table, whose stamps are full UTC dates and are
+    routinely WEEKS old -- and folding one of those into a 24-hour clock
+    is how a seven-week-old project came to report '1h ago'. So a dated
+    stamp is recognised as a date, not truncated to its time.
+    """
+    import datetime
+    import re
+    match = re.search(r"(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})",
+                      _text(text))
+    if not match:
+        return None
+    try:
+        return datetime.datetime(*(int(g) for g in match.groups()))
+    except ValueError:
+        return None                 # 2026-13-40: a stamp, but not a date
+
+
+def age_seconds(text, now_seconds=None, now_dt=None):
+    """How long ago the timestamp in `text` was, or None if it has none.
+
+    `now_dt` times a DATED stamp; `now_seconds` (seconds since midnight)
+    times a bare clock. Both are injectable so the suite never races the
+    machine's own clock. The timezone marker in the text picks the
+    reference when neither is supplied -- Embody writes local time when
+    Localtimestamps is on (the default) and UTC when it is off, so which
+    one this is has to be read, not assumed.
+    """
+    import datetime
+    utc = "utc" in _text(text).lower()
+    stamp_dt = dated_stamp(text)
+    if stamp_dt is not None:
+        if now_dt is None:
+            now_dt = (datetime.datetime.utcnow() if utc
+                      else datetime.datetime.now())
+        return int((now_dt - stamp_dt).total_seconds())
+    stamp = clock_seconds(text)
+    if stamp is None:
+        return None
+    if now_seconds is None:
+        now = (datetime.datetime.utcnow() if utc else datetime.datetime.now())
+        now_seconds = now.hour * 3600 + now.minute * 60 + now.second
+    delta = int(now_seconds) - stamp
+    if delta < 0:
+        delta += 86400              # the save was before midnight
+    return delta
+
+
 def ago_text(seconds):
     """'12s ago' / '3m ago' / '2h ago'. Freshness, not a timestamp.
 
@@ -795,17 +429,27 @@ def ago_text(seconds):
     return "%dd ago" % (seconds // 86400)
 
 
-def autosave_step(status, now_seconds=None):
+def autosave_step(status, now_seconds=None, now_dt=None):
     """TDN auto-save. 'Saved <time>' is the healthy resting state.
 
-    The saved TIME is converted to an AGE. Crossing midnight is handled
-    by wrapping rather than reporting a negative age, which would render
-    as an empty cell exactly once a day.
+    The saved TIME is converted to an AGE, because the age is the whole
+    question -- how long ago did the work reach disk. A bare clock wraps
+    at midnight and is wrapped rather than reported negative; a DATED
+    stamp (what SeedAutosaveStatus reads out of the externalizations
+    table) is measured against the calendar, so a project last written
+    seven weeks ago says '51d ago' and not '1h ago'.
     """
     text = _text(status)
     low = text.lower()
-    if not text:
-        return _entry(IDLE)
+    if not text or low in ("idle", "none", "never"):
+        # "Idle" is the value the release scrub leaves in the shipped .tox
+        # so a session's timestamp cannot leak into git (see EmbodyExt's
+        # _TRANSIENT_STATUS_PARS). It is NOT a running state -- and with
+        # no branch for it this fell through to the RUNNING default, so a
+        # project that had simply not checkpointed yet rendered a busy
+        # mark on the auto-save row forever, with no age beside it. What
+        # this row is FOR is how long ago the work was written.
+        return _entry(IDLE, detail="")
     if low.startswith(("off", "disabled")):
         return _entry(SKIPPED, detail=text)
     if "failed" in low or low.startswith("error"):
@@ -813,25 +457,14 @@ def autosave_step(status, now_seconds=None):
     if low.startswith(("saving", "exporting", "writing")):
         return _entry(RUNNING, detail=text)
     if low.startswith("saved"):
-        stamp = clock_seconds(text)
-        if stamp is not None:
-            if now_seconds is None:
-                # Compare against a clock in the SAME zone as the stamp.
-                # Embody writes local time when Localtimestamps is on
-                # (the default) and UTC when it is off, and a session
-                # that started before this change still holds a UTC
-                # string -- so the marker in the text decides, not an
-                # assumption about which one we are looking at.
-                import datetime
-                now = (datetime.datetime.utcnow() if "utc" in low
-                       else datetime.datetime.now())
-                now_seconds = (now.hour * 3600 + now.minute * 60
-                               + now.second)
-            delta = int(now_seconds) - stamp
-            if delta < 0:
-                delta += 86400          # the save was before midnight
-            return _entry(DONE, detail=ago_text(delta) or text)
-        return _entry(DONE, detail=text)
+        delta = age_seconds(text, now_seconds=now_seconds, now_dt=now_dt)
+        if delta is None:
+            return _entry(DONE, detail=text)
+        # A negative age means the stamp is in the FUTURE (a clock skew,
+        # or a UTC stamp read against a local clock). Showing the words
+        # is honest; inventing '0s ago' is not -- ago_text returns ''
+        # for a negative, and the fallback is the text itself.
+        return _entry(DONE, detail=ago_text(delta) or text)
     return _entry(RUNNING, detail=text)
 
 
@@ -865,67 +498,11 @@ def version_step(version, update_status, autoupdate=None):
     return _labelled(_entry(SKIPPED, detail=text), label)
 
 
-def status_row_text(key, step, label_width=9, width=None):
-    """One settled-status line: label, then what it is doing. No bar.
-
-    Truncation is MARKED. Some of these strings are long (the updater's
-    dev-checkout refusal is a full sentence), and a silent cut at the
-    panel edge reads as though the message simply ended -- which is how
-    a truncated warning becomes a misread one.
-    """
-    label = ((step or {}).get("label")
-             or STATUS_LABELS.get(key, key))[:label_width].ljust(label_width)
-    detail = (compact_status((step or {}).get("detail"))
-              or value_text(step))
-    line = "%s %s" % (label, detail)
-    if width:
-        width = int(width)
-        if width > 3 and len(line) > width:
-            line = line[:width - 3].rstrip() + "..."
-        else:
-            line = line[:width]
-    return line
-
-
-def live_status_rows(embody, label_width=9, width=None):
-    """(key, text, rgb) per settled-status row, from live parameters."""
-    def par(name):
-        try:
-            value = getattr(embody.par, name, None)
-            return value.eval() if value is not None else ""
-        except Exception:
-            return ""
-
-    steps = {
-        STATUS_EMBODY: embody_step(par("Status")),
-        STATUS_AUTOSAVE: autosave_step(par("Autosavestatus")),
-        STATUS_ENVOY: envoy_step(par("Envoystatus")),
-        STATUS_CONVOY: convoy_step(par("Convoystatus")),
-        STATUS_VERSION: version_step(par("Version"), par("Updatestatus"),
-                                     par("Autoupdate")),
-    }
-    return [(key, status_row_text(key, steps[key], label_width, width),
-             STATE_RGB.get(steps[key].get("state"), STATE_RGB[IDLE]))
-            for key in STATUS_ORDER]
-
-
-def is_installing(snap):
-    """True while any startup step is still moving or blocked.
-
-    The ONE switch between the two modes, so the panel and any test
-    agree on which question is being asked.
-    """
-    return not (snap or {}).get("summary", {}).get("settled", True)
-
-
-# Set once, the first time this session is seen fully settled. Bars
-# answer "how far along is startup?", which stops being a question the
-# moment startup finishes -- after that a Convoy heartbeat must not throw
-# the panel back to a progress view. Module-level because it is a
-# per-session observation, not project state; reset_session() keeps tests
-# from depending on order.
-_SESSION = {"settled_once": False, "problem_key": None,
-            "problem_since": None, "startup": False}
+# WHICH problem the panel is currently dwelling on, and since when.
+# Module-level because it is a per-session observation, not project
+# state; reset_session() keeps the suites from depending on order.
+_SESSION = {"problem_key": None, "problem_since": None,
+            "problem_last_seen": None}
 
 # How long a problem must PERSIST before it is allowed to change the
 # layout. Convoy's own vocabulary passes through "Not installed" and
@@ -934,6 +511,28 @@ _SESSION = {"settled_once": False, "problem_key": None,
 # to five rows and snap back every time the host app cycled. A genuine
 # failure is still there a few seconds later; an update is not.
 PROBLEM_DWELL_S = 6.0
+
+
+def reset_session():
+    """Forget EVERYTHING this session has observed.
+
+    TEST SUPPORT, and the reason it is public: the two module-level
+    records here (has a problem persisted long enough to change the
+    layout? when did each row enter its current state?) are observations
+    that outlive any one call, so without a reset the suites depend on
+    execution order.
+
+    _SINCE HAS TO GO TOO. Leaving it behind is not a partial reset, it
+    is a silent one: the fake COMP the suite uses has a FIXED path, so
+    every suite shares one key, and a clock started in an earlier test
+    then renders as an elapsed time in a later one that never started
+    it. A reset that leaves the clocks running is exactly the order
+    dependence this function exists to remove.
+    """
+    _SESSION["problem_key"] = None
+    _SESSION["problem_since"] = None
+    _SINCE.clear()
+
 
 # How long a step must stay RUNNING before its row spends width on an
 # elapsed clock. NOT zero: cell width sets column width sets font size,
@@ -959,42 +558,10 @@ def stuck_clock(step, now=None, dwell=STUCK_DWELL_S):
     return elapsed_text(step, now)
 
 
-def reset_session():
-    """Forget everything observed this session (tests, a genuine re-init).
-
-    The published record and the observed clocks go with it: a re-init
-    that kept them would replay the previous open's counts and date a new
-    RUNNING state to a start that happened before the reset.
-    """
-    _SESSION["settled_once"] = False
-    _SESSION["problem_key"] = None
-    _SESSION["problem_since"] = None
-    _SESSION["startup"] = False
-    _PUBLISHED.clear()
-    _SINCE.clear()
-
-
-def begin_startup(embody=None, now=None):
-    """The open sequence has STARTED. Called from the startup chain.
-
-    Declared rather than inferred: see the module docstring. Also drops
-    any record from a previous open, so a re-init cannot replay the last
-    session's counts.
-    """
-    if embody is not None:
-        clear_published(embody)
-    _SESSION["startup"] = True
-    _SESSION["settled_once"] = False
-
-
-def end_startup(embody=None):
-    """The open sequence has finished SCHEDULING; not necessarily working.
-
-    This releases the hold, it does not latch: the catalog scan legitimately
-    runs for hundreds of frames past the last startup callback, so the
-    viewer stays on bars until the snapshot itself settles.
-    """
-    _SESSION["startup"] = False
+# How long a problem may BLINK OUT before it counts as recovered. Longer
+# than the sub-second Registering... pass of a Convoy retry, far shorter
+# than a real recovery staying healthy.
+PROBLEM_GRACE_S = 10.0
 
 
 def persistent_problem(steps, now=None, dwell=PROBLEM_DWELL_S):
@@ -1008,13 +575,27 @@ def persistent_problem(steps, now=None, dwell=PROBLEM_DWELL_S):
     key = tuple(sorted(k for k, step in steps
                        if (step or {}).get("state") in (FAILED, STALLED)))
     if not key:
-        _SESSION["problem_key"] = None
-        _SESSION["problem_since"] = None
+        # A BLINK IS NOT A RECOVERY. Convoy's reconcile loop passes
+        # through Registering... for a fraction of a second on every
+        # retry, and clearing here on that blink restarted the dwell each
+        # cycle -- so a mesh that had been dead for minutes never earned
+        # its explanatory view (caught live: the dwell restamped every
+        # few seconds against a stable 'No Convoy host app'). The problem
+        # is only OVER once it has stayed gone for PROBLEM_GRACE_S.
+        last = _SESSION.get("problem_last_seen")
+        if (_SESSION["problem_key"] is None or now is None
+                or last is None or (float(now) - float(last))
+                > PROBLEM_GRACE_S):
+            _SESSION["problem_key"] = None
+            _SESSION["problem_since"] = None
+            _SESSION["problem_last_seen"] = None
         return False
     if key != _SESSION["problem_key"]:
         _SESSION["problem_key"] = key
         _SESSION["problem_since"] = now
+        _SESSION["problem_last_seen"] = now
         return False
+    _SESSION["problem_last_seen"] = now
     since = _SESSION["problem_since"]
     if since is None:
         # First seen by a caller with no clock, so the dwell starts at the
@@ -1027,43 +608,6 @@ def persistent_problem(steps, now=None, dwell=PROBLEM_DWELL_S):
     if now is None:
         return False
     return (float(now) - float(since)) >= float(dwell)
-
-
-def startup_snapshot(embody, now=None):
-    """The startup snapshot while startup is in flight, else None.
-
-    THE ONE LATCH, so live_view and live_grid can never disagree about
-    which question the panel is answering -- they drifted once already
-    and it read on screen as the layout freaking out.
-
-    Two ways to be in flight, and both are needed. `startup` is declared
-    by the open sequence (frame one looks perfectly settled, which is why
-    inference alone latched the viewer before anything ran); after that
-    hold is released, any step still moving keeps the bars up, which is
-    what covers a catalog scan that outlives the startup callbacks.
-    """
-    if _SESSION["settled_once"]:
-        return None
-    snap = live_snapshot(embody, now=now)
-    if _SESSION["startup"] or is_installing(snap):
-        return snap
-    _SESSION["settled_once"] = True
-    return None
-
-
-def live_view(embody, now=None, phase=0.0, bar_width=20, label_width=9,
-              width=None):
-    """The rows to draw, whichever mode we are in.
-
-    Positional by design: the two modes do not share a row SET (bars
-    describe startup steps, statuses describe subsystems), so the panel
-    binds row i to element i rather than to a fixed key.
-    """
-    snap = startup_snapshot(embody, now=now)
-    if snap is not None:
-        return rows(snap, now=now, phase=phase,
-                    label_width=label_width, bar_width=bar_width)
-    return live_minimal_rows(embody, now=now)
 
 
 # -- compact status text --------------------------------------------------
@@ -1133,17 +677,7 @@ def row_height_for(fontsize, spacing=LINE_SPACING):
         return 1.0
 
 
-def font_for_width(panel_width, target_chars=TARGET_ROW_CHARS,
-                   minimum=7.0, maximum=40.0):
-    """Font size from the WIDTH budget alone."""
-    try:
-        by_width = float(panel_width) / (float(target_chars) * MONO_ADVANCE)
-    except (TypeError, ValueError, ZeroDivisionError):
-        return minimum
-    return max(minimum, min(maximum, by_width))
-
-
-# == minimal mode: a glyph per subsystem, two columns =====================
+# == the marks: a glyph per subsystem, two columns ========================
 #
 # The state is carried by a MARK, not a sentence: a tick when it is fine,
 # a cross when it is not. That does two things at once -- it is read at a
@@ -1192,7 +726,6 @@ def busy_glyph(now=None, animate=False):
     return spinner_frame(now) if animate else GLYPH_BUSY
 
 
-
 GLYPH_OK = "\u2713"
 GLYPH_BAD = "\u2717"
 GLYPH_WAIT = "!"
@@ -1207,16 +740,6 @@ STATE_GLYPH = {
     SKIPPED: GLYPH_SKIP,
     IDLE: " ",
 }
-
-# Values that say nothing the tick has not already said.
-_REDUNDANT_OK = ("enabled", "connected", "up to date", "running", "ok",
-                 "saved", "online")
-
-# Rows whose detail is worth the width even when everything is fine. The
-# autosave AGE is the one genuinely useful happy-path fact here -- "3m
-# ago" answers a question a tick cannot ("is my work safe?"), unlike
-# "Connected", which only repeats the tick.
-_ALWAYS_SHOW = ()
 
 
 def cell_text(key, step, verbose=False, now=None, animate=False):
@@ -1254,106 +777,18 @@ def cell_text(key, step, verbose=False, now=None, animate=False):
     # and a reason nobody can read before it changes is not information.
     # Reasons live in the expanded view, which only a real problem
     # triggers and which therefore does not flicker.
-    show = detail and (verbose or key in _ALWAYS_SHOW)
+    # THERE IS NO EXCEPTION LIST, and there should not be one. There
+    # was: an _ALWAYS_SHOW tuple, permanently empty, under a comment
+    # describing the autosave age as its member. The age does get shown
+    # on the happy path -- as its own continuation row in live_grid --
+    # so the tuple was a second, dead mechanism for the same job, and
+    # the next bug here would have been fixed in it.
+    show = detail and verbose
     return ("%s %s %s" % (glyph, label, detail)).rstrip() if show \
         else "%s %s" % (glyph, label)
 
 
-def worst_state(steps):
-    """The state a row should be COLOURED by: the most alarming in it."""
-    order = (FAILED, STALLED, RUNNING, DONE, SKIPPED, IDLE)
-    present = [s.get("state") for s in steps if s]
-    for state in order:
-        if state in present:
-            return state
-    return IDLE
-
-
-def grid_rows(cells, columns=2, gap=2, col_width=None):
-    """Lay cells out in columns, COLUMN-MAJOR, as (text, rgb) rows.
-
-    Column-major so each column still reads top-to-bottom; row-major
-    would interleave unrelated subsystems across the fold.
-    """
-    cells = list(cells)
-    columns = max(1, int(columns))
-    per = (len(cells) + columns - 1) // columns
-    if col_width is None:
-        col_width = max([len(t) for _k, t, _s in cells] or [1])
-    col_width = int(col_width)
-    out = []
-    for r in range(per):
-        picked = []
-        for cnum in range(columns):
-            index = cnum * per + r
-            if index < len(cells):
-                picked.append(cells[index])
-        if not picked:
-            continue
-        text = (" " * gap).join(
-            t.ljust(col_width) if i < len(picked) - 1 else t
-            for i, (_k, t, _s) in enumerate(picked)).rstrip()
-        rgb = STATE_RGB.get(worst_state([s for _k, _t, s in picked]),
-                            STATE_RGB[IDLE])
-        out.append(("row%d" % r, text, rgb))
-    return out
-
-
 GRID_GAP = 2
-
-
-def layout_rows(by_key, layout, gap=GRID_GAP, now=None):
-    """Compose rows from an EXPLICIT column layout.
-
-    Columns may be different lengths (three subsystems beside two
-    housekeeping rows), so this pads by column rather than assuming an
-    even split.
-    """
-    columns = [[(key, cell_text(key, by_key[key], now=now), by_key[key])
-                for key in col if key in by_key] for col in layout]
-    widths = [max([len(t) for _k, t, _s in col] or [0]) for col in columns]
-    depth = max([len(col) for col in columns] or [0])
-    out = []
-    for r in range(depth):
-        picked, parts = [], []
-        for cnum, col in enumerate(columns):
-            if r < len(col):
-                picked.append(col[r][2])
-                parts.append(col[r][1].ljust(widths[cnum]))
-            elif any(r < len(c) for c in columns[cnum + 1:]):
-                parts.append(" " * widths[cnum])
-        text = (" " * gap).join(parts).rstrip()
-        out.append(("row%d" % r, text,
-                    STATE_RGB.get(worst_state(picked), STATE_RGB[IDLE])))
-    return out
-
-
-# Bar cells in the startup grid. The row is label(9) + bar + value(7)
-# plus three separators, so 14 keeps it inside TARGET_ROW_CHARS -- the
-# same budget the settled rows are sized against, which is what stops the
-# font jumping when the panel changes mode.
-GRID_BAR_WIDTH = 14
-
-# Sweep cycles per second for an indeterminate bar. Slow enough to read
-# as deliberate motion rather than strobing at whatever frame rate the
-# project happens to be running.
-SWEEP_RATE = 0.5
-
-
-def startup_grid(snap, now=None, bar_width=GRID_BAR_WIDTH, label_width=9):
-    """The startup bars, shaped like the grid the panel already draws.
-
-    ONE cell per row. The viewer binds row i / cell j positionally, so a
-    one-cell row simply leaves the second slot empty -- five bars fit the
-    five row slots with no change to a single panel expression, which is
-    the whole reason the bars are returned in grid shape rather than as
-    their own row list.
-    """
-    phase = ((now or 0.0) * SWEEP_RATE) % 1.0
-    return [[(key, text, rgb)]
-            for key, text, rgb in rows(snap, now=now, phase=phase,
-                                       label_width=label_width,
-                                       bar_width=bar_width)]
 
 
 def live_grid(embody, verbose=False, now=None):
@@ -1364,9 +799,6 @@ def live_grid(embody, verbose=False, now=None):
     the row one colour meant a disabled Envoy greyed out the version
     beside it, reporting a state that subsystem is not in.
     """
-    snap = startup_snapshot(embody, now=now)
-    if snap is not None:
-        return startup_grid(snap, now=now)
     steps = _live_steps(embody, now=now)
     # ONLY A PROBLEM EXPANDS THE GRID. The first rule was "anything not
     # done or skipped", which made every routine heartbeat reflow the
@@ -1376,11 +808,12 @@ def live_grid(embody, verbose=False, now=None):
     # than news about the project -- and a real failure persists, while
     # activity does not.
     healthy = not persistent_problem(steps, now)
-    # Animate the busy mark ONLY while an install is genuinely in flight.
-    # `startup_snapshot` returning None above means startup is over, so the
-    # only animating case left here is a subsystem still installing (a
-    # Convoy host app coming up after the open sequence). A settled project
-    # gets the static ellipsis and therefore publishes nothing.
+    # Animate the busy mark ONLY while an install is genuinely in
+    # flight, read off the DETAIL rather than off a startup flag: there
+    # is no startup flag any more, and an install can begin long after
+    # the open sequence (a Convoy host app coming up on demand). A
+    # settled project gets the static ellipsis -- an unchanging cell,
+    # which publishes nothing and cooks nothing.
     animate = any((step or {}).get("state") == RUNNING
                   and (step or {}).get("detail", "").lower().startswith(
                       ("install", "building", "preparing", "starting"))
@@ -1450,34 +883,13 @@ def _live_steps(embody, now=None):
     ]
 
 
-def live_minimal_rows(embody, columns=2, verbose=False, now=None):
-    """The settled view, as marks in a grid."""
-    steps = _live_steps(embody, now=now)
-    # ONLY A PROBLEM EXPANDS THE GRID. The first rule was "anything not
-    # done or skipped", which made every routine heartbeat reflow the
-    # whole panel: Convoy re-checks its host app, Envoy restarts on a
-    # reinit, the autosave runs. Those are RUNNING, not broken. A layout
-    # that jumps every few seconds reads as a fault in the viewer rather
-    # than news about the project -- and a real failure persists, while
-    # activity does not.
-    healthy = not persistent_problem(steps, now)
-    by_key = dict(steps)
-    if not healthy:
-        # Something needs a REASON, and a reason does not fit half a
-        # panel. Drop to one column and let the rows say what is wrong --
-        # the layout changing is itself a signal.
-        cells = [(key, cell_text(key, by_key[key], True, now=now),
-                  by_key[key]) for key in STATUS_ORDER]
-        return grid_rows(cells, columns=1)
-    return layout_rows(by_key, COLUMN_LAYOUT, now=now)
-
-
 def font_for_rows(panel_width, texts, minimum=7.0, maximum=40.0):
     """Font sized to the CONTENT, not to a fixed character budget.
 
-    Bars are fixed-length by construction so they use the budget; the
-    settled view is not, and sizing it to the longest row it actually
-    renders is what makes the minimal mode as large as it can be.
+    TARGET_ROW_CHARS is what the rows are DESIGNED to fit; this is what
+    they actually came out as. Sizing to the longest row really being
+    rendered is what makes the readout as large as it can be on any
+    given panel, rather than as large as the worst case allows.
     """
     try:
         longest = max([len(t) for t in texts] or [1])
@@ -1526,17 +938,22 @@ def _panel_row_budget(embody, now=None):
 def live_font(embody, panel_width, row_height=None, now=None):
     """Font sized from EXACTLY what the panel draws.
 
-    THE BUG THIS REPLACES, measured on the live panel every ~30s: this
-    used to ask is_installing() and fall back to the bar budget, while
-    the panel itself renders live_grid(). A Convoy heartbeat then left
-    the grid on screen but sized the font for bars -- 39.1 to 24.9 and
-    back, with the column widths never moving, which is why it read as
-    the layout freaking out rather than as a font change.
+    THE BUG THIS REPLACES, measured on the live panel every ~30s: the
+    font used to be chosen by guessing which view was up, while the
+    panel rendered live_grid() regardless. A Convoy heartbeat then left
+    the grid on screen but sized the font for the other view -- 39.1 to
+    24.9 and back, with the column widths never moving, which is why it
+    read as the layout freaking out rather than as a font change.
 
-    The cure is not a better guess about the mode: it is deriving the
-    size from live_col_chars(), the same numbers that set the cell
-    widths. Content and font cannot disagree if they come from one
-    source.
+    The cure is not a better guess: it is deriving the size from
+    live_col_chars(), the same numbers that set the cell widths.
+    Content and font cannot disagree if they come from one source.
+
+    KEPT DESPITE HAVING NO PRODUCTION CALLER. table_rows() builds one
+    grid and derives everything from it (_font_of/_col_chars_of); this
+    is the reference implementation those two are pinned against by
+    test_layout_matches_the_helpers_it_replaced, which is the only
+    thing standing between that optimisation and a silent drift.
     """
     cols = live_col_chars(embody, now=now)
     total = sum(cols) + GRID_GAP * max(0, len(cols) - 1)
@@ -1560,6 +977,9 @@ def live_col_chars(embody, now=None):
     an even split sized the font for one budget and then gave each cell
     a different one, which clipped the wider column ("Autosaved 1h ago"
     lost its "ago").
+
+    Reached only through live_font now; both survive as the reference
+    the table_rows fast path is tested against. See live_font.
     """
     grid = live_grid(embody, now=now)
     if not grid:
@@ -1587,9 +1007,38 @@ def live_col_chars(embody, now=None):
 # None without an error.
 PANEL_COMP = "viz_status"
 
+# The published table's columns. PUBLIC: the panel's publisher writes by
+# index against this, so the order here IS the table's contract.
+TABLE_HEADER = ("name", "value", "r", "g", "b", "show")
+
 PANEL_ROWS = 5          # rowboxes the panel ships
 PANEL_COLS = 2          # cells per rowbox
-TABLE_HEADER = ("name", "value", "r", "g", "b", "show")
+
+
+def rows_show_a_live_age(rows):
+    """True when some rendered cell is a clock that moves on its own.
+
+    An "N ago" age or an elapsed M:SS advances with wall time and no
+    event behind it, so an event-driven panel that renders one owes
+    itself a slow re-check -- will_change's short horizons cannot see a
+    flip that happens minutes out, and after the last event nothing else
+    would ever look again. The seeded auto-save age froze at its first
+    value for exactly this reason.
+    """
+    try:
+        for row in rows or ():
+            value = str(row[1] if len(row) > 1 else "")
+            if " ago" in value or _CLOCK_RE.search(value):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+# Word boundaries spelt as explicit character classes: a \b escape
+# travelled through one quoting layer too many on the way here and
+# arrived as a literal backspace byte, which matches nothing.
+_CLOCK_RE = __import__("re").compile(r"(?:^|[^0-9])[0-9]+:[0-9]{2}(?![0-9])")
 
 
 def will_change(embody, now=None, ahead=1.0, panel_width=600,

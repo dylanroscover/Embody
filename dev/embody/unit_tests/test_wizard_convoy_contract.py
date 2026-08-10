@@ -299,3 +299,103 @@ def test_recap_reports_convoy_plainly_behind_the_save_gate():
     recap = logic._recap()
     assert "Convoy: enabled" in recap
     assert "SAVE THE PROJECT" not in recap
+
+
+# -- MODALS: every OS dialog opens on the mouse-UP, never on the press --
+#
+# The OS dialog takes the input, so TouchDesigner never delivers the
+# mouse-UP that ends the click that opened it: the panel is left
+# mid-press, and the user's NEXT click merely completes that phantom
+# press instead of registering on the button under the cursor. That is
+# the two-clicks-to-continue bug -- the first Next after choosing the
+# folder did nothing while looking perfectly enabled, from v6.0.204.
+#
+# The first fix deferred by FRAMES, which is a guess about how long a
+# human holds a button: two frames is ~33 ms at 60 fps against a press
+# that normally lasts 80-150 ms, so the dialog still opened with the
+# button down and the bug survived its own fix. These pin the mechanism,
+# not the symptom -- a live click is owed a session check regardless.
+
+
+def test_no_modal_is_opened_from_inside_a_click_callback():
+    """click() must not reach ui.chooseFile / ui.chooseFolder on any path.
+
+    Walked as an AST call graph rather than grepped, because the two
+    dialogs live one and two frames down the call chain (_saveProjectNow,
+    finish) and a substring search over click() sees neither.
+    """
+    import ast
+    tree = ast.parse(LOGIC.read_text(encoding="utf-8"))
+    funcs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    assert "click" in funcs
+
+    def reaches(name, seen):
+        if name in seen:
+            return False
+        seen.add(name)
+        node = funcs.get(name)
+        if node is None:
+            return False
+        for sub in ast.walk(node):
+            if not isinstance(sub, ast.Call):
+                continue
+            fn = sub.func
+            if (isinstance(fn, ast.Attribute)
+                    and isinstance(fn.value, ast.Name)
+                    and fn.value.id == "ui"
+                    and fn.attr in ("chooseFile", "chooseFolder")):
+                return True
+            if isinstance(fn, ast.Name) and reaches(fn.id, seen):
+                return True
+        return False
+
+    assert not reaches("click", set()), (
+        "click() can open an OS modal synchronously -- the dialog "
+        "swallows the mouse-up and leaves the panel mid-press")
+
+
+def test_the_modal_waits_for_the_RELEASE_not_for_a_frame_count():
+    """_afterRelease must ask the panel whether the button is still held.
+
+    `lselect` is TouchDesigner's documented panel value for "left mouse
+    button is pressed" (docs.derivative.ca/PanelValue_Class). A frame
+    budget may only be the CEILING: without it a button that never
+    reports a release would withhold the dialog forever.
+    """
+    logic = _load_logic()
+    src = LOGIC.read_text(encoding="utf-8")
+    gate = src.split("def _afterRelease", 1)[1].split("\ndef ", 1)[0]
+    assert "_pressed(button)" in gate, (
+        "the gate no longer asks whether the button is held")
+    assert "_RELEASE_WAIT_FRAMES" in gate, "the ceiling is gone"
+    assert "lselect" in src.split("def _pressed", 1)[1].split("\ndef ", 1)[0]
+    assert logic._RELEASE_WAIT_FRAMES >= 60, (
+        "the ceiling must outlast a slow press by a wide margin, not "
+        "approximate one")
+
+
+def test_an_unreadable_button_still_gets_its_dialog():
+    """Fail OPEN. A stand-in with no panel, a destroyed COMP, a button
+    that never reports a release: the dialog must still happen, or the
+    save step becomes unusable instead of merely late."""
+    logic = _load_logic()
+    assert logic._pressed(None) is False
+    assert logic._pressed(object()) is False
+
+
+def test_one_dialog_per_click():
+    """A repeat press while the dialog is up is queued by TouchDesigner
+    and delivered after dismissal. Without the flag that scheduled a
+    SECOND dialog, which on the cancel path reopened the one the user had
+    just dismissed -- the same symptom clicks.py closes off for the
+    release edge."""
+    src = LOGIC.read_text(encoding="utf-8")
+    branch = src.split("if cur=='save' and name=='opt_savenow':", 1)[1]
+    branch = branch.split("\n\tif g:", 1)[0]
+    assert "save_pending" in branch, "no re-entrancy guard on the save card"
+    assert "return" in branch
+    # And it must be cleared on EVERY exit, including the cancel, or the
+    # save card is dead for the rest of the session.
+    deferred = src.split("def _saveStepDeferred", 1)[1].split("\ndef ", 1)[0]
+    assert "finally:" in deferred
+    assert "unstore('save_pending')" in deferred

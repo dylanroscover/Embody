@@ -9,29 +9,35 @@ display values that change a handful of times per SESSION. Now the
 values are computed here, once, and the cells read finished strings.
 
 WHY IT IS EVENT-DRIVEN, NOT POLLED. Refresh() runs when something
-actually changed: a parameter the readout shows (parexec_status), or a
-step published by EmbodyExt / CatalogManagerExt. In the steady state
-there is no tick at all -- an idle panel cooks ZERO times. The single
-exception is a step still RUNNING, which owns an elapsed clock that
-advances with no event behind it; that re-arms itself and stops the
-moment nothing is running.
+actually changed: a parameter the readout shows fires parexec_status,
+and Embody's own code calls _republishStatusPanel after events that
+have no parameter behind them (the auto-save seed at startup, the
+catalog scan's choke point). In the steady state there is no fast tick
+at all. The exceptions re-arm themselves and stop when their reason
+does: a spinner while something installs, and a slow half-minute check
+while any rendered cell is a wall-clock age -- an "N ago" advances with
+no event behind it, so a purely event-driven panel would freeze it at
+its first value forever (the seeded auto-save age did exactly that).
 
 WHY ONLY CHANGED CELLS ARE WRITTEN. Writing a DAT cooks it and every
 expression reading it, so writing an unchanged value would buy a full
 panel redraw for nothing. An unchanged readout writes nothing and
-therefore cooks nothing.
+therefore cooks nothing -- which is what makes the slow age check
+nearly free: one ~0.6 ms publish per half minute, zero panel cooks
+unless the age text actually flipped.
 """
 
-# Two cadences, because the panel has two reasons to re-tick.
-# SLOW is the elapsed clock ("2m ago" ticking over) -- half a second is
-# plenty and costs nothing to keep armed.
+# Three cadences, because the panel has three reasons to re-tick.
 # FAST is the busy-mark ANIMATION during an install: 8 frames is ~7.5 Hz
-# at 60 fps, which reads as motion. One publish is ~0.65 ms, so the
-# animation costs about 5 ms per second WHILE INSTALLING and exactly
-# nothing afterwards -- the tick only re-arms while the rows would
-# actually differ a tick from now.
+# at 60 fps, which reads as motion; ~5 ms per second WHILE INSTALLING
+# and nothing afterwards.
+# SLOW is an elapsed clock mid-flight ("0:18" on a running step).
+# AGE is the half-minute re-check while any cell shows an "N ago" --
+# will_change's short horizons cannot see a flip that is minutes out,
+# and after the last event nothing else would ever look again.
 TICK_FRAMES = 30
 TICK_FRAMES_ANIMATING = 8
+TICK_FRAMES_AGE = 1800
 
 
 def _table():
@@ -105,9 +111,25 @@ def _arm(mod, rows=None):
             if not mod.will_change(op.Embody, now=absTime.seconds,
                                    ahead=frames / rate, panel_width=width,
                                    rows=rows):
-                return
+                # Nothing moves within seconds -- but a rendered AGE still
+                # moves within minutes, and with no tick armed nothing
+                # would ever look again. See TICK_FRAMES_AGE.
+                if not mod.rows_show_a_live_age(rows):
+                    return
+                frames = TICK_FRAMES_AGE
     except Exception:
         return
+    # ONE tick, ever. run(group=...) does not dedupe: every event's
+    # Refresh armed another age tick and they accumulated (observed: five
+    # concurrent), each firing its own publish per half minute. Kill the
+    # group before arming so events RESCHEDULE the tick rather than
+    # multiply it.
+    try:
+        for pending in runs:
+            if getattr(pending, 'group', None) == 'embody_status_tick':
+                pending.kill()
+    except Exception:
+        pass
     run("me.module.Refresh()", fromOP=me, delayFrames=frames,
         group='embody_status_tick')
 

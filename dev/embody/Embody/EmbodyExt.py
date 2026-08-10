@@ -2632,60 +2632,32 @@ class EmbodyExt:
         return mod.embody_git.write_template(self, target_dir, rel_path, content)
 
     # ==========================================================================
-    # STARTUP PROGRESS (what the node viewer shows while the user waits)
+    # STATUS READOUT (the rows the node viewer draws)
     # ==========================================================================
     #
-    # The open sequence publishes INTO Embody/startup_progress rather than into
-    # a status string. A phase that restores nothing writes no string at all,
-    # and a phase that dies writes its last count forever -- both of which read
-    # on the panel as a startup still in progress. Publishing is the only way a
-    # step reaches a TERMINAL state on every path, including the ones that do
-    # no work. Every call here is best-effort: a viewer problem must never
-    # abort an open.
-
-    # The discrete phases this extension owns. NOT the catalog: its scan
-    # legitimately outlives every startup callback and publishes its own
-    # terminal state from _setScanStatus.
-    _STARTUP_PHASE_STEPS = ('repo', 'restore')
-
-    def _startupProgress(self):
-        """The startup_progress module, or None on a .tox that predates it."""
-        try:
-            dat = self.my.op('startup_progress')
-            return dat.module if dat is not None else None
-        except Exception:
-            return None
-
-    def _publishStartupStep(self, key: str, state: str, done: int = 0,
-                            total: int = 0, detail: str = '',
-                            add: bool = False) -> None:
-        """Hand one startup phase's REAL state to the node viewer.
-
-        absTime.seconds because that is the clock the readout is rendered
-        against -- an elapsed time is only meaningful against the clock that
-        draws it.
-        """
-        module = self._startupProgress()
-        if module is None:
-            return
-        try:
-            module.publish(self.my, key, state, done=done, total=total,
-                           detail=detail, add=add, now=absTime.seconds)
-        except Exception:
-            pass
-        self._republishStatusPanel()
+    # THE READOUT DERIVES FROM PARAMETERS, so nothing here feeds it values.
+    # There used to be a second path: seven wrappers that published each
+    # startup phase's counts into Embody/startup_progress for a column of
+    # progress bars to draw. The bars are gone, the record they drew from is
+    # gone, and the wrappers went with them rather than being kept warm --
+    # a write-only publish is indistinguishable from a working one until
+    # somebody trusts it, and by the time the bars died one of those calls
+    # was already invoking a function that no longer existed, swallowed by
+    # its own `except Exception: pass`.
+    #
+    # What survives is the redraw: the panel is event-driven and a value the
+    # readout shows has to say so, or the row it just wrote is never drawn.
 
     def _republishStatusPanel(self) -> None:
         """Redraw the status readout, because THIS was an event.
 
         The panel is event-driven: it holds no clock of its own and cooks
         nothing until something tells it a value moved (see
-        viz_status/status_publish). A parameter the readout shows is caught
-        by its parameter-execute DAT; a step published straight into the
-        module -- which is every startup phase -- has no parameter behind
-        it, so it has to say so here or the row it just wrote is never
-        drawn. Best-effort: a viewer that cannot redraw must never break
-        the startup it is reporting on."""
+        viz_status/status_publish). A parameter the readout shows is normally
+        caught by its parameter-execute DAT -- but a write that lands before
+        that DAT is watching (the frame-0 auto-save seed) has nothing behind
+        it, so it has to say so here. Best-effort: a viewer that cannot
+        redraw must never break the startup it is reporting on."""
         try:
             publisher = self.my.op('viz_status/status_publish')
             if publisher is not None:
@@ -2693,79 +2665,9 @@ class EmbodyExt:
         except Exception:
             pass
 
-    def _finishStartupStep(self, key: str, failed: bool = False,
-                           detail: str = '') -> None:
-        """Close a phase: DONE if it did work, SKIPPED if there was none."""
-        module = self._startupProgress()
-        if module is None:
-            return
-        try:
-            module.finish(self.my, key, failed=failed, detail=detail,
-                          now=absTime.seconds)
-        except Exception:
-            pass
-
-    def _beginStartupProgress(self) -> None:
-        """Declare the open sequence OPEN, and put the project step in flight.
-
-        Frame one reads Envoy Disabled, Convoy Disabled and the catalog
-        Enabled -- a perfectly settled snapshot, ten frames before any of it
-        runs. Inferring from that latched the viewer into its settled mode
-        before the first phase, which is why the startup bars were never seen.
-        """
-        module = self._startupProgress()
-        if module is None:
-            return
-        try:
-            module.begin_startup(self.my, now=absTime.seconds)
-        except Exception:
-            pass
-        # The project/config work starts NOW (settings restore at frame 5,
-        # the table at 15, the config pass at 30), so the step is in flight
-        # from here rather than snapping to DONE at frame 30 after reading
-        # as finished for the whole preceding window.
-        self._publishStartupStep('repo', 'running', total=1)
-
-    def _completeStartupConfigStep(self) -> None:
-        """The project/config step is over -- the dropped-.tox path.
-
-        A normal open closes it inside _upgradeEnvoy; onCreate never calls
-        that, and a step nobody closes is a bar that animates forever.
-        """
-        self._publishStartupStep('repo', 'done', done=1, total=1)
-
-    def _closeStartupPhases(self) -> None:
-        """End the open sequence and fail anything that never reported.
-
-        An exception inside a deferred run() callback kills the rest of that
-        chain silently, so a phase can stop existing between its RUNNING and
-        its terminal publish. A bar left animating forever is the exact lie
-        this viewer was built against: if a phase cannot say how it ended,
-        the panel says it did not end.
-        """
-        module = self._startupProgress()
-        if module is None:
-            return
-        try:
-            closed = module.close_unreported(
-                self.my, self._STARTUP_PHASE_STEPS, now=absTime.seconds)
-            module.end_startup(self.my)
-        except Exception:
-            return
-        for key in closed:
-            self.Log(f'Startup phase "{key}" never reported a result -- '
-                     f'shown as failed on the startup viewer', 'WARNING')
-
     def _upgradeEnvoy(self):
         """Restore AI config on open if Envoy is enabled but files are missing -- see embody_git."""
-        try:
-            result = mod.embody_git.upgrade_envoy(self)
-        except Exception as e:
-            self._publishStartupStep('repo', 'failed', done=0, total=1,
-                                     detail=str(e))
-            raise
-        self._publishStartupStep('repo', 'done', done=1, total=1)
-        return result
+        return mod.embody_git.upgrade_envoy(self)
 
     def _clientFilesMissing(self, target_dir, client):
         """True if the primary config files for the selected client are absent -- see embody_git."""
@@ -4307,6 +4209,67 @@ class EmbodyExt:
                 p.val = msg
             except Exception:
                 pass
+
+    def SeedAutosaveStatus(self) -> str:
+        """Show WHEN the work was last written, instead of resting at 'Idle'.
+
+        'Idle' is what the release scrub leaves in the shipped .tox so a
+        session's timestamp cannot leak into git (_TRANSIENT_STATUS_PARS).
+        It is the correct thing to SHIP and the wrong thing to display: a
+        freshly opened project then reads 'Idle' until its first
+        checkpoint, which on a project that is not being edited is
+        forever -- and the one question this readout answers is how long
+        ago the work reached disk.
+
+        The externalizations table already records that, per row, so the
+        newest tracked write IS the answer and needs no new bookkeeping.
+        Only ever seeds a resting value: a real checkpoint this session
+        outranks it, and Disabled/Bypassed/failed states are left alone.
+
+        THE DATE IS KEPT, deliberately. The live auto-save writes a bare
+        clock because the save it reports happened seconds ago; these
+        stamps are routinely weeks old, and folding one into a 24-hour
+        clock is how a seven-week-old project reported '1h ago' -- a
+        fabricated recency in the one readout whose entire job is
+        truthful staleness. startup_progress.age_seconds reads the date.
+        """
+        try:
+            p = getattr(self.my.par, 'Autosavestatus', None)
+            if p is None:
+                return ''
+            current = str(p.eval() or '').strip()
+            if current and current.lower() not in ('idle', 'none', 'never'):
+                return current      # a real state -- never overwrite it
+            table = self.Externalizations
+            if table is None:
+                return current
+            # _cellVal, not raw table[r, c].val: a partial externalize
+            # cascade can leave short rows, and None.val is exactly the
+            # issue-#21 crash the guard exists for.
+            headers = [self._cellVal(0, c) for c in range(table.numCols)]
+            if 'timestamp' not in headers:
+                return current
+            col = headers.index('timestamp')
+            newest = ''
+            for r in range(1, table.numRows):
+                stamp = self._cellVal(r, col).strip()
+                # Lexicographic == chronological ONLY because every writer
+                # in this file uses one fixed-width format with a constant
+                # suffix ('%Y-%m-%d %H:%M:%S UTC'). If that ever varies,
+                # this needs strptime -- as cleanupDuplicateRows already
+                # does on this very column.
+                if stamp > newest:
+                    newest = stamp
+            if not newest:
+                return current
+            self._setAutosaveStatus('Saved ' + newest)
+            # The parameter-execute DAT that normally redraws the readout is
+            # not watching yet at frame 0, so this write has to announce
+            # itself or the seeded row is not drawn until the next event.
+            self._republishStatusPanel()
+            return str(p.eval() or '')
+        except Exception:
+            return ''
 
     def _preRiskyCheckpoint(self, operation: str, params: dict) -> None:
         """Synchronously checkpoint the touched TDN root BEFORE a destructive
@@ -9161,16 +9124,11 @@ class EmbodyExt:
         # SAVE's network; the network is freshly restored now, so drop them
         # and let the first sweep re-seed against the current live state.
         self.my.unstore('_tdn_fingerprints')
-        # This method OWNS the terminal state of the shared restore bar --
-        # RestoreTOXComps only accumulates into it -- so every return below
-        # closes it, including the ones that do no work at all.
         mode = self._tdnMode()
         if mode == 'off':
             self.Log('TDN mode=off -- skipping reconstruction', 'INFO')
-            self._finishStartupStep('restore')
             return
         if not self.my.par.Tdncreateonstart.eval():
-            self._finishStartupStep('restore')
             return
         if mode == 'export':
             # .toe is the source of truth for COMPs that EXIST in it, so we do
@@ -9181,27 +9139,18 @@ class EmbodyExt:
             # row is invisible. (Spike-verified 2026-06-27.)
             self.Log('TDN mode=export -- additive recovery only, existing '
                      'COMPs kept (no full reconstruction)', 'INFO')
-            recovered = self._recoverMissingTDNComps()
-            if recovered:
-                self._publishStartupStep('restore', 'running', done=recovered,
-                                         total=recovered, add=True)
-            self._finishStartupStep('restore')
+            self._recoverMissingTDNComps()
             return
         # mode == 'full' -- repopulate ALL TDN COMPs (loop below)
 
         tdn_comps = self._getTDNStrategyComps()
         if not tdn_comps:
-            self._finishStartupStep('restore')
             return
 
         self.Log(f'Reconstructing {len(tdn_comps)} TDN COMP(s)...', 'INFO')
         errors_total = 0
-        self._publishStartupStep('restore', 'running',
-                                 total=len(tdn_comps), add=True)
 
         for comp_path, rel_tdn_path in tdn_comps:
-            # Counted on entry -- see RestoreTOXComps for why.
-            self._publishStartupStep('restore', 'running', done=1, add=True)
             # Re-check per row: at enumeration time the stripped .toe may
             # not contain a legacy row's annotate yet, so the enumerator's
             # filter can miss it (unresolvable -> not filtered). Parents
@@ -9308,10 +9257,6 @@ class EmbodyExt:
 
         # Build report
         self._logReconstructionReport(tdn_comps, errors_total)
-        self._finishStartupStep(
-            'restore', failed=bool(errors_total),
-            detail=f'{errors_total} error(s) -- see log' if errors_total
-            else '')
 
     def _recoverMissingTDNComps(self) -> int:
         """Export-mode auto-save recovery: rebuild TDN COMPs that are tracked and
@@ -9326,10 +9271,9 @@ class EmbodyExt:
         orphan .tdn with no row is invisible -- a deleted COMP is never
         resurrected. Spike-verified 2026-06-27 (children + connections round-trip).
 
-        Returns how many COMPs it rebuilt, so the caller can report real
-        counts on the startup viewer's restore bar. Export mode is a whole
-        startup path, and a path that reports nothing is a bar that never
-        moves.
+        Returns how many COMPs it rebuilt. The count once fed a startup
+        restore bar; the bars view is gone, but the return stays -- it is
+        the honest summary a caller or a log line can still report.
         """
         tdn_comps = self._getTDNStrategyComps()
         if not tdn_comps:
@@ -10697,18 +10641,7 @@ class EmbodyExt:
         restored = 0
         errors = 0
 
-        # The restore BAR is shared with ReconstructTDNComps: two methods,
-        # fifteen frames apart, answering one question ("how much of my
-        # project came back?"), so both accumulate into it and only the
-        # second one closes it. No terminal state here.
-        self._publishStartupStep('restore', 'running',
-                                 total=len(to_restore), add=True)
-
         for comp_path, rel_tox_path, comp_type in to_restore:
-            # Counted on entry rather than at each of the eight exits from
-            # this body; the close clamps done to total, so the only cost
-            # is the bar leading by one row while that row is in flight.
-            self._publishStartupStep('restore', 'running', done=1, add=True)
             # Check if it appeared (e.g. loaded as child of a parent .tox)
             if op(comp_path):
                 restored += 1

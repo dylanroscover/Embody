@@ -69,11 +69,11 @@ def init():
 
 def onStart():
 	init()
-	# Tell the startup viewer the open sequence is OPEN. It cannot infer
-	# that: init() above just set Envoystatus and Convoystatus to Disabled
-	# and the catalog reads Enabled, so this frame is a perfectly settled
-	# snapshot -- ten frames before the first phase runs.
-	parent.Embody.ext.Embody._beginStartupProgress()
+	# Show WHEN the work last reached disk, straight away. init() above
+	# left Autosavestatus at its resting value, and on a project that is
+	# not being edited that is what it stays -- so the row whose whole job
+	# is answering "is my work safe?" would say nothing all session.
+	parent.Embody.ext.Embody.SeedAutosaveStatus()
 	# Restore settings from .embody/config.json -- recovers user config after
 	# crash, force-quit, or any unsaved session. On normal open where
 	# .toe was saved, values match and this is a no-op.
@@ -114,30 +114,16 @@ def onStart():
 		f"op('{parent.Embody}').op('updater').ext.UpdaterExt.StartupCheck() "
 		f"if op('{parent.Embody}').op('updater') else None",
 		delayFrames=150)
-	# Close the startup readout. Past the last restore phase (frame 60) with
-	# margin: any phase that has not reported a result by now is one whose
-	# run() callback died mid-chain, and a bar left animating forever is
-	# exactly the lie the viewer exists to stop. The catalog is untouched --
-	# its scan legitimately runs on for hundreds of frames and reports its
-	# own end.
-	run(f"op('{parent.Embody}').ext.Embody._closeStartupPhases()",
-		delayFrames=120)
 	return
 
 def onCreate():
 	init()
-	# Same declaration as onStart: a dropped .tox runs the catalog scan too,
-	# and that is the step the startup bars exist for.
-	parent.Embody.ext.Embody._beginStartupProgress()
+	# Same seed as onStart -- see there.
+	parent.Embody.ext.Embody.SeedAutosaveStatus()
 	# Auto-create (or reconnect) the externalizations table before Verify()
 	run(f"op('{parent.Embody}').ext.Embody.CreateExternalizationsTable()", delayFrames=15)
 	# Verify handles update-scenario detection and Envoy opt-in
 	run(f"op('{parent.Embody}').Verify()", delayFrames=30)
-	# Verify() IS the config pass on this path, so it closes the startup
-	# viewer's project step -- the normal-open equivalent lives in
-	# _upgradeEnvoy, which onCreate never reaches.
-	run(f"op('{parent.Embody}').ext.Embody._completeStartupConfigStep()",
-		delayFrames=35)
 	# Ensure catalogs load on fresh-project drops too, not just onStart.
 	# Delayed past Verify() so the setup dialog isn't fighting the scan.
 	# Skip in Off mode -- see onStart() for rationale.
@@ -145,11 +131,6 @@ def onCreate():
 		f"op('{parent.Embody}').ext.CatalogManager.EnsureCatalogs() "
 		f"if op('{parent.Embody}').ext.Embody._tdnMode() != 'off' else None",
 		delayFrames=45)
-	# Same close as onStart: release the startup hold and fail anything that
-	# never reported. No restore phase runs on this path, so the restore bar
-	# simply never appears.
-	run(f"op('{parent.Embody}').ext.Embody._closeStartupPhases()",
-		delayFrames=120)
 	return
 
 def onExit():
