@@ -1,4 +1,4 @@
-﻿---
+---
 name: create-extension
 description: "MUST READ before calling create_extension. Required parameters, lifecycle methods, and wiring steps."
 ---

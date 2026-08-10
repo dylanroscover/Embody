@@ -514,3 +514,125 @@ class TestARepairDoesNotSayItIsInstalling(_LadderBase):
         source = inspect.getsource(convoy_mod.ConvoyExt.InstallHost)
         self.assertIn('self.HOST_REPAIRING if repair_only', source)
         self.assertIn('else self.HOST_INSTALLING', source)
+
+
+class TestEnablingWaitsForTheSharedEnvironment(EmbodyTestCase):
+    """A fresh install enables Envoy and Convoy seconds apart.
+
+    THE FIELD FAILURE THIS PINS (2026-08-09, clean v6.0.230 install on a
+    clean machine): the wizard enabled Envoy, which starts building its
+    venv on a background worker that runs for MINUTES, then enabled Convoy
+    a second later. Convoy's enable path went straight to InstallHost,
+    found no interpreter -- because the venv did not exist YET -- failed
+    the install outright, and told the user to "Enable Envoy first", which
+    is precisely what they had just done.
+
+    Neither the smoke nor any unit test could see it: the smoke asserted
+    nothing about Convoy at all, and the ladder tests below drive the
+    install with a runtime already resolved. So the question this class
+    asks is the one nothing asked: MAY the install proceed at all yet?
+    """
+
+    class _Installer:
+        """Records what was asked; answers the interpreter question only."""
+
+        def __init__(self, managed=None, explode=False):
+            self._managed = managed
+            self._explode = explode
+
+        def find_interpreters(self, platform):
+            if self._explode:
+                raise RuntimeError('probe blew up')
+            return [self._managed] if self._managed else []
+
+        def choose_interpreter(self, found):
+            return found[0] if found else None
+
+    def _resolvable(self, managed=None, venv_python=None, explode=False):
+        ctx = {'installer': self._Installer(managed, explode),
+               'platform': 'win32', 'venv_python': venv_python}
+        # Unbound on purpose: the predicate reads ctx and nothing else, so it
+        # is drivable without a live COMP -- which is the whole reason it can
+        # be tested on a CI runner instead of only inside TouchDesigner.
+        return convoy_mod.ConvoyExt._hostRuntimeResolvable(None, ctx)
+
+    def test_no_runtime_yet_is_not_a_failure(self):
+        """Envoy still building its venv: nothing to install UNDER yet."""
+        self.assertFalse(self._resolvable(managed=None, venv_python=None),
+                         'an install must not be attempted with no runtime')
+
+    def test_the_project_venv_is_enough(self):
+        self.assertTrue(self._resolvable(managed=None,
+                                         venv_python=PROJECT_VENV))
+
+    def test_a_managed_runtime_is_enough_without_any_venv(self):
+        self.assertTrue(self._resolvable(managed=SYSTEM_PY, venv_python=None))
+
+    def test_a_broken_probe_reads_as_not_ready_not_as_ready(self):
+        """Fail SAFE: an exception must never be read as 'go ahead'."""
+        self.assertFalse(self._resolvable(managed=SYSTEM_PY, explode=True))
+
+    def test_enabling_asks_before_it_installs(self):
+        """The ORDERING, pinned at the source.
+
+        _ensureHostApp must consult the predicate before InstallHost --
+        that is the entire fix. A source check rather than a behavioural
+        one because the method needs a live COMP; without it this class
+        would pass while the enable path still raced the venv.
+        """
+        path = os.path.join(_CONVOY_DIR, 'ConvoyExt.py')
+        with open(path, encoding='utf-8') as f:
+            src = f.read()
+        body = src[src.index('def _ensureHostApp'):]
+        body = body[:body.index('\n    def ', 10)]
+        self.assertIn('_hostRuntimeResolvable', body,
+                      'enabling Convoy must check for a runtime BEFORE '
+                      'attempting the install')
+        self.assertLess(
+            body.index('_hostRuntimeResolvable'), body.index('InstallHost'),
+            'the runtime check must come BEFORE InstallHost, or the install '
+            'still races the venv Envoy is building')
+        self.assertIn('_awaitHostRuntime', body,
+                      'a missing runtime must schedule a retry, not give up')
+
+
+class TestABlockedSpawnIsNotABadInterpreter(EmbodyTestCase):
+    """A probe that never reached Python must not be read as "bad Python".
+
+    FIELD EVIDENCE (2026-08-09): a TouchDesigner started by the Envoy
+    bridge inherits a NUL stdin, and EVERY subprocess it attempts dies
+    with `OSError: [WinError 50] The request is not supported` -- proven
+    by spawning `python -c "print(1)"` from such a session and watching
+    it fail identically for the system Python AND the Convoy runtime
+    venv. Convoy reported that as "no interpreter on this machine could
+    load cryptography and TLS 1.3 ... install Python from python.org",
+    which sends the user to install a Python they already have and
+    cannot possibly help, because the interpreter was never the problem.
+    """
+
+    def test_winerror_50_is_classified_as_a_blocked_spawn(self):
+        self.assertEqual(
+            install_mod.classify_probe_failure(
+                'OSError: [WinError 50] The request is not supported'),
+            'runtime_spawn_blocked')
+
+    def test_an_invalid_handle_is_the_same_class(self):
+        self.assertEqual(
+            install_mod.classify_probe_failure(
+                'OSError: [WinError 6] The handle is invalid'),
+            'runtime_spawn_blocked')
+
+    def test_a_real_interpreter_problem_is_still_reported_as_one(self):
+        """The new class must not swallow the failures it sits beside."""
+        self.assertEqual(
+            install_mod.classify_probe_failure(
+                "ModuleNotFoundError: No module named 'cryptography'"),
+            'runtime_missing_cryptography')
+        self.assertEqual(
+            install_mod.classify_probe_failure(
+                'ImportError: dlopen(...cryptography..._rust...): '
+                'different Team IDs'),
+            'runtime_crypto_signature_blocked')
+        self.assertEqual(
+            install_mod.classify_probe_failure('some other stderr'),
+            'runtime_probe_failed')

@@ -1449,7 +1449,12 @@ def _panel_row_budget(embody, now=None):
     no TD) so width-only sizing still applies in tests.
     """
     try:
-        panel = embody.op('viz_startup')
+        # PANEL_COMP, not a literal spelled twice: this lookup kept the old
+        # name after the COMP was renamed viz_startup -> viz_status, so it
+        # silently returned None and the row budget quietly fell back to
+        # width-only sizing -- no error, just a font sized for the wrong
+        # box. One constant means the next rename cannot half-land.
+        panel = embody.op(PANEL_COMP)
         if panel is None:
             return None
         usable = (float(panel.par.h.eval())
@@ -1521,6 +1526,11 @@ def live_col_chars(embody, now=None):
 # a 60 fps frame) to show values that change a handful of times per
 # session. These two functions are what the publisher writes into a table
 # instead; the cells then read finished strings and never call in here.
+
+# The COMP that draws this readout. Named ONCE: the lookup below used to
+# spell it inline, so renaming the COMP left a dangling op() that returned
+# None without an error.
+PANEL_COMP = "viz_status"
 
 PANEL_ROWS = 5          # rowboxes the panel ships
 PANEL_COLS = 2          # cells per rowbox

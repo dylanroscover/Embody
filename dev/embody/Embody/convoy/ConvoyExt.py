@@ -1915,13 +1915,30 @@ class ConvoyExt:
             pass
 
     @staticmethod
-    def _workerLoop(work_queue, shutdown_event, generation, idle_s=0.25):
-        """Long-lived TDTask target. WORKER THREAD; zero TD access."""
+    def _workerLoop(work_queue, shutdown_event, generation, idle_s=0.25,
+                    _empty=Empty):
+        """Long-lived TDTask target. WORKER THREAD; zero TD access.
+
+        `_empty` IS BOUND AT DEFINITION TIME, ON PURPOSE. This loop outlives
+        the module that defines it: every save reinitialises the extension
+        and TouchDesigner tears down the old module's globals, while this
+        thread is still spinning. Referring to the global `Empty` then
+        raises `NameError: name 'Empty' is not defined` from inside the
+        except clause -- observed on the v6.0.231 save (2026-08-09), where
+        it escaped through the Thread Manager as a worker-loop traceback.
+        A default argument lives on the function object, so it survives a
+        teardown the global namespace does not.
+        """
         while not shutdown_event.is_set():
             try:
                 fn = work_queue.get(timeout=idle_s)
-            except Empty:
+            except _empty:
                 continue
+            except BaseException:
+                # The queue itself failed in a way teardown can produce.
+                # A long-lived worker must end quietly rather than surface a
+                # traceback the user can do nothing about.
+                return
             try:
                 if fn is None or shutdown_event.is_set():
                     break
@@ -4270,12 +4287,23 @@ class ConvoyExt:
             # Name the path that was checked. "No runtime is available" with
             # nothing else sent a macOS user (and me) hunting blind when the
             # venv was present and healthy (2026-08-03).
-            self._log('no Convoy runtime is available -- no signed managed '
-                      'runtime, and no usable interpreter at %r. Enable Envoy '
-                      'first (it builds the Python environment Convoy shares), '
-                      'then turn Convoy on again.'
-                      % (ctx.get('venv_python') or '<no venv path>',),
-                      'WARNING')
+            # Two different situations, opposite advice. Telling a user who
+            # HAS just enabled Envoy to "enable Envoy first" is how a clean
+            # install read as broken (field log 2026-08-09): the venv simply
+            # did not exist yet, because Envoy builds it on a worker that
+            # runs for minutes after the wizard moves on.
+            if self._envoyBuildingItsEnvironment():
+                self._log('Convoy: the Python environment Convoy shares is '
+                          'still being built by Envoy -- the host app cannot '
+                          'install until it exists. This resolves itself; the '
+                          'install retries automatically.', 'INFO')
+            else:
+                self._log('no Convoy runtime is available -- no signed managed '
+                          'runtime, and no usable interpreter at %r. Enable '
+                          'Envoy (it builds the Python environment Convoy '
+                          'shares) and the host app installs itself.'
+                          % (ctx.get('venv_python') or '<no venv path>',),
+                          'WARNING')
             self._hostStatus(self.HOST_INSTALL_FAILED)
             return {'state': 'error', 'detail': 'no interpreter'}
 
@@ -4853,6 +4881,101 @@ class ConvoyExt:
         self._reconcile(force=True)
         return self.ConvoyStatus()
 
+    # How long the host install will wait for Envoy to finish building the
+    # Python environment it shares, and how often it looks. A fresh install
+    # pip-installs the whole MCP stack into a new venv: minutes on a loaded
+    # machine, and the wizard enables Convoy seconds after Envoy. 2 s x 150
+    # is ~5 minutes -- long enough for a slow first install, bounded so a
+    # genuinely absent runtime still reports instead of polling forever.
+    _HOST_RUNTIME_WAIT_FRAMES = 120
+    _HOST_RUNTIME_WAIT_TRIES = 150
+
+    def _hostRuntimeResolvable(self, ctx):
+        """Could the host app actually be run right now?
+
+        The SAME resolution the install performs (a signed managed runtime
+        first, then Embody's venv python), asked BEFORE committing to an
+        install, so a runtime that does not exist yet becomes a wait rather
+        than a failure. Kept next to that resolution deliberately: two copies
+        of this question drifting apart is how the status came to name a
+        button that refused.
+        """
+        try:
+            installer = ctx['installer']
+            if installer.choose_interpreter(
+                    installer.find_interpreters(ctx['platform'])):
+                return True
+            return bool(ctx.get('venv_python'))
+        except Exception:
+            return False
+
+    def _envoyBuildingItsEnvironment(self):
+        """True while Envoy is still installing the venv Convoy shares."""
+        try:
+            if not bool(self._embody.par.Envoyenable.eval()):
+                return False
+        except Exception:
+            return False
+        try:
+            return bool(getattr(self._embody.ext.Envoy, '_bootstrapping',
+                                False))
+        except Exception:
+            return False
+
+    def _awaitHostRuntime(self, attempt=0):
+        """Retry the host install once the shared Python environment exists.
+
+        Says which of the two situations it is, because they need opposite
+        things from the user: Envoy building its venv resolves itself and
+        wants patience, while Envoy switched off genuinely does need the user
+        to turn it on. The old path could not tell them apart and printed the
+        second message during the first.
+        """
+        try:
+            if not self._enabled() or self._performing():
+                return
+            ctx = self._safeHostContext()
+            if ctx is None:
+                return
+            if self._hostRuntimeResolvable(ctx):
+                self._log('Convoy: the shared Python environment is ready -- '
+                          'installing the host app now', 'INFO')
+                self.InstallHost(confirm=False)
+                return
+            building = self._envoyBuildingItsEnvironment()
+            if attempt == 0:
+                if building:
+                    self._log(
+                        'Convoy: waiting for Envoy to finish building the '
+                        'Python environment Convoy shares -- the host app '
+                        'installs on its own as soon as it is ready. Nothing '
+                        'to do.', 'INFO')
+                else:
+                    self._log(
+                        'Convoy: no Python runtime is available for the host '
+                        'app yet. Enable Envoy (it builds the environment '
+                        'Convoy shares) and the host app installs itself.',
+                        'WARNING')
+            if not building and attempt >= 5:
+                # Envoy is not coming: stop waiting for something that will
+                # never arrive, and leave a status the user can act on.
+                self._hostStatus(self.HOST_INSTALL_FAILED)
+                return
+            if attempt >= self._HOST_RUNTIME_WAIT_TRIES:
+                self._log(
+                    'Convoy: gave up waiting for the shared Python '
+                    'environment after %d attempts -- the host app is not '
+                    'installed. Use Install Host App once Envoy has finished.'
+                    % (attempt,), 'WARNING')
+                self._hostStatus(self.HOST_INSTALL_FAILED)
+                return
+            run('args[0](args[1])', self._awaitHostRuntime, attempt + 1,
+                delayFrames=self._HOST_RUNTIME_WAIT_FRAMES,
+                group='convoy_host_runtime_wait')
+        except Exception as e:
+            self._log('could not wait for the Convoy host runtime: %s' % (e,),
+                      'WARNING')
+
     def _ensureHostApp(self):
         """Install and/or start the host app so ENABLING is the only step.
 
@@ -4877,6 +5000,17 @@ class ConvoyExt:
             installed = ctx['installer'].read_installed(
                 ctx['data_dir'], ctx['platform'])
             if not installed:
+                if not self._hostRuntimeResolvable(ctx):
+                    # A FRESH INSTALL ENABLES BOTH AT ONCE. Envoy builds its
+                    # venv on a background worker that takes minutes, and the
+                    # wizard enables Convoy seconds later -- so the runtime
+                    # this install needs does not exist YET. Attempting it
+                    # anyway failed the install outright and told the user to
+                    # "Enable Envoy first", which they had just done (field
+                    # log 2026-08-09, a clean install on a clean machine).
+                    # Wait for the environment instead of racing it.
+                    self._awaitHostRuntime()
+                    return
                 self._log('Convoy enabled -- installing the host app it '
                           'needs to reach the LAN', 'INFO')
                 self.InstallHost(confirm=False)
@@ -6123,6 +6257,30 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                             'another CPU architecture -- toggle Envoy off '
                             'and on to rebuild the environment, then '
                             'enable Convoy again.')
+            if rejected and all(r['reason'] == 'runtime_spawn_blocked'
+                                for r in rejected):
+                # EVERY candidate died before Python ran: this TD process
+                # cannot spawn children at all (a bridge-launched session
+                # inherits a NUL stdin -- WinError 50 on every attempt).
+                # Blaming the interpreters here sends the user to install a
+                # Python they already have; the only fix is a normally
+                # launched TouchDesigner.
+                return {'ok': False, 'action': action,
+                        'reason': 'spawn_blocked',
+                        'rejected': rejected[:8],
+                        'detail':
+                            'this TouchDesigner process cannot start ANY '
+                            'child process, so no interpreter could be '
+                            'tested -- every candidate failed the same way '
+                            'before Python ran (' + ', '.join(
+                                sorted({(r.get('snippet') or r.get('detail')
+                                         or r.get('reason') or '')[:60]
+                                        for r in rejected if r})) + '). This is '
+                            'the session, not your Python: it happens when '
+                            'TouchDesigner was started by a tool rather '
+                            'than opened normally. Quit TouchDesigner, open '
+                            'the project yourself, and enable Convoy again. '
+                            'Tried: ' + '; '.join(described) + '.'}
             return {'ok': False, 'action': action,
                     'reason': 'no_usable_runtime',
                     # 8, not 6: the fullest macOS ladder produces up to

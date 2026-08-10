@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1134
-generator: Embody/6.0.230
+build: 1138
+generator: Embody/6.0.232
 td_build: 099.2025.33070
-source_file: Embody-6.230.toe
-exported_at: '2026-08-10T01:13:18Z'
+source_file: Embody-6.232.toe
+exported_at: '2026-08-10T03:00:26Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -14,6 +14,9 @@ type_defaults:
     parameters:
       resizecomp: =me
       repocomp: =me
+  textDAT:
+    parameters:
+      language: python
   baseCOMP:
     size: [160, 130]
   parameterexecuteDAT:
@@ -810,7 +813,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.230
+    value: 6.0.232
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -981,7 +984,6 @@ operators:
   parameters:
     file: embody/Embody/TDNExt.py
     syncfile: true
-    language: python
   position: [-700, 600]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1185,7 +1187,6 @@ operators:
   parameters:
     file: embody/Embody/EnvoyExt.py
     syncfile: true
-    language: python
   position: [-700, 700]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1207,7 +1208,6 @@ operators:
     file: embody/Embody/EmbodyExt.py
     defaultreadencoding: cp1252
     syncfile: true
-    language: python
     extension: py
   position: [-700, 800]
   size: [130, 90]
@@ -1219,7 +1219,6 @@ operators:
   parameters:
     file: embody/Embody/envoy_ops.py
     syncfile: true
-    language: python
   position: [-500, 400]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1230,7 +1229,6 @@ operators:
   parameters:
     file: embody/Embody/envoy_viz.py
     syncfile: true
-    language: python
   position: [-500, 600]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1241,7 +1239,6 @@ operators:
   parameters:
     file: embody/Embody/shortcuts.py
     syncfile: true
-    language: python
   position: [-500, -375]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1271,7 +1268,6 @@ operators:
   parameters:
     file: embody/Embody/embody_git.py
     syncfile: true
-    language: python
   position: [-700, 100]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1282,7 +1278,6 @@ operators:
   parameters:
     file: embody/Embody/envoy_read.py
     syncfile: true
-    language: python
   position: [-500, 800]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1546,15 +1541,19 @@ operators:
     color: [0.67, 0.67, 0.67]
   - name: status_publish
     type: textDAT
+    parameters:
+      file: embody/Embody/viz_status/status_publish.py
+      syncfile: true
     position: [450, 0]
     size: [130, 90]
-    color: [0.67, 0.67, 0.67]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - py
 - name: envoy_setup
   type: textDAT
   parameters:
     file: embody/Embody/envoy_setup.py
     syncfile: true
-    language: python
   position: [-500, 700]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1573,7 +1572,6 @@ operators:
   parameters:
     file: embody/Embody/embody_admin.py
     syncfile: true
-    language: python
   position: [-700, 300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1584,7 +1582,6 @@ operators:
   parameters:
     file: embody/Embody/envoy_layout.py
     syncfile: true
-    language: python
   position: [-500, 500]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1632,7 +1629,6 @@ operators:
   parameters:
     file: embody/Embody/embody_launch.py
     syncfile: true
-    language: python
   position: [-700, 200]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1742,7 +1738,6 @@ operators:
   parameters:
     file: embody/Embody/fifo1_callbacks.py
     syncfile: true
-    language: python
   position: [-275, 100]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1764,7 +1759,6 @@ operators:
   parameters:
     file: embody/Embody/timer_callbacks.py
     syncfile: true
-    language: python
   position: [-700, -375]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1776,7 +1770,6 @@ operators:
   parameters:
     file: embody/Embody/startup_progress.py
     syncfile: true
-    language: python
   position: [-700, 400]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1787,7 +1780,6 @@ operators:
   parameters:
     file: embody/Embody/CatalogManagerExt.py
     syncfile: true
-    language: python
   position: [-700, 500]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -2002,8 +1994,6 @@ operators:
         size: [126, 62]
     - name: title_callbacks
       type: textDAT
-      parameters:
-        language: python
       flags:
       - viewer
       position: [200, -160]
@@ -2012,8 +2002,6 @@ operators:
       dock: title
     - name: status_callbacks
       type: textDAT
-      parameters:
-        language: python
       flags:
       - viewer
       position: [200, -360]
@@ -2065,7 +2053,6 @@ operators:
   parameters:
     file: embody/Embody/keyboardin_callbacks.py
     syncfile: true
-    language: python
   position: [-300, -375]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]

@@ -1,4 +1,4 @@
-﻿---
+---
 name: debug-operator
 description: "TRIGGER when operator errors appear or user reports broken behavior. Systematic diagnosis workflow."
 ---

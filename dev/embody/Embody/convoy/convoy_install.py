@@ -1350,7 +1350,35 @@ def classify_probe_failure(text):
         return "runtime_crypto_broken"
     if "No module named 'cryptography'" in text:
         return "runtime_missing_cryptography"
+    if _is_spawn_failure(text):
+        # THE INTERPRETER IS NOT THE PROBLEM: this process could not spawn
+        # ANY child. A TouchDesigner launched by the Envoy bridge inherits
+        # a NUL stdin, and every subprocess it attempts then dies with
+        # WinError 50 -- verified 2026-08-09 by spawning `python -c
+        # "print(1)"` from such a session and watching it fail for the
+        # system Python AND the Convoy runtime venv alike. Reported as a
+        # probe failure, that reads as "none of your interpreters work"
+        # and sends the user to python.org to install a Python they
+        # already have.
+        return "runtime_spawn_blocked"
     return "runtime_probe_failed"
+
+
+# Errors that mean "this PROCESS cannot start children", not "this
+# interpreter is unusable". WinError 50 is the bridge-launched-TD case;
+# the others are the same class from the OS layer.
+_SPAWN_FAILURE_MARKERS = (
+    "WinError 50",
+    "The request is not supported",
+    "WinError 6",
+    "The handle is invalid",
+)
+
+
+def _is_spawn_failure(text):
+    """True when the probe never reached Python at all."""
+    text = str(text or "")
+    return any(marker in text for marker in _SPAWN_FAILURE_MARKERS)
 
 
 _PROBE_DIAGNOSIS_MARKERS = (

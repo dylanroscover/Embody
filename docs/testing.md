@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **122 test suites** and **3,745 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **122 test suites** and **3,766 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -162,18 +162,18 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_job_layer` | 25 | Background-job layer backing `get_job_status` / `save_project` / `run_tests background=True` -- the operations that outlive the 30 s MCP timeout |
 | `test_task_ledger` | 15 | Shared task ledger (`.embody/tasks.json`): work-STATE across AI sessions, including `done_uncommitted` |
 
-### Convoy (8 suites, 675 tests)
+### Convoy (8 suites, 696 tests)
 
 The LAN work relay: the node-side reconciler, the host-app client and installer, and the panel contracts. The host app itself is stdlib-only by design, so most of this tier also runs under plain pytest on the windows+macos CI matrix -- see `pytest.ini`.
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_convoy_install` | 255 | Host-app installer: Scheduled Task XML, LaunchAgent plist, the launcher, and the per-user daemon venv preference |
-| `test_convoy_client` | 171 | Host-app client, and its PARITY with the daemon-side probe the two copies must not drift from |
+| `test_convoy_install` | 260 | Host-app installer: Scheduled Task XML, LaunchAgent plist, the launcher, and the per-user daemon venv preference |
+| `test_convoy_client` | 175 | Host-app client, and its PARITY with the daemon-side probe the two copies must not drift from |
 | `test_convoy_host_install` | 105 | ConvoyExt's host-app orchestration (install plan) |
 | `test_convoy_ext` | 73 | ConvoyExt, the node-side Convoy reconciler |
 | `test_convoy_parameter_contract` | 33 | Off-TD contract for Convoy's user-facing parameter scaffold |
-| `test_convoy_host_ladder` | 17 | The runtime ladder that decides WHICH interpreter the daemon runs under |
+| `test_convoy_host_ladder` | 29 | The runtime ladder that decides WHICH interpreter the daemon runs under |
 | `test_wizard_convoy_contract` | 16 | Plain-Python contracts for Convoy's setup-wizard routing |
 | `test_convoy_forget_ux` | 5 | The Forget Offline Nodes daemon -> panel contract |
 

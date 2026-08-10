@@ -22,7 +22,7 @@ externalizations.
 
 | Parameter | Name | Meaning |
 |---|---|---|
-| Auto-Update | `Autoupdate` | `Off` (default): never checks. `Check and Notify`: checks once at startup and shows availability in Update Status — nothing is installed. `Check and Install`: checks at startup and installs a verified update automatically. A check that can't complete (no network, no manifest, TD too old) is logged quietly; a failure *during* an install (backup, reload, verify, rollback) always shows a dialog. |
+| Auto-Update | `Autoupdate` | **A fresh install ships set to `Check and Notify`** (the parameter's own default is `Off`, but the released `.tox` carries `Check and Notify`, so a new install does check once at startup until you change it). `Off`: never checks. `Check and Notify`: checks once at startup and shows availability in Update Status — nothing is installed. `Check and Install`: checks at startup and installs a verified update automatically. A check that can't complete (no network, no manifest, TD too old) is logged quietly; a failure *during* an install (backup, reload, verify, rollback) always shows a dialog. |
 | Check for Update | `Checkforupdate` | Checks GitHub now and prompts if an update is available (`up to date` and network errors are reported in a dialog). |
 | Update Status | `Updatestatus` | Read-only status line: `Disabled` (Auto-Update is Off -- the fresh-install resting state), `Up to date (v6.0.150)`, `v6.0.151 available`, `Downloading...`, `Updated to v6.0.151`, or an error summary. |
 
@@ -116,7 +116,7 @@ instead. This protects the working tree from being clobbered.
 A version check is a single HTTPS request to GitHub's public API. It carries
 no account data or project information — GitHub sees what any web request
 shows it (your IP address and a user-agent naming the updater). With
-Auto-Update `Off` (the default), Embody never phones home at all. Note
+Auto-Update `Off`, Embody never phones home at all (set it yourself -- a fresh install ships on `Check and Notify`). Note
 GitHub's anonymous API allows 60 requests per hour per IP address — many
 machines behind one NAT (a classroom) may see checks fail temporarily;
 checks fail soft and never block startup.

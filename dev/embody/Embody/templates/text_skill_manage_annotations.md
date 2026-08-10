@@ -1,4 +1,4 @@
-﻿---
+---
 name: manage-annotations
 description: "MUST READ before creating, modifying, or querying annotations. Contains parameter names, coordinate model, and API quirks."
 ---

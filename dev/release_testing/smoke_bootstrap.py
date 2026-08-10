@@ -47,7 +47,6 @@ Bootstrap timing (relative to onStart at frame 0):
 # frame - the current frame
 # state - True if the timeline is paused
 
-
 def onStart():
     """Project opened - kick off the smoke test bootstrap sequence."""
     import os, shutil
@@ -98,38 +97,29 @@ def onStart():
     # Frame 1: load the .tox
     run("args[0]()", _load_release_tox, delayFrames=1)
 
-
 def onCreate():
     pass
-
 
 def onExit():
     pass
 
-
 def onFrameStart(frame):
     pass
-
 
 def onFrameEnd(frame):
     pass
 
-
 def onPlayStateChange(state):
     pass
-
 
 def onDeviceChange():
     pass
 
-
 def onProjectPreSave():
     pass
 
-
 def onProjectPostSave():
     pass
-
 
 # =========================================================================
 # Bootstrap helpers (not TD callbacks)
@@ -141,7 +131,6 @@ def _find_latest_release_tox(repo_root):
     pattern = os.path.join(repo_root, 'release', 'Embody-v*.tox')
     candidates = sorted(glob.glob(pattern))
     return candidates[-1] if candidates else None
-
 
 def _load_release_tox(tox_path=None):
     """Load the release .tox into the project root."""
@@ -179,7 +168,6 @@ def _load_release_tox(tox_path=None):
 
     # Frame 120: write ready flag - after Envoy has started (~frame 65)
     run("args[0]()", _write_ready_flag, delayFrames=119)
-
 
 def _apply_headless_setup(attempt=0):
     """Close the Setup Wizard (if open) and apply its Auto defaults directly.
@@ -226,7 +214,6 @@ def _apply_headless_setup(attempt=0):
     # this apply, close it again once, well after.
     run("args[0]()", _close_wizard_again, delayFrames=95)
 
-
 def _close_wizard_again():
     embody_path = me.fetch('embody_path', None, search=False)
     embody = op(embody_path) if embody_path else None
@@ -238,7 +225,6 @@ def _close_wizard_again():
             wizard_window.par.winclose.pulse()
     except Exception:
         pass
-
 
 def _seed_responses():
     """Seed _smoke_test_responses so init dialogs are auto-answered."""
@@ -283,7 +269,6 @@ def _seed_responses():
     # repo is never a candidate for either clobbering or cleanup.
     _check_running_inside_repo()
 
-
 def _check_running_inside_repo():
     """Warn LOUDLY when the smoke project sits inside the Embody repo.
 
@@ -306,7 +291,6 @@ def _check_running_inside_repo():
              'AI config deploys to the repo root and will overwrite the dev '
              'session\'s .mcp.json. Copy the template to a temp dir and set '
              'EMBODY_SMOKE_REPO to run a truly isolated smoke.' % here)
-
 
 def _envoy_settled(embody):
     """(settled, status) for the Envoy server.
@@ -341,7 +325,6 @@ def _envoy_settled(embody):
     if any(tok in lowered for tok in pending):
         return False, status
     return True, status
-
 
 def _write_ready_flag(attempt=0):
     """Write the ready flag once Envoy reaches a terminal state.
@@ -396,6 +379,20 @@ def _write_ready_flag(attempt=0):
         autosave = _par('Autosavestatus') if embody else 'NOT_FOUND'
         filecleanup = _par('Filecleanup') if embody else 'NOT_FOUND'
 
+        # CONVOY WAS NEVER CHECKED HERE, and that is exactly how a broken
+        # fresh install shipped: on 2026-08-09 a clean v6.0.230 install on a
+        # clean machine failed its Convoy host-app install outright (no
+        # interpreter -- Envoy was still building the venv Convoy shares),
+        # and this harness reported PASS because it only ever asked about
+        # Embody and Envoy. A smoke that cannot see a whole subsystem fail
+        # is worse than no smoke, because it is quoted as evidence.
+        # There is no separate Host App parameter -- _hostStatus merges the
+        # host-app line INTO Convoystatus (ConvoyExt._hostStatus /
+        # _publishStatus), so that one readout carries both.
+        convoy_enabled = _par('Convoyenable', 'NOT_FOUND') if embody else 'NOT_FOUND'
+        convoy_status = _par('Convoystatus', 'NOT_FOUND') if embody else 'NOT_FOUND'
+        convoy_on = str(convoy_enabled).lower() in ('1', 'true', 'on')
+
         problems = []
         if embody is None:
             problems.append('Embody COMP not found')
@@ -407,6 +404,16 @@ def _write_ready_flag(attempt=0):
             problems.append(f'script errors: {errors[:120]}')
         if not upd or upd == 'NOT_FOUND':
             problems.append('Updatestatus is BLANK (v6.0.145 regression)')
+        if convoy_on:
+            # Only assert when the user actually opted in -- Convoy off is a
+            # legitimate fresh-install state and must not fail the smoke.
+            bad = ('failed', 'error', 'no runtime', 'no interpreter',
+                   'cannot start')
+            blob = str(convoy_status).lower()
+            if any(word in blob for word in bad):
+                problems.append(
+                    f'Convoy is enabled but its host app did not come '
+                    f'up: Convoystatus={convoy_status!r}')
         verdict = 'PASS' if not problems else 'FAIL'
 
         with open(flag_path, 'w') as f:
@@ -419,6 +426,8 @@ def _write_ready_flag(attempt=0):
             f.write(f'updatestatus={upd}\n')
             f.write(f'autosavestatus={autosave}\n')
             f.write(f'filecleanup={filecleanup}\n')
+            f.write(f'convoy_enabled={convoy_enabled}\n')
+            f.write(f'convoy_status={convoy_status}\n')
             f.write(f'script_errors={errors}\n')
             f.write(f'embody_path={embody_path}\n')
             f.write(f'settled_after_attempts={attempt}\n')
@@ -427,7 +436,6 @@ def _write_ready_flag(attempt=0):
             _log(f'SMOKE FAIL: {"; ".join(problems)}')
     except Exception as e:
         _log(f'ERROR writing ready flag: {e}')
-
 
 def _log(msg):
     """Print to textport with a prefix."""

@@ -211,7 +211,7 @@ Project-saved artifacts are not counted against this quota and are never removed
 
 **Stop Convoy App** intentionally prevents its login supervisor from immediately starting it again. Existing queued job records remain. Press **Start Convoy App** to resume.
 
-**Uninstall Convoy App** removes the background app and login registration but retains the local host identity, job history, the host log, and (on macOS) the dedicated Convoy runtime venv, so a later reinstall rejoins as the same host and reuses the already-built runtime without a rebuild. Incomplete or unrecognized payload directories are named but never deleted. The confirmation names each retained path before anything is removed. Explicitly saved project artifacts are project files and are not part of host-app cache cleanup.
+**Uninstall Convoy App** removes the background app and login registration but retains the local host identity, job history, the host log, and the dedicated Convoy runtime venv when one was built (macOS always builds one; Windows now prefers a per-user one too), so a later reinstall rejoins as the same host and reuses the already-built runtime without a rebuild. Incomplete or unrecognized payload directories are named but never deleted. The confirmation names each retained path before anything is removed. Explicitly saved project artifacts are project files and are not part of host-app cache cleanup.
 
 ## Platform validation status
 

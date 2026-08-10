@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.230-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.232-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-62-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -100,7 +100,7 @@ The generated config runs Envoy's bridged STDIO transport (recommended — it ca
 | `create_extension` | Scaffold a full extension (COMP + DAT + wiring) |
 | `get_op_errors` | Inspect errors on any operator and its children |
 
-...and 46 more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
+...and 55 more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
 
 When Envoy starts, it always generates an `AGENTS.md` file in your project root with TD development patterns and project-specific guidance. It also writes a client-specific config for whichever assistant you select in the `Aiclient` parameter (`CLAUDE.md` + `.claude/` for Claude Code, `opencode.json` + `.claude/` for OpenCode, Cursor/Windsurf rules, Copilot instructions, `GEMINI.md` for Gemini; Codex and OpenCode read `AGENTS.md` directly). For OpenCode and local-model setups, see the [Local Models & Open Clients](https://dylanroscover.github.io/Embody/envoy/local-models/) guide.
 
@@ -175,7 +175,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **122 test suites** (3,745 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **122 test suites** (3,766 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -206,7 +206,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
-- **6.0.230**: **The Embody node says what the project is doing, and agent work is actually checkpointed** -- the node's viewer carries a live status readout that never fabricates a percentage (one step has a real denominator; the rest show an elapsed clock, and a step that stays busy starts showing how long), computed once per event rather than 60 times a second: a settled panel cooks zero times, and a status change costs ~0.65 ms, while `execute_python` and `exec_op_method` -- previously arming no auto-save checkpoint at all, so a whole agent session could go uncheckpointed behind a readout that claimed otherwise -- now arm a coarse one that discovers what actually changed after the burst. Plus: a live Embot could still reach a `.tdn` through the asynchronous project-wide export, which is now closed from both walks; and the builds between 222 and 230 ship here (per-user Convoy venv with a repair that is not a dead end, the `.tdn` version lag, aborted catalog scans, and issue #85's `.tdn_backup/` ignore).
+- **6.0.232**: **The Embody node says what the project is doing, agent work is actually checkpointed, and a fresh install stops failing Convoy on its way in** -- the node's viewer carries a live status readout that never fabricates a percentage, computed once per event rather than 60 times a second (a settled panel cooks zero times; a status change costs ~0.65 ms); `execute_python` and `exec_op_method`, which previously armed no auto-save checkpoint at all, now arm a coarse one; enabling Convoy waits for the Python environment Envoy is still building instead of racing it and failing; a long-lived Convoy worker no longer dies on the module teardown a save produces; a TouchDesigner that cannot spawn child processes is reported as such instead of blaming your Python; and a live Embot could still reach a `.tdn` through the asynchronous project-wide export, now closed from both walks.
 - **6.0.222**: **A review of 219/220 found a data-loss defect in the release itself** -- the reaper could delete a delivery record it had merely failed to *open* (an antivirus handle, fd exhaustion, a concurrent rename), including the unacknowledged `indeterminate` that is the sole may-have-run proof. Corruption must now be proven and a proven-corrupt record is quarantined rather than deleted. Plus: everything the Convoy App writes is flushed before the rename that publishes it; two silent ways the reconcile loop could stop until TD restarted; the button's help and log line now match the contract the code enforces; and the two paths of the 219 fix that mutation testing showed were untested.
 - **6.0.220**: **Upgrading Embody can update the Convoy App without restarting TouchDesigner** -- the automatic daemon update is budgeted one attempt per TD session, and both its guards live in a session store that survives the Embody COMP being replaced. So an upgrade in a live session could never update the daemon: new Embody, old daemon, none of the fixes it was upgraded for. The budget is now keyed on the Embody version too, so an upgrade re-arms exactly one attempt without re-opening the retry loop. Live-verified: a fresh install took this machine's daemon from 6.0.212 to 6.0.220 on its own.
 - **6.0.219**: **Duplicate node rows clear themselves** -- one predicate treated "a delivery that has not finished" and "a finished result nobody collected" as the same thing, and it gated all three cleanup paths, so a single uncollected result made a duplicate row permanent (a field machine had 11 rows and 123 job records, 115 of them exactly that class). A finished result no longer pins a row anywhere; a queued delivery on a superseded identity is durably refused rather than left to haunt it; work past the dispatch boundary is never touched. Forget Offline Nodes stops logging a refusal as a success, names the nodes it kept and the deliveries pinning them, and restores a declined row in the same frame. Two latent ghost-resurrection paths (commit-before-write on both delete paths) closed, and an unreadable job record no longer freezes cleanup forever.
