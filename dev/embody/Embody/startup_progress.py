@@ -32,10 +32,17 @@ those parameters is a writer of this readout for free.
 THE CLOCK IS OBSERVED, NOT READ. A parameter carries no timestamp, so
 _stamp records when a row entered its current non-terminal state, keyed
 on state AND detail so two phases of one sequence are two measurements.
-That record and _SESSION's problem dwell are the only state this module
-keeps. Module-level on purpose: COMP storage recooks on every write and
-serializes into the .toe and into Embody's own .tdn, so last session's
-observations would come back on disk and be replayed as this session's.
+That record is the only state this module keeps. Module-level on
+purpose: COMP storage recooks on every write and serializes into the
+.toe and into Embody's own .tdn, so last session's observations would
+come back on disk and be replayed as this session's.
+
+ONE LAYOUT. Five rows, one subsystem each, mark + label + reason,
+always -- during an install, settled, and broken alike. The font is
+pinned to TARGET_ROW_CHARS so text changes inside the budget move
+nothing. The readout must never change SHAPE: shape changes read as
+faults in the panel, and hiding the reason (or the autosave age) on
+the happy path traded away the information the panel exists to show.
 
 RENDERING IS COMPUTED ONCE PER EVENT. table_rows() turns the readout
 into finished strings for viz_status/status_publish to write into a
@@ -292,24 +299,13 @@ STATUS_VERSION = "version"
 STATUS_ORDER = (STATUS_EMBODY, STATUS_AUTOSAVE, STATUS_ENVOY,
                 STATUS_CONVOY, STATUS_VERSION)
 
-# The compact grid, laid out BY MEANING rather than by dividing the list
-# in half: the three subsystems that can be up or down read down one
-# column, and the two housekeeping rows sit in the other. A naive split
-# put Convoy in a different column from Embody and Envoy, which reads as
-# though it belongs to something else.
-# The autosave AGE gets its own cell under its label rather than sitting
-# beside it. "Autosaved 1h ago" was the widest cell in the grid at 18
-# characters, and the widest cell sets the font for everything; split
-# across two lines the column needs 11, which is most of a 30% font
-# increase. It also balances the grid -- column two had two entries
-# against column one's three, so the age lands in a slot that was empty.
-STATUS_AUTOSAVE_AGE = "autosave_age"
-
-COLUMN_LAYOUT = (
-    (STATUS_EMBODY, STATUS_ENVOY, STATUS_CONVOY),
-    (STATUS_AUTOSAVE, STATUS_AUTOSAVE_AGE, STATUS_VERSION),
-)
-
+# ONE layout. There used to be two -- a two-column compact grid while
+# healthy and this list expanded while not -- and the panel switching
+# shape read as a fault in the panel, while the compact side hid the
+# autosave age entirely. A status readout that renders differently
+# depending on how it feels is two layouts for one feature; the field
+# verdict (2026-08-11) was blunt and correct. The single shape is the
+# informative one: five rows, mark + label + reason, always.
 STATUS_LABELS = {
     STATUS_EMBODY: "Embody",
     STATUS_AUTOSAVE: "Autosaved",
@@ -447,10 +443,19 @@ def autosave_step(status, now_seconds=None, now_dt=None):
         # _TRANSIENT_STATUS_PARS). It is NOT a running state -- and with
         # no branch for it this fell through to the RUNNING default, so a
         # project that had simply not checkpointed yet rendered a busy
-        # mark on the auto-save row forever, with no age beside it. What
-        # this row is FOR is how long ago the work was written.
-        return _entry(IDLE, detail="")
-    if low.startswith(("off", "disabled")):
+        # mark on the auto-save row forever, with no age beside it. The
+        # detail says "never" rather than nothing: this row's one job is
+        # how long ago the work was written, and a bare label is the
+        # ageless "Autosaved" the field verdict called out. (On any
+        # project with externalized files SeedAutosaveStatus replaces
+        # this within seconds of startup; "never" shows only on a truly
+        # virgin project before its first checkpoint.)
+        return _entry(IDLE, detail="never")
+    if low.startswith(("off", "disabled", "bypassed")):
+        # 'Bypassed (Perform Mode)' is a stated no-op, not activity --
+        # unhandled it fell to the RUNNING default and rendered a busy
+        # mark with a climbing clock on an auto-save that is switched
+        # off for the show. Same defect class as 'Idle' above.
         return _entry(SKIPPED, detail=text)
     if "failed" in low or low.startswith("error"):
         return _entry(FAILED, detail=text)
@@ -483,54 +488,60 @@ def version_step(version, update_status, autoupdate=None):
     text = _text(update_status)
     low = text.lower()
     mode = _text(autoupdate).lower()
-    if mode == "off" or low.startswith("disabled"):
+    if mode == "off":
         return _labelled(_entry(SKIPPED, detail="updates off"), label)
+    if low == "disabled":
+        # The bare word is the release scrub's RESTING value -- stamped
+        # on every project open (execute.py), exactly like the auto-save
+        # row's 'Idle'. The updater has not said anything yet this
+        # session, so the row claims nothing: rendering it as "updates
+        # off"/"disabled" told a notify-mode user their setting was off.
+        return _labelled(_entry(IDLE), label)
+    if low.startswith("disabled"):
+        # A stated refusal WITH its reason ('Disabled -- dev checkout
+        # (update via git)'): show the reason, not a fabricated user
+        # choice. The clause after ' -- ' is the whole message here.
+        reason = text.split(" -- ", 1)
+        return _labelled(_entry(SKIPPED,
+                                detail=reason[1] if len(reason) > 1
+                                else text), label)
+    if low.startswith("updated to"):
+        # The one state where the updater ACTED. A catch-all no-op mark
+        # here graded the successful update as a refusal.
+        return _labelled(_entry(DONE, detail=text), label)
     if "available" in low or "newer" in low:
         return _labelled(_entry(STALLED, detail=text), label)
     if "failed" in low or low.startswith("error"):
         return _labelled(_entry(FAILED, detail=text), label)
     if low.startswith(("checking", "download", "installing")):
         return _labelled(_entry(RUNNING, detail=text), label)
-    if not text or "up to date" in low:
+    if "up to date" in low:
         return _labelled(_entry(DONE, detail="up to date"), label)
+    if not text:
+        # A blank Updatestatus means no check has reported ANYTHING.
+        # Claiming "up to date" over it is exactly the kind of false
+        # reassurance this readout exists to prevent (a blank field is
+        # the v6.0.145 regression the smoke gates on).
+        return _labelled(_entry(IDLE), label)
     # A refusal with a reason (a git checkout, an unwritable install) is
     # not a failure of Embody -- it is a stated no-op, said plainly.
     return _labelled(_entry(SKIPPED, detail=text), label)
 
 
-# WHICH problem the panel is currently dwelling on, and since when.
-# Module-level because it is a per-session observation, not project
-# state; reset_session() keeps the suites from depending on order.
-_SESSION = {"problem_key": None, "problem_since": None,
-            "problem_last_seen": None}
-
-# How long a problem must PERSIST before it is allowed to change the
-# layout. Convoy's own vocabulary passes through "Not installed" and
-# "Needs repair" while it installs or updates itself -- real states, but
-# momentary ones -- so treating them as failures made the panel expand
-# to five rows and snap back every time the host app cycled. A genuine
-# failure is still there a few seconds later; an update is not.
-PROBLEM_DWELL_S = 6.0
-
-
 def reset_session():
     """Forget EVERYTHING this session has observed.
 
-    TEST SUPPORT, and the reason it is public: the two module-level
-    records here (has a problem persisted long enough to change the
-    layout? when did each row enter its current state?) are observations
-    that outlive any one call, so without a reset the suites depend on
-    execution order.
+    TEST SUPPORT, and the reason it is public: the per-row state clocks
+    in _SINCE are observations that outlive any one call, so without a
+    reset the suites depend on execution order -- the fake COMP the
+    suites use has a FIXED path, so every suite shares one key, and a
+    clock started in an earlier test then renders as an elapsed time in
+    a later one that never started it.
 
-    _SINCE HAS TO GO TOO. Leaving it behind is not a partial reset, it
-    is a silent one: the fake COMP the suite uses has a FIXED path, so
-    every suite shares one key, and a clock started in an earlier test
-    then renders as an elapsed time in a later one that never started
-    it. A reset that leaves the clocks running is exactly the order
-    dependence this function exists to remove.
+    (The problem-dwell records that used to live here went with the
+    dual-layout view they gated: a fixed layout has nothing to reflow,
+    so nothing needs to debounce it.)
     """
-    _SESSION["problem_key"] = None
-    _SESSION["problem_since"] = None
     _SINCE.clear()
 
 
@@ -558,58 +569,6 @@ def stuck_clock(step, now=None, dwell=STUCK_DWELL_S):
     return elapsed_text(step, now)
 
 
-# How long a problem may BLINK OUT before it counts as recovered. Longer
-# than the sub-second Registering... pass of a Convoy retry, far shorter
-# than a real recovery staying healthy.
-PROBLEM_GRACE_S = 10.0
-
-
-def persistent_problem(steps, now=None, dwell=PROBLEM_DWELL_S):
-    """Has a problem been continuously present long enough to matter?
-
-    Keyed on WHICH subsystems are unhappy, so a different failure
-    restarts the clock rather than inheriting the previous one's dwell.
-    With no clock (`now` is None) it answers False: a caller that cannot
-    time the state does not get to reflow the panel on it.
-    """
-    key = tuple(sorted(k for k, step in steps
-                       if (step or {}).get("state") in (FAILED, STALLED)))
-    if not key:
-        # A BLINK IS NOT A RECOVERY. Convoy's reconcile loop passes
-        # through Registering... for a fraction of a second on every
-        # retry, and clearing here on that blink restarted the dwell each
-        # cycle -- so a mesh that had been dead for minutes never earned
-        # its explanatory view (caught live: the dwell restamped every
-        # few seconds against a stable 'No Convoy host app'). The problem
-        # is only OVER once it has stayed gone for PROBLEM_GRACE_S.
-        last = _SESSION.get("problem_last_seen")
-        if (_SESSION["problem_key"] is None or now is None
-                or last is None or (float(now) - float(last))
-                > PROBLEM_GRACE_S):
-            _SESSION["problem_key"] = None
-            _SESSION["problem_since"] = None
-            _SESSION["problem_last_seen"] = None
-        return False
-    if key != _SESSION["problem_key"]:
-        _SESSION["problem_key"] = key
-        _SESSION["problem_since"] = now
-        _SESSION["problem_last_seen"] = now
-        return False
-    _SESSION["problem_last_seen"] = now
-    since = _SESSION["problem_since"]
-    if since is None:
-        # First seen by a caller with no clock, so the dwell starts at the
-        # first sighting that CAN time it. Pinning problem_since to None
-        # instead meant one untimed call -- a headless width probe, a
-        # panel expression evaluated before absTime is meaningful -- froze
-        # that failure out of the explanatory view for the whole session.
-        _SESSION["problem_since"] = now
-        return False
-    if now is None:
-        return False
-    return (float(now) - float(since)) >= float(dwell)
-
-
 # -- compact status text --------------------------------------------------
 #
 # WIDTH IS FONT SIZE in this viewer, so every character the value column
@@ -630,6 +589,15 @@ _COMPACT_PREFIX = (
     ("reviving (watchdog)", "reviving"),
     ("needs repair", "needs repair"),
     ("not installed", "not installed"),
+    # The 'Installed -- X' family keeps X: the clause after ' -- ' IS
+    # the status there, and the generic clause-cut below was throwing it
+    # away -- 'Installed -- no supervisor (use Repair Convoy App)'
+    # rendered as a bare 'Installed' under a failure mark, words
+    # contradicting the mark with the remedy deleted.
+    ("installed -- starting", "starting"),
+    ("installed -- not running", "not running; will restart"),
+    ("installed -- stopped", "stopped"),
+    ("installed -- no supervisor", "no supervisor; repair"),
     ("install failed", "install failed"),
     ("consent required", "consent needed"),
     ("waiting for", "waiting:"),
@@ -637,6 +605,7 @@ _COMPACT_PREFIX = (
     ("this is the embody dev checkout", "dev checkout"),
     ("saved ", ""),
     ("error: ", ""),
+    ("refused: ", "refused: "),
 )
 
 
@@ -647,6 +616,12 @@ def compact_status(text, max_width=None):
         return ""
     low = raw.lower()
     out = raw
+    # 'Running X -- installed by a newer Embody' has its status in the
+    # CLAUSE, with a version in front of it -- no fixed prefix can catch
+    # it, and the clause-cut below would leave 'Running X' with a
+    # waiting mark beside it.
+    if " -- installed by a newer embody" in low:
+        return "newer Embody owns it"
     for prefix, replacement in _COMPACT_PREFIX:
         if low.startswith(prefix):
             out = replacement + raw[len(prefix):]
@@ -742,17 +717,22 @@ STATE_GLYPH = {
 }
 
 
-def cell_text(key, step, verbose=False, now=None, animate=False):
-    """One cell: mark, name, and a reason ONLY when there is one.
+def cell_text(key, step, now=None, animate=False):
+    """One cell: mark, name, and the reason. ALWAYS all three.
 
-    On the happy path the detail is suppressed -- a tick beside "Convoy"
-    already says "Connected", and spending 10 characters to repeat it
-    costs font size everywhere else.
+    The reason is never suppressed. There used to be a compact mode that
+    rendered only mark + label while healthy, which meant "Autosaved"
+    with no age and a second layout for the panel to snap between; the
+    row now always answers its own question ("22h ago", "port 9870",
+    "Connected"). What keeps the panel from resizing on transient text
+    is the FONT rule, not hiding words: the font is pinned to
+    TARGET_ROW_CHARS (see _font_of), so a row growing or shrinking
+    inside the budget moves nothing.
 
-    The one thing that outranks the suppression is an elapsed clock on a
-    step that has been RUNNING past STUCK_DWELL_S. A busy mark alone
-    reads the same at four seconds and at forty minutes, which is how a
-    wedged dependency install looked exactly like a slow one.
+    An elapsed clock on a step RUNNING past STUCK_DWELL_S outranks the
+    detail: a busy mark alone reads the same at four seconds and at
+    forty minutes, which is how a wedged dependency install looked
+    exactly like a slow one.
     """
     step = step or {}
     state = step.get("state")
@@ -766,48 +746,33 @@ def cell_text(key, step, verbose=False, now=None, animate=False):
     clock = stuck_clock(step, now)
     if clock:
         return "%s %s %s" % (glyph, label, clock)
-    detail = compact_status(step.get("detail"))
-    # THE COMPACT VIEW CARRIES NO REASONS AT ALL -- only the mark.
-    #
-    # This is what stops the panel resizing on a timer. Cell width sets
-    # the column width, which sets the font, which relays the whole
-    # panel; so a transient reason ("Convoy Registering", 20 chars,
-    # against "Convoy" at 8) made the layout visibly jump every time a
-    # subsystem checked in. The glyph already says busy / fine / broken,
-    # and a reason nobody can read before it changes is not information.
-    # Reasons live in the expanded view, which only a real problem
-    # triggers and which therefore does not flicker.
-    # THERE IS NO EXCEPTION LIST, and there should not be one. There
-    # was: an _ALWAYS_SHOW tuple, permanently empty, under a comment
-    # describing the autosave age as its member. The age does get shown
-    # on the happy path -- as its own continuation row in live_grid --
-    # so the tuple was a second, dead mechanism for the same job, and
-    # the next bug here would have been fixed in it.
-    show = detail and verbose
-    return ("%s %s %s" % (glyph, label, detail)).rstrip() if show \
+    # The detail is CLAMPED to what fits this row inside the design
+    # budget -- mark, space, label, space, then whatever remains of
+    # TARGET_ROW_CHARS. This is the other half of the font pin: with no
+    # bound, a long producer string ('Error: host app did not answer
+    # /register within 5.0s') widened the column past the budget and
+    # resized the whole panel on every retry cycle -- the 2026-08-10
+    # flap re-entering through the font instead of the shape.
+    budget = TARGET_ROW_CHARS - len(label) - 3
+    detail = compact_status(step.get("detail"), max_width=budget)
+    return ("%s %s %s" % (glyph, label, detail)).rstrip() if detail \
         else "%s %s" % (glyph, label)
 
 
 GRID_GAP = 2
 
 
-def live_grid(embody, verbose=False, now=None):
+def live_grid(embody, now=None):
     """Rows of CELLS, each carrying its OWN colour.
 
-    A row is a layout accident, not a thing: Envoy and the version
-    number share row two only because that is where they landed. Giving
-    the row one colour meant a disabled Envoy greyed out the version
-    beside it, reporting a state that subsystem is not in.
+    ONE SHAPE, ALWAYS: five rows, one subsystem each, mark + label +
+    reason, in STATUS_ORDER. The healthy/expanded split this replaces
+    rendered the same feature two different ways and hid the autosave
+    age on the happy path -- and with a fixed shape there is nothing to
+    reflow, so the dwell/grace machinery that debounced the switching
+    went with it.
     """
     steps = _live_steps(embody, now=now)
-    # ONLY A PROBLEM EXPANDS THE GRID. The first rule was "anything not
-    # done or skipped", which made every routine heartbeat reflow the
-    # whole panel: Convoy re-checks its host app, Envoy restarts on a
-    # reinit, the autosave runs. Those are RUNNING, not broken. A layout
-    # that jumps every few seconds reads as a fault in the viewer rather
-    # than news about the project -- and a real failure persists, while
-    # activity does not.
-    healthy = not persistent_problem(steps, now)
     # Animate the busy mark ONLY while an install is genuinely in
     # flight, read off the DETAIL rather than off a startup flag: there
     # is no startup flag any more, and an install can begin long after
@@ -819,41 +784,13 @@ def live_grid(embody, verbose=False, now=None):
                       ("install", "building", "preparing", "starting"))
                   for _k, step in steps)
     by_key = dict(steps)
-    # ONE column containing every key -- not one column PER key. The
-    # latter reads the same in a tuple literal and is catastrophically
-    # different: five columns of one row each, rendered side by side,
-    # with three of them past the panel's two cell slots and therefore
-    # invisible exactly when something has gone wrong.
-    layout = COLUMN_LAYOUT if healthy else (tuple(STATUS_ORDER),)
-    show_detail = verbose or not healthy
-    def cell(key):
-        if key == STATUS_AUTOSAVE_AGE:
-            # A continuation line: indented under its label, no mark of
-            # its own, and it inherits the autosave colour.
-            step = by_key[STATUS_AUTOSAVE]
-            age = compact_status(step.get("detail"))
-            return (key, "  %s" % age if age else "", step)
-        return (key, cell_text(key, by_key[key], show_detail, now=now,
-                               animate=animate),
-                by_key[key])
-
-    columns = [[cell(key) for key in col
-                if key in by_key or key == STATUS_AUTOSAVE_AGE]
-               for col in layout]
-    widths = [max([len(t) for _k, t, _s in col] or [0]) for col in columns]
-    depth = max([len(col) for col in columns] or [0])
-    grid = []
-    for r in range(depth):
-        row = []
-        for cnum, col in enumerate(columns):
-            if r < len(col):
-                key, text, step = col[r]
-                row.append((key, text.ljust(widths[cnum]),
-                            STATE_RGB.get(step.get("state"),
-                                          STATE_RGB[IDLE])))
-        if row:
-            grid.append(row)
-    return grid
+    cells = [(key, cell_text(key, by_key[key], now=now, animate=animate),
+              by_key[key])
+             for key in STATUS_ORDER if key in by_key]
+    width = max([len(t) for _k, t, _s in cells] or [0])
+    return [[(key, text.ljust(width),
+              STATE_RGB.get(step.get("state"), STATE_RGB[IDLE]))]
+            for key, text, step in cells]
 
 
 def _live_steps(embody, now=None):
@@ -957,7 +894,14 @@ def live_font(embody, panel_width, row_height=None, now=None):
     """
     cols = live_col_chars(embody, now=now)
     total = sum(cols) + GRID_GAP * max(0, len(cols) - 1)
-    size = font_for_rows(panel_width, ["x" * max(1, total)])
+    # Pinned to the design budget: content NARROWER than
+    # TARGET_ROW_CHARS must not inflate the font, or every transient
+    # detail change ("Registering..." -> "Connected") resizes the whole
+    # panel. Content wider than the budget still shrinks to fit -- the
+    # rows are never clipped, the font is simply never bigger than the
+    # budget size.
+    size = font_for_rows(panel_width,
+                         ["x" * max(TARGET_ROW_CHARS, total)])
     if row_height is None:
         # No explicit budget -> take the panel's own, so the grid always
         # fits the aspect-locked height instead of clipping its last row.
@@ -1088,7 +1032,11 @@ def _col_chars_of(grid):
 def _font_of(embody, grid, chars, panel_width, now=None):
     """live_font, but from a grid already in hand (same arithmetic)."""
     total = sum(chars) + GRID_GAP * max(0, len(chars) - 1)
-    size = font_for_rows(panel_width, ["x" * max(1, total)])
+    # Same TARGET_ROW_CHARS pin as live_font -- the two are tested to
+    # agree, and the pin is what keeps transient detail-length changes
+    # from resizing the panel.
+    size = font_for_rows(panel_width,
+                         ["x" * max(TARGET_ROW_CHARS, total)])
     row_height = _panel_row_budget(embody, now=now)
     if row_height:
         try:
@@ -1098,7 +1046,7 @@ def _font_of(embody, grid, chars, panel_width, now=None):
     return max(7.0, size)
 
 
-def table_rows(embody, panel_width, now=None, verbose=False):
+def table_rows(embody, panel_width, now=None):
     """The whole readout as table rows: layout numbers, then cell strings.
 
     Returns rows of (name, value, r, g, b, show) -- `value` carries the
@@ -1114,7 +1062,7 @@ def table_rows(embody, panel_width, now=None, verbose=False):
     # ONE grid per publish. live_font -> live_col_chars -> live_grid means
     # the naive call sequence rebuilds it four times; the readout is the
     # same object every time, so derive the rest from a single build.
-    grid = live_grid(embody, verbose=verbose, now=now)
+    grid = live_grid(embody, now=now)
     chars = _col_chars_of(grid)
     font = _font_of(embody, grid, chars, width - pad * 2, now=now)
     rows = [

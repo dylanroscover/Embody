@@ -791,3 +791,109 @@ class TestEnvoyEnabledButNotYetStarted(EmbodyTestCase):
             def par(self):
                 raise RuntimeError('no COMP')
         self.assertFalse(self._ask(_Broken()))
+
+
+class TestARegistrationRevivesAStaleHostLine(EmbodyTestCase):
+    """A completed registration disproves a line saying the app is down.
+
+    THE FIELD FAILURE (2026-08-10..11): a spawn-blocked session latched
+    'Install failed -- see log' while the smoke run installed and
+    started the daemon out of band; the extension heartbeated THROUGH
+    that daemon for 20 hours with the failure line still on the panel,
+    because nothing ever re-asked. _reviveDisprovenHostLine is the
+    re-ask -- and its stand-downs are as load-bearing as the revive:
+    a show must not repaint, an in-flight host action owns the line,
+    and evidence older than a completed Stop must not resurrect a
+    daemon that was just stopped.
+    """
+
+    def _fake(self, line, seq=0, sent_seq=0, performing=False, busy=False,
+              host_state=None):
+        cls = convoy_mod.ConvoyExt
+
+        class _Self:
+            _DISPROVEN_HOST_TEXTS = cls._DISPROVEN_HOST_TEXTS
+            _host_status_text = line
+            _host_busy = busy
+            _host_line_seq = seq
+
+            def __init__(me):
+                me.session = {'register_host_seq': sent_seq}
+                if host_state is not None:
+                    me.session['host_state'] = host_state
+                me.published = []
+                me.logged = []
+
+            def _session(me):
+                return me.session
+
+            def _performing(me):
+                return performing
+
+            def _hostStatus(me, state):
+                me.published.append(state)
+
+            def _log(me, msg, level='INFO'):
+                me.logged.append((level, msg))
+
+        return _Self()
+
+    def _revive(self, fake, result=None):
+        class _Client:
+            HOST_RUNNING = 'running'
+        convoy_mod.ConvoyExt._reviveDisprovenHostLine(
+            fake, result or {}, _Client)
+
+    def test_a_latched_install_failed_is_replaced_with_running(self):
+        fake = self._fake('Install failed -- see log',
+                          host_state={'state': 'not_running',
+                                      'installed_version': '6.0.229',
+                                      'supervisor': 'scheduled_task',
+                                      'live': False,
+                                      'detail': 'stale words',
+                                      'pid': 4242})
+        self._revive(fake, {'host_app_version': '6.0.234'})
+        self.assertEqual(len(fake.published), 1, 'one recomputed line')
+        state = fake.published[0]
+        self.assertEqual(state['state'], 'running')
+        self.assertIs(state['live'], True,
+                      'a register IS proof of liveness')
+        self.assertEqual(state['installed_version'], '6.0.234')
+        self.assertEqual(state['supervisor'], 'scheduled_task',
+                         'identity facts survive')
+        self.assertNotIn('pid', state, 'a register proves no pid')
+        self.assertNotIn('detail', state,
+                         'the detail described the disproven state')
+        self.assertEqual(fake.session['host_state'], state,
+                         '_restoreHostStatus must not resurrect the claim')
+        self.assertTrue(fake.logged, 'the transition is logged')
+
+    def test_lines_a_register_does_not_disprove_stay(self):
+        for line in ('Installing...', 'Checking...',
+                     'Installed -- starting...', 'Needs repair -- Python '
+                     'not found (reinstall)',
+                     'Managed by another supervisor', 'Running 6.0.234'):
+            fake = self._fake(line)
+            self._revive(fake)
+            self.assertEqual(fake.published, [], line)
+
+    def test_perform_mode_freezes_the_readout(self):
+        fake = self._fake('Install failed -- see log', performing=True)
+        self._revive(fake)
+        self.assertEqual(fake.published, [])
+
+    def test_an_in_flight_host_action_owns_the_line(self):
+        fake = self._fake('Install failed -- see log', busy=True)
+        self._revive(fake)
+        self.assertEqual(fake.published, [])
+
+    def test_evidence_older_than_a_completed_stop_stands_down(self):
+        """The register was SENT before the Stop finished writing
+        'Installed -- stopped'; its success cannot prove the daemon
+        survived that Stop, so reviving would be the 20-hour latch
+        inverted."""
+        fake = self._fake('Installed -- stopped', seq=7, sent_seq=6)
+        self._revive(fake)
+        self.assertEqual(fake.published, [])
+        self.assertNotIn('host_state', fake.session,
+                         'the snapshot is not rewritten either')

@@ -944,7 +944,12 @@ class UpdaterExt:
             self._status('Disabled')
             return
         if self.isDevCheckout():
-            return  # silent -- dev tree updates via git
+            # Say WHY on the status readout, once: a silent return left
+            # the release scrub's bare 'Disabled' on the panel for the
+            # whole session, which the readout rendered as if the USER
+            # had switched updates off while Autoupdate said notify.
+            self._status('Disabled -- dev checkout (update via git)')
+            return
         # notify: check + status/log only. install: check + full apply.
         # CHECK-stage failures stay quiet on this auto path; INSTALL-stage
         # failures (backup/reload/verify/rollback) always dialog via _fail.

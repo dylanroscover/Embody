@@ -650,6 +650,17 @@ class ConvoyExt:
         'Install failed',
     )
 
+    # The subset of blocking host lines a COMPLETED registration
+    # disproves: each claims the host app is absent or down, and the
+    # register call just ran THROUGH the host app. Mid-flight lines
+    # (Checking/Installing/starting) update themselves when their action
+    # completes, and 'Needs repair' / 'Managed by another supervisor'
+    # are not claims about whether the app is running -- both stay.
+    _DISPROVEN_HOST_TEXTS = (
+        'Not installed', 'Install failed', 'Installed -- not running',
+        'Installed -- stopped', 'Installed -- no supervisor',
+    )
+
     def _status(self, text):
         """Record the node/registration line and republish Status."""
         self._node_status_text = str(text)[:160]
@@ -2986,6 +2997,12 @@ class ConvoyExt:
                 launch_reservation_id=os.environ.get(
                     'EMBODY_CONVOY_LAUNCH_RESERVATION'))
             session['pending_sent'] = state
+            # Snapshot the host-line write counter at SEND time so a
+            # register that drains AFTER a Stop/Uninstall completed can
+            # prove its evidence predates that action and stand down
+            # (see _reviveDisprovenHostLine).
+            session['register_host_seq'] = getattr(
+                self, '_host_line_seq', 0)
             self._apply({'state': client.STATE_REGISTERING}, client)
 
         self._busy = True
@@ -3171,6 +3188,15 @@ class ConvoyExt:
                 else self.CONVERGING_S))
             self._applyPolicyProjection(result)
             self._applyNetworkNodes(result.get('_network_nodes'))
+            # The same proof fixes the READOUT: a host-app line still
+            # claiming the app is absent or down is stale -- this call
+            # just ran through the daemon. An install can succeed out of
+            # band (another session, another project, a manual repair)
+            # and nothing else refreshes the snapshot; a spawn-blocked
+            # session latched 'Install failed -- see log' for 20 hours
+            # while the daemon it was heartbeating through ran the whole
+            # time (2026-08-10..11).
+            self._reviveDisprovenHostLine(result, client)
             # We provably just talked to the daemon: if its own account
             # of the code it runs is older than this Embody, update it
             # in place (once per session; see _maybeUpdateHostApp).
@@ -3761,8 +3787,74 @@ class ConvoyExt:
             text = client.host_status_text(state)
         except Exception:
             text = 'Install failed -- see log'
+        # Every write bumps the counter _reviveDisprovenHostLine compares
+        # against its register's send-time snapshot -- a host action
+        # landing between a register's send and its drain makes the
+        # stale-line evidence itself stale.
+        self._host_line_seq = getattr(self, '_host_line_seq', 0) + 1
         self._host_status_text = str(text)[:160]
         self._publishStatus()
+
+    def _reviveDisprovenHostLine(self, result, client):
+        """Replace a stale down-claiming host line after a registration.
+
+        Runs ONLY on the register success path: the call went through
+        the host app, so a line saying the app is absent/stopped/failed
+        (_DISPROVEN_HOST_TEXTS) is disproven by direct evidence. The
+        session's host_state snapshot is rewritten to running/live so
+        _restoreHostStatus cannot resurrect the stale claim and
+        HostStatus() readers see a self-consistent record; the line is
+        recomputed through host_status_text -- the one vocabulary source
+        -- rather than assembled here. pid and detail are DROPPED, not
+        carried: they described the disproven state, and _running_text
+        degrades honestly without a pid.
+
+        Three stand-downs, each a way the "evidence" can be weaker than
+        it looks:
+        - Perform Mode: the readout is frozen for the show, exactly like
+          the sibling guard in _apply. The next post-show register
+          revives it.
+        - A host action in flight (_host_busy): its completion is about
+          to write a FRESHER line; do not fight it.
+        - The line was written AFTER this register was sent
+          (_host_line_seq moved past the send-time snapshot): a Stop or
+          Uninstall completing while the register drained means the
+          daemon this call talked to may be gone -- reviving would be
+          the 20-hour latch inverted. The next heartbeat re-registers
+          with a fresh snapshot and settles it either way.
+
+        One accepted imprecision, deliberately: 'Install failed -- see
+        log' can also be worn by module-integrity failures (a missing
+        convoy_install in the COMP -- 'reinstall Embody'). A completed
+        registration does not disprove THAT, but it does prove the
+        daemon runs and the mesh works; the readout shows the working
+        mesh, the reinstall advice stays in the log this line points
+        to, and any later host ACTION re-fails loudly if the module is
+        genuinely missing.
+        """
+        host = str(getattr(self, '_host_status_text', '') or '')
+        if not host.startswith(self._DISPROVEN_HOST_TEXTS):
+            return
+        if self._performing() or self._host_busy:
+            return
+        session = self._session()
+        sent_seq = session.get('register_host_seq')
+        if sent_seq is not None and sent_seq != getattr(
+                self, '_host_line_seq', 0):
+            return
+        state = session.get('host_state')
+        state = dict(state) if isinstance(state, dict) else {}
+        state['state'] = getattr(client, 'HOST_RUNNING', 'running')
+        state['live'] = True
+        state.pop('pid', None)
+        state.pop('detail', None)
+        reported = str((result or {}).get('host_app_version') or '')
+        if reported:
+            state['installed_version'] = reported
+        session['host_state'] = state
+        self._log('host app answered registration -- replacing the stale '
+                  'host-app line (%s)' % host, 'INFO')
+        self._hostStatus(state)
 
     def _restoreHostStatus(self):
         """Put the readout back to the last KNOWN state, or leave it be.

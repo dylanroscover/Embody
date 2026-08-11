@@ -273,6 +273,40 @@ class TestSettledStatusMode(EmbodyTestCase):
         self.assertEqual(got['state'], sp.SKIPPED)
         self.assertIn('off', got['detail'])
 
+    def test_the_resting_disabled_stamp_claims_nothing(self):
+        """execute.py stamps the bare word 'Disabled' on EVERY open (the
+        release scrub's resting value, the version row's 'Idle'). To a
+        notify-mode user any rendering of it as off/disabled reports a
+        setting they did not choose -- the row stays claimless until
+        the updater actually says something."""
+        got = sp.version_step('6.0.234', 'Disabled', 'notify')
+        self.assertEqual(got['state'], sp.IDLE)
+        self.assertFalse(got.get('detail'))
+        off = sp.version_step('6.0.234', 'Disabled', 'off')
+        self.assertEqual(off['detail'], 'updates off',
+                         'mode=off is the user choice and still says so')
+
+    def test_an_updater_refusal_shows_its_REASON(self):
+        got = sp.version_step(
+            '6.0.234', 'Disabled -- dev checkout (update via git)',
+            'notify')
+        self.assertEqual(got['state'], sp.SKIPPED)
+        self.assertEqual(sp.compact_status(got['detail']), 'dev checkout')
+
+    def test_a_completed_update_is_DONE_not_a_refusal(self):
+        got = sp.version_step('6.0.229', 'Updated to v6.0.230', 'notify')
+        self.assertEqual(got['state'], sp.DONE)
+        self.assertIn('6.0.230', got['detail'])
+
+    def test_a_BLANK_update_status_claims_nothing(self):
+        """A blank Updatestatus means no check has reported anything --
+        rendering 'up to date' over it is false reassurance (a blank
+        field is the v6.0.145 regression the smoke gates on)."""
+        step = sp.version_step('6.0.234', '', 'notify')
+        self.assertEqual(step.get('state'), sp.IDLE)
+        self.assertNotIn('up to date',
+                         str(step.get('detail') or '').lower())
+
     def test_a_stated_refusal_is_skipped_not_failed(self):
         """The dev-checkout message is a no-op with a reason, not a
         broken updater."""
@@ -330,6 +364,22 @@ class TestCompactStatus(EmbodyTestCase):
                      'Not installed', 'Waiting for project save',
                      'This is the Embody dev checkout -- update via git'):
             self.assertLessEqual(len(sp.compact_status(text)), budget, text)
+
+    def test_the_installed_family_keeps_its_clause(self):
+        """The clause after ' -- ' IS the status for these five, and the
+        generic clause-cut rendered 'Installed -- no supervisor (use
+        Repair Convoy App)' as a bare 'Installed' under a failure mark
+        -- words contradicting the mark, remedy deleted."""
+        for raw, expect in (
+                ('Installed -- starting...', 'starting'),
+                ('Installed -- not running (restarts within a minute)',
+                 'not running; will restart'),
+                ('Installed -- stopped', 'stopped'),
+                ('Installed -- no supervisor (use Repair Convoy App)',
+                 'no supervisor; repair'),
+                ('Running 1.4.0 -- installed by a newer Embody',
+                 'newer Embody owns it')):
+            self.assertEqual(sp.compact_status(raw), expect, raw)
 
     def test_it_still_truncates_visibly_when_asked(self):
         got = sp.compact_status('a' * 100, max_width=20)
@@ -401,27 +451,47 @@ class TestAutosaveAge(EmbodyTestCase):
 
 
 class TestAlwaysShownDetail(EmbodyTestCase):
+    """Every row answers its own question, always.
 
-    def test_the_autosave_age_gets_its_OWN_cell(self):
-        """A tick cannot answer 'is my work safe?'. The age can -- and on
-        its own line it costs 11 characters of column instead of 18,
-        which is what pays for the larger font."""
-        comp = _Fake(
-            Status='Enabled', Autosavestatus='Saved 14:53:05 UTC',
-            Envoystatus='Running on port 9870', Convoystatus='Connected',
-            Version='6.0.225', Updatestatus='Up to date',
-            Autoupdate='notify')
-        grid = sp.live_grid(comp)
+    The compact mode that rendered bare mark+label while healthy is the
+    one that shipped 'Autosaved' with no age -- a row that LOOKS like
+    information and carries none. The field verdict (2026-08-11) killed
+    it: one layout, reasons always on.
+    """
+
+    def _comp(self, **kw):
+        base = {'Status': 'Enabled', 'Autosavestatus': 'Saved 14:53:05 UTC',
+                'Envoystatus': 'Running on port 9870',
+                'Convoystatus': 'Connected', 'Version': '6.0.225',
+                'Updatestatus': 'Up to date', 'Autoupdate': 'notify'}
+        base.update(kw)
+        return _Fake(**base)
+
+    def test_the_autosave_age_is_INLINE_and_always_visible(self):
+        """'Autosaved 22h ago' on one line -- the age is the answer to
+        'is my work safe?', and it must never render without it."""
+        now = 14 * 3600 + 53 * 60 + 5 + 2 * 3600
+        grid = sp.live_grid(self._comp(), now=float(now))
         cells = dict((k, t) for row in grid for k, t, _c in row)
-        self.assertIn(sp.STATUS_AUTOSAVE_AGE, cells)
-        self.assertIn('ago', cells[sp.STATUS_AUTOSAVE_AGE])
-        self.assertNotIn('ago', cells[sp.STATUS_AUTOSAVE],
-                         'the label cell stays bare')
+        self.assertIn('ago', cells[sp.STATUS_AUTOSAVE])
 
-    def test_other_healthy_rows_stay_bare(self):
+    def test_healthy_rows_carry_their_reason(self):
         self.assertEqual(
             sp.cell_text(sp.STATUS_CONVOY, sp.convoy_step('Connected')),
-            '%s Convoy' % sp.GLYPH_OK)
+            '%s Convoy Connected' % sp.GLYPH_OK)
+        self.assertEqual(
+            sp.cell_text(sp.STATUS_ENVOY,
+                         sp.envoy_step('Running on port 9870')),
+            '%s Envoy port 9870' % sp.GLYPH_OK)
+
+    def test_a_failure_shows_mark_AND_reason_immediately(self):
+        """No dwell, no delayed explanatory view: the first render of a
+        failure already says what is wrong."""
+        grid = sp.live_grid(self._comp(Convoystatus='Not installed'),
+                            now=0.0)
+        joined = ''.join(t for row in grid for _k, t, _c in row)
+        self.assertIn(sp.GLYPH_BAD, joined)
+        self.assertIn('not installed', joined)
 
 
 class TestPerCellColour(EmbodyTestCase):
@@ -435,62 +505,85 @@ class TestPerCellColour(EmbodyTestCase):
         base.update(kw)
         return _Fake(**base)
 
-    def test_a_disabled_envoy_does_not_grey_its_ROW_MATE(self):
-        """They share a row only because that is where they landed. One
-        colour per row meant a disabled Envoy reported a state its
-        neighbour was not in."""
-        grid = sp.live_grid(self._comp(Envoystatus='Disabled'))
-        row = [r for r in grid if any(k == sp.STATUS_ENVOY
-                                      for k, _t, _c in r)][0]
-        colours = dict((k, c) for k, _t, c in row)
+    def test_a_disabled_envoy_greys_only_its_OWN_row(self):
+        """Each row carries its own colour: a disabled Envoy must not
+        recolour any other subsystem's row."""
+        colours = dict((k, c)
+                       for row in sp.live_grid(
+                           self._comp(Envoystatus='Disabled'))
+                       for k, _t, c in row)
         self.assertEqual(colours[sp.STATUS_ENVOY], sp.STATE_RGB[sp.SKIPPED])
         others = [c for k, c in colours.items() if k != sp.STATUS_ENVOY]
-        self.assertTrue(others, 'the row has a neighbour to protect')
+        self.assertTrue(others)
         for colour in others:
             self.assertNotEqual(colour, sp.STATE_RGB[sp.SKIPPED])
 
-    def test_column_widths_follow_their_content(self):
+    def test_ONE_column_padded_to_a_uniform_width(self):
         widths = sp.live_col_chars(self._comp())
-        self.assertEqual(len(widths), 2)
-        self.assertGreater(widths[1], widths[0],
-                           'the autosave column is the wider one')
+        self.assertEqual(len(widths), 1, 'one column, one layout')
+        grid = sp.live_grid(self._comp())
+        self.assertEqual(sorted(set(len(row[0][1]) for row in grid)),
+                         [widths[0]],
+                         'every cell is padded to the column width')
 
     def test_a_project_with_no_parameters_still_lays_out(self):
-        """Every step reads IDLE. Nothing is BROKEN, so it takes the
-        compact two-column path rather than the explanatory one."""
+        """Every step reads IDLE -- the shape is the same anyway."""
         widths = sp.live_col_chars(_Fake())
-        self.assertEqual(len(widths), 2)
+        self.assertEqual(len(widths), 1)
         self.assertGreater(widths[0], 0)
 
 
-class TestUnhealthyLayout(EmbodyTestCase):
-    """The problem view must be ONE column of five rows.
+class TestOneLayoutAlways(EmbodyTestCase):
+    """ONE layout. Healthy, broken, installing, bare -- same shape.
 
-    A tuple of one-key tuples reads almost identically and produces five
-    COLUMNS of one row -- rendered side by side, with everything past
-    the second cell slot invisible, exactly when something is wrong.
+    There used to be two (a compact grid while healthy, this list when
+    not), and the panel switching shape read as a fault in the panel
+    while the compact side hid the autosave age. The contract now is
+    brutal and simple: five rows, one cell each, STATUS_ORDER, always.
     """
 
-    def _broken(self):
-        return _Fake(
-            Status='Enabled', Autosavestatus='Saved 14:53:05 UTC',
-            Envoystatus='Running on port 9870',
-            Convoystatus='Not installed', Version='6.0.225',
-            Updatestatus='Up to date', Autoupdate='notify')
+    def _comp(self, **kw):
+        base = {'Status': 'Enabled', 'Autosavestatus': 'Saved 14:53:05 UTC',
+                'Envoystatus': 'Running on port 9870',
+                'Convoystatus': 'Connected', 'Version': '6.0.225',
+                'Updatestatus': 'Up to date', 'Autoupdate': 'notify'}
+        base.update(kw)
+        return _Fake(**base)
 
-    def test_a_problem_renders_one_column_of_five_rows(self):
-        sp.reset_session()
-        comp = self._broken()
-        sp.live_grid(comp, now=0.0)
-        grid = sp.live_grid(comp, now=sp.PROBLEM_DWELL_S + 1)
-        self.assertEqual(len(grid), 5, 'five rows')
-        for row in grid:
-            self.assertEqual(len(row), 1, 'one cell per row')
+    def _shape(self, grid):
+        return [tuple(k for k, _t, _c in row) for row in grid]
+
+    def test_every_state_renders_the_SAME_shape(self):
+        reference = self._shape(sp.live_grid(self._comp(), now=1.0))
+        self.assertEqual(reference,
+                         [(k,) for k in sp.STATUS_ORDER],
+                         'five rows, one subsystem each, in order')
+        for name, kw in (
+                ('convoy broken', {'Convoystatus': 'Not installed'}),
+                ('convoy transient', {'Convoystatus': 'Registering...'}),
+                ('envoy installing',
+                 {'Envoystatus': 'Installing deps... (one-time)'}),
+                ('envoy failed', {'Envoystatus': 'Error: ports in use'}),
+                ('update waiting', {'Updatestatus': '6.0.230 available'}),
+                ('embody disabled', {'Status': 'Disabled'}),
+                ('bare project', None),
+        ):
+            comp = _Fake() if kw is None else self._comp(**kw)
+            self.assertEqual(self._shape(sp.live_grid(comp, now=1.0)),
+                             reference, '%s changed the SHAPE' % name)
+
+    def test_the_dual_layout_machinery_is_GONE(self):
+        """Tombstones: the second layout and everything that debounced
+        the switching must not quietly return."""
+        for name in ('COLUMN_LAYOUT', 'STATUS_AUTOSAVE_AGE',
+                     'persistent_problem', 'PROBLEM_DWELL_S',
+                     'PROBLEM_GRACE_S', '_SESSION'):
+            self.assertFalse(hasattr(sp, name),
+                             '%s is back -- the second layout is back'
+                             % name)
 
     def test_no_cell_ever_lands_past_the_panels_slots(self):
-        """The panel has two cell slots per row; a wider grid would be
-        silently cropped."""
-        for comp in (self._broken(),
+        for comp in (self._comp(Convoystatus='Not installed'),
                      _Fake(),
                      _Fake(Status='Enabled')):
             for row in sp.live_grid(comp):
@@ -549,63 +642,15 @@ class TestTheGridFitsThePanel(EmbodyTestCase):
         self._assert_fits(_Fake(), 'no parameters at all')
 
 
-class TestTheLayoutDoesNotFLAP(EmbodyTestCase):
-    """A panel that jumps every few seconds reads as a broken viewer.
+class TestTheFontNeverMovesInsideTheBudget(EmbodyTestCase):
+    """The font is pinned to TARGET_ROW_CHARS, so text changes cannot
+    resize the panel.
 
-    Convoy re-checks its host app, Envoy restarts on a reinit, the
-    autosave runs -- all routine, all RUNNING, all of them used to
-    reflow the whole panel and (worse) throw it back to progress bars.
-    """
-
-    def _comp(self, **kw):
-        base = {'Status': 'Enabled', 'Autosavestatus': 'Saved 14:53:05 UTC',
-                'Envoystatus': 'Running on port 9870',
-                'Convoystatus': 'Connected', 'Version': '6.0.225',
-                'Updatestatus': 'Up to date', 'Autoupdate': 'notify'}
-        base.update(kw)
-        return _Fake(**base)
-
-    def setUp(self):
-        super().setUp()
-        sp.reset_session()
-
-    def tearDown(self):
-        sp.reset_session()
-        super().tearDown()
-
-    def test_routine_activity_does_not_expand_the_grid(self):
-        sp.live_grid(self._comp())          # startup settles first
-        for name, kw in (('convoy heartbeat',
-                          {'Convoystatus': 'Checking...'}),
-                         ('envoy restarting',
-                          {'Envoystatus': 'Restarting after save...'}),
-                         ('autosave running',
-                          {'Autosavestatus': 'Saving...'})):
-            grid = sp.live_grid(self._comp(**kw))
-            self.assertEqual(len(grid), 3, '%s reflowed the panel' % name)
-
-    def test_a_real_problem_still_expands_it(self):
-        for name, kw in (('convoy broken',
-                          {'Convoystatus': 'Not installed'}),
-                         ('update waiting',
-                          {'Updatestatus': '6.0.230 available'}),
-                         ('envoy failed',
-                          {'Envoystatus': 'Error: ports in use'})):
-            sp.reset_session()
-            comp = self._comp(**kw)
-            sp.live_grid(comp, now=0.0)
-            grid = sp.live_grid(comp, now=sp.PROBLEM_DWELL_S + 1)
-            self.assertEqual(len(grid), 5, '%s did not explain itself'
-                             % name)
-
-
-class TestTheCompactViewNeverResizes(EmbodyTestCase):
-    """Cell width sets column width sets font size sets the whole panel.
-
-    So any cell whose TEXT changes on a timer relays the entire layout.
-    'Convoy Registering' (20 chars) against 'Convoy' (8) made the panel
-    visibly jump every time the host app checked in -- which read as the
-    viewer being broken rather than as news about Convoy.
+    The old design kept the panel still by HIDING the reasons; with the
+    reasons always on, stability comes from the font rule instead: any
+    row shorter than the budget renders at the budget size, so
+    'Registering...' -> 'Connected' moves nothing. Only a row LONGER
+    than the budget may shrink the font -- and never below fitting.
     """
 
     def _comp(self, **kw):
@@ -616,123 +661,69 @@ class TestTheCompactViewNeverResizes(EmbodyTestCase):
         base.update(kw)
         return _Fake(**base)
 
-    def test_convoy_heartbeats_never_move_a_column(self):
-        widths = set()
-        for status in ('Connected', 'Registering...', 'Checking...',
-                       'Starting host app...', 'Installing...',
-                       'Connected'):
-            widths.add(tuple(sp.live_col_chars(
-                self._comp(Convoystatus=status))))
-        self.assertEqual(len(widths), 1,
-                         'the columns resized: %r' % (widths,))
+    # Real producer strings, deliberately including the LONG ones: the
+    # first version of this test sampled only statuses that already fit
+    # the budget, and stayed green while an unbounded 'Error: ...'
+    # detail moved the font by 2x on every Convoy retry cycle.
+    STATUS_BARRAGE = (
+        {'Convoystatus': 'Connected'},
+        {'Convoystatus': 'Registering...'},
+        {'Convoystatus': 'Checking...'},
+        {'Convoystatus': 'Not installed'},
+        {'Convoystatus': 'Error: host app did not answer /register '
+                         'within 5.0s (attempt 3)'},
+        {'Convoystatus': 'Error: convoy_client module missing'},
+        {'Convoystatus': 'Refused: not_admitted -- this node is not in '
+                         'the convoy'},
+        {'Convoystatus': 'Installed -- no supervisor (use Repair Convoy '
+                         'App)'},
+        {'Convoystatus': 'Running 1.4.0 -- installed by a newer Embody'},
+        {'Envoystatus': 'Restarting after save...'},
+        {'Envoystatus': 'Installing deps... (one-time)'},
+        {'Envoystatus': 'Error: Python environment not ready -- '
+                        'preparing environment, retry shortly'},
+        {'Autosavestatus': 'Saving...'},
+        {'Autosavestatus': 'Autosave FAILED; see the log for the '
+                           'export error'},
+        {'Updatestatus': 'Update FAILED; backup unusable -- reinstall '
+                         'from the release page'},
+    )
 
-    def test_envoy_restarts_never_move_a_column(self):
-        widths = set()
-        for status in ('Running on port 9870', 'Restarting after save...',
-                       'Reviving (watchdog)...', 'Starting...',
-                       'Running on port 9870'):
-            widths.add(tuple(sp.live_col_chars(
-                self._comp(Envoystatus=status))))
-        self.assertEqual(len(widths), 1, widths)
+    def test_transient_statuses_never_change_the_font(self):
+        fonts = set()
+        for kw in self.STATUS_BARRAGE:
+            fonts.add(round(sp.live_font(self._comp(**kw), 452, now=1.0), 6))
+        self.assertEqual(len(fonts), 1,
+                         'the font moved across states: %r' % (fonts,))
 
-    def test_the_autosave_age_cannot_drive_the_column_either(self):
-        """It ticks every second; its label is longer than any age it
-        can render, so the column is pinned by the label instead."""
-        widths = set()
-        for stamp, now in (('Saved 14:53:05 UTC', 14 * 3600 + 53 * 60 + 6),
-                           ('Saved 14:53:05 UTC', 14 * 3600 + 58 * 60),
-                           ('Saved 01:00:00 UTC', 23 * 3600),
-                           ('Saved 14:53:05 UTC', 14 * 3600 + 53 * 60 + 5)):
-            step = sp.autosave_step(stamp, now_seconds=now)
-            age = sp.compact_status(step.get('detail'))
-            widths.add(len('  %s' % age) <= len('%s Autosaved'
-                                                % sp.GLYPH_OK))
-        self.assertEqual(widths, {True})
+    def test_no_state_can_render_a_row_past_the_budget(self):
+        """The structural half of the pin: every cell of every state
+        fits TARGET_ROW_CHARS, so the font arithmetic CANNOT move."""
+        for kw in self.STATUS_BARRAGE:
+            for row in sp.live_grid(self._comp(**kw), now=1.0):
+                for _k, text, _c in row:
+                    self.assertLessEqual(
+                        len(text), sp.TARGET_ROW_CHARS,
+                        '%r renders %r past the budget' % (kw, text))
 
-    def test_a_transient_shows_the_MARK_and_nothing_else(self):
+    def test_the_pin_is_the_design_budget(self):
+        self.assertAlmostEqual(
+            sp.live_font(self._comp(), 452, now=1.0),
+            sp.font_for_rows(452, ['x' * sp.TARGET_ROW_CHARS]), places=6)
+
+    def test_a_transient_shows_its_reason_now(self):
+        """The reason is information, not noise -- 'Registering...' is
+        visible the moment it is true."""
         cells = dict((k, t) for row in sp.live_grid(
-            self._comp(Convoystatus='Registering...')) for k, t, _c in row)
-        self.assertEqual(cells[sp.STATUS_CONVOY].rstrip(),
-                         '%s Convoy' % sp.GLYPH_BUSY)
-        self.assertNotIn('Registering', ''.join(cells.values()))
+            self._comp(Convoystatus='Registering...'), now=1.0)
+            for k, t, _c in row)
+        self.assertIn('Registering', cells[sp.STATUS_CONVOY])
 
-    def test_a_real_failure_STILL_says_why(self):
-        """Suppressing reasons must not suppress them where they matter."""
-        sp.reset_session()
-        comp = self._comp(Convoystatus='Not installed')
-        sp.live_grid(comp, now=0.0)
+    def test_a_real_failure_says_why_immediately(self):
         joined = ''.join(t for row in sp.live_grid(
-            comp, now=sp.PROBLEM_DWELL_S + 1) for _k, t, _c in row)
+            self._comp(Convoystatus='Not installed'), now=0.0)
+            for _k, t, _c in row)
         self.assertIn('not installed', joined)
-
-
-class TestAProblemMustPERSIST(EmbodyTestCase):
-    """Convoy passes through real failure states while it updates.
-
-    Its own vocabulary includes "Not installed" and "Needs repair"
-    mid-install -- true at that instant, gone a moment later. Reflowing
-    on them made the panel expand to five rows and snap back every time
-    the host app cycled, which is what "freaks out" looks like.
-    """
-
-    def setUp(self):
-        super().setUp()
-        sp.reset_session()
-
-    def tearDown(self):
-        sp.reset_session()
-        super().tearDown()
-
-    def _comp(self, **kw):
-        base = {'Status': 'Enabled', 'Autosavestatus': 'Saved 14:53:05 UTC',
-                'Envoystatus': 'Running on port 9870',
-                'Convoystatus': 'Connected', 'Version': '6.0.226',
-                'Updatestatus': 'Up to date', 'Autoupdate': 'notify'}
-        base.update(kw)
-        return _Fake(**base)
-
-    def test_a_convoy_reinstall_never_expands_the_panel(self):
-        """The exact sequence: the host app cycles through Not installed
-        and Installing while it updates itself, then reconnects."""
-        healthy = self._comp()
-        clock = 0.0
-        for status in ('Connected', 'Checking...', 'Not installed',
-                       'Installing...', 'Installed -- starting...',
-                       'Connected'):
-            clock += 1.0                       # a second per step
-            grid = sp.live_grid(self._comp(Convoystatus=status), now=clock)
-            self.assertEqual(len(grid), 3,
-                             '%r reflowed the panel at t=%s'
-                             % (status, clock))
-
-    def test_a_failure_that_STAYS_does_expand(self):
-        comp = self._comp(Convoystatus='Not installed')
-        self.assertEqual(len(sp.live_grid(comp, now=0.0)), 3, 'not yet')
-        self.assertEqual(len(sp.live_grid(comp, now=5.0)), 3, 'still not')
-        self.assertEqual(len(sp.live_grid(comp, now=7.0)), 5, 'now')
-
-    def test_the_MARK_is_immediate_even_though_the_reason_waits(self):
-        """A user must see something is wrong at once; only the
-        explanatory layout is delayed."""
-        grid = sp.live_grid(self._comp(Convoystatus='Not installed'),
-                            now=0.0)
-        self.assertIn(sp.GLYPH_BAD,
-                      ''.join(t for row in grid for _k, t, _c in row))
-
-    def test_a_DIFFERENT_failure_restarts_the_clock(self):
-        """Otherwise a brief Convoy blip would hand its dwell to an
-        unrelated Envoy failure seconds later."""
-        sp.live_grid(self._comp(Convoystatus='Not installed'), now=0.0)
-        grid = sp.live_grid(
-            self._comp(Envoystatus='Error: ports in use'), now=7.0)
-        self.assertEqual(len(grid), 3, 'inherited the previous dwell')
-
-    def test_recovery_clears_the_clock(self):
-        comp = self._comp(Convoystatus='Not installed')
-        sp.live_grid(comp, now=0.0)
-        sp.live_grid(self._comp(), now=1.0)          # recovered
-        self.assertEqual(len(sp.live_grid(comp, now=2.0)), 3,
-                         'a fresh problem must start its own dwell')
 
 
 class TestTheFontMatchesWhatIsDrawn(EmbodyTestCase):
@@ -768,8 +759,9 @@ class TestTheFontMatchesWhatIsDrawn(EmbodyTestCase):
         """There is no second sizing rule to drift from.
 
         The font is derived from live_col_chars() -- the same numbers
-        that set the cell widths -- so no state, transient or otherwise,
-        can make the size disagree with the content.
+        that set the cell widths -- floored at TARGET_ROW_CHARS so
+        narrow content cannot inflate it. No state, transient or
+        otherwise, can make the size disagree with the content.
         """
         for kw in ({}, {'Envoystatus': 'Installing deps... (one-time)'},
                    {'Convoystatus': 'Registering...'},
@@ -779,7 +771,9 @@ class TestTheFontMatchesWhatIsDrawn(EmbodyTestCase):
             total = sum(cols) + sp.GRID_GAP * max(0, len(cols) - 1)
             self.assertAlmostEqual(
                 sp.live_font(comp, 452, now=1.0),
-                sp.font_for_rows(452, ['x' * total]), places=6)
+                sp.font_for_rows(
+                    452, ['x' * max(sp.TARGET_ROW_CHARS, total)]),
+                places=6)
 
 
 class TestAnObservedClockMeasuresTheRightThing(EmbodyTestCase):
@@ -830,10 +824,8 @@ class TestAWedgeShowsItsClock(EmbodyTestCase):
     def setUp(self):
         super().setUp()
         sp.reset_session()
-        # The COMPACT grid is what these assert on: during startup the
-        # bars already carry an elapsed clock by design (there is no
-        # denominator to draw instead), and no dwell applies. The dwell
-        # exists for the SETTLED view, where the clock costs column width.
+        # Settle the healthy readout first so each test measures its own
+        # state transition, not the module's cold start.
         sp.live_grid(self._comp(), now=0.0)
 
     def tearDown(self):
@@ -854,11 +846,14 @@ class TestAWedgeShowsItsClock(EmbodyTestCase):
         return cells[sp.STATUS_ENVOY]
 
     def test_a_transient_shows_no_clock(self):
-        """Cell width sets column width sets font, so a clock on every
-        heartbeat relays the whole panel once a second."""
+        """A routine restart is not a wedge; no elapsed M:SS renders
+        before STUCK_DWELL_S. (The detail text itself may carry a colon
+        -- 'restarting: save' -- so the assertion targets the CLOCK
+        pattern, not the character.)"""
         comp = self._comp(Envoystatus='Restarting after save...')
         sp.live_grid(comp, now=0.0)                  # observed here
-        self.assertNotIn(':', self._envoy_cell(comp, 3.0))
+        self.assertIsNone(
+            sp._CLOCK_RE.search(self._envoy_cell(comp, 3.0)))
 
     def test_a_step_that_STAYS_running_starts_measuring(self):
         comp = self._comp(Envoystatus='Installing deps... (one-time)')
@@ -1022,55 +1017,6 @@ class TestTheReadoutIsFedAndRedrawn(EmbodyTestCase):
                         'so it does nothing at all')
 
 
-class TestAProblemSeenWithoutAClock(EmbodyTestCase):
-    """The dwell must survive an untimed first sighting.
-
-    problem_since pinned to None on the first call that had no clock, and
-    every later call read `since is None` and returned False -- so that
-    failure was frozen out of the explanatory view for the rest of the
-    session, which is the one view that says WHY.
-    """
-
-    def setUp(self):
-        super().setUp()
-        sp.reset_session()
-
-    def tearDown(self):
-        sp.reset_session()
-        super().tearDown()
-
-    def _steps(self):
-        return [(sp.STATUS_CONVOY, sp.convoy_step('Not installed'))]
-
-    def test_an_untimed_first_sighting_still_expands_later(self):
-        steps = self._steps()
-        self.assertFalse(sp.persistent_problem(steps),
-                         'no clock: cannot have dwelled yet')
-        self.assertFalse(sp.persistent_problem(steps, now=0.0),
-                         'the first TIMED sighting starts the dwell')
-        self.assertTrue(
-            sp.persistent_problem(steps, now=sp.PROBLEM_DWELL_S),
-            'the dwell was pinned to None and never elapsed')
-
-    def test_the_panel_itself_recovers_from_it(self):
-        comp = _Fake(
-            Status='Enabled', Autosavestatus='Saved 14:53:05 UTC',
-            Envoystatus='Running on port 9870',
-            Convoystatus='Not installed', Version='6.0.226',
-            Updatestatus='Up to date', Autoupdate='notify')
-        sp.live_grid(comp)                       # untimed probe first
-        sp.live_grid(comp, now=0.0)
-        grid = sp.live_grid(comp, now=sp.PROBLEM_DWELL_S + 1)
-        self.assertEqual(len(grid), 5, 'the reason never became visible')
-
-    def test_a_timed_first_sighting_is_unchanged(self):
-        steps = self._steps()
-        self.assertFalse(sp.persistent_problem(steps, now=0.0))
-        self.assertFalse(sp.persistent_problem(steps, now=1.0))
-        self.assertTrue(sp.persistent_problem(steps,
-                                              now=sp.PROBLEM_DWELL_S))
-
-
 class TestPublishedTableRows(EmbodyTestCase):
     """The rows the panel actually draws from.
 
@@ -1127,9 +1073,13 @@ class TestPublishedTableRows(EmbodyTestCase):
         comp = self._comp()
         pad = int(600 * 0.03)
         rows = dict((r[0], r) for r in sp.table_rows(comp, 600, now=100.0))
+        # places=3, not 6: the published cell is "%.4f"-formatted, so it
+        # carries at most 4 decimals -- the old comparison only survived
+        # at 6 places because the compact grid's font hit the 40.0 clamp
+        # exactly.
         self.assertAlmostEqual(float(rows['font'][1]),
                                sp.live_font(comp, 600 - pad * 2, now=100.0),
-                               places=6)
+                               places=3)
         self.assertEqual(int(rows['rowh'][1]),
                          int(sp.row_height_for(
                              sp.live_font(comp, 600 - pad * 2, now=100.0))))
@@ -1175,6 +1125,20 @@ class TestTheAutoSaveRowAnswersHowLongAgo(EmbodyTestCase):
             step = sp.autosave_step(value)
             self.assertEqual(step['state'], sp.IDLE,
                              '%r must not read as work in progress' % value)
+            self.assertEqual(step['detail'], 'never',
+                             'a virgin project still answers the row\'s '
+                             'question instead of rendering a bare label')
+
+    def test_bypassed_for_a_show_is_a_stated_noop_not_activity(self):
+        """'Bypassed (Perform Mode)' fell to the RUNNING default: a busy
+        mark and, past the dwell, a CLIMBING CLOCK on an auto-save that
+        is switched off for the show -- fabricated activity, the same
+        class as 'Idle'."""
+        step = sp.autosave_step('Bypassed (Perform Mode)')
+        self.assertEqual(step['state'], sp.SKIPPED)
+        self.assertEqual(sp.stuck_clock(
+            {'state': step['state'], 'started': 0.0}, now=600.0), '',
+            'a no-op can never grow an elapsed clock')
 
     def test_a_saved_stamp_becomes_an_age(self):
         step = sp.autosave_step('Saved 14:53:05 PDT',
@@ -1451,45 +1415,38 @@ class TestARenderedAgeKeepsMoving(EmbodyTestCase):
         self.assertFalse(sp.rows_show_a_live_age(rows))
 
 
-class TestAProblemSurvivesItsOwnBlink(EmbodyTestCase):
-    """A retrying subsystem blinks healthy for a fraction of a second.
+class TestAProblemNeedsNoDwellAnyMore(EmbodyTestCase):
+    """The dwell/grace machinery is gone WITH the layout it debounced.
 
-    THE FIELD FAILURE (2026-08-10, caught live with a spy on the dwell):
-    Convoy's reconcile loop passes through 'Registering...' on every
-    retry, the problem key blinked empty, and the dwell restarted each
-    cycle -- so a mesh that had been dead for minutes never earned its
-    explanatory view, and the user had to hunt the parameter page for
-    the words 'No Convoy host app'.
+    Its whole job was deciding when a problem had earned the expanded
+    view; with one fixed layout there is nothing to expand, a failure's
+    reason renders on its FIRST sighting, and the 2026-08-10 blink bug
+    (a retry loop restarting the dwell forever) has no mechanism left
+    to happen in.
     """
 
-    def _steps(self, state):
-        return [('convoy', {'state': state})]
+    def _comp(self, status):
+        return _Fake(
+            Status='Enabled', Autosavestatus='Saved 14:53:05 UTC',
+            Envoystatus='Running on port 9870', Convoystatus=status,
+            Version='6.0.226', Updatestatus='Up to date',
+            Autoupdate='notify')
 
-    def setUp(self):
-        super().setUp()
-        sp.reset_session()
+    def test_a_problem_needs_no_dwell_to_say_why(self):
+        joined = ''.join(
+            t for row in sp.live_grid(self._comp('No Convoy host app'),
+                                      now=0.0)
+            for _k, t, _c in row)
+        self.assertIn(sp.GLYPH_WAIT, joined)
+        self.assertIn('No Convoy host app', joined)
 
-    def test_a_blink_does_not_restart_the_dwell(self):
-        sp.persistent_problem(self._steps(sp.STALLED), 0.0)
-        sp.persistent_problem(self._steps(sp.STALLED), 3.0)
-        sp.persistent_problem(self._steps(sp.RUNNING), 3.5)   # the blink
-        sp.persistent_problem(self._steps(sp.STALLED), 4.0)
-        self.assertTrue(sp.persistent_problem(self._steps(sp.STALLED), 7.0),
-                        'the dwell must survive a sub-grace blink')
-
-    def test_a_real_recovery_still_resets(self):
-        sp.persistent_problem(self._steps(sp.STALLED), 0.0)
-        sp.persistent_problem(self._steps(sp.RUNNING), 1.0)
-        sp.persistent_problem(self._steps(sp.RUNNING),
-                              2.0 + sp.PROBLEM_GRACE_S)      # stayed gone
-        sp.persistent_problem(self._steps(sp.STALLED), 20.0)
-        self.assertFalse(sp.persistent_problem(self._steps(sp.STALLED), 23.0),
-                         'a problem that RETURNS after a real recovery '
-                         'starts a fresh dwell')
-
-    def test_a_different_problem_restarts(self):
-        sp.persistent_problem(self._steps(sp.STALLED), 0.0)
-        sp.persistent_problem([('envoy', {'state': sp.FAILED})], 3.0)
-        self.assertFalse(
-            sp.persistent_problem([('envoy', {'state': sp.FAILED})], 5.0),
-            'a different failure must not inherit the previous dwell')
+    def test_a_retry_blink_cannot_hide_the_reason(self):
+        """The exact 2026-08-10 sequence, now trivially safe: the reason
+        tracks the CURRENT state render by render."""
+        for now, status, expect in ((0.0, 'No Convoy host app', 'host app'),
+                                    (0.5, 'Registering...', 'Registering'),
+                                    (1.0, 'No Convoy host app', 'host app')):
+            joined = ''.join(
+                t for row in sp.live_grid(self._comp(status), now=now)
+                for _k, t, _c in row)
+            self.assertIn(expect, joined)
