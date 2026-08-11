@@ -266,23 +266,29 @@ MONO_ADVANCE = 0.55
 # The widest row the readout is allowed to want, and THEREFORE the font
 # size: width is the constraint that binds at node-tile sizes, so every
 # character the layout stops spending buys legibility directly (46 -> 33
-# is a ~39% larger glyph at the same panel width). Nothing here is
-# clipped to it -- font_for_rows sizes to the content it is actually
-# handed, and this is the budget that content is DESIGNED against.
-# compact_status is what keeps it: "Running on port 9870" becomes "port
-# 9870", which is what bought the last two font increases.
-TARGET_ROW_CHARS = 33
+# was ~39% more glyph; 33 -> 23 is another ~43%, because the 33 was
+# sized for the deleted two-column grid while the single column's
+# longest DESIGNED row is 22 characters). This must be readable at tiny
+# node-tile resolutions -- the field requirement is "as readable as
+# humanly possible" -- so the budget is exactly the designed content
+# and not a character more. Every compact vocabulary entry and every
+# label is sized INTO it (see cell_text's per-row clamp); widening any
+# string past its row budget shrinks the font everywhere, which is why
+# the suite bounds every producer state structurally.
+TARGET_ROW_CHARS = 23
 
 # Font size as a fraction of row height, when height is the binding
-# constraint. Consolas sits well below its em box, so 0.52 fills the row
-# without clipping ascenders or descenders.
-ROW_FONT_RATIO = 0.52
+# constraint. The row box is font * (1 + LINE_SPACING); Consolas' line
+# occupies ~1.17 em, so 0.68 of the budget fills a 1.35-box without
+# clipping ascenders or descenders (0.68 * 1.35 = 0.92 of the budget,
+# 8% slack).
+ROW_FONT_RATIO = 0.68
 
-# Leading, as a fraction of the font size. The row box is the glyph plus
-# this much breathing room -- 0.5 keeps the lines clearly separate while
-# spending no vertical space on nothing, which is what lets the font be
-# as large as it is at node-tile sizes.
-LINE_SPACING = 0.5
+# Leading, as a fraction of the font size. 0.35 keeps the lines clearly
+# separate while spending the least vertical space that still reads as
+# separate rows -- at node-tile sizes every point of leading is a point
+# of glyph given away.
+LINE_SPACING = 0.35
 
 
 # == the rows: one per subsystem ==========================================
@@ -308,7 +314,10 @@ STATUS_ORDER = (STATUS_EMBODY, STATUS_AUTOSAVE, STATUS_ENVOY,
 # informative one: five rows, mark + label + reason, always.
 STATUS_LABELS = {
     STATUS_EMBODY: "Embody",
-    STATUS_AUTOSAVE: "Autosaved",
+    # 'Saved', not 'Autosaved': the row answers "how long ago did the
+    # work reach disk" whoever wrote it, and the four characters go
+    # straight into glyph size (the longest healthy row sets the font).
+    STATUS_AUTOSAVE: "Saved",
     STATUS_ENVOY: "Envoy",
     STATUS_CONVOY: "Convoy",
     STATUS_VERSION: "Version",
@@ -581,6 +590,10 @@ def stuck_clock(step, now=None, dwell=STUCK_DWELL_S):
 #
 # The FULL text stays in step['detail'] for logs and the parameter
 # itself; this is only what the row renders.
+# Every replacement is sized into its row's budget (TARGET_ROW_CHARS
+# minus mark, label and two spaces -- 14 for Convoy, 15 for Envoy and
+# Saved, ~12 for the version row). One character past the budget
+# shrinks the font on EVERY row, so terseness here is glyph size there.
 _COMPACT_PREFIX = (
     ("running on ", ""),
     ("installing deps", "installing deps"),
@@ -595,17 +608,29 @@ _COMPACT_PREFIX = (
     # rendered as a bare 'Installed' under a failure mark, words
     # contradicting the mark with the remedy deleted.
     ("installed -- starting", "starting"),
-    ("installed -- not running", "not running; will restart"),
+    ("installed -- not running", "restarts soon"),
     ("installed -- stopped", "stopped"),
-    ("installed -- no supervisor", "no supervisor; repair"),
+    ("installed -- no supervisor", "repair needed"),
     ("install failed", "install failed"),
     ("consent required", "consent needed"),
     ("waiting for", "waiting:"),
-    ("managed by another supervisor", "external supervisor"),
+    ("managed by another supervisor", "other manager"),
     ("this is the embody dev checkout", "dev checkout"),
     ("saved ", ""),
     ("error: ", ""),
     ("refused: ", "refused: "),
+)
+
+# Full replacements: the tail carries nothing the row needs, so the
+# whole phrase maps to a fixed short form (a prefix rule would append
+# the tail back).
+_COMPACT_WHOLE = (
+    ("restarting after save", "restarting"),
+    ("updated to ", "updated"),
+    ("no convoy host app", "no host app"),
+    # The remedy said as the imperative it is -- 'waiting: project save'
+    # buries the verb and busts the row budget.
+    ("waiting for project save", "save project"),
 )
 
 
@@ -621,11 +646,20 @@ def compact_status(text, max_width=None):
     # it, and the clause-cut below would leave 'Running X' with a
     # waiting mark beside it.
     if " -- installed by a newer embody" in low:
-        return "newer Embody owns it"
-    for prefix, replacement in _COMPACT_PREFIX:
+        return "newer Embody"
+    # '6.0.230 available' has its status at the END, behind a version
+    # that varies -- same shape, same treatment.
+    if low.rstrip(".").endswith(" available"):
+        return "update ready"
+    for prefix, replacement in _COMPACT_WHOLE:
         if low.startswith(prefix):
-            out = replacement + raw[len(prefix):]
+            out = replacement
             break
+    else:
+        for prefix, replacement in _COMPACT_PREFIX:
+            if low.startswith(prefix):
+                out = replacement + raw[len(prefix):]
+                break
     # An explanatory clause after ' -- ', and a parenthetical aside, are
     # DETAIL rather than status. Both are kept in step['detail'].
     for marker in (" -- ", " ("):

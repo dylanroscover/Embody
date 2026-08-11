@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **120 test suites** and **3,734 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **120 test suites** and **3,735 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -43,7 +43,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_startup_progress` | 111 | The status readout's signals: the state each subsystem's status string maps to (including the idle states that used to read as work in progress), the age an auto-save stamp becomes, the elapsed clock a wedged step must show, and the rows `viz_status` renders -- including the predicate that decides whether the panel may re-arm a tick at all, and the mutation guard over the removed publish machinery. Pure module, so it also runs under plain pytest on the CI matrix |
+| `test_startup_progress` | 112 | The status readout's signals: the state each subsystem's status string maps to (including the idle states that used to read as work in progress), the age an auto-save stamp becomes, the elapsed clock a wedged step must show, and the rows `viz_status` renders -- including the predicate that decides whether the panel may re-arm a tick at all, and the mutation guard over the removed publish machinery. Pure module, so it also runs under plain pytest on the CI matrix |
 | `test_duplicate_handling` | 43 | Duplicate / clone / replicant resolution |
 | `test_custom_parameters` | 32 | Custom parameter behavior (Folder, Disable/Enable, Update, TDN controls, Logs, Envoy) |
 | `test_tag_management` | 29 | Tagging operators for externalization |

@@ -340,7 +340,7 @@ class TestCompactStatus(EmbodyTestCase):
         self.assertEqual(sp.compact_status('Installing deps... (one-time)'),
                          'installing deps')
         self.assertEqual(sp.compact_status('Restarting after save...'),
-                         'restarting: save')
+                         'restarting')
 
     def test_a_timestamp_keeps_only_the_time(self):
         self.assertEqual(sp.compact_status('Saved 14:53:05 UTC'), '14:53:05')
@@ -354,16 +354,47 @@ class TestCompactStatus(EmbodyTestCase):
         for text in ('Connected', 'Enabled', 'Perform Mode'):
             self.assertEqual(sp.compact_status(text), text)
 
-    def test_every_known_status_fits_the_row_budget(self):
+    def test_every_known_status_fits_ITS_row_budget(self):
         """The whole point: nothing routine should truncate at the
-        smallest panel size."""
-        budget = sp.TARGET_ROW_CHARS - 8 - 1
-        for text in ('Running on port 9870', 'Saved 14:53:05 UTC',
-                     'Connected', 'Enabled', 'Installing deps... (one-time)',
-                     'Needs repair -- Python not found (reinstall)',
-                     'Not installed', 'Waiting for project save',
-                     'This is the Embody dev checkout -- update via git'):
-            self.assertLessEqual(len(sp.compact_status(text)), budget, text)
+        smallest panel size. Budgets are per ROW -- mark + space +
+        label + space against TARGET_ROW_CHARS -- because the labels
+        differ ('Envoy' buys its details two more characters than
+        'v6.0.234' buys the updater's)."""
+        cases = (
+            ('Envoy', 'Running on port 9870'),
+            ('Envoy', 'Installing deps... (one-time)'),
+            ('Envoy', 'Preparing Python environment...'),
+            ('Envoy', 'Restarting after save...'),
+            ('Saved', 'Saved 14:53:05 UTC'),
+            ('Saved', 'Bypassed (Perform Mode)'),
+            ('Convoy', 'Connected'),
+            ('Convoy', 'Not installed'),
+            ('Convoy', 'Install failed -- see log'),
+            ('Convoy', 'Consent required -- enable Convoy again'),
+            ('Convoy', 'Needs repair -- Python not found (reinstall)'),
+            ('Convoy', 'Waiting for project save'),
+            ('Convoy', 'No Convoy host app'),
+            ('Convoy', 'Installed -- not running (restarts within a '
+                       'minute)'),
+            ('Convoy', 'Installed -- no supervisor (use Repair Convoy '
+                       'App)'),
+            ('Convoy', 'Managed by another supervisor'),
+            ('Convoy', 'Running 1.4.0 -- installed by a newer Embody'),
+            ('Embody', 'Enabled'),
+            ('v6.0.234', 'Up to date'),
+            ('v6.0.234', '6.0.235 available'),
+            ('v6.0.234', 'Updated to v6.0.235'),
+            ('v6.0.234', 'Disabled -- dev checkout (update via git)'),
+        )
+        for label, text in cases:
+            budget = sp.TARGET_ROW_CHARS - len(label) - 3
+            compact = sp.compact_status(
+                text.split(' -- ', 1)[1] if label == 'v6.0.234'
+                and text.startswith('Disabled -- ') else text)
+            self.assertLessEqual(
+                len(compact), budget,
+                '%r renders %r (%d) past its %d budget'
+                % (text, compact, len(compact), budget))
 
     def test_the_installed_family_keeps_its_clause(self):
         """The clause after ' -- ' IS the status for these five, and the
@@ -373,12 +404,12 @@ class TestCompactStatus(EmbodyTestCase):
         for raw, expect in (
                 ('Installed -- starting...', 'starting'),
                 ('Installed -- not running (restarts within a minute)',
-                 'not running; will restart'),
+                 'restarts soon'),
                 ('Installed -- stopped', 'stopped'),
                 ('Installed -- no supervisor (use Repair Convoy App)',
-                 'no supervisor; repair'),
+                 'repair needed'),
                 ('Running 1.4.0 -- installed by a newer Embody',
-                 'newer Embody owns it')):
+                 'newer Embody')):
             self.assertEqual(sp.compact_status(raw), expect, raw)
 
     def test_it_still_truncates_visibly_when_asked(self):
@@ -390,9 +421,20 @@ class TestCompactStatus(EmbodyTestCase):
 class TestLineSpacing(EmbodyTestCase):
     """Height follows the font, not the other way round."""
 
-    def test_the_row_box_is_the_glyph_plus_half(self):
-        self.assertAlmostEqual(sp.row_height_for(20), 30.0)
-        self.assertAlmostEqual(sp.row_height_for(27.3), 27.3 * 1.5)
+    def test_the_row_box_is_the_glyph_plus_the_leading(self):
+        self.assertAlmostEqual(sp.row_height_for(20),
+                               20 * (1.0 + sp.LINE_SPACING))
+        self.assertAlmostEqual(sp.row_height_for(27.3),
+                               27.3 * (1.0 + sp.LINE_SPACING))
+
+    def test_the_leading_still_separates_the_lines(self):
+        """Tightening leading buys glyph size, but rows that touch stop
+        reading as rows: the box must stay clearly larger than
+        Consolas' ~1.17 em line."""
+        self.assertGreaterEqual(sp.LINE_SPACING, 0.2)
+        self.assertLessEqual(
+            sp.ROW_FONT_RATIO * (1.0 + sp.LINE_SPACING), 1.0,
+            'a height-budget font must still FIT its row box')
 
     def test_spacing_is_adjustable_and_never_collapses(self):
         self.assertAlmostEqual(sp.row_height_for(20, 0.0), 20.0)
@@ -1438,7 +1480,7 @@ class TestAProblemNeedsNoDwellAnyMore(EmbodyTestCase):
                                       now=0.0)
             for _k, t, _c in row)
         self.assertIn(sp.GLYPH_WAIT, joined)
-        self.assertIn('No Convoy host app', joined)
+        self.assertIn('no host app', joined)
 
     def test_a_retry_blink_cannot_hide_the_reason(self):
         """The exact 2026-08-10 sequence, now trivially safe: the reason

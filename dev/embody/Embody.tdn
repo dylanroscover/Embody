@@ -4,7 +4,7 @@ build: 1139
 generator: Embody/6.0.234
 td_build: 099.2025.33070
 source_file: Embody-6.234.toe
-exported_at: '2026-08-11T15:28:02Z'
+exported_at: '2026-08-11T17:13:41Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
