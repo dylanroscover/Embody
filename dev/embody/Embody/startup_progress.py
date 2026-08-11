@@ -174,17 +174,8 @@ def convoy_step(status, started=None):
     return _entry(IDLE, detail=text)
 
 
-def elapsed_text(step, now):
-    """'0:42' since the step started, or '' when it has not.
-
-    A real measurement with no implied denominator: it proves the step
-    is alive rather than hung, which is exactly what a mark cannot do.
-    """
-    started = (step or {}).get("started")
-    if started is None or now is None:
-        return ""
-    seconds = int(max(0.0, float(now) - float(started)))
-    return "%d:%02d" % (seconds // 60, seconds % 60)
+# (The old elapsed-clock text went with the wordy layout; the wedge
+# signal survives as COLOUR -- see is_stuck and live_grid.)
 
 
 # Per-state colour for the row, as TD 0..1 floats. Colour carries the
@@ -265,17 +256,16 @@ MONO_ADVANCE = 0.55
 
 # The widest row the readout is allowed to want, and THEREFORE the font
 # size: width is the constraint that binds at node-tile sizes, so every
-# character the layout stops spending buys legibility directly (46 -> 33
-# was ~39% more glyph; 33 -> 23 is another ~43%, because the 33 was
-# sized for the deleted two-column grid while the single column's
-# longest DESIGNED row is 22 characters). This must be readable at tiny
+# character the layout stops spending buys legibility directly. The
+# minimal three-row layout's longest designed row is the top one --
+# mark, 'Embody', gap, and a version that may carry an update spinner
+# ('| v6.0.234') -- 20 characters. This must be readable at tiny
 # node-tile resolutions -- the field requirement is "as readable as
 # humanly possible" -- so the budget is exactly the designed content
-# and not a character more. Every compact vocabulary entry and every
-# label is sized INTO it (see cell_text's per-row clamp); widening any
-# string past its row budget shrinks the font everywhere, which is why
-# the suite bounds every producer state structurally.
-TARGET_ROW_CHARS = 23
+# and not a character more; widening any row past it shrinks the font
+# everywhere, which is why the suite bounds every producer state
+# structurally.
+TARGET_ROW_CHARS = 20
 
 # Font size as a fraction of row height, when height is the binding
 # constraint. The row box is font * (1 + LINE_SPACING); Consolas' line
@@ -554,28 +544,26 @@ def reset_session():
     _SINCE.clear()
 
 
-# How long a step must stay RUNNING before its row spends width on an
-# elapsed clock. NOT zero: cell width sets column width sets font size,
-# so a clock ticking through every routine heartbeat relays the whole
-# panel once a second -- the exact flap the compact view exists to stop.
-# Past this the step is no longer routine, and a measured 2:14 is the
-# only thing on the panel that can tell a wedge from a slow machine.
+# How long a step may stay RUNNING before the spinner stops meaning
+# "working" and starts meaning "working TOO LONG". Past this the mark
+# keeps spinning but turns the failure colour -- a spinner alone reads
+# the same at four seconds and at forty minutes, which is how a wedged
+# dependency install looked exactly like a slow one. Colour, not words:
+# the minimal layout spends no characters on it.
 STUCK_DWELL_S = 20.0
 
 
-def stuck_clock(step, now=None, dwell=STUCK_DWELL_S):
-    """'2:14' for a step that has been RUNNING too long, else ''."""
+def is_stuck(step, now=None, dwell=STUCK_DWELL_S):
+    """True for a step that has been RUNNING past the dwell."""
     if (step or {}).get("state") != RUNNING:
-        return ""
+        return False
     started = (step or {}).get("started")
     if started is None or now is None:
-        return ""
+        return False
     try:
-        if (float(now) - float(started)) < float(dwell):
-            return ""
+        return (float(now) - float(started)) >= float(dwell)
     except (TypeError, ValueError):
-        return ""
-    return elapsed_text(step, now)
+        return False
 
 
 # -- compact status text --------------------------------------------------
@@ -590,78 +578,20 @@ def stuck_clock(step, now=None, dwell=STUCK_DWELL_S):
 #
 # The FULL text stays in step['detail'] for logs and the parameter
 # itself; this is only what the row renders.
-# Every replacement is sized into its row's budget (TARGET_ROW_CHARS
-# minus mark, label and two spaces -- 14 for Convoy, 15 for Envoy and
-# Saved, ~12 for the version row). One character past the budget
-# shrinks the font on EVERY row, so terseness here is glyph size there.
-_COMPACT_PREFIX = (
-    ("running on ", ""),
-    ("installing deps", "installing deps"),
-    ("preparing python environment", "preparing env"),
-    ("restarting after ", "restarting: "),
-    ("reviving (watchdog)", "reviving"),
-    ("needs repair", "needs repair"),
-    ("not installed", "not installed"),
-    # The 'Installed -- X' family keeps X: the clause after ' -- ' IS
-    # the status there, and the generic clause-cut below was throwing it
-    # away -- 'Installed -- no supervisor (use Repair Convoy App)'
-    # rendered as a bare 'Installed' under a failure mark, words
-    # contradicting the mark with the remedy deleted.
-    ("installed -- starting", "starting"),
-    ("installed -- not running", "restarts soon"),
-    ("installed -- stopped", "stopped"),
-    ("installed -- no supervisor", "repair needed"),
-    ("install failed", "install failed"),
-    ("consent required", "consent needed"),
-    ("waiting for", "waiting:"),
-    ("managed by another supervisor", "other manager"),
-    ("this is the embody dev checkout", "dev checkout"),
-    ("saved ", ""),
-    ("error: ", ""),
-    ("refused: ", "refused: "),
-)
-
-# Full replacements: the tail carries nothing the row needs, so the
-# whole phrase maps to a fixed short form (a prefix rule would append
-# the tail back).
-_COMPACT_WHOLE = (
-    ("restarting after save", "restarting"),
-    ("updated to ", "updated"),
-    ("no convoy host app", "no host app"),
-    # The remedy said as the imperative it is -- 'waiting: project save'
-    # buries the verb and busts the row budget.
-    ("waiting for project save", "save project"),
-)
-
-
 def compact_status(text, max_width=None):
-    """The shortest phrasing that still answers the row's question."""
+    """The shortest phrasing that still answers the row's question.
+
+    The minimal layout renders almost no words -- marks carry the
+    states -- so the status-phrase vocabulary that used to live here is
+    gone with its consumer. What remains serves the ONE text the panel
+    still draws, the save age: strip a 'Saved ' lead and a ' UTC' tail,
+    drop parenthetical/clause asides and trailing dots, and clamp
+    visibly when asked.
+    """
     raw = _text(text)
     if not raw:
         return ""
-    low = raw.lower()
-    out = raw
-    # 'Running X -- installed by a newer Embody' has its status in the
-    # CLAUSE, with a version in front of it -- no fixed prefix can catch
-    # it, and the clause-cut below would leave 'Running X' with a
-    # waiting mark beside it.
-    if " -- installed by a newer embody" in low:
-        return "newer Embody"
-    # '6.0.230 available' has its status at the END, behind a version
-    # that varies -- same shape, same treatment.
-    if low.rstrip(".").endswith(" available"):
-        return "update ready"
-    for prefix, replacement in _COMPACT_WHOLE:
-        if low.startswith(prefix):
-            out = replacement
-            break
-    else:
-        for prefix, replacement in _COMPACT_PREFIX:
-            if low.startswith(prefix):
-                out = replacement + raw[len(prefix):]
-                break
-    # An explanatory clause after ' -- ', and a parenthetical aside, are
-    # DETAIL rather than status. Both are kept in step['detail'].
+    out = raw[len("saved "):] if raw.lower().startswith("saved ") else raw
     for marker in (" -- ", " ("):
         cut = out.find(marker)
         if cut > 0:
@@ -724,107 +654,97 @@ def spinner_frame(now=None, fps=SPINNER_FPS):
         return SPINNER_FRAMES[0]
 
 
-def busy_glyph(now=None, animate=False):
-    """The RUNNING mark: animated while installing, static otherwise.
-
-    `animate` is the caller's answer to "is this an installation, or a
-    settled project merely reporting state?". Settled, the ellipsis is
-    both correct and free -- an unchanging cell publishes nothing, so the
-    panel returns to zero cooks the moment startup ends.
-    """
-    return spinner_frame(now) if animate else GLYPH_BUSY
-
-
 GLYPH_OK = "\u2713"
 GLYPH_BAD = "\u2717"
 GLYPH_WAIT = "!"
-GLYPH_BUSY = "\u2026"
 GLYPH_SKIP = "-"
 
 STATE_GLYPH = {
     DONE: GLYPH_OK,
     FAILED: GLYPH_BAD,
     STALLED: GLYPH_WAIT,
-    RUNNING: GLYPH_BUSY,
+    # RUNNING is not here: it renders as the spinner, resolved per
+    # instant in _mark (field spec 2026-08-11: the mark spins while
+    # processing/installing/updating).
     SKIPPED: GLYPH_SKIP,
     IDLE: " ",
 }
 
 
-def cell_text(key, step, now=None, animate=False):
-    """One cell: mark, name, and the reason. ALWAYS all three.
-
-    The reason is never suppressed. There used to be a compact mode that
-    rendered only mark + label while healthy, which meant "Autosaved"
-    with no age and a second layout for the panel to snap between; the
-    row now always answers its own question ("22h ago", "port 9870",
-    "Connected"). What keeps the panel from resizing on transient text
-    is the FONT rule, not hiding words: the font is pinned to
-    TARGET_ROW_CHARS (see _font_of), so a row growing or shrinking
-    inside the budget moves nothing.
-
-    An elapsed clock on a step RUNNING past STUCK_DWELL_S outranks the
-    detail: a busy mark alone reads the same at four seconds and at
-    forty minutes, which is how a wedged dependency install looked
-    exactly like a slow one.
-    """
+def _mark(step, now=None):
+    """The one-character state mark for a cell. Always ONE character."""
     step = step or {}
-    state = step.get("state")
-    glyph = STATE_GLYPH.get(state, " ")
-    if state == RUNNING:
-        # Animated ONLY while something is installing. In a settled
-        # project the mark is static, which is what keeps the panel at
-        # zero cooks once startup is over.
-        glyph = busy_glyph(now, animate=animate)
-    label = (step.get("label") or STATUS_LABELS.get(key, key))
-    clock = stuck_clock(step, now)
-    if clock:
-        return "%s %s %s" % (glyph, label, clock)
-    # The detail is CLAMPED to what fits this row inside the design
-    # budget -- mark, space, label, space, then whatever remains of
-    # TARGET_ROW_CHARS. This is the other half of the font pin: with no
-    # bound, a long producer string ('Error: host app did not answer
-    # /register within 5.0s') widened the column past the budget and
-    # resized the whole panel on every retry cycle -- the 2026-08-10
-    # flap re-entering through the font instead of the shape.
-    budget = TARGET_ROW_CHARS - len(label) - 3
-    detail = compact_status(step.get("detail"), max_width=budget)
-    return ("%s %s %s" % (glyph, label, detail)).rstrip() if detail \
-        else "%s %s" % (glyph, label)
+    if step.get("state") == RUNNING:
+        return spinner_frame(now)
+    return STATE_GLYPH.get(step.get("state"), " ")
 
 
 GRID_GAP = 2
 
 
-def live_grid(embody, now=None):
-    """Rows of CELLS, each carrying its OWN colour.
+def _cell_rgb(step, now=None):
+    """The cell's colour: its state's colour, or the failure colour for
+    a step that has been RUNNING past STUCK_DWELL_S -- the spinner keeps
+    spinning (the work may yet finish) but the colour says TOO LONG,
+    which is the whole wedge-vs-slow distinction in zero characters."""
+    step = step or {}
+    if is_stuck(step, now):
+        return STATE_RGB[FAILED]
+    return STATE_RGB.get(step.get("state"), STATE_RGB[IDLE])
 
-    ONE SHAPE, ALWAYS: five rows, one subsystem each, mark + label +
-    reason, in STATUS_ORDER. The healthy/expanded split this replaces
-    rendered the same feature two different ways and hid the autosave
-    age on the happy path -- and with a fixed shape there is nothing to
-    reflow, so the dwell/grace machinery that debounced the switching
-    went with it.
+
+def live_grid(embody, now=None):
+    """The MINIMAL readout. Three rows, marks carry the state:
+
+        [mark] Embody   vX.Y.Z
+        [mark] Saved <age>
+        [mark] Envoy  [mark] Convoy
+
+    Field-specified layout (2026-08-11): 'Enabled', 'Connected' and the
+    port number are GIVENS -- the mark already says them -- so they
+    spend no characters, and every character saved is glyph size at the
+    node-tile scale this must be readable at. What keeps words: the
+    save age (that row's entire answer) and the version. The version
+    cell is grey -- red when an update is waiting or failed, with a
+    spinner while one is checking or installing. Failure reasons live
+    in the status parameters and the log; the panel is the at-a-glance
+    surface, and a red mark is the glance.
     """
-    steps = _live_steps(embody, now=now)
-    # Animate the busy mark ONLY while an install is genuinely in
-    # flight, read off the DETAIL rather than off a startup flag: there
-    # is no startup flag any more, and an install can begin long after
-    # the open sequence (a Convoy host app coming up on demand). A
-    # settled project gets the static ellipsis -- an unchanging cell,
-    # which publishes nothing and cooks nothing.
-    animate = any((step or {}).get("state") == RUNNING
-                  and (step or {}).get("detail", "").lower().startswith(
-                      ("install", "building", "preparing", "starting"))
-                  for _k, step in steps)
-    by_key = dict(steps)
-    cells = [(key, cell_text(key, by_key[key], now=now, animate=animate),
-              by_key[key])
-             for key in STATUS_ORDER if key in by_key]
-    width = max([len(t) for _k, t, _s in cells] or [0])
-    return [[(key, text.ljust(width),
-              STATE_RGB.get(step.get("state"), STATE_RGB[IDLE]))]
-            for key, text, step in cells]
+    steps = dict(_live_steps(embody, now=now))
+
+    def cell(key):
+        step = steps.get(key) or {}
+        return (key,
+                "%s %s" % (_mark(step, now), STATUS_LABELS.get(key, key)),
+                _cell_rgb(step, now))
+
+    saved_key, saved_text, saved_rgb = cell(STATUS_AUTOSAVE)
+    saved_step = steps.get(STATUS_AUTOSAVE) or {}
+    age = compact_status(saved_step.get("detail"),
+                         max_width=TARGET_ROW_CHARS - len(saved_text) - 1)
+    # ONLY an age (or its honest absence, 'never') rides the row -- a
+    # mid-save 'Saving' would repeat what the spinner already says.
+    if age and (age.endswith(" ago") or age == "never"):
+        saved_text = "%s %s" % (saved_text, age)
+
+    version = steps.get(STATUS_VERSION) or {}
+    vlabel = version.get("label") or "v?"
+    vstate = version.get("state")
+    # The version cell carries no mark -- except the spinner while an
+    # update is genuinely checking, downloading or installing.
+    vtext = ("%s %s" % (spinner_frame(now), vlabel)
+             if vstate == RUNNING else vlabel)
+    # Grey is the resting colour whatever the checker said (up to date,
+    # not checked, updates off -- all resting). RED means the user
+    # should act or know: an update is WAITING, or one FAILED.
+    vrgb = (STATE_RGB[FAILED] if vstate in (STALLED, FAILED)
+            else STATE_RGB[SKIPPED])
+
+    return [
+        [cell(STATUS_EMBODY), (STATUS_VERSION, vtext, vrgb)],
+        [(saved_key, saved_text, saved_rgb)],
+        [cell(STATUS_ENVOY), cell(STATUS_CONVOY)],
+    ]
 
 
 def _live_steps(embody, now=None):
@@ -854,7 +774,7 @@ def _live_steps(embody, now=None):
     ]
 
 
-def font_for_rows(panel_width, texts, minimum=7.0, maximum=40.0):
+def font_for_rows(panel_width, texts, minimum=7.0, maximum=96.0):
     """Font sized to the CONTENT, not to a fixed character budget.
 
     TARGET_ROW_CHARS is what the rows are DESIGNED to fit; this is what
@@ -906,34 +826,26 @@ def _panel_row_budget(embody, now=None):
         return None
 
 
+def row_chars_of(grid):
+    """Total character length of each row: its cells plus the gaps
+    between them. Cells FLOW in this layout (the second cell starts
+    where the first ends, per row), so the font budget is per-ROW
+    total, not per-column maximum."""
+    return [sum(len(text) for _k, text, _c in row)
+            + GRID_GAP * max(0, len(row) - 1)
+            for row in (grid or ())] or [1]
+
+
 def live_font(embody, panel_width, row_height=None, now=None):
     """Font sized from EXACTLY what the panel draws.
 
-    THE BUG THIS REPLACES, measured on the live panel every ~30s: the
-    font used to be chosen by guessing which view was up, while the
-    panel rendered live_grid() regardless. A Convoy heartbeat then left
-    the grid on screen but sized the font for the other view -- 39.1 to
-    24.9 and back, with the column widths never moving, which is why it
-    read as the layout freaking out rather than as a font change.
-
-    The cure is not a better guess: it is deriving the size from
-    live_col_chars(), the same numbers that set the cell widths.
-    Content and font cannot disagree if they come from one source.
-
-    KEPT DESPITE HAVING NO PRODUCTION CALLER. table_rows() builds one
-    grid and derives everything from it (_font_of/_col_chars_of); this
-    is the reference implementation those two are pinned against by
-    test_layout_matches_the_helpers_it_replaced, which is the only
-    thing standing between that optimisation and a silent drift.
+    Pinned to the design budget: content NARROWER than TARGET_ROW_CHARS
+    must not inflate the font, or every transient text change resizes
+    the whole panel; content wider still shrinks to fit rather than
+    clip. Reference implementation for the table_rows fast path, pinned
+    by test_layout_matches_the_helpers_it_replaced.
     """
-    cols = live_col_chars(embody, now=now)
-    total = sum(cols) + GRID_GAP * max(0, len(cols) - 1)
-    # Pinned to the design budget: content NARROWER than
-    # TARGET_ROW_CHARS must not inflate the font, or every transient
-    # detail change ("Registering..." -> "Connected") resizes the whole
-    # panel. Content wider than the budget still shrinks to fit -- the
-    # rows are never clipped, the font is simply never bigger than the
-    # budget size.
+    total = max(row_chars_of(live_grid(embody, now=now)))
     size = font_for_rows(panel_width,
                          ["x" * max(TARGET_ROW_CHARS, total)])
     if row_height is None:
@@ -946,28 +858,6 @@ def live_font(embody, panel_width, row_height=None, now=None):
         except (TypeError, ValueError):
             pass
     return max(7.0, size)
-
-
-def live_col_chars(embody, now=None):
-    """Character width of each grid column.
-
-    The panel packs columns to their CONTENT, not into equal halves --
-    an even split sized the font for one budget and then gave each cell
-    a different one, which clipped the wider column ("Autosaved 1h ago"
-    lost its "ago").
-
-    Reached only through live_font now; both survive as the reference
-    the table_rows fast path is tested against. See live_font.
-    """
-    grid = live_grid(embody, now=now)
-    if not grid:
-        return [1]
-    columns = max(len(row) for row in grid)
-    out = []
-    for i in range(columns):
-        out.append(max([len(row[i][1]) for row in grid if i < len(row)]
-                       or [0]))
-    return out or [1]
 
 
 # --- Publishing: the readout as finished rows, computed ONCE per change ---
@@ -1051,23 +941,11 @@ def will_change(embody, now=None, ahead=1.0, panel_width=600,
         return False
 
 
-def _col_chars_of(grid):
-    """live_col_chars, but from a grid already in hand."""
-    if not grid:
-        return [1]
-    columns = max(len(row) for row in grid)
-    out = []
-    for i in range(columns):
-        out.append(max([len(row[i][1]) for row in grid if i < len(row)]
-                       or [0]))
-    return out or [1]
-
-
-def _font_of(embody, grid, chars, panel_width, now=None):
+def _font_of(embody, grid, panel_width, now=None):
     """live_font, but from a grid already in hand (same arithmetic)."""
-    total = sum(chars) + GRID_GAP * max(0, len(chars) - 1)
+    total = max(row_chars_of(grid))
     # Same TARGET_ROW_CHARS pin as live_font -- the two are tested to
-    # agree, and the pin is what keeps transient detail-length changes
+    # agree, and the pin is what keeps transient text-length changes
     # from resizing the panel.
     size = font_for_rows(panel_width,
                          ["x" * max(TARGET_ROW_CHARS, total)])
@@ -1087,27 +965,35 @@ def table_rows(embody, panel_width, now=None):
     number for a layout row and the finished text for a cell row. Pure
     apart from the parameter reads every other live_* helper already
     does, so the shape is unit-testable without TouchDesigner.
+
+    Cells FLOW per row: rowbox r's second cell starts where its first
+    cell ends, so each row publishes its OWN first-cell width ('c0w0'..)
+    -- one shared column width forced the version cell out to the
+    widest row's edge and spent six characters of font on alignment air.
     """
     try:
         width = float(panel_width)
     except (TypeError, ValueError):
         width = 0.0
     pad = int(width * 0.03)
-    # ONE grid per publish. live_font -> live_col_chars -> live_grid means
-    # the naive call sequence rebuilds it four times; the readout is the
-    # same object every time, so derive the rest from a single build.
+    # ONE grid per publish -- every layout number derives from it.
     grid = live_grid(embody, now=now)
-    chars = _col_chars_of(grid)
-    font = _font_of(embody, grid, chars, width - pad * 2, now=now)
+    font = _font_of(embody, grid, width - pad * 2, now=now)
+    rowh = _panel_row_budget(embody, now=now)
+    if not rowh:
+        rowh = row_height_for(font)
     rows = [
         ("font", "%.4f" % font, "", "", "", ""),
-        ("rowh", str(int(row_height_for(font))), "", "", "", ""),
-        ("col0w", str(pad + int(((chars + [1])[0] + 2)
-                                * font * MONO_ADVANCE)), "", "", "", ""),
+        ("rowh", str(int(rowh)), "", "", "", ""),
         ("pad", str(pad), "", "", "", ""),
     ]
     for r in range(PANEL_ROWS):
         row = grid[r] if r < len(grid) else []
+        first = row[0][1] if row else ""
+        rows.append(("c0w%d" % r,
+                     str(pad + int((len(first) + GRID_GAP)
+                                   * font * MONO_ADVANCE)),
+                     "", "", "", ""))
         rows.append(("row%d" % r, "", "", "", "", "1" if row else "0"))
         for c in range(PANEL_COLS):
             name = "r%dc%d" % (r, c)

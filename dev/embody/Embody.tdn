@@ -4,7 +4,7 @@ build: 1139
 generator: Embody/6.0.234
 td_build: 099.2025.33070
 source_file: Embody-6.234.toe
-exported_at: '2026-08-11T17:13:41Z'
+exported_at: '2026-08-11T17:44:35Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -1324,7 +1324,7 @@ operators:
         fontcolorb: =float(parent().parent().op('status_table')['r0c0','b'].val or 0)
         textpaddingl: =float(parent().parent().op('status_table')['pad','value'].val or 0)
         alignx: left
-        w: =float(parent().parent().op('status_table')['col0w','value'].val or 100)
+        w: =float(parent().parent().op('status_table')['c0w0','value'].val or 100)
         vmode: fill
         display: =int(parent().parent().op('status_table')['r0c0','show'].val or 0)
       size: [160, 130]
@@ -1370,7 +1370,7 @@ operators:
         fontcolorb: =float(parent().parent().op('status_table')['r1c0','b'].val or 0)
         textpaddingl: =float(parent().parent().op('status_table')['pad','value'].val or 0)
         alignx: left
-        w: =float(parent().parent().op('status_table')['col0w','value'].val or 100)
+        w: =float(parent().parent().op('status_table')['c0w1','value'].val or 100)
         vmode: fill
         display: =int(parent().parent().op('status_table')['r1c0','show'].val or 0)
       size: [160, 130]
@@ -1416,7 +1416,7 @@ operators:
         fontcolorb: =float(parent().parent().op('status_table')['r2c0','b'].val or 0)
         textpaddingl: =float(parent().parent().op('status_table')['pad','value'].val or 0)
         alignx: left
-        w: =float(parent().parent().op('status_table')['col0w','value'].val or 100)
+        w: =float(parent().parent().op('status_table')['c0w2','value'].val or 100)
         vmode: fill
         display: =int(parent().parent().op('status_table')['r2c0','show'].val or 0)
       size: [160, 130]
@@ -1462,7 +1462,7 @@ operators:
         fontcolorb: =float(parent().parent().op('status_table')['r3c0','b'].val or 0)
         textpaddingl: =float(parent().parent().op('status_table')['pad','value'].val or 0)
         alignx: left
-        w: =float(parent().parent().op('status_table')['col0w','value'].val or 100)
+        w: =float(parent().parent().op('status_table')['c0w3','value'].val or 100)
         vmode: fill
         display: =int(parent().parent().op('status_table')['r3c0','show'].val or 0)
       size: [160, 130]
@@ -1507,7 +1507,7 @@ operators:
         fontcolorb: =float(parent().parent().op('status_table')['r4c0','b'].val or 0)
         textpaddingl: =float(parent().parent().op('status_table')['pad','value'].val or 0)
         alignx: left
-        w: =float(parent().parent().op('status_table')['col0w','value'].val or 100)
+        w: =float(parent().parent().op('status_table')['c0w4','value'].val or 100)
         vmode: fill
         display: =int(parent().parent().op('status_table')['r4c0','show'].val or 0)
       size: [160, 130]
