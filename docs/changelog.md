@@ -1,6 +1,28 @@
 # Changelog
 
-## v6.0.236
+## v6.0.239
+
+The split-realm bug, root-caused and closed. A Convoy daemon could be permanently wedged into `local_realm_conflict` -- refusing every registration on the machine, with no recovery short of hand-editing files -- by a single UDP broadcast from any Embody host on the subnet, admitted or not. The field kept hitting it because the system manufactured the collisions itself: every machine that enabled Convoy without hearing an existing realm within a fixed 8-second window crowned its own, and any two such machines meeting later latched a durable conflict on both sides.
+
+- **A stranger can no longer move a committed realm.** Discovery announcements are signature-verified, but under TOFU any subnet neighbour has a valid self-signed cert -- so a committed (established or conflicted) realm now changes only on an ADMITTED peer's evidence. An un-admitted host claiming a foreign established realm becomes an audited, deduplicated advisory carrying full sender provenance (host id, fingerprint, address) -- visible and denylistable, and powerless. Unbound and candidate hosts still hear the whole LAN, because genesis and adoption must predate admission.
+
+- **A foreign registration refuses without poisoning.** The register path used to commit the incoming observation to the durable realm store FIRST and only then notice the resulting conflict -- one register from a repo cloned off another LAN wedged the receiving daemon before its 409 was computed. It now checks, refuses, audits (with the claim and its source), and leaves realm state untouched.
+
+- **`Resolve Realm Conflict...`** on the Convoy page: the recovery the plan promised (`/realm/reset` had zero callers anywhere). It names the preserved realm, the conflicting realms, and the LIVE senders from the daemon's discovery cache, then -- on an explicit confirmation -- denylists those senders (via a new loopback route that works for record-less strangers, which `/peers/block` never could), resets the realm, and re-registers. Field-validated on the machine that hit the original incident.
+
+- **Re-enabling Convoy offers the rejoin.** A project whose git-tracked binding carries one established realm, opened on a LAN whose mesh is another, was refused forever with no exit. The explicit off/on toggle is now the rejoin gesture: the first refusal after an enable raises one dialog naming both realms, and "Rejoin Local Mesh" demotes the binding to candidate -- the sanctioned "explicit local reset" the refusal message always referenced -- after which the ordinary adoption machinery joins the local realm automatically. Never fires from a tick or at startup.
+
+- **The genesis listen window is randomized** (8-20 s per daemon), as ADR-003 specified all along -- isolated enables stop crowning identical-timing realms, which was the recurrence engine.
+
+- **Provenance everywhere**: realm state changes now audit their source (announcement sender, registering project, startup/reset derivation); the conflict that started this investigation was unattributable because every ingest path logged only the result. The denylist writer validates entries before writing -- one malformed value would have flipped the fail-closed file into blocking every peer.
+
+## v6.0.237
+
+Two fresh-install field notes, both about the first session telling the truth.
+
+- **The Envoy mark no longer goes red in the middle of a normal install.** The "working too long" signal -- a spinner that turns the failure colour past a dwell -- used one 20-second dwell for everything, and the one-time dependency install routinely takes minutes: every fresh install watched Envoy turn red and then finish fine, a false alarm in the one colour that must never lie. The dwell is per operation now: environment builds, installs, downloads, repairs and the host-app start (whose health wait alone can outlive 20 seconds) redden only past ten minutes, while a routine restart hanging at 20 seconds still turns red immediately -- that one IS news.
+
+- **"Check and Notify" checks on the first session, not just the next one.** The startup update check was scheduled only from project open -- but on a fresh install the open happened before Embody existed, so Update Status rested at the scrub's `Disabled` for the whole first session while the user's setting said notify (every fresh-load smoke flag showed the same; the one smoke that reopened a saved project showed `Up to date`). The fresh-install path now schedules the same background check once setup has settled.
 
 - **Saving the project resets the "Saved" counter.** Only the auto-checkpoint engine and the startup seed ever wrote that readout, so the panel kept the last checkpoint's age straight through a Ctrl+S -- telling a user who had just saved that their work was hours old (field question; the release smoke's own flag proved it, reading `Idle` right after the harness's save). The post-save hook now stamps the counter the moment a save completes, and the smoke's auto-save leg asserts the stamp so the gap cannot reopen.
 

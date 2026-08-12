@@ -1086,6 +1086,53 @@ def adopt_convoy_id(ext, convoy_id, expected_id,
     return new_id
 
 
+def rebind_convoy_to_candidate(ext, expected_id) -> str:
+    """USER-CONFIRMED demotion of this project's realm binding to candidate.
+
+    The one sanctioned way out of an established binding the local
+    daemon's realm refuses. adopt_convoy_id deliberately hard-refuses
+    both replacing and demoting an established binding on the automatic
+    paths ('never silently follow a routine heartbeat to another
+    realm') -- which left a project cloned onto a different LAN refused
+    forever, with the refusal message naming an 'explicit local reset'
+    that did not exist. This is that reset: gated behind the user's
+    Rejoin confirmation on the explicit re-enable gesture, never called
+    from a tick. The id is KEPT -- a candidate id is authority-free and
+    the host's convergence rules replace it with the local realm on the
+    next register -- consent metadata is preserved, and bound_at is
+    dropped because the binding it stamped no longer holds.
+    """
+    expected = _clean_convoy_id(expected_id)
+    if not expected:
+        ext.Log('Refused an invalid Convoy rejoin (no expected id)',
+                'WARNING')
+        return ''
+    path = project_json_path(ext)
+    data, readable = _load_project_json(ext, 'rejoining the local Convoy')
+    if not readable:
+        return ''
+    current = data.get(CONVOY_KEY)
+    if not isinstance(current, dict) or _clean_convoy_id(
+            current.get('id')) != expected:
+        ext.Log('Skipped a stale Convoy rejoin because the project '
+                'binding changed', 'WARNING')
+        return ''
+    entry = dict(current)
+    entry['binding_state'] = CONVOY_BINDING_CANDIDATE
+    entry.pop('bound_at', None)
+    data[CONVOY_KEY] = entry
+    try:
+        _write_json_atomic(path, data)
+    except Exception as e:
+        ext.Log(f'Failed to rebind the Convoy binding to candidate: {e}',
+                'WARNING')
+        return ''
+    ext.Log(f'Rebound Convoy {expected} to candidate in '
+            '.embody/project.json (user-confirmed rejoin; the local '
+            'realm is adopted on the next register)', 'INFO')
+    return expected
+
+
 def save_settings(ext) -> None:
     """Persist whitelisted parameter values to .embody/config.json."""
     ext._settings_save_pending = False

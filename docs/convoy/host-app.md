@@ -87,7 +87,7 @@ Exact wording can vary by release, but these are the useful categories:
 | **Offline** | The node is known but its TD process, host app, or network path is unavailable; automatic reconnect continues |
 | **Limited** | The node is reachable but the requested capability or version contract is unavailable |
 | **Incompatible** | Align Embody versions before sending work |
-| **Conflict - Multiple Convoys Found** | More than one previously established Convoy is visible; do not merge them by guessing. Keep existing peers running and use the advanced local reset/rejoin recovery when it is available in your build |
+| **Conflict - Multiple Convoys Found** | More than one previously established Convoy is visible; do not merge them by guessing. Keep existing peers running and use the Convoy page's Resolve Realm Conflict... action, which names the conflicting realms and their live senders, denylists them on confirmation, and resets this machine's realm |
 | **Permission denied / approval required** | Enable the required setting locally on the target; a peer cannot grant itself TD Python or Full Shell |
 | **Error** | Read **Details**, then check version, firewall, host-app health, and the troubleshooting cases below |
 

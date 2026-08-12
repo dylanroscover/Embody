@@ -169,6 +169,7 @@ _LOOPBACK_GET = ["/status", "/nodes", "/manifest", "/manifest/n", "/identity",
 _LOOPBACK_POST = ["/register", "/unregister", "/remint", "/jobs", "/envelope",
                   "/psk", "/identity/rotate", "/peers/admit", "/peers/block",
                   "/peers/forget", "/peers/observe", "/peers/quarantine",
+                  "/peers/denylist", "/realm/reset",
                   "/lan/killswitch", "/leases", "/leases/release",
                   "/heartbeat", "/dispatch", "/drain", "/poll", "/shutdown"]
 _LOOPBACK_POST.append("/relay/artifact")

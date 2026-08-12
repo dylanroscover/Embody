@@ -587,6 +587,95 @@ class Denylist:
                 "host_ids": sorted(self._host_ids),
                 "fingerprints": sorted(self._fingerprints)}
 
+    def add(self, host_id=None, fingerprint=None):
+        """Append identities to denylist.json, creating it if absent.
+
+        The programmatic half of the hand-editable contract, added
+        because the documented realm-conflict recovery ('block the
+        offending sender, then reset') was impossible through
+        /peers/block for exactly the sender class that CAUSES conflicts
+        -- an un-admitted host has no peer record and the state setter
+        404s (field incident 2026-08-12). Values are stored in FOLDED
+        form (the matching form); a fail-closed file refuses the write
+        rather than replacing content the operator meant to keep.
+        """
+        folded_host = fold(host_id)
+        folded_fp = fold(fingerprint)
+        if not folded_host and not folded_fp:
+            raise PeerError("denylist_entry_empty",
+                            "a denylist entry needs a host_id or a "
+                            "fingerprint")
+        # Validate BEFORE writing: the loader refuses a file containing
+        # any entry it cannot match, and a refused file fails CLOSED --
+        # so appending one malformed value here would block EVERY peer
+        # on this host. Refuse the entry instead.
+        if folded_host and normalize_host_id(folded_host) is None:
+            raise PeerError(
+                "denylist_entry_malformed",
+                f"{host_id!r} is not a 32-character lowercase hex host_id")
+        if folded_fp and normalize_fingerprint(folded_fp) is None:
+            raise PeerError(
+                "denylist_entry_malformed",
+                f"{fingerprint!r} is not a cvfp1-... fingerprint")
+        self._refresh()
+        if self._fail_closed:
+            raise PeerError(
+                "denylist_unreadable",
+                "denylist.json is fail-closed (%s); fix the file by hand "
+                "before appending to it" % (self._fail_detail,))
+        host_ids = set(self._host_ids)
+        fingerprints = set(self._fingerprints)
+        if folded_host:
+            host_ids.add(folded_host)
+        if folded_fp:
+            fingerprints.add(folded_fp)
+        # PRESERVE the operator's note -- the field the class docstring
+        # promises to the 2am hand-editor. Only fall back to a canned
+        # explanation when none exists.
+        note = ""
+        try:
+            with open(self.path, "r", encoding="utf-8") as stream:
+                existing = json.load(stream)
+            if isinstance(existing, dict) and isinstance(
+                    existing.get("note"), str):
+                note = existing["note"]
+        except (OSError, ValueError):
+            pass
+        payload = {
+            "version": 1,
+            "note": note or ("Hand-editable. Blocks by host_id OR "
+                             "fingerprint, matched case-insensitively."),
+            "host_ids": sorted(host_ids),
+            "fingerprints": sorted(fingerprints),
+        }
+        # Unpredictable temp name (the predictable-suffix hole
+        # _write_private documents), atomic replace, then VERIFY by
+        # re-reading through the normal loader -- a write that did not
+        # land must be an error, not a silent no-op.
+        tmp = "%s.tmp-%s" % (self.path, os.urandom(4).hex())
+        try:
+            with open(tmp, "w", encoding="utf-8") as stream:
+                json.dump(payload, stream, indent=1, sort_keys=True)
+                stream.write("\n")
+            os.replace(tmp, self.path)
+        except OSError as e:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise PeerError("denylist_write_failed",
+                            "%s: %s" % (type(e).__name__, e))
+        self._signature = _UNREAD          # force a reload on next ask
+        snapshot = self.snapshot()
+        if ((folded_host and folded_host not in snapshot["host_ids"])
+                or (folded_fp
+                    and folded_fp not in snapshot["fingerprints"])):
+            raise PeerError(
+                "denylist_write_failed",
+                "the entry did not survive the reload (%s)"
+                % (snapshot.get("detail") or "unknown cause"))
+        return snapshot
+
 
 # ---------------------------------------------------------------------
 # The peer store

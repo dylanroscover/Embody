@@ -3217,6 +3217,22 @@ class ConvoyExt:
         else:
             session['registered'] = False
             session['sent'] = None
+            if (state == 'refused'
+                    and str(result.get('reason') or '')
+                    == 'local_realm_conflict'):
+                until = session.get('offer_rejoin_until')
+                if until is not None and time.monotonic() >= until:
+                    session.pop('offer_rejoin_until', None)
+                    until = None
+                if until is not None:
+                    # The user recently toggled Convoy on and the local
+                    # daemon's realm refused this project's binding.
+                    # Offer the rejoin off this drain (a dialog inside
+                    # the poll would block it). The flag is cleared at
+                    # DELIVERY, not here -- a busy host slot or a failed
+                    # plan must not burn the one offer (review finding).
+                    run('args[0]._offerRejoinLocalConvoy()', self,
+                        delayFrames=5)
             if state in ('absent', 'stale', 'refused'):
                 # Absence is normal and a policy refusal is a decision:
                 # neither is retried hard.
@@ -3709,6 +3725,44 @@ class ConvoyExt:
                 self._confirmForgetOffline(
                     result.get('rows'),
                     remote_hosts=result.get('remote_offline_hosts'))
+            return
+
+        if action == 'realm_conflict_plan':
+            # Same preview contract as forget_offline_plan.
+            if ok:
+                self._confirmResolveRealm(result)
+            else:
+                self._log('Resolve Realm Conflict: %s'
+                          % (result.get('detail') or 'listing failed'),
+                          'WARNING')
+            return
+
+        if action == 'rejoin_plan':
+            # Preview for the re-enable rejoin offer; alters nothing.
+            if ok:
+                self._confirmRejoinLocalConvoy(result)
+            else:
+                self._log('Rejoin offer: %s'
+                          % (result.get('detail') or 'listing failed'),
+                          'INFO')
+            return
+
+        if action == 'realm_conflict_resolve':
+            if ok:
+                # Re-register PROMPTLY on success: the refusal-backoff
+                # loop would otherwise keep the node off its own
+                # freshly-reset realm for up to a minute. A FAILED reset
+                # earns no kick -- forcing an immediate register the
+                # daemon re-refuses only tightens the refusal loop.
+                session = self._session()
+                session['sent'] = None
+                session['next_call_at'] = None
+                self._kickTick()
+            self._log('Resolve Realm Conflict: %s'
+                      % (result.get('detail') or 'done'),
+                      'SUCCESS' if ok else 'WARNING')
+            # The readout: the register that follows writes the node
+            # line; the host line refresh rides the next status action.
             return
 
         if action == 'forget_offline':
@@ -4557,6 +4611,215 @@ class ConvoyExt:
         self._beginHostCall('preview', lambda: _host_preview(ctx))
         return {'state': 'previewing', 'busy': True,
                 'preview': self._session().get('uninstall_preview')}
+
+    def ResolveRealmConflict(self):
+        """Surface a split-realm CONFLICT and offer the sanctioned exit.
+
+        The recovery the plan promised (ADR-003's 'advanced local
+        reset/rejoin') finally gets a control: until now /realm/reset
+        had ZERO callers anywhere -- an operator whose daemon latched a
+        conflict (field, 2026-08-12: one un-admitted MacBook broadcast
+        wedged every registration on this LAN) had no way out short of
+        hand-crafting an authenticated loopback POST. Two phases on the
+        host slot, mirroring Forget Offline Nodes: plan (alters
+        nothing), a confirmation that NAMES the preserved realm, the
+        conflicting ids and the live announcers, then apply (denylist
+        the announcers, reset, re-register).
+        """
+        if not self._hostActionAllowed('Resolve Realm Conflict'):
+            return {'state': 'busy'}
+        ctx = self._safeHostContext()
+        if ctx is None:
+            return {'state': 'unavailable'}
+        self._beginHostCall('realm_conflict_plan',
+                            lambda: _host_realm_conflict_plan(ctx))
+        return {'state': 'listing'}
+
+    def _confirmResolveRealm(self, result):
+        """Stage two: name the split, ask, then apply. MAIN THREAD."""
+        if self._performing():
+            self._log('Resolve Realm Conflict: suppressed during '
+                      'Perform Mode', 'INFO')
+            return
+        realm = (result or {}).get('realm') or {}
+        announcers = (result or {}).get('announcers') or []
+        if str(realm.get('state') or '') != 'conflict':
+            if announcers:
+                # The advisory case: no conflict (the observer gate held)
+                # but un-admitted senders ARE advertising foreign realms.
+                # This button is the operator surface for that too --
+                # without it the advisory's own audit text pointed at a
+                # dead end (panel finding).
+                lines = ['No realm conflict -- this machine keeps %s.'
+                         % (realm.get('convoy_id') or 'its realm'),
+                         '',
+                         '%d un-admitted sender(s) are advertising '
+                         'foreign Convoy realms:' % len(announcers)]
+                for announcer in announcers[:8]:
+                    lines.append('  %s  %s' % (
+                        announcer.get('address') or 'unknown address',
+                        announcer.get('fingerprint')
+                        or announcer.get('host_id') or 'unknown'))
+                lines.append('')
+                lines.append('They cannot affect this machine, but they '
+                             'can be silenced.')
+                choice = self._dialog('Embody - Resolve Realm Conflict',
+                                      '\n'.join(lines),
+                                      ['Close', 'Denylist Senders'])
+                if choice == 1:
+                    ctx = self._safeHostContext()
+                    if ctx is not None and self._hostActionAllowed(
+                            'Resolve Realm Conflict'):
+                        self._beginHostCall(
+                            'realm_conflict_resolve',
+                            lambda: _host_realm_conflict_apply(
+                                ctx, announcers, reset=False))
+                return
+            self._dialog(
+                'Embody - Resolve Realm Conflict',
+                'No realm conflict on this machine.\n\n'
+                'The Convoy realm is %s (%s).'
+                % (realm.get('state') or 'unknown',
+                   realm.get('convoy_id') or 'no id'), ['OK'])
+            return
+        preserved = str(realm.get('convoy_id') or '?')
+        conflict_ids = [str(c) for c in realm.get('conflict_ids') or ()
+                        if str(c) != preserved]
+        lines = ['This machine keeps realm %s.' % preserved,
+                 'Conflicting realm(s): %s.'
+                 % (', '.join(conflict_ids) or 'unknown')]
+        if announcers:
+            lines.append('')
+            lines.append('Live sender(s) of the foreign realm '
+                         '(will be denylisted):')
+            for announcer in announcers[:8]:
+                lines.append('  %s  %s' % (
+                    announcer.get('address') or 'unknown address',
+                    announcer.get('fingerprint') or announcer.get(
+                        'host_id') or 'unknown identity'))
+            if len(announcers) > 8:
+                lines.append('  ...and %d more' % (len(announcers) - 8))
+            lines.append('')
+            lines.append('On each of those machines, disable Convoy (or '
+                         'delete its realm record) so it rejoins as a '
+                         'candidate and adopts this realm; then remove '
+                         'it from denylist.json here.')
+        else:
+            lines.append('')
+            lines.append('No sender of the foreign realm is announcing '
+                         'RIGHT NOW (the listing covers the last ~30s). '
+                         'If the conflict returns, run this again while '
+                         'the sender is live, or engage the LAN '
+                         'killswitch first.')
+        choice = self._dialog('Embody - Resolve Realm Conflict',
+                              '\n'.join(lines),
+                              ['Cancel', 'Keep This Realm'])
+        if choice != 1:
+            self._log('Resolve Realm Conflict: cancelled', 'INFO')
+            return
+        ctx = self._safeHostContext()
+        if ctx is None or not self._hostActionAllowed(
+                'Resolve Realm Conflict'):
+            self._log('Resolve Realm Conflict: host slot unavailable; '
+                      'pulse it again', 'WARNING')
+            return
+        self._beginHostCall(
+            'realm_conflict_resolve',
+            lambda: _host_realm_conflict_apply(ctx, announcers))
+
+    # How long an explicit enable keeps its rejoin offer live. Long
+    # enough for the register/refusal round trip (plus retries), short
+    # enough that a much-later realm change cannot pop a modal with no
+    # gesture behind it (review finding: the un-expiring flag let a
+    # tick raise the dialog arbitrarily long after the toggle).
+    REJOIN_OFFER_WINDOW_S = 120.0
+
+    def ArmRejoinOffer(self):
+        """Arm the one-shot rejoin offer. Called ONLY from the explicit
+        Convoy Enable toggle (parexec), which is already suppressed
+        during init and settings restore -- the arming lives THERE, not
+        in _ensureConsent, because every already-consented install
+        returns from _ensureConsent before its tail (review finding:
+        the original arming was unreachable for the exact clone
+        scenario the feature exists for)."""
+        self._session()['offer_rejoin_until'] = (
+            time.monotonic() + self.REJOIN_OFFER_WINDOW_S)
+
+    def _offerRejoinLocalConvoy(self):
+        """Fetch the machine realm, then offer the rejoin. MAIN THREAD."""
+        if self._staleInstance():
+            return
+        if 'offer_rejoin_until' not in self._session():
+            return          # delivered or expired by a sibling dispatch
+        if self._performing():
+            return          # the window may re-fire it after the show
+        if not self._hostActionAllowed('Rejoin Local Convoy'):
+            # NOT consumed: the next refusal inside the window retries.
+            self._log('Rejoin offer deferred: host slot busy', 'INFO')
+            return
+        ctx = self._safeHostContext()
+        if ctx is None:
+            return
+        self._beginHostCall(
+            'rejoin_plan',
+            lambda: dict(_host_realm_conflict_plan(ctx),
+                         action='rejoin_plan'))
+
+    def _confirmRejoinLocalConvoy(self, result):
+        """Name both realms, ask, then rebind. MAIN THREAD."""
+        if self._performing():
+            return          # window may re-offer after the show
+        realm = (result or {}).get('realm') or {}
+        machine_id = str(realm.get('convoy_id') or '')
+        machine_state = str(realm.get('state') or '')
+        project_id = str(self._readConvoyId() or '')
+        if machine_state == 'conflict':
+            self._log('Rejoin offer: this machine itself has a realm '
+                      'conflict -- use Resolve Realm Conflict first',
+                      'WARNING')
+            return
+        if (machine_state != 'established' or not machine_id
+                or not project_id or machine_id == project_id):
+            self._log('Rejoin offer withdrawn: machine realm %s (%s), '
+                      'project %s -- nothing to rejoin'
+                      % (machine_state or 'unknown',
+                         machine_id or 'no id', project_id or 'no id'),
+                      'INFO')
+            return
+        # DELIVERY is what consumes the offer -- everything above left
+        # it armed so a transient bail-out could retry inside the window.
+        self._session().pop('offer_rejoin_until', None)
+        choice = self._dialog(
+            'Embody - Rejoin Local Convoy',
+            'This project is bound to Convoy %s,\n'
+            "but this machine's mesh is %s.\n\n"
+            'Rejoin the local mesh? The project binding becomes a '
+            'candidate and adopts %s on the next registration.\n\n'
+            'Caution: .embody/project.json is git-tracked, so the '
+            'rebind travels to every clone of this repo -- clones on '
+            'the ORIGINAL mesh will be refused there until they rejoin '
+            'the same way (toggle Convoy off and on).'
+            % (project_id, machine_id, machine_id),
+            ['Keep Binding', 'Rejoin Local Mesh'])
+        if choice != 1:
+            self._log('Rejoin declined; the project keeps %s and stays '
+                      'refused on this LAN' % (project_id,), 'INFO')
+            return
+        try:
+            rebound = self._embody.ext.Embody._rebindConvoyToCandidate(
+                project_id)
+        except Exception as e:
+            rebound = ''
+            self._log('rejoin rebind failed: %s' % (e,), 'WARNING')
+        if not rebound:
+            return
+        session = self._session()
+        session['sent'] = None
+        session['next_call_at'] = None
+        self._publishId(rebound)
+        self._kickTick()
+        self._log('Rejoining the local Convoy: binding is candidate; '
+                  'adoption completes on the next registration', 'SUCCESS')
 
     def ForgetOfflineNodes(self):
         """Forget this machine's offline node rows -- after NAMING them.
@@ -5951,6 +6214,122 @@ def _host_offline_rows(ctx):
                      'toe_name': str(row.get('toe_name') or ''),
                      'last_seen_age_s': row.get('last_seen_age_s')})
     return rows, sorted(remote_hosts), None
+
+
+def _host_realm_conflict_plan(ctx):
+    """Snapshot the realm split and its live announcers. Alters nothing.
+
+    Pure loopback HTTP; needs no spawn. The announcer provenance comes
+    from the daemon's discovery candidate cache (/lan/status) -- the
+    only place the 2026-08-12 conflict's sender was ever recorded.
+    """
+    client = ctx['client']
+    try:
+        probe = client.probe(data_dir=ctx['data_dir'])
+    except Exception as e:
+        return {'ok': False, 'action': 'realm_conflict_plan',
+                'reason': 'no_host',
+                'detail': '%s: %s' % (type(e).__name__, e)}
+    if not probe.use_convoy:
+        return {'ok': False, 'action': 'realm_conflict_plan',
+                'reason': 'no_host',
+                'detail': 'no host app answered (%s)' % (probe.status,)}
+    code, status = client.host_get(probe.handle, '/status')
+    if code != 200 or not isinstance(status, dict):
+        return {'ok': False, 'action': 'realm_conflict_plan',
+                'reason': 'status_failed',
+                'detail': 'host status failed (HTTP %s)' % (code,)}
+    realm = status.get('realm') or {}
+    announcers = []
+    code, lan = client.host_get(probe.handle, '/lan/status')
+    if code == 200 and isinstance(lan, dict):
+        preserved = str(realm.get('convoy_id') or '')
+        for cand in (lan.get('discovery') or {}).get('candidates') or []:
+            if not isinstance(cand, dict):
+                continue
+            states = cand.get('realm_states') or {}
+            foreign = sorted(str(k) for k, v in states.items()
+                             if str(v) == 'established'
+                             and str(k) != preserved)
+            if not foreign:
+                continue
+            announcers.append({
+                'host_id': str(cand.get('host_id') or ''),
+                'fingerprint': str(cand.get('fingerprint') or ''),
+                'address': str(cand.get('address') or ''),
+                'realms': foreign,
+            })
+    return {'ok': True, 'action': 'realm_conflict_plan', 'realm': realm,
+            'announcers': announcers,
+            'detail': ('realm %s; %d foreign announcer(s) live'
+                       % (realm.get('state') or 'unknown',
+                          len(announcers)))}
+
+
+def _host_realm_conflict_apply(ctx, offenders, reset=True):
+    """Denylist the named announcers, then reset the realm. LOOPBACK.
+
+    Order is the recovery contract (the reset docstring's own advice):
+    silence the senders FIRST, or the next datagram re-derives the very
+    conflict the reset just cleared. Denylist failures do not abort the
+    reset -- with the observer gate a stranger cannot re-wedge a
+    committed realm anyway; the denylist just stops the advisories.
+    """
+    client = ctx['client']
+    try:
+        probe = client.probe(data_dir=ctx['data_dir'])
+    except Exception as e:
+        return {'ok': False, 'action': 'realm_conflict_resolve',
+                'reason': 'no_host',
+                'detail': '%s: %s' % (type(e).__name__, e)}
+    if not probe.use_convoy:
+        return {'ok': False, 'action': 'realm_conflict_resolve',
+                'reason': 'no_host',
+                'detail': 'no host app answered (%s)' % (probe.status,)}
+    blocked, block_failures = [], []
+    for offender in offenders or []:
+        host_id = str((offender or {}).get('host_id') or '')
+        fingerprint = str((offender or {}).get('fingerprint') or '')
+        if not host_id and not fingerprint:
+            continue
+        code, out = client.host_post(probe.handle, '/peers/denylist', {
+            'host_id': host_id, 'fingerprint': fingerprint,
+            'reason': 'foreign realm broadcast '
+                      '(Resolve Realm Conflict)'})
+        body = out if isinstance(out, dict) else {}
+        if code == 200:
+            blocked.append(host_id or fingerprint)
+        else:
+            block_failures.append('%s (HTTP %s: %s)' % (
+                host_id or fingerprint, code,
+                body.get('detail') or body.get('reason')))
+    if not reset:
+        return {'ok': not block_failures,
+                'action': 'realm_conflict_resolve',
+                'blocked': blocked, 'block_failures': block_failures,
+                'realm': None,
+                'detail': ('%d sender(s) denylisted%s'
+                           % (len(blocked),
+                              ('; blocks failed: '
+                               + '; '.join(block_failures))
+                              if block_failures else ''))}
+    code, out = client.host_post(probe.handle, '/realm/reset', {})
+    reset_body = out if isinstance(out, dict) else {}
+    ok = code == 200 and reset_body.get('ok') is True
+    realm = reset_body.get('realm')
+    return {'ok': ok, 'action': 'realm_conflict_resolve',
+            'blocked': blocked, 'block_failures': block_failures,
+            'realm': realm,
+            'detail': ('realm now %s (%s); %d sender(s) denylisted%s'
+                       % ((realm or {}).get('state') or 'unknown',
+                          (realm or {}).get('convoy_id') or '?',
+                          len(blocked),
+                          ('; blocks failed: ' + '; '.join(block_failures)
+                           if block_failures else ''))
+                       if ok else
+                       'realm reset failed (HTTP %s: %s)'
+                       % (code, reset_body.get('detail')
+                          or reset_body.get('reason')))}
 
 
 def _host_forget_offline_plan(ctx):

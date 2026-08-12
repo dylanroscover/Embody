@@ -96,6 +96,9 @@ def onValueChange(par, prev):
 		convoy = parent.Embody.op('convoy')
 		if convoy:
 			if par.eval():
+				# The explicit toggle is the one gesture that may raise
+				# the realm-rejoin dialog; arm its bounded window here.
+				convoy.ext.ConvoyExt.ArmRejoinOffer()
 				convoy.ext.ConvoyExt.Register()
 				# Convoy can run without an attached AI coding client, but its TD
 				# relay still terminates at Envoy's loopback command server. Keep
@@ -284,7 +287,7 @@ def onPulse(par):
 
 	elif par.name in ('Convoyinstallhost', 'Convoystarthost',
 					  'Convoystophost', 'Convoyuninstallhost',
-					  'Convoyforgetoffline'):
+					  'Convoyforgetoffline', 'Convoyresolverealm'):
 		# Convoy host-app lifecycle. Deliberately NOT folded into
 		# Convoyenable and deliberately NOT reachable from the setup
 		# wizard: A-13's consent covers minting a convoy id and
@@ -299,6 +302,8 @@ def onPulse(par):
 		# branch for the same missing-component guard and the
 		# ConvoyExt-owned confirmation -- it installs nothing, so the
 		# A-13/D-6 login-install grant story above does not apply to it.
+		# Convoyresolverealm rides it for the same reasons: pure loopback
+		# recovery (denylist + realm reset), its own enumerating confirm.
 		convoy = parent.Embody.op('convoy')
 		if convoy:
 			getattr(convoy.ext.ConvoyExt, {
@@ -307,6 +312,7 @@ def onPulse(par):
 				'Convoystophost': 'StopHost',
 				'Convoyuninstallhost': 'UninstallHost',
 				'Convoyforgetoffline': 'ForgetOfflineNodes',
+				'Convoyresolverealm': 'ResolveRealmConflict',
 			}[par.name])()
 		else:
 			parent.Embody.Log(

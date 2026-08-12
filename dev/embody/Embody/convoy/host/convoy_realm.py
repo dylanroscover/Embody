@@ -30,6 +30,19 @@ import convoy_platform
 REALM_FILE = "realm.json"
 REALM_VERSION = 1
 DEFAULT_SETTLE_DELAY_S = 8.0
+
+# ADR-003 requires the genesis listen window to be RANDOMIZED. The
+# fixed 8.0 s that shipped instead loses exactly the SIMULTANEOUS case:
+# two machines enabling within the same window each hear nothing before
+# their identical deadline and each crowns its own realm. (Machines
+# enabled in genuine isolation -- different days, different networks --
+# still self-establish; no jitter can fix that, which is why the
+# stranger-observation gate and the register check-then-apply carry the
+# rest of the split-realm defence.) The production caller (HostApp)
+# draws settle_delay_s uniformly from [DEFAULT_SETTLE_DELAY_S,
+# DEFAULT_SETTLE_DELAY_S + DEFAULT_SETTLE_JITTER_S]; RealmStore itself
+# stays deterministic so the suites keep their injected clocks.
+DEFAULT_SETTLE_JITTER_S = 12.0
 MAX_SETTLE_DELAY_S = 300.0
 MAX_REALM_BYTES = 64 * 1024
 MAX_OBSERVED_REALMS = 256

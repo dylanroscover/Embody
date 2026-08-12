@@ -1567,12 +1567,24 @@ class HostApp:
 
     def __init__(self, directory_path, now=None, forwarder=None, waker=None,
                  artifact_cache_path=None, realm_path=None,
-                 realm_settle_delay_s=realm_mod.DEFAULT_SETTLE_DELAY_S,
+                 realm_settle_delay_s=None,
                  owlette_client=None, owlette_command_policy=None,
                  lifecycle_manager=None, lifecycle_local_policy=None):
         self.data_dir = directory_path
         self._now = now or time.time
         self.started = self._now()
+        if realm_settle_delay_s is None:
+            # ADR-003 mandates a RANDOMIZED genesis listen window; the
+            # fixed 8.0 s that shipped meant every isolated enable, on
+            # every machine, waited identically, heard nothing, and
+            # crowned its own realm -- manufacturing the split-realm
+            # conflicts the field kept hitting. One draw per daemon
+            # process; suites keep determinism by passing an explicit
+            # value.
+            realm_settle_delay_s = (
+                realm_mod.DEFAULT_SETTLE_DELAY_S
+                + (secrets.randbelow(1000) / 1000.0)
+                * realm_mod.DEFAULT_SETTLE_JITTER_S)
         self.token = platform_mod.ensure_ipc_token(directory_path)
         # Safety authority is host-private and fail-closed.  Project/TDN
         # values are projections only; a corrupt or too-new policy file must
@@ -2132,13 +2144,18 @@ class HostApp:
         self._network_nodes_result_cache.clear()
 
     def _apply_realm_observations_locked(self, *, candidate_ids=(),
-                                         established_ids=()):
+                                         established_ids=(), source=None):
         """Reconcile signed/local observations and persist candidate rebases.
 
         CALLED WITH ``self.lock`` held. RealmStore writes its own private
         record before publishing state; HostStore then atomically projects an
         authoritative ID/state across every provisional local node. An
         established node is never selected by that projection.
+
+        ``source`` names WHO supplied the observation (announcement
+        sender, registering node, startup/reset derivation) and rides
+        the audit record: the 2026-08-12 conflict was unattributable
+        because only the RESULT was ever logged.
         """
         candidate_ids = tuple(candidate_ids or ())
         established_ids = tuple(established_ids or ())
@@ -2163,12 +2180,15 @@ class HostApp:
             self._invalidate_network_nodes_cache_locked()
         if changed and after is not None:
             event = "realm_" + str(after.get("state") or "changed")
-            self._audit_best_effort(event, {
+            payload = {
                 "convoy_id": after.get("convoy_id"),
                 "conflict_ids": list(after.get("conflict_ids") or ())[:16],
                 "generation": after.get("generation"),
                 "local_nodes_rebound": len(changed_nodes),
-            })
+            }
+            if source:
+                payload["source"] = source
+            self._audit_best_effort(event, payload)
         return after, changed
 
     def _initialize_realm_from_directory(self):
@@ -2189,7 +2209,8 @@ class HostApp:
             }
             self._apply_realm_observations_locked(
                 candidate_ids=candidate_ids,
-                established_ids=established_ids)
+                established_ids=established_ids,
+                source={"via": "startup"})
 
     def reset_realm(self, body):
         """Advanced LOCAL recovery: clear a realm binding/conflict and re-run
@@ -2218,7 +2239,9 @@ class HostApp:
             == realm_mod.ESTABLISHED and record.get("convoy_id")}
         if candidate_ids or established_ids:
             self._apply_realm_observations_locked(
-                candidate_ids=candidate_ids, established_ids=established_ids)
+                candidate_ids=candidate_ids,
+                established_ids=established_ids,
+                source={"via": "reset"})
         else:
             self._invalidate_network_nodes_cache_locked()
         after = self.realm.snapshot()
@@ -2232,14 +2255,49 @@ class HostApp:
                      "realm": self._realm_public(after)}
 
     def _accept_registration_realm_locked(self, convoy_id, binding_state,
-                                          current=None):
-        """Return the host-authoritative (id, state), or a conflict refusal."""
+                                          current=None, source=None):
+        """Return the host-authoritative (id, state), or a conflict refusal.
+
+        CHECK, THEN APPLY (field incidents 2026-08-06 and 2026-08-12):
+        the old order fed the incoming observation into the DURABLE
+        realm store first and only then noticed the resulting CONFLICT
+        -- one register carrying a foreign established realm (a repo
+        cloned from another LAN, or the malformed literal "cv")
+        permanently wedged the receiving daemon before its 409 was even
+        computed. A foreign ESTABLISHED claim against a committed realm
+        is now refused WITHOUT touching realm state, and audited with
+        the claim and its source; entering CONFLICT is reserved for
+        evidence channels that carry authority (an admitted peer's
+        announcement, or this host's own durable rows).
+        """
+        snapshot = self.realm.snapshot()
+        # No convoy_id-truthiness term: a legacy CONFLICT record can carry
+        # convoy_id=None, and skipping the guard there let a foreign
+        # established register mutate the very state the docstring says
+        # is never touched (panel finding).
+        if (binding_state == realm_mod.ESTABLISHED
+                and snapshot is not None
+                and snapshot.get("state") in (realm_mod.ESTABLISHED,
+                                              realm_mod.CONFLICT)
+                and convoy_id != snapshot.get("convoy_id")):
+            self._audit_best_effort("realm_foreign_register_refused", {
+                "convoy_id": convoy_id,
+                "binding_state": binding_state,
+                "local_convoy_id": snapshot.get("convoy_id"),
+                "source": dict(source or {}, via="register"),
+            })
+            return None, (
+                409, "local_realm_conflict",
+                "this project is bound to a different established Convoy "
+                "than this machine's realm; it was not joined "
+                "automatically (the local realm was left untouched)")
         candidates = ((convoy_id,) if binding_state == realm_mod.CANDIDATE
                       else ())
         established = ((convoy_id,)
                        if binding_state == realm_mod.ESTABLISHED else ())
         snapshot, _changed = self._apply_realm_observations_locked(
-            candidate_ids=candidates, established_ids=established)
+            candidate_ids=candidates, established_ids=established,
+            source=dict(source or {}, via="register"))
         if snapshot is None:
             return None, (503, "realm_unbound",
                           "the automatic Convoy realm is not ready")
@@ -2301,7 +2359,22 @@ class HostApp:
             return {}
 
     def _observe_realm_announcement(self, announcement):
-        """Discovery callback; announcement is already signature-verified."""
+        """Discovery callback; announcement is already signature-verified.
+
+        TRUST-SCOPED (field incident 2026-08-12): a signature only proves
+        the datagram matches the sender's own self-signed cert -- TOFU
+        means ANY host on the subnet has one. An UN-ADMITTED sender may
+        inform a host that is still unbound or a candidate (genesis and
+        adoption need to hear the LAN before any admission exists), but
+        it must NEVER move a host whose realm is already committed: one
+        stranger's broadcast latched this machine's daemon into a durable
+        CONFLICT that refused every registration, with nothing recording
+        who sent it. Committed-state transitions now require the sender
+        to be an ADMITTED peer (the same host-level pin admission uses);
+        an un-admitted claim of a foreign established realm is recorded
+        as an audited ADVISORY with full sender provenance -- visible,
+        denylistable, and powerless.
+        """
         states = announcement.get("realm_states")
         if not isinstance(states, dict):
             return
@@ -2309,15 +2382,130 @@ class HostApp:
                       if state == realm_mod.CANDIDATE]
         established = [realm_id for realm_id, state in states.items()
                        if state == realm_mod.ESTABLISHED]
+        endpoint = announcement.get("endpoint")
+        sender = {
+            "host_id": str(announcement.get("host_id") or ""),
+            "fingerprint": str(announcement.get("fingerprint") or ""),
+            # The parsed wire format carries endpoint={"address","port"},
+            # never a top-level address -- reading the wrong key recorded
+            # an EMPTY address on every production advisory (panel
+            # finding, reproduced).
+            "address": ("%s:%s" % (endpoint.get("address"),
+                                   endpoint.get("port"))
+                        if isinstance(endpoint, dict) else ""),
+        }
+        advisory = None
         with self.lock:
-            _snapshot, changed = self._apply_realm_observations_locked(
-                candidate_ids=candidates, established_ids=established)
+            snapshot = self.realm.snapshot()
+            committed = bool(snapshot) and snapshot.get("state") in (
+                realm_mod.ESTABLISHED, realm_mod.CONFLICT)
+            if committed and not self._realm_mover_locked(
+                    sender, snapshot):
+                foreign = [realm_id for realm_id in established
+                           if realm_id != snapshot.get("convoy_id")]
+                if foreign:
+                    advisory = self._note_foreign_realm_locked(
+                        sender, states)
+                changed = False
+            else:
+                _snapshot, changed = self._apply_realm_observations_locked(
+                    candidate_ids=candidates, established_ids=established,
+                    source=dict(sender, via="announcement"))
+        if advisory:
+            # OUTSIDE the lock: audit I/O must not ride the discovery
+            # thread's hold on the one lock /register and /jobs share.
+            self._audit_best_effort("realm_foreign_advisory", advisory)
         if changed:
             self.request_lan_refresh()
 
+    def _realm_mover_locked(self, sender, snapshot):
+        """May this announcement sender MOVE a committed realm?
+
+        The bar is OPERATOR-GRADE membership in the realm being moved,
+        not mere admission: `allowed` alone passes an observe-only peer
+        (a peer the operator deliberately stripped of every mutation),
+        and TOFU admission is self-service -- any LAN host that echoes
+        this host's own broadcast convoy_id gets auto-admitted, so
+        'admitted' by itself is two datagrams of work for a stranger
+        (both reproduced by the review panel). A genuine split between
+        two meshes an operator deliberately joined still latches; a
+        TOFU-auto-admitted neighbour is an advisory like any stranger.
+        """
+        try:
+            block = self.peers.authorize_peer(
+                sender["host_id"], sender["fingerprint"],
+                convoy_id=snapshot.get("convoy_id"))
+            if not (block.allowed and block.may_mutate):
+                return False
+            record = self.peers.get(sender["host_id"]) or {}
+            return str(record.get("admitted_via") or "") not in (
+                "", "lan_tofu")
+        except Exception:
+            return False
+
+    # Foreign-realm advisories: bounded, deduped per sender WITH a TTL,
+    # rate-limited globally, and AUDITED -- the 2026-08-12 conflict was
+    # unattributable because no ingest path recorded who sent the
+    # observation. Both dedupe-key halves are attacker-chosen, so the
+    # dedupe alone cannot bound the audit rate (rotating identities);
+    # the global budget is what protects audit.jsonl from being rolled
+    # over (~3 min at datagram rate, measured by the review panel).
+    _MAX_FOREIGN_REALM_ADVISORIES = 16
+    _FOREIGN_ADVISORY_TTL_S = 3600.0
+    _FOREIGN_ADVISORY_BUDGET = 6           # audits per budget window
+    _FOREIGN_ADVISORY_WINDOW_S = 3600.0
+
+    def _note_foreign_realm_locked(self, sender, states):
+        """Return the advisory payload to audit, or None. Lock held.
+
+        Decides only -- the caller writes the audit OUTSIDE the lock.
+        """
+        try:
+            now = self._now()
+            key = (sender.get("host_id"),
+                   tuple(sorted(str(k) for k in states)))
+            seen = getattr(self, "_foreign_realm_seen", None)
+            if seen is None:
+                seen = self._foreign_realm_seen = collections.OrderedDict()
+            last = seen.get(key)
+            if last is not None and (now - last) < \
+                    self._FOREIGN_ADVISORY_TTL_S:
+                return None
+            while len(seen) >= self._MAX_FOREIGN_REALM_ADVISORIES:
+                seen.popitem(last=False)
+            seen[key] = now
+            budget = getattr(self, "_foreign_advisory_budget", None)
+            if budget is None:
+                budget = self._foreign_advisory_budget = collections.deque()
+            while budget and (now - budget[0]) > \
+                    self._FOREIGN_ADVISORY_WINDOW_S:
+                budget.popleft()
+            if len(budget) >= self._FOREIGN_ADVISORY_BUDGET:
+                self._foreign_advisories_suppressed = getattr(
+                    self, "_foreign_advisories_suppressed", 0) + 1
+                return None
+            budget.append(now)
+            suppressed = getattr(self, "_foreign_advisories_suppressed", 0)
+            self._foreign_advisories_suppressed = 0
+            payload = {
+                "sender": dict(sender),
+                "realm_states": {str(k): str(v)
+                                 for k, v in list(states.items())[:16]},
+                "detail": "un-admitted LAN host advertises a foreign "
+                          "established Convoy; ignored (realm is "
+                          "committed). Use Resolve Realm Conflict / the "
+                          "denylist if it should be silenced.",
+            }
+            if suppressed:
+                payload["suppressed_since_last"] = suppressed
+            return payload
+        except Exception:
+            return None
+
     def _tick_realm(self):
         with self.lock:
-            _snapshot, changed = self._apply_realm_observations_locked()
+            _snapshot, changed = self._apply_realm_observations_locked(
+                source={"via": "tick"})
         if changed:
             self.request_lan_refresh()
         return changed
@@ -2925,7 +3113,10 @@ class HostApp:
                     node=current)
 
             authority, realm_refusal = self._accept_registration_realm_locked(
-                convoy_id, binding_state, current=current)
+                convoy_id, binding_state, current=current,
+                source={"project_root": str(project_root),
+                        "hostname": str((clean_metadata or {})
+                                        .get("hostname") or "")})
             if realm_refusal is not None:
                 code, reason, detail = realm_refusal
                 return self._refuse(
@@ -11648,6 +11839,30 @@ class HostApp:
         return 200, {"ok": True, "killswitch": state,
                      "leases_released": released}
 
+    def denylist_identity(self, body):
+        """Loopback-only: block a LAN identity that has NO peer record.
+
+        The realm-conflict recovery path for strangers: /peers/block
+        routes through PeerStore state and 404s for a host it never
+        admitted, while the identity that just wedged the realm is by
+        definition un-admitted. Appends to the hand-editable
+        denylist.json (folded matching, fail-closed semantics preserved)
+        and audits what was blocked and why.
+        """
+        host_id = str(body.get("host_id") or "").strip()
+        fingerprint = str(body.get("fingerprint") or "").strip()
+        try:
+            snapshot = self.peers.denylist.add(host_id=host_id or None,
+                                               fingerprint=fingerprint
+                                               or None)
+        except peers_mod.PeerError as e:
+            return self._refuse("peers", e.reason, e.detail, 400)
+        self._audit_best_effort("peer_denylisted", {
+            "host_id": host_id, "fingerprint": fingerprint,
+            "reason": str(body.get("reason") or "operator"),
+        })
+        return 200, {"ok": True, "denylist": snapshot}
+
     def quarantine_peers(self, body):
         """Move an UNREADABLE peers.json aside so the host is operable.
 
@@ -12329,6 +12544,12 @@ def make_handler(app):
                 # adding a branch to the wrong if-chain.
                 if self.path == "/peers/quarantine":
                     return app.quarantine_peers(body)
+                if self.path == "/peers/denylist":
+                    # LOOPBACK ONLY: append an identity to denylist.json
+                    # even when no peer record exists -- the sender class
+                    # that poisons realms is precisely the one /peers/block
+                    # cannot reach (no record, 404).
+                    return app.denylist_identity(body)
                 if self.path == "/realm/reset":
                     # Advanced LOCAL recovery for a split-realm conflict.
                     # Loopback-only by construction (this table is not on the

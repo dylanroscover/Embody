@@ -2929,6 +2929,11 @@ class EmbodyExt:
         return mod.embody_admin.adopt_convoy_id(
             self, convoy_id, expected_id, binding_state)
 
+    def _rebindConvoyToCandidate(self, expected_id) -> str:
+        """User-confirmed rejoin: demote the realm binding to candidate."""
+        return mod.embody_admin.rebind_convoy_to_candidate(
+            self, expected_id)
+
     def _saveSettings(self) -> None:
         """Persist whitelisted parameter values to .embody/config.json -- see embody_admin."""
         return mod.embody_admin.save_settings(self)
