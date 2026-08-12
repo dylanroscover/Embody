@@ -118,7 +118,10 @@ class TestEnvoyStep(EmbodyTestCase):
         got = sp.envoy_step('Installing deps... (one-time)', started=100.0)
         self.assertEqual(got['state'], sp.RUNNING)
         self.assertFalse(sp.is_stuck(got, now=110.0), 'slow is not stuck')
-        self.assertTrue(sp.is_stuck(got, now=100.0 + sp.STUCK_DWELL_S))
+        self.assertFalse(sp.is_stuck(got, now=100.0 + sp.STUCK_DWELL_S),
+                         'an install is LEGITIMATELY minutes long -- the '
+                         'short dwell went red on every fresh install')
+        self.assertTrue(sp.is_stuck(got, now=100.0 + sp.STUCK_DWELL_LONG_S))
 
     def test_running_on_a_port_is_done(self):
         self.assertEqual(sp.envoy_step('Running on port 9870')['state'],
@@ -803,10 +806,12 @@ class TestAnObservedClockMeasuresTheRightThing(EmbodyTestCase):
             Status='Enabled', Version='6.0.226', Convoystatus='Disabled',
             Envoystatus='Installing deps... (one-time)')
         sp.live_grid(comp, now=100.0)                  # first sighting
-        rgb = [c[2] for row in sp.live_grid(comp, now=142.0)
+        rgb = [c[2] for row in sp.live_grid(
+                   comp, now=100.0 + sp.STUCK_DWELL_LONG_S + 2)
                for c in row if c[0] == sp.STATUS_ENVOY][0]
         self.assertEqual(rgb, sp.STATE_RGB[sp.FAILED],
-                         '42s past a 20s dwell must read as TOO LONG')
+                         'past ITS OWN dwell the clock must have been '
+                         'measured from the first sighting')
 
     def test_the_rows_stay_inside_the_row_character_budget(self):
         comp = _Fake(
@@ -855,13 +860,29 @@ class TestAWedgeTurnsTheMarkRed(EmbodyTestCase):
                          sp.STATE_RGB[sp.RUNNING])
 
     def test_a_step_that_STAYS_running_turns_red(self):
-        comp = self._comp(Envoystatus='Installing deps... (one-time)')
+        comp = self._comp(Envoystatus='Restarting after save...')
         sp.live_grid(comp, now=0.0)
         self.assertEqual(self._envoy_rgb(comp, sp.STUCK_DWELL_S + 42),
                          sp.STATE_RGB[sp.FAILED])
 
-    def test_the_dwell_measures_from_the_first_sighting(self):
+    def test_a_legitimately_long_install_gets_a_LONG_dwell(self):
+        """THE FIELD REPORT (2026-08-12): the one-time dependency
+        install routinely takes minutes, and with one 20-second dwell
+        the Envoy mark went red on every fresh install and then
+        finished fine -- a false alarm in the one colour that must
+        never lie. The install family reddens only past the long
+        dwell."""
         comp = self._comp(Envoystatus='Installing deps... (one-time)')
+        sp.live_grid(comp, now=0.0)
+        self.assertEqual(self._envoy_rgb(comp, sp.STUCK_DWELL_S + 42),
+                         sp.STATE_RGB[sp.RUNNING],
+                         'minutes-long work is not a wedge at 20s')
+        self.assertEqual(self._envoy_rgb(comp, sp.STUCK_DWELL_LONG_S + 1),
+                         sp.STATE_RGB[sp.FAILED],
+                         'ten minutes IS a wedge, even for an install')
+
+    def test_the_dwell_measures_from_the_first_sighting(self):
+        comp = self._comp(Envoystatus='Restarting after save...')
         sp.live_grid(comp, now=100.0)
         self.assertEqual(self._envoy_rgb(comp, 110.0),
                          sp.STATE_RGB[sp.RUNNING], 'not yet')
@@ -871,9 +892,9 @@ class TestAWedgeTurnsTheMarkRed(EmbodyTestCase):
     def test_a_state_change_restarts_the_dwell(self):
         """Two phases of a sequence are two measurements, not one that
         never resets."""
-        sp.live_grid(self._comp(Envoystatus='Preparing Python '
-                                            'environment...'), now=0.0)
-        busy = self._comp(Envoystatus='Installing deps... (one-time)')
+        sp.live_grid(self._comp(Envoystatus='Reviving (watchdog)...'),
+                     now=0.0)
+        busy = self._comp(Envoystatus='Restarting after save...')
         sp.live_grid(busy, now=30.0)
         self.assertEqual(self._envoy_rgb(busy, 40.0),
                          sp.STATE_RGB[sp.RUNNING],
@@ -883,20 +904,20 @@ class TestAWedgeTurnsTheMarkRed(EmbodyTestCase):
                          sp.STATE_RGB[sp.FAILED])
 
     def test_recovery_drops_the_red(self):
-        comp = self._comp(Envoystatus='Installing deps... (one-time)')
+        comp = self._comp(Envoystatus='Restarting after save...')
         sp.live_grid(comp, now=0.0)
         healthy = self._comp()
         self.assertEqual(self._envoy_rgb(healthy, 500.0),
                          sp.STATE_RGB[sp.DONE])
-        sp.live_grid(comp, now=600.0)                # a fresh install
+        sp.live_grid(comp, now=600.0)                # a fresh restart
         self.assertEqual(self._envoy_rgb(comp, 605.0),
                          sp.STATE_RGB[sp.RUNNING],
-                         'a fresh install starts a fresh dwell')
+                         'a fresh restart starts a fresh dwell')
 
     def test_a_clockless_caller_never_reddens(self):
         """Headless width probes pass now=None; they must not render a
         measurement they cannot make."""
-        comp = self._comp(Envoystatus='Installing deps... (one-time)')
+        comp = self._comp(Envoystatus='Restarting after save...')
         sp.live_grid(comp, now=0.0)
         self.assertEqual(self._envoy_rgb(comp, None),
                          sp.STATE_RGB[sp.RUNNING])
@@ -1338,7 +1359,7 @@ class TestResetSessionForgetsEVERYTHING(EmbodyTestCase):
     def _comp(self):
         return _Fake(Status='Enabled', Version='6.0.234',
                      Convoystatus='Disabled',
-                     Envoystatus='Installing deps... (one-time)')
+                     Envoystatus='Restarting after save...')
 
     def _envoy_rgb(self, comp, now):
         return [c[2] for row in sp.live_grid(comp, now=now)

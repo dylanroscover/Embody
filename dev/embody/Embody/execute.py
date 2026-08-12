@@ -131,6 +131,17 @@ def onCreate():
 		f"op('{parent.Embody}').ext.CatalogManager.EnsureCatalogs() "
 		f"if op('{parent.Embody}').ext.Embody._tdnMode() != 'off' else None",
 		delayFrames=45)
+	# The Autoupdate-gated check on the FRESH-INSTALL path too. It was
+	# scheduled only from onStart (project open) -- but on a first install
+	# the open happened before Embody existed, so a user with 'Check and
+	# Notify' set watched Updatestatus rest at the scrub's 'Disabled' for
+	# the whole first session (field report, 2026-08-12; every fresh-load
+	# smoke flag showed the same). Background worker, no dialogs on the
+	# auto path; deferred well past Verify()'s dialog window.
+	run(
+		f"op('{parent.Embody}').op('updater').ext.UpdaterExt.StartupCheck() "
+		f"if op('{parent.Embody}').op('updater') else None",
+		delayFrames=300)
 	return
 
 def onExit():

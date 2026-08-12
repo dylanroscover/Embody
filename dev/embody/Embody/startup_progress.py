@@ -550,16 +550,46 @@ def reset_session():
 # the same at four seconds and at forty minutes, which is how a wedged
 # dependency install looked exactly like a slow one. Colour, not words:
 # the minimal layout spends no characters on it.
+#
+# The dwell is PER OPERATION, because "too long" depends on what is
+# running: a routine restart past 20 seconds is news, but the one-time
+# dependency install ROUTINELY takes minutes -- with one 20-second
+# dwell it went red on every fresh install and then finished fine
+# (field report, 2026-08-12), which is a false alarm in the one colour
+# that must never lie.
 STUCK_DWELL_S = 20.0
+STUCK_DWELL_LONG_S = 600.0
+
+# RUNNING details that are legitimately minutes-long: environment
+# builds, dependency installs, downloads, host-app installs/repairs,
+# and the host-app start (its health wait alone can outlive the short
+# dwell). Matched on the DETAIL because that is what names the
+# operation; 'installed -- starting' is the host app specifically --
+# Envoy's own bare 'Starting...' stays on the short dwell, where a
+# 20-second hang IS news.
+_LONG_RUNNING_PREFIXES = (
+    "installing", "preparing", "downloading", "building", "repairing",
+    "installed -- starting",
+)
 
 
-def is_stuck(step, now=None, dwell=STUCK_DWELL_S):
-    """True for a step that has been RUNNING past the dwell."""
+def stuck_dwell_for(step):
+    """The dwell this step must exceed before its spinner reddens."""
+    detail = _text((step or {}).get("detail")).lower()
+    if detail.startswith(_LONG_RUNNING_PREFIXES):
+        return STUCK_DWELL_LONG_S
+    return STUCK_DWELL_S
+
+
+def is_stuck(step, now=None, dwell=None):
+    """True for a step that has been RUNNING past its dwell."""
     if (step or {}).get("state") != RUNNING:
         return False
     started = (step or {}).get("started")
     if started is None or now is None:
         return False
+    if dwell is None:
+        dwell = stuck_dwell_for(step)
     try:
         return (float(now) - float(started)) >= float(dwell)
     except (TypeError, ValueError):
