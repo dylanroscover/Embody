@@ -2224,7 +2224,14 @@ class HostApp:
         that caused the conflict are now gated by the killswitch/denylist, so
         an operator blocks the offending sender (or engages the killswitch)
         first, then resets.
+
+        ``adopt_convoy_id`` in the body is the OTHER direction -- Join
+        Other Realm -- and takes a different, reset-free path: see
+        ``_adopt_realm_locked``. The KEY's presence selects the join
+        (an explicit null is a 400, never a silent bare reset).
         """
+        if isinstance(body, dict) and "adopt_convoy_id" in body:
+            return self._adopt_realm_locked(body)
         before = self.realm.snapshot()
         self.realm.reset()
         enabled = [record for record in self.directory.nodes()
@@ -2253,6 +2260,119 @@ class HostApp:
         return 200, {"ok": True,
                      "previous": self._realm_public(before),
                      "realm": self._realm_public(after)}
+
+    def _adopt_realm_locked(self, body):
+        """Join Other Realm: operator-confirmed adoption of a foreign
+        established realm. CALLED WITH ``self.lock`` held (via the
+        loopback reset route).
+
+        A bare reset re-derives from this host's own durable rows, so a
+        machine whose own realm is the WRONG one (field, 2026-08-12: an
+        isolated self-crowned MacBook) could only ever re-crown itself;
+        there was no way onto the house realm short of deleting
+        realm.json AND host.json by hand.
+
+        The sequence never passes through an unbound or reset instant
+        (both reviews, 2026-08-12: the reset-first draft let a single
+        failed write strand the host uncommitted -- the exact state an
+        un-admitted announcement is allowed to claim):
+
+        1. GATE: the adopted id must be evidenced -- present in this
+           host's latched conflict ids, its own committed id, or a live
+           discovery candidate's established realms. A refusal mutates
+           nothing. (The id is operator-confirmed but attacker-supplied;
+           this refuses ids this machine has never seen. A LATCHED id
+           with no live announcer IS accepted -- the machine holds
+           first-hand evidence it exists; the UI additionally requires
+           a live announcer before OFFERING a join, so the two layers
+           together stop phantom adoptions.)
+        2. Rows move to candidate AT the adopted id, disk first. A
+           failure here leaves the previous realm committed; the join is
+           simply retryable.
+        3. ``RealmStore.adopt`` commits the adopted realm atomically
+           (write-before-publish).
+        4. The standard observation apply re-establishes the projection
+           (rebind, PSK, cache, audit) on the now-committed realm.
+        """
+        try:
+            adopt = identity.normalize_convoy_id(body.get("adopt_convoy_id"))
+        except identity.IdentityError as exc:
+            return 400, {"ok": False, "reason": "bad_request",
+                         "detail": "adopt_convoy_id: %s" % (exc,)}
+        before = self.realm.snapshot()
+        known = set((before or {}).get("conflict_ids") or ())
+        if (before or {}).get("convoy_id"):
+            known.add(before["convoy_id"])
+        if self.discovery_service is not None:
+            for cand in (self.discovery_service.status().get("candidates")
+                         or []):
+                if not isinstance(cand, dict):
+                    continue
+                states = cand.get("realm_states")
+                if not isinstance(states, dict):
+                    continue
+                for realm_id, state in states.items():
+                    if str(state) == realm_mod.ESTABLISHED:
+                        known.add(str(realm_id))
+        if adopt not in known:
+            self._audit_best_effort("realm_adopt_refused", {
+                "adopted_convoy_id": adopt,
+                "reason": "adopt_unknown_realm",
+            })
+            return 409, {"ok": False, "reason": "adopt_unknown_realm",
+                         "detail": "that realm is not in this machine's "
+                                   "conflict record and no live LAN "
+                                   "sender is announcing it; run the "
+                                   "join again while the other machine "
+                                   "is on and announcing"}
+        abandoned_ids = sorted({
+            record["convoy_id"] for record in self.directory.nodes()
+            if record["binding_state"] == realm_mod.ESTABLISHED
+            and record["convoy_id"] != adopt})
+        demoted = self.db.abandon_established(self.directory, adopt)
+        self.realm.adopt(adopt)
+        self._apply_realm_observations_locked(
+            candidate_ids=(), established_ids=(adopt,),
+            source={"via": "operator_adopt"})
+        # The apply invalidates only when rows or realm snapshot changed;
+        # adopting the host's OWN id out of a conflict changes neither
+        # yet still changes what the node projection should report.
+        self._invalidate_network_nodes_cache_locked()
+        after = self.realm.snapshot()
+        denylisted_senders = []
+        senders = body.get("senders")
+        audit_senders = []
+        if isinstance(senders, list):
+            for sender in senders[:8]:
+                if not isinstance(sender, dict):
+                    continue
+                entry = {key: str(sender.get(key) or "")[:128]
+                         for key in ("host_id", "fingerprint", "address")}
+                if not (entry["host_id"] or entry["fingerprint"]):
+                    continue
+                audit_senders.append(entry)
+                try:
+                    blocked, _detail = self.peers.denylist.blocks(
+                        entry["host_id"], entry["fingerprint"])
+                except Exception:
+                    blocked = False
+                if blocked:
+                    denylisted_senders.append(entry)
+        self._audit_best_effort("realm_adopted", {
+            "previous_state": (before or {}).get("state"),
+            "previous_convoy_id": (before or {}).get("convoy_id"),
+            "adopted_convoy_id": adopt,
+            "abandoned_convoy_ids": abandoned_ids[:16],
+            "demoted_node_ids": [record["node_id"]
+                                 for record in demoted][:16],
+            "senders": audit_senders,
+            "denylisted_senders": denylisted_senders,
+        })
+        return 200, {"ok": True,
+                     "previous": self._realm_public(before),
+                     "realm": self._realm_public(after),
+                     "abandoned_convoy_ids": abandoned_ids[:16],
+                     "denylisted_senders": denylisted_senders}
 
     def _accept_registration_realm_locked(self, convoy_id, binding_state,
                                           current=None, source=None):

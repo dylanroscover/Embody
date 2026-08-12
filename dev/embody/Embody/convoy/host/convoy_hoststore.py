@@ -422,6 +422,41 @@ class HostStore:
         return directory.rebind_candidates(
             convoy_id, binding_state=binding_state, expected=expected)
 
+    def abandon_established(self, directory, adopted_convoy_id):
+        """Persist and apply an operator-confirmed realm abandonment.
+
+        The HostApp-facing transaction for Join Other Realm: every
+        established row NOT bound to ``adopted_convoy_id`` moves to
+        candidate AT the adopted id, DISK FIRST like
+        ``rebind_candidates`` -- a crash restart must converge toward
+        the adoption the operator confirmed, never resurrect the old
+        realm's commitment and re-derive the very conflict being
+        escaped. The caller commits the realm itself AFTER this returns
+        (RealmStore.adopt), so a failed write here leaves the previous
+        realm committed and the join simply retryable. HostApp
+        serializes calls with its state lock; the ``expected`` map gives
+        the directory the same exact compare-and-swap its sibling keeps.
+
+        Returns detached changed directory records.
+        """
+        adopted_convoy_id = identity.normalize_convoy_id(adopted_convoy_id)
+        expected = {}
+        projected = []
+        for record in directory.nodes():
+            if (record["binding_state"] == "established"
+                    and record["convoy_id"] != adopted_convoy_id):
+                expected[record["node_id"]] = record["convoy_id"]
+                target = dict(record)
+                target["metadata"] = dict(record.get("metadata") or {})
+                target["convoy_id"] = adopted_convoy_id
+                target["binding_state"] = "candidate"
+                projected.append(target)
+        if not projected:
+            return []
+        self.save_nodes(projected)
+        return directory.abandon_established(adopted_convoy_id,
+                                             expected=expected)
+
     def delete_node(self, node_id):
         """Remove one node row, DISK FIRST -- the save_nodes contract.
 

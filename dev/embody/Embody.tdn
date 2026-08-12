@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1142
-generator: Embody/6.0.239
+build: 1143
+generator: Embody/6.0.240
 td_build: 099.2025.33070
-source_file: Embody-6.239.toe
-exported_at: '2026-08-12T19:16:32Z'
+source_file: Embody-6.240.toe
+exported_at: '2026-08-12T20:53:33Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -513,7 +513,7 @@ custom_pars:
     style: Pulse
     label: Resolve Realm Conflict...
     startSection: true
-    help: 'Recover from a split-realm conflict (status "Refused: local_realm_conflict"). Lists the conflicting Convoy realms and their live senders, then -- after an explicit confirmation -- denylists those senders, resets this machine''s realm to the preserved one, and re-registers this node. The foreign machines must disable Convoy or clear their own realm record to rejoin this mesh.'
+    help: 'Recover from a split-realm conflict (status "Refused: local_realm_conflict"). Lists the conflicting Convoy realms and their live senders (hostname where reverse DNS answers), then offers both directions: Keep This Realm denylists those senders, resets this machine''s realm to the preserved one, and re-registers this node -- Join Other Realm abandons this machine''s realm, adopts the other one, and rebinds this project to it (other projects on this machine offer their rejoin on their next Convoy enable). Also usable without a conflict, to denylist -- or join -- foreign realms being advertised on the LAN.'
   - name: Convoyinstallhost
     style: Pulse
     label: Repair Convoy App
@@ -819,7 +819,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.239
+    value: 6.0.240
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -911,6 +911,7 @@ sequences:
   - {}
   - {}
   Convoynodes:
+  - {}
   - {}
   - {}
   - {}
@@ -1035,7 +1036,7 @@ operators:
 - name: timer1
   type: timerCHOP
   parameters:
-    active: always
+    active: never
     deferpars: true
     length: 30
     lengthunits: frames

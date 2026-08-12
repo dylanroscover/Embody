@@ -466,6 +466,74 @@ class NodeDirectory:
             changed.append(self._snapshot(record))
         return changed
 
+    def abandon_established(self, adopted_convoy_id, expected=None):
+        """Operator-sanctioned realm abandonment: move every established
+        row NOT bound to ``adopted_convoy_id`` to CANDIDATE **at the
+        adopted id**.
+
+        This is the one deliberate exception to "an established row can
+        never be demoted": it exists solely for the Join Other Realm
+        recovery, where the OPERATOR has confirmed that this machine's
+        own realm is the wrong one (field, 2026-08-12: a MacBook that
+        self-crowned in isolation had no path onto the house realm --
+        its reset always re-derived its own realm from these very rows).
+        The rows take the ADOPTED id, not their old one: a crash between
+        this write and the realm commit must never leave rows that a
+        restart turns back into a commitment to the abandoned realm.
+        (Concretely: with the previous realm still committed on disk, a
+        restart re-derives THAT realm and pulls these rows back to it --
+        the safe, retryable outcome; from an unbound or conflicted
+        record, candidate rows at the adopted id settle onto the
+        adoption. Either way the escaped realm never regains rows that
+        outvote the operator; state-machine review, 2026-08-12.) The id
+        is not invented -- it is the operator-confirmed argument.
+        Routine paths (register, heartbeats, rebind_candidates) remain
+        unable to demote anything.
+
+        ``expected`` mirrors ``rebind_candidates``: a mapping of
+        ``{node_id: current_convoy_id}`` validated in full before any
+        record changes. With ``expected=None`` every established row not
+        already on the adopted id participates.
+
+        Returns detached snapshots of the moved rows.
+        """
+        adopted_convoy_id = normalize_convoy_id(adopted_convoy_id)
+        if expected is None:
+            expected = {
+                record["node_id"]: record["convoy_id"]
+                for record in self._by_node.values()
+                if record["binding_state"] == "established"
+                and record["convoy_id"] != adopted_convoy_id
+            }
+        elif not isinstance(expected, dict):
+            raise IdentityError(
+                "malformed_abandon_expectation",
+                "expected must be a node_id-to-convoy_id mapping")
+        else:
+            expected = dict(expected)
+
+        selected = []
+        for node_id, expected_convoy_id in expected.items():
+            expected_convoy_id = normalize_convoy_id(expected_convoy_id)
+            record = self._by_node.get(node_id)
+            if record is None:
+                raise IdentityError("unknown_node", node_id)
+            if (record["binding_state"] != "established"
+                    or record["convoy_id"] != expected_convoy_id):
+                raise IdentityError(
+                    "abandon_conflict",
+                    f"node {node_id!r} is {record['binding_state']!r} at "
+                    f"{record['convoy_id']!r}, expected established at "
+                    f"{expected_convoy_id!r}")
+            selected.append(record)
+
+        changed = []
+        for record in selected:
+            record["convoy_id"] = adopted_convoy_id
+            record["binding_state"] = "candidate"
+            changed.append(self._snapshot(record))
+        return changed
+
     def remint(self, node_id):
         """Operator-initiated identity reset for one node.
 

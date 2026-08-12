@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 import convoy_hostapp as hostapp
 
 
@@ -357,6 +359,221 @@ def test_the_denylist_route_blocks_a_stranger_with_no_peer_record(
     blocked, _detail = app.peers.denylist.blocks(
         "f" * 32, "cvfp1-unrelated")
     assert not blocked, 'the denylist must still work after the refusal'
+
+
+class _StubDiscovery:
+    """A live LAN view: one candidate announcing the given realms."""
+
+    def __init__(self, realm_states):
+        self._realm_states = dict(realm_states)
+
+    def status(self):
+        return {"candidates": [{
+            "host_id": "d" * 32, "fingerprint": "cvfp1-live",
+            "address": "192.168.88.10:47600",
+            "realm_states": dict(self._realm_states)}]}
+
+
+def test_join_other_realm_adopts_and_demotes_stale_rows(tmp_path):
+    """The 2026-08-12 MacBook dead end: a machine whose OWN realm is the
+    wrong one could only re-crown itself -- a bare reset re-derives from
+    its own established rows, so Repair/Resolve/toggle all looped back.
+    adopt_convoy_id is the operator-confirmed exit: rows move to the
+    adopted id FIRST, the adopted realm is committed atomically, and a
+    restart converges to the adoption -- never back to the abandoned
+    realm."""
+    clock = Clock()
+    app = make_app(tmp_path, clock)
+    code, node = app.register_node(registration(
+        HIGH, binding_state="established"))
+    assert code == 200
+
+    # The dead end this exit exists for, proven: a bare reset re-derives
+    # the very realm being escaped.
+    code, out = app.reset_realm({})
+    assert code == 200
+    assert out["realm"]["convoy_id"] == HIGH
+
+    app.discovery_service = _StubDiscovery({LOW: "established"})
+    code, out = app.reset_realm({"adopt_convoy_id": LOW})
+    assert code == 200 and out["ok"] is True
+    assert out["realm"]["state"] == "established"
+    assert out["realm"]["convoy_id"] == LOW
+    assert out["abandoned_convoy_ids"] == [HIGH]
+    record = app.directory.lookup(node["node_id"])
+    assert record["convoy_id"] == LOW
+    assert record["binding_state"] == "established"
+
+    adoptions = [entry for entry in audit_events(tmp_path)
+                 if entry.get("event") == "realm_adopted"]
+    assert len(adoptions) == 1
+    detail = adoptions[0]["detail"]
+    assert detail["adopted_convoy_id"] == LOW
+    assert detail["abandoned_convoy_ids"] == [HIGH]
+    assert detail["demoted_node_ids"] == [node["node_id"]]
+    app.db.close()
+
+    # Durability: a restart derives the ADOPTED realm from the rows.
+    second = make_app(tmp_path, clock)
+    realm = second.realm.snapshot()
+    assert realm["state"] == "established"
+    assert realm["convoy_id"] == LOW
+
+
+def test_join_other_realm_escapes_a_latched_conflict(tmp_path):
+    """The Mac's exact field state: a CONFLICT latched by an admitted
+    peer's foreign announcement, where Keep This Realm goes the WRONG
+    direction. Adoption clears the conflict onto the other realm (the
+    latched conflict record itself is the evidence -- no live announcer
+    is required for a realm this host has already seen established)."""
+    clock = Clock()
+    app = make_app(tmp_path, clock)
+    code, node = app.register_node(registration(
+        HIGH, binding_state="established"))
+    assert code == 200
+    _grant_realm_authority(app, STRANGER["host_id"])
+    _announce(app, {OTHER: "established"})
+    assert app.realm.snapshot()["state"] == "conflict"
+
+    code, out = app.reset_realm({"adopt_convoy_id": OTHER})
+    assert code == 200 and out["ok"] is True
+    assert out["realm"]["state"] == "established"
+    assert out["realm"]["convoy_id"] == OTHER
+    record = app.directory.lookup(node["node_id"])
+    assert record["convoy_id"] == OTHER
+    assert record["binding_state"] == "established"
+
+
+def test_join_with_a_malformed_id_is_refused_and_touches_nothing(
+        tmp_path):
+    clock = Clock()
+    app = make_app(tmp_path, clock)
+    code, _node = app.register_node(registration(
+        HIGH, binding_state="established"))
+    assert code == 200
+    code, refusal = app.reset_realm({"adopt_convoy_id": "cv\x00bad"})
+    assert code == 400
+    assert refusal["reason"] == "bad_request"
+    # An EXPLICIT null selects the join and is refused -- the first
+    # draft silently fell back to a bare reset, i.e. the caller asked
+    # to join and got the destructive opposite (review finding).
+    code, refusal = app.reset_realm({"adopt_convoy_id": None})
+    assert code == 400
+    assert refusal["reason"] == "bad_request"
+    realm = app.realm.snapshot()
+    assert realm["state"] == "established"
+    assert realm["convoy_id"] == HIGH, "a refused join must alter nothing"
+
+
+def test_join_an_unevidenced_realm_is_refused(tmp_path):
+    """The adopted id is operator-confirmed but attacker-supplied (it
+    rides announcements) and can also be a stale ghost in a latched
+    conflict record. A realm neither in this host's conflict record nor
+    live on the LAN is refused, and the refusal mutates nothing --
+    adopting a phantom realm nobody announces had no UI exit (review
+    finding)."""
+    clock = Clock()
+    app = make_app(tmp_path, clock)
+    code, node = app.register_node(registration(
+        HIGH, binding_state="established"))
+    assert code == 200
+    code, refusal = app.reset_realm({"adopt_convoy_id": LOW})
+    assert code == 409
+    assert refusal["reason"] == "adopt_unknown_realm"
+    realm = app.realm.snapshot()
+    assert realm["state"] == "established"
+    assert realm["convoy_id"] == HIGH
+    record = app.directory.lookup(node["node_id"])
+    assert record["convoy_id"] == HIGH
+    assert record["binding_state"] == "established"
+
+
+def test_join_demotes_disabled_rows_too(tmp_path):
+    """A disabled established row left on the abandoned realm would
+    hand the next startup derivation the very conflict being escaped
+    (mutation finding: an enabled-only filter passed every test)."""
+    clock = Clock()
+    app = make_app(tmp_path, clock)
+    code, first = app.register_node(registration(
+        HIGH, binding_state="established"))
+    assert code == 200
+    code, second = app.register_node(registration(
+        HIGH, root="/Work/other", runtime="rt_other",
+        binding_state="established"))
+    assert code == 200
+    app.directory.set_enabled(second["node_id"], False)
+
+    app.discovery_service = _StubDiscovery({LOW: "established"})
+    code, out = app.reset_realm({"adopt_convoy_id": LOW})
+    assert code == 200 and out["ok"] is True
+    for node_id in (first["node_id"], second["node_id"]):
+        record = app.directory.lookup(node_id)
+        assert record["convoy_id"] == LOW
+        assert record["binding_state"] == "established"
+
+
+def test_sender_evidence_is_audit_only_and_reports_denylist_hits(
+        tmp_path):
+    """The 'senders' body field is reporting, never a gate: it must not
+    be able to veto a join (mutation finding: no daemon test sent it at
+    all, so a control-flow use had no fence). A sender this machine
+    denylisted earlier -- a previous Keep This Realm -- is reported
+    back so the UI can warn that the machine would be deaf to the mesh
+    it just joined."""
+    clock = Clock()
+    app = make_app(tmp_path, clock)
+    code, _node = app.register_node(registration(
+        HIGH, binding_state="established"))
+    assert code == 200
+    code, _out = app.denylist_identity({
+        "host_id": "e" * 32, "reason": "an earlier Keep This Realm"})
+    assert code == 200
+    app.discovery_service = _StubDiscovery({LOW: "established"})
+    sender = {"host_id": "e" * 32, "fingerprint": "cvfp1-x",
+              "address": "192.168.88.24:47600"}
+    code, out = app.reset_realm({"adopt_convoy_id": LOW, "senders": [
+        sender, "garbage", {"address": ""}]})
+    assert code == 200 and out["ok"] is True, \
+        "sender evidence must never veto a join"
+    assert out["realm"]["convoy_id"] == LOW
+    assert out["denylisted_senders"] == [sender]
+    adoptions = [entry for entry in audit_events(tmp_path)
+                 if entry.get("event") == "realm_adopted"]
+    assert adoptions[-1]["detail"]["senders"] == [sender]
+    assert adoptions[-1]["detail"]["denylisted_senders"] == [sender]
+
+
+def test_a_failed_row_write_leaves_the_realm_committed(
+        tmp_path, monkeypatch):
+    """THE ordering contract (both 2026-08-12 review blockers): the
+    first draft reset the realm BEFORE touching rows, so one failed
+    host.json write (AV scanner, backup agent -- the condition
+    delete_node's docstring documents) stranded the host UNCOMMITTED,
+    the exact state an un-admitted LAN announcement is allowed to
+    claim. Now the row write comes first and a failure leaves the
+    previous realm committed on disk and in memory -- the join is
+    simply retryable."""
+    clock = Clock()
+    app = make_app(tmp_path, clock)
+    code, node = app.register_node(registration(
+        HIGH, binding_state="established"))
+    assert code == 200
+    app.discovery_service = _StubDiscovery({LOW: "established"})
+
+    def refuse_write(records):
+        raise OSError("sharing violation")
+
+    monkeypatch.setattr(app.db, "save_nodes", refuse_write)
+    with pytest.raises(OSError):
+        app.reset_realm({"adopt_convoy_id": LOW})
+    realm = app.realm.snapshot()
+    assert realm["state"] == "established"
+    assert realm["convoy_id"] == HIGH, \
+        "the realm must stay COMMITTED on the previous id"
+    record = app.directory.lookup(node["node_id"])
+    assert record["convoy_id"] == HIGH
+    assert record["binding_state"] == "established", \
+        "the directory must not outrun the store"
 
 
 def test_candidate_deadline_and_binding_survive_host_restart(tmp_path):

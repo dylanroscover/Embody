@@ -488,6 +488,29 @@ class RealmStore:
             conflict_ids=conflict_ids,
         ))
 
+    def adopt(self, convoy_id):
+        """Operator-confirmed adoption: commit ``convoy_id`` as this host's
+        ESTABLISHED realm, from ANY current state (including conflict and
+        unbound), in one atomic disk-first transition.
+
+        This exists so Join Other Realm never passes through an unbound
+        instant: the first design reset() first and re-derived, and a
+        failed write in that window left the host uncommitted -- which is
+        precisely the state an un-admitted LAN announcement is allowed to
+        claim (security review, 2026-08-12). ``_commit_locked`` writes
+        before publishing, so a failed write leaves both memory and disk
+        on the previous committed realm.
+
+        Authority is the CALLER's problem: HostApp exposes this only
+        through the loopback-authenticated reset route, carrying an
+        operator confirmation. Discovery observations must keep using
+        ``reconcile``, which cannot rewrite a committed realm.
+        """
+        convoy_id = _convoy_id(convoy_id)
+        with self._lock:
+            return self._commit_locked(_state_payload(
+                ESTABLISHED, convoy_id))
+
     def reset(self):
         """Advanced local recovery: clear the realm binding/conflict so this
         host can re-run leaderless genesis.
