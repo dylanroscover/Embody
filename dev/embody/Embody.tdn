@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1140
-generator: Embody/6.0.236
+build: 1142
+generator: Embody/6.0.239
 td_build: 099.2025.33070
-source_file: Embody-6.236.toe
-exported_at: '2026-08-12T04:07:50Z'
+source_file: Embody-6.239.toe
+exported_at: '2026-08-12T19:16:32Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -74,6 +74,7 @@ custom_pars:
   - name: Refresh
     style: Pulse
     help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
+    value: true
   - name: Performmode
     style: Toggle
     label: Perform Mode
@@ -508,6 +509,11 @@ custom_pars:
     style: Pulse
     label: Forget Offline Nodes...
     help: Remove this machine's offline Convoy node rows. Names the rows it would forget (the first eight, then a count) in a confirmation before anything is removed. A forgotten node rejoins as a NEW identity the next time its project opens, and its TD Python approval resets. A node with a delivery that has not finished is kept and named afterwards -- a finished result never holds a row, because results are fetched by delivery id and outlive it. A node that comes back online before you confirm is skipped. Each computer can only forget its own rows.
+  - name: Convoyresolverealm
+    style: Pulse
+    label: Resolve Realm Conflict...
+    startSection: true
+    help: 'Recover from a split-realm conflict (status "Refused: local_realm_conflict"). Lists the conflicting Convoy realms and their live senders, then -- after an explicit confirmation -- denylists those senders, resets this machine''s realm to the preserved one, and re-registers this node. The foreign machines must disable Convoy or clear their own realm record to rejoin this mesh.'
   - name: Convoyinstallhost
     style: Pulse
     label: Repair Convoy App
@@ -813,7 +819,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.236
+    value: 6.0.239
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -905,8 +911,6 @@ sequences:
   - {}
   - {}
   Convoynodes:
-  - {}
-  - {}
   - {}
   - {}
   - {}
@@ -1031,7 +1035,7 @@ operators:
 - name: timer1
   type: timerCHOP
   parameters:
-    active: never
+    active: always
     deferpars: true
     length: 30
     lengthunits: frames
