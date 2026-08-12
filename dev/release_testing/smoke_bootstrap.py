@@ -655,12 +655,20 @@ def _exercise_features(attempt=0):
     def autosave():
         comp = op('/smoke_tdn')
         assert comp is not None, 'tdn feature must run first'
+        # The project.save() that opened the gate must ALSO have reset
+        # the Saved counter -- a Ctrl+S is the strongest form of "work
+        # reached disk", and until 2026-08-11 the readout kept the last
+        # CHECKPOINT's age straight through it (this flag read 'Idle'
+        # after the harness's own save, which is how the gap was proven).
+        pre = str(embody.par.Autosavestatus.eval())
+        assert pre.startswith('Saved'), \
+            'post-save stamp missing: Autosavestatus=%r after save' % pre
         comp.op('noise_src').par.period = 4.5
         ok = ext.Checkpoint(comp.path)
         assert ok, 'Checkpoint returned falsy'
         status = str(embody.par.Autosavestatus.eval())
         assert status.startswith('Saved'), 'Autosavestatus=%r' % status
-        return 'checkpoint wrote; status %r' % status
+        return 'save stamped %r; checkpoint wrote %r' % (pre, status)
 
     def portable():
         comp = op('/smoke_tdn')

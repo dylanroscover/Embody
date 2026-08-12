@@ -1,5 +1,9 @@
 # Changelog
 
+## v6.0.236
+
+- **Saving the project resets the "Saved" counter.** Only the auto-checkpoint engine and the startup seed ever wrote that readout, so the panel kept the last checkpoint's age straight through a Ctrl+S -- telling a user who had just saved that their work was hours old (field question; the release smoke's own flag proved it, reading `Idle` right after the harness's save). The post-save hook now stamps the counter the moment a save completes, and the smoke's auto-save leg asserts the stamp so the gap cannot reopen.
+
 ## v6.0.235
 
 One layout, minimal by design, and nothing on it that is not true.

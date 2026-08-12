@@ -406,6 +406,19 @@ def onProjectPostSave():
 	# modal; scheduled up-front via run() so every return path still clears it and
 	# a stuck flag can never outlive the save.
 	run(f"op('{parent.Embody}').unstore('_suppress_dialogs')", delayFrames=120)
+
+	# The save that just completed is the strongest form of "work reached
+	# disk" -- reset the Saved counter to NOW. Only the auto-checkpoint
+	# engine and the startup seed wrote this status before, so the readout
+	# kept the last checkpoint's age straight through a Ctrl+S and told a
+	# user who had JUST saved that their work was hours old (field
+	# question, 2026-08-11; the smoke's ready flag showed the same:
+	# autosavestatus stayed 'Idle' across the harness's own save).
+	try:
+		parent.Embody.ext.Embody._setAutosaveStatus(
+			'Saved ' + parent.Embody.ext.Embody._autosaveClock())
+	except Exception as e:
+		print(f'Embody > post-save Saved stamp failed: {e}')
 	# Restore children that were stripped during pre-save.
 	# Re-import from the just-exported .tdn files to keep the session intact.
 	# In Export/Off modes no strip runs, so stripped is empty -- but we still
