@@ -917,9 +917,18 @@ def save_externalization(ext, op_path: str) -> dict:
         if target.family == 'COMP':
             strategy = op.Embody.ext.Embody._getCompStrategy(target)
             if strategy == 'tdn':
-                op.Embody.SaveTDN(op_path)
+                written = op.Embody.SaveTDN(op_path)
             else:
-                op.Embody.Save(op_path)
+                written = op.Embody.Save(op_path)
+            if not written:
+                # Never report a refusal or failure as a save (review):
+                # the empty-overwrite guard is the common refusal -- an
+                # operator-empty COMP over a non-empty file on disk.
+                return {'error': f'Save refused or failed for {op_path} '
+                                 f'-- see the Embody log. (An EMPTY COMP '
+                                 f'never auto-overwrites a non-empty '
+                                 f'file; untrack it or delete the file '
+                                 f'if the empty state is intended.)'}
         elif target.family == 'DAT':
             if hasattr(target.par, 'syncfile') and target.par.syncfile.eval():
                 return {
@@ -1084,12 +1093,25 @@ def create_extension(ext, parent_path: str, class_name: str,
     return result
 
 
-def import_network(ext, target_path, tdn, clear_first=False):
-    """Delegate to TDN extension for network import."""
+def import_network(ext, target_path, tdn, clear_first=False,
+                   restore_tdn_shells=True):
+    """Delegate to TDN extension for network import.
+
+    restore_tdn_shells=True (default) fills nested externalized-TDN
+    children from their own .tdn files in the same import, recursively
+    -- one import of a deeply nested boundary therefore fans out into
+    one ImportNetwork per nested tracked COMP (correctness over speed:
+    an empty shell's stale fingerprint is the empty-overwrite data-loss
+    vector). Pass False only when the caller re-imports every nested
+    COMP itself. The result's 'restored_tdn_shells' lists what was
+    rebuilt from disk -- unsaved live edits inside those children were
+    replaced by the disk copies.
+    """
     if not getattr(ext.ownerComp.ext, 'TDN', None):
         return {'error': 'TDN extension not loaded on Embody COMP'}
     return ext.ownerComp.ext.TDN.ImportNetwork(
         target_path=target_path,
         tdn=tdn,
         clear_first=clear_first,
+        restore_tdn_shells=restore_tdn_shells,
     )

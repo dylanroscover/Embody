@@ -1854,7 +1854,15 @@ class EnvoyMCPServer:
                 include_defaults: True returns all parameters
 
             Returns:
-                Dict with type, family, parameters, inputs, outputs, children
+                Dict with type, family, parameters, inputs, outputs,
+                children. 'inputs' has ONE ENTRY PER INPUT CONNECTOR
+                (null = that connector is empty), so a wire on input 2
+                with inputs 0-1 unwired reads [null, null, path] --
+                entry position IS the real connector index. Dynamic
+                multi-input ops (Switch, Composite) always show one
+                trailing null (their growth connector). 'outputs' is
+                the compacted connected-outputs list, not
+                per-connector.
             """
             return self._execute_in_td('get_op', {
                 'op_path': op_path,
@@ -2033,7 +2041,13 @@ class EnvoyMCPServer:
                 op_path: Path to the operator
 
             Returns:
-                Dict with inputs and outputs lists
+                Dict with inputs and outputs lists. 'inputs' has ONE
+                ENTRY PER INPUT CONNECTOR: {'index': i, 'connected_to':
+                path-or-null}, so index is the REAL connector index and
+                a sparse wire (input 2 wired, 0-1 empty) reads exactly
+                that -- never compacted. Dynamic multi-input ops show
+                one trailing empty connector. 'outputs' entries carry a
+                LIST per connector (outputs fan out).
             """
             return self._execute_in_td('get_connections', {'op_path': op_path})
 

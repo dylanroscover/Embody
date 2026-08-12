@@ -68,3 +68,35 @@ class TestMCPConnections(EmbodyTestCase):
     def test_get_connections_nonexistent(self):
         result = self.envoy._get_connections(op_path='/nonexistent')
         self.assertDictHasKey(result, 'error')
+
+    def test_get_connections_reports_true_connector_indices(self):
+        """One entry PER CONNECTOR, index-faithful. The old reader
+        walked OP.inputs -- a COMPACTED list -- so a wire on a Matte
+        TOP's connector 2 with 0-1 empty reported as index 0 (live
+        repro, 2026-08-12). This is an agent-facing MCP contract: the
+        docstring now promises real connector indices with explicit
+        nulls, and this pins it."""
+        src = self.sandbox.create(noiseTOP, 'idx_src')
+        mat = self.sandbox.create(matteTOP, 'idx_matte')
+        src.outputConnectors[0].connect(mat.inputConnectors[2])
+
+        result = self.envoy._get_connections(op_path=mat.path)
+        inputs = result.get('inputs')
+        self.assertEqual(len(inputs), 3,
+                         'a Matte TOP has three fixed input connectors')
+        self.assertIsNone(inputs[0]['connected_to'])
+        self.assertIsNone(inputs[1]['connected_to'])
+        self.assertEqual(inputs[2]['index'], 2)
+        self.assertEqual(inputs[2]['connected_to'], src.path,
+                         'the wire must report at its REAL connector')
+
+    def test_get_op_inputs_are_per_connector(self):
+        """get_op's 'inputs' shares the same contract: entry position ==
+        connector index, null == empty connector."""
+        src = self.sandbox.create(noiseTOP, 'gio_src')
+        lk = self.sandbox.create(lookupTOP, 'gio_lookup')
+        src.outputConnectors[0].connect(lk.inputConnectors[1])
+
+        result = self.envoy._get_op(op_path=lk.path)
+        self.assertEqual(result.get('inputs'), [None, src.path],
+                         'sparse wire must surface at its real index')

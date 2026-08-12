@@ -239,8 +239,13 @@ SKIP_STORAGE_KEYS = {
 	'_tdn_fingerprints',
 	# Embody-managed recovery/restore markers -- live on the COMP shell in
 	# the .toe, never inside the .tdn (serializing _tdn_rel_path would make
-	# every pasted/imported copy claim the original's file).
-	'_tdn_rel_path', '_pending_tox_restore',
+	# every pasted/imported copy claim the original's file). A serialized
+	# _pending_tdn_restore would be worse still: restored by Phase 6a on
+	# every import, it would clear_first-import the child from the baked
+	# ref path forever -- a one-way ratchet that goes destructive the
+	# moment the ref goes stale or the .tdn is pasted into another project
+	# (review blocker, 2026-08-12).
+	'_tdn_rel_path', '_pending_tox_restore', '_pending_tdn_restore',
 	# Save-window dialog guard. project.save() stores this True for the
 	# duration of the save, and the TDN strip/export runs INSIDE that window
 	# -- so without this exclusion every save bakes _suppress_dialogs: true
@@ -1905,7 +1910,9 @@ class TDNExt:
 		return None
 
 	def ImportNetwork(self, target_path: str, tdn: Union[dict[str, Any], list[dict[str, Any]]],
-					  clear_first: bool = False, restore_file_links: bool = False) -> dict[str, Any]:
+					  clear_first: bool = False, restore_file_links: bool = False,
+					  restore_tdn_shells: bool = True,
+					  _tdn_seen: Optional[set] = None) -> dict[str, Any]:
 		"""
 		Import a .tdn network into a COMP, recreating all operators.
 
@@ -1916,6 +1923,19 @@ class TDNExt:
 			restore_file_links: Re-establish file/syncfile parameters on DATs
 				that are tracked in the externalizations table (used during
 				TDN reconstruction on project open)
+			restore_tdn_shells: Fill nested tdn_ref shells from their own
+				.tdn files immediately after import (Phase 8.6), recursing.
+				Default True: an individual reload, an MCP import, or any
+				other one-shot import must never leave a nested
+				externalized COMP as an empty shell -- that shell reads
+				fingerprint-dirty and the next auto-export overwrites the
+				child's good .tdn with an empty network (field data loss,
+				2026-08-12). Pass False ONLY from a caller whose own loop
+				already imports every tracked TDN COMP (startup
+				reconstruction, the post-save restore) so nested comps are
+				not imported twice per pass.
+			_tdn_seen: internal cycle guard -- normalized .tdn file paths
+				already imported in this recursion.
 
 		Returns:
 			dict with 'success', 'created_count', 'created_paths' or 'error'
@@ -2219,6 +2239,17 @@ class TDNExt:
 			# without waiting for the next project open.
 			self._restoreTOXShells(dest)
 
+			# Phase 8.6: Restore TDN content for tdn_ref shells -- the
+			# missing TDN counterpart of Phase 8.5. Without it, every
+			# import path EXCEPT startup reconstruction left nested
+			# externalized-TDN children as empty shells (their fill was
+			# deferred to a ReconstructTDNComps pass that only runs at
+			# project open), and the emptied shell's stale fingerprint
+			# then let auto-export destroy the child's .tdn on disk.
+			restored_shells = self._restoreTDNShells(
+				dest, restore=restore_tdn_shells, seen=_tdn_seen,
+				restore_file_links=restore_file_links)
+
 			# Cleanup temporary operator references from Phase 1
 			def _cleanupRefs(defs):
 				for d in defs:
@@ -2380,11 +2411,26 @@ class TDNExt:
 				result['restored_file_links'] = restored_count
 			if ext_restored:
 				result['restored_external_connections'] = ext_restored
+			if restored_shells:
+				# Auditability: an import that rebuilt nested externalized
+				# children from THEIR OWN files must say which -- any
+				# unsaved live edits inside them were replaced by the disk
+				# copies (review finding).
+				result['restored_tdn_shells'] = restored_shells
 			return result
 
 		except Exception as e:
 			self._log(f'Import failed: {e}', 'ERROR')
 			ui.status = f'TDN Import failed: {e}'
+			# Clear any restore markers an aborted import stranded --
+			# _pending_tdn_restore is skip-listed from serialization as
+			# defence-in-depth, but a live stranded marker would still
+			# trigger a surprise child re-import on the NEXT import of
+			# this COMP (review blocker, 2026-08-12).
+			try:
+				self._restoreTDNShells(dest, restore=False)
+			except Exception:
+				pass
 			return {'error': f'Import failed: {e}'}
 
 	def ImportNetworkFromFile(self, file_path: str, target_path: str = '/',
@@ -3613,18 +3659,35 @@ class TDNExt:
 		Array position = input index. Entries are source operator names
 		(sibling) or full paths (cross-network). Null entries for gaps.
 		Example: ['noise1'] or ['noise1', null, 'level1']
+
+		MUST enumerate ``inputConnectors``, never ``OP.inputs``: inputs is
+		a COMPACTED list of connected sources, so a wire on connector 1
+		with connector 0 empty surfaced at position 0 and the gap was
+		destroyed at export -- every sparse wire on a fixed-connector op
+		(Displace, Matte, Lookup, Cross...) collapsed to the first input
+		on reimport (field report + live repro, 2026-08-12). The import
+		side and the spec both already handle the null gaps this now
+		actually produces.
 		"""
 		inputs = []
 		max_index = -1
 		conn_map = {}
-		for i, inp in enumerate(target.inputs):
-			if inp is not None:
-				# Use sibling name if same parent, otherwise full path
-				if inp.parent() == target.parent():
-					conn_map[i] = inp.name
-				else:
-					conn_map[i] = inp.path
-				max_index = i
+		try:
+			for i, connector in enumerate(target.inputConnectors):
+				for conn in connector.connections:
+					source = conn.owner
+					if source.parent() == target.parent():
+						conn_map[i] = source.name
+					else:
+						conn_map[i] = source.path
+					max_index = i
+		except Exception as e:
+			# WARNING, not DEBUG: an exception mid-enumeration writes a
+			# TRUNCATED inputs array -- silently dropped wires are the
+			# exact failure this exporter exists to prevent (review).
+			self._log(f'Error exporting connections on {target.path}: '
+					  f'{e} -- the inputs array may be truncated',
+					  'WARNING')
 
 		if max_index < 0:
 			return []
@@ -3650,7 +3713,9 @@ class TDNExt:
 						conn_map[i] = source.path
 					max_index = i
 		except Exception as e:
-			self._log(f'Error exporting COMP connections on {target.path}: {e}', 'DEBUG')
+			self._log(f'Error exporting COMP connections on '
+					  f'{target.path}: {e} -- the comp_inputs array '
+					  f'may be truncated', 'WARNING')
 
 		if max_index < 0:
 			return []
@@ -4026,8 +4091,15 @@ class TDNExt:
 			tox_ref = op_def.get('tox_ref')
 			if tdn_ref and new_op.isCOMP:
 				# This COMP's children come from a separate .tdn file.
-				# Shell created here; network populated by
-				# ReconstructTDNComps() in depth-sorted order.
+				# Shell created here; marked so Phase 8.6 can fill it
+				# from its own .tdn in the SAME import (startup
+				# reconstruction passes restore_tdn_shells=False and the
+				# marker is simply cleared -- its loop imports every
+				# tracked COMP itself, depth-sorted).
+				try:
+					new_op.store('_pending_tdn_restore', tdn_ref)
+				except Exception:
+					pass
 				self._log(
 					f'Skipping children of {new_op.path} -- '
 					f'managed by {tdn_ref}', 'DEBUG')
@@ -5118,6 +5190,109 @@ class TDNExt:
 		if restored:
 			self._log(
 				f'Restored {restored} TOX shell(s) under {dest.path} from .tox',
+				'INFO')
+		return restored
+
+	def _restoreTDNShells(self, dest, restore: bool = True,
+						  seen: Optional[set] = None,
+						  restore_file_links: bool = True) -> list:
+		"""Phase 8.6: Fill empty shells created from tdn_ref entries.
+
+		The TDN counterpart of _restoreTOXShells. _createOps marks any
+		COMP it built from a `tdn_ref` entry with a
+		`_pending_tdn_restore` storage key holding the relative .tdn
+		path. This pass walks `dest`'s subtree and imports each marked
+		shell from its own file (clear_first on an empty shell clears
+		nothing), which re-enters ImportNetwork and so recurses
+		naturally for deeper nesting.
+
+		`seen` is an ANCESTOR CHAIN, not a global visited set: the key
+		is added before the child import and discarded after, so a true
+		ref cycle (A.tdn -> B.tdn -> A.tdn) is refused while two
+		SIBLING shells legitimately pointing at the same file both fill
+		(review finding: a visited set punished the duplicated-ref
+		shape that duplicate detection exists to surface, leaving the
+		second copy permanently empty with a misdiagnosis).
+
+		`restore_file_links` is the CALLER's flag, passed through --
+		the recursion must not escalate a capability the original
+		import declined (review finding).
+
+		With restore=False the markers are only CLEARED: the caller's
+		own loop (startup reconstruction, the post-save restore)
+		imports every tracked TDN COMP itself in depth order, and stale
+		storage must not leak into later imports.
+
+		Returns the list of restored shell paths.
+		"""
+		embody = self.ownerComp.ext.Embody
+		restored = []
+		if seen is None:
+			seen = set()
+
+		def _walk(comp):
+			for child in list(getattr(comp, 'children', ()) or ()):
+				try:
+					pending = child.fetch('_pending_tdn_restore', None,
+										search=False)
+				except Exception:
+					pending = None
+				if pending:
+					try:
+						child.unstore('_pending_tdn_restore')
+					except Exception:
+						pass
+					if not restore:
+						continue
+					try:
+						abs_path = embody.buildAbsolutePath(pending)
+						key = str(abs_path).replace('\\', '/').lower()
+						if key in seen:
+							self._log(
+								f'TDN shell restore: circular ref at '
+								f'{child.path} ({pending}) -- skipping',
+								'WARNING')
+							continue
+						if not abs_path.is_file():
+							self._log(
+								f'TDN shell restore: file missing for '
+								f'{child.path} ({pending}) -- left '
+								f'empty', 'WARNING')
+							continue
+						doc = tdn_load(
+							abs_path.read_text(encoding='utf-8'))
+						seen.add(key)
+						try:
+							res = self.ImportNetwork(
+								child.path, doc, clear_first=True,
+								restore_file_links=restore_file_links,
+								restore_tdn_shells=True,
+								_tdn_seen=seen)
+						finally:
+							seen.discard(key)
+						if res.get('error'):
+							self._log(
+								f'TDN shell restore failed for '
+								f'{child.path}: {res["error"]}',
+								'WARNING')
+						else:
+							restored.append(child.path)
+					except Exception as e:
+						self._log(
+							f'Failed to restore TDN shell '
+							f'{child.path}: {e}', 'WARNING')
+				else:
+					if hasattr(child, 'children'):
+						_walk(child)
+
+		_walk(dest)
+		if restored:
+			shown = ', '.join(restored[:8])
+			if len(restored) > 8:
+				shown += f', ...and {len(restored) - 8} more'
+			self._log(
+				f'Restored {len(restored)} TDN shell(s) under '
+				f'{dest.path} from their own .tdn files: {shown}',
 				'INFO')
 		return restored
 

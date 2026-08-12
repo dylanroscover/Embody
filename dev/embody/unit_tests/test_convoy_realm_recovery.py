@@ -14,7 +14,15 @@ import os
 import pathlib
 import sys
 
-import pytest
+try:
+    import pytest
+except ModuleNotFoundError:
+    # The in-TD TestRunner imports every test_*.py in this folder during
+    # discovery, and TD's Python has no pytest. This suite is
+    # pytest-only (fixtures + monkeypatch); with pytest absent it must
+    # import cleanly and expose no tests there, not error the discovery
+    # sweep (field regression, 2026-08-12).
+    pytest = None
 
 # unit_tests/ -> embody/ -> dev/ -> the repo root.
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
@@ -86,10 +94,11 @@ class _FakeSocketModule:
             raise OSError('no reverse record')
 
 
-@pytest.fixture(autouse=True)
-def _hermetic_dns(monkeypatch):
-    _FakeSocketModule.table = {}
-    monkeypatch.setattr(convoy_ext, 'socket', _FakeSocketModule)
+if pytest is not None:
+    @pytest.fixture(autouse=True)
+    def _hermetic_dns(monkeypatch):
+        _FakeSocketModule.table = {}
+        monkeypatch.setattr(convoy_ext, 'socket', _FakeSocketModule)
 
 
 CONFLICT_STATUS = {'realm': {'state': 'conflict',

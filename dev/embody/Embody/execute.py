@@ -468,9 +468,12 @@ def onProjectPostSave():
 					continue
 				tdn_doc = parent.Embody.ext.TDN.tdn_load(
 					abs_path.read_text(encoding='utf-8'))
+				# restore_tdn_shells=False: this restore loop imports every
+				# stripped TDN COMP itself -- Phase 8.6 would double-import
+				# nested comps on every Ctrl+S.
 				parent.Embody.ext.TDN.ImportNetwork(
 					target_path=comp_path, tdn=tdn_doc, clear_first=True,
-					restore_file_links=True)
+					restore_file_links=True, restore_tdn_shells=False)
 			except Exception as e:
 				# print() as backup - Log may fail if extensions are reinitializing
 				print(f'Embody > Post-save restore failed for {comp_path}: {e}')
@@ -488,7 +491,8 @@ def onProjectPostSave():
 							backup_path.read_text(encoding='utf-8'))
 						parent.Embody.ext.TDN.ImportNetwork(
 							target_path=comp_path, tdn=backup_tdn,
-							clear_first=True, restore_file_links=True)
+							clear_first=True, restore_file_links=True,
+							restore_tdn_shells=False)
 						print(f'Embody > Rolled back {comp_path} from backup')
 				except Exception as rb_e:
 					print(f'Embody > Rollback also failed for {comp_path}: {rb_e}')

@@ -716,6 +716,30 @@ Each string element references the source operator:
 
 On import, the source is resolved by first looking for a sibling with that name, then falling back to interpreting it as a full path.
 
+### Array Length
+
+The array is truncated at the **last connected index** — trailing `null`
+entries never appear. Dynamic multi-input operators (Switch, Composite,
+Merge) always expose one trailing empty connector in TouchDesigner; it is
+never serialized, so densely wired networks produce byte-identical
+`inputs` arrays across exports. An exporter that emitted trailing nulls
+would produce a spurious diff on every multi-input operator in every
+file.
+
+Indices are derived from the operator's real **input connectors**, never
+from TouchDesigner's `OP.inputs` (a compacted list of connected sources
+that cannot represent a gap) — a wire on connector 2 with connectors 0-1
+empty exports as `[null, null, "src"]`, and reimports onto connector 2.
+
+### Known Limitation: Source Output Index
+
+Each element names the source operator only; there is no field for the
+source's **output connector index**. A multi-output source (e.g. a COMP
+with several Out operators) wired from output 1 or higher is re-imported
+from output 0. Representing it would require a format extension (the
+importer already tolerates dict-shaped entries for forward
+compatibility).
+
 ---
 
 ## Docking

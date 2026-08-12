@@ -261,6 +261,11 @@ class EmbodyExt:
         self._last_checkpoint_activity = 0.0   # time.monotonic()
         self._autosave_gen = 0
         self._autosave_armed = False
+        # Empty-overwrite guard memo: abs_path -> ((path, mtime_ns, size),
+        # refused). Keeps a STABLE refusal to one parse + one WARNING
+        # instead of re-parsing the file on every sweep (per-session;
+        # reinit re-warms it harmlessly).
+        self._empty_guard_cache = {}
         # An op ran that could have touched ANY tracked root (execute_python),
         # so the drain must discover which ones actually changed. A flag, not a
         # queued set: the sweep is deferred to the settle so a burst of agent
@@ -3785,15 +3790,45 @@ class EmbodyExt:
         except Exception:
             pass
 
-    def Save(self, opPath: str) -> None:
-        """Save a TOX-strategy COMP and update tracking."""
+    def Save(self, opPath: str, allow_empty: bool = False) -> bool:
+        """Save a TOX-strategy COMP and update tracking. Returns True
+        only when the .tox was actually written.
+
+        allow_empty mirrors SaveTDN: an AUTOMATIC save of an
+        operator-empty COMP over a substantial existing .tox is the
+        transiently-emptied-shell shape (the TOX-side twin of the TDN
+        data loss, review finding 2026-08-12). A .tox cannot be parsed
+        for content, so the on-disk test is a size heuristic: an empty
+        COMP's .tox is ~1-2 KB of shell + parameters, so an existing
+        file over 4 KB is treated as content worth protecting. The
+        explicit manager Save passes allow_empty=True.
+        """
         if self._performMode:
-            return
+            return False
         try:
             oper = op(opPath)
             if not oper or oper.family != 'COMP':
                 self.Log(f"Save() requires a COMP, got {oper.family if oper else 'None'}: {opPath}", "ERROR")
-                return
+                return False
+            if not allow_empty:
+                try:
+                    if not any(c.type != 'annotate' for c in oper.children):
+                        rel_tox = self.getExternalPath(oper)
+                        if rel_tox:
+                            existing = self.buildAbsolutePath(rel_tox)
+                            if (existing.is_file()
+                                    and existing.stat().st_size > 4096):
+                                self.Log(
+                                    f'REFUSED auto-save of {opPath}: the '
+                                    f'COMP is empty but its .tox on disk '
+                                    f'is {existing.stat().st_size} bytes '
+                                    f'-- overwriting would destroy the '
+                                    f'only good copy. If the empty state '
+                                    f'is intentional, use the manager '
+                                    f'Save button.', 'WARNING')
+                                return False
+                except Exception:
+                    pass
             oper.par.enableexternaltox = True
 
             # Update build info
@@ -3829,11 +3864,17 @@ class EmbodyExt:
             self._updatePositionInTable(oper, opPath)
 
             self.Log(f"Saved {opPath}", "SUCCESS")
+            return True
         except Exception as e:
             self.Log("Save failed", "ERROR", str(e))
+            return False
 
-    def SaveTDN(self, opPath: str, bump_build: bool = True) -> None:
+    def SaveTDN(self, opPath: str, bump_build: bool = True,
+                allow_empty: bool = False) -> bool:
         """Save a TDN-strategy COMP by re-exporting its .tdn file.
+        Returns True only when the file was actually written -- callers
+        (dirtyHandler's Saved-N tally, the MCP save surface) must not
+        report a refusal or failure as a save (review finding).
 
         bump_build=False re-exports WITHOUT advancing par.Build. The
         post-save version sync needs that: the release manifest records
@@ -3841,23 +3882,37 @@ class EmbodyExt:
         manifest one behind the .tdn -- a smaller copy of the very drift
         the sync exists to remove. Checkpoint() already skips the bump
         for the same class of reason.
+
+        allow_empty=False (every automatic caller) refuses to overwrite
+        a non-empty .tdn on disk from an operator-empty COMP -- the
+        signature of a transiently-emptied shell about to destroy the
+        only good copy (field data loss, 2026-08-12). The explicit
+        manager Save passes True: a deliberately emptied COMP may save.
+        A refusal re-baselines the fingerprint so the dirty-sweep
+        converges (warn once, not forever) while any LATER real edit
+        still reads dirty.
         """
         if self._performMode:
-            return
+            return False
         if not self._tdnEnabled():
             self.Log(f'TDN disabled -- skipping SaveTDN for {opPath}', 'INFO')
-            return
+            return False
         try:
             oper = op(opPath)
             if not oper:
                 self.Log(f"Operator not found: {opPath}", "ERROR")
-                return
+                return False
 
             # Get the TDN file path from the table
             rel_path = self._getStrategyFilePath(opPath, 'tdn')
             if not rel_path:
                 self.Log(f"No TDN entry found for {opPath}", "ERROR")
-                return
+                return False
+
+            if not allow_empty and self._refusesEmptyTDNOverwrite(
+                    oper, str(self.buildAbsolutePath(rel_path))):
+                self._storeTDNFingerprint(oper)
+                return False
 
             # For root /, re-derive filename from current project name
             # so it stays in sync when the .toe is renamed/versioned
@@ -3907,10 +3962,12 @@ class EmbodyExt:
                 # Snapshot the network structure so _isTDNDirty returns False
                 self._storeTDNFingerprint(oper)
                 self.Log(f"Exported TDN for {opPath}", "SUCCESS")
-            else:
-                self.Log(f"TDN export failed for {opPath}: {result.get('error')}", "ERROR")
+                return True
+            self.Log(f"TDN export failed for {opPath}: {result.get('error')}", "ERROR")
+            return False
         except Exception as e:
             self.Log(f"SaveTDN failed for {opPath}", "ERROR", str(e))
+            return False
 
     def Checkpoint(self, opPath: str) -> bool:
         """Frame-cheap SYNCHRONOUS auto-save checkpoint of one TDN COMP.
@@ -3941,6 +3998,10 @@ class EmbodyExt:
             if not rel_path:
                 return False
             abs_path = str(self.buildAbsolutePath(rel_path))
+            # A checkpoint is always automatic -- never let it overwrite
+            # a non-empty .tdn from a transiently-emptied shell.
+            if self._refusesEmptyTDNOverwrite(oper, abs_path):
+                return False
             result = self.my.ext.TDN.ExportNetwork(
                 root_path=opPath, output_file=abs_path, skip_cleanup=True)
             if not result.get('success'):
@@ -3966,6 +4027,71 @@ class EmbodyExt:
         except Exception as e:
             self.Log(f'Checkpoint failed for {opPath}', 'WARNING', str(e))
             return False
+
+    def _refusesEmptyTDNOverwrite(self, oper, abs_path: str) -> bool:
+        """True when an AUTOMATIC export must not overwrite this .tdn.
+
+        A COMP with ZERO operator children whose on-disk .tdn holds a
+        non-empty network is almost never a legitimate auto-export: it
+        is the signature of a transiently-emptied shell (an interrupted
+        import, a pre-Phase-8.6 reload) about to destroy the only good
+        copy on disk (field data loss, 2026-08-12). The automatic
+        writers (dirtyHandler, Checkpoint, the pre-save Update sweep)
+        get a loud refusal; a deliberately emptied COMP still saves
+        through the manager's explicit Save (SaveTDN allow_empty=True).
+
+        Polarity on doubt (review): a MISSING file allows the save
+        (nothing to destroy), but an existing file that cannot be
+        PARSED refuses it -- a truncated or corrupt .tdn is the case
+        where the bytes are most valuable (a human can still hand-
+        repair them) and precisely when an empty overwrite must not
+        land. Only annotate children are discounted from the emptiness
+        test (live-verified: .children INCLUDES annotates, and an
+        annotations-only live COMP over a populated file is still the
+        emptied-shell shape). Refusals are warned ONCE per file state
+        via a (path, mtime, size) cache so a stable refusal cannot spam
+        the log or re-parse every sweep.
+        """
+        try:
+            if any(c.type != 'annotate' for c in oper.children):
+                return False
+            from pathlib import Path
+            existing = Path(abs_path)
+            if not existing.is_file():
+                return False
+            stat = existing.stat()
+            cache_key = (abs_path, stat.st_mtime_ns, stat.st_size)
+            cached = self._empty_guard_cache.get(abs_path)
+            if cached is not None and cached[0] == cache_key:
+                return cached[1]
+            refused = False
+            detail = ''
+            try:
+                doc = self.my.ext.TDN.tdn_load(
+                    existing.read_text(encoding='utf-8'))
+                if isinstance(doc, dict):
+                    refused = bool(doc.get('operators')
+                                   or doc.get('annotations'))
+                else:
+                    refused = bool(doc)
+                if refused:
+                    detail = 'holds a non-empty network'
+            except Exception:
+                if stat.st_size > 0:
+                    refused = True
+                    detail = ('exists but cannot be parsed -- its bytes '
+                              'may still be hand-recoverable')
+            self._empty_guard_cache[abs_path] = (cache_key, refused)
+            if not refused:
+                return False
+        except Exception:
+            return False
+        self.Log(
+            f'REFUSED auto-export of {oper.path}: the COMP is empty but '
+            f'its .tdn on disk {detail} -- overwriting would destroy '
+            f'the only good copy. If the empty state is intentional, '
+            f'use the manager Save button.', 'WARNING')
+        return True
 
     def _reBaselineCheckpoint(self, opPath: str) -> None:
         """Deferred dirty-detection re-baseline after a checkpoint.
@@ -5671,8 +5797,11 @@ class EmbodyExt:
             except Exception as e:
                 self.Log(f"Failed to update dirty state for {oper.path}: {e}", "DEBUG")
             if dirty and update:
-                self.Save(oper.path)
-                updates.append(oper.path)
+                # Only a save that actually WROTE counts toward the
+                # 'Saved N externalizations' tally -- a guard refusal
+                # reported as a save is a contradictory signal (review).
+                if self.Save(oper.path):
+                    updates.append(oper.path)
 
         # TDN-strategy COMPs -- use network fingerprint instead of oper.dirty
         # (oper.dirty is always True when externaltox is empty). This is the
@@ -5703,8 +5832,8 @@ class EmbodyExt:
                 except Exception as e:
                     self.Log(f"Failed to update dirty state for {oper.path}: {e}", "DEBUG")
                 if dirty and update:
-                    self.SaveTDN(oper.path)
-                    updates.append(oper.path)
+                    if self.SaveTDN(oper.path):
+                        updates.append(oper.path)
 
         return updates
 
@@ -8576,16 +8705,19 @@ class EmbodyExt:
         tdn_tag = self.my.par.Tdntag.val
 
         if tox_tag in oper.tags:
-            self.Save(oper.path)
+            # allow_empty: this is the one EXPLICIT save gesture, so a
+            # deliberately emptied COMP may overwrite its file here (the
+            # automatic writers refuse that shape as data loss).
+            self.Save(oper.path, allow_empty=True)
         elif tdn_tag in oper.tags:
-            self.SaveTDN(oper.path)
+            self.SaveTDN(oper.path, allow_empty=True)
         else:
             # Fallback: check externalizations table for untagged COMPs (e.g. root)
             strategy = self._getCompStrategy(oper)
             if strategy == 'tox':
-                self.Save(oper.path)
+                self.Save(oper.path, allow_empty=True)
             elif strategy == 'tdn':
-                self.SaveTDN(oper.path)
+                self.SaveTDN(oper.path, allow_empty=True)
 
         self.Refresh()
 
@@ -8655,6 +8787,28 @@ class EmbodyExt:
                 msg += f', {restored} file links'
             msg += ')'
             self.Log(msg, 'SUCCESS')
+            # Re-baseline dirty-detection for the root AND every tracked
+            # TDN COMP inside it: the import just made live == disk, and
+            # a stale pre-reload fingerprint reads the fresh content as
+            # dirty -- the vector that let an auto-export overwrite a
+            # nested child's .tdn from its transiently-empty shell
+            # (field data loss, 2026-08-12; the shells themselves are now
+            # filled by import Phase 8.6).
+            try:
+                tdn_paths = self._getTDNPaths()
+                exclude_tag = self.my.par.Tdnexcludetag.eval()
+                self._storeTDNFingerprint(oper, tdn_paths, exclude_tag)
+                prefix = oper.path.rstrip('/') + '/'
+                for comp_path, _rel in self._getTDNStrategyComps():
+                    if comp_path.startswith(prefix):
+                        nested = op(comp_path)
+                        if nested is not None:
+                            self._storeTDNFingerprint(
+                                nested, tdn_paths, exclude_tag)
+                self.param_tracker.updateParamStore(oper)
+            except Exception as e:
+                self.Log(f'Reload re-baseline failed for {oper.path}: '
+                         f'{e}', 'WARNING')
 
     def _reloadTox(self, oper: OP) -> None:
         """Reload a single TOX-strategy COMP from its .tox file on disk."""
@@ -9200,11 +9354,16 @@ class EmbodyExt:
             # COMP an empty shell for the session. Convert to an error
             # result so the backup-rollback path below still runs.
             try:
+                # restore_tdn_shells=False: THIS loop imports every
+                # tracked TDN COMP itself, depth-sorted parents-first --
+                # Phase 8.6 filling nested shells here would import each
+                # nested COMP twice per project open.
                 result = self.my.ext.TDN.ImportNetwork(
                     target_path=comp_path,
                     tdn=tdn_doc,
                     clear_first=True,
                     restore_file_links=True,
+                    restore_tdn_shells=False,
                 )
             except Exception as e:
                 result = {'error': f'Import raised: {e}'}
@@ -9220,7 +9379,8 @@ class EmbodyExt:
                             backup_path.read_text(encoding='utf-8'))
                         rb_result = self.my.ext.TDN.ImportNetwork(
                             target_path=comp_path, tdn=backup_tdn,
-                            clear_first=True, restore_file_links=True)
+                            clear_first=True, restore_file_links=True,
+                            restore_tdn_shells=False)
                         if rb_result.get('success'):
                             self.Log(
                                 f'Rolled back {comp_path} from backup',
@@ -9310,11 +9470,15 @@ class EmbodyExt:
             try:
                 tdn_doc = self.my.ext.TDN.tdn_load(
                     abs_path.read_text(encoding='utf-8'))
-                # The op may ALREADY exist as a tdn_ref shell created by a parent
-                # import earlier in this pass -- reuse it; only create when truly
-                # absent. Either way we still import its OWN .tdn (a nested TDN
-                # child is left as a bare shell by the parent import and must be
-                # populated). Never skip a missing-at-start path.
+                # The op may ALREADY exist -- either as a bare tdn_ref
+                # shell, or FULLY POPULATED by a parent import's Phase
+                # 8.6 earlier in this pass. A populated one is already
+                # identical to its own .tdn (Phase 8.6 imported exactly
+                # that file), so re-importing it would be a redundant
+                # destroy-and-rebuild -- double extension inits, and a
+                # transient failure on the second import would empty a
+                # COMP the first had restored (review finding). Only a
+                # truly absent or still-empty shell imports here.
                 shell = op(comp_path)
                 if shell is None:
                     shell = self._createMissingCompShell(
@@ -9322,6 +9486,14 @@ class EmbodyExt:
                 if shell is None:
                     self.Log(f'Auto-save recovery: cannot create shell for '
                              f'{comp_path} (parent missing?)', 'WARNING')
+                    continue
+                if any(c.type != 'annotate' for c in shell.children):
+                    self.Log(f'Auto-save recovery: {comp_path} already '
+                             f'restored by its parent import (Phase '
+                             f'8.6); skipping the redundant re-import',
+                             'DEBUG')
+                    self._storeTDNFingerprint(shell)
+                    recovered += 1
                     continue
                 res = self.my.ext.TDN.ImportNetwork(
                     target_path=comp_path, tdn=tdn_doc,
@@ -9453,9 +9625,22 @@ class EmbodyExt:
             try:
                 tdn_doc = self.my.ext.TDN.tdn_load(
                     abs_path.read_text(encoding='utf-8'))
-                res = self.my.ext.TDN.ImportNetwork(
-                    target_path=comp_path, tdn=tdn_doc,
-                    clear_first=True, restore_file_links=True)
+                # A parent restore's Phase 8.6 may have just filled this
+                # candidate from this very file -- skip the redundant
+                # destroy-and-rebuild but STILL run the tracking
+                # bookkeeping below (the orphan's whole problem is its
+                # missing row; review finding).
+                existing = op(comp_path)
+                if existing is not None and any(
+                        c.type != 'annotate' for c in existing.children):
+                    self.Log(f'Orphan-shell restore: {comp_path} already '
+                             f'filled by its parent restore; skipping '
+                             f'the redundant re-import', 'DEBUG')
+                    res = {'success': True}
+                else:
+                    res = self.my.ext.TDN.ImportNetwork(
+                        target_path=comp_path, tdn=tdn_doc,
+                        clear_first=True, restore_file_links=True)
                 if res.get('success'):
                     # Tag is present (that's how we found it), so the row
                     # append passes _trackTDNExport's enrollment gate.

@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.0.241
+
+Two field-reported TDN bugs, both confirmed by live reproduction before a line was written -- one of them a silent data-loss class.
+
+- **Reloading a COMP from its `.tdn` now recurses into nested externalized children.** An individual "Reload tdn" imported exactly one file: nested TDN-externalized children came back as EMPTY SHELLS (their fill was deferred to a pass that only runs at project open), the reload's own refresh then reaped the tracking rows inside them, and the emptied shell's stale fingerprint let the next auto-export -- a checkpoint, a dirty-sweep, or Ctrl+S -- overwrite the child's good `.tdn` with an empty network. Import gains Phase 8.6, the TDN counterpart of the TOX-shell restore: every `tdn_ref` shell is filled from its own file in the same import, recursively (cycle-guarded), and the reload re-baselines dirty-detection for the whole subtree. Startup reconstruction and the post-save restore opt out -- their own loops already import every tracked COMP once.
+
+- **Automatic exports refuse to overwrite a non-empty `.tdn` from an empty COMP.** The transiently-emptied-shell shape above is the signature of data about to be destroyed, so checkpoints and dirty-sweeps now refuse it loudly (once) instead of writing `operators: []` over the only good copy. The explicit manager Save still writes -- a deliberately emptied COMP remains saveable.
+
+- **Sparse inputs survive the TDN round-trip.** The exporter derived wire indices from TouchDesigner's `OP.inputs` -- a COMPACTED list -- so a wire on input 2 of a fixed-connector operator (Displace, Matte, Lookup, Cross...) with earlier inputs empty exported at position 0 and reimported onto the first input. It now enumerates the real input connectors, producing the `[null, null, "src"]` sparse arrays the spec always documented (the importer was already index-faithful). Densely wired networks export byte-identically, so nothing churns. The same compaction bug lived in Envoy's `get_op`/`get_connections`, which now report one entry per connector with explicit nulls -- an agent asking "what feeds input 2" finally gets the real answer. Known limitation, now documented in the spec: a multi-output SOURCE's output index still is not representable.
+
 ## v6.0.240
 
 The realm recovery gets its missing direction. v6.0.239's `Resolve Realm Conflict...` could only ever KEEP this machine's realm -- but the field case is a machine whose own realm is the wrong one (it crowned itself in isolation and now meets the house mesh): every exit it had re-derived its own realm from its own rows, so Repair, Resolve and the enable toggle all looped straight back to `local_realm_conflict`.

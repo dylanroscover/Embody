@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1143
+build: 1148
 generator: Embody/6.0.240
 td_build: 099.2025.33070
 source_file: Embody-6.240.toe
-exported_at: '2026-08-12T20:53:33Z'
+exported_at: '2026-08-12T23:55:23Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -74,7 +74,6 @@ custom_pars:
   - name: Refresh
     style: Pulse
     help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
-    value: true
   - name: Performmode
     style: Toggle
     label: Perform Mode

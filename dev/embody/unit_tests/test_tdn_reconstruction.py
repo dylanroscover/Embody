@@ -826,6 +826,169 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertEqual(rc.inputs[1].name, 'b')
 		self.assertEqual(rc.inputs[2].name, 'c')
 
+	def test_D09_sparse_input_keeps_connector_index(self):
+		"""A wired input PRECEDED BY AN EMPTY connector keeps its index.
+
+		The exporter used to derive indices from OP.inputs -- a
+		COMPACTED list of connected sources -- so a Matte TOP wired only
+		on connector 2 exported as ['src'] and reimported onto connector
+		0 (field report + live repro, 2026-08-12). Assertions go through
+		inputConnectors: OP.inputs cannot see the very gap under test.
+		"""
+		src = self.sandbox.create(noiseTOP, 'src')
+		src2 = self.sandbox.create(noiseTOP, 'src2')
+		mat = self.sandbox.create(matteTOP, 'mat')
+		lk = self.sandbox.create(lookupTOP, 'lk')
+		src.outputConnectors[0].connect(mat.inputConnectors[2])
+		src2.outputConnectors[0].connect(lk.inputConnectors[1])
+
+		orig_tdn, _reimported, _res = self._roundTrip(self.sandbox)
+		by_name = {o.get('name'): o
+				   for o in orig_tdn.get('operators', [])}
+		self.assertEqual(by_name['mat'].get('inputs'),
+						 [None, None, 'src'],
+						 'export must keep the empty-connector gap')
+		self.assertEqual(by_name['lk'].get('inputs'), [None, 'src2'])
+
+		rmat = self.sandbox.op('mat')
+		self.assertEqual(
+			[len(c.connections) for c in rmat.inputConnectors],
+			[0, 0, 1], 'the wire must come back on connector 2')
+		self.assertEqual(
+			rmat.inputConnectors[2].connections[0].owner.name, 'src')
+		rlk = self.sandbox.op('lk')
+		self.assertEqual(
+			[len(c.connections) for c in rlk.inputConnectors], [0, 1])
+		self.assertEqual(
+			rlk.inputConnectors[1].connections[0].owner.name, 'src2')
+
+	def _untrack(self, comp_path):
+		"""Remove a test externalization completely: row, tags, file.
+		Tests that tag sandbox COMPs MUST purge them -- leaked rows
+		materialize test junk into the live project on the next open
+		(review finding)."""
+		rel = self.embody_ext._getStrategyFilePath(comp_path, 'tdn')
+		if rel:
+			self.embody_ext.RemoveListerRow(comp_path, rel,
+											delete_file=True)
+
+	def test_D10_individual_reload_recurses_into_nested_tdn(self):
+		"""_reloadTDN on a parent fills nested externalized-TDN children
+		AND re-baselines dirty-detection.
+
+		The reload used to leave a tdn_ref child as an EMPTY SHELL --
+		its fill was deferred to a startup pass the reload never ran --
+		and the shell's stale fingerprint then let the next auto-export
+		overwrite the child's good .tdn with an empty network (field
+		data loss, 2026-08-12). Import Phase 8.6 now fills the shell in
+		the same import and the reload re-baselines fingerprints. The
+		fingerprint assertion is made to BITE by checkpointing an edited
+		state (fingerprint = edited) and then reverting the file on disk
+		before the reload -- without the re-baseline, the reloaded child
+		reads dirty against the stale edited-state baseline (review
+		finding: the naive assertion passed with the re-baseline
+		deleted).
+		"""
+		import os
+		tdn_tag = self.embody.par.Tdntag.val
+		parent = self.sandbox.create(baseCOMP, 'rl_parent')
+		child = parent.create(baseCOMP, 'rl_child')
+		child.create(noiseTOP, 'payload')
+		try:
+			self.embody_ext.applyTagToOperator(parent, tdn_tag)
+			self.embody_ext.applyTagToOperator(child, tdn_tag)
+			# Re-export the parent so its .tdn carries the child as a
+			# tdn_ref pointer (its initial export predated the child's
+			# tag).
+			self.assertTrue(
+				self.embody_ext.SaveTDN(parent.path, allow_empty=True))
+
+			child_rel = self.embody_ext._getStrategyFilePath(
+				child.path, 'tdn')
+			child_abs = str(self.embody_ext.buildAbsolutePath(child_rel))
+			with open(child_abs, encoding='utf-8') as f:
+				disk_before_edit = f.read()
+
+			# Stale-baseline setup: fingerprint the EDITED state, then
+			# revert the file so disk differs from the baseline.
+			child.create(levelTOP, 'extra')
+			self.assertTrue(
+				self.embody_ext.SaveTDN(child.path, allow_empty=True))
+			with open(child_abs, 'w', encoding='utf-8', newline='\n') as f:
+				f.write(disk_before_edit)
+
+			self.embody_ext._reloadTDN(parent)
+
+			rchild = self.sandbox.op('rl_parent/rl_child')
+			self.assertIsNotNone(rchild, 'reload must recreate the child')
+			self.assertEqual(
+				[c.name for c in rchild.children], ['payload'],
+				'the nested child must come back FULL from ITS OWN '
+				'.tdn, never an empty shell')
+			self.assertIn(tdn_tag, rchild.tags)
+			self.assertFalse(
+				self.embody_ext._isTDNDirty(rchild),
+				'freshly reloaded content must not read dirty -- a '
+				'stale fingerprint is the empty-overwrite vector')
+		finally:
+			self._untrack('%s/rl_child' % parent.path)
+			self._untrack(parent.path)
+
+	def test_D11_auto_export_refuses_empty_overwrite(self):
+		"""Checkpoint must not overwrite a non-empty .tdn from an
+		emptied COMP -- the transiently-emptied-shell signature; the
+		explicit manager save (allow_empty) still may."""
+		import os
+		tdn_tag = self.embody.par.Tdntag.val
+		comp = self.sandbox.create(baseCOMP, 'guard_victim')
+		comp.create(noiseTOP, 'payload')
+		try:
+			self.embody_ext.applyTagToOperator(comp, tdn_tag)
+			rel = self.embody_ext._getStrategyFilePath(comp.path, 'tdn')
+			self.assertTrue(rel, 'tagging must have tracked the COMP')
+			abs_path = str(self.embody_ext.buildAbsolutePath(rel))
+			size_before = os.path.getsize(abs_path)
+
+			for c in list(comp.children):
+				c.destroy()
+			self.assertFalse(
+				self.embody_ext.Checkpoint(comp.path),
+				'checkpoint of an emptied tracked COMP must refuse')
+			self.assertEqual(
+				os.path.getsize(abs_path), size_before,
+				'the .tdn on disk must be byte-identical after the '
+				'refusal')
+			self.assertTrue(
+				self.embody_ext.SaveTDN(comp.path, allow_empty=True),
+				'an explicit allow_empty save must return True')
+			self.assertNotEqual(
+				os.path.getsize(abs_path), size_before,
+				'an explicit allow_empty save must still write')
+		finally:
+			self._untrack(comp.path)
+
+	def test_D12_dense_dynamic_op_exports_without_trailing_null(self):
+		"""The no-churn guarantee: a densely wired DYNAMIC multi-input
+		op (whose live connector list always ends in one empty growth
+		connector) must export exactly ['a', 'b'] -- a trailing null
+		would put a spurious one-line diff on every multi-input op in
+		every .tdn at the next save (review finding: nothing else in
+		the suite could catch that regression)."""
+		a = self.sandbox.create(noiseTOP, 'a')
+		b = self.sandbox.create(noiseTOP, 'b')
+		comp = self.sandbox.create(compositeTOP, 'comp')
+		a.outputConnectors[0].connect(comp.inputConnectors[0])
+		b.outputConnectors[0].connect(comp.inputConnectors[1])
+		orig = self.tdn.ExportNetwork(
+			root_path=self.sandbox.path, include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		by_name = {o.get('name'): o
+				   for o in orig['tdn'].get('operators', [])}
+		self.assertEqual(
+			by_name['comp'].get('inputs'), ['a', 'b'],
+			'dense export must truncate at the last connected index -- '
+			'no trailing null for the growth connector')
+
 	def test_D05_chop_chain(self):
 		"""CHOP family connection chain round-trip."""
 		w = self.sandbox.create(waveCHOP, 'w')

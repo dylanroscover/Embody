@@ -81,8 +81,13 @@ def get_op(ext, op_path: str, include_defaults: bool = False) -> dict:
     if parameters_omitted > 0:
         info['parameters_omitted'] = parameters_omitted
 
-    # Get inputs/outputs
-    info['inputs'] = [inp.path if inp else None for inp in target.inputs]
+    # Get inputs/outputs. inputConnectors, never OP.inputs: inputs is a
+    # COMPACTED list of connected sources, so a wire on connector 1 with
+    # connector 0 empty misreported as index 0 (live repro 2026-08-12).
+    info['inputs'] = [
+        (connector.connections[0].owner.path
+         if connector.connections else None)
+        for connector in target.inputConnectors]
     info['outputs'] = [out.path if out else None for out in target.outputs]
 
     # COMP-specific info
@@ -145,11 +150,16 @@ def get_connections(ext, op_path: str) -> dict:
     if not target:
         return {'error': f'Operator not found: {op_path}'}
 
+    # inputConnectors, never OP.inputs: inputs compacts away empty
+    # connectors, so a sparse wire's true index was flattened to its
+    # position among connected sources (live repro 2026-08-12: a wire
+    # on a Matte TOP's connector 2 reported as index 0).
     inputs = []
-    for i, inp in enumerate(target.inputs):
+    for i, connector in enumerate(target.inputConnectors):
+        connected = [conn.owner.path for conn in connector.connections]
         inputs.append({
             'index': i,
-            'connected_to': inp.path if inp else None
+            'connected_to': connected[0] if connected else None
         })
 
     outputs = []
