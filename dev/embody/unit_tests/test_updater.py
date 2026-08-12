@@ -285,9 +285,18 @@ class TestUpdaterStatusLine(EmbodyTestCase):
         inst.StartupCheck()
         self.assertTrue(pars.Updatestatus.readOnly)
 
-    def test_startupcheck_enabled_does_not_write_disabled(self):
-        """A non-off mode must never stamp 'Disabled' (dev checkout returns
-        silently before any check on this path)."""
+    def test_startupcheck_enabled_never_writes_a_BARE_disabled(self):
+        """A non-off mode must never stamp the bare word 'Disabled' --
+        the readout rendered that as the user having switched updates
+        off. The dev checkout no longer returns silently (silence left
+        the release scrub's bare 'Disabled' on the panel all session);
+        it states its reason, which the version row renders as 'dev
+        checkout', never as off."""
         inst, pars = self._harness('notify', status='')
         inst.StartupCheck()
-        self.assertEqual(pars.Updatestatus.val, '')
+        got = pars.Updatestatus.val
+        self.assertNotEqual(got, 'Disabled',
+                            'the bare scrub word is the "updates off" lie')
+        if got:
+            self.assertIn('dev checkout', got,
+                          'a refusal must carry its reason: %r' % got)

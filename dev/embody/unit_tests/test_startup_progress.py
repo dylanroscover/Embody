@@ -439,10 +439,18 @@ class TestMinimalRows(EmbodyTestCase):
                     for k, t, _c in row)
 
     def test_the_autosave_age_is_INLINE_and_always_visible(self):
-        now = 14 * 3600 + 53 * 60 + 5 + 2 * 3600
-        cells = self._cells(self._comp(), now=float(now))
-        self.assertEqual(cells[sp.STATUS_AUTOSAVE],
-                         '%s Saved 2h ago' % sp.GLYPH_OK)
+        """Pins the SHAPE -- mark, label, a live age -- never the value.
+
+        The age is a WALL-time quantity (the panel's `now` is session
+        time and deliberately does not reach it; the AGE tick re-renders
+        it), so asserting '2h ago' raced the machine's clock: it passed
+        at the desk at one time of day and failed on every CI runner at
+        another. Exact age arithmetic is pinned where the clock is
+        injectable -- autosave_step/ago_text/age_seconds."""
+        cells = self._cells(self._comp(), now=1.0)
+        text = cells[sp.STATUS_AUTOSAVE]
+        self.assertTrue(text.startswith('%s Saved ' % sp.GLYPH_OK), text)
+        self.assertTrue(text.endswith(' ago'), text)
 
     def test_the_givens_render_no_words(self):
         joined = ' '.join(self._cells(self._comp()).values())
