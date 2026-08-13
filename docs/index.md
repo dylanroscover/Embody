@@ -25,7 +25,7 @@ Embody is four tools working together — *lateral velocity*, *forward velocity*
 
     ---
 
-    An embedded [MCP](https://modelcontextprotocol.io/) server with **62 tools** that lets Claude Code, Codex, Gemini, Cursor, Windsurf, and GitHub Copilot via VS Code talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen in your live session. Small changes can land in seconds, depending on your model; a complete network is a 5-20 minute autonomous build you can hand off, parallelize across sessions, and check back on.
+    An embedded [MCP](https://modelcontextprotocol.io/) server with **62 tools** that lets Claude Code, OpenCode, Codex, Gemini, Cursor, Windsurf, and GitHub Copilot via VS Code talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen in your live session. Small changes can land in seconds, depending on your model; a complete network is a 5-20 minute autonomous build you can hand off, parallelize across sessions, and check back on.
 
     [:octicons-arrow-right-24: Setup Envoy](envoy/setup.md)
 
@@ -82,7 +82,7 @@ You describe what you want. The AI works with your live network — operators, c
 | :material-file-document: | **TDN Format** | Export/import operator networks as diffable YAML for code review and snapshots |
 | :material-keyboard: | **Keyboard Shortcuts** | Double-tap ++lctrl++ to tag, ++ctrl+shift+u++ to save — and every binding is remappable (type or record) |
 | :material-cog: | **Parameter Tracking** | Automatically detects parameter changes and marks COMPs dirty |
-| :material-test-tube: | **122 Test Suites** | Comprehensive automated testing framework (3,720 tests) |
+| :material-test-tube: | **123 Test Suites** | Comprehensive automated testing framework (3,684 tests) |
 | :material-note-text: | **Structured Logging** | Multi-destination logging with file rotation, ring buffer, and MCP access |
 
 ---

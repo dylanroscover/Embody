@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **120 test suites** and **3,733 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **123 test suites** and **3,684 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -25,7 +25,7 @@ op.unit_tests.RunTestsDeferred()
 # Get results
 results = op.unit_tests.GetResults()
 # Example after a full successful run:
-# {'total': 2080, 'passed': 2080, 'failed': 0, 'errors': 0, 'skipped': 0, 'results': [...]}
+# {'total': 3684, 'passed': 3684, 'failed': 0, 'errors': 0, 'skipped': 0, 'results': [...]}
 ```
 
 ### Via MCP
@@ -38,6 +38,10 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 ```
 
 ## Test Coverage
+
+The tables below cover 120 suites. The remaining three are the
+AI-client connectivity tier, listed separately under
+[Agent Tier](#agent-tier-ai-client-connectivity-tests).
 
 ### Core Embody (36 suites, 701 tests)
 
@@ -162,7 +166,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_job_layer` | 25 | Background-job layer backing `get_job_status` / `save_project` / `run_tests background=True` -- the operations that outlive the 30 s MCP timeout |
 | `test_task_ledger` | 15 | Shared task ledger (`.embody/tasks.json`): work-STATE across AI sessions, including `done_uncommitted` |
 
-### Convoy (8 suites, 713 tests)
+### Convoy (9 suites, 736 tests)
 
 The LAN work relay: the node-side reconciler, the host-app client and installer, and the panel contracts. The host app itself is stdlib-only by design, so most of this tier also runs under plain pytest on the windows+macos CI matrix -- see `pytest.ini`.
 
@@ -174,6 +178,7 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_convoy_ext` | 73 | ConvoyExt, the node-side Convoy reconciler |
 | `test_convoy_parameter_contract` | 33 | Off-TD contract for Convoy's user-facing parameter scaffold |
 | `test_convoy_host_ladder` | 47 | The runtime ladder that decides WHICH interpreter the daemon runs under, and the register-success revive that replaces a stale down-claiming host line |
+| `test_convoy_realm_recovery` | 23 | The TD-side realm-conflict recovery: `Resolve Realm Conflict` / `Join Other Realm` worker bodies and the rejoin rebind |
 | `test_wizard_convoy_contract` | 20 | Plain-Python contracts for Convoy's setup-wizard routing |
 | `test_convoy_forget_ux` | 5 | The Forget Offline Nodes daemon -> panel contract |
 

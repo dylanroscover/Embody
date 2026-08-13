@@ -122,7 +122,12 @@ The `Tdnexcludetag` parameter on the Embody COMP (default value: `tdn_exclude`) 
 
 **Why not just leave the tag off?** With cascade autotag on, you can't — the cascade would re-apply `tdn` on the next scan. `tdn_exclude` is the only durable opt-out.
 
-**For app-managed copies**: when a runtime `.copy()` clones a COMP that has `tdn_exclude`, the clone inherits the tag and stays invisible to Embody. This is the recommended pattern for app-spawned content (Moonshine's `proj_<id>` projector chains, for example) — Embody won't track or interfere with the copies.
+**For app-managed copies**: a runtime `.copy()` does inherit `tdn_exclude`, but the tag only keeps the clone out of the **TDN pipeline** (cascade autotag, parent inlining, strip, reconstruction, and the dropped-`.tox` sweep). It is not a general "invisible to Embody" flag — duplicate-path detection never reads it. So `tdn_exclude` alone is sufficient only when the copied template is **not itself externalized**. Copy a COMP that *is* externalized (or that contains externalized DATs) and the copy carries the master's Embody tags and file references, joins the master's duplicate group, and still prompts.
+
+For app-spawned copies of an externalized master, use a relationship Embody's duplicate detection already resolves silently:
+
+- **TD-native clone relationship** — set the copy's `clone` parameter to the master, or spawn it as a real clone or replicant. Embody reads TD's clone API (and the ancestor-clone case for DATs inside cloned COMPs), tags the copies as references, and never asks.
+- **Template Master Name convention** — keep the master under a path component named by the `Templatemaster` parameter (default `__template__`). When exactly one operator in a duplicate group matches, it becomes the master and the rest are tagged as clones — no prompt. Zero or two-plus matches fall through to the normal dialog, so the choice stays unambiguous.
 
 **Startup prompts honor the tag too.** The dropped-`.tox` expression sweep (the "Dropped .tox Expression Detected" dialog that offers to clean TD's drag-in `externaltox` expression) skips any COMP carrying `tdn_exclude` — on itself **or on any ancestor**, so tagging a root COMP silences the prompt for its whole subtree. Tag the COMPs in a startup file `tdn_exclude` and Embody won't ask about them (issue #60). The project-wide **Externalize Full Project** scan skips tagged COMPs the same way.
 
@@ -161,6 +166,20 @@ The preference is stored in the **Content Safety** parameter (`Tdndatsafety`) an
     The save-time warning covers only locked operators the TDN export itself serializes. Locked content inside a **nested externalization boundary** — a child COMP with its own TOX or TDN tag, or an exclude-tagged subtree — is that boundary's own concern and does not trigger the parent's warning: a nested TOX-strategy COMP preserves its locked content in its own `.tox`, which is exactly the recommended remedy.
 
     During a batch sweep — such as **Externalize Full Project** — the per-COMP findings are collected and shown as **one combined dialog** at the end, listing every affected COMP, instead of one popup per export. The dialog's **Don't show again** button sets the **Locked Content Warning** parameter (`Tdnlockedwarn`) to `quiet`, suppressing future dialogs; the warning is still written to the log on every export. Set it back to `ask` from the Embody COMP's TDN settings to re-enable the dialog.
+
+### Empty-network overwrite protection
+
+Automatic exports refuse to overwrite a substantial file on disk from a COMP that has **no operator children**. An emptied COMP over a populated file is almost never a real edit — it is the signature of a transiently-emptied shell (an interrupted import, a reload caught mid-flight) about to destroy the only good copy.
+
+| Strategy | What the guard checks | Refusal |
+|----------|-----------------------|---------|
+| **TDN** | The COMP has no children other than annotations, and the `.tdn` on disk parses to a non-empty network — or exists but cannot be parsed at all, which is exactly when its bytes are most worth keeping. | The automatic writers (the dirty sweep, checkpoints, the pre-save update pass) skip the file. |
+| **TOX** | The COMP has no children other than annotations and the `.tox` on disk is larger than 4 KB. A `.tox` can't be parsed for content, so size stands in: an empty COMP's `.tox` is only shell and parameters. | The automatic save skips the file. |
+
+A refusal is written to the log as a **WARNING** naming the operator and the reason (`REFUSED auto-export of ...` for TDN, `REFUSED auto-save of ...` for TOX). The TDN guard warns once per file state rather than on every sweep, and re-baselines its change fingerprint so a stable refusal stops repeating while any later real edit still registers as changed.
+
+!!! tip "When the empty state is intentional"
+    Deliberately emptying a COMP and saving it is still supported — use the **Save** action in the manager (the row's Actions menu). The explicit Save is the deliberate override and writes the empty network to disk. Alternatively, untrack the operator or delete the file if it should no longer exist.
 
 ### Why TDN
 

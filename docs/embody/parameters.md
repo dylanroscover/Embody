@@ -5,7 +5,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 <!-- GENERATED FILE - do not edit by hand. Regenerate with: python dev/embody/tools/generate_parameters_doc.py -->
 
 !!! info "Auto-generated from `Embody.tdn`"
-    This page is generated from the externalized Embody COMP (`dev/embody/Embody.tdn`), the source of truth for its parameters, so it stays in sync with the actual component. **135 parameters** across 9 pages.
+    This page is generated from the externalized Embody COMP (`dev/embody/Embody.tdn`), the source of truth for its parameters, so it stays in sync with the actual component. **137 parameters** across 9 pages.
 
 ## Embody
 
@@ -103,6 +103,8 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 | <a class="par-anchor" id="par-ipaddress" href="#par-ipaddress">IP Address (`Ipaddress`)</a> | Str (read-only) | - | Current LAN endpoint. |
 | <a class="par-anchor" id="par-nodestatus" href="#par-nodestatus">Status (`Nodestatus`)</a> | Str (read-only) | - | Node and connection status; notes an Embody version mismatch only when relevant. |
 | <a class="par-anchor" id="par-lastseen" href="#par-lastseen">Last Seen (`Lastseen`)</a> | Str (read-only) | - | How recently the node was seen. |
+| <a class="par-anchor" id="par-convoyforgetoffline" href="#par-convoyforgetoffline">Forget Offline Nodes... (`Convoyforgetoffline`)</a> | Pulse | - | Remove this machine's offline Convoy node rows. Names the rows it would forget (the first eight, then a count) in a confirmation before anything is removed. A forgotten node rejoins as a NEW identity the next time its project opens, and its TD Python approval resets. A node with a delivery that has not finished is kept and named afterwards -- a finished result never holds a row, because results are fetched by delivery id and outlive it. A node that comes back online before you confirm is skipped. Each computer can only forget its own rows. |
+| <a class="par-anchor" id="par-convoyresolverealm" href="#par-convoyresolverealm">Resolve Realm Conflict... (`Convoyresolverealm`)</a> | Pulse | - | Recover from a split-realm conflict (status "Refused: local_realm_conflict"). Lists the conflicting Convoy realms and their live senders (hostname where reverse DNS answers), then offers both directions: Keep This Realm denylists those senders, resets this machine's realm to the preserved one, and re-registers this node -- Join Other Realm abandons this machine's realm, adopts the other one, and rebinds this project to it (other projects on this machine offer their rejoin on their next Convoy enable). Also usable without a conflict, to denylist -- or join -- foreign realms being advertised on the LAN. |
 | <a class="par-anchor" id="par-convoyinstallhost" href="#par-convoyinstallhost">Repair Convoy App (`Convoyinstallhost`)</a> | Pulse | - | Reinstall or upgrade the background app for YOUR user account. Enabling Convoy installs it automatically; use this to repair a broken install or apply an update. |
 | <a class="par-anchor" id="par-convoystarthost" href="#par-convoystarthost">Start Convoy App (`Convoystarthost`)</a> | Pulse | - | Start the installed host app now, without waiting for the next login. |
 | <a class="par-anchor" id="par-convoystophost" href="#par-convoystophost">Stop Convoy App (`Convoystophost`)</a> | Pulse | - | Stop the host app and keep it stopped. This disables the supervisor first -- otherwise it would restart within a minute and the button would look broken. Jobs already queued stay queued. Use Start Convoy App to resume. |
@@ -176,7 +178,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| <a class="par-anchor" id="par-version" href="#par-version">`Version`</a> | Str (read-only) | `6.0.234` | Embody version string (read-only). |
+| <a class="par-anchor" id="par-version" href="#par-version">`Version`</a> | Str (read-only) | `6.0.241` | Embody version string (read-only). |
 | <a class="par-anchor" id="par-touchbuild" href="#par-touchbuild">Touch Build (`Touchbuild`)</a> | Str (read-only) | `2025.33070` | TouchDesigner build number this version was developed on (read-only). |
 | <a class="par-anchor" id="par-author" href="#par-author">`Author`</a> | Str (read-only) | `Dylan Roscover` | Embody author (read-only). |
 | <a class="par-anchor" id="par-build" href="#par-build">Build Number (`Build`)</a> | Int (read-only) | - | Embody build number (read-only). Incremented with each release. |

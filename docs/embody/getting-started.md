@@ -77,7 +77,7 @@ Embody is a self-contained component — no external dependencies are needed for
 3. **Work with confidence**: Your externalizations are written to disk for diffs and AI context. On project open, TOX-strategy COMPs are always restored from `.tox` files and DATs sync from their externalized source files (`.py`, `.txt`, `.json`, ...). TDN-strategy COMPs are reconstructed from `.tdn` files **only in Roundtrip mode** — in the default Export-on-Save mode the `.toe` remains authoritative and is not rebuilt from `.tdn` on open. See [TDN Mode](externalization.md#tdn-mode-master-switch) for the tradeoffs.
 
 !!! tip
-    To externalize an entire project at once, enable the **Externalize Full Project** option on the Embody COMP. Otherwise, externalize operators selectively with ++lctrl+lctrl++.
+    To externalize an entire project at once, pulse **Externalize Full Project** on the Embody COMP. Otherwise, externalize operators selectively with ++lctrl+lctrl++.
 
 ## Everyday Workflow
 

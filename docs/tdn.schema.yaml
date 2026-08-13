@@ -121,6 +121,17 @@ properties:
       $ref: '#/$defs/parameterValue'
     description: Target COMP's own non-default built-in parameter values. Same format as operator-level
       parameters.
+  sequences:
+    type: object
+    description: Target COMP's own built-in/custom parameter sequences. Same format as operator-level
+      sequences - keyed by sequence name, each value an array of block objects with base-name parameter
+      values. Added in v1.3.
+    additionalProperties:
+      type: array
+      items:
+        type: object
+        additionalProperties:
+          $ref: '#/$defs/parameterValue'
   type:
     type: string
     description: TouchDesigner operator type of the target COMP (e.g., "baseCOMP", "containerCOMP", "geometryCOMP").

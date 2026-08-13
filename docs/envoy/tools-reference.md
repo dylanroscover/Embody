@@ -17,7 +17,7 @@ Responses are compact by default; opt-in flags such as `include_defaults` and `d
 | `delete_op` | `op_path`, `override?` | Delete an operator. Also purges its externalization tracking (any strategy) and the externalized file — unless the file is clone-owned or still referenced by another operator. Refused while another live session claims the scope or wrote it in the last minute; `override=True` bypasses |
 | `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location |
 | `rename_op` | `op_path`, `new_name` | Rename an operator |
-| `get_op` | `op_path`, `include_defaults?` | Get operator info. Parameters are NON-DEFAULT only by default; pass `include_defaults=True` for all parameters. Parameter-heavy COMPs are expensive in full detail, so prefer `read_tdn` for structure reads |
+| `get_op` | `op_path`, `include_defaults?` | Get operator info. Parameters are NON-DEFAULT only by default; pass `include_defaults=True` for all parameters. Parameter-heavy COMPs are expensive in full detail, so prefer `read_tdn` for structure reads. `inputs` has one entry per input connector, `null` for an empty one — entry position IS the real connector index |
 | `query_network` | `parent_path?`, `recursive?`, `op_type?`, `include_utility?` | List operators in a container. Child rows are compact: `path`, `type`, `family`, `depth` (`name` is derivable from the last path segment). Set `include_utility=True` to include annotations |
 | `find_children` | `op_path`, `name?`, `type?`, `depth?`, `tags?`, `text?`, `comment?`, `include_utility?` | Advanced search using TD's `findChildren` — filter by name pattern, type, depth, tags, text content, or comment |
 | `cook_op` | `op_path`, `force?`, `recurse?` | Force-cook an operator |
@@ -80,7 +80,7 @@ Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mod
 |------|-----------|-------------|
 | `connect_ops` | `source_path`, `dest_path`, `source_index?`, `dest_index?`, `comp?` | Wire two operators together. Set `comp=True` for COMP connectors (top/bottom) |
 | `disconnect_op` | `op_path`, `input_index?`, `comp?` | Disconnect an operator's input. Set `comp=True` for COMP connectors (top/bottom) |
-| `get_connections` | `op_path` | Get all input/output connections (includes COMP connections for COMPs) |
+| `get_connections` | `op_path` | Get all input/output connections (includes COMP connections for COMPs). Inputs are reported **per connector**: one entry per input connector carrying its real `index`, with `connected_to: null` for an empty connector — nothing is compacted away, so a wire on connector 2 reports as index 2. Dynamic multi-input ops (Switch, Composite) always show one trailing empty connector, the growth slot |
 
 ## Performance Monitoring
 
@@ -116,7 +116,7 @@ Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mod
 | `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (auto-detects type if omitted) |
 | `remove_externalization_tag` | `op_path`, `delete_file?` | Remove externalization tracking (tag + row + TDN breadcrumb); `delete_file=True` also deletes the file (best-effort). Returns `removed_tags`, `removed_rows`, `removed_anything`, `summary` -- an operator can have a tracked row but NO tag, so check `removed_anything`, not `removed_tags`, to confirm cleanup |
 | `get_externalizations` | _(none)_ | List all externalized operators with status |
-| `save_externalization` | `op_path` | Force save an externalized operator to disk |
+| `save_externalization` | `op_path` | Force save an externalized operator to disk. Refuses to overwrite a non-empty file with an operator-empty COMP and returns an error instead — untrack the operator or delete the file if the empty state is intended |
 | `get_externalization_status` | `op_path` | Get dirty state, build number, timestamp, file path |
 
 ## TDN Format
@@ -125,7 +125,7 @@ Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mod
 |------|-----------|-------------|
 | `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Return the live network as a TDN dict (in-memory, never written to disk). ~20-90× fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
 | `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?`, `embed_all?` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup. Set `embed_all=True` to recurse into TDN-tagged COMPs instead of skipping their children (self-contained export) |
-| `import_network` | `target_path`, `tdn`, `clear_first?`, `override?` | Recreate a network from a `.tdn` file. With `clear_first=True`, gated against live peer sessions like `delete_op` |
+| `import_network` | `target_path`, `tdn`, `clear_first?`, `override?` | Recreate a network from a `.tdn` file. Nested externalized-TDN children are rebuilt from their own `.tdn` files in the same import, recursively, so no nested COMP is left an empty shell; the result's `restored_tdn_shells` lists what was restored. With `clear_first=True`, gated against live peer sessions like `delete_op` |
 | `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What is UNSAVED in TDN networks** -- the live in-memory network vs the on-disk `.tdn`, the view git cannot give. Omit `target` for a whole-project summary (every live TDN COMP, which changed + counts); pass a COMP path OR a `.tdn` file path/bare filename for one COMP in full per-field detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` -- Embody installs a `.tdn` diff driver that keeps those clean. Read-only, non-interactive |
 
 ## TOP Capture
@@ -158,7 +158,7 @@ Concurrent AI sessions (multiple Claude Code windows, other MCP clients) working
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Get recent log entries from ring buffer. Filter by level, source, or use `since_id` for incremental polling |
-| `run_tests` | `suite_name?`, `test_name?`, `override?`, `background?` | Run test suites. `background=True` (recommended for full runs) returns a job id immediately and parks results in `.embody/jobs/` -- poll `get_job_status`; the synchronous mode is severed by the watchdog suites' server restart. Gated while a peer session holds `project:tests` |
+| `run_tests` | `suite_name?`, `test_name?`, `override?`, `background?`, `idempotency_key?` | Run test suites. `background=True` (recommended for full runs) returns a job id immediately and parks results in `.embody/jobs/` -- poll `get_job_status`; the synchronous mode is severed by the watchdog suites' server restart. `idempotency_key` is background only -- a retry with the same key reconciles to the original run's job handle instead of starting a second run (passing it without `background=True` is refused). Gated while a peer session holds `project:tests` |
 
 !!! info "Auto-piggybacked logs"
     When a tool call generates `WARNING` or `ERROR` entries since the previous call, the response carries a `_logs` field with up to the last 8 of them. `INFO`/`DEBUG`/`SUCCESS` history does not ride along — fetch it on demand with `get_logs`. Warning cursors are tracked per session, so concurrent AI sessions each receive their own copy — one session polling first no longer consumes a warning meant for everyone.
@@ -173,7 +173,7 @@ Long operations that outlive the 30-second operation timeout run as disk-backed 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_job_status` | `job_id?` | One job record (status `running`/`done`/`error`, result when done, `stale` when a running record stopped updating), or the 16 newest records without `job_id`. A finished `run_tests` job carries the summary with failures listed first; a finished `save_project` job carries `version_before`/`version_after` |
-| `save_project` | _(none)_ | Save the project as a tracked job. Refused while a test run is active (a mid-run save bakes test-forced parameters into the export); idempotent -- a second call while a save is in flight returns the existing handle. The next call after a save may fail once while the bridge reconnects |
+| `save_project` | `idempotency_key?` | Save the project as a tracked job. Refused while a test run is active (a mid-run save bakes test-forced parameters into the export); idempotent -- a second call while a save is in flight returns the existing handle, and the same `idempotency_key` extends that dedupe to a retry of any age, reconciling it to the original save instead of queuing a second one. The next call after a save may fail once while the bridge reconnects |
 
 ## Bridge Meta-Tools
 

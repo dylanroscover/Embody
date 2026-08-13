@@ -7,15 +7,6 @@ Want to influence it? [Open an issue](https://github.com/dylanroscover/Embody/is
 
 ## Next up
 
-- **A job layer for long operations.** Long-running tools (full test runs,
-  `project.save()`, whole-project TDN export, movie export, `ReleaseAll`)
-  currently race Envoy's 30-second operation timeout, and a mid-operation
-  server restart severs the call even though the work completes. Jobs fix
-  the shape: the tool returns a job id immediately, the work runs to
-  completion inside TD, results park restart-proof on disk, and a
-  `get_job_status` tool polls. One consistent pattern replacing several
-  hand-rolled ones -- and deliberately the same shape as MCP's Tasks
-  extension, so adopting Tasks later is an adapter, not a rearchitecture.
 - **Structured decisions instead of invisible modals.** When an AI session
   drives an operation that needs a human-style decision (palette black-box
   vs full export, file-cleanup keep/delete, dropped-tox expression
@@ -39,9 +30,12 @@ revision with Envoy, so these wait on the ecosystem:
 - **Protocol-revision telemetry.** Log which MCP revision each session
   negotiates -- the tripwire that tells us when 2026-07-28 clients actually
   arrive in the field and the items below become real.
-- **Tasks extension binding.** Bind the job layer (above) to MCP's Tasks
-  extension with capability gating and a polling fallback for older
-  clients.
+- **Tasks extension binding.** Bind the shipped job layer -- `run_tests`
+  with `background=True`, `save_project`, and the `get_job_status` poll,
+  whose results park restart-proof on disk -- to MCP's Tasks extension,
+  with capability gating and a polling fallback for older clients. The
+  job layer was deliberately built in the Tasks shape, so this is an
+  adapter rather than a rearchitecture.
 - **MCP Apps.** Interactive UI surfaces served through the protocol into
   the client. Natural Embody candidates, roughly in value order: a live
   TOP capture viewer (pick an op, watch it -- versus one-shot image

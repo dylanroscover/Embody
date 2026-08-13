@@ -30,6 +30,8 @@ Rules are loaded into every Claude Code conversation automatically. They provide
 | `parameters.md` | Custom parameter design: value access, required help text, section breaks, ordering, pages, naming, and styles |
 | `performance.md` | Performance gating protocol, stop conditions, and a safe-caps summary; the full crash-cause and safe-default-caps tables live in `/td-api-reference` (Heavy-Build Safety) |
 | `td-connectivity.md` | Session-start connectivity checks, the bridge reconciler and Envoy liveness watchdog, and manual recovery steps |
+| `multi-session.md` | The session-start presence check, `_peers` advisories and gate hard stops, and claiming a scope before big or destructive work |
+| `worktree-td-safety.md` | When to isolate multi-step edits in a git worktree instead of the live tree, and the discipline for landing that diff back |
 
 ## Skills (On-Demand)
 
@@ -50,6 +52,7 @@ Skills are loaded only when needed, keeping the context window lean. Claude Code
 | `/parameter-design` | Before creating or designing custom parameters on a COMP |
 | `/td-recovery` | When Envoy/TD connectivity has not self-healed after ~15s |
 | `/multi-session-etiquette` | The moment a `_peers` advisory or a second AI session appears |
+| `/merge-divergent-tox` | When a merge or rebase conflicts on a `.tox`/`.toe`, or when comparing a component across branches, machines, or TD builds |
 | `/brief` | User-invoked: `/brief <request>` compiles a conversational ask into a task brief in `briefs/` (skills to load, anchors, success criteria, gates) that the work then executes from |
 
 Each skill contains step-by-step workflows, API details, and common pitfalls specific to that operation.

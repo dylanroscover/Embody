@@ -358,6 +358,16 @@ The `custom_pars` object maps page names to arrays of parameter definitions. Unl
     count ships only when it differs from the type default. User COMPs
     are never affected -- the registries key on global OP shortcuts.
 
+    One page is dropped outright rather than value-stripped: an `About`
+    page whose parameters are **only** Embody's per-COMP metadata stamp
+    (`Build`, `Date`, `Touchbuild`) is omitted from `custom_pars`
+    entirely, because those values are reconstructed from
+    `externalizations.tsv` on import. The stamp is written on every
+    externalized COMP, so most COMPs' `.tdn` files carry no About page
+    at all. An About page holding any additional authored parameter --
+    including the Embody COMP's own, larger About page -- is exported
+    normally.
+
 ### Page-Grouped Format
 
 Custom parameters are grouped by page name. Each page contains an array of parameter definitions:
@@ -627,6 +637,9 @@ The `flags` array contains string names of flags whose values differ from their 
 | `expose` | `true` | Whether the node is visible in the network editor. |
 | `allowCooking` | `true` | Whether the COMP is allowed to cook. **COMPs only.** |
 
+!!! note "Defaults are per-type creation values"
+    The exporter compares each flag against the **creation defaults probed for that operator type** — the same catalog-probe mechanism used for [parameter creation defaults](#divergent-defaults-and-the-creation-defaults-catalog): a temporary operator of the type is created and its actual flag values recorded. The table above is the common fallback baseline, used when probing is unavailable, not a guarantee for every operator type. For a type whose creation default differs from the listed value, an omitted flag means "this type's creation default", not the value in the table.
+
 ### Format
 
 Flags that default to `false` are listed by name when set to `true`:
@@ -884,9 +897,18 @@ Values that cannot be serialized to JSON (threading objects, operator references
 
 ### Skipped Keys
 
-The following storage keys are never exported (runtime/transient state managed by Embody):
+The following storage keys are never exported — runtime and session state managed by Embody, grouped by what each family holds:
 
-`_tdn_stripped_paths`, `_git_root`, `envoy_running`, `envoy_shutdown_event`, `expanded_paths`, `manage_file_path`, `visible_count`, `hover`
+| Category | Keys |
+|----------|------|
+| Embody runtime / UI state | `_git_root`, `envoy_running`, `envoy_shutdown_event`, `claudius_running`, `expanded_paths`, `expand_order`, `git_status`, `manage_file_path`, `visible_count`, `hover`, `pressed`, `_tip_trace` |
+| Dirty-detection baselines | `_tdn_fingerprints` |
+| Strip and restore markers | `_tdn_stripped_paths`, `_tdn_rel_path`, `_pending_tox_restore`, `_pending_tdn_restore` |
+| Lifecycle flags | `_suppress_dialogs`, `_init_complete`, `_start_in_progress`, `_release_hook_active`, `_tdn_restore_failures` |
+| Test-runner bookkeeping | `_test_saved_filecleanup`, `_test_saved_toxdropexpr`, `_test_saved_status`, `_smoke_test_responses`, `test_results`, `cp_summary`, `_test_run_active`, `_test_run_owner` |
+| Loop generation counters | `_watchdog_gen`, `_clip_watch_gen`, `_shortcut_rec_gen`, `_convoy_gen` |
+
+Two families are worth understanding rather than just listing. The **restore markers** are per-`.toe` recovery state: a serialized `_tdn_rel_path` would make every pasted copy claim the original's file, and a serialized `_pending_tdn_restore` would be replayed by Phase 6a on every import, re-importing the child from a baked ref path forever. The **generation counters** are bumped on every extension reinit purely so a previous instance's pending `run()` tick retires itself; because they change constantly, exporting them rewrote several lines of committed `.tdn` files on every save.
 
 ### Startup Storage
 
@@ -906,6 +928,8 @@ On import, keys in `startup_storage` are restored via `storeStartupValue()`, whi
 ### Import Behavior
 
 Storage is restored during Phase 6a (after DAT content, before positions). Keys in `storage` are restored via `op.store(key, value)`. Keys in `startup_storage` are restored via `op.storeStartupValue(key, value)`. `$type` wrappers are deserialized back to their Python types. Unknown `$type` values are treated as plain dicts with a warning logged.
+
+The [skip list](#skipped-keys) is applied on import as well: a skipped key found in a `.tdn` is ignored rather than restored. A stale entry written by an older build therefore dies on the next round-trip instead of ratcheting forward forever.
 
 ---
 
@@ -963,7 +987,9 @@ When a parent COMP is exported and a child COMP has its own TDN externalization,
 
 **Mutually exclusive with `children`**: When `tdn_ref` is present, the operator definition does not contain a `children` array. The COMP's internal network is defined entirely in the referenced file.
 
-**Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) but does not populate its children. The referenced `.tdn` file is imported separately during reconstruction (sorted by path depth — parents before children).
+**Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) and marks it with a `_pending_tdn_restore` storage key holding the ref path. [Phase 8.6](#import-process) then imports the referenced `.tdn` into that shell **in the same import**, re-entering the importer so deeper nesting recurses naturally; an ancestor-chain guard refuses a true ref cycle (`A.tdn` -> `B.tdn` -> `A.tdn`) while two sibling shells pointing at the same file both fill. A nested externalized COMP is therefore never left empty by an import — an empty shell reads as changed content and the next automatic export would overwrite the child's own good `.tdn`.
+
+Two callers pass `restore_tdn_shells=False` and skip Phase 8.6: **startup reconstruction** (`ReconstructTDNComps`) and the **post-save restore**. Their own depth-sorted loops already import every tracked TDN COMP exactly once, parents before children, so filling shells inline would import the same files twice. In that mode the markers are only cleared, never acted on.
 
 **Cross-validation**: The `tdn_ref` value is checked against two independent sources:
 
@@ -1133,7 +1159,7 @@ An operator is excluded if its path equals one of these or starts with one follo
 
 Importing a `.tdn` file reconstructs the network in a pre-phase plus a series of ordered phases. This ordering ensures that dependencies are satisfied — for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
 
-When `clear_first` is set, existing children are destroyed before import — **except** COMPs tagged `exclude`, which are preserved. Excluded COMPs are invisible to TDN (absent from the `.tdn`), so destroying them would be permanent data loss; the owning app manages their lifecycle instead.
+When `clear_first` is set, existing children are destroyed before import — **except** COMPs carrying the exclude tag (the `Tdnexcludetag` parameter's value, `tdn_exclude` by default), which are preserved. Excluded COMPs are invisible to TDN (absent from the `.tdn`), so destroying them would be permanent data loss; the owning app manages their lifecycle instead.
 
 | Phase | Action | Details |
 |-------|--------|---------|
@@ -1152,6 +1178,7 @@ When `clear_first` is set, existing children are destroyed before import — **e
 | 7a | **Create annotations** | Annotations are created from the `annotations` array (top-level and per-COMP). Each annotation is created as an `annotateCOMP` with `utility=True`, then its mode, title, body text, position, size, color, and opacity are set. |
 | 8 | **Restore file links** | File/syncfile parameters are restored on externalized DATs. |
 | 8.5 | **Restore TOX content** | `.tox` content is loaded into `tox_ref` shells so their internals are present immediately after import. |
+| 8.6 | **Restore nested TDN content** | `tdn_ref` shells are imported from their own `.tdn` files (recursively, with an ancestor-chain cycle guard) so their internals are present immediately after import. Skipped by startup reconstruction and the post-save restore, whose own depth-sorted loops import every tracked TDN COMP exactly once. See [COMP References](#comp-references-tdn_ref). |
 | 9 | **Apply target COMP properties** | The target COMP's own type, parameters, flags, color, tags, and comment are applied — last, so extension reinit triggered by recreating source DATs cannot overwrite them. |
 
 The importer accepts either a full `.tdn` document (with metadata) or just the `operators` array directly.

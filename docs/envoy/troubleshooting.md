@@ -7,11 +7,11 @@
 1. **Check the Textport** (Alt+T) — Embody logs all startup messages there. Look for lines starting with `[Envoy]`.
 2. **Dependency install in progress:** On first enable (or after a version upgrade), Envoy builds its virtual environment and installs `mcp`, `uvicorn`, and other packages. This runs in a background thread — the status reads `Installing deps... (one-time)` and the port appears only when it finishes. A fresh install can take a minute or two; wait for it rather than re-toggling. If it **failed** (e.g., no internet, Python version mismatch), the status shows `Error: Python environment not ready`. Check for pip errors in the Textport and try installing manually:
    ```
-   pip install "mcp>=1.26.0" "attrs<25" pyyaml
+   pip install "mcp>=2.0.0,<3" "attrs<25" pyyaml cryptography
    ```
-   On Windows, also add `"pywin32>=306"`.
+   On Windows, also add `"pywin32>=311"`.
 3. **Port already in use:** If another process is using port 9870 (the default), the server will fail to bind. Change the **Envoy Port** parameter on the Embody COMP to a different port (e.g., 9871).
-4. **TD version too old:** Envoy requires TouchDesigner **2025.32820** or later.
+4. **TD version too old:** Envoy requires TouchDesigner **2025.33070** or later.
 
 ## Restart Loop: "Unable to configure formatter 'default'"
 
@@ -29,7 +29,7 @@ every ~10–25 seconds, with noticeable freezes or frame drops as the watchdog k
 **Fix:**
 
 1. **Update Embody** to v6.0.116 or later — Envoy now passes `use_colors=False` to uvicorn, which skips the `isatty()` probe entirely.
-2. **Or update TouchDesigner** to 2025.32820 or later (the documented minimum) — those builds ship a stdout catcher that implements `isatty()`.
+2. **Or update TouchDesigner** to 2025.33070 or later (the documented minimum) — those builds ship a stdout catcher that implements `isatty()`.
 
 Do **not** patch `.venv/.../uvicorn/logging.py` by hand — the edit is lost whenever the virtual environment is rebuilt (TD upgrades, dependency floor bumps, venv repair).
 

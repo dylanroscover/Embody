@@ -32,16 +32,18 @@ Several Embody nodes can run on one computer. They share that computer's single 
 
 ## How membership works
 
-**Enable Convoy** is the membership and exposure gate. Turning it on says, “this node may join the Convoy on this trusted LAN.” There are no Create, Join, invitation, role, or “Expose This Node” controls.
+**Enable Convoy** is the membership and exposure gate. Turning it on says, “this node may join the Convoy on this trusted LAN.” There are no everyday Create, Join, invitation, role, or “Expose This Node” controls -- the one explicit Join lives inside the **Resolve Realm Conflict...** recovery dialog described in [Setup and Troubleshooting](host-app.md#recovering-from-a-realm-conflict).
 
 - If a compatible Convoy is already present, the node joins it automatically.
-- If none is present, enabled nodes establish one automatically.
+- If none is present, enabled nodes establish one automatically, after a short randomized listen window of 8-20 seconds. Operations attempted during it report `realm_not_established` while genesis settles. The randomization is deliberate: enable two machines at the same moment and they converge on one Convoy instead of each founding its own.
 - Nodes discover changes and reconnect without a manual refresh.
 - Membership is remembered locally across ordinary restarts. Network-visible node status converges automatically, while dangerous permissions and resource limits remain local settings that peers cannot overwrite.
 - Every node is a sibling. A host going offline makes its own nodes unavailable, but reachable siblings continue communicating.
-- Turning **Enable Convoy** off prevents that node from both sending and receiving Convoy work and withdraws it from the LAN.
+- Turning **Enable Convoy** off prevents that node from both sending and receiving Convoy work and withdraws it from the LAN. Disabling the *last* enabled node on a computer withdraws that whole computer: the host app keeps running for local use, but it closes its LAN listener and stops announcing, so none of its rows can be seen, pinged, or remotely started until a node there is enabled again. The setting is durable, and a refused registration never re-enables a node on its own.
 
 The first time you enable Convoy on a machine, Embody asks once for confirmation, naming the trusted-LAN scope it grants and the background host app it will install. That consent is remembered per install: later projects mint their identity silently, and the Setup Wizard's Convoy step counts as the same answer, so you are never asked twice. The node's convoy identity and the granted scope are recorded in the committed `.embody/project.json`, which project clones inherit. A project that has never been saved cannot enable Convoy -- Embody explains why and turns the toggle back off until you save.
+
+A project whose committed binding names a *different* established Convoy -- a clone of a repo from another studio's LAN, for example -- is refused rather than merged, and its **Status** reads `Refused: local_realm_conflict`. Toggling **Enable Convoy** on arms a one-shot offer for about two minutes: when the refusal arrives inside that window, Embody opens **Rejoin Local Convoy**, naming both realms. **Keep Binding** leaves the project bound as it is and refused on this LAN; **Rejoin Local Mesh** rebinds the git-tracked `.embody/project.json` to this machine's mesh, which it adopts on the next registration. That rebind travels to every clone of the repo, so clones still on the original mesh will be refused there until they rejoin the same way. If the *machine* itself is in conflict, resolve that first -- see [Recovering from a realm conflict](host-app.md#recovering-from-a-realm-conflict).
 
 Convoy does not require an attached AI client. When **AI Client** is **None**, enabling Convoy keeps Envoy's loopback command server running only as Convoy's internal TouchDesigner relay; it does not generate client configuration or launch a coding tool. Turning Convoy off stops that otherwise-unused internal server.
 
@@ -78,12 +80,12 @@ The read-only **Convoy Nodes** sequence shows one row per known node:
 |---|---|
 | **Node Name** | Automatic or user-supplied display name |
 | **IP Address** | Current address; several nodes can correctly show the same IP |
-| **Status** | Online, offline, limited, incompatible, conflict, or an actionable error. An incompatible node's Embody version is folded into this column when it is the point |
+| **Status** | Online, offline, or an error. Version and capability mismatches are not shown here: they are reported when an operation is attempted, as **Limited**/**Incompatible** refusals and in the `compatibility` field of `convoy_list_nodes`. A realm conflict likewise shows on the affected machine's own **Status** readout as `Refused: local_realm_conflict`, not in this list |
 | **Last Seen** | Age of the most recent presence update when the host reports it; otherwise the current observed online/offline state |
 
 Per-node controller counts and richer detail are deliberately not standing columns; use `convoy_list_controllers` and `convoy_list_nodes` for live sessions and full node records.
 
-Offline rows may remain visible so a temporarily closed or disconnected project does not disappear from the operator's mental map -- an offline node is still remotely launchable. Convoy routes with stable identities, not names or IP addresses. Genuinely dead rows clear themselves: the host app's retention sweep forgets a node whose project file has been deleted (once it has been silent for half an hour), and any node unseen for 30 days, always sparing a node with a delivery that has not finished (a finished result never holds a row -- results are fetched by delivery id and outlive it). An unplugged or unmounted drive never counts as deleted. A project that saves under a new version number replaces its own old row the moment it re-registers -- one node, one row, even across renames. To remove offline rows immediately, press **Forget Offline Nodes...** on the Convoy page (it names the rows -- the first eight, then a count -- before anything is forgotten), or use the `convoy_forget_node` tool for a single known id.
+Offline rows may remain visible so a temporarily closed or disconnected project does not disappear from the operator's mental map -- an offline node is still remotely launchable, as long as at least one node on that machine is still enabled to keep its host app on the LAN. Convoy routes with stable identities, not names or IP addresses. Genuinely dead rows clear themselves: the host app's retention sweep forgets a node whose project file has been deleted (once it has been silent for half an hour), and any node unseen for 30 days, always sparing a node with a delivery that has not finished (a finished result never holds a row -- results are fetched by delivery id and outlive it). An unplugged or unmounted drive never counts as deleted. A project that saves under a new version number replaces its own old row the moment it re-registers -- one node, one row, even across renames. To remove offline rows immediately, press **Forget Offline Nodes...** on the Convoy page (it names the rows -- the first eight, then a count -- before anything is forgotten), or use the `convoy_forget_node` tool for a single known id.
 
 ## Use Convoy from an AI client
 

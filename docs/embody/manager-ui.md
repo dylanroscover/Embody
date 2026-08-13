@@ -51,7 +51,9 @@ The toolbar provides quick access to common operations. All buttons with keyboar
 | Envoy | Toggle Envoy MCP server | — |
 | Pars | Open the Embody COMP's parameter dialog | — |
 | Filter | Filter box — type to narrow the list (keywords: `changed`, `dirty`); clear it to show all rows | — |
-| Close | Close the Manager window | — |
+| Clear filter (X) | Empties the filter box beside it — it does *not* close the window | — |
+
+To close the Manager window, use the close button in its title bar or pulse **Close Manager** on the Embody COMP.
 
 The toolbar is also visible in minimized mode with a compact subset of buttons.
 
@@ -61,3 +63,76 @@ The toolbar is also visible in minimized mode with a compact subset of buttons.
 - **Open file location** in your system file browser
 - **Export portable tox** to save a self-contained `.tox` with no external dependencies — honors `pre_release`/`post_release` hook DATs in the exported COMP (see [Script hooks](externalization.md#script-hooks))
 - **Filter/search** through externalized operators
+
+### Row actions
+
+Clicking a row's **Strategy** cell opens that operator's **Actions** menu. On an
+untagged COMP it offers the strategy choice (TOX or TDN); on an already-tagged
+COMP it offers:
+
+| Action | What it does |
+|--------|--------------|
+| **Save tox** / **Save tdn** | Writes the externalization now. This is the one *explicit* save gesture, so it also overrides the empty-network overwrite guard — a deliberately emptied COMP can be written over its file here, where the automatic exports refuse (see [Externalization](externalization.md)). |
+| **Reload tox** / **Reload tdn** | Re-imports the COMP from its file on disk, discarding in-TD changes. Since v6.0.241 a `.tdn` reload also rebuilds nested externalized children from their own `.tdn` files, so nothing is left as an empty shell. |
+| **Convert to tox** / **Convert to tdn** | Switches the strategy; the button reads **Remove tox** / **Remove tdn** for the strategy that is currently active, which untags the operator instead. |
+| **Embed DATs in tdn** | TDN only. Per-COMP toggle (a check mark means on) overriding the **Embed DATs (default)** parameter. |
+| **Embed storage in tdn** | TDN only. Per-COMP toggle for storage capture, same override behavior. |
+| **Export portable tox** | Writes a self-contained `.tox` with no external dependencies. |
+| **Reveal in Finder** / **Reveal in Explorer** | Opens the externalized file's folder. Shown only when the operator has a file on disk. |
+
+Clicking a row's **File** cell opens the externalized file itself.
+
+## Status readout (the Embody node viewer)
+
+The Embody COMP's own node viewer carries a live status readout -- the
+at-a-glance surface you get without opening anything. It is three rows, and the
+**marks are the readout**:
+
+```
+[mark] Embody      v6.0.241
+[mark] Saved 2m ago
+[mark] Envoy  [mark] Convoy
+```
+
+Words that a mark already says ("Enabled", "Connected", the port number) are
+deliberately absent, which is what pays for the larger type at node-tile size.
+
+### What the marks mean
+
+| Mark | State |
+|------|-------|
+| `✓` | Fine -- running, connected, done |
+| `✗` | Failed. The reason is in that subsystem's status parameter and the log |
+| `!` | Waiting on you -- an update is available, or an enabled Convoy has no host app |
+| `-` | Deliberately off or skipped (Envoy disabled, auto-save bypassed in Perform Mode) |
+| Spinner (a rotating bar, slash, dash, backslash) | Work in flight -- installing, updating, registering |
+| (blank) | Nothing claimed yet this session |
+
+A spinning mark that turns **red** means *working too long*, not failed: the step
+is still running but has passed its dwell. The dwell is per operation -- 20
+seconds for routine work such as a restart, but ten minutes for the legitimately
+slow ones (environment builds, dependency installs, downloads, repairs, and the
+host app's start), so a first-run dependency install no longer reddens on its way
+to succeeding.
+
+### The rows
+
+- **Embody + version.** The mark is Embody's own state; the version sits at the
+  right, grey at rest. It turns **red only when an update is waiting or failed**,
+  and spins while one is being checked, downloaded, or installed.
+- **Saved.** How long ago your work reached disk -- `12s ago`, `3m ago`,
+  `2h ago`, `51d ago`, or `never` on a project that has not checkpointed yet. The
+  age is measured against the calendar, so a weeks-old project says so instead of
+  folding into a 24-hour clock, and it is seeded at startup from the newest write
+  the externalizations table records, so the answer is there before you ask.
+- **Envoy and Convoy.** One mark each, side by side.
+
+Two things this panel will not do: it never renders a percentage (nothing here
+has an honest denominator, so a busy step shows an elapsed clock instead), and it
+never changes shape -- the same three rows during an install, when settled, and
+when broken.
+
+Every row is derived from parameters on the Embody COMP (`Status`,
+`Autosavestatus`, `Envoystatus`, `Convoystatus`, `Version`, `Updatestatus`,
+`Autoupdate`), so the panel cannot drift from what those parameters say. Full
+failure detail lives there and in the [log](troubleshooting.md).

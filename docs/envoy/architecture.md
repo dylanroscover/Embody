@@ -113,7 +113,7 @@ Envoy supports running multiple TouchDesigner instances simultaneously in the sa
 
 **Port allocation**: Each instance picks a port from a 10-port range starting at the configured Envoy Port (default: 9870). If the base port is occupied by another instance, Envoy scans ports `base+1` through `base+9` and claims the first available one. Up to 10 simultaneous instances are supported per base port.
 
-**Bridge routing**: The STDIO bridge connects to **one active instance** at a time. The `switch_instance` meta-tool redirects the bridge to a different running instance by updating its target port in memory and writing the new `active` field to `.embody/envoy.json`. Switching is instant — no reconnection delay.
+**Bridge routing**: The STDIO bridge connects to **one active instance** at a time. The `switch_instance` meta-tool is **session-local by default**: it re-pins only this session's bridge to the new instance's port in memory, leaving `.embody/envoy.json` and every peer session untouched. Pass `all_sessions=true` to also write the new `active` field (and bump `active_epoch`, which overrides peers' own pins) — that is how you move the whole-user default. Switching is instant — no reconnection delay.
 
 **Instance reachability**: The bridge verifies instances by checking both PID liveness and port responsiveness. An instance is only considered reachable when both checks pass. This filters out stale registry entries from crashed or closed instances.
 
@@ -179,7 +179,7 @@ To close a specific instance in a multi-instance setup, first `switch_instance` 
 
 Envoy handles two error categories:
 
-1. **Protocol errors** (JSON-RPC level) — unknown tools, invalid arguments, or server errors. FastMCP handles these automatically.
+1. **Protocol errors** (JSON-RPC level) — unknown tools, invalid arguments, or server errors. The MCP SDK's `MCPServer` handles these automatically.
 2. **Tool execution errors** — returned in tool results via `{'error': str(e)}` dicts. These indicate the tool ran but encountered a problem (missing operator, invalid path, etc.).
 3. **Recovery hints** — when a tool returns an `{'error': ...}` result, Envoy auto-attaches a `recovery_hints` list (each entry `{cause, action, next_tools}`), matched against the real error string by a small curated table (path-not-found -> `query_network`/`find_children`; parameter-not-found -> `get_op`; wrong family; empty capture -> `get_op_performance`; thread conflict; timeout -> `get_project_performance`). Attached centrally in `_send_response` — additive, never clobbers an existing block, never raises — it steers the agent's next call instead of a blind retry of the same failing tool.
 

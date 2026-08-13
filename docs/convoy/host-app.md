@@ -15,7 +15,7 @@ Convoy uses a small background **host app** on each participating computer. One 
 6. Confirm **Status** and the **Convoy Nodes** sequence on the Embody COMP.
 7. Repeat on the next computer, using the same Embody version.
 
-There is no invitation code or Create/Join decision. Enabled nodes find the Convoy automatically and reconnect after ordinary process, address, or network interruptions.
+There is no invitation code or everyday Create/Join decision -- an explicit Join appears only in the [Resolve Realm Conflict recovery dialog](#recovering-from-a-realm-conflict). Enabled nodes find the Convoy automatically and reconnect after ordinary process, address, or network interruptions.
 
 ## Host App controls
 
@@ -66,6 +66,15 @@ Use one dedicated logged-in user for an unattended show machine. The host app is
 
 Convoy is for a trusted local network. For the initial release, participating computers should be on the same local discovery domain. Guest Wi-Fi isolation, client isolation, strict VLAN boundaries, VPN routing, or blocked local discovery traffic can keep otherwise reachable machines from finding each other.
 
+For a locked-down studio firewall that needs explicit rules, the LAN transport uses two fixed defaults:
+
+| Traffic | Default | Notes |
+|---|---|---|
+| Peer-to-peer | inbound **TCP 47600** | The mutually authenticated TLS transport between host apps |
+| Discovery | **UDP 47601**, multicast group **239.255.67.86** | TTL 1, so it is never routed off the local segment |
+
+Allow both on the private/trusted profile. The host app's own API stays on `127.0.0.1` and needs no firewall rule at all.
+
 - On Windows, keep the network profile **Private** and approve only the Convoy host app on that profile.
 - On macOS, grant the host app Local Network access when prompted.
 - Do not expose Envoy itself; it remains local to its computer.
@@ -87,7 +96,7 @@ Exact wording can vary by release, but these are the useful categories:
 | **Offline** | The node is known but its TD process, host app, or network path is unavailable; automatic reconnect continues |
 | **Limited** | The node is reachable but the requested capability or version contract is unavailable |
 | **Incompatible** | Align Embody versions before sending work |
-| **Conflict - Multiple Convoys Found** | More than one previously established Convoy is visible; do not merge them by guessing. Keep existing peers running and use the Convoy page's Resolve Realm Conflict... action, which names the conflicting realms and their live senders (with hostnames where reverse DNS answers) and offers both directions: **Keep This Realm** denylists the senders and resets, while **Join Other Realm** abandons this machine's realm and adopts the other one -- the right choice on a machine that crowned itself in isolation and now meets the mesh it should be on |
+| **Refused: local_realm_conflict** (realm conflict / multiple Convoys) | This is the exact string that appears in the affected node's combined **Status** readout. Another established Convoy has been reported by evidence this machine trusts -- an admitted peer, or this machine's own saved node records -- so registration is refused rather than merged. A stranger on the LAN advertising a foreign Convoy can no longer latch this state; it is recorded as a powerless, audited advisory, which **Resolve Realm Conflict...** also lists and can denylist or join. Do not merge realms by guessing. Keep the existing peers running and use the Convoy page's **Resolve Realm Conflict...** action, which names the conflicting realms and their live senders (with hostnames where reverse DNS answers) and offers both directions: **Keep This Realm** denylists the live senders and resets, while `Join <realm id>` abandons this machine's realm and adopts the other one -- the right choice on a machine that crowned itself in isolation and now meets the mesh it should be on. Full sequence: [Recovering from a realm conflict](#recovering-from-a-realm-conflict) |
 | **Permission denied / approval required** | Enable the required setting locally on the target; a peer cannot grant itself TD Python or Full Shell |
 | **Error** | Read **Details**, then check version, firewall, host-app health, and the troubleshooting cases below |
 
@@ -97,15 +106,45 @@ Several rows with the same IP address are normal when one computer has multiple 
 
 Work through this list on both computers:
 
-1. Confirm **Enable Convoy** is on and the project has been saved.
+1. Confirm **Enable Convoy** is on and the project has been saved. Disabling the last enabled node on a computer withdraws that whole computer from the LAN: the host app keeps running for local use but closes its LAN listener and stops announcing, so none of its rows can be seen, pinged, or remotely started until a node there is enabled again.
 2. Confirm **Host App** says it is running for the same logged-in user that runs TouchDesigner.
 3. Confirm both machines use the same Embody version.
 4. Confirm both are on the same trusted LAN and are not isolated guest clients.
 5. Check the private-network firewall permission on both sides. A successful connection in one direction does not prove the reverse direction is allowed.
 6. Wait for automatic reconnect; do not repeatedly toggle permissions while a node is converging.
-7. If several established Convoys are reported, stop and use the explicit local recovery path instead of deleting random state.
+7. If several established Convoys are reported, stop and follow [Recovering from a realm conflict](#recovering-from-a-realm-conflict) instead of deleting random state.
 
 If the host app was just updated, run **Repair Convoy App** once more as the repair path, then **Start Convoy App**. Repair works while the host app is running: it asks the old daemon to exit gracefully, waits, and replaces it -- no manual stop needed. Do not manually copy host identities or settings between computers.
+
+## Recovering from a realm conflict
+
+A machine that established its own Convoy in isolation -- powered up alone, or on a disconnected switch -- and later meets the mesh it should have joined ends up refusing registration with `Refused: local_realm_conflict`. Convoy will not merge two established realms by guessing, so the way out is an explicit, operator-confirmed sequence run **on the machine that is on the wrong realm**. Keep the other machines running and announcing throughout, and work through all four steps in order.
+
+1. **Pulse Resolve Realm Conflict... on the Convoy page and choose Keep This Realm.** This silences the live senders of the foreign realm (they are added to the denylist) and then resets this machine's conflict record. Do this first even though you intend to join the other realm: while the conflict is latched and senders keep re-latching it, nothing else settles.
+2. **Turn Enable Convoy back on.** The refusal left this node disabled, and a refused registration never re-enables a node by itself -- the refusal is returned before the row is re-enabled. Nothing in the following steps can work while the node is down.
+3. **Pulse Resolve Realm Conflict... again, while the other machines are on and announcing.** A `Join <realm id>` button is offered only for a standard realm id with a *live* announcer. The realm ids latched in the conflict record are display-only, and the host app refuses to adopt an id nobody is announcing -- it answers "run the join again while the other machine is on and announcing". If no Join button appears, the mesh is not being heard right now; fix that before continuing.
+4. **Choose `Join <realm id>` for the mesh this machine belongs on.** This machine abandons its own realm and adopts that one. Every project on the machine moves: the current project rebinds now, and the others offer their rejoin on their next Convoy enable.
+
+One step is easy to miss: **the Keep This Realm from step 1 left a denylist entry for the machine you just joined.** Remove it (see below) or this computer stays deaf to its new mesh. Embody warns about this in the join dialog and again in the log, naming the senders that need clearing.
+
+A related case needs a different, much shorter fix: a *project* on the wrong realm rather than a machine. A repo cloned from another studio's LAN carries its committed binding with it and is refused here as well, but the machine itself is healthy. Toggle **Enable Convoy** on and take the **Rejoin Local Convoy** offer instead of the sequence above -- see [How membership works](index.md#how-membership-works).
+
+### The denylist (denylist.json)
+
+**Keep This Realm** and **Denylist Senders** write to `denylist.json` in the Convoy data directory:
+
+| Platform | Path |
+|---|---|
+| Windows | `%LOCALAPPDATA%\EmbodyConvoy\denylist.json` |
+| macOS | `~/Library/Application Support/EmbodyConvoy/denylist.json` |
+
+It is a small, deliberately hand-editable file -- Convoy's own dialogs and log lines tell you to edit it -- so it is worth knowing its rules:
+
+- An entry blocks by **host id** or by **certificate fingerprint**, and neither subsumes the other: a fingerprint entry survives the peer changing its host id, a host-id entry survives it rotating its key.
+- **A missing file blocks nobody.** That is the normal state of a machine that has never blocked anything.
+- **An unreadable or malformed file fails closed and refuses every peer** until it is fixed by hand. If a machine suddenly sees nothing after a manual edit, check that file's syntax before anything else.
+- Convoy validates entries as it writes them, and refuses to append to a file that is already failing closed.
+- After joining a realm you previously kept against, remove that realm's machines from the file. A stale entry silences exactly the mesh you just joined.
 
 ## When a node keeps going offline
 
