@@ -1149,6 +1149,75 @@ class TestBindFailureBlacklistLifecycle(EnvoyWatchdogBase):
             'entry for it (late error from an older generation) must clear')
 
 
+class TestWatchdogStrandedTestingStatus(EnvoyWatchdogBase):
+    """The stranded-'Testing' self-heal (field, 2026-08-12): a run whose
+    completion poll died (reinit) or outlived the ~10 min poll window
+    left Status='Testing' forever, with the true prior parked in
+    storage. The watchdog restores it after two consecutive stranded
+    ticks -- and must NEVER touch a live run's Testing status.
+
+    _testRunnerLive is instance-stubbed (the suite itself executes
+    INSIDE a live run, so the real read is always True here)."""
+
+    def setUp(self):
+        super().setUp()
+        # _stranded_* names: the BASE fixture owns _saved_store (a dict
+        # it iterates in tearDown) -- shadowing it with a scalar broke
+        # the base restore ('str' has no .items; caught first run).
+        self._stranded_saved_status = self.embody.par.Status.eval()
+        self._stranded_saved_marker = self.embody.fetch(
+            '_test_saved_status', None, search=False)
+        self._stranded_saved_ticks = getattr(
+            self.envoy, '_strandedTestTicks', 0)
+        self._stranded_saved_liveness = self.envoy._testRunnerLive
+        # Keep the server branch of the tick inert.
+        self.embody.par.Envoyenable = 0
+
+    def tearDown(self):
+        self.envoy._testRunnerLive = self._stranded_saved_liveness
+        self.envoy._strandedTestTicks = self._stranded_saved_ticks
+        if self._stranded_saved_marker is None:
+            self.embody.unstore('_test_saved_status')
+        else:
+            self.embody.store('_test_saved_status',
+                              self._stranded_saved_marker)
+        self.embody.par.Status = self._stranded_saved_status
+        super().tearDown()
+
+    def test_stranded_testing_restores_after_two_ticks(self):
+        live_gen = self.embody.fetch('_watchdog_gen', 1)
+        self.embody.store('_test_saved_status', 'Enabled')
+        self.embody.par.Status = 'Testing'
+        self.envoy._strandedTestTicks = 0
+        self.envoy._testRunnerLive = lambda: False
+
+        self.envoy._watchdogTick(live_gen)
+        self.assertEqual(
+            str(self.embody.par.Status.eval()), 'Testing',
+            'the first stranded tick is dwell, not action')
+        self.envoy._watchdogTick(live_gen)
+        self.assertEqual(
+            str(self.embody.par.Status.eval()), 'Enabled',
+            'the second stranded tick must restore the saved status')
+        self.assertIsNone(
+            self.embody.fetch('_test_saved_status', None, search=False),
+            'the restore must clear the storage marker')
+
+    def test_a_live_run_is_never_yanked(self):
+        live_gen = self.embody.fetch('_watchdog_gen', 1)
+        self.embody.store('_test_saved_status', 'Enabled')
+        self.embody.par.Status = 'Testing'
+        self.envoy._strandedTestTicks = 0
+        self.envoy._testRunnerLive = lambda: True
+
+        self.envoy._watchdogTick(live_gen)
+        self.envoy._watchdogTick(live_gen)
+        self.envoy._watchdogTick(live_gen)
+        self.assertEqual(
+            str(self.embody.par.Status.eval()), 'Testing',
+            "a LIVE run's Testing status must never be yanked -- the "
+            'suppression exists to hold Update off mid-run')
+
 class TestRunTestsStatusRestore(EmbodyTestCase):
     """The MCP _run_tests Status='Testing' stomp: the prior Status survives in
     COMP storage (reinit-proof) and _restoreStatusAfterTests is idempotent.

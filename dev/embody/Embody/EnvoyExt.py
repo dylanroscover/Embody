@@ -5250,6 +5250,11 @@ class EnvoyExt:
             return
 
         try:
+            self._healStrandedTestStatus()
+        except Exception:
+            pass
+
+        try:
             enabled = bool(self.ownerComp.par.Envoyenable.eval())
             status = str(self.ownerComp.par.Envoystatus.eval())
             # The SOCKET is the source of truth, never the internal _starting /
@@ -6855,6 +6860,52 @@ class EnvoyExt:
             self._restoreStatusAfterTests()
             self._signalTestError(pending, f'Test run failed: {e}')
             return None
+
+    def _testRunnerLive(self) -> bool:
+        """Whether an in-TD test run is executing right now.
+
+        Unknown reads as LIVE: the caller (the stranded-status heal)
+        must never yank Status out from under a run it merely failed to
+        see.
+        """
+        try:
+            test_comp = op.unit_tests
+            runner = (getattr(test_comp.ext, 'TestRunnerExt', None)
+                      if test_comp and test_comp.extensionsReady
+                      else None)
+            return bool(getattr(runner, '_running', False))
+        except Exception:
+            return True
+
+    def _healStrandedTestStatus(self) -> None:
+        """Watchdog-tick check: restore a stranded 'Testing' Status.
+
+        A run_tests whose completion poll died (extension reinit
+        mid-run) or whose run OUTLIVED the ~10 min poll window leaves
+        Embody Status at 'Testing' forever -- the only thing that
+        restored it was the now-dead poll chain, and the give-up arm
+        correctly refuses to restore while the run is still live
+        (field, 2026-08-12: two full runs stranded it in one day). The
+        stranded signature is precise: the saved-status storage exists
+        while NO run is live -- a starting run sets storage and
+        _running in the same call, so a tick cannot race it. Two
+        consecutive ticks (~8s) of dwell as a belt anyway.
+        """
+        embody = op.Embody
+        saved = embody.fetch('_test_saved_status', None, search=False)
+        if (saved is not None and not self._testRunnerLive()
+                and str(embody.par.Status.eval()) == 'Testing'):
+            self._strandedTestTicks = getattr(
+                self, '_strandedTestTicks', 0) + 1
+            if self._strandedTestTicks >= 2:
+                self._strandedTestTicks = 0
+                self._log(
+                    "Watchdog: Embody Status stranded at 'Testing' "
+                    'with no test run live -- restoring the saved '
+                    'status', 'WARNING')
+                self._restoreStatusAfterTests()
+        else:
+            self._strandedTestTicks = 0
 
     def _restoreStatusAfterTests(self):
         """Re-enable Embody's Update cycle after tests complete.
