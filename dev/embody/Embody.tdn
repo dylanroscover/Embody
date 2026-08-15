@@ -4,7 +4,7 @@ build: 1148
 generator: Embody/6.0.241
 td_build: 099.2025.33070
 source_file: Embody-6.241.toe
-exported_at: '2026-08-13T00:05:28Z'
+exported_at: '2026-08-13T03:26:06Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -74,7 +74,6 @@ custom_pars:
   - name: Refresh
     style: Pulse
     help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
-    value: true
   - name: Performmode
     style: Toggle
     label: Perform Mode
@@ -911,8 +910,6 @@ sequences:
   - {}
   - {}
   Convoynodes:
-  - {}
-  - {}
   - {}
   - {}
 flags:
