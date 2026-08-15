@@ -6,6 +6,7 @@ import Base from "../layouts/Base.astro";
 import { sampleTdn } from "../fixtures/sample-tdn";
 import { resultImage } from "../lib/specimenThumb";
 import { fixtureSummaries } from "../lib/specimenFallback";
+import { MIN_TD_BUILD } from "../lib/tdBuild";
 import { listSpecimensForCollection } from "../server/db";
 import heroShot from "../assets/embody-screenshot.png";
 import Pillars from "../components/landing/Pillars.astro";
@@ -59,7 +60,7 @@ const jsonLd = {
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
   author: { "@type": "Person", name: "Dylan Roscover" },
   publisher: { "@type": "Organization", name: "TEC", url: "https://tec.design" },
-  softwareRequirements: "TouchDesigner 2025.32280 or later",
+  softwareRequirements: `TouchDesigner ${MIN_TD_BUILD} or later`,
   keywords:
     "TouchDesigner, MCP, Model Context Protocol, AI agent, externalization, version control, TDN, generative art, creative coding, Claude Code, Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot"
 };
@@ -483,6 +484,27 @@ const jsonLd = {
 
   .section--collection .card-grid {
     margin-top: 2.25rem;
+  }
+
+  /* Descriptions are author-written and unbounded -- a raymarching writeup can
+     run to a dozen lines while the card beside it has two. Unclamped, the
+     tallest one set the row height and the teaser grew several screens tall.
+     Clamp to 3 lines with an ellipsis; the full text is on the specimen page.
+     Scoped, so the /collection card rules (2-line list clamp, hidden in
+     gallery) are untouched. */
+  .section--collection .specimen-card p {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+  }
+
+  /* The body is a grid, so in a stretched card its rows shared the leftover
+     height and the badges/title drifted down the card. Pack them at the top
+     and let the trailing space fall below the description. */
+  .section--collection .specimen-card__body {
+    align-content: start;
   }
 
   /* The 3-card teaser uses the global auto-fit grid, which lands a lone third

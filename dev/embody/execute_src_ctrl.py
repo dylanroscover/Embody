@@ -60,10 +60,10 @@ def _rewriteFile(path, transforms):
 def updateVersionDocs(build, new_version):
     """Keep every user-facing version / minimum-build statement in lock-step
     with this save. The build we save with IS the minimum supported build
-    (TD files do not open in older builds), so README, docs/index.md, and
-    CONTRIBUTING.md restate the running build; the README badges restate
-    par.Version and the build's year. Each file is guarded so a missing or
-    unwritable doc can never abort a project save."""
+    (TD files do not open in older builds), so README, docs/index.md,
+    CONTRIBUTING.md and the embody.tools site restate the running build; the
+    README badges restate par.Version and the build's year. Each file is
+    guarded so a missing or unwritable doc can never abort a project save."""
     year = str(build).split('.')[0]
     targets = [
         (root / 'README.md', [
@@ -80,6 +80,16 @@ def updateVersionDocs(build, new_version):
         ]),
         (root / 'CONTRIBUTING.md', [
             ('- **TouchDesigner ',
+             lambda l: BUILD_RE.sub(build, l, count=1)),
+        ]),
+        # embody.tools (Astro). ONE constant feeds every requirement
+        # statement on the site -- the landing page's "Requires
+        # TouchDesigner ..." line and the SoftwareApplication JSON-LD --
+        # so this single anchored line keeps the whole site in sync. It
+        # went stale at 2025.32280 while the docs said 33070 precisely
+        # because the site restated the build as a literal.
+        (root / 'platform' / 'apps' / 'web' / 'src' / 'lib' / 'tdBuild.ts', [
+            ('export const MIN_TD_BUILD',
              lambda l: BUILD_RE.sub(build, l, count=1)),
         ]),
     ]

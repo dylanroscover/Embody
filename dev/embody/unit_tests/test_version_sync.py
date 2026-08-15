@@ -27,6 +27,25 @@ README_ANCHOR = '**Requirements:** TouchDesigner'
 DOCS_ANCHOR = '- **TouchDesigner '
 CONTRIB_ANCHOR = '- **TouchDesigner '
 
+# embody.tools states the support floor too. It is a single exported
+# constant so ONE anchored line keeps the whole site in sync.
+SITE_ANCHOR = 'export const MIN_TD_BUILD'
+SITE_BUILD_PARTS = ('platform', 'apps', 'web', 'src', 'lib', 'tdBuild.ts')
+SITE_SRC_PARTS = ('platform', 'apps', 'web', 'src')
+
+# Hand-maintained machine files served by the site. They are not rewritten by
+# the save hook (they are prose/JSON audited at release), so they get a loud
+# tripwire instead of silent drift.
+SITE_MACHINE_FILES = (
+    ('platform', 'apps', 'web', 'public', 'for-ai.json'),
+    ('platform', 'apps', 'web', 'public', 'for-ai', 'index.html'),
+    ('platform', 'apps', 'web', 'public', 'llms-full.txt'),
+)
+
+# A requirement statement that hard-codes a build, e.g.
+# 'TouchDesigner 2025.32280 or later'. Anywhere but tdBuild.ts this is drift.
+SITE_LITERAL_RE = re.compile(r'TouchDesigner\s+\d{4}\.\d{3,6}')
+
 
 class TestVersionSync(EmbodyTestCase):
 
@@ -212,6 +231,75 @@ class TestVersionSync(EmbodyTestCase):
             readme, op.Embody.par.Touchbuild.eval(),
             'documented minimum build out of sync with par.Touchbuild '
             '(the build of the last save is the support floor)')
+
+    # ------------------------------------------------------------------
+    # embody.tools (the site is a separate deploy -- it drifted silently)
+    # ------------------------------------------------------------------
+
+    def test_site_min_build_matches_docs(self):
+        """The landing page restates the support floor.
+
+        It sat at 2025.32280 while every doc said 2025.33070 -- the site
+        hard-coded the literal and nothing was watching. It now reads one
+        constant that updateVersionDocs rewrites on every save.
+        """
+        readme = self._min_build(self._read('README.md'), README_ANCHOR, 'README.md')
+        site = self._min_build(
+            self._read(*SITE_BUILD_PARTS), SITE_ANCHOR, 'web/src/lib/tdBuild.ts')
+        self.assertEqual(
+            readme, site,
+            'README vs embody.tools minimum build drift -- updateVersionDocs '
+            'should rewrite the MIN_TD_BUILD constant on every save')
+
+    def test_site_states_no_hard_coded_build(self):
+        """No site source may restate the build as a literal.
+
+        That is exactly how the landing page went stale: a second copy of
+        the number with no sync path. Every requirement statement must
+        interpolate MIN_TD_BUILD instead.
+        """
+        src = self._repo_root().joinpath(*SITE_SRC_PARTS)
+        self.assertTrue(src.is_dir(), f'missing site source dir: {src}')
+        allowed = self._repo_root().joinpath(*SITE_BUILD_PARTS)
+        offenders = []
+        for path in src.rglob('*'):
+            if not path.is_file() or path.suffix not in (
+                    '.astro', '.ts', '.tsx', '.js', '.jsx', '.json', '.md'):
+                continue
+            if path == allowed:
+                continue
+            try:
+                text = path.read_text(encoding='utf-8')
+            except (OSError, UnicodeDecodeError):
+                continue
+            for i, line in enumerate(text.splitlines(), 1):
+                if SITE_LITERAL_RE.search(line):
+                    rel = path.relative_to(self._repo_root()).as_posix()
+                    offenders.append(f'{rel}:{i}: {line.strip()}')
+        self.assertEqual(
+            offenders, [],
+            'hard-coded TouchDesigner build in site source -- import '
+            'MIN_TD_BUILD from lib/tdBuild.ts instead:\n' + '\n'.join(offenders))
+
+    def test_site_machine_files_state_the_current_floor(self):
+        """The served machine files (for-ai.*, llms-full.txt) are audited by
+        hand, not rewritten by the save hook -- so assert every requirement
+        statement in them names the current floor rather than trusting the
+        audit to catch it."""
+        readme = self._min_build(self._read('README.md'), README_ANCHOR, 'README.md')
+        stale = []
+        for parts in SITE_MACHINE_FILES:
+            text = self._read(*parts)
+            label = '/'.join(parts)
+            for i, line in enumerate(text.splitlines(), 1):
+                for match in SITE_LITERAL_RE.finditer(line):
+                    build = BUILD_RE.search(match.group(0)).group(0)
+                    if build != readme:
+                        stale.append(f'{label}:{i}: {line.strip()}')
+        self.assertEqual(
+            stale, [],
+            f'machine file states a stale minimum build (current {readme}):\n'
+            + '\n'.join(stale))
 
     # ------------------------------------------------------------------
     # Rewriter unit coverage (pure, no file writes)

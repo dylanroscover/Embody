@@ -26,7 +26,7 @@ Two ways in — both end in the same place. Pick whichever suits you.
 
 === "Paste into a Textport"
 
-    Open your `.toe` project (or a brand-new one), open a Textport (**Dialogs → Textport and DATs**, or **Alt + Shift + T**), and paste this one line:
+    Open your `.toe` project (or a brand-new one), open a Textport (**Dialogs → Textport and DATs**, or **Alt + T**), and paste this one line:
 
     ```python
     import requests, hashlib, tempfile, os; h = {'User-Agent': 'Embody-Install'}; mf = requests.get('https://github.com/dylanroscover/Embody/releases/latest/download/embody-release.json', headers=h, timeout=30).json(); b = requests.get('https://github.com/dylanroscover/Embody/releases/download/%s/%s' % (mf['tag'], mf['asset']), headers=h, timeout=120).content; assert hashlib.sha256(b).hexdigest() == mf['sha256'], 'checksum mismatch'; f = os.path.join(tempfile.gettempdir(), mf['asset']); open(f, 'wb').write(b); n = ui.panes.current; n = n if n.type == PaneType.NETWORKEDITOR else next(x for x in ui.panes if x.type == PaneType.NETWORKEDITOR); print('Embody', mf['version'], 'installed at', n.owner.loadTox(f).path)
