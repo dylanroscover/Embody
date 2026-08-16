@@ -1467,8 +1467,14 @@ class EnvoyMCPServer:
             return {'error': 'not a git worktree/checkout: %s' % wt}
 
         def _git_lines(cwd, *args):
+            # stdin=DEVNULL: TD's GUI stdin handle is not duplicatable, so
+            # without it subprocess.run raises [WinError 50] inside TD.
+            # creationflags: no console flash over TD's GUI (see embody_git).
             r = subprocess.run(['git', '-C', cwd] + list(args),
-                               capture_output=True, text=True, timeout=15)
+                               capture_output=True, text=True, timeout=15,
+                               stdin=subprocess.DEVNULL,
+                               creationflags=getattr(
+                                   subprocess, 'CREATE_NO_WINDOW', 0))
             if r.returncode != 0:
                 raise RuntimeError(
                     (r.stderr or r.stdout).strip()[:300] or 'git failed')

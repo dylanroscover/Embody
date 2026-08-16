@@ -27,6 +27,12 @@ from pathlib import Path
 from glob import glob
 from typing import Optional, Union, Any
 
+# TD is a GUI process on Windows and owns no console, so every console child
+# (git, uv, pip, python) gets a NEW console window -- a flash over the user's
+# TD. CREATE_NO_WINDOW suppresses it; absent off-Windows, hence getattr.
+# EVERY subprocess spawned from inside TD must pass creationflags=NO_WINDOW.
+NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+
 
 class EmbodyExt:
     """
@@ -485,7 +491,7 @@ class EmbodyExt:
                 [venv_python, '-I', '-c',
                  'import platform; print(platform.machine())'],
                 capture_output=True, text=True, timeout=15,
-                stdin=subprocess.DEVNULL)
+                stdin=subprocess.DEVNULL, creationflags=NO_WINDOW)
             if proc.returncode != 0:
                 return None
             return (proc.stdout or '').strip() or None
@@ -848,6 +854,7 @@ class EmbodyExt:
                     cmd,
                     check=True, capture_output=True, text=True,
                     stdin=subprocess.DEVNULL, env=uv_env,
+                    creationflags=NO_WINDOW,
                 )
 
             # Name the spec in the log line: when an install resolves the
@@ -858,6 +865,7 @@ class EmbodyExt:
                 [uv, 'pip', 'install'] + deps + ['--python', venv_python],
                 check=True, capture_output=True, text=True,
                 stdin=subprocess.DEVNULL, env=uv_env,
+                creationflags=NO_WINDOW,
             )
             # Best-effort: what the venv interpreter runs AS when spawned
             # fresh (can differ from the TD process under Rosetta). Pure
@@ -980,7 +988,7 @@ class EmbodyExt:
             subprocess.run(
                 [python_exe, '-m', 'pip', 'install', '--user', 'uv'],
                 check=True, capture_output=True, text=True,
-                stdin=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL, creationflags=NO_WINDOW,
             )
         except subprocess.CalledProcessError as e:
             log(f'Failed to install uv: {e.stderr or e}', 'ERROR')
@@ -1166,7 +1174,7 @@ class EmbodyExt:
         """Returns the .tdn_backup directory path (under the project root)."""
         return Path(project.folder) / '.tdn_backup'
 
-    def _cellVal(self, row, col, default: str = '') -> str:
+    def _cellVal(self, row, col, default: str = '', table=None) -> str:
         """Safe read of an externalizations table cell.
 
         TD's `table[row, col]` returns None when the column doesn't exist or
@@ -1185,8 +1193,15 @@ class EmbodyExt:
         common: a string path-key that simply isn't tracked (a normal "is this
         op in the table?" lookup), and a column absent from the header (legacy
         pre-strategy table).
+
+        `table` lets a caller that already holds the DAT pass it in. The
+        Externalizations property EVALUATES A PARAMETER on every access, so a
+        loop reading N cells otherwise costs N par.eval() calls -- 1,626 of
+        them measured in a single TDN save. Behaviour is identical either way;
+        omit it and the property is read exactly as before.
         """
-        table = self.Externalizations
+        if table is None:
+            table = self.Externalizations
         if table is None:
             return default
         cell = table[row, col]
@@ -3605,28 +3620,31 @@ class EmbodyExt:
             opFamily: COMP or DAT
             strategy: Optional filter -- 'tox', 'tdn', or None for all.
         """
-        if not self.Externalizations:
+        # Hoist the table: the Externalizations property EVALUATES a parameter
+        # on every access, and this loop touched it per cell AND per loop bound.
+        table = self.Externalizations
+        if not table:
             return []
 
         family_str = 'COMP' if opFamily == COMP else 'DAT'
         has_strategy_col = 'strategy' in [
-            self._cellVal(0, c)
-            for c in range(self.Externalizations.numCols)
+            self._cellVal(0, c, table=table)
+            for c in range(table.numCols)
         ]
         ops = []
 
-        for i in range(1, self.Externalizations.numRows):
+        for i in range(1, table.numRows):
             # Filter by strategy if requested
             if has_strategy_col and strategy:
-                row_strategy = self._cellVal(i, 'strategy')
+                row_strategy = self._cellVal(i, 'strategy', table=table)
                 if row_strategy != strategy:
                     continue
             elif not has_strategy_col:
                 # Legacy table without strategy column -- skip TDN rows
-                if self._cellVal(i, 'type') == 'tdn':
+                if self._cellVal(i, 'type', table=table) == 'tdn':
                     continue
 
-            path = self._cellVal(i, 'path')
+            path = self._cellVal(i, 'path', table=table)
             if not path:
                 continue
             oper = op(path)
@@ -5637,11 +5655,12 @@ class EmbodyExt:
             return None
         has_strategy_col = table[0, 'strategy'] is not None
         for i in range(1, table.numRows):
-            if self._cellVal(i, 'path') == op_path:
-                if has_strategy_col and self._cellVal(i, 'strategy') == strategy:
-                    return self._cellVal(i, 'rel_file_path')
+            if self._cellVal(i, 'path', table=table) == op_path:
+                if has_strategy_col and self._cellVal(
+                        i, 'strategy', table=table) == strategy:
+                    return self._cellVal(i, 'rel_file_path', table=table)
                 elif not has_strategy_col:
-                    return self._cellVal(i, 'rel_file_path')
+                    return self._cellVal(i, 'rel_file_path', table=table)
         return None
 
     def _getAllTrackedTDNFiles(self, exclude_path: Optional[str] = None) -> list[str]:
@@ -5658,12 +5677,12 @@ class EmbodyExt:
             return []
         protected = []
         for i in range(1, table.numRows):
-            if self._cellVal(i, 'strategy') != 'tdn':
+            if self._cellVal(i, 'strategy', table=table) != 'tdn':
                 continue
-            path = self._cellVal(i, 'path')
+            path = self._cellVal(i, 'path', table=table)
             if path == exclude_path:
                 continue
-            rel = self._cellVal(i, 'rel_file_path')
+            rel = self._cellVal(i, 'rel_file_path', table=table)
             if rel:
                 protected.append(str(self.buildAbsolutePath(rel)))
         return protected
@@ -5676,8 +5695,8 @@ class EmbodyExt:
         if table[0, 'strategy'] is None:
             return 'tox'  # Legacy table without strategy column
         for i in range(1, table.numRows):
-            if self._cellVal(i, 'path') == comp.path:
-                s = self._cellVal(i, 'strategy')
+            if self._cellVal(i, 'path', table=table) == comp.path:
+                s = self._cellVal(i, 'strategy', table=table)
                 if s in ('tox', 'tdn'):
                     return s
         return None
@@ -5837,22 +5856,148 @@ class EmbodyExt:
 
         return updates
 
+    # Per-frame time budget (ms) for one chunk of the passive TDN dirty sweep.
+    # A 60fps frame is 16.6ms; 8ms leaves room for the rest of the frame.
+    _DIRTY_SWEEP_BUDGET_MS = 8.0
+
+    def _dirtyHandlerDeferred(self) -> None:
+        """Passive dirty scan, spread across frames so it never blocks one.
+
+        Same observable result as dirtyHandler(False) -- every TOX COMP's
+        dirty flag and every TDN COMP's fingerprint-derived flag land in the
+        table -- but the TDN fingerprint pass is chunked under a per-frame
+        time budget instead of fingerprinting every COMP in a single frame.
+        That pass measured 255ms on a 66-TDN-COMP project: a ~15-frame stall
+        at 60fps, paid on every Refresh, so on every save.
+
+        It is NOT threadable: it reads DATs, operators and parameters, all of
+        which are main-thread-only (rules/td-python.md, where a read counts as
+        a write). Chunking with run(delayFrames=) is the sanctioned rung for
+        main-thread-bound work.
+
+        dirtyHandler(True) -- the Update()/save path -- stays synchronous: its
+        callers need the saves to have actually happened when it returns.
+        """
+        # The TOX pass is one cheap flag read per COMP -- keep it inline.
+        for oper in self.getExternalizedOps(COMP, strategy='tox'):
+            dirty = oper.dirty
+            try:
+                # Preserve 'Par' dirty state when oper.dirty is False -- see
+                # dirtyHandler; parameter changes clear only on Save.
+                if dirty or self._cellVal(oper.path, 'dirty') != 'Par':
+                    self.Externalizations[oper.path, 'dirty'] = dirty
+            except Exception as e:
+                self.Log(f"Failed to update dirty state for {oper.path}: {e}",
+                         "DEBUG")
+
+        if not self._tdnEnabled():
+            return
+
+        # Bump the generation so a newer Refresh SUPERSEDES a sweep still in
+        # flight -- rapid saves coalesce instead of stacking overlapping chains.
+        gen = getattr(self, '_dirty_gen', 0) + 1
+        self._dirty_gen = gen
+        exclude_tag = self.my.par.Tdnexcludetag.eval()
+        # Skip root "/" (Full Project export) and app-managed excluded COMPs,
+        # exactly as dirtyHandler does.
+        self._dirty_queue = [
+            oper.path for oper in self.getExternalizedOps(COMP, strategy='tdn')
+            if oper.path != '/' and exclude_tag not in oper.tags]
+        self._dirty_idx = 0
+        # Defer even the FIRST chunk, so the frame that triggered the Refresh
+        # (the user's save) does no fingerprinting at all.
+        run(f"op('{self.my}').ext.Embody._sweepTDNDirtyChunk({gen})",
+            delayFrames=1)
+
+    def _sweepTDNDirtyChunk(self, gen: int) -> None:
+        """One frame's worth of the passive TDN dirty sweep; re-arms until done.
+
+        Bails immediately when superseded by a newer sweep -- a generation
+        mismatch, which also covers an extension reinit having dropped the
+        queue -- or when perform mode is on.
+        """
+        import time
+        if gen != getattr(self, '_dirty_gen', None) or self._performMode:
+            return
+        queue = getattr(self, '_dirty_queue', None)
+        if not queue:
+            return
+        tdn_paths = self._getTDNPaths()
+        exclude_tag = self.my.par.Tdnexcludetag.eval()
+        deadline = time.perf_counter() + self._DIRTY_SWEEP_BUDGET_MS / 1000.0
+        i = getattr(self, '_dirty_idx', 0)
+        while i < len(queue):
+            oper = op(queue[i])
+            i += 1
+            if oper is None:  # deleted since the queue was built
+                continue
+            dirty = self._isTDNDirty(oper, tdn_paths, exclude_tag)
+            try:
+                if dirty:
+                    self.Externalizations[oper.path, 'dirty'] = 'True'
+                elif self._cellVal(oper.path, 'dirty'):
+                    # Clean now -- clear a stale flag left by a prior scan.
+                    self.Externalizations[oper.path, 'dirty'] = ''
+            except Exception as e:
+                self.Log(f"Failed to update dirty state for {oper.path}: {e}",
+                         "DEBUG")
+            # Always finish the COMP in hand: a single fingerprint is not
+            # divisible, so the budget is checked AFTER the work, not before.
+            if time.perf_counter() >= deadline:
+                break
+        self._dirty_idx = i
+        if i < len(queue):
+            run(f"op('{self.my}').ext.Embody._sweepTDNDirtyChunk({gen})",
+                delayFrames=1)
+            return
+        self._dirty_queue = []
+        # Repaint the manager so the badges reflect the finished sweep.
+        try:
+            self.my.op('list/inject_parents').cook(force=True)
+            self.lister.reset()
+        except Exception:
+            pass
+
     def updateDirtyStates(self, externalizationsFolder: str) -> None:
         """Update dirty states and check for path/parameter changes."""
-        dirties = self.dirtyHandler(False)
+        # Passive scan, chunked across frames. It never saves, so it never
+        # returns updates -- the "unsaved tox" tally below has always come
+        # from param_changes here; dirtyHandler(True) on Update() does saves.
+        self._dirtyHandlerDeferred()
+        dirties = []
         # Second status axis: git-uncommitted files (orange badge). Read-only,
         # folder-scoped, self-disabling outside a repo -- see _updateGitStatus.
         self._updateGitStatus()
         param_changes = []
 
+        # Strategy per path, resolved in ONE table pass. _getCompStrategy()
+        # scans the whole table per COMP, so calling it inside this loop was
+        # O(comps x rows) -- ~20k cell reads / ~83ms of blocked main thread on
+        # a 300-row project, every Refresh. Same rows, same answer, one pass.
+        table = self.Externalizations
+        has_strategy_col = (table is not None
+                            and table[0, 'strategy'] is not None)
+        strategy_by_path = {}
+        if table is not None:
+            for i in range(1, table.numRows):
+                path = self._cellVal(i, 'path', table=table)
+                if not path or path in strategy_by_path:
+                    continue
+                if not has_strategy_col:
+                    strategy_by_path[path] = 'tox'  # legacy pre-strategy table
+                else:
+                    s = self._cellVal(i, 'strategy', table=table)
+                    if s in ('tox', 'tdn'):
+                        strategy_by_path[path] = s
+
         for oper in self.getExternalizedOps(COMP) + self.getExternalizedOps(DAT):
             # TDN-strategy COMPs don't use externaltox -- their rel_file_path
             # is managed by _handleTDNAddition / _addToTable, not the par.
             # Their dirty state (structural AND parameter) was already fully
-            # evaluated by dirtyHandler(False) above via the network
-            # fingerprint, so there is no separate compareParameters() pass
-            # here. Skip them to avoid overwriting the .tdn path with "".
-            if oper.family == 'COMP' and self._getCompStrategy(oper) == 'tdn':
+            # evaluated by the dirty scan above via the network fingerprint,
+            # so there is no separate compareParameters() pass here. Skip them
+            # to avoid overwriting the .tdn path with "".
+            if oper.family == 'COMP' and strategy_by_path.get(oper.path) == 'tdn':
                 continue
 
             # A tracked DAT path can resolve to a non-file-backed DAT
@@ -7274,14 +7419,52 @@ class EmbodyExt:
     # ==========================================================================
 
     def cleanupAllDuplicateRows(self) -> None:
-        """Remove all duplicate rows in the externalizations table."""
-        paths = set()
-        for i in range(1, self.Externalizations.numRows):
-            path = self._cellVal(i, 'path')
-            if path:
-                paths.add(path)
-        for path in paths:
-            self.cleanupDuplicateRows(path)
+        """Remove all duplicate rows in the externalizations table.
+
+        ONE pass over the table, grouping rows by (path, type) as it goes,
+        then deleting the stale members of any group holding more than one
+        row. Same keep-the-most-recent-per-type semantics as
+        cleanupDuplicateRows, which this deliberately does NOT call per
+        path: that helper re-scans the WHOLE table for every path it is
+        given, which made this O(rows x paths) -- 182k guarded cell reads
+        and ~500ms of BLOCKED MAIN THREAD on a 300-row project, on every
+        Refresh, so on every save. None of this work can move off the main
+        thread (it reads a DAT), so it has to be cheap instead.
+        """
+        table = self.Externalizations
+        groups = {}
+        for i in range(1, table.numRows):
+            path = self._cellVal(i, 'path', table=table)
+            if not path:
+                continue
+            groups.setdefault(
+                (path, self._cellVal(i, 'type', table=table)), []).append(i)
+
+        def _stamp(i):
+            """Parse a row's timestamp. Deferred until a group is KNOWN to hold
+            duplicates -- parsing every row cost 302 strptime calls per Refresh
+            on a project where almost no row has a duplicate."""
+            try:
+                ts_str = self._cellVal(i, 'timestamp', table=table)
+                return (datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S UTC")
+                        if ts_str else datetime.min)
+            except (ValueError, TypeError) as e:
+                self.Log(f"Failed to parse timestamp for row {i}: {e}", "DEBUG")
+                return datetime.min
+
+        # Collect every stale row first, then delete highest index -> lowest so
+        # the shifting row indices can never invalidate a pending deletion.
+        stale = []
+        for (path, row_type), rows in groups.items():
+            if len(rows) <= 1:
+                continue
+            keep = max(rows, key=_stamp)
+            stale.extend((i, path, row_type) for i in rows if i != keep)
+
+        for i, path, row_type in sorted(stale, reverse=True):
+            table.deleteRow(i)
+            self.Log(f"Removed duplicate row {i} for {path} (type={row_type})",
+                     "INFO")
 
     def cleanupDuplicateRows(self, path: str) -> Optional[int]:
         """Remove duplicate rows for a path, keeping most recent per type.
@@ -7336,11 +7519,16 @@ class EmbodyExt:
         Only includes operators with Embody tags that are not inside
         TD clone hierarchies or replicator outputs.
         """
-        embody_tags = self.getTags()
+        # Set intersection, not `any(tag in oper.tags ...)`: the latter probes
+        # the TD tag store once PER KNOWN TAG per operator (~20x), which
+        # profiled as 19,813 TDStoreTools.__contains__ calls in a single
+        # Refresh. Reading oper.tags once and intersecting is identical in
+        # meaning and reads the store once.
+        embody_tags = set(self.getTags())
         path_groups = {}
 
         for oper in self.root.findChildren(type=COMP, parName='externaltox'):
-            if not any(tag in oper.tags for tag in embody_tags):
+            if not (embody_tags & set(oper.tags)):
                 continue
             if self.isInsideClone(oper) or self.isReplicant(oper):
                 continue
@@ -7349,7 +7537,7 @@ class EmbodyExt:
                 path_groups.setdefault(path, []).append(oper)
 
         for oper in self.root.findChildren(type=DAT, parName='file'):
-            if not any(tag in oper.tags for tag in embody_tags):
+            if not (embody_tags & set(oper.tags)):
                 continue
             if self.isInsideClone(oper) or self.isReplicant(oper):
                 continue
@@ -11388,6 +11576,9 @@ class EmbodyExt:
                 # on the return code or every successful click logs a
                 # false-positive warning.
                 filepath = filepath.replace('/', '\\')
+                # no-console-window-exempt: explorer.exe is a GUI app --
+                # Windows never allocates a console for it (see
+                # test_no_console_window).
                 subprocess.Popen(['explorer', f'/select,{filepath}'])
         except Exception as e:
             self.Log(f'Failed to open file location: {e}', 'ERROR')

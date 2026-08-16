@@ -50,6 +50,13 @@ import subprocess
 from pathlib import Path
 
 
+# TD is a GUI process on Windows: it owns no console, so spawning a console
+# program (git.exe) makes Windows allocate a NEW console window -- a visible
+# flash over the user's TD. CREATE_NO_WINDOW suppresses it. Absent off-Windows,
+# hence getattr. EVERY subprocess spawned from inside TD needs this.
+NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+
+
 # ==========================================================================
 # AI CLIENT CONFIG GENERATION (C6)
 # ==========================================================================
@@ -872,7 +879,8 @@ def update_git_status(ext) -> None:
                 ['git', '--no-optional-locks', 'status', '--porcelain', '-z',
                  '--untracked-files=all', '--', proj],
                 cwd=git_root_s, capture_output=True, text=True,
-                env=clean_env, stdin=subprocess.DEVNULL, timeout=5, check=False)
+                env=clean_env, stdin=subprocess.DEVNULL, timeout=5,
+                check=False, creationflags=NO_WINDOW)
             state['changed'] = parse(r.stdout or '') if r.returncode == 0 else {}
         except Exception:
             state['changed'] = {}

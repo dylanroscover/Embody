@@ -3384,8 +3384,13 @@ def run_command(argv, timeout_s=30.0):
     forever on a wedged service.
     """
     try:
+        # creationflags: schtasks/launchctl are console programs, and this runs
+        # inside TD (a GUI process, no console) -- without this Windows opens a
+        # visible console window for each call. See embody_git.NO_WINDOW.
         proc = subprocess.run(list(argv), capture_output=True, text=True,
-                              timeout=timeout_s)
+                              timeout=timeout_s,
+                              creationflags=getattr(
+                                  subprocess, "CREATE_NO_WINDOW", 0))
     except subprocess.TimeoutExpired:
         return 1, "", "timed out after %ss: %s" % (timeout_s, argv[0])
     except OSError as e:

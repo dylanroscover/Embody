@@ -1799,9 +1799,12 @@ def configure_tdn_diff_driver(ext, target_dir, python_cmd):
         # Register the driver in the repo's git config (idempotent).
         script_str = str(script_path).replace('\\', '/')
         driver = '"%s" "%s"' % (python_cmd, script_str)
+        # creationflags: no console flash over TD's GUI (see embody_git).
         git_kwargs = dict(cwd=str(target_dir), capture_output=True,
                           text=True, timeout=10,
-                          stdin=subprocess.DEVNULL)
+                          stdin=subprocess.DEVNULL,
+                          creationflags=getattr(
+                              subprocess, 'CREATE_NO_WINDOW', 0))
         current = subprocess.run(
             ['git', 'config', '--get', 'diff.tdn.textconv'], **git_kwargs)
         if (current.stdout or '').strip() != driver:

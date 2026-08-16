@@ -190,6 +190,9 @@ def launch_editor(ext, cwd, app_name, bundle_id=None, win_exe_candidates=(),
                 exe = os.path.expandvars(cand)
                 if Path(exe).exists():
                     # argv (no shell): spaces/&/trailing-sep in the dir are safe.
+                    # no-console-window-exempt: a GUI editor executable --
+                    # Windows never allocates a console for one, so there is
+                    # nothing to suppress (see test_no_console_window).
                     subprocess.Popen([exe, d], stdin=subprocess.DEVNULL, env=env)
                     return True
             if win_shim:
@@ -203,8 +206,12 @@ def launch_editor(ext, cwd, app_name, bundle_id=None, win_exe_candidates=(),
                     # .cmd/.bat shims run through cmd; the doubled-quote form
                     # (""prog" "arg"") keeps program+dir literally quoted so a
                     # metachar (& | etc.) in the dir is not re-parsed by cmd.
+                    # CREATE_NO_WINDOW: the cmd shim is a console program and
+                    # would flash a window over TD (see embody_git.NO_WINDOW).
                     subprocess.Popen(f'cmd /c ""{resolved}" "{d}""',
-                                     stdin=subprocess.DEVNULL, env=env)
+                                     stdin=subprocess.DEVNULL, env=env,
+                                     creationflags=getattr(
+                                         subprocess, 'CREATE_NO_WINDOW', 0))
                     return True
         except OSError as e:
             ext.Log(f'{app_name}: launch failed ({e}).', 'WARNING')

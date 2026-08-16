@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.0.243
+
+A console window stopped flashing over TouchDesigner on every save, and the save that flashed it got roughly four times faster -- five separate whole-table or whole-filesystem scans, each run per operation.
+
+- **No more command-prompt flash on save.** TouchDesigner is a GUI process and owns no console, so every `subprocess` call from inside it made Windows allocate -- and immediately destroy -- a real console window. The manager's orange "uncommitted" badge asks `git status` on every Refresh, so every save flashed an **empty** black window (the output was already going through a pipe). The cure, `creationflags=CREATE_NO_WINDOW`, was already applied at one `git init` site under a comment naming this exact symptom; it had never been swept across the rest. All nine remaining TD-side spawn sites now suppress it: the git-status scan, `preflight_landing`'s git calls, three `git config` calls, Uninstall's per-key `git config` loop, the venv/uv/pip installers, Convoy's supervisor commands, and the editor launch shim. `preflight_landing` also gained the `stdin=DEVNULL` that TD's non-duplicatable GUI stdin handle requires. A new `test_no_console_window` suite fails on any future spawn that ships without the flag; a call may opt out only by stating why at the call site.
+
+- **Saving a TDN COMP got ~4x faster, and Refresh ~16x.** Profiling an *empty* COMP save found ~99% of it was bookkeeping. Five fixes, each removing redundant work rather than moving it: the stale-file scan rglob'd the **entire project folder** on every save and then filtered the results down to one COMP's subtree (196.9ms -> 0.31ms); `cleanupAllDuplicateRows` collected the unique paths and then re-scanned all rows once **per path**, 182,408 cell reads to find duplicates among 303 rows (504.7ms -> 6.9ms); `_getCompStrategy` ran a full table scan **per COMP** inside a per-operator loop (82.8ms -> 18.3ms); the duplicate-path check probed the TD tag store once per known tag per operator, 19,813 store lookups per Refresh, now one set intersection (66); and the `Externalizations` property EVALUATES a parameter on every access while `_cellVal` called it per cell -- 1,626 evaluations in a single save, now 404. Net: an empty TDN save 306ms -> 95ms, Refresh 724ms -> 44.5ms.
+
+- **The dirty sweep no longer blocks the save frame.** Refresh fingerprinted every TDN COMP in the project on every save -- 255ms in a single frame on a 66-COMP project, a ~15-frame stall at 60fps, paid even when you saved one empty COMP. None of it can move off the main thread (it reads DATs, operators and parameters), so it is now chunked across frames under an 8ms budget, superseded-generation guarded so rapid saves coalesce instead of stacking, and deferred so the frame that triggered the save does no fingerprinting at all. `dirtyHandler(True)` -- the Update/save path whose callers need the writes to have happened -- stays synchronous. Verified landing byte-identical table state across 302 rows.
+
 ## v6.0.241
 
 Two field-reported TDN bugs, both confirmed by live reproduction before a line was written -- one of them a silent data-loss class.

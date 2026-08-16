@@ -1243,12 +1243,17 @@ class TDNExt:
 				# the continuity sweep / next full save; recovery is tsv-driven, so a
 				# no-row orphan .tdn is ignored -- never resurrected.
 				before_tdn = set()
+				# One resolve() cache for BOTH cleanup passes of this export:
+				# they otherwise resolve the same ~65 tracked paths twice.
+				# Operation-scoped, so nothing is cached across saves.
+				resolve_cache = {}
 				if not skip_cleanup:
 					before_tdn = TDNExt._collectExistingTDNFiles(
 						scan_folder, root_path)
 					# Only files Embody tracks are deletion candidates --
 					# never reclaim a stray the user placed themselves.
-					before_tdn = self._restrictToTrackedTDN(before_tdn)
+					before_tdn = self._restrictToTrackedTDN(
+						before_tdn, resolve_cache=resolve_cache)
 
 				write_result = TDNExt._safe_write_tdn(
 					filepath, content, scan_folder)
@@ -1261,7 +1266,8 @@ class TDNExt:
 					if cleanup_protected:
 						protected.extend(cleanup_protected)
 					stale = TDNExt._cleanupStaleTDNFiles(
-						before_tdn, protected, scan_folder)
+						before_tdn, protected, scan_folder,
+						resolve_cache=resolve_cache)
 					if stale:
 						self._log(
 							f'Cleaned up {len(stale)} stale .tdn file(s)',
@@ -5457,7 +5463,29 @@ class TDNExt:
 	# STALE FILE CLEANUP
 	# =========================================================================
 
-	def _restrictToTrackedTDN(self, files: set) -> set:
+	@staticmethod
+	def _resolveCached(path_str, cache=None):
+		"""Path.resolve() memoized per caller-supplied dict.
+
+		resolve() is a FILESYSTEM call (nt._getfinalpathname): 308 of them
+		measured in one TDN save, because the stale-cleanup pass and the
+		tracked-restriction pass each resolve the same ~65 tracked paths
+		independently. Sharing one cache for the duration of a single export
+		halves that. Scope the cache to one operation -- never module-global,
+		so a path that genuinely changes on disk is re-resolved next time.
+		Falls back to the raw string exactly as the callers did before.
+		"""
+		if cache is not None and path_str in cache:
+			return cache[path_str]
+		try:
+			resolved = str(Path(path_str).resolve())
+		except Exception:
+			resolved = None
+		if cache is not None:
+			cache[path_str] = resolved
+		return resolved
+
+	def _restrictToTrackedTDN(self, files: set, resolve_cache=None) -> set:
 		"""Restrict stale-cleanup deletion candidates to files Embody tracks.
 
 		The stale sweep previously treated EVERY pre-existing .tdn under
@@ -5484,17 +5512,14 @@ class TDNExt:
 			return set()
 		resolved_tracked = set()
 		for p in tracked:
-			try:
-				resolved_tracked.add(str(Path(p).resolve()))
-			except Exception:
-				pass
+			r = TDNExt._resolveCached(p, resolve_cache)
+			if r is not None:
+				resolved_tracked.add(r)
 		kept = set()
 		for f in files:
-			try:
-				if str(Path(f).resolve()) in resolved_tracked:
-					kept.add(f)
-			except Exception:
-				pass
+			r = TDNExt._resolveCached(f, resolve_cache)
+			if r is not None and r in resolved_tracked:
+				kept.add(f)
 		return kept
 
 	@staticmethod
@@ -5516,23 +5541,28 @@ class TDNExt:
 		if not base.is_dir():
 			return set()
 
-		all_tdn = {str(p) for p in base.rglob('*.tdn')}
-
 		if root_path == '/':
-			return all_tdn
+			return {str(p) for p in base.rglob('*.tdn')}
 
-		# Scope to files belonging to this root
+		# Scope the SCAN, not merely its result. A sub-COMP's .tdn files can
+		# only ever be `<prefix>.tdn` or live under `<prefix>/`, so rglobbing
+		# the WHOLE project folder and filtering afterwards read the entire
+		# tree on every TDN save -- measured at 146ms to discover 1 relevant
+		# file, the single dominant cost of saving an empty COMP. Identical
+		# result set, a fraction of the I/O.
 		prefix = root_path.lstrip('/')
 		scoped = set()
-		for f in all_tdn:
-			rel = str(Path(f).relative_to(base)).replace('\\', '/')
-			stem = rel.removesuffix('.tdn')
-			if stem == prefix or stem.startswith(prefix + '/'):
-				scoped.add(f)
+		own = base / f'{prefix}.tdn'
+		if own.is_file():
+			scoped.add(str(own))
+		subtree = base / prefix
+		if subtree.is_dir():
+			scoped.update(str(p) for p in subtree.rglob('*.tdn'))
 		return scoped
 
 	@staticmethod
-	def _cleanupStaleTDNFiles(before_files, written_files, base_folder):
+	def _cleanupStaleTDNFiles(before_files, written_files, base_folder,
+							  resolve_cache=None):
 		"""Delete .tdn files that existed before export but weren't written.
 
 		Safety:
@@ -5551,11 +5581,23 @@ class TDNExt:
 		from pathlib import Path
 
 		base_root = Path(base_folder).resolve()
-		written_set = {str(Path(f).resolve()) for f in written_files}
+		written_set = set()
+		for f in written_files:
+			r = TDNExt._resolveCached(f, resolve_cache)
+			if r is None:
+				# Cannot prove this just-written file differs from a deletion
+				# candidate -> delete NOTHING. (The unguarded resolve() this
+				# replaces raised here, which also deleted nothing. Fail closed:
+				# never risk unlinking the file we just wrote.)
+				return []
+			written_set.add(r)
 		deleted = []
 
 		for fpath_str in before_files:
-			fpath = Path(fpath_str).resolve()
+			resolved = TDNExt._resolveCached(fpath_str, resolve_cache)
+			if resolved is None:
+				continue  # unresolvable -> never a deletion candidate
+			fpath = Path(resolved)
 
 			# Safety: only delete .tdn files
 			if fpath.suffix.lower() != '.tdn':

@@ -51,6 +51,9 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+# No console flash over TD's GUI -- see embody_git.NO_WINDOW for the why.
+NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+
 
 # ==========================================================================
 # UNINSTALL / DEINIT (C5)
@@ -220,7 +223,8 @@ def compute_uninstall_plan(ext, target_dir=None):
                 r = subprocess.run(['git', 'config', '--get', key],
                                    cwd=str(root), capture_output=True,
                                    text=True, timeout=5,
-                                   stdin=subprocess.DEVNULL)
+                                   stdin=subprocess.DEVNULL,
+                                   creationflags=NO_WINDOW)
                 if r.returncode == 0 and (r.stdout or '').strip():
                     plan['unset'].append(key)
             except Exception:
@@ -429,7 +433,8 @@ def execute_uninstall_plan(ext, plan, include_review=False):
         try:
             subprocess.run(['git', 'config', '--unset', key],
                            cwd=str(root), capture_output=True, text=True,
-                           timeout=5, stdin=subprocess.DEVNULL)
+                           timeout=5, stdin=subprocess.DEVNULL,
+                           creationflags=NO_WINDOW)
             summary['unset'] += 1
         except Exception as e:
             ext.Log(f'Uninstall: could not un-set {key}: {e}', 'DEBUG')
