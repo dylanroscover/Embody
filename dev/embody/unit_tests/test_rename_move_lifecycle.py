@@ -285,11 +285,18 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         """cleanupDuplicateRows should keep the row with the most recent timestamp."""
         comp, _, _ = self._externalize_comp(self.workspace, 'dup_comp')
 
-        # Manually insert a duplicate row with an older timestamp
-        self.embody_ext.Externalizations.appendRow([
-            comp.path, comp.type, 'old/path.tox',
-            '2020-01-01 00:00:00 UTC', '', '', ''
-        ])
+        # Insert a TRUE duplicate: copy the real row (so every column lands in
+        # its own slot, whatever the schema is) and age its timestamp. Hand-
+        # writing a short literal row here silently misaligned once the
+        # `strategy` column was added -- 'old/path.tox' landed IN `strategy`,
+        # so the row was only a duplicate under the old (path, type) key.
+        table = self.embody_ext.Externalizations
+        src = next(i for i in range(1, table.numRows)
+                   if table[i, 'path'].val == comp.path)
+        dup = [table[src, c].val for c in range(table.numCols)]
+        dup[[table[0, c].val for c in range(table.numCols)].index('timestamp')] = \
+            '2020-01-01 00:00:00 UTC'
+        table.appendRow(dup)
 
         # Count rows before cleanup
         count_before = 0

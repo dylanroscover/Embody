@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1041
-generator: Embody/6.0.243
+build: 1053
+generator: Embody/6.0.244
 td_build: 099.2025.33070
-source_file: Embody-6.243.toe
-exported_at: '2026-08-16T05:16:57Z'
+source_file: Embody-6.244.toe
+exported_at: '2026-08-16T15:43:45Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -71,6 +71,7 @@ operators:
     - {}
     - {}
     - {}
+    - {}
   custom_pars:
     Embody:
     - name: Setupwizard
@@ -113,6 +114,7 @@ operators:
     - name: Refresh
       style: Pulse
       help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
+      value: true
     - name: Performmode
       style: Toggle
       label: Perform Mode
@@ -857,7 +859,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.243
+      value: 6.0.244
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -958,7 +960,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 303
+    rows: 304
     cols: 11
   flags:
   - viewer

@@ -1269,6 +1269,64 @@ class EmbodyExt:
             oper.par.file = normalized
             oper.par.file.readOnly = readonly
 
+    def _updateRowCells(self, row_key, changes: dict, strategy: str = '') -> bool:
+        """Apply several cell changes to ONE externalizations row in ONE write.
+
+        The Externalizations DAT is syncfile-backed (`externalizations.tsv`),
+        so every CHANGED cell triggers a full DAT-to-file sync -- measured
+        ~15ms each on a 300-row table, while an identical scratch tableDAT with
+        no file costs 0.0ms. (The raw 46KB write is under 2ms of that; the rest
+        is TD's own serialize + cook + dependency propagation. The A/B is what
+        justifies this helper -- the exact sub-step does not.) A save that
+        touched build, timestamp and dirty separately paid that cost three
+        times; replaceRow coalesces them into one: 37.6ms -> 1.1ms, measured.
+
+        Deliberately does NOT toggle par.syncfile to batch writes. That was
+        tried and is unsafe: toggling it schedules a reload that lands a frame
+        later and clobbers the in-memory changes with the stale file.
+
+        Returns True when the row was written, False when nothing changed (the
+        write is skipped entirely -- replaceRow touches the file even when the
+        values are identical).
+        """
+        table = self.Externalizations
+        if table is None:
+            return False
+        row = row_key if isinstance(row_key, int) else None
+        if row is None:
+            # Strategy-aware when asked: a COMP may hold BOTH a tox and a tdn
+            # row, and matching on path alone would let a TDN save stamp the
+            # TOX row clean (and vice versa). Callers that know their strategy
+            # pass it; without one this keeps the historical first-match.
+            for i in range(1, table.numRows):
+                if self._cellVal(i, 'path', table=table) != row_key:
+                    continue
+                if strategy and self._cellVal(i, 'strategy', table=table) not in (
+                        '', strategy):
+                    continue
+                row = i
+                break
+        if row is None or not (0 < row < table.numRows):
+            # LOUD: the caller believes this operator is tracked. Swallowing
+            # this silently let Save() write its .tox, log SUCCESS and return
+            # True for a COMP whose recovery row had vanished -- and
+            # dirtyHandler counts that in its "Saved N" tally, which must
+            # never report a non-save.
+            self.Log(f"Externalizations row not found for {row_key!r} -- "
+                     f"{sorted(changes)} not recorded", "WARNING")
+            return False
+        headers = [self._cellVal(0, c, table=table) for c in range(table.numCols)]
+        current = [self._cellVal(row, c, table=table)
+                   for c in range(table.numCols)]
+        updated = list(current)
+        for col, val in changes.items():
+            if col in headers:
+                updated[headers.index(col)] = '' if val is None else str(val)
+        if updated == current:
+            return False
+        table.replaceRow(row, updated)
+        return True
+
     def buildAbsolutePath(self, rel_path: Union[str, Path]) -> Path:
         """Build absolute path from relative path, handling cross-platform issues."""
         return Path(project.folder) / self.normalizePath(rel_path)
@@ -3849,18 +3907,24 @@ class EmbodyExt:
                     pass
             oper.par.enableexternaltox = True
 
-            # Update build info
+            # Update build info on the OPERATOR now; the matching table cells
+            # are collected and written ONCE after the .tox is actually on
+            # disk. Four separate cell writes here cost four full rewrites of
+            # the syncfile-backed .tsv (~15ms each, measured), and writing
+            # them before saveExternalTox() also advanced the table's build
+            # past what was on disk if the save then threw.
+            row_changes = {}
             if hasattr(oper.par, 'Build'):
                 new_build = oper.par.Build.val + 1
                 oper.par.Build = new_build
-                self.Externalizations[opPath, 'build'] = str(new_build)
+                row_changes['build'] = str(new_build)
 
             if hasattr(oper.par, 'Date'):
                 oper.par.Date.val = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
             if hasattr(oper.par, 'Touchbuild'):
                 oper.par.Touchbuild = app.build
-                self.Externalizations[opPath, 'touch_build'] = app.build
+                row_changes['touch_build'] = app.build
 
             # Issue #86: saveExternalTox() would otherwise write Embot's
             # annotation parts into the .tox -- see _retireVizBeforeWrite.
@@ -3875,11 +3939,13 @@ class EmbodyExt:
             else:
                 timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
-            self.Externalizations[opPath, 'timestamp'] = timestamp
             self.param_tracker.updateParamStore(oper)
-            self.Externalizations[opPath, 'dirty'] = False
-            # Refresh position/color metadata
-            self._updatePositionInTable(oper, opPath)
+            # build/touch_build (from above) + timestamp + dirty in ONE write.
+            row_changes['timestamp'] = timestamp
+            row_changes['dirty'] = False
+            # Position/color merges into the SAME write -- see _positionCells.
+            row_changes.update(self._positionCells(oper))
+            self._updateRowCells(opPath, row_changes, strategy='tox')
 
             self.Log(f"Saved {opPath}", "SUCCESS")
             return True
@@ -3949,18 +4015,28 @@ class EmbodyExt:
                     self.Externalizations[opPath, 'rel_file_path'] = rel_path
                     self.Log(f"Updated root TDN path: {rel_path}", "INFO")
 
-            # Update build info
+            # Update build info. The table's `build` MUST be written before the
+            # export: TDNExt._getBuildNumber treats the TSV as source of truth
+            # and the exporter stamps the .tdn header from it, so skipping this
+            # freezes the recorded build while par.Build advances (caught in
+            # testing -- par.Build 8, table build 1).
+            #
+            # touch_build is deliberately NOT written here: _trackTDNExport
+            # records it after a successful export in the fuller
+            # '099.2025.33070' form, so writing app.build here only guaranteed
+            # a second differing value and an extra full rewrite of the
+            # syncfile-backed .tsv (~15ms measured -- see _updateRowCells).
             if bump_build and hasattr(oper.par, 'Build'):
                 new_build = oper.par.Build.val + 1
                 oper.par.Build = new_build
-                self.Externalizations[opPath, 'build'] = str(new_build)
+                self._updateRowCells(opPath, {'build': str(new_build)},
+                                     strategy='tdn')
 
             if hasattr(oper.par, 'Date'):
                 oper.par.Date.val = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
             if hasattr(oper.par, 'Touchbuild'):
                 oper.par.Touchbuild = app.build
-                self.Externalizations[opPath, 'touch_build'] = app.build
 
             # Export TDN -- protect .tdn files belonging to OTHER tracked
             # TDN COMPs so the stale-file cleanup doesn't delete them.
@@ -3972,11 +4048,11 @@ class EmbodyExt:
 
             if result.get('success'):
                 timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-                self.Externalizations[opPath, 'timestamp'] = timestamp
                 self.param_tracker.updateParamStore(oper)
-                self.Externalizations[opPath, 'dirty'] = ''
-                # Refresh position/color metadata
-                self._updatePositionInTable(oper, opPath)
+                # timestamp + dirty + position in ONE row write.
+                tdn_changes = {'timestamp': timestamp, 'dirty': ''}
+                tdn_changes.update(self._positionCells(oper))
+                self._updateRowCells(opPath, tdn_changes, strategy='tdn')
                 # Snapshot the network structure so _isTDNDirty returns False
                 self._storeTDNFingerprint(oper)
                 self.Log(f"Exported TDN for {opPath}", "SUCCESS")
@@ -4029,13 +4105,18 @@ class EmbodyExt:
             # Mark clean + stamp now; defer the heavy fingerprint re-baseline off
             # this frame. Without re-baselining, _isTDNDirty reads false-dirty
             # forever and the next Ctrl+S re-exports an already-current COMP.
-            self.Externalizations[opPath, 'timestamp'] = datetime.utcnow().strftime(
-                '%Y-%m-%d %H:%M:%S UTC')
-            self.Externalizations[opPath, 'dirty'] = ''
-            # Recovery restores the boundary's own node_x/y/color from the table
-            # (not the .tdn), so keep them current or a moved/recolored COMP
-            # recovers at stale coordinates (SaveTDN does the same).
-            self._updatePositionInTable(oper, opPath)
+            # ONE row write for all of it (see _updateRowCells): a checkpoint
+            # fires on the autosave drain, so its table churn is the most
+            # frequent of any save path. Position/color rides along because
+            # recovery restores the boundary's own node_x/y/color from the
+            # TABLE (not the .tdn) -- a moved or recolored COMP would otherwise
+            # come back at stale coordinates.
+            cp_changes = {
+                'timestamp': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
+                'dirty': '',
+            }
+            cp_changes.update(self._positionCells(oper))
+            self._updateRowCells(opPath, cp_changes, strategy='tdn')
             self._setAutosaveStatus('Saved ' + self._autosaveClock())
             # delayFrames=2 staggers the ~40ms re-baseline off F+1, where the
             # drain schedules the NEXT root's checkpoint -- so they never co-fire.
@@ -5890,24 +5971,39 @@ class EmbodyExt:
                 self.Log(f"Failed to update dirty state for {oper.path}: {e}",
                          "DEBUG")
 
-        if not self._tdnEnabled():
-            return
-
-        # Bump the generation so a newer Refresh SUPERSEDES a sweep still in
-        # flight -- rapid saves coalesce instead of stacking overlapping chains.
+        # Bump the generation BEFORE the enabled check: an early return here
+        # used to leave an in-flight chain matching, so switching TDN off
+        # mid-sweep kept it fingerprinting and writing TDN dirty cells.
         gen = getattr(self, '_dirty_gen', 0) + 1
         self._dirty_gen = gen
+        if not self._tdnEnabled():
+            self._dirty_queue = []
+            return
+
         exclude_tag = self.my.par.Tdnexcludetag.eval()
         # Skip root "/" (Full Project export) and app-managed excluded COMPs,
         # exactly as dirtyHandler does.
-        self._dirty_queue = [
+        queue = [
             oper.path for oper in self.getExternalizedOps(COMP, strategy='tdn')
             if oper.path != '/' and exclude_tag not in oper.tags]
-        self._dirty_idx = 0
+        # RESUME an identical queue instead of restarting it. Refresh is
+        # pulse-driven and the manager calls it synchronously on every tree
+        # click, so resetting the index each time starved the sweep: a user
+        # clicking faster than the sweep drains meant it never finished and
+        # every click paid a fresh partial pass.
+        if queue != getattr(self, '_dirty_queue', None):
+            self._dirty_idx = 0
+        self._dirty_queue = queue
+        # Resolve the per-sweep constants ONCE and carry them with the queue.
+        # _getTDNPaths() is a full table scan; reading it per chunk put ~33 of
+        # them where the synchronous sweep had 1 -- and it sat outside the
+        # frame budget, so each chunk really cost scan + budget.
+        self._dirty_tdn_paths = self._getTDNPaths()
+        self._dirty_exclude_tag = exclude_tag
         # Defer even the FIRST chunk, so the frame that triggered the Refresh
         # (the user's save) does no fingerprinting at all.
         run(f"op('{self.my}').ext.Embody._sweepTDNDirtyChunk({gen})",
-            delayFrames=1)
+            delayFrames=1, fromOP=self.my)
 
     def _sweepTDNDirtyChunk(self, gen: int) -> None:
         """One frame's worth of the passive TDN dirty sweep; re-arms until done.
@@ -5922,8 +6018,13 @@ class EmbodyExt:
         queue = getattr(self, '_dirty_queue', None)
         if not queue:
             return
-        tdn_paths = self._getTDNPaths()
-        exclude_tag = self.my.par.Tdnexcludetag.eval()
+        # Resolved once per sweep by _dirtyHandlerDeferred, not per chunk.
+        tdn_paths = getattr(self, '_dirty_tdn_paths', None)
+        if tdn_paths is None:
+            tdn_paths = self._getTDNPaths()
+        exclude_tag = getattr(self, '_dirty_exclude_tag', None)
+        if exclude_tag is None:
+            exclude_tag = self.my.par.Tdnexcludetag.eval()
         deadline = time.perf_counter() + self._DIRTY_SWEEP_BUDGET_MS / 1000.0
         i = getattr(self, '_dirty_idx', 0)
         while i < len(queue):
@@ -5931,16 +6032,21 @@ class EmbodyExt:
             i += 1
             if oper is None:  # deleted since the queue was built
                 continue
-            dirty = self._isTDNDirty(oper, tdn_paths, exclude_tag)
+            # The FINGERPRINT is inside the guard too. Left outside it, one
+            # COMP whose fingerprint raised escaped this run() callback, so the
+            # chain never re-armed -- and because every later Refresh rebuilds
+            # the same queue and stops at the same COMP, TDN dirty badges died
+            # for the rest of the session with nothing pointing at the cause.
+            # A detached callback must not be able to fail silently.
             try:
+                dirty = self._isTDNDirty(oper, tdn_paths, exclude_tag)
                 if dirty:
                     self.Externalizations[oper.path, 'dirty'] = 'True'
                 elif self._cellVal(oper.path, 'dirty'):
                     # Clean now -- clear a stale flag left by a prior scan.
                     self.Externalizations[oper.path, 'dirty'] = ''
             except Exception as e:
-                self.Log(f"Failed to update dirty state for {oper.path}: {e}",
-                         "DEBUG")
+                self.Log(f"Dirty scan failed for {oper.path}: {e}", "WARNING")
             # Always finish the COMP in hand: a single fingerprint is not
             # divisible, so the budget is checked AFTER the work, not before.
             if time.perf_counter() >= deadline:
@@ -5964,7 +6070,6 @@ class EmbodyExt:
         # returns updates -- the "unsaved tox" tally below has always come
         # from param_changes here; dirtyHandler(True) on Update() does saves.
         self._dirtyHandlerDeferred()
-        dirties = []
         # Second status axis: git-uncommitted files (orange badge). Read-only,
         # folder-scoped, self-disabling outside a repo -- see _updateGitStatus.
         self._updateGitStatus()
@@ -6026,13 +6131,10 @@ class EmbodyExt:
                 param_changes.append(oper.path)
                 self.Externalizations[oper.path, 'dirty'] = 'Par'
 
-        if dirties or param_changes:
-            msgs = []
-            if dirties:
-                msgs.append(f"{len(dirties)} unsaved tox{'es' if len(dirties) > 1 else ''}")
-            if param_changes:
-                msgs.append(f"{len(param_changes)} COMP{'s' if len(param_changes) > 1 else ''} with param changes")
-            self.Log(f"Found {' and '.join(msgs)}", "INFO")
+        if param_changes:
+            plural = 's' if len(param_changes) > 1 else ''
+            self.Log(f"Found {len(param_changes)} COMP{plural} with param "
+                     f"changes", "INFO")
 
     # ==========================================================================
     # ADDITION / SUBTRACTION HANDLING
@@ -6307,15 +6409,31 @@ class EmbodyExt:
                 dirty, build_num, touch_build
             ])
 
-    def _updatePositionInTable(self, oper: 'OP', op_path: str) -> None:
-        """Update position/color metadata for an operator in the table."""
-        if self.Externalizations[0, 'node_x'] is None:
-            return
-        self.Externalizations[op_path, 'node_x'] = str(int(oper.nodeX))
-        self.Externalizations[op_path, 'node_y'] = str(int(oper.nodeY))
+    def _positionCells(self, oper: 'OP') -> dict:
+        """The row's position/color cells, or {} on a table without them.
+
+        Returned rather than written so a caller already updating the row can
+        MERGE them into its own single write. Every save path was otherwise
+        paying a second full DAT-to-file sync (see _updateRowCells) purely to
+        record three cells it was about to touch anyway.
+        """
+        if self.Externalizations is None or (
+                self.Externalizations[0, 'node_x'] is None):
+            return {}
         c = oper.color
-        self.Externalizations[op_path, 'node_color'] = (
-            f'{c[0]:.4f},{c[1]:.4f},{c[2]:.4f}')
+        return {
+            'node_x': str(int(oper.nodeX)),
+            'node_y': str(int(oper.nodeY)),
+            'node_color': f'{c[0]:.4f},{c[1]:.4f},{c[2]:.4f}',
+        }
+
+    def _updatePositionInTable(self, oper: 'OP', op_path: str,
+                               strategy: str = '') -> None:
+        """Write position/color metadata on its own (callers not already
+        updating the row -- otherwise merge _positionCells into their dict)."""
+        cells = self._positionCells(oper)
+        if cells:
+            self._updateRowCells(op_path, cells, strategy=strategy)
 
     def handleSubtraction(self, oper: OP) -> None:
         """Process removal of an operator from externalization."""
@@ -7431,14 +7549,42 @@ class EmbodyExt:
         Refresh, so on every save. None of this work can move off the main
         thread (it reads a DAT), so it has to be cheap instead.
         """
+        self._dedupeRows()
+
+    def _dedupeRows(self, only_path: Optional[str] = None) -> dict:
+        """Remove duplicate rows in ONE table pass; return each group's keeper.
+
+        The single implementation behind both cleanupAllDuplicateRows() and
+        cleanupDuplicateRows(): the rule (keep the most recent row per
+        externalization) existed twice, in two shapes, so any change to
+        tie-breaking had to land in both.
+
+        Groups by (path, STRATEGY) -- not (path, type). A COMP may legitimately
+        hold both a TOX row and a TDN row, and `type` holds the OP type
+        ('base'/'container'), identical on both, while `strategy` is what
+        distinguishes them. Keying on `type` put a legitimate pair in ONE group
+        and silently deleted the older row, destroying a tracking row and its
+        recovery pointer. `type` remains the key only for legacy tables that
+        predate the strategy column, where it did hold 'tox'/'tdn'.
+
+        Args:
+            only_path: restrict to one op path (the per-path callers); None
+                sweeps the whole table.
+
+        Returns:
+            {(path, kind): kept_row_index} in table order.
+        """
         table = self.Externalizations
+        if table is None:
+            return {}
+        kind_col = 'strategy' if table[0, 'strategy'] is not None else 'type'
         groups = {}
         for i in range(1, table.numRows):
             path = self._cellVal(i, 'path', table=table)
-            if not path:
+            if not path or (only_path is not None and path != only_path):
                 continue
             groups.setdefault(
-                (path, self._cellVal(i, 'type', table=table)), []).append(i)
+                (path, self._cellVal(i, kind_col, table=table)), []).append(i)
 
         def _stamp(i):
             """Parse a row's timestamp. Deferred until a group is KNOWN to hold
@@ -7454,64 +7600,34 @@ class EmbodyExt:
 
         # Collect every stale row first, then delete highest index -> lowest so
         # the shifting row indices can never invalidate a pending deletion.
-        stale = []
-        for (path, row_type), rows in groups.items():
-            if len(rows) <= 1:
-                continue
-            keep = max(rows, key=_stamp)
-            stale.extend((i, path, row_type) for i in rows if i != keep)
+        kept, stale = {}, []
+        for key, rows in groups.items():
+            keep = rows[0] if len(rows) == 1 else max(rows, key=_stamp)
+            kept[key] = keep
+            stale.extend((i, key[0], key[1]) for i in rows if i != keep)
 
-        for i, path, row_type in sorted(stale, reverse=True):
+        for i, path, kind in sorted(stale, reverse=True):
             table.deleteRow(i)
-            self.Log(f"Removed duplicate row {i} for {path} (type={row_type})",
-                     "INFO")
+            self.Log(f"Removed duplicate row {i} for {path} ({kind})", "INFO")
+            # Deleting shifts every higher index down by one.
+            for key, row in kept.items():
+                if row > i:
+                    kept[key] = row - 1
+        return kept
 
     def cleanupDuplicateRows(self, path: str) -> Optional[int]:
-        """Remove duplicate rows for a path, keeping most recent per type.
+        """Remove duplicate rows for ONE path; return the surviving row index.
 
-        A COMP can legitimately have both a TOX row and a TDN row -- these are
-        different externalization types, not duplicates. Only rows with the
-        same path AND same type are true duplicates.
+        A COMP can legitimately have both a TOX row and a TDN row -- different
+        externalizations, not duplicates. Shares its implementation with
+        cleanupAllDuplicateRows via _dedupeRows so the keep-the-most-recent
+        rule (and the tie-break) exists in exactly one place.
+
+        When a path holds several externalizations the index of the LAST one in
+        table order is returned, matching the previous behaviour.
         """
-        type_groups = {}
-
-        for i in range(1, self.Externalizations.numRows):
-            if self._cellVal(i, 'path') == path:
-                row_type = self._cellVal(i, 'type')
-                if row_type not in type_groups:
-                    type_groups[row_type] = {'indices': [], 'timestamps': []}
-                type_groups[row_type]['indices'].append(i)
-                try:
-                    ts_str = self._cellVal(i, 'timestamp')
-                    timestamp = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S UTC") if ts_str else datetime.min
-                except (ValueError, TypeError) as e:
-                    self.Log(f"Failed to parse timestamp for row {i}: {e}", "DEBUG")
-                    timestamp = datetime.min
-                type_groups[row_type]['timestamps'].append(timestamp)
-
-        kept_row = None
-        rows_to_delete = []
-
-        for type_key, group in type_groups.items():
-            indices = group['indices']
-            timestamps = group['timestamps']
-            if len(indices) <= 1:
-                if indices:
-                    kept_row = indices[0]
-                continue
-            most_recent = timestamps.index(max(timestamps))
-            row_to_keep = indices[most_recent]
-            kept_row = row_to_keep
-            for i in indices:
-                if i != row_to_keep:
-                    rows_to_delete.append(i)
-
-        for i in sorted(rows_to_delete, reverse=True):
-            row_type = self._cellVal(i, 'type')
-            self.Externalizations.deleteRow(i)
-            self.Log(f"Removed duplicate row {i} for {path} (type={row_type})", "INFO")
-
-        return kept_row
+        kept = self._dedupeRows(only_path=path)
+        return list(kept.values())[-1] if kept else None
 
     def _buildPathGroups(self) -> dict:
         """Map normalized external paths to lists of operators sharing them.

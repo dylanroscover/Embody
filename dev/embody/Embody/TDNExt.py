@@ -5547,9 +5547,10 @@ class TDNExt:
 		# Scope the SCAN, not merely its result. A sub-COMP's .tdn files can
 		# only ever be `<prefix>.tdn` or live under `<prefix>/`, so rglobbing
 		# the WHOLE project folder and filtering afterwards read the entire
-		# tree on every TDN save -- measured at 146ms to discover 1 relevant
-		# file, the single dominant cost of saving an empty COMP. Identical
-		# result set, a fraction of the I/O.
+		# tree on every TDN save -- measured at 150-200ms across runs to
+		# discover 1 relevant file, the single dominant cost of saving an empty
+		# COMP. Identical result set, a fraction of the I/O. Note root '/' still
+		# needs the full scan, so whole-project exports gain nothing here.
 		prefix = root_path.lstrip('/')
 		scoped = set()
 		own = base / f'{prefix}.tdn'
@@ -6721,11 +6722,16 @@ class TDNExt:
 				elif table[i, 'type'].val == 'tdn':
 					is_tdn_row = True
 				if is_tdn_row:
-					table[i, 'rel_file_path'] = rel_path
-					table[i, 'timestamp'] = timestamp
-					table[i, 'dirty'] = ''
-					table[i, 'build'] = build_str
-					table[i, 'touch_build'] = tb_str
+					# ONE row write, not five cell writes: the table is
+					# syncfile-backed, so each changed cell rewrites the whole
+					# .tsv (~15ms measured). See EmbodyExt._updateRowCells.
+					self.ownerComp.ext.Embody._updateRowCells(i, {
+						'rel_file_path': rel_path,
+						'timestamp': timestamp,
+						'dirty': '',
+						'build': build_str,
+						'touch_build': tb_str,
+					})
 					_stamp_recovery_pointer()
 					return
 
