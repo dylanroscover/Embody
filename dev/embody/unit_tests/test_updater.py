@@ -313,7 +313,6 @@ class _StubUpdater:
         self._embody = embody
         self.logs = []
         self.dialogs = []
-        self._STRUCTURAL_PARS = _updater_cls()._STRUCTURAL_PARS
 
     def _log(self, message, level='INFO'):
         self.logs.append((level, message))
@@ -328,6 +327,13 @@ class _StubUpdater:
         par.val = value
         par.readOnly = was
 
+    # The real reconciliation helpers, so the tests exercise shipping code.
+    def _parMatches(self, par, mode, value):
+        return _updater_cls()._parMatches(par, mode, value)
+
+    def _setParMode(self, par, mode, value):
+        return _updater_cls()._setParMode(self, par, mode, value)
+
 
 class TestUpdateParReconciliation(EmbodyTestCase):
     """What an update may and may not do to the component's parameters.
@@ -341,7 +347,9 @@ class TestUpdateParReconciliation(EmbodyTestCase):
     """
 
     def _comp(self, with_viz=True):
-        comp = self.sandbox.create(baseCOMP, 'upd_host')
+        # A containerCOMP, like the real Embody: nodeview/opviewer/w/h are
+        # panel-COMP pars and do not exist on a baseCOMP.
+        comp = self.sandbox.create(containerCOMP, 'upd_host')
         if with_viz:
             comp.create(containerCOMP, 'viz_status')
         return comp
@@ -355,31 +363,93 @@ class TestUpdateParReconciliation(EmbodyTestCase):
 
     # --- build-owned built-ins ---
 
-    def test_structural_par_is_asserted_after_a_preserving_reload(self):
-        """The v6.0.152 -> v6.0.244 field bug: the status viz shipped and was
-        never displayed, because the preserved opviewer was still empty."""
+    _VIEWER = {'builtin_pars': {
+        'nodeview': {'mode': 'CONSTANT', 'value': 'opviewer'},
+        'opviewer': {'mode': 'CONSTANT', 'value': './viz_status'},
+    }}
+
+    def test_the_whole_viewer_pair_moves_not_just_opviewer(self):
+        """The v6.0.245 miss, pinned.
+
+        The status readout needs BOTH nodeview and opviewer. Setting opviewer
+        alone leaves it inert -- TD greys the field out while Node View is
+        'Default Viewer' -- so the update still presents as a no-op. That is
+        exactly what shipped in v6.0.245 and had to be corrected.
+        """
         comp = self._comp()
-        comp.par.opviewer = ''
+        comp.par.nodeview = 'default'          # what a preserving reload keeps
+        comp.par.opviewer = './viz_status'     # already right, and still inert
         stub = _StubUpdater(comp)
-        _updater_cls()._applyStructuralPars(stub)
+        _updater_cls()._applyBuildOwnedPars(stub, self._VIEWER)
+        self.assertEqual('opviewer', str(comp.par.nodeview.val),
+                         'opviewer does nothing while Node View is Default')
         self.assertEqual('./viz_status', comp.par.opviewer.val)
 
-    def test_structural_par_is_left_alone_when_its_target_is_absent(self):
-        """Never point the viewer at something this build does not ship."""
+    def test_a_par_is_left_alone_when_its_target_is_absent(self):
+        """Never point a viewer at something this build does not ship."""
         comp = self._comp(with_viz=False)
-        comp.par.opviewer = ''
+        comp.par.opviewer = './out1'
         stub = _StubUpdater(comp)
-        _updater_cls()._applyStructuralPars(stub)
-        self.assertEqual('', comp.par.opviewer.val)
+        _updater_cls()._applyBuildOwnedPars(stub, self._VIEWER)
+        self.assertEqual('./out1', comp.par.opviewer.val)
 
-    def test_structural_par_already_correct_is_not_rewritten(self):
+    def test_already_correct_pars_are_not_rewritten(self):
         comp = self._comp()
+        comp.par.nodeview = 'opviewer'
         comp.par.opviewer = './viz_status'
         stub = _StubUpdater(comp)
-        _updater_cls()._applyStructuralPars(stub)
-        self.assertEqual('./viz_status', comp.par.opviewer.val)
-        self.assertEqual([], [m for lvl, m in stub.logs if 'set to' in m],
+        _updater_cls()._applyBuildOwnedPars(stub, self._VIEWER)
+        self.assertEqual([], [m for lvl, m in stub.logs if 'asserted' in m],
                          'an already-correct par must not be re-set')
+
+    def test_a_bound_par_keeps_its_binding(self):
+        """w/h ship in BIND mode. Assigning .val would drop them to CONSTANT
+        and silently break the panel sizing (rules/parameters.md)."""
+        comp = self._comp()
+        comp.par.w.bindExpr = 'me.par.h'
+        comp.par.w.mode = type(comp.par.w.mode).BIND
+        stub = _StubUpdater(comp)
+        _updater_cls()._applyBuildOwnedPars(stub, {'builtin_pars': {
+            'w': {'mode': 'BIND', 'value': 'me.par.h'}}})
+        self.assertEqual('BIND', comp.par.w.mode.name)
+        self.assertEqual('me.par.h', comp.par.w.bindExpr)
+
+    def test_extension_wiring_is_carried_across_an_update(self):
+        """The same hole would silently drop an extension a new build adds --
+        ext*object/name/promote are built-in pars too."""
+        comp = self._comp()
+        stub = _StubUpdater(comp)
+        _updater_cls()._applyBuildOwnedPars(stub, {'builtin_pars': {
+            'ext0name': {'mode': 'CONSTANT', 'value': 'Embody'},
+            'ext0promote': {'mode': 'CONSTANT', 'value': '1'},
+        }})
+        self.assertEqual('Embody', str(comp.par.ext0name.val))
+        self.assertTrue(bool(comp.par.ext0promote.eval()))
+
+    def test_a_manifest_without_builtin_pars_asserts_nothing(self):
+        comp = self._comp()
+        comp.par.nodeview = 'default'
+        stub = _StubUpdater(comp)
+        _updater_cls()._applyBuildOwnedPars(stub, {'version': '6.0.245'})
+        self.assertEqual('default', str(comp.par.nodeview.val))
+
+    def test_the_manifest_declares_the_viewer_pair_and_not_user_placement(self):
+        """The reconciliation is only as good as what the exporter records."""
+        import json
+        from pathlib import Path
+        mf = Path(project.folder).parent / 'release' / 'embody-release.json'
+        if not mf.is_file():
+            self.skipTest('no release manifest in this checkout')
+        declared = json.loads(mf.read_text(encoding='utf-8')).get(
+            'builtin_pars') or {}
+        self.assertIn('nodeview', declared,
+                      'without nodeview the status viz stays invisible')
+        self.assertIn('opviewer', declared)
+        for owned_by_user in ('nodeX', 'nodeY', 'color', 'externaltox'):
+            self.assertNotIn(
+                owned_by_user, declared,
+                '%s belongs to the user or the swap -- an update must never '
+                'replay it' % owned_by_user)
 
     # --- user settings ---
 
@@ -389,7 +459,7 @@ class TestUpdateParReconciliation(EmbodyTestCase):
         stub = _StubUpdater(comp)
         manifest = {'custom_pars': ['Mysetting', 'Another']}
         _updater_cls()._pruneRetiredPars(stub, manifest)
-        _updater_cls()._applyStructuralPars(stub)
+        _updater_cls()._applyBuildOwnedPars(stub, self._VIEWER)
         self.assertEqual('user-chosen', comp.par.Mysetting.val)
         self.assertEqual('also-mine', comp.par.Another.val)
 

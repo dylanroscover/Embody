@@ -192,6 +192,40 @@ def onProjectPreSave():
     writeReleaseManifest(comp, save_path, new_version, build)
 
 
+# Built-in pars an update must NOT carry across: the user's own placement, and
+# the ones the updater itself drives during the swap. Everything else that this
+# build sets away from its TD default belongs to the build.
+_USER_OWNED_BUILTINS = frozenset({
+    'nodex', 'nodey', 'nodewidth', 'nodeheight',   # where the user put it
+    'color', 'comment',                            # how the user marked it
+    'pageindex',                                   # which par page is showing
+    'externaltox', 'enableexternaltox',            # the updater's own swap
+    'enableexternaltoxpulse', 'reloadcustom',
+})
+
+
+def _buildOwnedBuiltins(comp):
+    """{name: {mode, value}} for every non-default built-in this build sets."""
+    out = {}
+    for par in comp.pars():
+        try:
+            if par.isCustom or par.isDefault:
+                continue
+            if par.name.lower() in _USER_OWNED_BUILTINS:
+                continue
+            mode = par.mode.name
+            if mode == 'EXPRESSION':
+                out[par.name] = {'mode': mode, 'value': par.expr}
+            elif mode == 'BIND':
+                out[par.name] = {'mode': mode, 'value': par.bindExpr}
+            elif mode == 'CONSTANT':
+                out[par.name] = {'mode': mode, 'value': str(par.val)}
+            # EXPORT mode is driven by another op -- never replayed.
+        except Exception:
+            continue
+    return dict(sorted(out.items()))
+
+
 def writeReleaseManifest(comp, tox_path, version, build):
     """Write release/embody-release.json describing the exported tox."""
     import hashlib
@@ -222,6 +256,16 @@ def writeReleaseManifest(comp, tox_path, version, build):
             # settings went away. Absent on pre-6.0.245 manifests, where the
             # updater simply skips pruning.
             'custom_pars': sorted(p.name for p in comp.customPars),
+            # Every BUILT-IN par this build sets away from its TD default --
+            # the component's own wiring, not the user's settings. The same
+            # preserving reload strands ALL of these, so a build can never make
+            # one take effect on an existing install: v6.0.233 shipped the
+            # status readout and `nodeview`/`opviewer` never moved, and the same
+            # hole would silently drop a newly added extension (ext*object).
+            # Mode travels with the value because w/h are BIND here, and
+            # assigning .val to a bound par would switch it to CONSTANT and
+            # break the panel sizing (rules/parameters.md).
+            'builtin_pars': _buildOwnedBuiltins(comp),
         }
         manifest_path = Path(tox_path).parent / 'embody-release.json'
         tmp = Path(str(manifest_path) + '.tmp')

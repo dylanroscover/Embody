@@ -1,5 +1,19 @@
 # Changelog
 
+## v6.0.246
+
+v6.0.245 fixed one parameter where the whole category was broken, and shipped without confirming the node actually displayed anything. It did not. This does.
+
+- **The viewer needs BOTH parameters, and v6.0.245 moved one.** The status readout is shown only when `nodeview` is `Operator Viewer` AND `opviewer` points at `viz_status`. v6.0.245 asserted `opviewer` alone, which TouchDesigner greys out and ignores while Node View is `Default Viewer` -- so the update still presented as a no-op, exactly the symptom it was released to fix.
+
+- **The set is no longer hand-picked.** A correct install carries **25** built-in parameters set away from their TouchDesigner defaults, and a value-preserving reload strands every one of them. The exporter now records all of them in the release manifest (`builtin_pars`), so the updater asserts whatever the build declares rather than whatever someone remembered to list -- a parameter introduced in a future version is carried automatically. Excluded by design: the user's own placement (position, colour, comment) and the parameters the updater drives during the swap.
+
+- **This closes a second, quieter case of the same bug.** `ext0object` through `ext3object`, their names and promote flags are built-in parameters too, so a build that ADDED an extension would have installed it and never loaded it on any existing install -- the same invisible failure, with worse consequences than a viewer.
+
+- **Modes travel with values.** `w` and `h` ship bound; assigning `.val` to a bound parameter silently drops it to CONSTANT and breaks the panel sizing. The updater now replays expression and bind parameters as expressions and binds.
+
+- **The tests now assert the outcome, not the assumption.** v6.0.245's tests passed while the feature stayed invisible, because they checked the one parameter the fix set instead of the pair the display needs. The suite now pins the field failure itself (a preserved `nodeview` with `opviewer` already correct), bind-mode preservation, extension wiring, and a guard that fails if the exporter ever stops declaring the set.
+
 ## v6.0.245
 
 The self-updater's own upgrade path: a field report showed an update that ran perfectly and looked like it had not run at all.

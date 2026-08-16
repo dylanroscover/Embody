@@ -756,7 +756,7 @@ class UpdaterExt:
         # The reload preserves live par values. That is right for the user's
         # settings and wrong for pars the BUILD owns, so re-assert those, then
         # retire settings this version no longer declares.
-        self._applyStructuralPars()
+        self._applyBuildOwnedPars(manifest)
         self._pruneRetiredPars(manifest)
         self._clearExternalTox()
         self._cleanupFiles(sentinel, keep_backup=True)
@@ -769,22 +769,6 @@ class UpdaterExt:
                          f'Embody was updated to {sentinel["tag"]}.\n\n'
                          'Settings and externalizations were preserved.',
                          ['OK'])
-
-    # Built-in pars the BUILD owns rather than the user. The in-place reload
-    # preserves every live par value -- correct for settings, wrong for these,
-    # because a build that introduces one can never make it take effect on an
-    # existing install. That is not hypothetical: `opviewer` arrived with the
-    # status readout in v6.0.233, so every user updating from an older build
-    # got the new viz installed and never displayed -- the node kept showing
-    # the old manager panel and the update looked like it had not run at all
-    # (field-reported on a v6.0.152 -> v6.0.244 update).
-    #
-    # Values are declared by the build that ships this file, so they are always
-    # the NEW build's intent. Deliberately built-in pars ONLY: a user's custom
-    # par value is never overwritten by an update.
-    _STRUCTURAL_PARS = {
-        'opviewer': './viz_status',
-    }
 
     def _stampAboutPars(self, manifest):
         """Preserved par values keep the OLD About info -- stamp the new."""
@@ -802,30 +786,89 @@ class UpdaterExt:
             if par is not None:
                 self._setPar(par, value)
 
-    def _applyStructuralPars(self):
-        """Re-assert build-owned built-in pars the reload preserved (see
-        _STRUCTURAL_PARS). Never touches custom pars."""
+    def _applyBuildOwnedPars(self, manifest):
+        """Re-assert every built-in par the NEW build declares.
+
+        The reload preserves live par values: right for the user's settings,
+        wrong for the component's own wiring, because a build that changes one
+        could otherwise never make it take effect on an existing install. The
+        set is not hand-picked here -- the exporter records every built-in this
+        build sets away from its TD default (`builtin_pars`), so a par added in
+        a future version is carried automatically.
+
+        Why the whole set matters, not just the obvious one: v6.0.233 shipped
+        the status readout, and BOTH `nodeview` and `opviewer` had to move for
+        the node to display it. Fixing only `opviewer` left it inert and the
+        update still looked like a no-op (v6.0.245 shipped exactly that
+        mistake). The same hole would silently drop a newly added extension,
+        since ext*object/ext*name/ext*promote are built-in pars too.
+
+        Mode travels with the value: w/h are BIND, and assigning .val to a
+        bound par switches it to CONSTANT (rules/parameters.md). Custom pars
+        are never touched -- those are the user's settings.
+        """
+        declared = manifest.get('builtin_pars')
+        if not declared:
+            return  # pre-6.0.246 manifest -- nothing declared, assert nothing
         embody = self._embody
-        for name, value in self._STRUCTURAL_PARS.items():
+        applied, skipped = [], []
+        for name, spec in declared.items():
             par = getattr(embody.par, name, None)
             if par is None:
                 continue
             try:
-                if str(par.val) == str(value):
+                mode = (spec or {}).get('mode', 'CONSTANT')
+                value = (spec or {}).get('value', '')
+                # Never point an op reference at something this build lacks.
+                if (mode == 'CONSTANT' and isinstance(value, str)
+                        and value.startswith('./')):
+                    if embody.op(value[2:]) is None:
+                        skipped.append(name)
+                        continue
+                if self._parMatches(par, mode, value):
                     continue
-                # Only assert what the new build can actually satisfy -- a
-                # relative op reference is meaningless if the target is absent.
-                target = str(value).lstrip('./')
-                if target and embody.op(target) is None:
-                    self._log(f'structural par {name}: target {value!r} not '
-                              f'present in this build -- left as-is', 'DEBUG')
-                    continue
-                self._setPar(par, value)
-                self._log(f'structural par {name} set to {value!r} '
-                          f'(the reload preserved the old value)')
+                self._setParMode(par, mode, value)
+                applied.append(name)
             except Exception as e:
-                self._log(f'could not set structural par {name}: {e}',
+                self._log(f'could not assert built-in par {name}: {e}',
                           'WARNING')
+        if applied:
+            self._log(f'asserted {len(applied)} build-owned par(s) the reload '
+                      f'preserved: {", ".join(sorted(applied))}')
+        if skipped:
+            self._log(f'left {", ".join(sorted(skipped))} as-is (target not '
+                      f'present in this build)', 'DEBUG')
+
+    @staticmethod
+    def _parMatches(par, mode, value):
+        """True when the live par already carries the declared mode+value."""
+        if par.mode.name != mode:
+            return False
+        if mode == 'EXPRESSION':
+            return par.expr == value
+        if mode == 'BIND':
+            return par.bindExpr == value
+        return str(par.val) == str(value)
+
+    def _setParMode(self, par, mode, value):
+        """Assign honouring MODE -- .val on a bound/expression par would drop
+        it to CONSTANT and silently break the binding."""
+        # ParMode is a DAT-namespace global and absent from the td module, so
+        # the enum is taken off the live par -- no namespace dependency.
+        par_mode = getattr(type(par.mode), mode, None)
+        was = par.readOnly
+        par.readOnly = False
+        try:
+            if mode == 'EXPRESSION':
+                par.expr = value
+            elif mode == 'BIND':
+                par.bindExpr = value
+            else:
+                par.val = value
+            if par_mode is not None:
+                par.mode = par_mode
+        finally:
+            par.readOnly = was
 
     def _pruneRetiredPars(self, manifest):
         """Remove custom pars this build no longer declares, and say so.

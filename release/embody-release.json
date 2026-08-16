@@ -1,16 +1,16 @@
 {
  "schema": 1,
  "name": "Embody",
- "version": "6.0.245",
- "tag": "v6.0.245",
- "asset": "Embody-v6.0.245.tox",
- "size": 1531148,
- "sha256": "dd15ff639a62d01291d36ecb21fdb25e6c2f38cdc8eb896a109b86569a7db983",
+ "version": "6.0.246",
+ "tag": "v6.0.246",
+ "asset": "Embody-v6.0.246.tox",
+ "size": 1531668,
+ "sha256": "c78248cce60bce31fed97ba83f3e70c860c8e95be2e3d06670646f4f330b102a",
  "td_build": "2025.33070",
  "min_td_build": "2025.33070",
- "build": 1157,
- "date": "2026-08-16 15:43:40 UTC",
- "exported_at": "2026-08-16T16:45:37+00:00",
+ "build": 1158,
+ "date": "2026-08-16 16:59:52 UTC",
+ "exported_at": "2026-08-16T16:59:55+00:00",
  "custom_pars": [
   "Aiclient",
   "Aiprojectroot",
@@ -59,6 +59,14 @@
   "Convoynodes3lastseen",
   "Convoynodes3nodename",
   "Convoynodes3nodestatus",
+  "Convoynodes4ipaddress",
+  "Convoynodes4lastseen",
+  "Convoynodes4nodename",
+  "Convoynodes4nodestatus",
+  "Convoynodes5ipaddress",
+  "Convoynodes5lastseen",
+  "Convoynodes5nodename",
+  "Convoynodes5nodestatus",
   "Convoyremotewake",
   "Convoyresolverealm",
   "Convoystarthost",
@@ -209,5 +217,103 @@
   "Version",
   "Verttag",
   "Xmltag"
- ]
+ ],
+ "builtin_pars": {
+  "align": {
+   "mode": "CONSTANT",
+   "value": "horizlr"
+  },
+  "borderover": {
+   "mode": "CONSTANT",
+   "value": "False"
+  },
+  "display": {
+   "mode": "CONSTANT",
+   "value": "False"
+  },
+  "ext0name": {
+   "mode": "CONSTANT",
+   "value": "Embody"
+  },
+  "ext0object": {
+   "mode": "CONSTANT",
+   "value": "op('./EmbodyExt').module.EmbodyExt(me)"
+  },
+  "ext0promote": {
+   "mode": "CONSTANT",
+   "value": "True"
+  },
+  "ext1name": {
+   "mode": "CONSTANT",
+   "value": "Envoy"
+  },
+  "ext1object": {
+   "mode": "CONSTANT",
+   "value": "op('./EnvoyExt').module.EnvoyExt(me)"
+  },
+  "ext1promote": {
+   "mode": "CONSTANT",
+   "value": "True"
+  },
+  "ext2name": {
+   "mode": "CONSTANT",
+   "value": "TDN"
+  },
+  "ext2object": {
+   "mode": "CONSTANT",
+   "value": "op('./TDNExt').module.TDNExt(me)"
+  },
+  "ext2promote": {
+   "mode": "CONSTANT",
+   "value": "True"
+  },
+  "ext3name": {
+   "mode": "CONSTANT",
+   "value": "CatalogManager"
+  },
+  "ext3object": {
+   "mode": "CONSTANT",
+   "value": "op('./CatalogManagerExt').module.CatalogManagerExt(me)"
+  },
+  "ext3promote": {
+   "mode": "CONSTANT",
+   "value": "True"
+  },
+  "h": {
+   "mode": "BIND",
+   "value": "op('./manager').par.h"
+  },
+  "justifyv": {
+   "mode": "CONSTANT",
+   "value": "top"
+  },
+  "nodeview": {
+   "mode": "CONSTANT",
+   "value": "opviewer"
+  },
+  "opshortcut": {
+   "mode": "CONSTANT",
+   "value": "Embody"
+  },
+  "opviewer": {
+   "mode": "CONSTANT",
+   "value": "./viz_status"
+  },
+  "parentshortcut": {
+   "mode": "CONSTANT",
+   "value": "Embody"
+  },
+  "reloadbuiltin": {
+   "mode": "CONSTANT",
+   "value": "False"
+  },
+  "savebackup": {
+   "mode": "CONSTANT",
+   "value": "False"
+  },
+  "w": {
+   "mode": "BIND",
+   "value": "op('./manager').par.w"
+  }
+ }
 }
