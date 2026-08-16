@@ -213,6 +213,15 @@ def writeReleaseManifest(comp, tox_path, version, build):
             'date': str(comp.par.Date.eval()),
             'exported_at': datetime.now(timezone.utc).isoformat(
                 timespec='seconds'),
+            # The custom pars THIS build declares. The self-updater applies an
+            # in-place tox reload, which deliberately preserves live par VALUES
+            # (they are the user's settings) -- but that also preserves pars a
+            # newer build has REMOVED, with no way to tell a retired setting
+            # from a live one. This list is that missing source of truth: the
+            # updater prunes anything absent from it and tells the user which
+            # settings went away. Absent on pre-6.0.245 manifests, where the
+            # updater simply skips pruning.
+            'custom_pars': sorted(p.name for p in comp.customPars),
         }
         manifest_path = Path(tox_path).parent / 'embody-release.json'
         tmp = Path(str(manifest_path) + '.tmp')

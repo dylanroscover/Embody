@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 1157
-generator: Embody/6.0.244
+generator: Embody/6.0.245
 td_build: 099.2025.33070
-source_file: Embody-6.244.toe
-exported_at: '2026-08-16T15:43:44Z'
+source_file: Embody-6.245.toe
+exported_at: '2026-08-16T16:46:28Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -74,7 +74,6 @@ custom_pars:
   - name: Refresh
     style: Pulse
     help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
-    value: true
   - name: Performmode
     style: Toggle
     label: Perform Mode
@@ -819,7 +818,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.244
+    value: 6.0.245
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -911,6 +910,7 @@ sequences:
   - {}
   - {}
   Convoynodes:
+  - {}
   - {}
   - {}
   - {}

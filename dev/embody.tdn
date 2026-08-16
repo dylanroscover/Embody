@@ -1,14 +1,20 @@
 format: tdn
 version: '2.0'
 build: 1053
-generator: Embody/6.0.244
+generator: Embody/6.0.245
 td_build: 099.2025.33070
-source_file: Embody-6.244.toe
-exported_at: '2026-08-16T15:43:45Z'
+source_file: Embody-6.245.toe
+exported_at: '2026-08-16T16:46:28Z'
 network_path: /embody
 options:
   include_dat_content: false
   include_storage: true
+type_defaults:
+  baseCOMP:
+    size: [160, 130]
+    color: [0.3, 0.5, 0.9]
+    tags:
+    - tdn
 type: containerCOMP
 parameters:
   w: 960
@@ -30,6 +36,12 @@ color: [0.3, 0.5, 0.9]
 tags:
 - tdn
 operators:
+- name: base1
+  type: baseCOMP
+  flags:
+  - viewer
+  position: [200, -275]
+  tdn_ref: embody/base1.tdn
 - name: Embody
   type: containerCOMP
   parameters:
@@ -68,6 +80,7 @@ operators:
     - {}
     - {}
     Convoynodes:
+    - {}
     - {}
     - {}
     - {}
@@ -114,7 +127,6 @@ operators:
     - name: Refresh
       style: Pulse
       help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
-      value: true
     - name: Performmode
       style: Toggle
       label: Perform Mode
@@ -859,7 +871,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.244
+      value: 6.0.245
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -935,10 +947,6 @@ operators:
     - {}
     - {}
   position: [400, 102]
-  size: [160, 130]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdn
   tdn_ref: embody/unit_tests.tdn
 - name: execute_src_ctrl
   type: executeDAT
@@ -960,7 +968,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 304
+    rows: 305
     cols: 11
   flags:
   - viewer

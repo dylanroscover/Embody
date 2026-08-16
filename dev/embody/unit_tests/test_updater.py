@@ -300,3 +300,144 @@ class TestUpdaterStatusLine(EmbodyTestCase):
         if got:
             self.assertIn('dev checkout', got,
                           'a refusal must carry its reason: %r' % got)
+
+
+class _StubUpdater:
+    """Stand-in host: the par-reconciliation methods touch only these.
+
+    Lets the real methods run against a sandbox COMP without performing an
+    actual swap (which replaces the live Embody COMP -- destructive tier).
+    """
+
+    def __init__(self, embody):
+        self._embody = embody
+        self.logs = []
+        self.dialogs = []
+        self._STRUCTURAL_PARS = _updater_cls()._STRUCTURAL_PARS
+
+    def _log(self, message, level='INFO'):
+        self.logs.append((level, message))
+
+    def _dialog(self, title, body, buttons):
+        self.dialogs.append(body)
+        return buttons[0]
+
+    def _setPar(self, par, value):
+        was = par.readOnly
+        par.readOnly = False
+        par.val = value
+        par.readOnly = was
+
+
+class TestUpdateParReconciliation(EmbodyTestCase):
+    """What an update may and may not do to the component's parameters.
+
+    The in-place reload preserves every live par value. That is REQUIRED for
+    the user's settings and WRONG for pars the build owns, so the updater
+    reconciles both directions afterwards. Contract:
+      - build-owned built-ins are re-asserted from the new build
+      - a user's custom par value is NEVER rewritten
+      - pars the new build no longer declares are removed, and the user is told
+    """
+
+    def _comp(self, with_viz=True):
+        comp = self.sandbox.create(baseCOMP, 'upd_host')
+        if with_viz:
+            comp.create(containerCOMP, 'viz_status')
+        return comp
+
+    def _settings(self, comp, values):
+        page = comp.appendCustomPage('Settings')
+        for name, val in values.items():
+            page.appendStr(name)
+            getattr(comp.par, name).val = val
+        return comp
+
+    # --- build-owned built-ins ---
+
+    def test_structural_par_is_asserted_after_a_preserving_reload(self):
+        """The v6.0.152 -> v6.0.244 field bug: the status viz shipped and was
+        never displayed, because the preserved opviewer was still empty."""
+        comp = self._comp()
+        comp.par.opviewer = ''
+        stub = _StubUpdater(comp)
+        _updater_cls()._applyStructuralPars(stub)
+        self.assertEqual('./viz_status', comp.par.opviewer.val)
+
+    def test_structural_par_is_left_alone_when_its_target_is_absent(self):
+        """Never point the viewer at something this build does not ship."""
+        comp = self._comp(with_viz=False)
+        comp.par.opviewer = ''
+        stub = _StubUpdater(comp)
+        _updater_cls()._applyStructuralPars(stub)
+        self.assertEqual('', comp.par.opviewer.val)
+
+    def test_structural_par_already_correct_is_not_rewritten(self):
+        comp = self._comp()
+        comp.par.opviewer = './viz_status'
+        stub = _StubUpdater(comp)
+        _updater_cls()._applyStructuralPars(stub)
+        self.assertEqual('./viz_status', comp.par.opviewer.val)
+        self.assertEqual([], [m for lvl, m in stub.logs if 'set to' in m],
+                         'an already-correct par must not be re-set')
+
+    # --- user settings ---
+
+    def test_an_update_never_rewrites_a_custom_par_value(self):
+        comp = self._settings(self._comp(), {'Mysetting': 'user-chosen',
+                                             'Another': 'also-mine'})
+        stub = _StubUpdater(comp)
+        manifest = {'custom_pars': ['Mysetting', 'Another']}
+        _updater_cls()._pruneRetiredPars(stub, manifest)
+        _updater_cls()._applyStructuralPars(stub)
+        self.assertEqual('user-chosen', comp.par.Mysetting.val)
+        self.assertEqual('also-mine', comp.par.Another.val)
+
+    def test_a_par_the_new_build_still_declares_survives(self):
+        comp = self._settings(self._comp(), {'Keepme': 'v'})
+        stub = _StubUpdater(comp)
+        _updater_cls()._pruneRetiredPars(stub, {'custom_pars': ['Keepme']})
+        self.assertIsNotNone(getattr(comp.par, 'Keepme', None))
+        self.assertEqual('v', comp.par.Keepme.val)
+
+    # --- retired settings ---
+
+    def test_a_retired_par_is_removed_and_the_user_is_told_which(self):
+        comp = self._settings(self._comp(), {'Keepme': 'v', 'Goneme': 'x'})
+        stub = _StubUpdater(comp)
+        _updater_cls()._pruneRetiredPars(stub, {'custom_pars': ['Keepme']})
+        self.assertIsNone(getattr(comp.par, 'Goneme', None),
+                          'a par this build no longer declares must go')
+        self.assertIsNotNone(getattr(comp.par, 'Keepme', None))
+        self.assertTrue(any('Goneme' in body for body in stub.dialogs),
+                        'the user must be told WHICH settings were removed')
+
+    def test_nothing_is_removed_when_nothing_is_retired(self):
+        comp = self._settings(self._comp(), {'Keepme': 'v'})
+        stub = _StubUpdater(comp)
+        _updater_cls()._pruneRetiredPars(stub, {'custom_pars': ['Keepme']})
+        self.assertEqual([], stub.dialogs,
+                         'no removals means no dialog')
+
+    def test_a_manifest_without_custom_pars_prunes_nothing(self):
+        """Older releases carry no declaration -- with no source of truth the
+        updater must not guess, or it would delete every live setting."""
+        comp = self._settings(self._comp(), {'Keepme': 'v', 'Alsokeep': 'w'})
+        stub = _StubUpdater(comp)
+        _updater_cls()._pruneRetiredPars(stub, {'version': '6.0.244'})
+        self.assertIsNotNone(getattr(comp.par, 'Keepme', None))
+        self.assertIsNotNone(getattr(comp.par, 'Alsokeep', None))
+        self.assertEqual([], stub.dialogs)
+
+    def test_the_release_manifest_declares_its_custom_pars(self):
+        """The pruning above is only safe because the exporter writes this."""
+        import json
+        from pathlib import Path
+        mf = Path(project.folder).parent / 'release' / 'embody-release.json'
+        if not mf.is_file():
+            self.skipTest('no release manifest in this checkout')
+        data = json.loads(mf.read_text(encoding='utf-8'))
+        self.assertIn('custom_pars', data,
+                      'writeReleaseManifest must declare custom_pars, or the '
+                      'updater silently stops pruning retired settings')
+        self.assertIn('Version', data['custom_pars'])

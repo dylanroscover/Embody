@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.0.245
+
+The self-updater's own upgrade path: a field report showed an update that ran perfectly and looked like it had not run at all.
+
+- **An update could install a new feature and never let it appear.** The in-place tox reload deliberately preserves every live parameter VALUE -- that is what keeps your settings across an update -- but it preserves *build-owned* parameters too, and a build that introduces one could therefore never make it take effect on an existing install. `opviewer` arrived with the status readout in v6.0.233, so **every user updating from an older build got the new status viz installed and never displayed**: the Embody node kept showing the old manager panel, the About page read the new version, and the update looked like a no-op. Reported from a real v6.0.152 -> v6.0.244 update. Build-owned built-ins are now re-asserted from the new build after a reload, and only when the build actually ships the thing they point at.
+
+- **Settings that no longer exist are now removed, and named.** The same value-preserving reload also stranded custom parameters that a newer build had retired -- dead settings that persisted on the component forever with nothing able to tell a retired one from a live one. The release manifest now declares the custom parameters the build ships (`custom_pars`), the updater removes anything absent from that list, and it tells you exactly which settings went away. Manifests from before this release carry no declaration, and with no source of truth the updater prunes nothing rather than guessing.
+
+- **What an update may and may not touch, now pinned by tests.** A custom parameter's value is never rewritten by an update; new parameters arrive with the reload; retired ones are removed with a warning; build-owned built-ins come from the new build. Nine tests cover the reconciliation, including the exact field failure (a preserved-empty `opviewer` with the viz present) and the refusal to point a viewer at something the build does not ship.
+
 ## v6.0.244
 
 v6.0.243's own regressions, found by putting an adversarial review panel on it -- plus a latent data-loss bug in duplicate-row cleanup that predates it, and a net reduction in the code that caused all of this.

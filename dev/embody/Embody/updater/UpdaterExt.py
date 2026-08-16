@@ -753,6 +753,11 @@ class UpdaterExt:
 
         manifest = sentinel['manifest']
         self._stampAboutPars(manifest)
+        # The reload preserves live par values. That is right for the user's
+        # settings and wrong for pars the BUILD owns, so re-assert those, then
+        # retire settings this version no longer declares.
+        self._applyStructuralPars()
+        self._pruneRetiredPars(manifest)
         self._clearExternalTox()
         self._cleanupFiles(sentinel, keep_backup=True)
         self._clearSentinel()
@@ -764,6 +769,22 @@ class UpdaterExt:
                          f'Embody was updated to {sentinel["tag"]}.\n\n'
                          'Settings and externalizations were preserved.',
                          ['OK'])
+
+    # Built-in pars the BUILD owns rather than the user. The in-place reload
+    # preserves every live par value -- correct for settings, wrong for these,
+    # because a build that introduces one can never make it take effect on an
+    # existing install. That is not hypothetical: `opviewer` arrived with the
+    # status readout in v6.0.233, so every user updating from an older build
+    # got the new viz installed and never displayed -- the node kept showing
+    # the old manager panel and the update looked like it had not run at all
+    # (field-reported on a v6.0.152 -> v6.0.244 update).
+    #
+    # Values are declared by the build that ships this file, so they are always
+    # the NEW build's intent. Deliberately built-in pars ONLY: a user's custom
+    # par value is never overwritten by an update.
+    _STRUCTURAL_PARS = {
+        'opviewer': './viz_status',
+    }
 
     def _stampAboutPars(self, manifest):
         """Preserved par values keep the OLD About info -- stamp the new."""
@@ -780,6 +801,82 @@ class UpdaterExt:
             par = getattr(embody.par, name, None)
             if par is not None:
                 self._setPar(par, value)
+
+    def _applyStructuralPars(self):
+        """Re-assert build-owned built-in pars the reload preserved (see
+        _STRUCTURAL_PARS). Never touches custom pars."""
+        embody = self._embody
+        for name, value in self._STRUCTURAL_PARS.items():
+            par = getattr(embody.par, name, None)
+            if par is None:
+                continue
+            try:
+                if str(par.val) == str(value):
+                    continue
+                # Only assert what the new build can actually satisfy -- a
+                # relative op reference is meaningless if the target is absent.
+                target = str(value).lstrip('./')
+                if target and embody.op(target) is None:
+                    self._log(f'structural par {name}: target {value!r} not '
+                              f'present in this build -- left as-is', 'DEBUG')
+                    continue
+                self._setPar(par, value)
+                self._log(f'structural par {name} set to {value!r} '
+                          f'(the reload preserved the old value)')
+            except Exception as e:
+                self._log(f'could not set structural par {name}: {e}',
+                          'WARNING')
+
+    def _pruneRetiredPars(self, manifest):
+        """Remove custom pars this build no longer declares, and say so.
+
+        The reload preserves live custom-par VALUES (they are the user's
+        settings, and an update must never rewrite them) -- but that also
+        strands pars a newer build removed, leaving dead settings on the
+        component forever. The manifest's `custom_pars` is the build's own
+        declaration of what exists; anything else is retired.
+
+        Silent on manifests that predate the field, and it only ever removes
+        pars the OLD build had: a par the new build declares is untouched, and
+        new ones arrive with the reload.
+        """
+        declared = manifest.get('custom_pars')
+        if not declared:
+            return  # pre-6.0.245 manifest -- no source of truth, prune nothing
+        embody = self._embody
+        declared = set(declared)
+        # Names first: destroying a Par invalidates the OTHER Par objects held
+        # in a snapshot, so each removal is re-looked-up by name.
+        candidates = [p.name for p in embody.customPars
+                      if p.name not in declared]
+        retired = []
+        for name in candidates:
+            par = getattr(embody.par, name, None)
+            if par is None:
+                continue
+            try:
+                par.destroy()
+                retired.append(name)
+            except Exception as e:
+                self._log(f'could not remove retired par {name}: {e}',
+                          'WARNING')
+        if retired:
+            try:  # pages emptied by the removals go with them
+                for page in list(embody.customPages):
+                    if not page.pars:
+                        page.destroy()
+            except Exception:
+                pass
+        if not retired:
+            return
+        names = ', '.join(sorted(retired))
+        self._log(f'removed {len(retired)} setting(s) retired in this '
+                  f'version: {names}', 'WARNING')
+        self._dialog(
+            'Embody Update',
+            f'{len(retired)} setting(s) no longer exist in this version and '
+            f'were removed:\n\n{names}\n\nAll other settings were preserved.',
+            ['OK'])
 
     def _clearExternalTox(self):
         """Detach from the downloaded file so a later save can't clobber it."""
