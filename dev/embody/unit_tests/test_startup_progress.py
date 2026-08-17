@@ -161,6 +161,12 @@ class TestConvoyStep(EmbodyTestCase):
         """
         for text in ('Not installed',
                      'Needs repair -- Python not found (reinstall)',
+                     # An install that landed on disk while the daemon kept
+                     # serving the old payload, after the settle AND the one
+                     # automatic restart. It names a button, so it is a
+                     # defect with a remedy -- never a green 'Running'.
+                     'Needs repair -- still running 6.0.241, not 6.0.246 '
+                     '(use Repair Convoy App)',
                      'Install failed -- see log'):
             self.assertEqual(sp.convoy_step(text)['state'], sp.FAILED, text)
 

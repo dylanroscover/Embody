@@ -512,7 +512,13 @@ class ConvoyHostBase(EmbodyTestCase):
                 'platform': 'win32', 'data_dir': FAKE_DATA_DIR,
                 'version': VERSION, 'home': FAKE_HOME, 'uid': None,
                 'installed_by': 'C:/fake/project (/embody/Embody)',
-                'health_wait_s': 0.0, 'health_poll_s': 0.0}
+                'health_wait_s': 0.0, 'health_poll_s': 0.0,
+                # ZERO, like the health waits above: the install's
+                # version-settle poll is real time, and a suite that races a
+                # wall clock is exactly what this repo's CI rule forbids.
+                # Five attempts x 2 s of production default would add eight
+                # seconds to every install test in this file.
+                'version_settle_attempts': 1, 'version_settle_s': 0.0}
 
     def _fakeRun(self, *a, **kw):
         """Record every scheduled call; DISPATCH only the initial poll."""
@@ -2217,13 +2223,22 @@ class TestHostAutoUpdate(ConvoyHostBase):
         payload (the vendored DATs had not reloaded a changed file) and
         installed.json claimed the new version while the daemon served
         old code. The restarted daemon is the one honest witness -- a
-        mismatch must surface as a WARNING, never a clean 'installed'."""
+        mismatch must surface as a WARNING, never a clean 'installed'.
+
+        Since 6.0.247 the verdict is reached only after the daemon has been
+        given time to settle AND restarted once automatically, because a
+        supervisor respawn mid-install answers as the outgoing payload for
+        about a second and three field logs read that transient as a
+        permanent failure. A daemon that answers with NO app_version at all
+        is a pre-6.0.213 payload -- conclusive staleness, and still the
+        strongest case for the warning."""
         self.client.probe_status = self.client.STATUS_RUNNING
         self.client.get_results = [
             (200, {'ok': True, 'host_id': 'h' * 32})]   # /health: no version
         self.convoy.InstallHost(confirm=False)
-        self.assertTrue(any('may be stale' in w for w in self._warnings()),
-                        self._warnings())
+        self.assertTrue(
+            any('still reports' in w or 'may be stale' in w
+                for w in self._warnings()), self._warnings())
 
     def test_install_is_quiet_when_the_daemon_verifies_at_the_new_version(
             self):

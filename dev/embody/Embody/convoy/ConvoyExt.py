@@ -140,11 +140,16 @@ class ConvoyExt:
     # paths, two PATH lookups), one VENV_REPAIR_TIMEOUT_S uv reinstall,
     # one 15 s re-probe, a daemon venv build (three 15 s base version
     # gates + create 60 s + install 120 s + one 15 s probe, ~240 s), and
-    # install()'s own 15 s verifier re-probe of the winner. Summed worst
-    # case is ~780 s of legitimate work, so the cap is 3400 x 15 frames
-    # (~850 s at 60 fps; slower frame rates only lengthen it). It is a
-    # BOUND on a wedged worker, not a timer -- the worker's own
-    # subprocess timeouts are what actually end it.
+    # install()'s own 15 s verifier re-probe of the winner. The version
+    # tail adds a bounded ~51 s on the stale path only: two settles of
+    # VERSION_SETTLE_ATTEMPTS x VERSION_SETTLE_S (8 s each) around one
+    # automatic restart (EXIT_WAIT_S 15 s + HEALTH_WAIT_S 20 s). Summed
+    # worst case is ~830 s of legitimate work, so the cap is 3400 x 15
+    # frames (~850 s at 60 fps; slower frame rates only lengthen it). It
+    # is a BOUND on a wedged worker, not a timer -- the worker's own
+    # subprocess timeouts are what actually end it. The headroom is now
+    # thin: anything further added to this path needs the cap raised with
+    # it, or Install reports timed_out over work that later succeeds.
     HOST_POLL_ATTEMPTS = 3400
 
     # At most one node call and one host-lifecycle call can be outstanding.
@@ -210,6 +215,18 @@ class ConvoyExt:
     # after a successful install, which reads exactly like a failure.
     HEALTH_WAIT_S = 20.0
     HEALTH_POLL_S = 1.0
+
+    # How long an install waits for the RESTARTED daemon to report the
+    # version it just wrote. A supervisor respawn during the install window
+    # answers as the outgoing payload for about a second (the launcher
+    # resolves its payload directory from a record written last), so a single
+    # immediate read turns that into a permanent-looking 'stale payload'
+    # verdict -- it did, in three consecutive field logs. Four sleeps of 2 s
+    # covers that comfortably and costs nothing on the common path, where the
+    # first read already matches. Named constants, and carried in the host
+    # ctx, so a test can set them to zero instead of racing a real clock.
+    VERSION_SETTLE_ATTEMPTS = 5
+    VERSION_SETTLE_S = 2.0
 
     # Mirrors convoy_client.HOST_* -- that module owns the vocabulary and
     # a test pins these five against it. They are the TRANSIENT states,
@@ -3350,6 +3367,8 @@ class ConvoyExt:
             'installed_by': '%s (%s)' % (project_root, self._embody.path),
             'health_wait_s': self.HEALTH_WAIT_S,
             'health_poll_s': self.HEALTH_POLL_S,
+            'version_settle_attempts': self.VERSION_SETTLE_ATTEMPTS,
+            'version_settle_s': self.VERSION_SETTLE_S,
             # Embody's own uv-managed venv python -- the interpreter the rest
             # of Embody's Python runs under. It already carries the Convoy
             # crypto floor (Ed25519/X.509/TLS 1.3), so the host app runs under
@@ -3706,6 +3725,20 @@ class ConvoyExt:
             self._log('host %s: %s' % (action, detail or 'the restarted '
                       'daemon did not verify at the installed version'),
                       'WARNING')
+        elif ('version_verified' in result
+                and result['version_verified'] is None
+                and (result.get('outcome') or {}).get('registered')):
+            # An install whose daemon never answered is not a debug detail:
+            # nothing confirmed the code now running, so it must not slide
+            # past as a clean install the way a DEBUG line would. The key is
+            # present only on install/repair results, so start/stop -- which
+            # verify no version -- do not fall in here.
+            self._log('host %s: %s' % (action, detail or 'the restarted '
+                      'daemon did not answer in time'), 'WARNING')
+        elif result.get('restart_retry'):
+            # A self-heal is not a failure, but it is not a debug detail
+            # either -- it is why this install took longer than usual.
+            self._log('host %s: %s' % (action, detail), 'INFO')
         elif detail:
             self._log('host %s: %s' % (action, detail), 'DEBUG')
 
@@ -6099,12 +6132,64 @@ def _host_snapshot(ctx):
 
     interpreter_exists = _host_recorded_interpreter_exists(installed)
 
-    return installer.host_state(installed=installed,
-                                probe_status=probe_status,
-                                supervisor=supervisor,
-                                version=ctx['version'],
-                                interpreter_exists=interpreter_exists,
-                                pid=pid)
+    return _host_mark_stale_payload(ctx, installed, installer.host_state(
+        installed=installed,
+        probe_status=probe_status,
+        supervisor=supervisor,
+        version=ctx['version'],
+        interpreter_exists=interpreter_exists,
+        pid=pid))
+
+
+def _host_mark_stale_payload(ctx, installed, state):
+    """Re-derive 'the running daemon is older than the install record'.
+
+    DERIVED ON EVERY SNAPSHOT, NOT LATCHED AT INSTALL TIME. The readout is
+    the whole point of this state -- the field complaint was that a stale
+    payload only ever reached the textport -- and a value stamped once by
+    the install is erased by the very next refresh, which fires on every
+    project save (execute.py's onProjectPostSave pulses Refresh). So it is
+    recomputed from the same two witnesses every time: the record on disk,
+    and the daemon's own account of the code it runs.
+
+    Deliberately narrow, because a false 'Needs repair' on a healthy machine
+    would be its own defect:
+      - only over a daemon host_state already calls RUNNING (a stopped or
+        newer-install state has its own, more specific words);
+      - only when both versions are ORDERABLE and the running one is
+        strictly OLDER. A dev checkout's daemon reports 'source', which is
+        unorderable and must never read as broken;
+      - only when the daemon actually answered. Silence claims nothing.
+    A pre-6.0.213 daemon (answers, names no version) IS marked: it cannot be
+    the version just installed, by construction.
+    """
+    if not isinstance(state, dict):
+        return state
+    client = ctx['client']
+    running = getattr(client, 'HOST_RUNNING', 'running')
+    if state.get('state') != running:
+        return state
+    want = str((installed or {}).get('version') or '')
+    if not want:
+        return state
+    body = _host_status_body(ctx)
+    if body is None:
+        return state  # could not ask -- claim nothing
+    reported = body.get('app_version')
+    reported = str(reported) if reported else None
+    if reported == want:
+        return state
+    if reported is not None:
+        key = getattr(ctx['installer'], 'orderable_version_key', None)
+        mine, theirs = (key(want), key(reported)) if key else (None, None)
+        if mine is None or theirs is None or not (theirs < mine):
+            # Unorderable ('source'), or the daemon is NEWER than the record
+            # -- neither is this state's business.
+            return state
+    state = dict(state)
+    state['state'] = getattr(client, 'HOST_STALE_PAYLOAD', 'stale_payload')
+    state['reported_version'] = reported
+    return state
 
 
 def _host_await_health(ctx, timeout_s, sleep=None, now=None):
@@ -6131,6 +6216,128 @@ def _host_await_health(ctx, timeout_s, sleep=None, now=None):
         if now() >= deadline:
             return False
         sleep(ctx.get('health_poll_s') or 1.0)
+
+
+def _host_status_body(ctx):
+    """The authenticated /status body from whatever daemon owns the endpoint.
+
+    A FRESH probe every call -- convoy_client.probe re-reads the portfile and
+    re-runs the /health identity check, so this follows a restart to the
+    process that now serves, rather than remembering the one that used to.
+    None when nothing answered; the caller must not read that as agreement.
+    """
+    client = ctx['client']
+    try:
+        probe = client.probe(data_dir=ctx['data_dir'])
+        if not probe.use_convoy or probe.handle is None:
+            return None
+        code, body = client.host_get(probe.handle, '/status')
+        if code == 200 and isinstance(body, dict) and body.get('ok'):
+            return body
+    except Exception:
+        return None
+    return None
+
+
+def _host_settle_version(ctx, want, attempts=None, sleep=None):
+    """Poll /status until the daemon reports `want`. -> (reported, ok, body).
+
+    WHY THIS IS NOT ONE READ. The daemon's app_version is the directory its
+    running module was imported from (convoy_hostapp._running_app_version), and
+    the generated launcher picks that directory out of installed.json AT LAUNCH
+    TIME. install() writes installed.json LAST, after the supervisor is
+    registered -- and on macOS the LaunchAgent carries RunAtLoad + KeepAlive, so
+    the graceful /shutdown lets launchd respawn the daemon within about a second
+    while the record still names the OLD version. The process answering health
+    is then genuinely the previous payload: not a lie, not a cache, just a
+    process that still has to be replaced.
+
+    A single immediate read turns that transitional second into a permanent
+    verdict. It did, three times in one field log -- every install reporting
+    exactly the version before it, while the payload itself was fine and the
+    next session saw the new one. Settling first is what tells a restart race
+    apart from a genuinely stuck install.
+
+    `sleep` is injected so tests run on a fake clock (CI runners stall, and a
+    real-clock deadline turns that stall into a failure).
+    """
+    sleep = sleep or time.sleep
+    if attempts is None:
+        attempts = ctx.get('version_settle_attempts')
+    attempts = max(1, int(5 if attempts is None else attempts))
+    interval = ctx.get('version_settle_s')
+    # `is None`, never `or`: a test injecting 0.0 means ZERO wait, and
+    # truthiness would silently restore the two-second production interval.
+    interval = 2.0 if interval is None else float(interval)
+    reported, body = None, None
+    for index in range(attempts):
+        body = _host_status_body(ctx)
+        reported = str(body.get('app_version')) if (
+            body and body.get('app_version')) else None
+        if reported and want and reported == str(want):
+            return reported, True, body
+        if index + 1 < attempts:
+            sleep(interval)
+    return reported, False, body
+
+
+def _host_answered_without_version(body):
+    """A daemon that ANSWERED /status but named no version.
+
+    That is not silence -- it is a pre-6.0.213 payload, which predates
+    version reporting entirely (convoy_hostapp._running_app_version returns
+    'source' rather than nothing precisely so absence stays unambiguous). It
+    is therefore the STRONGEST stale signal there is, and must not be folded
+    in with 'nobody answered': doing so both mislabels it and skips the very
+    automatic repair it most needs.
+    """
+    return isinstance(body, dict) and not body.get('app_version')
+
+
+def _host_daemon_has_work(body):
+    """True when the live daemon is mid-flight on real work.
+
+    Restarting under it would strand a dispatch that stop_drain_loop can spend
+    a minute unwinding, and an out-of-date daemon serving jobs correctly is a
+    smaller problem than one killed halfway through them. Absent data reads as
+    'no work' -- a daemon that cannot say is one we cannot protect.
+    """
+    if not isinstance(body, dict):
+        return False
+    for key in ('jobs_running', 'polls_in_flight'):
+        try:
+            if int(body.get(key) or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _host_restart_for_version(ctx):
+    """ONE targeted restart so the daemon re-reads installed.json.
+
+    THE AUTOMATIC REPAIR. By this point installed.json already names the new
+    version, so any relaunch resolves the new payload -- no payload rewrite and
+    no supervisor re-registration is needed, which is exactly why this is a
+    restart rather than a second install(). It is also strictly what the old
+    'Pulse Repair Convoy App' message asked the USER to do, so doing it here
+    costs them nothing and saves a warning they would never see.
+
+    Graceful only: the same /shutdown observers install() itself uses, then the
+    supervisor's own start. Never a hard kill -- that leaves a portfile naming
+    a dead pid, the hazard convoy_install documents at its uninstall path.
+    """
+    installer = ctx['installer']
+    out = {'shutdown': _host_shutdown(ctx)}
+    try:
+        out['exited'] = installer._await_exit(_host_is_running(ctx))
+    except Exception as e:
+        out['exited'] = False
+        out['detail'] = '%s: %s' % (type(e).__name__, e)
+    out['started'] = installer.start(platform=ctx['platform'],
+                                     uid=ctx['uid'], home=ctx['home'])
+    out['healthy'] = _host_await_health(ctx, ctx.get('health_wait_s'))
+    return out
 
 
 def _host_shutdown(ctx):
@@ -7209,6 +7416,7 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
     healthy = None
     verified = None
     reported = None
+    repaired_restart = None
     if outcome.get('registered'):
         # An external supervisor registered nothing, so there is nothing
         # here for us to start -- A-36's rule is never two supervisors,
@@ -7225,23 +7433,38 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
         # pre-token /health): a payload at version X reports
         # app_version X; a pre-6.0.213 payload reports nothing. Either
         # way a mismatch must never read as a clean install.
-        client = ctx['client']
-        try:
-            probe = client.probe(data_dir=ctx['data_dir'])
-            if probe.use_convoy and probe.handle is not None:
-                code, body = client.host_get(probe.handle, '/status')
-                if code == 200 and isinstance(body, dict) and body.get('ok'):
-                    reported = body.get('app_version')
-                    # Against the INSTALLED version, not ours. They are
-                    # the same thing for an install; for a runtime repair
-                    # the record keeps a NEWER version than this project,
-                    # and comparing against ctx would make the lie
-                    # detector itself lie on every successful repair.
-                    verified = bool(
-                        reported
-                        and str(reported) == str(outcome.get('version')))
-        except Exception:
-            verified = None
+        #
+        # SETTLE, THEN REPAIR, THEN report (2026-08-16). The detector was
+        # right that a mismatch is real -- and wrong to conclude from ONE
+        # immediate read, because a launchd respawn during the install
+        # window answers as the outgoing payload for about a second. So:
+        # wait for it to converge; if it does not, do the restart the
+        # warning used to ask the user to perform; only a mismatch that
+        # survives both is worth anyone's attention.
+        #
+        # Against the INSTALLED version, not ours. They are the same
+        # thing for an install; for a runtime repair the record keeps a
+        # NEWER version than this project, and comparing against ctx
+        # would make the lie detector itself lie on every successful
+        # repair.
+        want = outcome.get('version')
+        reported, matched, body = _host_settle_version(ctx, want)
+        # ANSWERED counts, with or without a version. A versionless answer is
+        # a pre-6.0.213 payload -- conclusive staleness, not silence.
+        answered = reported is not None or _host_answered_without_version(body)
+        if not matched and answered:
+            if _host_daemon_has_work(body):
+                # Work in flight outranks a version. Report the mismatch
+                # instead of stranding a dispatch mid-forward.
+                repaired_restart = {'skipped': 'daemon busy'}
+            else:
+                repaired_restart = _host_restart_for_version(ctx)
+                reported, matched, body = _host_settle_version(ctx, want)
+                answered = (reported is not None
+                            or _host_answered_without_version(body))
+        # None (nobody answered at all) is NOT False (answered, wrong or
+        # unnameable version).
+        verified = bool(matched) if answered else None
     detail = ('%s %s under %s%s%s'
               % ('re-pointed the installed' if repair_only else 'installed',
                  outcome.get('version'), interpreter, success_note,
@@ -7253,21 +7476,40 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
         detail += (' The daemon is running from this project and will '
                    'stop working if the project is moved or deleted.')
     if verified is False:
-        detail += (' -- WARNING: the restarted daemon reports %r, not '
-                   'the installed %s: the payload it runs may be stale. '
-                   'Pulse Repair Convoy App to re-run the install.'
-                   % (reported, outcome.get('version')))
+        tried = ('and restarting it once'
+                 if repaired_restart and 'skipped' not in repaired_restart
+                 else '(it was busy with running work, so it was NOT '
+                      'restarted)')
+        detail += (' -- WARNING: the daemon still reports %r, not the '
+                   'installed %s, after waiting for it to settle %s. '
+                   'The Convoy App on this machine is running older code '
+                   'than this Embody installed; Repair Convoy App is the '
+                   'manual retry.'
+                   % (reported, outcome.get('version'), tried))
     elif verified is None and outcome.get('registered'):
         # Not verified is not the same as verified: say the check was
         # inconclusive rather than letting a slow or unreachable daemon
         # read as a clean, confirmed install.
         detail += (' -- version unverified: the restarted daemon did '
                    'not answer in time')
+    elif repaired_restart:
+        # It DID converge, but only after the restart. Say so: a silent
+        # self-heal is the next 'why was that install slow' round trip.
+        detail += (' -- the daemon was restarted once to pick up the new '
+                   'payload, and now reports %s' % (reported,))
+    # THE READOUT comes from _host_snapshot, which re-derives the stale state
+    # itself (see _host_mark_stale_payload). It is deliberately NOT stamped
+    # from `verified` here: this snapshot is taken after the settle and the
+    # restart, so it is the FRESHER witness -- a daemon that came good in
+    # between must read as running, and a stamp from the older evidence would
+    # overrule it with a warning that is no longer true.
+    state = _host_snapshot(ctx)
     result = {'ok': True, 'action': action, 'outcome': outcome,
               'started': started, 'healthy': healthy,
               'version_verified': verified,
+              'restart_retry': repaired_restart,
               'detail': detail,
-              'state': _host_snapshot(ctx)}
+              'state': state}
     if rejected:
         # Probe rejections ride along on SUCCESS too: a venv that failed
         # its probe while a later candidate passed (or was repaired) is

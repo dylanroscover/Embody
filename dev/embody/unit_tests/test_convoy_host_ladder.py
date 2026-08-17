@@ -897,3 +897,347 @@ class TestARegistrationRevivesAStaleHostLine(EmbodyTestCase):
         self.assertEqual(fake.published, [])
         self.assertNotIn('host_state', fake.session,
                          'the snapshot is not rewritten either')
+
+
+# ---------------------------------------------------------------------
+# INSTALL VERIFICATION: settle -> one automatic restart -> visible state
+# ---------------------------------------------------------------------
+
+
+class _Handle:
+    host_id = 'h' * 32
+
+
+class _Probe:
+    def __init__(self, live):
+        self.use_convoy = bool(live)
+        self.handle = _Handle() if live else None
+        self.status = 'running' if live else 'absent'
+
+
+class _VersionClient:
+    """A daemon that answers /status with a SCRIPTED version per read.
+
+    `versions` is consumed one entry per /status read and the last entry
+    repeats, so a restart race is expressed directly: ['6.0.241', '6.0.246']
+    means 'the outgoing payload answered first, then the new one'. A
+    /shutdown also advances the script, because the next process to answer
+    is one launched AFTER installed.json was rewritten -- which is exactly
+    the mechanism the automatic repair relies on.
+    """
+
+    STATUS_RUNNING = 'running'
+    HOST_STALE_PAYLOAD = 'stale_payload'
+
+    def __init__(self, versions, extra=None):
+        self.versions = list(versions)
+        self.extra = dict(extra or {})
+        self.reads = 0
+        self.shutdowns = 0
+        self.live = True
+        # False models a daemon that never comes back at all -- the
+        # 'unverified, not stale' case, where nothing may be claimed.
+        self.revive_on_start = True
+
+    def _version(self):
+        if not self.versions:
+            return None
+        return self.versions[min(self.reads, len(self.versions) - 1)]
+
+    def data_dir(self):
+        return 'C:/fake/EmbodyConvoy'
+
+    def read_live_portfile(self, *a, **kw):
+        return {'pid': 4242} if self.live else None
+
+    def probe(self, *a, **kw):
+        return _Probe(self.live)
+
+    def host_get(self, handle, path):
+        if path != '/status':
+            return 404, {}
+        body = {'ok': True, 'app_version': self._version()}
+        body.update(self.extra)
+        self.reads += 1
+        return 200, body
+
+    def host_post(self, handle, path, body):
+        if path == '/shutdown':
+            self.shutdowns += 1
+            self.reads += 1
+            # The daemon really exits, so the portfile observer reports it
+            # gone and convoy_install._await_exit returns at once. Without
+            # this the observer would say 'still running' forever and the
+            # test would burn the full EXIT_WAIT_S of REAL time -- the
+            # wall-clock dependency this repo's CI rule forbids.
+            self.live = False
+            return 200, {'ok': True}
+        return 404, {}
+
+
+class _RegisteringInstaller(_Installer):
+    """_Installer, but its install REGISTERS -- so _host_install runs the
+    started/healthy/verify tail that the plain ladder tests skip."""
+
+    def __init__(self, real, build, version='6.0.246'):
+        super().__init__(real, build)
+        self.version = version
+        self.starts = 0
+        self.start_kwargs = []
+        self.client = None   # set by the test so start() can revive it
+
+    def install(self, data_dir, version, modules, interpreter, **kw):
+        self.calls.append(['INSTALL', interpreter])
+        self.recorded = interpreter
+        return {'ok': True, 'version': self.version, 'registered': True,
+                'supervisor': 'scheduled_task', 'steps': ['payload']}
+
+    def read_installed(self, data_dir, platform=None):
+        """The record a real install has just written. _host_snapshot reads
+        it to re-derive the stale-payload state on EVERY refresh, so the
+        harness has to carry it or that derivation cannot happen."""
+        # A REAL interpreter path: host_state answers 'needs repair -- Python
+        # not found' when the recorded one is missing, which would mask the
+        # state under test.
+        return {'version': self.version, 'supervisor': 'scheduled_task',
+                'interpreter': sys.executable,
+                'modules': ['convoy_hostapp.py']}
+
+    def start(self, **kw):
+        self.starts += 1
+        self.start_kwargs.append(dict(kw))
+        if self.client is not None and self.client.revive_on_start:
+            # The supervisor brings a daemon back up, so /health and /status
+            # answer again -- and the one that comes back reads the record
+            # written since, which is what the scripted version list models.
+            self.client.live = True
+        return {'ok': True, 'results': []}
+
+
+class TestInstallVersionVerification(_LadderBase):
+    """The install's lie detector, after the field report of 2026-08-16.
+
+    Three consecutive updates (6.0.239, 6.0.241, 6.0.246) each logged 'the
+    restarted daemon reports <the previous version> ... the payload it runs
+    may be stale', and each time the payload was fine: the daemon answering
+    was a launchd respawn of the OUTGOING process, because the LaunchAgent
+    carries RunAtLoad+KeepAlive and install() writes installed.json last.
+    One immediate read turned a transitional second into a permanent
+    verdict -- printed only to the textport, telling the user to press a
+    button they would never see.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.installer = _RegisteringInstaller(install_mod, self.buildVenv)
+
+    def _ctx(self, versions, extra=None, **over):
+        self.client = _VersionClient(versions, extra=extra)
+        self.installer.client = self.client
+        base = {'client': self.client, 'installer': self.installer,
+                'health_wait_s': 0.0, 'health_poll_s': 0.0,
+                'version_settle_attempts': 4, 'version_settle_s': 0.0,
+                # Same version as the record, so host_state reads RUNNING
+                # rather than 'installed by a newer Embody' -- the stale
+                # derivation only ever speaks over a running daemon.
+                'version': self.installer.version}
+        base.update(over)
+        return self.ctx(**base)
+
+    def _install(self, versions, extra=None, **over):
+        self.script({PROJECT_VENV: {'ok': True, 'probe': {}},
+                     self.daemon_py: {'ok': True, 'probe': {}}})
+        return self.install(ctx=self._ctx(versions, extra=extra, **over))
+
+    def test_a_matching_daemon_verifies_with_no_restart(self):
+        got = self._install(['6.0.246'])
+        self.assertTrue(got['ok'], got)
+        self.assertIs(got['version_verified'], True)
+        self.assertIsNone(got['restart_retry'],
+                          'a daemon already on the new payload is left alone')
+        self.assertEqual(self.client.shutdowns, 0)
+        self.assertNotIn('stale', got['detail'])
+
+    def test_the_restart_race_settles_instead_of_crying_wolf(self):
+        """THE FIELD CASE. The outgoing payload answers first; waiting was
+        all it took. The shipped code declared a stale payload here."""
+        got = self._install(['6.0.241', '6.0.241', '6.0.246'])
+        self.assertIs(got['version_verified'], True,
+                      'a version that converges is verified, not stale')
+        self.assertIsNone(got['restart_retry'],
+                          'settling must not spend the repair')
+        self.assertEqual(self.client.shutdowns, 0,
+                         'nothing is restarted over a race that resolves')
+        self.assertNotIn('WARNING', got['detail'])
+
+    def test_a_stuck_daemon_is_repaired_automatically(self):
+        """The reporter's question, answered in code: the installer performs
+        the repair its own warning used to ask them to perform."""
+        got = self._install(['6.0.241'] * 4 + ['6.0.246'])
+        self.assertEqual(self.client.shutdowns, 1,
+                         'exactly one automatic restart, never a loop')
+        self.assertEqual(self.installer.starts, 2,
+                         'the install start, plus the repair start')
+        self.assertIs(got['version_verified'], True)
+        self.assertTrue(got['restart_retry'],
+                        'a self-heal must be recorded, never silent')
+        self.assertIn('restarted once', got['detail'])
+
+    def test_a_daemon_that_never_updates_is_reported_as_needing_repair(self):
+        """And it reaches the READOUT, not just the textport -- that a
+        textport WARNING is invisible was the whole complaint."""
+        got = self._install(['6.0.241'])
+        self.assertIs(got['version_verified'], False)
+        self.assertEqual(self.client.shutdowns, 1,
+                         'the repair is attempted exactly once')
+        self.assertEqual(got['state']['state'], 'stale_payload')
+        self.assertEqual(got['state']['reported_version'], '6.0.241')
+        self.assertIn('6.0.241', got['detail'])
+        self.assertIn('Repair Convoy App', got['detail'])
+
+    def test_a_busy_daemon_is_never_restarted_under_its_own_work(self):
+        """An out-of-date daemon serving jobs correctly is a smaller problem
+        than one killed halfway through a dispatch."""
+        got = self._install(['6.0.241'],
+                            extra={'jobs_running': 1, 'polls_in_flight': 0})
+        self.assertEqual(self.client.shutdowns, 0,
+                         'work in flight outranks a version number')
+        self.assertIs(got['version_verified'], False)
+        self.assertEqual(got['restart_retry'], {'skipped': 'daemon busy'})
+        self.assertIn('busy', got['detail'])
+
+    def test_a_silent_daemon_is_unverified_not_stale(self):
+        """None is not False. Nothing answered, so nothing is claimed, and
+        the readout is NOT rewritten to needs-repair on no evidence."""
+        self.script({PROJECT_VENV: {'ok': True, 'probe': {}},
+                     self.daemon_py: {'ok': True, 'probe': {}}})
+        ctx = self._ctx(['6.0.246'])
+        self.client.live = False
+        self.client.revive_on_start = False
+        got = self.install(ctx=ctx)
+        self.assertIsNone(got['version_verified'])
+        self.assertNotEqual(got['state'].get('state'), 'stale_payload')
+        self.assertIn('unverified', got['detail'])
+
+    def test_settle_uses_the_injected_interval_not_a_real_wait(self):
+        """CI runners stall; a real-clock settle would be a flake factory."""
+        slept = []
+        reported, ok, _body = convoy_mod._host_settle_version(
+            self._ctx(['6.0.241']), '6.0.246', attempts=3,
+            sleep=slept.append)
+        self.assertFalse(ok)
+        self.assertEqual(reported, '6.0.241')
+        self.assertEqual(slept, [0.0, 0.0],
+                         'one sleep between attempts, none after the last')
+
+    def test_a_versionless_daemon_is_stale_not_silent(self):
+        """A daemon that ANSWERS but names no version is a pre-6.0.213
+        payload -- the strongest staleness signal there is, since it
+        predates version reporting entirely. Folding it in with 'nobody
+        answered' both mislabels it and skips the automatic repair it most
+        needs (panel finding, 2026-08-16)."""
+        got = self._install([None])
+        self.assertIs(got['version_verified'], False,
+                      'answered-without-a-version is a mismatch, not silence')
+        self.assertEqual(self.client.shutdowns, 1,
+                         'and it earns the automatic restart')
+        self.assertNotIn('did not answer', got['detail'],
+                         'a daemon that answered four times must never be '
+                         'reported as unreachable')
+
+    def test_the_stale_state_is_re_derived_from_a_plain_snapshot(self):
+        """THE READOUT MUST SURVIVE A REFRESH. Stamped once by the install,
+        it was erased by the very next status refresh -- which fires on
+        every project save -- leaving the log line as the only trace, i.e.
+        the exact invisibility the field report complained about."""
+        self._install(['6.0.241'])
+        state = convoy_mod._host_snapshot(self._ctxSameClient())
+        self.assertEqual(state['state'], 'stale_payload',
+                         'a refresh must re-derive it, never clear it')
+        self.assertEqual(state['reported_version'], '6.0.241')
+
+    def test_a_converged_daemon_stops_being_reported_as_stale(self):
+        """Derived, not latched: the moment the daemon serves the installed
+        version the readout goes back to running, with no repair needed."""
+        self._install(['6.0.246'])
+        state = convoy_mod._host_snapshot(self._ctxSameClient())
+        self.assertNotEqual(state['state'], 'stale_payload')
+
+    def test_a_source_daemon_is_never_called_stale(self):
+        """A dev checkout's daemon reports 'source' -- unorderable, and a
+        false 'Needs repair' on a healthy dev machine would be its own
+        defect."""
+        self._install(['source'])
+        state = convoy_mod._host_snapshot(self._ctxSameClient())
+        self.assertNotEqual(state['state'], 'stale_payload')
+
+    def test_a_newer_daemon_is_never_called_stale(self):
+        """Newer-than-the-record has its own, more specific words."""
+        self._install(['6.0.999'])
+        state = convoy_mod._host_snapshot(self._ctxSameClient())
+        self.assertNotEqual(state['state'], 'stale_payload')
+
+    def _ctxSameClient(self):
+        """A fresh status-refresh ctx over the SAME daemon, as a Refresh
+        pulse would build it."""
+        return self.ctx(client=self.client, installer=self.installer,
+                        health_wait_s=0.0, health_poll_s=0.0,
+                        version_settle_attempts=1, version_settle_s=0.0,
+                        version=self.installer.version)
+
+    def test_the_automatic_restart_is_graceful_on_darwin(self):
+        """THE PLATFORM THAT HAS THE BUG, pinned where CI can see it.
+
+        The stale-payload race is macOS-specific: the LaunchAgent carries
+        RunAtLoad+KeepAlive, so a respawn during the install window serves
+        the outgoing payload. This Windows dev box cannot reproduce that
+        (schtasks /Create registers without starting), and the hardware
+        Mac is not a routine signal -- so the darwin restart is pinned by
+        the commands it ISSUES, on every leg of the matrix.
+
+        Graceful, never a hard kill: the daemon is ASKED to exit
+        (/shutdown), waited for, and only then started. `launchctl
+        kickstart -k` would SIGKILL it and leave a portfile naming a dead
+        pid, which convoy_install documents as its own hazard.
+        """
+        self.script({MAC_VENV: {'ok': True, 'probe': {}},
+                     MAC_DAEMON: {'ok': True, 'probe': {}}})
+        ctx = self._ctx(['6.0.241'], platform='darwin', uid='501',
+                        venv_python=MAC_VENV,
+                        runtime_candidates=[MAC_VENV],
+                        daemon_venv=self.spec(python=MAC_DAEMON,
+                                              daemon_python=MAC_DAEMON,
+                                              bases=['/opt/homebrew/bin/'
+                                                     'python3']))
+        out = convoy_mod._host_restart_for_version(ctx)
+
+        # 1. It ASKS the daemon to exit, and waits for it, before starting.
+        self.assertEqual(self.client.shutdowns, 1,
+                         'the daemon is asked to exit first')
+        self.assertIs(out['exited'], True,
+                      'and the exit is WAITED for -- starting over a live '
+                      'process is how the stale payload survived')
+        # 2. It starts through the SUPERVISOR, on this platform.
+        self.assertEqual(self.installer.start_kwargs[-1].get('platform'),
+                         'darwin')
+        self.assertEqual(self.installer.starts, 1, 'exactly one start')
+        # 3. And that supervisor primitive is graceful on darwin. Asserted
+        #    against the real generator, so a future switch to the hard-kill
+        #    form fails here instead of in the field.
+        argv = install_mod.supervisor_argv('start', 'darwin', uid='501')
+        self.assertEqual(argv[0], 'launchctl')
+        self.assertIn('kickstart', argv)
+        self.assertNotIn(
+            '-k', argv,
+            'kickstart -k SIGKILLs the daemon and strands a portfile naming '
+            'a dead pid -- convoy_install\'s own documented hazard')
+
+    def test_work_detection_reads_both_counters_and_defaults_to_free(self):
+        has_work = convoy_mod._host_daemon_has_work
+        self.assertTrue(has_work({'jobs_running': 2}))
+        self.assertTrue(has_work({'polls_in_flight': 1}))
+        self.assertFalse(has_work({'jobs_running': 0, 'polls_in_flight': 0}))
+        self.assertFalse(has_work({}), 'absent data is not evidence of work')
+        self.assertFalse(has_work(None))
+        self.assertFalse(has_work({'jobs_running': 'lots'}),
+                         'an unreadable counter must not block the repair')

@@ -134,6 +134,14 @@ HOST_CHECKING = "checking"
 HOST_INSTALLING = "installing"
 HOST_STARTING = "starting"
 HOST_INSTALL_FAILED = "install_failed"
+# An install that landed on disk but whose DAEMON is still serving the
+# previous payload after the settle wait AND one automatic restart. Owned
+# here, not by convoy_install.host_state: only the install call knows what
+# the daemon answered, and host_state reads disk. The lead words are
+# 'Needs repair' on purpose -- that prefix already outranks the node line on
+# Status and already classifies FAILED in startup_progress, so a defect the
+# user must act on cannot hide behind a green 'Running'.
+HOST_STALE_PAYLOAD = "stale_payload"
 # The runtime-only repair (plan_install's repair_runtime action) rode
 # HOST_INSTALLING and so read 'Installing...' -- which is false in the
 # one way this field exists to prevent. A repair writes NO payload: it
@@ -1617,8 +1625,8 @@ def status_text(result):
 def host_status_text(state):
     """The Convoy Host string for one host-app state. TOTAL, never raises.
 
-    THE SINGLE SOURCE of that field's vocabulary -- thirteen strings, and
-    no fourteenth. `state` is either convoy_install.host_state()'s dict
+    THE SINGLE SOURCE of that field's vocabulary -- fourteen strings, and
+    no fifteenth. `state` is either convoy_install.host_state()'s dict
     or a bare transient name ('checking', 'installing', 'repairing',
     'starting', 'install_failed'), because the extension needs to say
     what it is doing before there is anything on disk to describe.
@@ -1673,6 +1681,10 @@ def host_status_text(state):
             lead, version or "?")
     if name == HOST_EXTERNAL_SUPERVISOR:
         return "Managed by another supervisor"
+    if name == HOST_STALE_PAYLOAD:
+        running = str(state.get("reported_version") or "")
+        return ("Needs repair -- still running %s, not %s (use Repair "
+                "Convoy App)" % (running or "older code", version or "?"))
     return "Install failed -- see log"
 
 
