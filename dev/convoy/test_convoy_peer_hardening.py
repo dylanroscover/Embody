@@ -1035,12 +1035,14 @@ def test_new6_a_revocation_does_not_stall_the_whole_host(server):
     node = register(server)
     admit(server)
     jobs = 250
+    delivery_ids = []
     with server.app.lock:
         for i in range(jobs):
-            server.app.db.create_job("n6-%d" % i, node["node_id"],
-                                     "query_network", {}, CONVOY,
-                                     origin_host_id=PEER,
-                                     controller_id="peer:%s:c" % PEER)
+            job, _ = server.app.db.create_job("n6-%d" % i, node["node_id"],
+                                              "query_network", {}, CONVOY,
+                                              origin_host_id=PEER,
+                                              controller_id="peer:%s:c" % PEER)
+            delivery_ids.append(job["delivery_id"])
     worst = [0.0]
     stop = threading.Event()
 
@@ -1063,8 +1065,29 @@ def test_new6_a_revocation_does_not_stall_the_whole_host(server):
 
     assert code == 200
     summary = body["revocation"]
-    assert summary["refused"] == jobs, (
-        "every queued job must actually transition: %r" % summary)
+    # Every queued job must actually transition -- but WHICH ACTOR
+    # terminalises each one is a race this test must not assert. On a
+    # stalled runner (windows-latest, 2026-08-18) the autonomous drain
+    # lawfully refused 241 of the 250 at dispatch-time re-authorization
+    # BEFORE the sweep snapshotted the store (already_terminal, state
+    # 'refused'), and the sweep's read-then-CAS lost 8 more records to
+    # that same race mid-write (mark_refused declined -> 'errors'). The
+    # invariant is the OUTCOME, asserted on the STORE: every job ends
+    # refused whoever won, nothing is left live, and the lock was never
+    # held long.
+    for name in ("left_queued", "left_in_flight", "left_running"):
+        assert summary[name] == 0, (
+            "revocation left live work behind: %r" % summary)
+    with server.app.lock:
+        end_states = {
+            delivery_id: (server.app.db.get_job(delivery_id) or {}).get(
+                "state")
+            for delivery_id in delivery_ids}
+    not_refused = {k: v for k, v in end_states.items() if v != "refused"}
+    assert not not_refused, (
+        "every job must END refused whichever actor won the race: "
+        "%r ... (sweep summary %r)"
+        % (dict(list(not_refused.items())[:8]), summary))
     # AND THE SUMMARY MUST ADD UP, which is what made the one CI failure
     # of this test so hard to read: it reported examined 250 against
     # buckets summing to 14 and said nothing about the other 236, so the

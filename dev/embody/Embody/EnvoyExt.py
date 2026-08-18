@@ -17,6 +17,7 @@ Usage:
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import contextvars
 import fnmatch
@@ -30,6 +31,7 @@ import tempfile
 import urllib.parse
 import urllib.request
 import time
+from collections import deque
 from html import unescape
 from queue import Queue, Empty
 from threading import Lock, Event, Thread
@@ -879,6 +881,227 @@ def read_tsv_dirty_paths(repo_root: str) -> set:
     return dirty
 
 
+# --- Worker-thread run() lint (static, write-time) ---
+
+# Calling TD's global run() from a worker thread does NOT raise on current
+# builds -- it silently corrupts TD state and crashes later (Derivative-
+# confirmed 2026-08-17). Nothing catches it at runtime, so the tool layer
+# catches it at WRITE time, the same contract as LAYOUT WARNING: a warning
+# rides back in _logs and the write still lands.
+
+# Matched on the TRAILING callable name so threading.Thread(...), Thread(...),
+# TDTask(...), ThreadManager.EnqueueTask(...) and executor.submit(...) all
+# resolve without tracking imports or aliases.
+_THREAD_CTORS = ('Thread', 'TDTask')
+_THREAD_DISPATCHERS = ('EnqueueTask', 'submit')
+_THREAD_TARGET_KWARGS = ('target', 'task')
+# Subclassing threading.Thread (or TD's TDThread) and overriding run() is the
+# other standard spawn idiom; .start() invokes that run() on the worker.
+_THREAD_BASES = ('Thread', 'TDThread', 'TDTask', 'Timer')
+
+# The lint runs on TD's main thread inside the per-frame refresh drain, so
+# its cost is bounded up front: sources over the byte cap are not linted
+# (ast.parse alone measures ~200ms at 500KB), sources without the substring
+# 'run(' cannot produce a finding and skip the parse entirely, and each
+# distinct (target, body) pair is scanned once no matter how many spawn
+# sites hand it to a thread.
+_WORKER_RUN_LINT_MAX_BYTES = 131072
+_WORKER_RUN_LINT_MAX_TARGETS = 64
+
+
+def _called_name(node) -> str:
+    """Trailing callable name of a Call: 'Thread' for both Thread(...) and
+    threading.Thread(...). None when the callee is neither a name nor an
+    attribute (a subscript or an immediate call)."""
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
+
+
+def _run_calls_in(node, run_shadowed: bool) -> list:
+    """(label, lineno) for every worker-hostile run() call inside `node`:
+    bare run(...) and td.run(...). subprocess.run and every other x.run are
+    deliberately NOT matched -- only TD's global run() is the hazard. String
+    and comment occurrences never reach here; ast only yields real calls."""
+    out = []
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        func = child.func
+        if (isinstance(func, ast.Name) and func.id == 'run'
+                and not run_shadowed):
+            out.append(('run()', child.lineno))
+        elif (isinstance(func, ast.Attribute) and func.attr == 'run'
+                and isinstance(func.value, ast.Name)
+                and func.value.id == 'td'):
+            out.append(('td.run()', child.lineno))
+    return out
+
+
+def _direct_callees(node, defs: dict) -> list:
+    """Names called inside `node` that are defined in the SAME submitted
+    source. One level of resolution: a helper the thread target calls runs
+    on the worker thread too, so its run() is the target's run()."""
+    names = []
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call):
+            name = _called_name(child)
+            if name in defs and name not in names:
+                names.append(name)
+    return names
+
+
+def _module_bound_names(tree) -> set:
+    """Names bound at MODULE scope: top-level defs, classes, assignments and
+    import aliases, descending through module-level control flow (if/try/
+    for/while) but never into class or function bodies -- a method or a
+    local variable does not rebind the module-scope name a bare call
+    resolves to."""
+    bound = set()
+    stack = list(tree.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef)):
+            bound.add(node.name)
+            continue                     # do not descend into the body
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                bound.add((alias.asname or alias.name).split('.')[0])
+            continue
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            bound.add(node.id)
+        stack.extend(ast.iter_child_nodes(node))
+    return bound
+
+
+def _worker_run_findings(source) -> list:
+    """Findings for code a thread will execute -- a function handed to a
+    thread as a TARGET (or a helper it calls in this same source), and the
+    run() method of a threading.Thread subclass -- that calls TD's global
+    run().
+
+    Pure: source string in, list of {function, call, line, via} out, so it
+    is testable without TouchDesigner. Unparseable source lints to NOTHING:
+    submitted code may be a fragment, and a lint must never be the thing
+    that fails a write. Oversized source and source with no 'run(' at all
+    lint to nothing before the parse -- the byte cap keeps the main thread
+    inside its frame budget.
+    """
+    if not isinstance(source, str) or not source:
+        return []
+    if len(source) > _WORKER_RUN_LINT_MAX_BYTES or 'run(' not in source:
+        return []
+    try:
+        tree = ast.parse(source)
+    except Exception:
+        return []
+
+    # Every def in the source (nested and local defs included -- a locally
+    # defined worker is the common shape).
+    defs = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            defs.setdefault(node.name, node)
+
+    # Bare run() is suppressed only when MODULE scope rebinds `run` -- that
+    # is what a bare call inside a function resolves to. A method named run
+    # (every threading.Thread subclass has one) or a local variable must NOT
+    # disable the lint: a whole-tree scan goes silent on exactly the
+    # threading-heavy sources the lint exists for. td.run() stays
+    # unambiguous either way.
+    run_shadowed = 'run' in _module_bound_names(tree)
+
+    # (reported name, node to scan) -- callables handed to a thread ctor or
+    # dispatcher, plus run() overrides on thread-subclass bodies.
+    resolved = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            name = _called_name(node)
+            if name not in _THREAD_CTORS and name not in _THREAD_DISPATCHERS:
+                continue
+            expr = None
+            for kw in node.keywords:
+                if kw.arg in _THREAD_TARGET_KWARGS:
+                    expr = kw.value
+                    break
+            # EnqueueTask(task, *args) / executor.submit(fn, *args) take the
+            # callable positionally; Thread's first positional is `group`,
+            # so positional targets are read for dispatchers only.
+            if expr is None and name in _THREAD_DISPATCHERS and node.args:
+                expr = node.args[0]
+            if expr is None:
+                continue
+            if isinstance(expr, ast.Lambda):
+                resolved.append(('<lambda>', expr))
+            elif isinstance(expr, (ast.Name, ast.Attribute)):
+                key = (expr.id if isinstance(expr, ast.Name)
+                       else expr.attr)   # self.worker / mod.worker by name
+                body = defs.get(key)
+                if body is not None:
+                    resolved.append((key, body))
+        elif isinstance(node, ast.ClassDef):
+            bases = {b.id if isinstance(b, ast.Name) else b.attr
+                     for b in node.bases
+                     if isinstance(b, (ast.Name, ast.Attribute))}
+            if not bases.intersection(_THREAD_BASES):
+                continue
+            for stmt in node.body:
+                if (isinstance(stmt, (ast.FunctionDef,
+                                      ast.AsyncFunctionDef))
+                        and stmt.name == 'run'):
+                    resolved.append((node.name + '.run', stmt))
+
+    # Scan each distinct (label, body) once -- N spawn sites of one worker
+    # are one scan, which is what bounds the repeated-target worst case --
+    # and cap the total in case a pathological source defeats the dedupe.
+    scan = []
+    scanned = set()
+    for label, body in resolved:
+        key = (label, id(body))
+        if key in scanned:
+            continue
+        scanned.add(key)
+        scan.append((label, body, None))
+        for callee in _direct_callees(body, defs):
+            if defs[callee] is not body:
+                scan.append((label, defs[callee], callee))
+        if len(scan) >= _WORKER_RUN_LINT_MAX_TARGETS:
+            break
+
+    findings = []
+    seen = set()
+    for label, node, via in scan:
+        for call_label, lineno in _run_calls_in(node, run_shadowed):
+            key = (label, call_label, lineno, via)
+            if key in seen:
+                continue
+            seen.add(key)
+            findings.append({'function': label, 'call': call_label,
+                             'line': lineno, 'via': via})
+    findings.sort(key=lambda f: (f['line'], f['function']))
+    return findings
+
+
+# Worker threads must not print(): TD replaces sys.stdout with a Textport
+# catcher, a main-thread object, so a worker print is the same defect class
+# as worker-side run() (Derivative-confirmed 2026-08-17). Workers buffer
+# diagnostics here instead; _onRefresh drains them through the normal
+# logger on the main thread. Bounded so a chatty worker cannot grow it.
+_WORKER_LOG_LINES = deque(maxlen=64)
+
+
+def _queueWorkerLog(message, level='WARNING'):
+    """Buffer one worker-side log line for main-thread delivery."""
+    try:
+        _WORKER_LOG_LINES.append((level, str(message)))
+    except Exception:
+        pass
+
+
 class EnvoyMCPServer:
     """
     MCP Server that runs in a worker thread.
@@ -982,8 +1205,8 @@ class EnvoyMCPServer:
                 ],
             )
         except Exception as e:
-            print(f'[Envoy][WARNING] Transport security settings unavailable; '
-                  f'continuing without explicit MCPServer transport_security: {e}')
+            _queueWorkerLog(f'Transport security settings unavailable; '
+                            f'continuing without explicit MCPServer transport_security: {e}')
         # version: 2.0 reports serverInfo.version as "" unless told (1.x
         # substituted the SDK's own version -- neither is Envoy's).
         # MCPServer.__init__ calls logging.basicConfig(level=INFO): inside
@@ -1782,8 +2005,8 @@ class EnvoyMCPServer:
                 pending['event'].set()
             else:
                 # Orphaned response -- request already timed out and was removed
-                print(f'[Envoy][WARNING] Orphaned response for request {request_id} '
-                      f'(likely timed out). Operation still executed on main thread.')
+                _queueWorkerLog(f'Orphaned response for request {request_id} '
+                                f'(likely timed out). Operation still executed on main thread.')
 
         if first_response is not None:
             process_response(first_response)
@@ -1800,7 +2023,7 @@ class EnvoyMCPServer:
                 except NameError:
                     expected = type(e).__name__ == 'Empty'
                 if not expected:
-                    print(f'[Envoy][WARNING] check_responses unexpected error: {type(e).__name__}: {e}')
+                    _queueWorkerLog(f'check_responses unexpected error: {type(e).__name__}: {e}')
                 break
             process_response(response)
 
@@ -3903,7 +4126,7 @@ class EnvoyMCPServer:
                     if expected:
                         continue
                     if not self.shutdown_event.is_set():
-                        print(f'[Envoy][WARNING] response_checker exiting: {e}')
+                        _queueWorkerLog(f'response_checker exiting: {e}')
                     break
 
         Thread(target=response_checker, daemon=True).start()
@@ -6065,6 +6288,15 @@ class EnvoyExt:
         except Exception:
             return
 
+        # Deliver worker-side buffered diagnostics (workers cannot print()
+        # or _log() -- both touch main-thread TD objects).
+        while _WORKER_LOG_LINES:
+            try:
+                level, message = _WORKER_LOG_LINES.popleft()
+            except IndexError:
+                break
+            self._log(message, level)
+
         # Process up to MAX_REQUESTS_PER_FRAME to avoid frame stalls from
         # burst MCP traffic.  Remaining requests queue to next frame.
         MAX_REQUESTS_PER_FRAME = 5
@@ -7703,10 +7935,38 @@ class EnvoyExt:
         except Exception:
             pass
 
+    def _lintWorkerRun(self, source, where):
+        """WARN when submitted source hands a thread a target that calls TD's
+        global run(). Static and bounded (_worker_run_findings size-caps and
+        substring-prefilters before parsing), so the per-call frame cost stays
+        negligible, and it fires on the WRITE, not on the crash that
+        would otherwise arrive frames later. Warning only -- the code still
+        executes and the DAT is still written, same contract as LAYOUT
+        WARNING; the warning rides back in _logs via _attachNotableLogs."""
+        try:
+            findings = _worker_run_findings(source or '')
+            if not findings:
+                return
+            detail = '; '.join(
+                '"%s" reaches %s at line %d%s'
+                % (f['function'], f['call'], f['line'],
+                   (' (via %s)' % f['via']) if f['via'] else '')
+                for f in findings[:5])
+            self._log(
+                'THREADING WARNING: ' + where + ' -- thread target ' + detail
+                + '. Worker-side run() corrupts TD state and crashes later '
+                  '(Derivative-confirmed 2026-08-17); hand results back as '
+                  'plain data drained by a main-thread pump instead.',
+                'WARNING')
+        except Exception:
+            pass
+
     def _execute_python(self, code: str) -> dict:
         """Execute arbitrary Python code"""
         code_preview = code[:200] + ('...' if len(code) > 200 else '')
         self._log(f'execute_python: {code_preview}')
+        # Before exec, so the warning lands even when the code itself fails.
+        self._lintWorkerRun(code, 'execute_python')
         try:
             # Snapshot op paths so we can lint ONLY the ops this call creates.
             # execute_python uses raw comp.create()/copy() (no auto-position),
@@ -7833,13 +8093,35 @@ class EnvoyExt:
                         rows: list = None, clear: bool = False,
                         confirm_wipe: bool = False) -> dict:
         """Set DAT content from text or table rows -- see envoy_ops."""
-        return mod.envoy_ops.set_dat_content(self, op_path, text, rows, clear, confirm_wipe)
+        result = mod.envoy_ops.set_dat_content(self, op_path, text, rows, clear, confirm_wipe)
+        # text= IS the resulting full text; rows= is a table, never source.
+        if (isinstance(result, dict) and result.get('success')
+                and isinstance(text, str)):
+            self._lintWorkerRun(text, 'set_dat_content ' + op_path)
+        return result
 
     def _edit_dat_content(self, op_path: str, old_string: str,
                          new_string: str, replace_all: bool = False,
                          confirm_wipe: bool = False) -> dict:
         """Surgical text edit on a DAT -- see envoy_ops."""
-        return mod.envoy_ops.edit_dat_content(self, op_path, old_string, new_string, replace_all, confirm_wipe)
+        result = mod.envoy_ops.edit_dat_content(self, op_path, old_string, new_string, replace_all, confirm_wipe)
+        # A partial edit only makes sense against the WHOLE resulting text --
+        # re-read the DAT rather than linting the spliced-in fragment. The
+        # row-count proxy skips even the full-text read when the DAT is far
+        # beyond the lint's byte cap; a finding here can also predate this
+        # edit, which the where-label says out loud.
+        if (isinstance(result, dict) and result.get('success')
+                and result.get('numRows', 0) <= 4096):
+            try:
+                target = self._resolve_op(op_path)
+                edited = target.text if target is not None else None
+            except Exception:
+                edited = None
+            if isinstance(edited, str):
+                self._lintWorkerRun(
+                    edited, 'edit_dat_content ' + op_path
+                    + ' (whole resulting text, may predate this edit)')
+        return result
 
     # === TOP Capture (Main Thread Only) ===
 
