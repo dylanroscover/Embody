@@ -129,6 +129,29 @@ def build_bundle(runtime_root, output, runtime_id, python_relative,
             raise ValueError("managed runtime Python is not executable")
         if not os.access(probe_python_path, os.X_OK):
             raise ValueError("runtime probe Python is not executable")
+    if platform_name == "win32":
+        # THE SAME GATE provision_runtime_bundle and verify_managed_runtime
+        # apply, moved to the only place it can still be FIXED. A managed
+        # runtime is hash-pinned, so a console daemon interpreter is
+        # correctly unrepairable on a user's machine: it would pass
+        # packaging here and then hard-refuse with
+        # runtime_interpreter_not_windowless on every install, forever.
+        # Names, not subsystems, are what _validate_runtime_manifest
+        # checks (pythonw.exe / python.exe); this checks that the binaries
+        # behind those names really are what the names claim.
+        daemon_subsystem = installer.pe_subsystem(str(python_path))
+        if daemon_subsystem != installer.PE_SUBSYSTEM_GUI:
+            raise ValueError(
+                "the Windows daemon interpreter must be a windowless "
+                "(GUI-subsystem) binary or it opens a console window at "
+                "every logon: %s reports subsystem %r"
+                % (python_path, daemon_subsystem))
+        probe_subsystem = installer.pe_subsystem(str(probe_python_path))
+        if probe_subsystem != installer.PE_SUBSYSTEM_CONSOLE:
+            raise ValueError(
+                "the Windows capability probe interpreter must be the "
+                "CONSOLE python.exe (it is driven over pipes): %s reports "
+                "subsystem %r" % (probe_python_path, probe_subsystem))
 
     probe = installer.probe_runtime(
         str(probe_python_path), platform_name, architecture,

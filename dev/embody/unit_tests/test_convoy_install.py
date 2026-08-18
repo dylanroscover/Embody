@@ -253,6 +253,56 @@ def _approved_runtime(data_dir, interpreter, platform=None,
     }
 
 
+def _pe_bytes(subsystem, magic=0x010B, e_lfanew=0x80, size=None, tail=b''):
+    """A PE image header carrying one honest fact: its subsystem.
+
+    Enough of a real Portable Executable for pe_subsystem to read: the
+    DOS stub's e_lfanew at 0x3C, the PE signature it points at, a COFF
+    header, and an optional header whose magic says PE32 (0x010b) or
+    PE32+ (0x020b). `tail` makes two otherwise identical fixtures
+    distinguishable, so a test can prove WHICH file was copied.
+
+    Crafted rather than copied from the machine: these tests run on the
+    macOS CI leg too, where no Windows binary exists to borrow.
+    """
+    size = size or (e_lfanew + 96)
+    raw = bytearray(size)
+    raw[0:2] = b'MZ'
+    raw[0x3C:0x40] = e_lfanew.to_bytes(4, 'little')
+    raw[e_lfanew:e_lfanew + 4] = b'PE\0\0'
+    raw[e_lfanew + 4:e_lfanew + 6] = (0x8664).to_bytes(2, 'little')
+    raw[e_lfanew + 24:e_lfanew + 26] = magic.to_bytes(2, 'little')
+    raw[e_lfanew + 92:e_lfanew + 94] = subsystem.to_bytes(2, 'little')
+    return bytes(raw) + tail
+
+
+def _gui_pe(tail=b''):
+    return _pe_bytes(install_mod.PE_SUBSYSTEM_GUI, tail=tail)
+
+
+def _console_pe(tail=b''):
+    return _pe_bytes(install_mod.PE_SUBSYSTEM_CONSOLE, tail=tail)
+
+
+def _write(path, payload):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'wb') as f:
+        f.write(payload)
+    return path
+
+
+def _read(path):
+    with open(path, 'rb') as f:
+        return f.read()
+
+
+def _listdir(path):
+    try:
+        return os.listdir(path)
+    except OSError:
+        return []
+
+
 class _TempDir:
     """tempfile.mkdtemp with a context manager, because the in-TD runner
     and pytest disagree about fixtures."""
@@ -1714,7 +1764,7 @@ class TestConvoyInstallStatusParsing(EmbodyTestCase):
 class TestConvoyInstallInterpreterDiscovery(EmbodyTestCase):
 
     def _runtime(self, root, runtime_id, platform, architecture,
-                 python_version='3.11.15'):
+                 python_version='3.11.15', subsystem=None):
         target = os.path.join(root, runtime_id)
         relative = ('python/pythonw.exe' if platform == 'win32'
                     else 'python/bin/python3')
@@ -1722,13 +1772,19 @@ class TestConvoyInstallInterpreterDiscovery(EmbodyTestCase):
                           else relative)
         interpreter = os.path.join(target, *relative.split('/'))
         os.makedirs(os.path.dirname(interpreter), exist_ok=True)
+        # A REAL PE HEADER on win32: 'windowless' is no longer a claim the
+        # receipt makes, it is read out of the binary, so a fixture of
+        # plain bytes would answer False and this fixture would stop
+        # describing a runtime anyone would ship.
         with open(interpreter, 'wb') as f:
-            f.write(b'fake managed python')
+            f.write(_pe_bytes(subsystem or install_mod.PE_SUBSYSTEM_GUI,
+                              tail=b'fake managed python')
+                    if platform == 'win32' else b'fake managed python')
         probe_interpreter = os.path.join(target,
                                          *probe_relative.split('/'))
         if probe_interpreter != interpreter:
             with open(probe_interpreter, 'wb') as f:
-                f.write(b'fake managed probe python')
+                f.write(_console_pe(b'fake managed probe python'))
         receipt = {
             'format': install_mod.RUNTIME_RECEIPT_FORMAT,
             'runtime_id': runtime_id,
@@ -1769,6 +1825,33 @@ class TestConvoyInstallInterpreterDiscovery(EmbodyTestCase):
             self.assertEqual([c['path'] for c in found], [expected])
             self.assertTrue(found[0]['managed'])
             self.assertTrue(found[0]['windowless'])
+
+    def test_a_console_interpreter_is_never_windowless_and_loses(self):
+        """'windowless' was hardcoded True -- a claim made by the file's
+        NAME. It is read out of the binary now, so a runtime whose
+        pythonw.exe is really a console build is passed over for one that
+        is not, however much newer it is."""
+        with _TempDir() as root:
+            console = self._runtime(
+                root, 'runtime-newer', 'win32', 'x86_64', '3.12.2',
+                subsystem=install_mod.PE_SUBSYSTEM_CONSOLE)
+            windowless = self._runtime(root, 'runtime-older', 'win32',
+                                       'x86_64', '3.11.15')
+            found = install_mod.find_interpreters(
+                'win32', roots=[root], architecture='x86_64')
+            self.assertEqual({c['path']: c['windowless'] for c in found},
+                             {console: False, windowless: True})
+            self.assertEqual(install_mod.choose_interpreter(found),
+                             windowless,
+                             'the newest runtime still loses to the one '
+                             'that will not open a window at logon')
+
+    def test_posix_runtimes_stay_windowless_with_no_pe_to_read(self):
+        with _TempDir() as root:
+            self._runtime(root, 'runtime-mac', 'darwin', 'arm64')
+            found = install_mod.find_interpreters(
+                'darwin', roots=[root], architecture='arm64')
+            self.assertEqual([c['windowless'] for c in found], [True])
 
     def test_the_newest_managed_python_wins(self):
         with _TempDir() as root:
@@ -2119,6 +2202,995 @@ class TestConvoyDaemonVenvSpec(EmbodyTestCase):
         self.assertEqual(spec['bases'], [])
 
 
+# -- 8b. the daemon interpreter must be WINDOWLESS ---------------------
+#
+# THE FIELD DEFECT, measured: uv 0.11.x and earlier write BYTE-IDENTICAL
+# trampolines for a venv's Scripts/python.exe and Scripts/pythonw.exe --
+# both PE subsystem CONSOLE, both re-launching the base CONSOLE
+# python.exe (astral-sh/uv#19226, fixed in uv 0.12.4). The Scheduled Task
+# launches the "windowless" one at logon, so an empty Windows Terminal
+# window appears at every single login. A fixed uv repairs NOTHING that
+# is already on disk, so the gate and the repair live in our installer.
+
+class TestPESubsystem(EmbodyTestCase):
+    """The four bytes that decide whether a window appears at logon.
+
+    A file NAMED pythonw.exe is a claim. The PE subsystem field is the
+    fact, and this is the only thing in the codebase that can tell them
+    apart -- so it is tested against both PE32 and PE32+ layouts and
+    against every malformed shape it must answer None for rather than
+    raise, because every caller is on a worker thread.
+    """
+
+    def test_it_reads_gui_and_console_out_of_a_pe32_image(self):
+        with _TempDir() as root:
+            gui = _write(os.path.join(root, 'pythonw.exe'), _gui_pe())
+            console = _write(os.path.join(root, 'python.exe'), _console_pe())
+            self.assertEqual(install_mod.pe_subsystem(gui),
+                             install_mod.PE_SUBSYSTEM_GUI)
+            self.assertEqual(install_mod.pe_subsystem(console),
+                             install_mod.PE_SUBSYSTEM_CONSOLE)
+
+    def test_it_reads_a_pe32_plus_image_too(self):
+        """x64 CPython is PE32+ (magic 0x020b). Subsystem sits at the
+        same optional-header offset in both layouts -- everything that
+        differs in size comes after it -- and a reader that got that
+        wrong would answer 0 for every 64-bit binary on the machine."""
+        with _TempDir() as root:
+            for name, subsystem in (('w.exe', install_mod.PE_SUBSYSTEM_GUI),
+                                    ('c.exe',
+                                     install_mod.PE_SUBSYSTEM_CONSOLE)):
+                path = _write(os.path.join(root, name),
+                              _pe_bytes(subsystem, magic=0x020B))
+                self.assertEqual(install_mod.pe_subsystem(path), subsystem)
+
+    def test_a_far_pe_header_is_still_found(self):
+        with _TempDir() as root:
+            path = _write(os.path.join(root, 'far.exe'),
+                          _pe_bytes(install_mod.PE_SUBSYSTEM_GUI,
+                                    e_lfanew=0x400))
+            self.assertEqual(install_mod.pe_subsystem(path),
+                             install_mod.PE_SUBSYSTEM_GUI)
+
+    def test_anything_that_is_not_a_readable_pe_answers_none(self):
+        with _TempDir() as root:
+            truncated = _pe_bytes(install_mod.PE_SUBSYSTEM_GUI)[:0x80 + 40]
+            cases = {
+                'text.txt': b'#!/bin/sh\necho hello\n',
+                'empty.exe': b'',
+                'short.exe': b'MZ',
+                'truncated.exe': truncated,
+                'past_eof.exe': _pe_bytes(install_mod.PE_SUBSYSTEM_GUI,
+                                          e_lfanew=0x9000, size=0x200),
+                'bad_signature.exe': _pe_bytes(
+                    install_mod.PE_SUBSYSTEM_GUI).replace(b'PE\0\0',
+                                                          b'NE\0\0', 1),
+                'bad_magic.exe': _pe_bytes(install_mod.PE_SUBSYSTEM_GUI,
+                                           magic=0x0107),
+            }
+            for name, payload in cases.items():
+                path = _write(os.path.join(root, name), payload)
+                self.assertIsNone(install_mod.pe_subsystem(path),
+                                  '%s must read as unknown, not as a PE'
+                                  % (name,))
+            self.assertIsNone(install_mod.pe_subsystem(
+                os.path.join(root, 'not-here.exe')))
+            self.assertIsNone(install_mod.pe_subsystem(root),
+                              'a directory must not raise IsADirectoryError '
+                              'onto a worker thread')
+            self.assertIsNone(install_mod.pe_subsystem(None))
+            self.assertIsNone(install_mod.pe_subsystem(''))
+
+    def test_a_console_binary_fails_the_windowless_assertion(self):
+        """A GUARD ON THE GUARD. Every check added in this change reads
+        `pe_subsystem(x) == PE_SUBSYSTEM_GUI`; if the crafted fixtures
+        below were somehow all GUI, every one of those tests would pass
+        while proving nothing. So: a crafted CONSOLE image must actually
+        FAIL that assertion, and the two constants must differ."""
+        with _TempDir() as root:
+            console = _write(os.path.join(root, 'pythonw.exe'),
+                             _console_pe())
+            self.assertNotEqual(install_mod.PE_SUBSYSTEM_GUI,
+                                install_mod.PE_SUBSYSTEM_CONSOLE)
+            self.assertNotEqual(install_mod.pe_subsystem(console),
+                                install_mod.PE_SUBSYSTEM_GUI)
+
+
+class TestEnsureWindowlessDaemonPython(EmbodyTestCase):
+    """Repairing a venv whose windowless interpreter is not windowless.
+
+    Real files under a temp dir on every runner: the function reads and
+    writes an actual filesystem, and `platform='win32'` is injected, so
+    the macOS leg exercises exactly the same decisions on its own disk.
+    """
+
+    CONSOLE = install_mod.PE_SUBSYSTEM_CONSOLE
+    GUI = install_mod.PE_SUBSYSTEM_GUI
+
+    def _venv(self, root, subsystem=None, home=None, pythonw=True,
+              scripts=True):
+        venv_dir = os.path.join(root, 'runtime-venv')
+        scripts_dir = os.path.join(venv_dir, 'Scripts')
+        if scripts:
+            os.makedirs(scripts_dir, exist_ok=True)
+            _write(os.path.join(scripts_dir, 'python.exe'),
+                   _console_pe(b'uv console trampoline'))
+            if pythonw:
+                _write(os.path.join(scripts_dir, 'pythonw.exe'),
+                       _pe_bytes(self.CONSOLE if subsystem is None
+                                 else subsystem, tail=b'uv trampoline'))
+        else:
+            os.makedirs(venv_dir, exist_ok=True)
+        if home is not None:
+            with open(os.path.join(venv_dir, 'pyvenv.cfg'), 'w',
+                      encoding='utf-8') as f:
+                f.write('home = %s\nversion = 3.11.15\nuv = 0.11.29\n'
+                        % (home,))
+        return venv_dir
+
+    # The DLL set a real uv-managed CPython base actually ships on this
+    # machine -- including vcruntime140_threads.dll, which an earlier
+    # version of the copier neither copied nor mentioned.
+    BASE_DLLS = ('python311.dll', 'python3.dll', 'vcruntime140.dll',
+                 'vcruntime140_1.dll', 'vcruntime140_threads.dll')
+
+    def _base(self, root, name='base', redirector=True, gui_exe=True,
+              dlls=BASE_DLLS):
+        base = os.path.join(root, name)
+        os.makedirs(base, exist_ok=True)
+        _write(os.path.join(base, 'python.exe'), _console_pe(b'base console'))
+        if gui_exe:
+            _write(os.path.join(base, 'pythonw.exe'), _gui_pe(b'base gui'))
+        for dll in dlls:
+            _write(os.path.join(base, dll), b'dll ' + dll.encode('ascii'))
+        if redirector:
+            _write(os.path.join(base, *install_mod.REDIRECTOR_PARTS),
+                   _gui_pe(b'cpython redirector'))
+        return os.path.join(base, 'python.exe')
+
+    def _fix(self, venv_dir, base_python=None, **kw):
+        kw.setdefault('platform', 'win32')
+        return install_mod.ensure_windowless_daemon_python(
+            venv_dir, base_python, **kw)
+
+    def _scripts(self, venv_dir):
+        return os.path.join(venv_dir, 'Scripts')
+
+    def _names(self, venv_dir):
+        return sorted(os.listdir(self._scripts(venv_dir)))
+
+    def _daemon(self, venv_dir):
+        return os.path.join(self._scripts(venv_dir), 'pythonw.exe')
+
+    def _interpreter_files(self, venv_dir):
+        """{name: bytes} for everything EXCEPT our own sweepable leftovers.
+
+        WHAT A REFUSAL PROMISES, precisely. It is not a total no-op: the
+        sweep of this module's own *.old-/*.tmp- files runs first, on
+        every call, and has to (a leftover is only ever produced by a
+        repair that ENDS with the venv windowless, so a sweep that ran
+        later than the fast path would never run at all). What a refusal
+        does promise is that the interpreter file set is untouched -- no
+        new exe, no new DLL, no altered pythonw.exe.
+        """
+        found = {}
+        for name in sorted(_listdir(self._scripts(venv_dir))):
+            if install_mod._STALE_REPAIR_NAME.match(name):
+                continue
+            found[name] = _read(os.path.join(self._scripts(venv_dir), name))
+        return found
+
+    # -- plan A: CPython's own redirector -------------------------------
+
+    def test_the_redirector_is_preferred_and_copies_ONE_file(self):
+        """It needs zero sibling DLLs (it resolves the base through the
+        venv's pyvenv.cfg) and reports the VENV path as sys.executable --
+        which the generated launcher requires, or it refuses to start."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root)
+            before = self._names(venv_dir)
+            got = self._fix(venv_dir, base)
+            self.assertTrue(got['ok'], got)
+            self.assertTrue(got['repaired'])
+            self.assertEqual(got['plan'], 'redirector')
+            self.assertEqual([os.path.basename(p) for p in got['copied']],
+                             ['pythonw.exe'])
+            self.assertEqual(self._names(venv_dir), before,
+                             'plan A adds no DLLs beside the interpreter')
+            self.assertEqual(install_mod.pe_subsystem(self._daemon(venv_dir)),
+                             self.GUI)
+            self.assertEqual(
+                _read(self._daemon(venv_dir)),
+                _read(os.path.join(os.path.dirname(base),
+                                   *install_mod.REDIRECTOR_PARTS)),
+                'the redirector itself must be what landed')
+
+    def test_pyvenv_cfg_names_the_base_when_the_caller_cannot(self):
+        """The reuse path repairs a venv it did not build, so it has no
+        base to pass. pyvenv.cfg's `home` is the same answer the repaired
+        interpreter uses at run time -- not a guess."""
+        with _TempDir() as root:
+            base = self._base(root)
+            venv_dir = self._venv(root, home=os.path.dirname(base))
+            got = self._fix(venv_dir)
+            self.assertTrue(got['ok'], got)
+            self.assertEqual(got['plan'], 'redirector')
+            self.assertEqual(install_mod.pe_subsystem(self._daemon(venv_dir)),
+                             self.GUI)
+
+    def test_a_venv_with_no_pyvenv_cfg_refuses_without_touching_it(self):
+        with _TempDir() as root:
+            self._base(root)
+            venv_dir = self._venv(root)
+            before = self._interpreter_files(venv_dir)
+            got = self._fix(venv_dir)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'],
+                             'daemon_venv_repair_source_missing')
+            self.assertEqual(self._interpreter_files(venv_dir), before)
+
+    def test_a_bom_in_pyvenv_cfg_still_names_the_base(self):
+        """Some editors and installers write one. Read as plain utf-8 the
+        BOM stays glued to the first key, `home` never matches, and every
+        reuse repair on that machine becomes a false 'cannot locate the
+        base Python' refusal -- reported as a console window nobody can
+        get rid of."""
+        with _TempDir() as root:
+            base = self._base(root)
+            venv_dir = self._venv(root)
+            with open(os.path.join(venv_dir, 'pyvenv.cfg'), 'wb') as f:
+                f.write(b'\xef\xbb\xbfhome = %s\nversion = 3.11.15\n'
+                        % (os.path.dirname(base).encode('utf-8'),))
+            got = self._fix(venv_dir)
+            self.assertTrue(got['ok'], got)
+            self.assertTrue(got['repaired'])
+            self.assertEqual(install_mod.pe_subsystem(self._daemon(venv_dir)),
+                             self.GUI)
+
+    def test_a_venv_dir_that_is_not_a_string_refuses_instead_of_raising(self):
+        """NEVER RAISES is the contract every caller leans on -- this runs
+        on a worker thread, and a foreign spec carrying a Path or a None
+        must come back as a refusal, not a TypeError out of os.path.join."""
+        for bad in (None, 0, b'bytes', ['list'], object()):
+            got = self._fix(bad)
+            self.assertFalse(got['ok'], bad)
+            self.assertEqual(got['reason'],
+                             'daemon_venv_repair_source_missing')
+
+    # -- plan B: the base's own GUI exe plus its DLLs --------------------
+
+    def test_without_a_redirector_the_gui_exe_and_its_dlls_are_copied(self):
+        """A lone pythonw.exe exits 0xC0000135 (STATUS_DLL_NOT_FOUND)
+        SILENTLY -- which looks exactly like a healthy daemon."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root, redirector=False)
+            got = self._fix(venv_dir, base)
+            self.assertTrue(got['ok'], got)
+            self.assertEqual(got['plan'], 'dll_copy')
+            self.assertEqual(got['note'], '')
+            self.assertEqual(
+                sorted(os.path.basename(p) for p in got['copied']),
+                ['python3.dll', 'python311.dll', 'pythonw.exe',
+                 'vcruntime140.dll', 'vcruntime140_1.dll',
+                 'vcruntime140_threads.dll'])
+            self.assertEqual(install_mod.pe_subsystem(self._daemon(venv_dir)),
+                             self.GUI)
+            self.assertEqual(_read(os.path.join(self._scripts(venv_dir),
+                                                'python311.dll')),
+                             b'dll python311.dll')
+
+    def test_the_versioned_dll_is_globbed_never_named(self):
+        """python311.dll on one machine, python313.dll on the next. A
+        hardcoded name would silently copy an interpreter that cannot
+        start."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root, redirector=False,
+                              dlls=('python313.dll', 'python3.dll'))
+            got = self._fix(venv_dir, base)
+            self.assertTrue(got['ok'], got)
+            self.assertIn('python313.dll',
+                          [os.path.basename(p) for p in got['copied']])
+            self.assertIn('python313.dll', self._names(venv_dir))
+
+    def test_a_missing_vcruntime_is_tolerated_but_said_out_loud(self):
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root, redirector=False,
+                              dlls=('python311.dll', 'python3.dll'))
+            got = self._fix(venv_dir, base)
+            self.assertTrue(got['ok'], got)
+            self.assertIn('vcruntime140.dll', got['note'])
+            self.assertEqual(install_mod.pe_subsystem(self._daemon(venv_dir)),
+                             self.GUI)
+
+    def test_a_console_redirector_falls_through_to_the_dll_copy(self):
+        """The redirector is preferred because of what it IS, not where
+        it sits: a console one is no better than the trampoline."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root)
+            _write(os.path.join(os.path.dirname(base),
+                                *install_mod.REDIRECTOR_PARTS),
+                   _console_pe(b'wrong subsystem'))
+            got = self._fix(venv_dir, base)
+            self.assertTrue(got['ok'], got)
+            self.assertEqual(got['plan'], 'dll_copy')
+
+    # -- refusals leave the venv exactly as it was ----------------------
+
+    def test_no_versioned_dll_refuses_and_writes_nothing(self):
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root, redirector=False, dlls=('python3.dll',))
+            before = self._interpreter_files(venv_dir)
+            got = self._fix(venv_dir, base)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'],
+                             'daemon_venv_repair_source_missing')
+            self.assertIn('python3XX.dll', got['detail'])
+            self.assertEqual(self._interpreter_files(venv_dir), before,
+                             'a refusal must not half-repair the venv: no '
+                             'new DLL, no new exe, no altered interpreter')
+
+    def test_a_base_with_no_windowless_python_at_all_refuses(self):
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root, redirector=False, gui_exe=False)
+            before = self._names(venv_dir)
+            got = self._fix(venv_dir, base)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'],
+                             'daemon_venv_repair_source_missing')
+            self.assertEqual(self._names(venv_dir), before)
+
+    def test_a_console_pythonw_in_the_base_is_not_a_source(self):
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root, redirector=False)
+            _write(os.path.join(os.path.dirname(base), 'pythonw.exe'),
+                   _console_pe(b'console base gui slot'))
+            got = self._fix(venv_dir, base)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'],
+                             'daemon_venv_repair_source_missing')
+
+    def test_a_venv_with_no_scripts_directory_refuses(self):
+        with _TempDir() as root:
+            self._base(root)
+            venv_dir = self._venv(root, scripts=False)
+            got = self._fix(venv_dir)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'],
+                             'daemon_venv_repair_source_missing')
+            self.assertFalse(os.path.isdir(self._scripts(venv_dir)),
+                             'a refusal must not create a Scripts dir')
+
+    def test_a_destination_outside_the_venv_is_refused(self):
+        """An interrupted repair or a hand-made junction must not turn
+        this into a writer of arbitrary paths."""
+        with _TempDir() as root:
+            base = self._base(root)
+            venv_dir = os.path.join(root, 'runtime-venv')
+            outside = os.path.join(root, 'elsewhere')
+            os.makedirs(venv_dir)
+            os.makedirs(outside)
+            _write(os.path.join(outside, 'pythonw.exe'),
+                   _console_pe(b'redirected'))
+            try:
+                os.symlink(outside, os.path.join(venv_dir, 'Scripts'),
+                           target_is_directory=True)
+            except (OSError, NotImplementedError, AttributeError):
+                self.skipTest('this runner cannot create directory symlinks')
+            got = self._fix(venv_dir, base)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'daemon_venv_repair_unsafe_path')
+            self.assertEqual(install_mod.pe_subsystem(
+                os.path.join(outside, 'pythonw.exe')), self.CONSOLE,
+                'the redirected file must not have been written')
+
+    # -- the fast path, and the file that must never be touched ---------
+
+    def test_an_already_windowless_interpreter_is_left_alone(self):
+        with _TempDir() as root:
+            venv_dir = self._venv(root, subsystem=self.GUI)
+            self._base(root)
+            before = _read(self._daemon(venv_dir))
+            got = self._fix(venv_dir, os.path.join(root, 'base',
+                                                   'python.exe'))
+            self.assertTrue(got['ok'], got)
+            self.assertFalse(got['repaired'])
+            self.assertEqual(got['plan'], '')
+            self.assertEqual(got['copied'], [])
+            self.assertEqual(_read(self._daemon(venv_dir)), before)
+
+    def test_the_console_python_exe_is_never_touched(self):
+        """uv pip is driven through Scripts/python.exe over pipes; it is
+        SUPPOSED to be a console binary, and replacing it would break the
+        next dependency install."""
+        with _TempDir() as root:
+            for redirector in (True, False):
+                venv_dir = self._venv(root)
+                base = self._base(root, name='base-%s' % (redirector,),
+                                  redirector=redirector)
+                console = os.path.join(self._scripts(venv_dir), 'python.exe')
+                before = _read(console)
+                got = self._fix(venv_dir, base)
+                self.assertTrue(got['ok'], got)
+                self.assertEqual(_read(console), before)
+                self.assertNotIn('python.exe',
+                                 [os.path.basename(p) for p in got['copied']])
+                shutil.rmtree(venv_dir)
+
+    def test_nothing_temporary_survives_a_successful_repair(self):
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            got = self._fix(venv_dir, self._base(root, redirector=False))
+            self.assertTrue(got['ok'], got)
+            self.assertEqual([n for n in self._names(venv_dir)
+                              if '.tmp-' in n], [])
+
+    def test_non_win32_is_a_no_op(self):
+        """posix has no windowless twin to get wrong -- and this must not
+        start rewriting a macOS venv's bin/python3."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            before = _read(self._daemon(venv_dir))
+            got = self._fix(venv_dir, self._base(root), platform='darwin')
+            self.assertTrue(got['ok'], got)
+            self.assertFalse(got['applicable'])
+            self.assertFalse(got['repaired'])
+            self.assertEqual(_read(self._daemon(venv_dir)), before)
+
+    # -- the daemon is RUNNING while this happens -----------------------
+
+    def test_a_locked_interpreter_is_renamed_aside_not_overwritten(self):
+        """A running exe cannot be replaced or deleted on Windows, but it
+        CAN be renamed -- and the daemon is normally running during an
+        install. The seams are injected rather than patched onto os:
+        globally patching os in this suite has burned us before, and the
+        real denial only happens against a live process."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root)
+            target = self._daemon(venv_dir)
+
+            def replace(source, destination):
+                if os.path.basename(destination) == 'pythonw.exe':
+                    raise PermissionError(13, 'in use by another process')
+                return os.replace(source, destination)
+
+            def unlink(path):
+                if install_mod.STALE_DAEMON_PREFIX in os.path.basename(path):
+                    raise PermissionError(13, 'in use by another process')
+                return os.unlink(path)
+
+            got = self._fix(venv_dir, base, replace=replace, unlink=unlink)
+            self.assertTrue(got['ok'], got)
+            self.assertTrue(got['repaired'])
+            self.assertEqual(install_mod.pe_subsystem(target), self.GUI)
+            leftovers = [n for n in self._names(venv_dir)
+                         if n.startswith(install_mod.STALE_DAEMON_PREFIX)]
+            self.assertEqual(len(leftovers), 1, self._names(venv_dir))
+            self.assertEqual([os.path.basename(p) for p in got['kept']],
+                             leftovers,
+                             'the leftover must be REPORTED, not hidden')
+            self.assertEqual([n for n in self._names(venv_dir)
+                              if '.tmp-' in n], [])
+
+    def test_the_leftover_of_a_locked_repair_is_swept_by_the_NEXT_call(self):
+        """THE REAL SEQUENCE, end to end -- and the one an earlier version
+        of this test faked.
+
+        A leftover is produced by exactly one thing: a repair over a LIVE
+        daemon, which renames the running image aside and CANNOT delete
+        it. That sequence ends with the venv already windowless, so a
+        sweep that ran after the GUI fast path would never run again on
+        that machine -- the leftover would be permanent and the note
+        promising 'removed on the next repair' false forever. Seeding a
+        console venv hid exactly that, because it is a state a successful
+        repair never leaves behind."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root)
+
+            def replace(source, destination):
+                raise PermissionError(13, 'in use by another process')
+
+            def unlink(path):
+                if install_mod._STALE_REPAIR_NAME.match(
+                        os.path.basename(path)):
+                    raise PermissionError(13, 'in use by another process')
+                return os.unlink(path)
+
+            first = self._fix(venv_dir, base, replace=replace, unlink=unlink)
+            self.assertTrue(first['ok'], first)
+            self.assertTrue(first['repaired'])
+            leftover = first['kept'][-1]
+            self.assertTrue(os.path.isfile(leftover))
+            self.assertEqual(install_mod.pe_subsystem(self._daemon(venv_dir)),
+                             self.GUI, 'the repair left the venv WINDOWLESS '
+                                       '-- which is why the sweep may not '
+                                       'live behind the GUI fast path')
+
+            # The next install: nothing to repair, everything to tidy.
+            second = self._fix(venv_dir, base)
+            self.assertTrue(second['ok'], second)
+            self.assertFalse(second['repaired'],
+                             'the fast path still refuses to touch a '
+                             'windowless interpreter')
+            self.assertFalse(os.path.exists(leftover),
+                             'the promise made in the first result must '
+                             'come true on the next call')
+            self.assertEqual(second['kept'], [])
+
+    def test_the_sweep_takes_our_leftovers_and_leaves_human_files(self):
+        """Both shapes this module can orphan -- the renamed-aside image
+        and a staging copy a kill left behind (multi-MB, and nothing else
+        would ever remove it) -- in either case.
+
+        And ONLY those. The tail must look like time.time_ns(), which has
+        been 19 digits since 2001, precisely so a person's date-stamped
+        backup (`pythonw.exe.old-20260817-143000`) cannot match: an
+        earlier \\d+-\\d+ tail swept exactly that."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root, subsystem=self.GUI)
+            scripts = self._scripts(venv_dir)
+            swept = [
+                _write(os.path.join(
+                    scripts,
+                    install_mod.STALE_DAEMON_PREFIX + '4242-1787005143889438000'),
+                    _console_pe(b'yesterday')),
+                _write(os.path.join(
+                    scripts, 'python311.dll.old-4242-1787005143889438001'),
+                    b'yesterday dll'),
+                _write(os.path.join(
+                    scripts, 'pythonw.exe.tmp-7-1787005143889438002'),
+                    _gui_pe(b'staged then killed')),
+                _write(os.path.join(
+                    scripts, 'PYTHONW.EXE.OLD-8-1787005143889438003'),
+                    b'shouting'),
+            ]
+            keepers = [
+                _write(os.path.join(scripts, 'notes.old-backup.txt'),
+                       b'a person put this here'),
+                _write(os.path.join(scripts, 'pythonw.exe.old'),
+                       b'a person renamed this by hand'),
+                _write(os.path.join(scripts, 'pythonw.exe.old-mine'),
+                       b'no pid-ns tail: not ours'),
+                _write(os.path.join(scripts,
+                                    'pythonw.exe.old-20260817-143000'),
+                       b'a person date-stamped this'),
+                _write(os.path.join(scripts, 'python311.dll.old-1-2'),
+                       b'too short to be a nanosecond clock'),
+            ]
+            got = self._fix(venv_dir, self._base(root))
+            self.assertTrue(got['ok'], got)
+            for path in swept:
+                self.assertFalse(os.path.exists(path), path)
+            for path in keepers:
+                self.assertTrue(os.path.exists(path), path)
+            self.assertEqual(got['kept'], [])
+
+    def test_the_sweep_never_reaches_outside_a_junctioned_scripts(self):
+        """It runs BEFORE the per-destination escape guard, so it carries
+        its own: a Scripts that resolves outside the venv gets no unlinks
+        at all, however well-named the files there are."""
+        with _TempDir() as root:
+            base = self._base(root)
+            venv_dir = os.path.join(root, 'runtime-venv')
+            outside = os.path.join(root, 'elsewhere')
+            os.makedirs(venv_dir)
+            os.makedirs(outside)
+            _write(os.path.join(outside, 'pythonw.exe'),
+                   _console_pe(b'redirected'))
+            bait = _write(
+                os.path.join(outside,
+                             'pythonw.exe.old-4242-1787005143889438000'),
+                b'sweep-shaped, and still not ours to delete')
+            try:
+                os.symlink(outside, os.path.join(venv_dir, 'Scripts'),
+                           target_is_directory=True)
+            except (OSError, NotImplementedError, AttributeError):
+                self.skipTest('this runner cannot create directory symlinks')
+            got = self._fix(venv_dir, base)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'daemon_venv_repair_unsafe_path')
+            self.assertTrue(os.path.exists(bait),
+                            'a junctioned Scripts must not aim the sweep at '
+                            'files outside the venv')
+
+    def _denied(self, *matchers):
+        """A rename/replace seam that denies the named moves, counts calls.
+
+        Sleep is injected alongside every use of this, so the ten-attempt
+        retry loop is exercised at full length and costs nothing -- a real
+        backoff here would be a wall-clock assertion, which this repo has
+        been burned by on shared CI runners.
+        """
+        calls = []
+
+        def rename(source, destination):
+            calls.append((os.path.basename(source),
+                          os.path.basename(destination)))
+            for match_source, match_destination in matchers:
+                if (match_source in os.path.basename(source)
+                        and match_destination in os.path.basename(
+                            destination)):
+                    raise PermissionError(13, 'in use by another process')
+            return os.rename(source, destination)
+
+        return rename, calls
+
+    def test_a_denied_forward_move_is_rolled_back_with_the_same_budget(self):
+        """(i) The replacement cannot take the freed name, but the
+        ORIGINAL can go back. A rollback with a smaller retry budget than
+        the move it undoes is how one transient denial turns into a venv
+        with no interpreter at all."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root)
+            target = self._daemon(venv_dir)
+            before = _read(target)
+            slept = []
+            rename, calls = self._denied(('.tmp-', 'pythonw.exe'))
+
+            def replace(source, destination):
+                raise PermissionError(13, 'in use by another process')
+
+            got = self._fix(venv_dir, base, replace=replace, rename=rename,
+                            sleep=slept.append)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'daemon_venv_repair_locked')
+            self.assertIn('restored', got['detail'])
+            self.assertEqual(_read(target), before,
+                             'the original interpreter must be back at the '
+                             'canonical name, byte for byte')
+            self.assertEqual([n for n in self._names(venv_dir)
+                              if '.tmp-' in n], [],
+                             'the staged copy must not outlive the refusal')
+            self.assertEqual(len(slept), 9,
+                             'the forward move gets ten attempts (nine '
+                             'backoffs) -- previously untested')
+
+    def test_when_rollback_fails_too_the_repair_takes_the_free_name(self):
+        """(ii) ANY interpreter at the canonical name beats none. The path
+        in the Scheduled Task's <Command> and in installed.json is that
+        exact string; leaving it empty is the one outcome worse than a
+        console window."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root)
+            target = self._daemon(venv_dir)
+            attempts = {'forward': 0}
+
+            def replace(source, destination):
+                raise PermissionError(13, 'in use by another process')
+
+            def rename(source, destination):
+                name = os.path.basename(source)
+                if '.old-' in name:
+                    raise PermissionError(13, 'rollback denied')
+                if '.tmp-' in name:
+                    attempts['forward'] += 1
+                    # Denied for the whole first budget, allowed on the
+                    # last-ditch attempt after the rollback also failed.
+                    if attempts['forward'] <= 10:
+                        raise PermissionError(13, 'forward denied')
+                return os.rename(source, destination)
+
+            got = self._fix(venv_dir, base, replace=replace, rename=rename,
+                            sleep=lambda seconds: None)
+            self.assertTrue(got['ok'], got)
+            self.assertTrue(got['repaired'])
+            self.assertTrue(os.path.isfile(target))
+            self.assertEqual(install_mod.pe_subsystem(target), self.GUI)
+            self.assertEqual([os.path.basename(p) for p in got['kept']],
+                             [n for n in self._names(venv_dir)
+                              if n.startswith(
+                                  install_mod.STALE_DAEMON_PREFIX)])
+
+    def test_an_interpreter_lost_to_a_double_denial_is_named_as_lost(self):
+        """(iii) Nothing could take the canonical name. The refusal must
+        say THAT -- 'still a console interpreter' would send the next
+        diagnosis hunting a window that cannot appear -- and it must name
+        where the old image sits, or a rebuild is the only way out."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root)
+            target = self._daemon(venv_dir)
+
+            def replace(source, destination):
+                raise PermissionError(13, 'in use by another process')
+
+            def rename(source, destination):
+                if os.path.basename(destination) == 'pythonw.exe':
+                    raise PermissionError(13, 'denied both ways')
+                return os.rename(source, destination)
+
+            got = self._fix(venv_dir, base, replace=replace, rename=rename,
+                            sleep=lambda seconds: None)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'daemon_venv_repair_locked')
+            self.assertTrue(got['interpreter_missing'])
+            self.assertFalse(os.path.exists(target))
+            self.assertIn('no longer exists', got['detail'])
+            aside = [n for n in self._names(venv_dir)
+                     if n.startswith(install_mod.STALE_DAEMON_PREFIX)]
+            self.assertEqual(len(aside), 1)
+            self.assertIn(aside[0], got['detail'],
+                          'the refusal must name where the old image went')
+            self.assertIn(os.path.join(self._scripts(venv_dir), aside[0]),
+                          got['kept'])
+            self.assertEqual([n for n in self._names(venv_dir)
+                              if '.tmp-' in n], [])
+
+    def test_a_concurrent_repair_that_wins_is_reported_as_success(self):
+        """Two Embodys, one machine, one per-user venv. If our write is
+        denied while ANOTHER process makes the interpreter windowless,
+        the honest answer is success -- a refusal would describe a state
+        that no longer exists and put a console-window warning in front of
+        a user who does not have one."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root)
+            target = self._daemon(venv_dir)
+
+            def replace(source, destination):
+                # The other process lands its repair in the same instant.
+                _write(target, _gui_pe(b'the other install won'))
+                raise PermissionError(13, 'in use by another process')
+
+            def rename(source, destination):
+                raise PermissionError(13, 'in use by another process')
+
+            got = self._fix(venv_dir, base, replace=replace, rename=rename,
+                            sleep=lambda seconds: None)
+            self.assertTrue(got['ok'], got)
+            self.assertFalse(got['repaired'],
+                             'we did not repair it -- someone else did')
+            self.assertTrue(got['concurrent'])
+            self.assertEqual(install_mod.pe_subsystem(target), self.GUI)
+
+    # -- unreadable is not console -------------------------------------
+
+    def _unreadable(self, path, misses=99):
+        """A pe_subsystem seam that cannot read `path` for `misses` calls.
+
+        Models a file that EXISTS and cannot be opened right now -- a peer
+        repair holding it for the instant it is renamed aside, a scanner
+        or indexer on a freshly written exe. Injected rather than locked
+        for real, so the same branches run on every runner; a real
+        share-mode-0 lock proves the model separately below.
+        """
+        state = {'left': misses}
+
+        def read(candidate):
+            if (os.path.normcase(str(candidate))
+                    == os.path.normcase(path) and state['left'] > 0):
+                state['left'] -= 1
+                return None
+            return install_mod.pe_subsystem(candidate)
+
+        return read, state
+
+    def test_an_unreadable_interpreter_is_never_treated_as_console(self):
+        """THE RACE, reproduced 4/10 rounds with four real processes on
+        one venv. pe_subsystem answers None for a file it cannot open,
+        and None is not 'console' -- reading it as one starts a repair
+        nobody needed, of a file somebody else is holding."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root, subsystem=self.GUI)
+            base = self._base(root)
+            target = self._daemon(venv_dir)
+            before = _read(target)
+            read, _state = self._unreadable(target)
+            got = self._fix(venv_dir, base, read_subsystem=read,
+                            sleep=lambda seconds: None)
+            self.assertTrue(got['ok'], got)
+            self.assertFalse(got['repaired'])
+            self.assertTrue(got['unverified'])
+            self.assertIsNone(got['subsystem'])
+            self.assertIn('could not be read', got['note'])
+            self.assertEqual(_read(target), before,
+                             'a file we cannot even read must not be '
+                             'rewritten on the assumption it is wrong')
+
+    def test_a_read_that_settles_within_the_retries_is_believed(self):
+        """The lock is usually gone in milliseconds, which is the whole
+        reason for retrying rather than refusing on the first None."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root, subsystem=self.GUI)
+            base = self._base(root)
+            slept = []
+            read, state = self._unreadable(self._daemon(venv_dir), misses=3)
+            got = self._fix(venv_dir, base, read_subsystem=read,
+                            sleep=slept.append)
+            self.assertTrue(got['ok'], got)
+            self.assertFalse(got['repaired'])
+            self.assertEqual(got['subsystem'], self.GUI,
+                             'once it settles, the answer is the fact -- '
+                             'not the transient None')
+            self.assertEqual(state['left'], 0)
+            self.assertEqual(len(slept), 3)
+
+    def test_a_repair_that_cannot_be_read_back_is_not_called_a_failure(self):
+        """Every write reported success and the file is there; only the
+        read-back is owed. Reporting 'still not a windowless interpreter'
+        on the strength of a scanner's lock invents a defect."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root)
+            target = self._daemon(venv_dir)
+            calls = {'n': 0}
+
+            def read(candidate):
+                # Readable while we decide (console, so repair), blind
+                # for the post-repair confirmation.
+                if os.path.normcase(str(candidate)) != os.path.normcase(
+                        target):
+                    return install_mod.pe_subsystem(candidate)
+                calls['n'] += 1
+                return None if calls['n'] > 1 else self.CONSOLE
+
+            got = self._fix(venv_dir, base, read_subsystem=read,
+                            sleep=lambda seconds: None)
+            self.assertTrue(got['ok'], got)
+            self.assertTrue(got['repaired'])
+            self.assertTrue(got['unverified'])
+            self.assertIsNone(got['subsystem'])
+            self.assertIn('read back', got['note'])
+            self.assertEqual(install_mod.pe_subsystem(target), self.GUI,
+                             'and the repair really did land')
+
+    def test_a_denied_repair_on_an_unreadable_file_says_unverified(self):
+        """The classifier's third case. Whoever denied the write is often
+        the same process holding the file, so 'still a console daemon
+        interpreter' is a claim with no evidence behind it."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root)
+            target = self._daemon(venv_dir)
+            calls = {'n': 0}
+
+            def read(candidate):
+                if os.path.normcase(str(candidate)) != os.path.normcase(
+                        target):
+                    return install_mod.pe_subsystem(candidate)
+                calls['n'] += 1
+                return None if calls['n'] > 1 else self.CONSOLE
+
+            def replace(source, destination):
+                raise PermissionError(13, 'in use by another process')
+
+            def rename(source, destination):
+                raise PermissionError(13, 'in use by another process')
+
+            got = self._fix(venv_dir, base, replace=replace, rename=rename,
+                            read_subsystem=read,
+                            sleep=lambda seconds: None)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'daemon_venv_repair_locked')
+            self.assertTrue(got['interpreter_unreadable'])
+            self.assertFalse(got['interpreter_missing'])
+            self.assertIn('unverified', got['detail'])
+
+    def test_a_real_exclusive_lock_reads_as_unreadable_not_console(self):
+        """A GUARD ON THE MODEL. The seam above only proves the branches
+        if a genuinely unopenable file really does answer None with
+        os.path.isfile still True -- which is what CreateFileW with
+        dwShareMode=0 produces, and what the four-process race hit."""
+        if sys.platform != 'win32':
+            self.skipTest('share-mode locking is a Windows behaviour')
+        import ctypes
+        from ctypes import wintypes
+        with _TempDir() as root:
+            path = _write(os.path.join(root, 'pythonw.exe'), _gui_pe())
+            self.assertEqual(install_mod.pe_subsystem(path), self.GUI)
+            create = ctypes.windll.kernel32.CreateFileW
+            create.restype = wintypes.HANDLE
+            handle = create(path, 0x80000000, 0, None, 3, 0x80, None)
+            self.assertNotEqual(handle, wintypes.HANDLE(-1).value,
+                                'could not take the exclusive handle')
+            try:
+                self.assertIsNone(install_mod.pe_subsystem(path))
+                self.assertTrue(os.path.isfile(path),
+                                'an exclusively held file is still a file '
+                                '-- which is the distinction the settled '
+                                'read is built on')
+                subsystem, present = install_mod._pe_subsystem_settled(
+                    path, sleep=lambda seconds: None)
+                self.assertIsNone(subsystem)
+                self.assertTrue(present)
+            finally:
+                ctypes.windll.kernel32.CloseHandle(handle)
+            self.assertEqual(install_mod.pe_subsystem(path), self.GUI)
+
+    # -- partial writes, and what a refusal really promises -------------
+
+    def test_a_refusal_part_way_through_a_dll_copy_says_so_honestly(self):
+        """A dll_copy denied on its third member has already written the
+        first two. The guarantee is about ONE file -- the interpreter the
+        Scheduled Task launches -- and the wording must not read as a
+        promise about the whole venv. The staged DLLs are inert: nothing
+        loads them until a windowless exe joins them."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root, redirector=False)
+            target = self._daemon(venv_dir)
+            before = _read(target)
+
+            def replace(source, destination):
+                if os.path.basename(destination) == 'python3.dll':
+                    raise PermissionError(13, 'denied')
+                return os.replace(source, destination)
+
+            got = self._fix(venv_dir, base, replace=replace,
+                            sleep=lambda seconds: None)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'daemon_venv_repair_locked')
+            self.assertEqual([os.path.basename(p) for p in got['copied']],
+                             ['python311.dll'])
+            self.assertIn('python311.dll', self._names(venv_dir),
+                          'the earlier member really did land')
+            self.assertEqual(_read(target), before,
+                             'THE guarantee: the interpreter the task '
+                             'launches is untouched')
+            self.assertIn('that file was not changed', got['detail'])
+            self.assertNotIn('nothing was changed', got['detail'],
+                             'a sentence about one file must not read as '
+                             'a promise about the venv')
+            self.assertEqual([n for n in self._names(venv_dir)
+                              if '.tmp-' in n], [])
+
+    def test_the_sweep_never_takes_the_last_surviving_interpreter(self):
+        """The hazard the top-of-function sweep created: install #1 loses
+        pythonw.exe to a double denial and leaves the previous image as a
+        .old-; install #2 must not tidy that away before discovering it
+        cannot repair anything. Sweeping there turns a recoverable state
+        into rebuild-or-nothing."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root, pythonw=False)
+            scripts = self._scripts(venv_dir)
+            survivor = _write(
+                os.path.join(scripts, install_mod.STALE_DAEMON_PREFIX
+                             + '4242-1787005143889438000'),
+                _console_pe(b'the only interpreter left'))
+            got = self._fix(venv_dir, os.path.join(root, 'gone',
+                                                   'python.exe'))
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'],
+                             'daemon_venv_repair_source_missing')
+            self.assertTrue(os.path.isfile(survivor),
+                            'tidying may never delete the last copy of the '
+                            'interpreter')
+
+    def test_a_locked_file_that_cannot_even_be_renamed_changes_nothing(self):
+        """A windowed daemon beats a dead daemon: if the old image cannot
+        be moved out of the way, the repair refuses and leaves the venv
+        exactly as it found it."""
+        with _TempDir() as root:
+            venv_dir = self._venv(root)
+            base = self._base(root)
+            target = self._daemon(venv_dir)
+            before = _read(target)
+
+            def replace(source, destination):
+                raise PermissionError(13, 'in use by another process')
+
+            def rename(source, destination):
+                raise PermissionError(13, 'in use by another process')
+
+            got = self._fix(venv_dir, base, replace=replace, rename=rename)
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'], 'daemon_venv_repair_locked')
+            self.assertEqual(_read(target), before)
+            self.assertEqual([n for n in self._names(venv_dir)
+                              if '.tmp-' in n], [])
+
+
 class TestConvoyManagedRuntime(EmbodyTestCase):
 
     PLATFORM = 'win32'
@@ -2128,10 +3200,19 @@ class TestConvoyManagedRuntime(EmbodyTestCase):
     PROBE_PYTHON_REL = 'python/python.exe'
     CRYPTO_REL = 'Lib/site-packages/cryptography/__init__.py'
 
-    def _payloads(self):
+    def _payloads(self, daemon_subsystem=None):
+        # REAL PE HEADERS for the two exes. The daemon interpreter of a
+        # win32 bundle is now gated on its subsystem -- a console one
+        # would put an empty terminal on the desktop at every logon -- so
+        # a fixture of plain bytes would describe a bundle this installer
+        # is right to refuse. `daemon_subsystem` exists for the test that
+        # proves it DOES refuse.
+        daemon = _pe_bytes(daemon_subsystem or install_mod.PE_SUBSYSTEM_GUI,
+                           tail=b'fake self-contained python')
         return {
-            self.PYTHON_REL: b'fake self-contained python',
-            self.PROBE_PYTHON_REL: b'fake self-contained probe python',
+            self.PYTHON_REL: daemon,
+            self.PROBE_PYTHON_REL: _console_pe(
+                b'fake self-contained probe python'),
             self.CRYPTO_REL: b'__version__ = "test"\n',
         }
 
@@ -2328,6 +3409,59 @@ class TestConvoyManagedRuntime(EmbodyTestCase):
                 architecture=self.ARCH)
             self.assertEqual([c['path'] for c in discovered],
                              [got['interpreter']])
+
+    def test_a_console_daemon_interpreter_is_refused_at_provision(self):
+        """A bundle whose pythonw.exe is really a console build would put
+        an empty terminal on the desktop at every logon, and no amount of
+        live cryptography makes that the runtime we install."""
+        with _TempDir() as root:
+            payloads = self._payloads(
+                daemon_subsystem=install_mod.PE_SUBSYSTEM_CONSOLE)
+            bundle, digest = self._bundle(root, payloads=payloads)
+            got = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertFalse(got['ok'])
+            self.assertEqual(got['reason'],
+                             'runtime_interpreter_not_windowless')
+            self.assertIsNone(
+                install_mod.read_runtime_receipt(root, self.RUNTIME_ID,
+                                                 self.PLATFORM),
+                'a refused bundle must never be activated')
+
+    def test_a_console_daemon_interpreter_is_refused_at_verification(self):
+        """REFUSED, never repaired. A managed runtime is a hash-pinned
+        release artifact: rewriting one of its files would break the
+        inventory just verified above it, and the defect belongs to the
+        release build. (The daemon venv is the opposite case -- Embody
+        builds that one, so Embody repairs it.)"""
+        with _TempDir() as root:
+            bundle, digest = self._bundle(root)
+            got = install_mod.provision_runtime_bundle(
+                root, bundle, digest, self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertTrue(got['ok'], got)
+            # Swap in a console build AND make the receipt agree, so the
+            # integrity hash above passes and this gate is what answers.
+            payload = _console_pe(b'console daemon')
+            with open(got['interpreter'], 'wb') as f:
+                f.write(payload)
+            receipt_path = install_mod.runtime_complete_path(
+                root, self.RUNTIME_ID, self.PLATFORM)
+            with open(receipt_path, encoding='utf-8') as f:
+                receipt = json.load(f)
+            for row in receipt['files']:
+                if row['path'] == self.PYTHON_REL:
+                    row['size'] = len(payload)
+                    row['sha256'] = hashlib.sha256(payload).hexdigest()
+            with open(receipt_path, 'w', encoding='utf-8') as f:
+                json.dump(receipt, f)
+            verified = install_mod.verify_managed_runtime(
+                root, got['interpreter'], self.PLATFORM, self.ARCH,
+                runner=self._probe_runner())
+            self.assertFalse(verified['ok'])
+            self.assertEqual(verified['reason'],
+                             'runtime_interpreter_not_windowless')
 
     def test_catalog_selects_and_provisions_only_this_architecture_offline(self):
         with _TempDir() as root:
@@ -2894,8 +4028,20 @@ class TestConvoyManagedRuntime(EmbodyTestCase):
         with _TempDir() as root:
             prepared = os.path.join(root, 'prepared')
             payloads = {
-                python_rel: b'daemon-python',
-                probe_rel: b'probe-python',
+                # A REAL GUI PE header on win32: the installer refuses a
+                # bundle whose daemon interpreter is a console binary, so
+                # a packager fixture of plain bytes would be describing a
+                # release nobody should ship.
+                python_rel: (_gui_pe(b'daemon-python')
+                             if platform_name == 'win32'
+                             else b'daemon-python'),
+                # ...and the probe half must be the CONSOLE binary: the
+                # packager now checks that both names really are what
+                # they claim, because the split is unrepairable once the
+                # hash-pinned bundle has shipped.
+                probe_rel: (_console_pe(b'probe-python')
+                            if platform_name == 'win32'
+                            else b'probe-python'),
                 crypto_rel: b'__version__ = "test"\n',
                 os.path.join(stdlib_rel, 'os.py').replace('\\', '/'):
                     b'# stdlib marker\n',
@@ -3435,6 +4581,84 @@ class TestConvoyInstallRecord(EmbodyTestCase):
                 self.assertIn(f.read(), values)
             self.assertEqual([name for name in os.listdir(root)
                               if name.endswith('.tmp')], [])
+
+
+class TestConvoyRecordedInterpreterIsWindowless(EmbodyTestCase):
+    """installed.json says WHICH SUBSYSTEM the recorded interpreter is.
+
+    'An empty console window appears at every logon' was, until this
+    field existed, answerable only from the user's desktop: the record
+    named a path ending in pythonw.exe and nothing checked what that file
+    actually was. Stamped in the ONE place both install() and
+    repair_runtime() share, so a repair can never leave a stale claim.
+    """
+
+    def _verifier(self, data_dir, interpreter, platform=None,
+                  architecture=None, runner=None):
+        """A venv runtime: a live crypto pass with no managed bundle."""
+        return {'ok': True, 'probe': {'python': [3, 11, 15],
+                                      'cryptography_version': '49.0.0'}}
+
+    def _install(self, root, interpreter, platform='win32'):
+        got = install_mod.install(
+            root, '6.0.171', _MODULES, interpreter, platform=platform,
+            runner=_Runner(), env=WIN_ENV, home=root,
+            runtime_verifier=self._verifier)
+        self.assertTrue(got['ok'], got)
+        return install_mod.read_installed(root, platform)
+
+    def _exe(self, root, name, payload):
+        return _write(os.path.join(root, 'runtime-venv', 'Scripts', name),
+                      payload)
+
+    def test_a_windowless_interpreter_is_recorded_as_gui(self):
+        with _TempDir() as root:
+            record = self._install(
+                root, self._exe(root, 'pythonw.exe', _gui_pe()))
+            self.assertEqual(record['interpreter_subsystem'], 'gui')
+            self.assertIs(record['venv_runtime'], True,
+                          'venv_runtime stays a BARE bool -- the launcher '
+                          'reads it as one')
+
+    def test_a_console_interpreter_is_recorded_as_console(self):
+        """The whole defect, made visible in the record: a file NAMED
+        pythonw.exe that is a console binary."""
+        with _TempDir() as root:
+            record = self._install(
+                root, self._exe(root, 'pythonw.exe', _console_pe()))
+            self.assertEqual(record['interpreter_subsystem'], 'console')
+
+    def test_an_unreadable_interpreter_is_recorded_as_unknown(self):
+        """A path, not a promise: the recorded interpreter may be gone by
+        the time anyone reads the record (that is exactly what
+        repair_runtime exists for), and 'unknown' must not read as
+        'console'. NOT WIN_PY -- on a dev box that one is a real
+        TouchDesigner pythonw.exe, and the test would silently start
+        asserting nothing."""
+        with _TempDir() as root:
+            record = self._install(
+                root, os.path.join(root, 'gone', 'pythonw.exe'))
+            self.assertEqual(record['interpreter_subsystem'], 'unknown')
+
+    def test_a_repair_restamps_it_and_never_leaves_a_stale_claim(self):
+        with _TempDir() as root:
+            self._install(root, self._exe(root, 'pythonw.exe',
+                                          _console_pe()))
+            repaired = install_mod.repair_runtime(
+                root, self._exe(root, 'fixed.exe', _gui_pe()),
+                platform='win32', runner=_Runner(), env=WIN_ENV,
+                runtime_verifier=self._verifier)
+            self.assertTrue(repaired['ok'], repaired)
+            record = install_mod.read_installed(root, 'win32')
+            self.assertEqual(record['interpreter_subsystem'], 'gui')
+            self.assertIs(record['venv_runtime'], True)
+
+    def test_posix_records_no_subsystem_at_all(self):
+        """There is no such thing to get wrong on macOS, and a field that
+        always says 'unknown' there would read as a fault."""
+        with _TempDir() as root:
+            record = self._install(root, MAC_PY, platform='darwin')
+            self.assertNotIn('interpreter_subsystem', record)
 
 
 # -- 10. THE uninstall preview -----------------------------------------

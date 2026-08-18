@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.0.250
+
+The Convoy App no longer opens an empty terminal window at every Windows logon.
+
+- **Logon terminal window fixed.** uv 0.11.x and earlier write console-subsystem launchers for a venv's `pythonw.exe` (astral-sh/uv#19226), so the scheduled task that starts the Convoy App put an empty terminal on the desktop at every login. The installer now reads the binary's PE subsystem instead of trusting its filename, repairs affected environments in place with CPython's own windowless launcher -- existing installs self-heal on their next update or Repair Convoy App -- and refuses to package a release runtime with the same defect. `installed.json` records the check as `interpreter_subsystem`. 74 new tests.
+
 ## v6.0.249
 
 One field report of a v6.0.246 update produced three dialogs in five seconds. Every one of them was wrong, and two of them could destroy something. Plus two things that had been shipping inside released builds for a while: a developer's dialog preference, and a latched pulse.

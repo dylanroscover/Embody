@@ -7118,6 +7118,24 @@ def _host_build_daemon_venv(ctx, runner=None):
         text = str(err or out or 'uv pip exited %s' % (code,)).strip()
         return {'ok': False, 'reason': 'daemon_venv_build_failed',
                 'detail': text[-400:]}
+    # THE VENV IS BUILT; NOW MAKE ITS WINDOWLESS HALF REAL. uv 0.11.x and
+    # earlier write byte-identical CONSOLE trampolines for python.exe and
+    # pythonw.exe (astral-sh/uv#19226, fixed in 0.12.4), so what the
+    # Scheduled Task launches at logon pops an empty terminal window. The
+    # gate is unconditional rather than uv-version-keyed: a newer uv
+    # fixes new venvs and nothing about the ones already on disk.
+    # NEVER FATAL -- a console window is cosmetic, and refusing the build
+    # over it would leave the machine with no per-user daemon venv at all.
+    window_note = ''
+    windowless = installer.ensure_windowless_daemon_python(
+        venv_dir, base, platform=platform)
+    if not windowless.get('ok'):
+        window_note = (
+            ' The daemon interpreter could not be made windowless (%s), '
+            'so a console window may appear at logon.'
+            % (windowless.get('detail') or windowless.get('reason'),))
+    elif windowless.get('note'):
+        window_note = ' %s.' % (windowless['note'],)
     # What the caller probes and records is the SUPERVISOR's interpreter,
     # not uv's target. They differ only on Windows (pythonw.exe vs
     # python.exe) and uv builds both -- but if a future uv ever stops
@@ -7130,7 +7148,96 @@ def _host_build_daemon_venv(ctx, runner=None):
         chosen = venv_python
     return {'ok': True, 'reason': 'daemon_venv_built',
             'python': chosen, 'console_python': venv_python, 'base': base,
+            'note': window_note,
             'detail': 'built a dedicated Convoy venv from %s' % (base,)}
+
+
+def _host_ensure_windowless_daemon(ctx, daemon_python):
+    """Repair an ALREADY-BUILT daemon venv's console pythonw.exe. WORKER.
+
+    The reuse path's counterpart to the build path's gate. A venv built
+    by uv 0.11.x or earlier carries two byte-identical CONSOLE
+    trampolines (astral-sh/uv#19226), and the reuse decision keeps such a
+    venv forever -- so without this, one bad build means an empty
+    terminal window at every logon for the life of the machine.
+
+    Returns a NOTE for the caller's detail line, '' when there is nothing
+    to say. It can never fail an install: the venv still probes healthy
+    either way, and a refusal (typically: the live daemon holds the exe
+    and even the rename aside was denied) is reported, not escalated.
+
+    IT ALWAYS CALLS THE INSTALLER, even when the interpreter is already
+    windowless. A short-circuit here looked free and was not: the ONLY
+    sequence that leaves a pythonw.exe.old-* behind is a repair over a
+    LIVE daemon, and that sequence ends with the venv GUI -- so a
+    GUI-means-skip rung meant those leftovers were never swept and the
+    note promising otherwise was false on every field machine. The
+    installer's own fast path is one PE read plus one listdir.
+    """
+    installer = ctx['installer']
+    spec = ctx.get('daemon_venv') or {}
+    # No base is passed: an existing venv names its own in pyvenv.cfg,
+    # which is the same answer the repaired interpreter uses at run time.
+    fixed = installer.ensure_windowless_daemon_python(
+        spec.get('dir'), platform=ctx.get('platform'))
+    if not fixed.get('ok'):
+        # SAY WHAT IS ACTUALLY THERE -- three different things, and only
+        # one of them is a console window. A denied repair that could not
+        # put the original back leaves NO interpreter at the recorded
+        # path; a denied repair whose file cannot even be READ (usually
+        # the same process that denied the write is holding it) proves
+        # nothing about a window at all.
+        if fixed.get('interpreter_missing'):
+            note = (' WARNING: the Convoy venv has no daemon interpreter '
+                    'at %s after a denied repair (%s).'
+                    % (daemon_python, fixed.get('detail')
+                       or fixed.get('reason')))
+        elif fixed.get('interpreter_unreadable'):
+            note = (' The existing Convoy venv\'s daemon interpreter could '
+                    'not be replaced or read just now, so whether it opens '
+                    'a console window at logon is unverified (%s).'
+                    % (fixed.get('detail') or fixed.get('reason'),))
+        else:
+            note = (' The existing Convoy venv still has a console daemon '
+                    'interpreter, so a console window may appear at logon '
+                    '(%s).' % (fixed.get('detail') or fixed.get('reason'),))
+        return note + _host_kept_note(fixed)
+    if not fixed.get('repaired'):
+        # Already windowless, unreadable-so-left-alone, or another process
+        # got there first. The sweep may still have run, so a leftover it
+        # could not remove is worth one sentence.
+        if fixed.get('note'):
+            return ' %s.%s' % (fixed['note'], _host_kept_note(fixed))
+        return _host_kept_note(fixed)
+    note = (' The existing Convoy venv had a console daemon interpreter '
+            '(older uv) and was repaired in place.')
+    if fixed.get('note'):
+        note += ' %s.' % (fixed['note'],)
+    return note + _host_kept_note(fixed)
+
+
+def _host_kept_note(fixed):
+    """Name a leftover image the repair could not delete yet. WORKER.
+
+    Expected, not exceptional: a running daemon holds its own exe open,
+    so the old image survives until it exits and the NEXT install sweeps
+    it. Naming it beats leaving a mystery multi-megabyte file beside the
+    interpreter.
+
+    TWO DIFFERENT LEFTOVERS, and calling them the same thing was a lie in
+    one direction: `kept` carries what THIS repair renamed aside, but on
+    a call that repaired nothing it carries what an EARLIER repair left
+    and the sweep still could not remove. Only the first is "the replaced
+    interpreter".
+    """
+    kept = fixed.get('kept') or ()
+    if not kept:
+        return ''
+    if fixed.get('repaired'):
+        return (' The replaced interpreter is still in use and was left as '
+                '%s; it is removed on the next install.' % (kept[-1],))
+    return (' A leftover from an earlier repair could not be removed yet '
+            '(%s); it goes at the next install.' % (kept[-1],))
 
 
 def _host_install(ctx, modules, interpreter, supervisor=None,
@@ -7163,11 +7270,28 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
     # daemon, so without its own channel the explanation would be
     # dropped exactly when the outcome looks fine.
     #
-    # Says only WHY the per-user venv was not used. It must NOT claim
-    # what was used instead: on a failure nothing was installed at all,
-    # and on a success the winner may be a system Python rather than the
-    # project venv. That sentence is added below, once, where the
+    # WHAT IT CARRIES, since it is no longer only bad news: either why
+    # the per-user venv was NOT used, or -- when it WAS -- what had to be
+    # done to it (an in-place windowless repair, a leftover image the
+    # live daemon still holds, a missing vcruntime). It must still never
+    # claim what was used instead: on a failure nothing was installed at
+    # all, and on a success the winner may be a system Python rather than
+    # the project venv. That sentence is added below, once, where the
     # chosen interpreter is actually known.
+    #
+    # IT ACCUMULATES, it does not overwrite. A reuse attempt can produce
+    # a note ("repaired in place", "this venv now has no interpreter, the
+    # surviving image is at X") and then still fall through to a rebuild;
+    # reassigning there made the loudest warning we have unreachable in
+    # production. Every later assignment therefore PREPENDS what the
+    # reuse rung already said.
+    #
+    # WHAT KEEPS THE 'moved or deleted' SENTENCE BELOW HONEST is not this
+    # string's tone but its gate: that sentence is appended only when the
+    # winning interpreter IS ctx['venv_python']. A note may well carry a
+    # positive clause about the daemon venv and still end on a fallback
+    # to the project venv -- in which case the project-scoped warning is
+    # exactly right, because that is what actually won.
     daemon_note = ''
     if venv_runtime:
         def verifier(data_dir, interp, platform=None, architecture=None,
@@ -7232,17 +7356,40 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
         prefer_daemon_venv = (ctx['platform'] == 'win32'
                               and bool(daemon_python))
         if prefer_daemon_venv:
+            # THREE-WAY, not two. An EXISTING venv is reused forever, so
+            # a venv built by an older uv keeps its console pythonw.exe
+            # (astral-sh/uv#19226) and re-pops an empty terminal window at
+            # every logon until something repairs it in place. Rebuilding
+            # is the wrong cure: the venv still probes healthy, and
+            # `uv venv --clear` would try to delete an exe the LIVE daemon
+            # holds open. So: absent -> build; windowless -> reuse
+            # untouched; console or unreadable -> repair, then reuse.
+            reuse_note = ''
+            if os.path.isfile(daemon_python):
+                reuse_note = _host_ensure_windowless_daemon(
+                    ctx, daemon_python)
             if os.path.isfile(daemon_python) and _probe(daemon_python):
                 # A healthy venv from a previous install: seconds, and it
                 # works offline. Never rebuild what already proves itself.
                 chosen = daemon_python
+                daemon_note = reuse_note
             else:
+                # ACCUMULATE, NEVER REASSIGN. The loudest thing
+                # reuse_note can carry is "this venv now has NO daemon
+                # interpreter, and the only surviving image is <path>" --
+                # and that state is exactly what sends control HERE
+                # (isfile is False, so the rebuild runs). Overwriting the
+                # note made the warning unreachable in production while a
+                # stub that left the file on disk kept its test green.
+                # The rebuild does self-heal the venv; the user still has
+                # to be told what happened to the old one.
                 built = _host_build_daemon_venv(ctx)
                 if built.get('ok') and _probe(built['python']):
                     chosen = built['python']
                     success_note = (
                         ' (daemon runs under a dedicated per-user Convoy '
                         'venv built from %s)' % (built.get('base'),))
+                    daemon_note = reuse_note + str(built.get('note') or '')
                 else:
                     if built.get('ok'):
                         why = 'the venv was built but its probe failed'
@@ -7252,7 +7399,7 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                         remedy_named = bool(built.get('names_remedy'))
                     # Not fatal -- but say plainly WHY, because the cost
                     # of the fallback is invisible until the day it bites.
-                    daemon_note = (
+                    daemon_note = reuse_note + (
                         ' A dedicated per-user Convoy venv could not be '
                         'used (%s).' % (why,))
 
@@ -7305,6 +7452,7 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                 chosen = built['python']
                 success_note = (' (daemon runs under a dedicated Convoy '
                                 'venv built from %s)' % (built.get('base'),))
+                daemon_note += str(built.get('note') or '')
             elif built.get('ok'):
                 # Built fine, still refused by the probe -- say THAT, not
                 # the build's success line inside a failure message.
