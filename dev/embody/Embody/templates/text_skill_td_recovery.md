@@ -61,3 +61,12 @@ The most frequent cause of connectivity issues is `.embody/envoy.json` having `a
 3. After recreation, reopen the Claude Code session so the bridge reconnects with the new venv Python.
 
 **Prevention**: Envoy validates the venv Python on startup and logs a warning if broken. Check TD textport for "failed to execute" warnings after TD upgrades.
+
+## A "Frozen" TD May Be a Masked Crash
+
+A worker-thread-rich project (MCP servers, download threads, any `threading.Thread`) that touched TD objects from a worker -- including worker-side `run()`/`td.run()`, which silently corrupts TD state (see rules/td-python.md) -- can die as a native access violation inside libTD.dll far from any worker thread. TD's crash handler can then hang inside its own CrashAutoSave pickling (`/sys/pickleUtils`), so the process looks FROZEN: no crash dump, no CrashAutoSave written, no exit (Derivative-confirmed failure signature, 2026-08-17).
+
+- **Distinguish it from a real hang**: `py-spy dump --pid <td_pid> --native` works against TD's embedded Python 3.11, including hung processes. A masked crash shows the main thread stuck in crash-handler / pickling frames rather than in a cook or a Python loop.
+- **Do not kill the process yourself** -- report the diagnosis and let the user decide.
+- **Root-cause hunt**: audit every worker thread in the project for TD-object touches, especially `run()` calls -- the corruption site is usually nowhere near the crash site.
+- **Operational mitigation (UNVERIFIED against official docs)**: Derivative support has reported that `TOUCH_QUICK_CRASH=1`, set in the LAUNCHER environment (TD reads it at boot only), skips the slow crash handler so a supervisor can observe the death and relaunch. The variable does not appear in official documentation as of 2026-08-17 -- verify with Derivative before relying on it.

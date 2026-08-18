@@ -453,6 +453,14 @@ class TestConvoyRegistrations(EmbodyTestCase):
                 '%s runs or is called from the worker and must not capture '
                 'the TD-bound extension object' % name)
 
+    def test_sibling_api_main_thread_gate_is_live(self):
+        # _submitSiblingApi's wrong-thread gate does `import td` and asks
+        # isMainThread(). Prove both halves are real inside TD, so the
+        # ImportError fail-open can never be the branch that runs here --
+        # a guard that silently assumes main is a dead guard.
+        import td
+        self.assertTrue(td.isMainThread())
+
     def test_worker_shutdown_is_generation_safe_and_non_blocking(self):
         src = self.embody.op('convoy').op('ConvoyExt').text
         self.assertIn("sys._convoy_workers", src)

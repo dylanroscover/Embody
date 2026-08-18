@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.251
+
+Worker threads can no longer touch TouchDesigner by accident -- corrected guidance, a clean codebase audit, and a new write-time lint, after Derivative confirmed that worker-side `run()` silently corrupts TD state.
+
+- **THREADING WARNING**: `execute_python`, `set_dat_content`, and `edit_dat_content` now statically lint submitted Python; handing a thread a target -- or subclassing `threading.Thread` with a `run()` method -- that calls TD's global `run()` rides a warning back on the response, at write time instead of at the crash frames later. Cost is bounded (size cap, substring prefilter, per-target dedupe), verified by an adversarial review panel with measured worst cases.
+- **Guidance corrected**: worker-side `run()` does NOT raise `tdError` on current builds -- it executes normally and corrupts silently, crashing later far from the call site (Derivative-confirmed 2026-08-17). The rule, skill, docs, and shipped templates retract the old rationale, and `/td-recovery` now teaches the masked-crash signature (a "frozen" TD that is really an access violation with the crash handler hung) and the py-spy diagnosis.
+- **Audit + hardening**: every TD `run()` call site in the codebase (~105) traced to its executing thread -- all main-thread, zero violations. The four worker-side `print()` calls found in Envoy's server threads now buffer through a bounded queue drained on the main thread, and Convoy's sibling API enforces its documented main-thread contract with a real `import td` guard. 34 new tests.
+
 ## v6.0.250
 
 The Convoy App no longer opens an empty terminal window at every Windows logon.

@@ -93,7 +93,7 @@ Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mod
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `execute_python` | `code` | Execute Python in TD; set the `result` variable to return values. Auto-lints newly-created ops and emits a **LAYOUT WARNING** when they are left at (0,0) or overlapping (unlike `create_op`, raw `comp.create()` does not auto-position) |
+| `execute_python` | `code` | Execute Python in TD; set the `result` variable to return values. Auto-lints newly-created ops and emits a **LAYOUT WARNING** when they are left at (0,0) or overlapping (unlike `create_op`, raw `comp.create()` does not auto-position). Also statically lints the submitted source (as do `set_dat_content` / `edit_dat_content` for Python written to DATs) and emits a **THREADING WARNING** when a thread target calls TD's `run()` -- worker-side `run()` silently corrupts TD state and crashes later (Derivative-confirmed 2026-08-17) |
 
 ## Introspection & Diagnostics
 

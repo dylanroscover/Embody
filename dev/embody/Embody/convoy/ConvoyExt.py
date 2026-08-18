@@ -2523,6 +2523,36 @@ class ConvoyExt:
     def _submitSiblingApi(self, kind, request, callback=None,
                           local_error=None):
         """Validate/gate on main, then enqueue one pure worker callable."""
+        # This funnel arms td.run() polls, and worker-side run() silently
+        # corrupts TD state (Derivative-confirmed 2026-08-17) -- so the
+        # documented main-thread contract is enforced, not just stated.
+        # `td` is imported explicitly (the bare name is not reliably bound
+        # in an extension namespace); outside TD (pytest) the import fails
+        # and main thread is assumed. Any other surprise fails OPEN -- the
+        # guard must never be what breaks the API surface.
+        try:
+            import td
+            on_main = td.isMainThread()
+        except ImportError:
+            on_main = True
+        except Exception:
+            on_main = True
+        if not on_main:
+            # Mirror the request_capacity refusal handle (state 'failed'
+            # with the error in 'result') so every consumer shape survives;
+            # request_id is None because nothing was enqueued. The callback
+            # is deliberately NOT fired: invoking consumer code from the
+            # offending worker thread would extend the very violation this
+            # guard exists to stop.
+            now = time.time()
+            return {
+                'request_id': None, 'kind': kind,
+                'state': 'failed', 'created': now, 'updated': now,
+                'result': self._apiError(
+                    'wrong_thread',
+                    'sibling API entry points are main-thread-only '
+                    '(they schedule td.run() polls)'),
+            }
         if callback is not None and not callable(callback):
             local_error = self._apiError(
                 'invalid_callback', 'callback must be callable or None')

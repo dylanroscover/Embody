@@ -138,7 +138,7 @@ Wire operators together and inspect the full connection graph. Works for all sta
 
 | Tool | Description |
 |---|---|
-| `execute_python` | Execute Python in TD's main thread; return values via the `result` variable. Auto-lints newly-created ops for (0,0)/overlap and emits a **LAYOUT WARNING** when they need positioning |
+| `execute_python` | Execute Python in TD's main thread; return values via the `result` variable. Auto-lints newly-created ops for (0,0)/overlap and emits a **LAYOUT WARNING** when they need positioning. Also statically lints the submitted source (as do `set_dat_content` / `edit_dat_content` for Python written to DATs) and emits a **THREADING WARNING** when a thread target calls TD's `run()` -- worker-side `run()` silently corrupts TD state and crashes later (Derivative-confirmed 2026-08-17) |
 
 ### Introspection & Diagnostics
 
