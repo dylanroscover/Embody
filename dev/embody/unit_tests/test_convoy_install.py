@@ -3446,8 +3446,14 @@ class TestConvoyManagedRuntime(EmbodyTestCase):
             payload = _console_pe(b'console daemon')
             with open(got['interpreter'], 'wb') as f:
                 f.write(payload)
-            receipt_path = install_mod.runtime_complete_path(
-                root, self.RUNTIME_ID, self.PLATFORM)
+            # HOST-filesystem path, not runtime_complete_path: that helper
+            # joins with the TARGET platform's separators (ntpath for
+            # win32), which are literal filename characters on a POSIX
+            # host -- the macOS CI leg cannot open them. Mirror the
+            # module's own I/O helper instead.
+            receipt_path = os.path.join(
+                install_mod._runtime_fs_dir(root, self.RUNTIME_ID),
+                install_mod.COMPLETE_FILE)
             with open(receipt_path, encoding='utf-8') as f:
                 receipt = json.load(f)
             for row in receipt['files']:
