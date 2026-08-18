@@ -255,6 +255,50 @@ class TestTDNExportImport(EmbodyTestCase):
 
     # --- Custom parameter VALUE round-trip ---
 
+    def _find_par_def(self, tdn, name):
+        """The exported definition for one custom par, page-grouped or flat."""
+        pars = tdn.get('custom_pars') or []
+        if isinstance(pars, dict):
+            pars = [d for page in pars.values() for d in page]
+        return next((d for d in pars if d.get('name') == name), None)
+
+    def test_a_latched_pulse_never_exports_a_value(self):
+        """A COMMITTED EXPORT MUST NOT BE ABLE TO RE-FIRE A PULSE.
+
+        A Pulse par reads True for the instant it is firing, so an export
+        that catches one in flight serializes `value: true` -- and the
+        import side re-applies values, so loading that file fires the pulse.
+        It shipped twice: v6.0.243 put a latched `Refresh` in embody.tdn and
+        Embody/Embody.tdn (hand-scrubbed in e884000), and the very next
+        release export latched it again, because the post-save refresh runs
+        while the export is being written. Scrubbing the file was never the
+        fix.
+        """
+        page = self.sandbox.appendCustomPage('RT')
+        pulse = page.appendPulse('Rtpulse')[0]
+        pulse.val = True          # exactly how the field cases latched
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        par_def = self._find_par_def(export['tdn'], 'Rtpulse')
+        self.assertIsNotNone(par_def, 'the pulse must still be DECLARED')
+        self.assertEqual('Pulse', par_def.get('style'))
+        self.assertNotIn(
+            'value', par_def,
+            'a serialized pulse value re-fires the pulse on import')
+        self.assertNotIn('values', par_def)
+
+    def test_a_toggle_still_exports_its_value(self):
+        """Non-vacuity for the guard above: the value path is still live for
+        every style that legitimately carries one."""
+        page = self.sandbox.appendCustomPage('RT')
+        tog = page.appendToggle('Rtflag')[0]
+        tog.default = False
+        tog.val = True
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        par_def = self._find_par_def(export['tdn'], 'Rtflag')
+        self.assertIsNotNone(par_def)
+        self.assertIn('value', par_def,
+                      'the guard must be scoped to momentary styles only')
+
     def test_roundtrip_custom_par_default_valued(self):
         """Regression: a custom Float whose value equals its (non-standard)
         default round-trips with the VALUE intact. The exporter omits a value

@@ -204,6 +204,33 @@ _USER_OWNED_BUILTINS = frozenset({
 })
 
 
+def _declaredCustomPars(comp):
+    """Custom par names this build DECLARES -- runtime blocks excluded.
+
+    A custom SEQUENCE's block parameters are not a declaration, they are a
+    live projection: ConvoyExt sizes the Convoy Nodes sequence to whatever
+    this machine's Convoy mesh happens to be (`seq.numBlocks = len(rows)`),
+    so a raw customPars snapshot bakes the DEV machine's node count into the
+    release. The updater then enforces that count against every user and
+    destroys the surplus rows as 'settings that no longer exist' -- the
+    field failure this filter exists for (v6.0.245 shipped 4 blocks,
+    v6.0.246 shipped 6; anyone with more lost the difference).
+
+    The sequence HEADER par stays declared -- it is authored, static, and
+    must never itself be pruned. Only its per-block members are dropped.
+
+    ONE predicate, borrowed from the consumer that enforces it: UpdaterExt
+    owns _isSequenceBlockPar because it is the side that must refuse to
+    destroy a block whatever a manifest says (including manifests already
+    published). Importing it here rather than restating it is what keeps
+    'what a build declares' and 'what an update may remove' from drifting
+    into two subtly different answers.
+    """
+    dat = comp.op('updater/UpdaterExt')
+    is_block = dat.module.UpdaterExt._isSequenceBlockPar
+    return sorted(p.name for p in comp.customPars if not is_block(p))
+
+
 def _buildOwnedBuiltins(comp):
     """{name: {mode, value}} for every non-default built-in this build sets."""
     out = {}
@@ -254,8 +281,10 @@ def writeReleaseManifest(comp, tox_path, version, build):
             # from a live one. This list is that missing source of truth: the
             # updater prunes anything absent from it and tells the user which
             # settings went away. Absent on pre-6.0.245 manifests, where the
-            # updater simply skips pruning.
-            'custom_pars': sorted(p.name for p in comp.customPars),
+            # updater simply skips pruning. Sequence BLOCK pars are excluded
+            # (_declaredCustomPars): their count is live machine state, not
+            # something a build declares.
+            'custom_pars': _declaredCustomPars(comp),
             # Every BUILT-IN par this build sets away from its TD default --
             # the component's own wiring, not the user's settings. The same
             # preserving reload strands ALL of these, so a build can never make

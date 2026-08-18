@@ -4688,6 +4688,18 @@ class EmbodyExt:
             # while preserving the block count, so another machine's names,
             # addresses and presence never bake into a TDN or release tox.
             'Convoynodes': None,
+            # A DEVELOPER'S DIALOG PREFERENCE, and it shipped. v6.0.246 was
+            # published with this On (verified 2026-08-16 by loading the
+            # released .tox: Showbuiltinpars True against a False default),
+            # so every download presented TD's Layout/Panel/Look/Common
+            # pages instead of Embody's filtered POPX dialog -- because
+            # whoever cut the release happened to be inspecting built-in
+            # pars at save time. It is not in the config.json prefs
+            # whitelist, so the live value rides in the .toe and the
+            # scrub/restore cycle hands it straight back to the session:
+            # registering it costs the developer nothing and closes the
+            # leak permanently. Reset to its default (Off).
+            'Showbuiltinpars': None,
         },
     }
 

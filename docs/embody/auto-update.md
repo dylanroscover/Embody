@@ -57,9 +57,19 @@ preference.
    and restarts through its normal startup path afterward (if you had it
    enabled).
 6. **Verify** — after the new version boots, the updater confirms the
-   component is intact, stamps the new version metadata, detaches from the
-   downloaded file, and reports success. If verification fails, the
-   pre-update backup is restored automatically and the failure is reported.
+   component is intact, stamps the new version metadata, reconciles
+   parameters, detaches from the downloaded file, clears the in-flight
+   sentinel, and only then reports success — **one** dialog for the whole
+   update, which also names any settings the new version retired. If
+   verification fails, the pre-update backup is restored automatically and
+   the failure is reported.
+
+   The reporting deliberately comes last. A message box is modal to the
+   script that raised it but *not* to TouchDesigner, whose scheduled
+   callbacks keep running behind it — so a dialog raised mid-verification
+   used to park the update half-applied, with its crash sentinel still on
+   disk, long enough for the startup sweep to find it and offer to roll back
+   an update that was seconds from succeeding.
 
 Your externalized files and the `externalizations` table are untouched by
 design — the table lives beside Embody precisely so it survives component
@@ -96,7 +106,14 @@ replacement, and the new version revalidates every tracked operator on boot
 - **Crash recovery**: before the reload, a sentinel file
   (`.embody/updates/pending.json`) records the update in flight. If
   TouchDesigner crashes or is closed mid-update, the next project open
-  detects it and offers to restore the backup.
+  detects it and offers to restore the backup. It offers that *only* for an
+  update that really was interrupted: the sentinel records the process that
+  wrote it, and an in-place reload keeps the same TouchDesigner process, so
+  the rebuilt component recognises its own update still finishing instead of
+  mistaking it for wreckage. If a swap is found live but nothing is left to
+  finish it — the interrupted case where the component was already re-pointed
+  at the new `.tox` — verification is re-armed rather than prompting, so the
+  install completes instead of stalling half-applied.
 - **Rollback**: a failed verification automatically reloads the pre-update
   backup. If even the rollback fails, the updater tells you to close
   *without saving* and reopen — the saved `.toe` still holds the previous
@@ -155,6 +172,7 @@ invisible to the updater** — users on auto-update simply won't receive it.
 | "cannot be verified: release has no embody-release.json" | The release predates the manifest system. Update manually from GitHub. |
 | "requires TouchDesigner build X+" | Your TD build is older than the release's floor. Update TouchDesigner, or stay on the current Embody. |
 | "Update check failed (network error)" | No internet, GitHub down, or the 60/hour anonymous rate limit (shared per IP). Try again later. |
-| "Update Recovery" dialog at startup | A previous update was interrupted. `Restore Backup` returns to the pre-update version; `Keep Current State` leaves things as they are. |
+| "Update Recovery" dialog at startup | A previous update was interrupted. `Restore Backup` returns to the pre-update version; `Keep Current State` leaves things as they are. It never appears for an update that is merely still finishing — if you see it, the update really did stop. |
+| "N settings no longer exist in this version and were removed" | The new version retired those parameters; their values are gone with them. It arrives inside the update's own success dialog, never as a separate alarm, and it never names Convoy node rows or any other runtime-populated sequence — those are a live readout, not settings, and an update leaves them alone. |
 | Status shows an old version after update | The verify step stamps version metadata a few seconds after the reload; if it still shows stale info, check the Embody log for a rollback report. |
 | Updater refuses in the dev repo | Intended — see above. Use `git pull`. |

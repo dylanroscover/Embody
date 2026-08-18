@@ -30,7 +30,9 @@ There is no invitation code or everyday Create/Join decision -- an explicit Join
 
 Enabling Convoy installs and starts the host app automatically, because Convoy cannot reach the LAN without it. The consent is carried by the one-time Enable Convoy confirmation (or the wizard's Convoy step), which discloses that the app runs at login, whether or not TouchDesigner is open. The pulses above remain for repair, deliberate stop/start, and uninstall.
 
-**The app keeps itself current.** The daemon reports the version of the code it is actually running, and when a project registers with a daemon running *older* code than its own Embody, that Embody updates the app in place automatically -- once per TouchDesigner session, a few seconds after registration settles, logged when it happens. Strictly older only: an equal or newer app is never touched, and a newer app is never downgraded by an older Embody. After every install or repair, the restarted daemon is asked what version it now runs, and a mismatch is a visible warning rather than a silent success.
+**The app keeps itself current.** The daemon reports the version of the code it is actually running, and when a project registers with a daemon running *older* code than its own Embody, that Embody updates the app in place automatically -- once per TouchDesigner session, a few seconds after registration settles, logged when it happens. Strictly older only: an equal or newer app is never touched, and a newer app is never downgraded by an older Embody.
+
+**And it verifies the daemon it restarted, without crying wolf.** After every install or repair the restarted daemon is asked what version it now runs -- but the answer is not taken from the first read. A daemon relaunched by its supervisor during the install window can genuinely still be serving the outgoing payload for a second or two (the launcher resolves its payload directory from the install record, which is written last), so Embody waits for the reported version to converge. If it does not, Embody performs the repair itself: one graceful stop and start, so the daemon re-reads the record and picks up the new payload. Only a mismatch that survives *both* is reported -- and it is reported on **Status**, as `Needs repair ...`, not only in the log. A daemon that is busy running work is never restarted underneath it; the mismatch is reported instead.
 
 The host-app portion of **Status** uses these user-facing states:
 
@@ -42,6 +44,7 @@ The host-app portion of **Status** uses these user-facing states:
 | `Installed -- not running (restarts within a minute)` | On Windows, the scheduled supervisor may take up to a minute; macOS LaunchAgent recovery is normally prompt. You can press **Start Convoy App** immediately on either platform. |
 | `Installed -- stopped` | Press **Start Convoy App** when you want Convoy available again |
 | `Installed -- no supervisor (use Repair Convoy App)` | Run **Repair Convoy App** to repair login startup |
+| `Needs repair -- still running X, not Y (use Repair Convoy App)` | The new payload is on disk, but the daemon serving the machine is still running the older code -- and it stayed that way through the settle wait *and* one automatic restart. Press **Repair Convoy App**; if it persists, check the log for why the supervisor cannot replace the process |
 | `Needs repair -- Python not found (reinstall)` | The Python the app was installed against is gone. Run **Repair Convoy App** to re-resolve the runtime; it is also the repair path if Embody's Python environment was rebuilt. This works even when the app was installed by a *newer* Embody than the project you are in: that case re-resolves the runtime and re-registers login startup **without** writing a payload or changing the installed version, so the newer app is what starts back up. The one case it cannot fix is an app managed by another supervisor -- repair that through the supervisor that owns it |
 | `Running ... -- installed by a newer Embody` or `Installed ... -- installed by a newer Embody` | Do not downgrade it from an older Embody; align versions first. (If its recorded Python is *missing*, the readout is `Needs repair ...` instead and **Repair Convoy App** will fix it in place -- see the row above) |
 | `Managed by another supervisor` | Use the studio or Owlette process that owns startup, rather than competing with it |
@@ -251,6 +254,59 @@ Project-saved artifacts are not counted against this quota and are never removed
 **Stop Convoy App** intentionally prevents its login supervisor from immediately starting it again. Existing queued job records remain. Press **Start Convoy App** to resume.
 
 **Uninstall Convoy App** removes the background app and login registration but retains the local host identity, job history, the host log, and the dedicated Convoy runtime venv when one was built (macOS always builds one; Windows now prefers a per-user one too), so a later reinstall rejoins as the same host and reuses the already-built runtime without a rebuild. Incomplete or unrecognized payload directories are named but never deleted. The confirmation names each retained path before anything is removed. Explicitly saved project artifacts are project files and are not part of host-app cache cleanup.
+
+## The Windows daemon interpreter (no console window at logon)
+
+On Windows the host app is launched at every logon by a Scheduled Task
+pointing at `pythonw.exe` -- the *windowless* half of the per-user Convoy
+venv. Some versions of `uv` (0.11.x and earlier) wrote that file as a
+console binary anyway, byte-identical to `python.exe`
+([astral-sh/uv#19226](https://github.com/astral-sh/uv/issues/19226), fixed
+in uv 0.12.4). The symptom is an empty terminal window that appears at
+every login and does nothing. A newer `uv` fixes newly built environments
+and nothing about the one already on your machine, so Embody checks and
+repairs it directly.
+
+**What Install and Repair Convoy App now do.** Every install checks what
+the daemon interpreter actually is, not what it is named. If it is a
+console binary, Embody replaces it in place with the windowless
+interpreter from the same base Python -- it never rebuilds the
+environment for this, because the environment is otherwise healthy and a
+rebuild would try to delete a file the running daemon is holding open.
+The `python.exe` beside it is deliberately left alone: package installs
+are driven through that one and it is supposed to be a console binary.
+
+**About the `pythonw.exe.old-...` file.** Windows cannot delete a program
+that is running, but it can rename it, so a repair over a live daemon
+leaves the previous interpreter beside the new one under a name ending in
+`.old-` and says so in the install details. The next Install or Repair
+removes it, once the old daemon has exited and the environment has a
+healthy interpreter again -- deliberately not before, because in the rare
+case where the current `pythonw.exe` is missing, that renamed file is the
+only copy left. It is safe to leave alone.
+
+**What a refused repair does and does not change.** The guarantee is
+about one file: a refusal never alters the `pythonw.exe` your login task
+launches. A repair that has to copy several files can be interrupted part
+way and leave support DLLs beside a still-unrepaired interpreter; those
+are inert -- nothing loads them until a matching interpreter is in place
+-- and the next successful repair overwrites them.
+
+**Details you may see, and what each one means:**
+
+| Reported reason | Meaning and next action |
+|---|---|
+| `daemon_venv_repair_source_missing` | The base Python behind the Convoy environment could not be found, or it ships neither a windowless interpreter nor the DLLs one needs. The interpreter was not changed. Install Python 3.11+ from python.org, then run **Repair Convoy App**. |
+| `daemon_venv_repair_locked` | The running daemon is holding the interpreter, so it could not be replaced. Your `pythonw.exe` is unchanged (support files may have been staged beside it; they are harmless). Use **Stop Convoy App**, then **Repair Convoy App**, then **Start Convoy App**. Two variants say more: *"could not be read back either ... unverified"* means another program had the file open and nothing about a console window was actually established -- just repair again later; *"no longer exists"* means the environment lost its interpreter entirely, and **Repair Convoy App** rebuilds it. |
+| `daemon_venv_repair_unsafe_path` | A file inside the Convoy environment's `Scripts` folder resolves outside it (a junction or link). Embody refuses to write through it. Remove the link, or uninstall and reinstall the host app. |
+| `daemon_venv_not_windowless` | The replacement was written, was read back successfully, and still reports itself as a console program -- so the base Python this machine used supplies a `pythonw.exe` that is not windowless. Run **Repair Convoy App** after installing a stock Python 3.11+ from python.org; if it repeats, report it with the install details. |
+| `runtime_interpreter_not_windowless` | A **managed Convoy Runtime bundle** names a console binary as its daemon interpreter. Embody refuses to install or trust it rather than repairing it: a managed runtime is signed and hash-pinned, so it can only be fixed by a corrected release. Report the release version. |
+
+Windows install records also carry a diagnostic `interpreter_subsystem`
+field (`gui`, `console`, or `unknown`) in the per-user
+`installed.json`. It is informational -- it lets a support answer say
+whether a window will appear without asking anyone to watch a login --
+and it is absent on macOS, which has no such distinction.
 
 ## Platform validation status
 

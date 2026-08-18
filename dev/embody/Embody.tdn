@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1158
-generator: Embody/6.0.246
+build: 1161
+generator: Embody/6.0.250
 td_build: 099.2025.33070
-source_file: Embody-6.246.toe
-exported_at: '2026-08-16T17:00:20Z'
+source_file: Embody-6.250.toe
+exported_at: '2026-08-18T00:13:43Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -788,7 +788,6 @@ custom_pars:
     label: Show Built-in Pars
     startSection: true
     help: Show TouchDesigner's built-in parameter pages (Layout, Panel, Look, Children, Drag/Drop, Extensions, Common) alongside Embody's pages in this dialog. Off (default) filters the dialog to Embody's pages only. The built-in pages remain fully functional either way -- this only controls dialog visibility, e.g. turn it on to reach the Common page's Global OP Shortcut.
-    value: true
   - name: Verbose
     style: Toggle
     label: Verbose (Debug)
@@ -819,7 +818,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.246
+    value: 6.0.250
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -911,6 +910,10 @@ sequences:
   - {}
   - {}
   Convoynodes:
+  - {}
+  - {}
+  - {}
+  - {}
   - {}
   - {}
   - {}
@@ -1201,8 +1204,8 @@ operators:
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
-  - py
   - TDExtension
+  - py
 - name: mousein1
   type: mouseinCHOP
   parameters:

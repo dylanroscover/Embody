@@ -2690,7 +2690,8 @@ class TestConvoyHostRepairVocabulary(EmbodyTestCase):
     def test_every_transient_string_is_distinct_and_ascii(self):
         seen = {}
         for name in ('HOST_CHECKING', 'HOST_INSTALLING', 'HOST_REPAIRING',
-                     'HOST_STARTING', 'HOST_INSTALL_FAILED'):
+                     'HOST_STARTING', 'HOST_INSTALL_FAILED',
+                     'HOST_STALE_PAYLOAD'):
             text = client.host_status_text(getattr(client, name))
             text.encode('ascii')
             for glyph in ('\u2014', '\u2013', '\u2026', '\u2019'):
@@ -2700,3 +2701,40 @@ class TestConvoyHostRepairVocabulary(EmbodyTestCase):
                     text, seen,
                     '%s and %s both read %r' % (name, seen.get(text), text))
             seen[text] = name
+
+
+class TestConvoyStalePayloadVocabulary(EmbodyTestCase):
+    """An install that landed on disk while the DAEMON kept serving the
+    previous payload had no words at all -- only a textport WARNING naming
+    a button, which is exactly how a user misses it (field report,
+    2026-08-16). It now has a resting state, and the lead words matter as
+    much as the rest.
+    """
+
+    def _text(self, **over):
+        state = {'state': client.HOST_STALE_PAYLOAD,
+                 'installed_version': '6.0.246',
+                 'reported_version': '6.0.241', 'live': True}
+        state.update(over)
+        return client.host_status_text(state)
+
+    def test_it_did_not_fall_through_to_the_default(self):
+        self.assertNotEqual(self._text(), 'Install failed -- see log')
+
+    def test_it_leads_with_needs_repair(self):
+        """The prefix is load-bearing twice over: ConvoyExt's
+        _BLOCKING_HOST_TEXTS promotes it onto Status, and
+        startup_progress.convoy_step classifies it FAILED. Lead with
+        'Running' and the defect hides behind a green mark."""
+        self.assertTrue(self._text().startswith('Needs repair'), self._text())
+
+    def test_it_names_both_versions_and_the_remedy(self):
+        text = self._text()
+        self.assertIn('6.0.241', text)
+        self.assertIn('6.0.246', text)
+        self.assertIn('Repair Convoy App', text)
+
+    def test_it_degrades_honestly_when_a_version_is_unknown(self):
+        text = self._text(reported_version=None, installed_version='')
+        text.encode('ascii')
+        self.assertTrue(text.startswith('Needs repair'), text)

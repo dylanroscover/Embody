@@ -268,9 +268,16 @@ class TestUpdaterStatusLine(EmbodyTestCase):
             def isDevCheckout(self):
                 return dev_checkout
 
+            def _staleInstance(self):
+                # StartupCheck stands down for a superseded instance, like
+                # every other deferred entry point. This harness has no
+                # ownerComp, so the real check would raise and read as stale.
+                return False
+
         inst = Harness.__new__(Harness)
         inst._busy = False
         inst._pending = None
+        inst._rearmed = False
         return inst, pars
 
     def test_startupcheck_off_sets_disabled(self):
@@ -333,6 +340,25 @@ class _StubUpdater:
 
     def _setParMode(self, par, mode, value):
         return _updater_cls()._setParMode(self, par, mode, value)
+
+    def _isSequenceBlockPar(self, par):
+        return _updater_cls()._isSequenceBlockPar(par)
+
+    # Sentinel-ownership helpers, real, so the in-flight gate is exercised
+    # rather than mocked. _embody is the sandbox comp, which carries a real
+    # externaltox par.
+    def _sameSession(self, sentinel):
+        return _updater_cls()._sameSession(self, sentinel)
+
+    def _swapStillPointed(self, sentinel):
+        return _updater_cls()._swapStillPointed(self, sentinel)
+
+    def _updateInFlight(self, sentinel):
+        return _updater_cls()._updateInFlight(self, sentinel)
+
+    @staticmethod
+    def _sessionMark():
+        return _updater_cls()._sessionMark()
 
 
 class TestUpdateParReconciliation(EmbodyTestCase):
@@ -473,19 +499,32 @@ class TestUpdateParReconciliation(EmbodyTestCase):
     # --- retired settings ---
 
     def test_a_retired_par_is_removed_and_the_user_is_told_which(self):
+        """The user is still told WHICH settings went -- but through the
+        names the prune RETURNS, which VerifyUpdate folds into the update's
+        own dialog after the sentinel is cleared. The prune used to raise
+        that modal itself, from inside the critical section, and a modal
+        does not stop TouchDesigner's run() callbacks: the startup sweep
+        fired into the parked state and offered to roll back a healthy
+        update (field report, v6.0.246)."""
         comp = self._settings(self._comp(), {'Keepme': 'v', 'Goneme': 'x'})
         stub = _StubUpdater(comp)
-        _updater_cls()._pruneRetiredPars(stub, {'custom_pars': ['Keepme']})
+        retired = _updater_cls()._pruneRetiredPars(
+            stub, {'custom_pars': ['Keepme']})
         self.assertIsNone(getattr(comp.par, 'Goneme', None),
                           'a par this build no longer declares must go')
         self.assertIsNotNone(getattr(comp.par, 'Keepme', None))
-        self.assertTrue(any('Goneme' in body for body in stub.dialogs),
-                        'the user must be told WHICH settings were removed')
+        self.assertIn('Goneme', retired,
+                      'the removed names must reach the caller that reports')
+        self.assertTrue(any('Goneme' in message
+                            for lvl, message in stub.logs if lvl == 'WARNING'),
+                        'and the log must name them too')
 
     def test_nothing_is_removed_when_nothing_is_retired(self):
         comp = self._settings(self._comp(), {'Keepme': 'v'})
         stub = _StubUpdater(comp)
-        _updater_cls()._pruneRetiredPars(stub, {'custom_pars': ['Keepme']})
+        retired = _updater_cls()._pruneRetiredPars(
+            stub, {'custom_pars': ['Keepme']})
+        self.assertEqual([], retired, 'nothing retired, nothing reported')
         self.assertEqual([], stub.dialogs,
                          'no removals means no dialog')
 
@@ -511,3 +550,474 @@ class TestUpdateParReconciliation(EmbodyTestCase):
                       'writeReleaseManifest must declare custom_pars, or the '
                       'updater silently stops pruning retired settings')
         self.assertIn('Version', data['custom_pars'])
+
+
+class TestSequenceParsAreNeverRetired(EmbodyTestCase):
+    """A sequence's BLOCK COUNT is live machine state, not a declaration.
+
+    THE FIELD FAILURE (v6.0.246, macOS): the Convoy Nodes sequence is sized
+    to whatever Convoy mesh a machine has seen, so the release manifest --
+    a raw snapshot of the developer's own COMP -- declared blocks 0..5 and
+    nothing else. A user with a seventh node was shown '4 settings no longer
+    exist in this version and were removed' naming four cells of a read-only
+    status readout, and lost the row. v6.0.245 shipped the same bug with the
+    threshold at four nodes.
+
+    Two independent guards, tested separately below, because either alone
+    leaves a hole: the PRODUCER stops declaring machine state, and the
+    CONSUMER refuses to destroy sequence blocks whatever the manifest says
+    (the only protection for the manifests already published).
+    """
+
+    def _comp_with_sequence(self, blocks=3):
+        comp = self.sandbox.create(containerCOMP, 'upd_seq')
+        page = comp.appendCustomPage('Nodes')
+        page.appendSequence('Rows')
+        page.appendStr('Rowlabel')
+        comp.seq.Rows.blockSize = 1
+        comp.seq.Rows.numBlocks = blocks
+        settings = comp.appendCustomPage('Settings')
+        settings.appendStr('Keepme')
+        settings.appendStr('Goneme')
+        return comp
+
+    # --- the predicate ---
+
+    def test_the_predicate_separates_header_block_and_plain_pars(self):
+        comp = self._comp_with_sequence()
+        is_block = _updater_cls()._isSequenceBlockPar
+        header = getattr(comp.par, 'Rows', None)
+        self.assertIsNotNone(header, 'precondition: the sequence header')
+        self.assertFalse(is_block(header),
+                         'the header is authored and static -- prunable')
+        block = getattr(comp.par, 'Rows0rowlabel', None)
+        self.assertIsNotNone(block, 'precondition: a block par exists')
+        self.assertTrue(is_block(block), 'a block member is runtime state')
+        self.assertFalse(is_block(comp.par.Keepme))
+
+    # --- the consumer guard ---
+
+    def test_undeclared_blocks_survive_a_prune(self):
+        """The exact field case: the manifest declares the sequence but
+        fewer blocks than this machine has."""
+        comp = self._comp_with_sequence(blocks=3)
+        stub = _StubUpdater(comp)
+        retired = _updater_cls()._pruneRetiredPars(
+            stub, {'custom_pars': ['Keepme', 'Goneme', 'Rows']})
+        self.assertEqual(3, comp.seq.Rows.numBlocks,
+                         'a live sequence must survive intact')
+        self.assertIsNotNone(getattr(comp.par, 'Rows0rowlabel', None))
+        self.assertEqual([], retired,
+                         'runtime blocks are not retired settings')
+        self.assertEqual([], stub.dialogs,
+                         'and the user is never told they lost a setting')
+
+    def test_a_surplus_of_several_blocks_is_still_untouched(self):
+        """Per docs.derivative.ca/Par_Class, destroying a sequential par
+        destroys its whole BLOCK and renumbers the survivors -- so a
+        by-name loop over several surplus blocks retargets live ones and
+        removes more than it reports."""
+        comp = self._comp_with_sequence(blocks=6)
+        stub = _StubUpdater(comp)
+        _updater_cls()._pruneRetiredPars(stub, {'custom_pars': ['Rows']})
+        self.assertEqual(6, comp.seq.Rows.numBlocks)
+
+    def test_a_genuinely_retired_plain_par_still_goes(self):
+        """The guard must not disable pruning -- only exempt sequences."""
+        comp = self._comp_with_sequence()
+        stub = _StubUpdater(comp)
+        retired = _updater_cls()._pruneRetiredPars(
+            stub, {'custom_pars': ['Keepme', 'Rows']})
+        self.assertEqual(['Goneme'], retired)
+        self.assertIsNone(getattr(comp.par, 'Goneme', None))
+        self.assertIsNotNone(getattr(comp.par, 'Keepme', None))
+        self.assertEqual(3, comp.seq.Rows.numBlocks)
+
+    def test_the_prune_reports_names_and_opens_no_dialog(self):
+        """Reporting moved to VerifyUpdate. A modal raised from inside the
+        prune parked the update with its sentinel still on disk, which is
+        what let the startup sweep offer to roll back a healthy install."""
+        comp = self._comp_with_sequence()
+        stub = _StubUpdater(comp)
+        retired = _updater_cls()._pruneRetiredPars(
+            stub, {'custom_pars': ['Keepme', 'Rows']})
+        self.assertEqual(['Goneme'], retired)
+        self.assertEqual([], stub.dialogs,
+                         'the prune must not dialog from inside the '
+                         'critical section')
+
+    def test_a_page_that_was_already_empty_is_left_alone(self):
+        """The empty-page sweep used to run over EVERY custom page whenever
+        anything at all was retired."""
+        comp = self._comp_with_sequence()
+        comp.appendCustomPage('Untouched')
+        stub = _StubUpdater(comp)
+        _updater_cls()._pruneRetiredPars(
+            stub, {'custom_pars': ['Keepme', 'Rows']})
+        self.assertIn('Untouched', [p.name for p in comp.customPages],
+                      'a page this prune did not empty is not ours to '
+                      'destroy')
+
+    # --- the producer gate ---
+
+    def test_the_release_manifest_declares_no_sequence_block(self):
+        """The test that would have caught v6.0.245 and v6.0.246 at commit
+        time. Phrased against every sequence the Embody COMP carries, not
+        as a Convoynodes blacklist, so a sequence added later inherits it.
+        """
+        import json
+        import re
+        from pathlib import Path
+        mf = Path(project.folder).parent / 'release' / 'embody-release.json'
+        if not mf.is_file():
+            self.skipTest('no release manifest in this checkout')
+        declared = json.loads(mf.read_text(encoding='utf-8')).get(
+            'custom_pars') or []
+        headers = [seq.name for seq in op.Embody.seq if seq is not None]
+        self.assertTrue(headers, 'precondition: Embody carries a sequence')
+        pattern = re.compile(
+            r'^(%s)\d' % '|'.join(re.escape(h) for h in headers))
+        leaked = sorted(n for n in declared if pattern.match(n))
+        self.assertEqual(
+            [], leaked,
+            'the manifest is shipping this machine\'s live sequence blocks '
+            'as a parameter contract; every user whose sequence is longer '
+            'loses the surplus on their next update: %r' % (leaked,))
+
+    def test_the_exporter_declares_no_sequence_block_from_the_live_comp(self):
+        """The producer itself, run against the real Embody COMP -- not the
+        artifact it wrote last time. This is what proves the fix before the
+        next release export, and it is the half a manifest assertion cannot
+        see: the manifest on disk is only as new as the last project.save().
+        """
+        # The source-control execute DAT is Embody's SIBLING (it watches the
+        # project, not the component), so it is reached through the parent.
+        dat = op.Embody.op('../execute_src_ctrl')
+        if dat is None:
+            self.skipTest('execute_src_ctrl not resolvable from Embody')
+        declared = dat.module._declaredCustomPars(op.Embody)
+        leaked = sorted(n for n in declared
+                        if n.lower().startswith('convoynodes')
+                        and n.lower() != 'convoynodes')
+        self.assertEqual([], leaked,
+                         'the exporter is still declaring live sequence '
+                         'blocks: %r' % (leaked,))
+        self.assertIn('Convoynodes', declared, 'the header is a declaration')
+        self.assertIn('Version', declared)
+        self.assertEqual(sorted(set(declared)), declared,
+                         'the manifest list must be sorted and duplicate-free')
+
+    def test_the_exporter_and_the_pruner_use_one_predicate(self):
+        """Two copies of 'is this a sequence block?' is how the producer and
+        the consumer drift apart."""
+        from pathlib import Path
+        src = (Path(project.folder) / 'embody'
+               / 'execute_src_ctrl.py').read_text(encoding='utf-8')
+        body = src.split('def _declaredCustomPars', 1)[1]
+        body = body.split('\ndef ', 1)[0]
+        self.assertIn('_isSequenceBlockPar', body,
+                      'the exporter must borrow UpdaterExt\'s predicate, '
+                      'not restate it')
+
+    def test_the_manifest_still_declares_the_sequence_header(self):
+        """A filter that strips too much silently stops pruning."""
+        import json
+        from pathlib import Path
+        mf = Path(project.folder).parent / 'release' / 'embody-release.json'
+        if not mf.is_file():
+            self.skipTest('no release manifest in this checkout')
+        declared = json.loads(mf.read_text(encoding='utf-8')).get(
+            'custom_pars') or []
+        for name in ('Convoynodes', 'Version', 'Autoupdate'):
+            self.assertIn(name, declared)
+
+
+class _StartupStub(_StubUpdater):
+    """Enough host for StartupCheck to run for real.
+
+    Everything the gate DECIDES on is the real method; only the effects
+    (rollback, re-arm, the auto check) are recorded instead of performed.
+    """
+
+    def __init__(self, embody, sentinel=None, choice=1):
+        super().__init__(embody)
+        self.sentinel = sentinel
+        self.choice = choice
+        self.rollbacks = []
+        self.rearmed = []
+        self.cleared = 0
+        self.checked = []
+        self.status = []
+        self._rearmed = False
+
+    def _staleInstance(self):
+        return False
+
+    def _readSentinel(self):
+        return self.sentinel
+
+    def _clearSentinel(self):
+        self.cleared += 1
+        self.sentinel = None
+
+    def _validBackup(self, sentinel):
+        return sentinel.get('backup_path'), None
+
+    def _dialog(self, title, body, buttons):
+        self.dialogs.append(body)
+        return self.choice
+
+    def _rollback(self, sentinel, why):
+        self.rollbacks.append(why)
+
+    def _resumeVerifyIfOrphaned(self, sentinel):
+        # The REAL decision (same-session skip, one-shot latch); the stub
+        # only observes whether it fired.
+        before = self._rearmed
+        _updater_cls()._resumeVerifyIfOrphaned(self, sentinel)
+        if self._rearmed and not before:
+            self.rearmed.append(sentinel)
+
+    def _status(self, text):
+        self.status.append(text)
+
+    def isDevCheckout(self):
+        return False
+
+    def CheckForUpdate(self, interactive=True, auto_install=False):
+        self.checked.append((interactive, auto_install))
+
+
+class TestAnInFlightUpdateIsNotAnInterruptedOne(EmbodyTestCase):
+    """The false 'An update to v6.0.246 did not complete' prompt.
+
+    An in-place tox reload does NOT restart TouchDesigner. The rebuilt
+    component runs Embody's ordinary boot chain in the SAME process, and
+    that chain schedules this crash sweep on the same frame budget the
+    update's own verifier uses -- so the sweep meets the live sentinel of
+    the update it IS. The reporter was asked to roll back an install that
+    succeeded four seconds later, between the prune dialog and the success
+    dialog: three modals for one update.
+
+    'Keep Current State' was the more damaging answer: it deletes the
+    sentinel out from under VerifyUpdate, which then stamps nothing --
+    par.Version keeps naming the old release and externaltox is left
+    pointing into .embody/updates.
+    """
+
+    def _comp(self):
+        return self.sandbox.create(containerCOMP, 'upd_flight')
+
+    def _sentinel(self, comp, session=True, tox='/p/.embody/updates/n.tox'):
+        s = {'tag': 'v6.0.246', 'tox_path': tox, 'from_version': '6.0.241',
+             'backup_path': '/p/.embody/updates/backup-v6.0.241.tox'}
+        if session:
+            s['session'] = _updater_cls()._sessionMark()
+        return s
+
+    # --- the two witnesses ---
+
+    def test_this_process_recognises_its_own_update(self):
+        stub = _StubUpdater(self._comp())
+        self.assertTrue(stub._sameSession(self._sentinel(None)))
+
+    def test_another_process_is_not_this_one(self):
+        import os
+        stub = _StubUpdater(self._comp())
+        alien = self._sentinel(None)
+        alien['session'] = dict(alien['session'], pid=os.getpid() + 99991)
+        self.assertFalse(stub._sameSession(alien),
+                         'a crash in another process must still prompt')
+
+    def test_a_restart_is_caught_by_the_start_time_even_on_a_reused_pid(self):
+        stub = _StubUpdater(self._comp())
+        alien = self._sentinel(None)
+        alien['session'] = dict(alien['session'],
+                                started=alien['session']['started'] - 3600)
+        self.assertFalse(stub._sameSession(alien))
+
+    def test_a_live_swap_is_recognised_without_any_session_stamp(self):
+        """The witness that makes the FIRST update to ship this fix behave
+        -- its sentinel was written by the older build, which stamped no
+        owner at all."""
+        comp = self._comp()
+        stub = _StubUpdater(comp)
+        sentinel = self._sentinel(comp, session=False,
+                                  tox='/p/.embody/updates/n.tox')
+        self.assertFalse(stub._sameSession(sentinel))
+        self.assertFalse(stub._updateInFlight(sentinel),
+                         'nothing is pointed at it yet')
+        comp.par.externaltox = '/p/.embody/updates/n.tox'
+        self.assertTrue(stub._swapStillPointed(sentinel))
+        self.assertTrue(stub._updateInFlight(sentinel))
+
+    def test_a_finished_swap_is_not_in_flight(self):
+        """VerifyUpdate clears externaltox, so a sentinel that outlives it
+        is a genuine crash artifact and must prompt."""
+        comp = self._comp()
+        stub = _StubUpdater(comp)
+        comp.par.externaltox = ''
+        sentinel = self._sentinel(comp, session=False)
+        self.assertFalse(stub._updateInFlight(sentinel))
+
+    # --- the gate ---
+
+    def test_an_in_flight_update_is_never_offered_for_rollback(self):
+        comp = self._comp()
+        stub = _StartupStub(comp, self._sentinel(comp), choice=0)
+        _updater_cls().StartupCheck(stub)
+        self.assertEqual([], stub.dialogs,
+                         'the update that is still running must not be '
+                         'offered for recovery')
+        self.assertEqual([], stub.rollbacks)
+        self.assertEqual(0, stub.cleared,
+                         'and its sentinel must survive for VerifyUpdate')
+
+    def test_its_own_session_does_not_re_arm_a_second_verifier(self):
+        comp = self._comp()
+        stub = _StartupStub(comp, self._sentinel(comp))
+        _updater_cls().StartupCheck(stub)
+        self.assertEqual([], stub.rearmed,
+                         '_applyPhase2 already armed one; a second would '
+                         'race its own verifier')
+
+    def test_a_live_swap_from_a_dead_session_is_finished_not_prompted(self):
+        """Suppressing the prompt without this would trade a wrong dialog
+        for a silent half-applied install."""
+        comp = self._comp()
+        comp.par.externaltox = '/p/.embody/updates/n.tox'
+        stub = _StartupStub(comp, self._sentinel(comp, session=False))
+        _updater_cls().StartupCheck(stub)
+        self.assertEqual([], stub.dialogs)
+        self.assertEqual(1, len(stub.rearmed),
+                         'verification must be re-armed for a swap nothing '
+                         'is left to finish')
+        _updater_cls().StartupCheck(stub)
+        self.assertEqual(1, len(stub.rearmed),
+                         'once only -- a failing verifier must not loop')
+
+    def test_a_genuinely_interrupted_update_still_prompts(self):
+        """The crash sweep is the point of the sentinel; the gate must not
+        disarm it."""
+        comp = self._comp()
+        comp.par.externaltox = ''
+        stub = _StartupStub(comp, self._sentinel(comp, session=False),
+                            choice=0)
+        _updater_cls().StartupCheck(stub)
+        self.assertEqual(1, len(stub.dialogs))
+        self.assertIn('did not complete', stub.dialogs[0])
+        self.assertEqual(1, len(stub.rollbacks))
+
+    def test_a_dismissed_recovery_prompt_keeps_the_sentinel(self):
+        comp = self._comp()
+        comp.par.externaltox = ''
+        stub = _StartupStub(comp, self._sentinel(comp, session=False),
+                            choice=-1)
+        _updater_cls().StartupCheck(stub)
+        self.assertEqual(0, stub.cleared,
+                         'a suppressed dialog must re-offer next open')
+
+
+class TestVerifyUpdateClosesBeforeItSpeaks(EmbodyTestCase):
+    """No modal may open while pending.json still exists.
+
+    ui.messageBox is modal to its CALLER, not to TouchDesigner: run()
+    callbacks keep firing while it is up (the field log shows Convoy's
+    scheduled work landing between the prune dialog and the success one,
+    two and a half minutes apart). So any dialog raised mid-verify parks
+    the update in a half-applied state that a concurrent caller can act on.
+    """
+
+    def _verify_source(self):
+        from pathlib import Path
+        src = (Path(project.folder) / 'embody' / 'Embody' / 'updater'
+               / 'UpdaterExt.py').read_text(encoding='utf-8')
+        body = src.split('def VerifyUpdate', 1)[1]
+        return body.split('\n    def ', 1)[0]
+
+    def test_the_sentinel_is_cleared_before_any_dialog(self):
+        body = self._verify_source()
+        cleared = body.find('_clearSentinel()')
+        dialog = body.find('self._dialog(')
+        self.assertGreater(cleared, 0, 'VerifyUpdate must clear the sentinel')
+        self.assertGreater(dialog, 0, 'and still report to the user')
+        self.assertLess(cleared, dialog,
+                        'a dialog opened before _clearSentinel leaves the '
+                        'sentinel live for the startup sweep to find -- the '
+                        'exact v6.0.246 field failure')
+
+    def test_externaltox_is_detached_before_any_dialog(self):
+        body = self._verify_source()
+        self.assertLess(body.find('_clearExternalTox()'),
+                        body.find('self._dialog('),
+                        'a parked dialog must never leave the component '
+                        'pointed at a file in .embody/updates')
+
+    def test_no_callee_in_the_critical_section_may_raise_a_dialog(self):
+        """The guard that actually catches the shipped bug.
+
+        Scanning VerifyUpdate's own body is not enough: the v6.0.246 modal
+        was raised by _pruneRetiredPars, a CALLEE, which a body scan cannot
+        see -- so the ordering assertions above pass even on the unfixed
+        code (panel finding, 2026-08-16). The invariant is about the whole
+        critical section, so it is tested that way: nothing called between
+        the sentinel being read and being cleared may block on a user.
+        """
+        from pathlib import Path
+        src = (Path(project.folder) / 'embody' / 'Embody' / 'updater'
+               / 'UpdaterExt.py').read_text(encoding='utf-8')
+        for callee in ('_stampAboutPars', '_applyBuildOwnedPars',
+                       '_pruneRetiredPars', '_clearExternalTox',
+                       '_cleanupFiles'):
+            body = src.split('def %s' % callee, 1)[1]
+            body = body.split('\n    def ', 1)[0]
+            for blocker in ('self._dialog(', 'ui.messageBox'):
+                self.assertNotIn(
+                    blocker, body,
+                    '%s runs while the sentinel is still on disk; a modal '
+                    'there parks the update half-applied and the startup '
+                    'sweep offers to roll back a healthy install' % callee)
+
+    def test_removals_ride_the_update_dialog_rather_than_their_own(self):
+        body = self._verify_source()
+        self.assertEqual(1, body.count('self._dialog('),
+                         'one update, one dialog')
+        self.assertIn('no longer exist in this', body,
+                      'removals are still reported, inside that one dialog')
+        self.assertLess(body.find('retired = self._pruneRetiredPars'),
+                        body.find('_clearSentinel()'),
+                        'the prune still runs INSIDE the critical section; '
+                        'only its reporting moved out')
+
+
+class TestManifestKeysThatDriveDestruction(EmbodyTestCase):
+    """custom_pars and builtin_pars are unhashed, mutable release data that
+    drive destructive reconciliation, so their TYPES are a gate."""
+
+    def test_a_string_custom_pars_is_refused(self):
+        """set('Version') is {'V','e','r',...} -- every real par would read
+        as undeclared and the prune would destroy the entire component."""
+        m = _valid_manifest()
+        m['custom_pars'] = 'Version'
+        self.assertIsNotNone(_updater_cls().validateManifest(m))
+
+    def test_non_string_entries_are_refused(self):
+        m = _valid_manifest()
+        m['custom_pars'] = ['Version', 7]
+        self.assertIsNotNone(_updater_cls().validateManifest(m))
+
+    def test_a_non_object_builtin_pars_is_refused(self):
+        m = _valid_manifest()
+        m['builtin_pars'] = []
+        self.assertIsNotNone(_updater_cls().validateManifest(m))
+
+    def test_the_well_formed_pair_passes(self):
+        m = _valid_manifest()
+        m['custom_pars'] = ['Version', 'Autoupdate']
+        m['builtin_pars'] = {'nodeview': {'mode': 'CONSTANT',
+                                          'value': 'opviewer'}}
+        self.assertIsNone(_updater_cls().validateManifest(m))
+
+    def test_both_keys_stay_optional(self):
+        """Pre-6.0.245 manifests carry neither and must still install."""
+        self.assertIsNone(_updater_cls().validateManifest(_valid_manifest()))

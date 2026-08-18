@@ -81,6 +81,23 @@ VOCABULARY = (
 )
 
 
+def _pe_bytes(subsystem, tail=b''):
+    """A PE header carrying one honest fact: its subsystem.
+
+    The daemon-venv rung now ASKS the binary whether it is windowless
+    instead of trusting the name pythonw.exe (uv 0.11.x and earlier wrote
+    two byte-identical CONSOLE trampolines, astral-sh/uv#19226), so the
+    fake exes here have to be readable Portable Executables.
+    """
+    raw = bytearray(0x80 + 96)
+    raw[0:2] = b'MZ'
+    raw[0x3C:0x40] = (0x80).to_bytes(4, 'little')
+    raw[0x80:0x84] = b'PE\0\0'
+    raw[0x98:0x9A] = (0x010B).to_bytes(2, 'little')
+    raw[0xDC:0xDE] = subsystem.to_bytes(2, 'little')
+    return bytes(raw) + tail
+
+
 class StubClient:
     """The real convoy_client with every machine-reaching seam replaced."""
 
@@ -176,6 +193,7 @@ class StubInstaller:
         self.uninstall_result = {'ok': True, 'removed': [], 'kept': [],
                                  'remaining': [], 'complete': True}
         self.plan = None                 # plan_host_uninstall's answer
+        self.windowless_result = None    # None = behave like the real one
 
     def __getattr__(self, name):
         return getattr(self._real, name)
@@ -242,6 +260,41 @@ class StubInstaller:
             'graceful_seams': (callable(kw.get('shutdown'))
                                and callable(kw.get('is_running')))}))
         return dict(self.repair_result)
+
+    def ensure_windowless_daemon_python(self, venv_dir, base_python=None,
+                                        platform=None):
+        """Recorded, and by default it really does leave a GUI exe.
+
+        The repair itself is proven against real files in
+        test_convoy_install.py; what this suite owns is that the ladder
+        calls it on the reuse path at all -- the path that would
+        otherwise keep an older uv's console interpreter forever.
+        """
+        self.calls.append(('ensure_windowless_daemon_python',
+                           {'dir': venv_dir, 'base': base_python,
+                            'platform': platform}))
+        if self.windowless_result is not None:
+            return dict(self.windowless_result)
+        if platform != 'win32':
+            return {'ok': True, 'applicable': False, 'repaired': False,
+                    'plan': '', 'copied': [], 'kept': []}
+        daemon = os.path.join(venv_dir or '', 'Scripts', 'pythonw.exe')
+        if not os.path.isfile(daemon):
+            return {'ok': False,
+                    'reason': 'daemon_venv_repair_source_missing',
+                    'detail': 'no %s to repair' % (daemon,)}
+        # The real function's GUI fast path writes NOTHING on an already-
+        # windowless venv (pinned by test_convoy_install.py) -- the stub
+        # must model that, or the asked-but-never-written test fails
+        # against a stub defect instead of proving the ladder's contract.
+        if (self._real.pe_subsystem(daemon)
+                == self._real.PE_SUBSYSTEM_GUI):
+            return {'ok': True, 'repaired': False, 'plan': '',
+                    'copied': [], 'kept': []}
+        with open(daemon, 'wb') as f:
+            f.write(_pe_bytes(self._real.PE_SUBSYSTEM_GUI, b'repaired'))
+        return {'ok': True, 'repaired': True, 'plan': 'redirector',
+                'copied': [daemon], 'kept': [], 'note': ''}
 
     def start(self, **kw):
         self.calls.append(('start', dict(kw)))
@@ -512,7 +565,13 @@ class ConvoyHostBase(EmbodyTestCase):
                 'platform': 'win32', 'data_dir': FAKE_DATA_DIR,
                 'version': VERSION, 'home': FAKE_HOME, 'uid': None,
                 'installed_by': 'C:/fake/project (/embody/Embody)',
-                'health_wait_s': 0.0, 'health_poll_s': 0.0}
+                'health_wait_s': 0.0, 'health_poll_s': 0.0,
+                # ZERO, like the health waits above: the install's
+                # version-settle poll is real time, and a suite that races a
+                # wall clock is exactly what this repo's CI rule forbids.
+                # Five attempts x 2 s of production default would add eight
+                # seconds to every install test in this file.
+                'version_settle_attempts': 1, 'version_settle_s': 0.0}
 
     def _fakeRun(self, *a, **kw):
         """Record every scheduled call; DISPATCH only the initial poll."""
@@ -1467,12 +1526,20 @@ class TestWindowsDaemonVenvPreference(ConvoyHostBase):
         shutil.rmtree(self.tmp, ignore_errors=True)
         super().tearDown()
 
-    def _build_the_venv(self):
-        """What a successful `uv venv` leaves behind on Windows."""
+    def _build_the_venv(self, subsystem=None):
+        """What a successful `uv venv` leaves behind on Windows.
+
+        BOTH EXES CONSOLE by default, because that is what uv 0.11.x and
+        earlier really wrote: byte-identical console trampolines, one of
+        them merely NAMED pythonw.exe (astral-sh/uv#19226).
+        """
         os.makedirs(self.scripts, exist_ok=True)
-        for path in (self.console_py, self.daemon_py):
-            with open(path, 'wb') as f:
-                f.write(b'not really python')
+        real = self.installer._real
+        with open(self.console_py, 'wb') as f:
+            f.write(_pe_bytes(real.PE_SUBSYSTEM_CONSOLE, b'console'))
+        with open(self.daemon_py, 'wb') as f:
+            f.write(_pe_bytes(subsystem or real.PE_SUBSYSTEM_CONSOLE,
+                              b'trampoline'))
 
     def _ctx(self, **overrides):
         ctx = {'client': self.client, 'installer': self.installer,
@@ -1677,6 +1744,56 @@ class TestWindowsDaemonVenvPreference(ConvoyHostBase):
         self.assertEqual(self.installer.last('install')['interpreter'],
                          self.daemon_py)
 
+    # -- and the reused venv must not open a window at logon -------------
+
+    def test_a_console_daemon_interpreter_is_repaired_in_place(self):
+        """uv 0.11.x and earlier wrote BYTE-IDENTICAL console
+        trampolines, so the "windowless" exe the Scheduled Task launches
+        pops an empty terminal at every logon (astral-sh/uv#19226). The
+        reuse decision keeps such a venv FOREVER, so this rung has to
+        repair it in place -- not rebuild it, because the venv still
+        probes healthy and `--clear` would try to delete an exe the live
+        daemon holds open."""
+        self._build_the_venv()
+        self._script_run_command()
+        self._script_probes({self.daemon_py: {'ok': True, 'probe': {}}})
+        result = self._run_install(self._ctx())
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(self._uv_argvs('venv'), [],
+                         'a console pythonw.exe must never cost a rebuild')
+        self.assertEqual(
+            self.installer.count('ensure_windowless_daemon_python'), 1)
+        self.assertEqual(
+            self.installer.last('ensure_windowless_daemon_python')['dir'],
+            self.venv_dir)
+        self.assertEqual(self.installer.last('install')['interpreter'],
+                         self.daemon_py)
+        self.assertEqual(self.install_mod.pe_subsystem(self.daemon_py),
+                         self.install_mod.PE_SUBSYSTEM_GUI)
+
+    def test_an_already_windowless_venv_is_asked_about_but_never_written(
+            self):
+        """The ladder asks on EVERY install -- it must, because the only
+        thing that leaves a pythonw.exe.old-* behind is a repair over a
+        live daemon, and that repair ends with the venv windowless. A
+        GUI-means-skip rung would have made those leftovers permanent.
+        The answer still changes nothing on disk and says nothing to the
+        user."""
+        self._build_the_venv(
+            subsystem=self.install_mod.PE_SUBSYSTEM_GUI)
+        before = open(self.daemon_py, 'rb').read()
+        self._script_run_command()
+        self._script_probes({self.daemon_py: {'ok': True, 'probe': {}}})
+        result = self._run_install(self._ctx())
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(
+            self.installer.count('ensure_windowless_daemon_python'), 1,
+            'asked once -- the leftover sweep depends on it')
+        self.assertEqual(open(self.daemon_py, 'rb').read(), before)
+        self.assertEqual(self.install_mod.pe_subsystem(self.daemon_py),
+                         self.install_mod.PE_SUBSYSTEM_GUI)
+        self.assertNotIn('console window', result.get('detail', ''))
+
     # -- and it stays a preference, never a requirement ------------------
 
     def test_a_failed_build_falls_back_to_the_project_venv(self):
@@ -1754,7 +1871,8 @@ class TestHostThreadingDiscipline(EmbodyTestCase):
                      '_host_stop', '_host_preview', '_host_uninstall',
                      '_host_shutdown', '_host_await_health',
                      '_host_is_running', '_host_repair_venv_runtime',
-                     '_host_build_daemon_venv'):
+                     '_host_build_daemon_venv',
+                     '_host_ensure_windowless_daemon', '_host_kept_note'):
             self.assertIn('\ndef %s(' % (name,), self.src,
                           '%s must be a module-level function, not a method'
                           % (name,))
@@ -2217,13 +2335,22 @@ class TestHostAutoUpdate(ConvoyHostBase):
         payload (the vendored DATs had not reloaded a changed file) and
         installed.json claimed the new version while the daemon served
         old code. The restarted daemon is the one honest witness -- a
-        mismatch must surface as a WARNING, never a clean 'installed'."""
+        mismatch must surface as a WARNING, never a clean 'installed'.
+
+        Since 6.0.247 the verdict is reached only after the daemon has been
+        given time to settle AND restarted once automatically, because a
+        supervisor respawn mid-install answers as the outgoing payload for
+        about a second and three field logs read that transient as a
+        permanent failure. A daemon that answers with NO app_version at all
+        is a pre-6.0.213 payload -- conclusive staleness, and still the
+        strongest case for the warning."""
         self.client.probe_status = self.client.STATUS_RUNNING
         self.client.get_results = [
             (200, {'ok': True, 'host_id': 'h' * 32})]   # /health: no version
         self.convoy.InstallHost(confirm=False)
-        self.assertTrue(any('may be stale' in w for w in self._warnings()),
-                        self._warnings())
+        self.assertTrue(
+            any('still reports' in w or 'may be stale' in w
+                for w in self._warnings()), self._warnings())
 
     def test_install_is_quiet_when_the_daemon_verifies_at_the_new_version(
             self):

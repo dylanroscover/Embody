@@ -23,6 +23,29 @@ class TestComponentPresentation(EmbodyTestCase):
                          'suite assumes the shipped default (off)')
         self.assertTrue(self.embody.showCustomOnly)
 
+    def test_the_toggle_can_never_ship_baked_on(self):
+        """A DIALOG PREFERENCE IS NOT PRODUCT, and this one shipped.
+
+        v6.0.246 was published with Showbuiltinpars On -- verified by
+        loading the released .tox (True against a False default) -- so
+        every download got TD's built-in parameter pages instead of the
+        filtered dialog, purely because the toggle happened to be on at
+        save time. Registering it as a transient status par means the
+        release export and the tracked .tdn always see its default,
+        whatever the developer is doing, while the scrub/restore cycle
+        hands the live session its own value straight back.
+        """
+        cls = type(self.embody_ext)
+        registered = cls._TRANSIENT_STATUS_PARS.get('Embody', {})
+        self.assertIn(
+            'Showbuiltinpars', registered,
+            'an unregistered dialog preference ships whatever the '
+            'developer last clicked')
+        self.assertIsNone(
+            registered['Showbuiltinpars'],
+            'resting None means "reset to the parameter default", which is '
+            'the Off this component is authored with')
+
     def test_show_builtin_pars_toggle_exists_with_wiring(self):
         """The Advanced-page 'Show Built-in Pars' toggle (issue #77) exists
         with sane authoring, and both application paths carry the mapping.

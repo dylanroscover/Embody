@@ -64,6 +64,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from pathlib import Path
 
 
@@ -116,6 +117,7 @@ class UpdaterExt:
         self._download_gen = 0
         self._busy = False
         self._pending = None  # release info between check -> apply
+        self._rearmed = False  # one-shot: StartupCheck's verifier re-arm
 
     # ==================================================================
     # Host access (CONTEXT-FREE) + logging / dialogs (main thread only)
@@ -201,6 +203,21 @@ class UpdaterExt:
         if not UpdaterExt.ASSET_RE.match(str(data['asset'])):
             return (f'manifest asset must be a bare .tox filename, got '
                     f'{data["asset"]!r}')
+        # The two OPTIONAL keys with the largest blast radius, type-checked
+        # because both drive destructive reconciliation and the manifest is a
+        # mutable, unhashed release asset. A `custom_pars` that arrived as the
+        # STRING "Version" would set()-iterate into single characters, leaving
+        # every real par 'undeclared' -- the prune would then destroy every
+        # setting on the component. A non-dict `builtin_pars` raises inside
+        # VerifyUpdate, orphaning the sentinel and externaltox.
+        pars = data.get('custom_pars')
+        if pars is not None:
+            if (not isinstance(pars, (list, tuple))
+                    or not all(isinstance(n, str) for n in pars)):
+                return 'manifest custom_pars must be a list of names'
+        builtins = data.get('builtin_pars')
+        if builtins is not None and not isinstance(builtins, dict):
+            return 'manifest builtin_pars must be an object'
         return None
 
     @staticmethod
@@ -255,6 +272,79 @@ class UpdaterExt:
             self._sentinelPath().unlink(missing_ok=True)
         except OSError:
             pass
+
+    # ---- sentinel ownership: 'in flight' vs 'interrupted' ----------------
+    #
+    # The sentinel is a CRASH artifact: it exists from just before the swap
+    # until VerifyUpdate confirms it, and StartupCheck offers to roll back
+    # anything it finds. But an in-place tox reload does NOT restart
+    # TouchDesigner -- the new component boots inside the same process and
+    # runs the same startup chain, so it meets the live sentinel of the very
+    # update it IS. Without an owner stamp that reads as 'a previous update
+    # never completed', and the user is asked to roll back a healthy install
+    # seconds before it succeeds (field report, v6.0.246).
+
+    @staticmethod
+    def _sessionMark():
+        """Identity of the TD PROCESS applying an update.
+
+        pid alone would be ambiguous after a crash that recycled it, so it is
+        paired with the process's wall-clock start time, derived from
+        absTime.seconds ('total seconds played since the application started'
+        -- docs.derivative.ca/AbsTime_Class). Both are plain data, safe in
+        JSON, and meaningless to any other process.
+        """
+        try:
+            started = int(time.time() - float(absTime.seconds))
+        except Exception:
+            started = 0
+        return {'pid': os.getpid(), 'started': started}
+
+    def _sameSession(self, sentinel):
+        """True when THIS TD process is the one that started this update."""
+        owner = sentinel.get('session')
+        if not isinstance(owner, dict):
+            return False  # pre-6.0.247 sentinel: no ownership was recorded
+        try:
+            if int(owner.get('pid')) != os.getpid():
+                return False
+        except (TypeError, ValueError):
+            return False
+        mine = self._sessionMark().get('started', 0)
+        try:
+            # Both readings estimate the same instant; a couple of seconds of
+            # drift is the sampling jitter, a restart is minutes apart.
+            return abs(int(owner.get('started')) - int(mine)) <= 5
+        except (TypeError, ValueError):
+            return False
+
+    def _swapStillPointed(self, sentinel):
+        """True while the component is still pointed at the tox being applied.
+
+        A second, writer-independent witness. _applyPhase2 sets externaltox to
+        the download and only VerifyUpdate clears it, so a match means the
+        swap has not finished being verified -- by definition unfinished, not
+        interrupted. This one needs nothing from the build that WROTE the
+        sentinel, which is what makes the first update to ship this fix (whose
+        sentinel came from the older build) behave correctly.
+        """
+        want = str(sentinel.get('tox_path') or '').replace('\\', '/')
+        if not want:
+            return False
+        try:
+            current = str(self._embody.par.externaltox.eval() or '')
+        except Exception:
+            return False
+        # Separator- and case-insensitive, because both filesystems this ships
+        # on are case-insensitive and the par round-trips through TD. Kept to
+        # exactly that: any looser match (a basename, a directory) would risk
+        # a FALSE positive, and a false positive here SUPPRESSES a genuine
+        # crash-recovery prompt -- the one direction that must not happen.
+        return current.replace('\\', '/').lower() == want.lower()
+
+    def _updateInFlight(self, sentinel):
+        """True when this sentinel describes a swap that is still running."""
+        return self._sameSession(sentinel) or self._swapStillPointed(sentinel)
 
     @staticmethod
     def _sha256File(path):
@@ -670,42 +760,64 @@ class UpdaterExt:
             self._fail('Backup tox missing or implausibly small -- '
                        'update aborted.')
             return
-        backup_sha = self._sha256File(backup)
-
-        # Reload token: the EmbodyExt DAT's op id changes when children are
-        # recreated by a REAL reload. A no-op/failed reload keeps the old id,
-        # and VerifyUpdate refuses to stamp success in that case (so
-        # par.Version can never lie about an install that didn't happen).
+        # Everything from here to the reload is guarded as one unit: a raise
+        # in this region (a Windows file lock on the just-exported backup, a
+        # read-only .embody/updates) used to escape the run() callback with
+        # NO dialog, the status stuck on 'Installing ...' and _busy latched
+        # True -- so every later check answered 'An update operation is
+        # already running' for the rest of the session. Install-stage
+        # failures ALWAYS dialog (see the module docstring); nothing here has
+        # touched the live component yet, so the refusal is clean.
         try:
-            reload_token = embody.op('EmbodyExt').id
-        except Exception:
-            reload_token = None
+            backup_sha = self._sha256File(backup)
 
-        # Crash sentinel: if TD dies mid-swap, the next open finds this and
-        # offers the (integrity-checked) backup.
-        self._writeSentinel({
-            'from_version': old_version,
-            'to_version': pending['version'],
-            'tag': pending['tag'],
-            'tox_path': pending['tox_path'],
-            'backup_path': backup,
-            'backup_sha256': backup_sha,
-            'reload_token': reload_token,
-            'manifest': pending['manifest'],
-            'interactive': bool(interactive),
-            'phase': 'reloading',
-        })
-        self._log(f'applying {pending["tag"]}: in-place reload from '
-                  f'{pending["tox_path"]} (backup: {backup})')
+            # Reload token: the EmbodyExt DAT's op id changes when children
+            # are recreated by a REAL reload. A no-op/failed reload keeps the
+            # old id, and VerifyUpdate refuses to stamp success in that case
+            # (so par.Version can never lie about an install that didn't
+            # happen).
+            try:
+                reload_token = embody.op('EmbodyExt').id
+            except Exception:
+                reload_token = None
 
-        # Post-reload verifier: STRING form, resolves the FRESH instance via
-        # the surviving host COMP, guarded against a missing 'updater' child,
-        # no delayRef, generous delay for the new version's boot chain. This
-        # run survives destruction of this extension's own host child.
-        ep = embody.path
-        verify = (f"op('{ep}').op('updater').ext.UpdaterExt.VerifyUpdate(0) "
-                  f"if op('{ep}') and op('{ep}').op('updater') else None")
-        run(verify, delayFrames=300)
+            # Crash sentinel: if TD dies mid-swap, the next open finds this
+            # and offers the (integrity-checked) backup. `session` stamps the
+            # process applying it, so the reloaded component -- which boots in
+            # THIS process while the swap is still being verified -- can tell
+            # its own update in flight from one a crash interrupted.
+            self._writeSentinel({
+                'from_version': old_version,
+                'to_version': pending['version'],
+                'tag': pending['tag'],
+                'tox_path': pending['tox_path'],
+                'backup_path': backup,
+                'backup_sha256': backup_sha,
+                'reload_token': reload_token,
+                'manifest': pending['manifest'],
+                'interactive': bool(interactive),
+                'session': self._sessionMark(),
+                'phase': 'reloading',
+            })
+            self._log(f'applying {pending["tag"]}: in-place reload from '
+                      f'{pending["tox_path"]} (backup: {backup})')
+
+            # Post-reload verifier: STRING form, resolves the FRESH instance
+            # via the surviving host COMP, guarded against a missing 'updater'
+            # child, no delayRef, generous delay for the new version's boot
+            # chain. This run survives destruction of this extension's own
+            # host child.
+            ep = embody.path
+            verify = (f"op('{ep}').op('updater').ext.UpdaterExt"
+                      f".VerifyUpdate(0) "
+                      f"if op('{ep}') and op('{ep}').op('updater') else None")
+            run(verify, delayFrames=300)
+        except Exception as e:
+            self._busy = False
+            self._clearSentinel()
+            self._fail(f'Update could not be started -- nothing was '
+                       f'changed: {e!r}')
+            return
 
         # ---- The reload. The undo block is opened AND closed here, so the
         # pulse is the LAST TD-touching statement (its own host dies with it).
@@ -729,8 +841,11 @@ class UpdaterExt:
         """Confirm the reload booted; stamp About pars; clean up or roll back."""
         sentinel = self._readSentinel()
         if not sentinel:
-            self._log('VerifyUpdate: no pending sentinel -- nothing to do',
-                      'WARNING')
+            # Benign since 6.0.247: StartupCheck re-arms verification for a
+            # live-but-unowned swap, so two passes can be scheduled and the
+            # loser finds the work already done.
+            self._log('VerifyUpdate: no pending sentinel -- already verified',
+                      'DEBUG')
             return
         embody = self._embody
         ext_dat = embody.op('EmbodyExt')
@@ -751,24 +866,40 @@ class UpdaterExt:
             self._rollback(sentinel, 'new version never finished booting')
             return
 
+        # NOTHING BELOW MAY BLOCK UNTIL THE SENTINEL IS GONE. ui.messageBox is
+        # modal to the caller but NOT to TouchDesigner: run() callbacks keep
+        # firing while it is open. The retired-settings dialog used to be
+        # raised from inside this sequence, five statements short of
+        # _clearSentinel -- so the reloaded component's own startup sweep read
+        # a live sentinel and offered to roll back the update that was busy
+        # succeeding (field report, v6.0.246). Every mutation completes first;
+        # reporting happens at the end, when there is no half-applied state
+        # left for a concurrent caller to act on.
         manifest = sentinel['manifest']
         self._stampAboutPars(manifest)
         # The reload preserves live par values. That is right for the user's
         # settings and wrong for pars the BUILD owns, so re-assert those, then
         # retire settings this version no longer declares.
         self._applyBuildOwnedPars(manifest)
-        self._pruneRetiredPars(manifest)
+        retired = self._pruneRetiredPars(manifest)
         self._clearExternalTox()
         self._cleanupFiles(sentinel, keep_backup=True)
         self._clearSentinel()
         self._status(f'Updated to {sentinel["tag"]}')
         self._log(f'update to {sentinel["tag"]} verified '
                   f'(from v{sentinel["from_version"]})', 'SUCCESS')
+        # ---- critical section over; dialogs are safe from here ----
         if sentinel.get('interactive'):
-            self._dialog('Embody Update',
-                         f'Embody was updated to {sentinel["tag"]}.\n\n'
-                         'Settings and externalizations were preserved.',
-                         ['OK'])
+            message = (f'Embody was updated to {sentinel["tag"]}.\n\n'
+                       'Settings and externalizations were preserved.')
+            if retired:
+                # ONE dialog, not two. These are removals the user did not ask
+                # for, so they are reported -- but as part of the update's own
+                # result, not as a separate alarm that lands before the update
+                # has even announced itself.
+                message += ('\n\nThese settings no longer exist in this '
+                            'version and were removed:\n' + ', '.join(retired))
+            self._dialog('Embody Update', message, ['OK'])
 
     def _stampAboutPars(self, manifest):
         """Preserved par values keep the OLD About info -- stamp the new."""
@@ -870,8 +1001,33 @@ class UpdaterExt:
         finally:
             par.readOnly = was
 
+    @staticmethod
+    def _isSequenceBlockPar(par):
+        """True for a par that lives inside a custom SEQUENCE block.
+
+        Sequence blocks are a RUNTIME projection, never a setting: ConvoyExt
+        sizes the Convoy Nodes sequence to this machine's live Convoy mesh
+        (`seq.numBlocks = len(rows)`), so the block count differs on every
+        install and drifts within a session. The sequence HEADER par is
+        authored and static, so it is NOT a block par and stays prunable
+        like any other declaration.
+
+        Verified on docs.derivative.ca/Par_Class: `Par.sequence` is the
+        Sequence a par belongs to (None when it belongs to none), and
+        `Par.isSequence` is True for the header. Access is defended because
+        Embody's own sequence code carries build-portability fallbacks
+        (ConvoyExt._sequenceBlockPar); an unreadable attribute is treated as
+        'a block', i.e. keep it -- never destroy on a guess.
+        """
+        try:
+            if getattr(par, 'isSequence', False):
+                return False
+            return getattr(par, 'sequence', None) is not None
+        except Exception:
+            return True
+
     def _pruneRetiredPars(self, manifest):
-        """Remove custom pars this build no longer declares, and say so.
+        """Remove custom pars this build no longer declares; return the names.
 
         The reload preserves live custom-par VALUES (they are the user's
         settings, and an update must never rewrite them) -- but that also
@@ -882,16 +1038,39 @@ class UpdaterExt:
         Silent on manifests that predate the field, and it only ever removes
         pars the OLD build had: a par the new build declares is untouched, and
         new ones arrive with the reload.
+
+        SEQUENCE BLOCK PARS ARE NEVER TOUCHED, whatever the manifest says.
+        v6.0.245 and v6.0.246 shipped manifests that declared the developer's
+        own Convoy node blocks, so a user with a bigger mesh had the surplus
+        rows destroyed and was told four status cells were 'settings that no
+        longer exist'. Two further reasons this guard is not merely cosmetic:
+        `Par.destroy()` on a sequential par destroys its ENTIRE block and
+        renumbers the survivors, so the by-name re-lookup below would retarget
+        live blocks; and the manifests already published cannot be un-shipped,
+        so the CONSUMER is the only place that can protect those users.
+
+        Returns the list of removed names -- it does not dialog. Reporting is
+        the caller's, deliberately: a modal opened from here would park inside
+        VerifyUpdate's critical section with the sentinel still on disk, which
+        is exactly what let StartupCheck offer to roll back a healthy update.
         """
         declared = manifest.get('custom_pars')
         if not declared:
-            return  # pre-6.0.245 manifest -- no source of truth, prune nothing
+            return []  # pre-6.0.245 manifest -- no source of truth, prune none
         embody = self._embody
         declared = set(declared)
         # Names first: destroying a Par invalidates the OTHER Par objects held
         # in a snapshot, so each removal is re-looked-up by name.
         candidates = [p.name for p in embody.customPars
-                      if p.name not in declared]
+                      if p.name not in declared
+                      and not self._isSequenceBlockPar(p)]
+        # Pages that were ALREADY empty before this prune. Anything in here is
+        # not ours to remove -- see the sweep below.
+        try:
+            was_empty = {page.name for page in embody.customPages
+                         if not page.pars}
+        except Exception:
+            was_empty = None
         retired = []
         for name in candidates:
             par = getattr(embody.par, name, None)
@@ -903,23 +1082,23 @@ class UpdaterExt:
             except Exception as e:
                 self._log(f'could not remove retired par {name}: {e}',
                           'WARNING')
-        if retired:
-            try:  # pages emptied by the removals go with them
+        if retired and was_empty is not None:
+            # ONLY pages THIS PRUNE emptied. The sweep used to run over every
+            # custom page whenever anything at all was retired, so a page whose
+            # remaining content is a sequence (Page.pars is not documented to
+            # include sequence members) could read as empty and be destroyed
+            # outright -- taking the sequence definition with it, unrecoverable
+            # without another tox reload.
+            try:
                 for page in list(embody.customPages):
-                    if not page.pars:
+                    if page.name not in was_empty and not page.pars:
                         page.destroy()
             except Exception:
                 pass
-        if not retired:
-            return
-        names = ', '.join(sorted(retired))
-        self._log(f'removed {len(retired)} setting(s) retired in this '
-                  f'version: {names}', 'WARNING')
-        self._dialog(
-            'Embody Update',
-            f'{len(retired)} setting(s) no longer exist in this version and '
-            f'were removed:\n\n{names}\n\nAll other settings were preserved.',
-            ['OK'])
+        if retired:
+            self._log(f'removed {len(retired)} setting(s) retired in this '
+                      f'version: {", ".join(sorted(retired))}', 'WARNING')
+        return sorted(retired)
 
     def _clearExternalTox(self):
         """Detach from the downloaded file so a later save can't clobber it."""
@@ -1038,14 +1217,59 @@ class UpdaterExt:
                 'WITHOUT saving and reopen the project to recover the last '
                 'saved state.', ['OK'])
 
+    def _resumeVerifyIfOrphaned(self, sentinel):
+        """Arm verification for a live swap this process did not schedule.
+
+        _applyPhase2 arms VerifyUpdate in the same breath as the reload, so
+        the session that started the update needs nothing here -- re-arming
+        there would just race its own verifier.
+
+        A swap found LIVE in a different process is the case that needs it:
+        the component is already pointed at the new tox (so the update
+        effectively applied) but nothing is left to stamp the About pars,
+        re-assert build-owned pars, clear externaltox or clean up. Suppressing
+        the recovery prompt without this would trade a wrong dialog for a
+        silent half-applied install. Once only, so a verifier that keeps
+        failing cannot loop.
+        """
+        if self._sameSession(sentinel) or getattr(self, '_rearmed', False):
+            return
+        self._rearmed = True
+        ep = self._embody.path
+        self._log('startup sweep: re-arming verification for an update left '
+                  'unverified by a previous session', 'INFO')
+        run(f"op('{ep}').op('updater').ext.UpdaterExt.VerifyUpdate(0) "
+            f"if op('{ep}') and op('{ep}').op('updater') else None",
+            delayFrames=120)
+
     # ==================================================================
     # STARTUP (promoted): called from execute.py at ~frame 150
     # ==================================================================
 
     def StartupCheck(self):
         """Crash-recovery sweep, then the Autoupdate-gated auto check."""
+        if self._staleInstance():
+            return
         sentinel = self._readSentinel()
         if sentinel:
+            if self._updateInFlight(sentinel):
+                # NOT an interrupted update -- one that is still finishing.
+                # An in-place reload keeps the same TD process, and the
+                # reloaded component runs this very sweep (execute.py's
+                # onCreate) at the same frame budget VerifyUpdate uses, so
+                # without this gate a successful self-update offers to roll
+                # itself back. Answering 'Keep Current State' was the worse
+                # outcome: it deletes the sentinel out from under
+                # VerifyUpdate, which then stamps nothing -- par.Version
+                # keeps naming the OLD release, build-owned pars are never
+                # re-asserted, and externaltox is left pointing into
+                # .embody/updates, so the component breaks the moment that
+                # file is cleaned up or the project moves.
+                self._log(f'startup sweep: the update to '
+                          f'{sentinel.get("tag")} is still being verified '
+                          f'-- no recovery prompt', 'DEBUG')
+                self._resumeVerifyIfOrphaned(sentinel)
+                return
             # A previous update never completed (TD crashed or was closed
             # mid-swap). Surface it regardless of the Autoupdate setting.
             backup, berr = self._validBackup(sentinel)

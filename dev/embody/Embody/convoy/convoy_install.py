@@ -1515,10 +1515,16 @@ def _runtime_candidates_from_root(root, platform, architecture):
         interpreter = os.path.join(target, *python_rel.split("/"))
         if not os.path.isfile(interpreter):
             continue
+        # ASKED OF THE BINARY, never assumed from its name. A file called
+        # pythonw.exe is a claim; the PE subsystem field is the fact, and
+        # the difference is an empty console window on the user's desktop
+        # at every logon. On posix there is no such thing to get wrong.
+        windowless = (pe_subsystem(interpreter) == PE_SUBSYSTEM_GUI
+                      if platform == "win32" else True)
         found.append({
             "path": interpreter,
             "build": _version_key(receipt.get("python_version")) or (),
-            "windowless": True,
+            "windowless": windowless,
             "managed": True,
             "runtime_id": runtime_id,
             "probe_python": os.path.join(
@@ -1759,6 +1765,572 @@ def daemon_venv_spec(data_dir, platform=None, exists=None, isdir=None,
             "daemon_python": daemon_python, "bases": bases}
 
 
+# -- the daemon interpreter must be WINDOWLESS (win32) ------------------
+#
+# A Windows PE image declares which subsystem the loader starts it under.
+# GUI (2) attaches no console; CONSOLE (3) gets one allocated -- which
+# for a LOGON-STARTED daemon means an empty terminal window sitting on
+# the user's desktop from every login until they close it.
+PE_SUBSYSTEM_GUI = 2
+PE_SUBSYSTEM_CONSOLE = 3
+
+# Sources for a windowless repair, all relative to the BASE Python.
+REDIRECTOR_PARTS = ("Lib", "venv", "scripts", "nt", "pythonw.exe")
+# python311.dll / python313.dll -- VERSION-SPECIFIC, so it is globbed and
+# never named. A copied pythonw.exe without its own one exits with
+# 0xC0000135 (STATUS_DLL_NOT_FOUND) before running a line of Python, and
+# does it silently.
+_VERSIONED_PYTHON_DLL = re.compile(r"^python3\d+\.dll$")
+_STABLE_PYTHON_DLL = "python3.dll"
+# All three halves, because the uv-managed CPython bases really do ship
+# vcruntime140_threads.dll -- copying two of three is the kind of partial
+# that only shows up as a silent 0xC0000135 on the one machine without a
+# system-wide redistributable.
+_VCRUNTIME_DLLS = ("vcruntime140.dll", "vcruntime140_1.dll",
+                   "vcruntime140_threads.dll")
+# What a previous repair renamed aside because the old image was in use.
+# The prefix names the case that actually happens (the daemon holds its
+# own interpreter); the pattern is what the sweep matches, because plan B
+# can also have to move a locked DLL out of the way, and a leftover
+# nobody sweeps is a leftover forever. Deliberately narrow: it must never
+# match something a person put there.
+STALE_DAEMON_PREFIX = "pythonw.exe.old-"
+# Both leftovers this module can create, and ONLY those: the renamed-aside
+# image, and a staged copy orphaned by a kill between staging and replace
+# (a multi-MB file nobody would otherwise ever sweep).
+#
+# THE SECOND GROUP IS time.time_ns(), which has been >= 19 digits since
+# 2001 and stays so past 2200 -- so requiring 15+ digits is what keeps a
+# HUMAN date stamp out of the pattern. `pythonw.exe.old-20260817-143000`
+# is a person's backup, not ours, and an earlier \d+-\d+ tail swept it.
+_STALE_REPAIR_NAME = re.compile(
+    r"^[A-Za-z0-9_.-]+\.(exe|dll)\.(old|tmp)-\d+-\d{15,}$", re.IGNORECASE)
+
+
+def pe_subsystem(path):
+    """The Windows subsystem a PE image declares (2 GUI / 3 console).
+
+    None for anything that is not a readable PE -- a missing path, a
+    directory, a shell script, a truncated file, an e_lfanew pointing
+    past EOF. NEVER RAISES: every caller is deciding whether to trust a
+    binary, and an exception there would turn "unknown" into a crash on
+    a worker thread.
+
+    Only the bytes that answer the question are read: the DOS header's
+    e_lfanew at 0x3C, the "PE\\0\\0" signature it points at, the 20-byte
+    COFF header after it, then the optional header -- whose Subsystem
+    field sits at 0x44 in BOTH the PE32 (0x010b) and PE32+ (0x020b)
+    layouts, because everything that differs in size comes after it.
+    """
+    try:
+        with open(path, "rb") as stream:
+            stream.seek(0x3C)
+            pointer = stream.read(4)
+            if len(pointer) != 4:
+                return None
+            # int.from_bytes, not struct: this module's import allowlist
+            # is deliberately tiny and struct is not on it.
+            stream.seek(int.from_bytes(pointer, "little"))
+            header = stream.read(94)
+    except (OSError, ValueError, TypeError, OverflowError):
+        return None
+    if len(header) < 94 or header[:4] != b"PE\0\0":
+        return None
+    if int.from_bytes(header[24:26], "little") not in (0x010B, 0x020B):
+        return None
+    return int.from_bytes(header[92:94], "little")
+
+
+def _pe_subsystem_settled(path, sleep=None, read=None, attempts=6):
+    """(subsystem, exists) -- pe_subsystem, retried while it is UNREADABLE.
+
+    THE DISTINCTION THIS EXISTS FOR, reproduced in a four-process race:
+    a file that exists but cannot be opened RIGHT NOW reads as None, and
+    None is not "console". A peer repair holds the image for the instant
+    it is renamed aside; an indexer or scanner opens a freshly written
+    exe with no sharing; either way a single read turns a perfectly
+    windowless venv into a false "still a console binary" -- and, worse,
+    into a repair nobody needed of a file somebody else is holding.
+
+    So a None is retried a few times against the same bounded backoff
+    _retry_rename uses, and the answer separates the two cases the
+    callers must never merge:
+
+      (2 or 3, True)  -- read it, this is the fact
+      (None, True)    -- it is THERE and we could not read it: unknown
+      (None, False)   -- genuinely absent
+
+    `read` and `sleep` are injected so a test can model the lock without
+    holding one (and so the macOS leg can exercise the same branches).
+    """
+    sleep = sleep or time.sleep
+    read = read or pe_subsystem
+    exists = False
+    for attempt in range(attempts):
+        subsystem = read(path)
+        if subsystem is not None:
+            return subsystem, True
+        exists = os.path.isfile(path)
+        if not exists:
+            return None, False
+        if attempt == attempts - 1:
+            break
+        sleep(0.005 * (attempt + 1))
+    return None, exists
+
+
+def _pyvenv_home(venv_dir):
+    """The base Python directory named by a venv's pyvenv.cfg, or "".
+
+    `home` is how CPython's own redirector finds the real interpreter at
+    run time, so it is the same answer the repaired exe will use -- not a
+    guess about where the venv came from.
+    """
+    try:
+        # utf-8-SIG: a BOM'd pyvenv.cfg (some editors, some installers)
+        # would otherwise leave the BOM glued to the first key, so 'home'
+        # never matches and every reuse repair on that machine becomes a
+        # false "cannot locate the base Python" refusal.
+        with open(os.path.join(venv_dir, "pyvenv.cfg"), "r",
+                  encoding="utf-8-sig", errors="replace") as stream:
+            for line in stream:
+                key, separator, value = line.partition("=")
+                if separator and key.strip().lower() == "home":
+                    return value.strip()
+    except (OSError, ValueError, TypeError):
+        return ""
+    return ""
+
+
+def _windowless_repair_sources(source_root):
+    """(plan, [(source, name), ...], note) for a windowless repair.
+
+    EVERY SOURCE IS VERIFIED HERE, before the caller writes anything, so
+    a base that cannot supply a working interpreter refuses without
+    touching pythonw.exe at all. That is the guarantee, and only that:
+    the caller's sweep of OUR OWN leftovers has already run by then, and
+    a copy denied PART WAY through the list leaves the earlier support
+    DLLs staged (inert until a windowless exe joins them, and overwritten
+    by the next successful repair). See ensure_windowless_daemon_python.
+
+    The exe is deliberately LAST in the list: its DLLs must already be in
+    place when it becomes the file the supervisor launches -- which is
+    also why a mid-list refusal cannot produce a broken interpreter.
+    """
+    redirector = os.path.join(source_root, *REDIRECTOR_PARTS)
+    if pe_subsystem(redirector) == PE_SUBSYSTEM_GUI:
+        # ONE FILE, no DLLs at all. CPython ships this shim for exactly
+        # this job: it re-execs nothing, resolves the base through the
+        # venv's own pyvenv.cfg, and reports the VENV path as
+        # sys.executable -- which is load-bearing, because the generated
+        # launcher refuses to start unless the recorded interpreter
+        # realpath-matches the running one.
+        return "redirector", [(redirector, "pythonw.exe")], ""
+    base_gui = os.path.join(source_root, "pythonw.exe")
+    if pe_subsystem(base_gui) != PE_SUBSYSTEM_GUI:
+        return "", [], (
+            "%s has neither %s nor a windowless pythonw.exe of its own, "
+            "so there is nothing to repair the venv with"
+            % (source_root, "/".join(REDIRECTOR_PARTS)))
+    versioned, stable, optional = [], [], []
+    for name in sorted(_default_listdir(source_root)):
+        lowered = name.lower()
+        if _VERSIONED_PYTHON_DLL.match(lowered):
+            versioned.append(name)
+        elif lowered == _STABLE_PYTHON_DLL:
+            stable.append(name)
+        elif lowered in _VCRUNTIME_DLLS:
+            optional.append(name)
+    if not versioned:
+        return "", [], (
+            "%s has no versioned python3XX.dll beside pythonw.exe, so a "
+            "copied interpreter would fail to start with no message at "
+            "all" % (source_root,))
+    missing = [n for n in _VCRUNTIME_DLLS
+               if n not in {o.lower() for o in optional}]
+    note = ""
+    if missing:
+        # Tolerated, never silent: most machines have the Visual C++
+        # redistributable installed system-wide, and refusing here would
+        # trade a console window for no daemon.
+        note = ("%s ships no %s; the repaired interpreter will rely on "
+                "the machine's Visual C++ runtime"
+                % (source_root, " or ".join(missing)))
+    sources = [(os.path.join(source_root, name), name)
+               for name in versioned + stable + optional]
+    sources.append((base_gui, "pythonw.exe"))
+    return "dll_copy", sources, note
+
+
+def _sweep_stale_repair_leftovers(scripts, unlink=None):
+    """Remove the *.old-<pid>-<ns> images an earlier repair left behind.
+
+    Best effort by design: the leftover from THIS machine's last update
+    is normally still locked by the daemon that was running then, and
+    stays until it exits. Returns the ones that could not be removed.
+    """
+    unlink = unlink or os.unlink
+    kept = []
+    for name in sorted(_default_listdir(scripts)):
+        if not _STALE_REPAIR_NAME.match(name):
+            continue
+        path = os.path.join(scripts, name)
+        try:
+            unlink(path)
+        except OSError:
+            kept.append(path)
+    return kept
+
+
+def _stage_binary_copy(source, destination, unlink=None):
+    """Copy `source` to a temp file beside `destination`. Binary + fsync.
+
+    _atomic_write is TEXT mode and would corrupt every one of these.
+    """
+    unlink = unlink or os.unlink
+    temp = "%s.tmp-%s-%s" % (destination, os.getpid(), time.time_ns())
+    try:
+        with open(source, "rb") as reader, open(temp, "wb") as writer:
+            while True:
+                chunk = reader.read(1024 * 1024)
+                if not chunk:
+                    break
+                writer.write(chunk)
+            writer.flush()
+            os.fsync(writer.fileno())
+        os.chmod(temp, 0o755)
+    except OSError:
+        try:
+            unlink(temp)
+        except OSError:
+            pass
+        raise
+    return temp
+
+
+def _retry_rename(rename, sleep, source, destination, attempts=10):
+    """os.rename with the bounded PermissionError retry _atomic_write uses.
+
+    Windows denies a rename TRANSIENTLY (an indexer, a scanner, a handle
+    closing on another thread) far more often than permanently, and every
+    rename here is on the daemon's own interpreter. Shared by the forward
+    move and the rollback deliberately: a rollback with a smaller budget
+    than the move it undoes is how a transient denial becomes a venv with
+    no interpreter at all.
+    """
+    for attempt in range(attempts):
+        try:
+            rename(source, destination)
+            return True
+        except PermissionError:
+            if attempt == attempts - 1:
+                return False
+            sleep(0.005 * (attempt + 1))
+        except OSError:
+            return False
+    return False
+
+
+def _replace_running_binary(temp, destination, kept, replace=None,
+                            rename=None, unlink=None, sleep=None):
+    """Move `temp` onto `destination` even if it is a RUNNING image.
+
+    A running exe on Windows cannot be overwritten or deleted -- but it
+    CAN be renamed, and the daemon is normally running during an install
+    or an update. So a denied replace renames the old image aside and
+    moves the replacement into the freed name; the leftover is unlinked
+    best effort and otherwise reported in `kept` for the next repair's
+    sweep.
+
+    Returns "" on success, or a refusal detail, having left the
+    destination exactly as it was. Never leaves the temp file behind.
+    """
+    replace = replace or os.replace
+    rename = rename or os.rename
+    unlink = unlink or os.unlink
+    sleep = sleep or time.sleep
+
+    def discard():
+        try:
+            unlink(temp)
+        except OSError:
+            pass
+
+    try:
+        replace(temp, destination)
+        return ""
+    except PermissionError:
+        pass
+    except OSError as e:
+        discard()
+        return "could not replace %s: %s" % (destination, e)
+    aside = "%s.old-%s-%s" % (destination, os.getpid(), time.time_ns())
+    try:
+        rename(destination, aside)
+    except OSError as e:
+        discard()
+        # SCOPED TO THIS FILE, deliberately: a dll_copy denied on its
+        # third member has already written the first two, and a blanket
+        # "nothing was changed" read as a promise about the whole venv.
+        if not os.path.isfile(destination):
+            return ("%s could not be written (%s); that file was not "
+                    "changed" % (destination, e))
+        return ("%s is locked and could not even be renamed aside (%s); "
+                "that file was not changed" % (destination, e))
+    # rename, not replace: the destination name is free now, and the same
+    # transient Windows denial _atomic_write retries can still land on it.
+    if _retry_rename(rename, sleep, temp, destination):
+        try:
+            unlink(aside)
+        except OSError:
+            # EXPECTED while the old daemon still holds its own image open.
+            kept.append(aside)
+        return ""
+    # THE CANONICAL NAME IS EMPTY RIGHT NOW, and it is the exact string
+    # in the Scheduled Task's <Command> and in installed.json. Put the
+    # ORIGINAL back, with the same budget the forward move got.
+    if _retry_rename(rename, sleep, aside, destination):
+        discard()
+        return ("could not move the repaired interpreter onto %s -- the "
+                "original was restored" % (destination,))
+    # Rollback denied too. ANY interpreter at the canonical name beats
+    # none, so spend the budget once more on the replacement before
+    # giving up -- and only then discard it.
+    if _retry_rename(rename, sleep, temp, destination):
+        try:
+            unlink(aside)
+        except OSError:
+            # Same expectation as the ordinary path: the old image is
+            # normally still open by the daemon running it.
+            kept.append(aside)
+        return ""
+    discard()
+    kept.append(aside)
+    return ("%s could not be replaced OR restored: the venv now has NO "
+            "interpreter at that path, and the previous image is at %s"
+            % (destination, aside))
+
+
+def _windowless_refusal(target, detail, plan, copied, kept, sleep=None,
+                        read=None):
+    """Report a denied repair -- by what is ACTUALLY on disk afterwards.
+
+    THREE THINGS the naive refusal got wrong, all reproduced. A CONCURRENT
+    repair (a second Embody, another project's install) may have made the
+    interpreter windowless while ours was being denied: the honest answer
+    is then success, not a refusal describing a state that no longer
+    exists. The interpreter may be GONE -- a materially different thing to
+    tell a user than "it is still a console binary", and the one case
+    where the venv genuinely needs a rebuild. And it may simply be
+    UNREADABLE this instant -- whoever denied our write is often the same
+    process holding it -- which is not evidence of a console binary and
+    must never be reported as one.
+    """
+    subsystem, present = _pe_subsystem_settled(target, sleep=sleep, read=read)
+    if subsystem == PE_SUBSYSTEM_GUI:
+        return _ok(applicable=True, repaired=False, plan=plan, copied=copied,
+                   kept=kept, subsystem=subsystem, daemon_python=target,
+                   concurrent=True,
+                   note=("another process made the daemon interpreter "
+                         "windowless first (%s)"
+                         % (_clip_detail(detail, 200),)))
+    if not present:
+        return _failed(
+            "daemon_venv_repair_locked",
+            "%s no longer exists after a denied repair -- %s"
+            % (target, detail),
+            copied=copied, kept=kept, daemon_python=target,
+            interpreter_missing=True, interpreter_unreadable=False)
+    if subsystem is None:
+        return _failed(
+            "daemon_venv_repair_locked",
+            "%s could not be replaced and could not be read back either, "
+            "so whether it opens a console window is unverified -- %s"
+            % (target, detail),
+            copied=copied, kept=kept, daemon_python=target,
+            interpreter_missing=False, interpreter_unreadable=True)
+    return _failed("daemon_venv_repair_locked", detail, copied=copied,
+                   kept=kept, daemon_python=target, subsystem=subsystem,
+                   interpreter_missing=False, interpreter_unreadable=False)
+
+
+def ensure_windowless_daemon_python(venv_dir, base_python=None,
+                                    platform=None, replace=None,
+                                    rename=None, unlink=None, sleep=None,
+                                    read_subsystem=None):
+    """Make <venv>/Scripts/pythonw.exe a real windowless interpreter.
+
+    THE BUG THIS EXISTS FOR, measured rather than assumed: uv 0.11.x and
+    earlier write BYTE-IDENTICAL trampolines for Scripts/python.exe and
+    Scripts/pythonw.exe -- both PE subsystem CONSOLE, both launching the
+    base CONSOLE python.exe (astral-sh/uv#19226, fixed in uv 0.12.4).
+    The Scheduled Task launches the "windowless" one at logon, so the
+    user gets an empty terminal window every single login. A fixed uv
+    fixes NEW venvs and nothing whatsoever about the ones already on
+    disk, and field machines run older uv -- so this gate lives in our
+    installer, runs unconditionally, and is never keyed to a uv version.
+
+    TWO REPAIRS, in preference order:
+
+      redirector -- <base>/Lib/venv/scripts/nt/pythonw.exe, the shim
+        CPython ships for exactly this. GUI subsystem, needs ZERO sibling
+        DLLs (it resolves the base through pyvenv.cfg's `home`), and
+        reports the VENV path as sys.executable. That last part is
+        load-bearing: the generated launcher refuses to start unless the
+        recorded interpreter realpath-matches the running one.
+
+      dll_copy -- for a base with no redirector: the base's own GUI
+        pythonw.exe plus the DLLs it links (python3XX.dll globbed because
+        it is version-specific, python3.dll, and the two vcruntime140
+        halves when present). A lone pythonw.exe exits 0xC0000135
+        SILENTLY, which is indistinguishable from a healthy daemon, so
+        every source is verified BEFORE anything is written.
+
+    WHAT IT NEVER DOES. It never touches Scripts/python.exe: uv pip is
+    driven through that one over pipes and is SUPPOSED to be a console
+    binary. It never byte-patches the trampoline's subsystem field (the
+    child base python.exe allocates its own window anyway -- measured),
+    and it never rebuilds the venv (--clear on a venv whose exe a live
+    daemon holds open trades a cosmetic defect for a dead daemon).
+
+    WHAT A REFUSAL PROMISES, re-narrowed twice now because it kept being
+    written wider than the code: a refusal NEVER alters
+    Scripts/pythonw.exe -- the one file the Scheduled Task launches. That
+    is the whole guarantee. Two other things may legitimately have
+    happened: the sweep of OUR OWN *.old-/*.tmp- leftovers runs first on
+    every call (see the comment at the sweep), and a dll_copy denied
+    halfway may have staged SUPPORT DLLs beside a still-console
+    interpreter. Those DLLs are inert -- nothing loads them until a
+    windowless pythonw.exe sits beside them -- and the next successful
+    repair overwrites them.
+
+    Returns a result dict either way; the caller treats a refusal as a
+    note, not a failure. A windowed daemon beats no daemon.
+    """
+    platform = platform or sys.platform
+    if platform != "win32":
+        # posix has no windowless twin to get wrong: one interpreter
+        # serves both roles and no console is ever attached.
+        return _ok(applicable=False, repaired=False, plan="", copied=[],
+                   kept=[])
+    if not venv_dir or not isinstance(venv_dir, str):
+        # A non-str here (a Path, a None from a foreign spec) would raise
+        # out of os.path.join and straight through the never-raises
+        # contract every caller relies on.
+        return _failed("daemon_venv_repair_source_missing",
+                       "no daemon venv was named to repair")
+    scripts = os.path.join(venv_dir, "Scripts")
+    target = os.path.join(scripts, "pythonw.exe")
+    # THE SWEEP RUNS ON EVERY CALL, BEFORE ANYTHING ELSE -- including
+    # before the GUI fast path, and before the escape guard below.
+    #
+    # Before the fast path, because the ONLY sequence that produces a
+    # leftover is a repair over a LIVE daemon (rename-aside), and that
+    # sequence ends with the venv already GUI. Sweeping after the fast
+    # path meant every real field leftover was permanent and the note
+    # promising "removed on the next repair" was false forever.
+    #
+    # Before the guard loop, because it needs no guard from it: it has
+    # its own, checking that Scripts really resolves inside the venv, so
+    # a junctioned Scripts cannot aim these unlinks outside. It deletes
+    # only names this module itself creates (*.old-<pid>-<ns>,
+    # *.tmp-<pid>-<ns>), never a file a person put there.
+    #
+    # AND NEVER WHEN THE CANONICAL NAME IS EMPTY. A double-denied repair
+    # can leave the venv with no pythonw.exe and the previous image only
+    # as a .old-; sweeping THEN would delete the last copy of the
+    # interpreter and turn a recoverable state into a rebuild-or-nothing
+    # one. Tidying is for a venv that already has its interpreter.
+    kept = []
+    if (os.path.isdir(scripts) and _actual_inside(venv_dir, scripts)
+            and os.path.isfile(target)):
+        kept = _sweep_stale_repair_leftovers(scripts, unlink=unlink)
+    subsystem, present = _pe_subsystem_settled(target, sleep=sleep,
+                                               read=read_subsystem)
+    if subsystem == PE_SUBSYSTEM_GUI:
+        return _ok(applicable=True, repaired=False, plan="", copied=[],
+                   kept=kept, subsystem=subsystem, daemon_python=target)
+    if subsystem is None and present:
+        # UNREADABLE, NOT CONSOLE. We cannot show a repair is needed, and
+        # writing into a venv whose interpreter something else is holding
+        # right now is exactly how the double-denial hazard starts. Say
+        # so and leave it: the next install asks again, costing nothing.
+        return _ok(applicable=True, repaired=False, plan="", copied=[],
+                   kept=kept, subsystem=None, daemon_python=target,
+                   unverified=True,
+                   note=("the daemon interpreter could not be read just "
+                         "now (another process is holding it); it was "
+                         "left alone and is re-checked at the next "
+                         "install"))
+    if not os.path.isdir(scripts):
+        return _failed(
+            "daemon_venv_repair_source_missing",
+            "%s has no Scripts directory, so it is not a venv this can "
+            "repair" % (venv_dir,), kept=kept)
+    source_root = (os.path.dirname(base_python) if base_python
+                   else _pyvenv_home(venv_dir))
+    if not source_root or not os.path.isdir(source_root):
+        return _failed(
+            "daemon_venv_repair_source_missing",
+            "cannot locate the base Python behind %s, so its windowless "
+            "interpreter cannot be restored" % (venv_dir,), kept=kept)
+    plan, sources, note = _windowless_repair_sources(source_root)
+    if not sources:
+        return _failed("daemon_venv_repair_source_missing", note, kept=kept)
+    for _source, name in sources:
+        destination = os.path.join(scripts, name)
+        if not _actual_inside(venv_dir, destination):
+            # An interrupted repair or a hand-made junction must not turn
+            # this into a writer of arbitrary paths.
+            return _failed(
+                "daemon_venv_repair_unsafe_path",
+                "%s resolves outside %s" % (destination, venv_dir),
+                kept=kept)
+    copied = []
+    for source, name in sources:
+        destination = os.path.join(scripts, name)
+        try:
+            temp = _stage_binary_copy(source, destination, unlink=unlink)
+        except OSError as e:
+            return _windowless_refusal(
+                target, "could not stage %s: %s" % (name, e), plan,
+                copied, kept, sleep=sleep, read=read_subsystem)
+        detail = _replace_running_binary(
+            temp, destination, kept, replace=replace, rename=rename,
+            unlink=unlink, sleep=sleep)
+        if detail:
+            return _windowless_refusal(target, detail, plan, copied, kept,
+                                       sleep=sleep, read=read_subsystem)
+        copied.append(destination)
+    subsystem, present = _pe_subsystem_settled(target, sleep=sleep,
+                                               read=read_subsystem)
+    if subsystem is None and present:
+        # EVERY WRITE REPORTED SUCCESS and the file is there -- we simply
+        # cannot read it back this instant (a scanner opens a freshly
+        # written exe with no sharing). Calling that "still not a
+        # windowless interpreter" would report a defect we have no
+        # evidence for, on the strength of a lock. Say what is true: it
+        # was repaired, and the read-back is owed.
+        return _ok(applicable=True, repaired=True, plan=plan, copied=copied,
+                   kept=kept, subsystem=None, daemon_python=target,
+                   unverified=True,
+                   note=("the repaired interpreter could not be read back "
+                         "to confirm it just now; it is re-checked at the "
+                         "next install"))
+    if subsystem != PE_SUBSYSTEM_GUI:
+        # The postcondition, asserted rather than assumed: the whole
+        # point is the file the supervisor launches, and a repair that
+        # reported success without changing it would hide the defect.
+        return _failed(
+            "daemon_venv_not_windowless",
+            "%s is still not a windowless interpreter after the %s repair"
+            % (target, plan or "attempted"),
+            copied=copied, kept=kept, subsystem=subsystem)
+    return _ok(applicable=True, repaired=True, plan=plan, copied=copied,
+               kept=kept, subsystem=subsystem, daemon_python=target,
+               base=source_root, note=note)
+
+
 def _actual_inside(directory, path):
     try:
         directory = os.path.normcase(os.path.realpath(directory))
@@ -1833,6 +2405,17 @@ def verify_managed_runtime(data_dir, interpreter, platform=None,
         except OSError as e:
             return _failed("runtime_integrity_failed",
                            "%s: %s" % (relative, e))
+    if platform == "win32" and pe_subsystem(match["path"]) != PE_SUBSYSTEM_GUI:
+        # REFUSE, never repair. A managed runtime is a hash-pinned release
+        # artifact: rewriting one of its files would break the very
+        # inventory just verified above, and the defect belongs to the
+        # release build, not to this machine. (The daemon venv is the
+        # opposite case -- we built it here, so we repair it here.)
+        return _failed(
+            "runtime_interpreter_not_windowless",
+            "the managed runtime's daemon interpreter is a console binary "
+            "and would open a terminal window at every logon: %s"
+            % (match["path"],))
     live = probe_runtime(match["probe_python"], platform, architecture,
                          runner)
     if not live.get("ok"):
@@ -2186,6 +2769,19 @@ def provision_runtime_bundle(data_dir, bundle_path, expected_sha256,
     probe_interpreter = os.path.join(
         install_target,
         *manifest["probe_python"].split("/"))
+    if platform == "win32" and pe_subsystem(interpreter) != PE_SUBSYSTEM_GUI:
+        # Before the probe spawns anything: a bundle whose daemon
+        # interpreter is a console binary would put an empty terminal on
+        # the desktop at every logon, and no amount of live crypto makes
+        # that the runtime we install. Refuse -- the fix belongs to the
+        # signed release build, and a rewrite here would invalidate the
+        # bundle's own hashes.
+        _discard_runtime_stage(stage, staged_files)
+        return _failed(
+            "runtime_interpreter_not_windowless",
+            "the runtime bundle's daemon interpreter %s is not a "
+            "windowless (GUI-subsystem) Windows binary"
+            % (manifest["python"],))
     live = probe_runtime(probe_interpreter, platform, architecture, runner)
     if not live.get("ok"):
         _discard_runtime_stage(stage, staged_files)
@@ -3910,9 +4506,23 @@ def _stamp_runtime_shape(record, runtime_check, platform, architecture):
     two shapes are MUTUALLY EXCLUSIVE by construction: a record can never
     claim managed verification it did not get, and a repair that changes
     the shape must not leave the old claim behind.
+
+    It also records, on win32 only, WHICH SUBSYSTEM the interpreter the
+    supervisor will launch actually is, so "an empty console window
+    appears at every logon" is answerable from installed.json instead of
+    only from the user's desktop. ADDITIVE: the format string does not
+    move, because an OLDER launcher must keep reading records a newer
+    Embody wrote.
     """
     record.pop("runtime", None)
     record.pop("venv_runtime", None)
+    record.pop("interpreter_subsystem", None)
+    if platform == "win32":
+        subsystem = pe_subsystem(record.get("interpreter"))
+        record["interpreter_subsystem"] = (
+            "gui" if subsystem == PE_SUBSYSTEM_GUI
+            else "console" if subsystem == PE_SUBSYSTEM_CONSOLE
+            else "unknown")
     if runtime_check.get("runtime_id"):
         record["runtime"] = {
             "format": runtime_check.get("receipt_format",

@@ -3387,6 +3387,18 @@ class TDNExt:
 		if first_par.help:
 			par_def['help'] = first_par.help
 
+		# A MOMENTARY PAR HAS NO VALUE WORTH KEEPING. A Pulse reads True for
+		# the instant it is firing, so an export that catches one in flight
+		# serializes `value: true` -- and the import side re-applies it, so a
+		# committed export can re-fire the pulse on every load. It has
+		# happened twice: v6.0.243 shipped a latched `Refresh` in embody.tdn
+		# and Embody/Embody.tdn (hand-scrubbed in e884000), and the same
+		# post-save refresh latched it again on the very next release export.
+		# Cleaning the file was never the fix; not writing it is. The import
+		# side already agrees ("Pulse has no value", _applyCustomParValues).
+		if style in ('Pulse', 'Momentary'):
+			return par_def
+
 		# Current values -- only if different from default
 		if len(group) == 1:
 			val = self._getParValue(first_par)
