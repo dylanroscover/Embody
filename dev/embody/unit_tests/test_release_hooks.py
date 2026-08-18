@@ -977,14 +977,21 @@ class TestTransientParScrub(EmbodyTestCase):
                 par = getattr(self.embody.par, name, None)
                 # None means "reset to the par's own default". That is the
                 # right registration for an IDENTIFIER or display name (rests
-                # empty) AND for a CONSENT toggle (rests Off) -- neither has a
-                # truthy state string to name. What stays banned is a literal
-                # '' resting, which would claim empty is a state.
-                self.assertIn(
-                    par.default, ('', False, 0),
-                    'reset-to-default resting only makes sense for a par '
-                    'whose default IS its resting state (empty or off); %r '
-                    'has default %r' % (name, par.default))
+                # empty) AND for a CONSENT toggle (rests at its AUTHORED
+                # default -- Off for opt-ins like Convoyenable, On for
+                # default-on consent like Clipboardautopaste, whose baked
+                # Off shipped in v6.0.251 and killed the collection copy
+                # flow on fresh installs). A toggle's default is always a
+                # real state, so the empty-default restriction applies only
+                # to non-toggle pars, where a '' default can be a non-state
+                # the runtime cannot leave (Status's '' bricked the enable
+                # path -- the Opus panel blocker).
+                if par.style != 'Toggle':
+                    self.assertIn(
+                        par.default, ('', False, 0),
+                        'reset-to-default resting only makes sense for a '
+                        'par whose default IS its resting state (empty or '
+                        'off); %r has default %r' % (name, par.default))
         for name in sorted(self._orig_omit['Embody']):
             self.assertIsNotNone(
                 getattr(self.embody.par, name, None),

@@ -79,3 +79,30 @@ test("specimen page renders + TDN blob downloads", async ({ page, request }) => 
   const body = await res.body();
   expect(body.byteLength).toBe(20494); // content-addressed: matches seed.sql size
 });
+
+test("card copy puts the _embody_tdn envelope on the clipboard", async ({ page, context }) => {
+  // The copy handler must construct the ClipboardItem synchronously inside
+  // the click gesture and let its payload resolve from the fetch. Writing
+  // with writeText AFTER the network await loses WebKit's transient
+  // activation, so Safari rejected the write and the copy silently no-oped
+  // (field report, macOS 2026-08-18). Chromium can't reproduce the Safari
+  // failure, but this locks the end-to-end contract through the
+  // ClipboardItem path: click -> POST /copy -> valid envelope on the
+  // clipboard + counter bump.
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/collection");
+  const card = page.locator('[data-specimen][data-slug="kaleidoscope"]');
+  const button = card.locator("[data-card-copy]");
+  const before = Number(await button.locator("[data-copy-count]").textContent());
+  await button.click();
+  await expect(button).toHaveClass(/is-copied/);
+  const raw = await page.evaluate(() => navigator.clipboard.readText());
+  const env = JSON.parse(raw);
+  expect(env._embody_tdn).toBe(1);
+  expect(env.source).toBe("embody.tools");
+  expect(env.slug).toBe("kaleidoscope");
+  expect(typeof env.sha256).toBe("string");
+  expect(typeof env.copy_id).toBe("string");
+  expect(env.tdn && typeof env.tdn).toBe("object");
+  await expect(button.locator("[data-copy-count]")).toHaveText(String(before + 1));
+});

@@ -801,3 +801,56 @@ class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
 		self.assertFalse(ok)
 		self.assertTrue(any('uv' in m.lower() for _, m in msgs))
 		self.assertEqual(self._log_calls, [])
+
+
+class TestBootstrapEnv(EmbodyTestCase):
+	"""_bootstrapEnv: the environment handed to pip/uv bootstrap children.
+
+	It must strip the variables that redirect Python's module search
+	(TD's 'Python 64-bit Module Path' preference reaches children via
+	the environment on macOS; users also set PYTHONPATH globally), pin
+	child output to UTF-8, and keep everything else -- children may
+	need TD's loader variables. Field failure 2026-08-18: an inherited
+	module path turned pip's output non-ASCII and the ASCII-locale
+	parent decode killed the whole env setup on macOS.
+	"""
+
+	SCRUBBED = ('PYTHONPATH', 'PYTHONSTARTUP',
+				'PYTHONUSERBASE', 'PYTHONNOUSERSITE')
+
+	def setUp(self):
+		super().setUp()
+		self.ext = self.embody.ext.Embody
+		self._saved = {k: os.environ.get(k) for k in
+					   self.SCRUBBED + ('EMBODY_BOOTSTRAP_TEST_KEEP',
+										'PYTHONIOENCODING')}
+
+	def tearDown(self):
+		for k, v in self._saved.items():
+			if v is None:
+				os.environ.pop(k, None)
+			else:
+				os.environ[k] = v
+		super().tearDown()
+
+	def test_scrubs_module_search_vars(self):
+		for k in self.SCRUBBED:
+			os.environ[k] = '/contaminated/site-packages'
+		env = self.ext._bootstrapEnv()
+		for k in self.SCRUBBED:
+			self.assertNotIn(k, env,
+				f'{k} must not leak into bootstrap children')
+
+	def test_pins_utf8_io_and_keeps_other_vars(self):
+		os.environ['EMBODY_BOOTSTRAP_TEST_KEEP'] = 'kept'
+		env = self.ext._bootstrapEnv()
+		self.assertEqual(env.get('PYTHONIOENCODING'), 'utf-8')
+		self.assertEqual(env.get('EMBODY_BOOTSTRAP_TEST_KEEP'), 'kept',
+			'unrelated variables must pass through (loader vars etc.)')
+
+	def test_extra_kwargs_are_applied(self):
+		env = self.ext._bootstrapEnv(UV_LINK_MODE='copy')
+		self.assertEqual(env.get('UV_LINK_MODE'), 'copy')
+		# extras must also be able to override the defaults
+		env2 = self.ext._bootstrapEnv(PYTHONIOENCODING='latin-1')
+		self.assertEqual(env2.get('PYTHONIOENCODING'), 'latin-1')

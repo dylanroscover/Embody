@@ -879,6 +879,7 @@ def update_git_status(ext) -> None:
                 ['git', '--no-optional-locks', 'status', '--porcelain', '-z',
                  '--untracked-files=all', '--', proj],
                 cwd=git_root_s, capture_output=True, text=True,
+                encoding='utf-8', errors='replace',
                 env=clean_env, stdin=subprocess.DEVNULL, timeout=5,
                 check=False, creationflags=NO_WINDOW)
             state['changed'] = parse(r.stdout or '') if r.returncode == 0 else {}

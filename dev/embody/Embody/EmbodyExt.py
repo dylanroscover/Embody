@@ -101,6 +101,12 @@ class EmbodyExt:
         'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
         'Tdncascade', 'Tdncreateonstart', 'Tdnstriponsave',
         'Toxrestoreonstart', 'Datrestoreonstart', 'Filecleanup',
+        # Clipboard auto-paste watcher consent (TDN page). Persisting the
+        # user's own choice is what makes the release-export scrub of this
+        # par (see _TRANSIENT_STATUS_PARS) cost them nothing: a deliberate
+        # Off is restored from config.json, while fresh installs get the
+        # authored default (On).
+        'Clipboardautopaste',
         # Self-update consent (Advanced page) -- must persist or the user's
         # opt-in dies in the very update it triggers (the replacement COMP
         # restores prefs from config.json).
@@ -491,6 +497,7 @@ class EmbodyExt:
                 [venv_python, '-I', '-c',
                  'import platform; print(platform.machine())'],
                 capture_output=True, text=True, timeout=15,
+                encoding='utf-8', errors='replace',
                 stdin=subprocess.DEVNULL, creationflags=NO_WINDOW)
             if proc.returncode != 0:
                 return None
@@ -839,7 +846,7 @@ class EmbodyExt:
             # with "Python environment not ready" (caught by the
             # v6.0.151 fresh-install smoke). Copy mode trades a few MB
             # of one-time disk for immunity to that entire class.
-            uv_env = dict(os.environ, UV_LINK_MODE='copy')
+            uv_env = self._bootstrapEnv(UV_LINK_MODE='copy')
 
             recreate = bool(spec.get('recreate_venv'))
             if recreate or not os.path.isdir(venv_dir):
@@ -853,6 +860,7 @@ class EmbodyExt:
                 subprocess.run(
                     cmd,
                     check=True, capture_output=True, text=True,
+                    encoding='utf-8', errors='replace',
                     stdin=subprocess.DEVNULL, env=uv_env,
                     creationflags=NO_WINDOW,
                 )
@@ -864,6 +872,7 @@ class EmbodyExt:
             subprocess.run(
                 [uv, 'pip', 'install'] + deps + ['--python', venv_python],
                 check=True, capture_output=True, text=True,
+                encoding='utf-8', errors='replace',
                 stdin=subprocess.DEVNULL, env=uv_env,
                 creationflags=NO_WINDOW,
             )
@@ -936,6 +945,32 @@ class EmbodyExt:
         return False
 
     @staticmethod
+    def _bootstrapEnv(**extra) -> dict:
+        """Environment for bootstrap children (python -m pip, uv).
+
+        Starts from TD's environment (children may need TD's loader vars)
+        but drops the variables that redirect Python's module search:
+        PYTHONPATH, PYTHONSTARTUP, PYTHONUSERBASE, PYTHONNOUSERSITE.
+        TouchDesigner's 'Python 64-bit Module Path' preference reaches
+        child processes through the environment on macOS, and users also
+        set PYTHONPATH globally (the TD-documented alternative to the
+        preference) -- either way a foreign site-packages leaking into
+        the pip/uv children changes what they resolve and print (field,
+        2026-08-18: it turned pip's output non-ASCII and killed env setup
+        on a GUI-launched macOS TD whose default IO codec is US-ASCII).
+        PYTHONIOENCODING pins child output to UTF-8 so the parent-side
+        decode (forced utf-8) is byte-exact on every platform and locale.
+
+        WORKER-THREAD SAFE: reads os.environ only.
+        """
+        env = {k: v for k, v in os.environ.items()
+               if k not in ('PYTHONPATH', 'PYTHONSTARTUP',
+                            'PYTHONUSERBASE', 'PYTHONNOUSERSITE')}
+        env['PYTHONIOENCODING'] = 'utf-8'
+        env.update(extra)
+        return env
+
+    @staticmethod
     def _resolveUv() -> 'str | None':
         """Locate an existing uv WITHOUT installing one, or None.
 
@@ -988,7 +1023,9 @@ class EmbodyExt:
             subprocess.run(
                 [python_exe, '-m', 'pip', 'install', '--user', 'uv'],
                 check=True, capture_output=True, text=True,
-                stdin=subprocess.DEVNULL, creationflags=NO_WINDOW,
+                encoding='utf-8', errors='replace',
+                stdin=subprocess.DEVNULL, env=self._bootstrapEnv(),
+                creationflags=NO_WINDOW,
             )
         except subprocess.CalledProcessError as e:
             log(f'Failed to install uv: {e.stderr or e}', 'ERROR')
@@ -4700,6 +4737,20 @@ class EmbodyExt:
             # registering it costs the developer nothing and closes the
             # leak permanently. Reset to its default (Off).
             'Showbuiltinpars': None,
+            # A DEVELOPER'S PREFERENCE, and it shipped -- the same class
+            # as Showbuiltinpars, caught from the other direction.
+            # v6.0.251 was published with Clipboardautopaste Off against
+            # a True default (verified 2026-08-18 by toeexpand of the
+            # released .tox: 'Clipboardautopaste ... off' in Embody.parm)
+            # because the dev machine had the watcher quieted at bake
+            # time. Every fresh install therefore shipped with the
+            # collection-page "Embody it" copy flow dead: the envelope
+            # landed on the OS clipboard and the watcher never prompted
+            # (field report, macOS/Chrome 2026-08-18). Reset to its
+            # default (On); the user's own choice is not lost -- the par
+            # is in the _PERSISTED_PARAMS whitelist, so config.json
+            # restores a deliberate Off across sessions and upgrades.
+            'Clipboardautopaste': None,
         },
     }
 

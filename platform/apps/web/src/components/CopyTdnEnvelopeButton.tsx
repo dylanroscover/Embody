@@ -28,9 +28,27 @@ export default function CopyTdnEnvelopeButton({
       window.clearTimeout(timer.current);
     }
 
+    // Safari revokes the click's transient activation across awaits, so a
+    // writeText AFTER building the envelope can throw NotAllowedError. Hand
+    // the PENDING build to a ClipboardItem created synchronously inside the
+    // gesture (the WebKit-sanctioned pattern); engines without ClipboardItem
+    // keep the plain writeText path.
+    const textPromise = buildEmbodyEnvelope(tdn, { slug, version }).then(
+      (envelope) => JSON.stringify(envelope)
+    );
+
     try {
-      const envelope = await buildEmbodyEnvelope(tdn, { slug, version });
-      await navigator.clipboard.writeText(JSON.stringify(envelope));
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/plain": textPromise.then(
+              (text) => new Blob([text], { type: "text/plain" })
+            )
+          })
+        ]);
+      } else {
+        await navigator.clipboard.writeText(await textPromise);
+      }
       setState("copied");
       timer.current = window.setTimeout(() => setState("idle"), COPY_RESET_MS);
     } catch {

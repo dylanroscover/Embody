@@ -1,6 +1,12 @@
 # Changelog
 
-## v6.0.251
+## v6.0.252
+
+Two macOS field reports from one fresh install: an environment setup that died decoding pip's output, and a copy button that "did nothing" because a dev-machine toggle shipped inside the release.
+
+- **macOS environment setup no longer crashes on non-ASCII installer output**: a GUI-launched macOS TD decodes subprocess output as US-ASCII, so one non-ASCII byte from pip killed the whole Envoy venv build (`'ascii' codec can't decode byte 0xe2`). Every TD-side subprocess read is now forced UTF-8, and pip/uv bootstrap children run with `PYTHONPATH`-class variables scrubbed -- TD's "Python 64-bit Module Path" preference (or a global `PYTHONPATH`) can no longer contaminate what gets installed into the venv.
+- **Clipboard auto-paste shipped disabled**: v6.0.251 baked the dev machine's `Clipboardautopaste` Off into the release .tox (the `Showbuiltinpars` leak class), so the collection "Embody it" copy flow never prompted on a fresh install. The toggle now rests at its default (On) in every export, the user's own choice persists via config.json, and the fresh-install smoke asserts it.
+- **embody.tools copy buttons are Safari-safe**: clipboard writes now hand the pending fetch to a `ClipboardItem` created inside the click gesture -- WebKit revokes transient activation across a network await, which silently no-oped the copy in Safari. Locked by a new e2e test.
 
 Worker threads can no longer touch TouchDesigner by accident -- corrected guidance, a clean codebase audit, and a new write-time lint, after Derivative confirmed that worker-side `run()` silently corrupts TD state.
 

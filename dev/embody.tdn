@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1061
-generator: Embody/6.0.251
+build: 1065
+generator: Embody/6.0.252
 td_build: 099.2025.33070
-source_file: Embody-6.251.toe
-exported_at: '2026-08-18T03:02:47Z'
+source_file: Embody-6.252.toe
+exported_at: '2026-08-18T22:32:49Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -80,6 +80,7 @@ operators:
     - {}
     - {}
     Convoynodes:
+    - {}
     - {}
     - {}
     - {}
@@ -287,7 +288,6 @@ operators:
       startSection: true
       default: true
       help: When on, Embody watches the OS clipboard and prompts to paste an Embody network the moment one is copied (e.g. the web "embody it" button) -- no keyboard shortcut needed. Turn off to disable the automatic prompt.
-      value: false
     - name: Tdncascade
       style: Toggle
       label: Cascade to Children
@@ -876,7 +876,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.251
+      value: 6.0.252
     - name: Touchbuild
       style: Str
       label: Touch Build

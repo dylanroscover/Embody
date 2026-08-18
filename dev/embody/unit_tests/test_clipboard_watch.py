@@ -113,6 +113,40 @@ class TestClipboardWatch(EmbodyTestCase):
         # The Clipboardautopaste toggle must be a real (persisted) custom par.
         self.assertTrue(hasattr(op.Embody.par, 'Clipboardautopaste'))
 
+    def test_autopaste_can_never_ship_disabled(self):
+        """A USER PREFERENCE IS NOT PRODUCT, and this one shipped.
+
+        v6.0.251 was published with Clipboardautopaste Off against a True
+        default (verified 2026-08-18 by toeexpand of the released .tox)
+        because the dev machine had the watcher quieted at bake time --
+        the Showbuiltinpars leak class (v6.0.246), caught from the other
+        direction. Every fresh install got the collection "Embody it"
+        copy flow dead: envelope on the clipboard, watcher never prompts.
+
+        Two-part contract: (1) registered as a transient status par with
+        resting None, so the release export and tracked .tdn always see
+        the authored default (On) whatever the developer is doing;
+        (2) in the _PERSISTED_PARAMS whitelist, so a user's deliberate
+        Off is restored from config.json and the scrub costs them
+        nothing.
+        """
+        self.assertTrue(op.Embody.par.Clipboardautopaste.default,
+                        'the authored default is On -- the watcher is the '
+                        'advertised path from the collection copy button')
+        cls = type(op.Embody.ext.Embody)
+        registered = cls._TRANSIENT_STATUS_PARS.get('Embody', {})
+        self.assertIn(
+            'Clipboardautopaste', registered,
+            'an unregistered user preference ships whatever the developer '
+            'last clicked')
+        self.assertIsNone(
+            registered['Clipboardautopaste'],
+            'resting None means "reset to the parameter default" (On)')
+        self.assertIn(
+            'Clipboardautopaste', cls._PERSISTED_PARAMS,
+            'without persistence the scrub would also discard the USER\'s '
+            'own Off across sessions')
+
     def test_detects_envelope(self):
         self._put_envelope()
         self.assertTrue(op.Embody.ext.TDN.ClipboardHasNetwork())
