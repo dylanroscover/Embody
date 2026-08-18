@@ -566,14 +566,37 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
       if (!slug) return;
       const counter = button.querySelector<HTMLElement>("[data-copy-count]");
       button.classList.remove("is-copied", "is-failed");
-      try {
+      // Safari revokes the click's transient activation across a network
+      // await, so a writeText AFTER the fetch throws NotAllowedError and
+      // the copy silently no-ops (field report, macOS 2026-08-18). Start
+      // the fetch, but hand its PENDING promise to a ClipboardItem created
+      // synchronously inside the gesture -- the WebKit-sanctioned pattern.
+      // Engines without ClipboardItem keep the plain writeText path (their
+      // activation window survives the await).
+      const dataPromise = (async () => {
         const response = await fetch(
           `/api/specimens/${encodeURIComponent(slug)}/copy`,
           { method: "POST" }
         );
         if (!response.ok) throw new Error(`copy failed: ${response.status}`);
-        const data = (await response.json()) as CopyResponse;
-        await navigator.clipboard.writeText(JSON.stringify(data.envelope));
+        return (await response.json()) as CopyResponse;
+      })();
+      try {
+        if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              "text/plain": dataPromise.then(
+                (data) =>
+                  new Blob([JSON.stringify(data.envelope)], { type: "text/plain" })
+              )
+            })
+          ]);
+        } else {
+          await navigator.clipboard.writeText(
+            JSON.stringify((await dataPromise).envelope)
+          );
+        }
+        const data = await dataPromise;
         if (counter && typeof data.copies_count === "number") {
           counter.textContent = String(data.copies_count);
           button.closest("[data-specimen]")?.setAttribute("data-copies", String(data.copies_count));

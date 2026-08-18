@@ -412,6 +412,12 @@ def _write_ready_flag(attempt=0):
         upd = _par('Updatestatus') if embody else 'NOT_FOUND'
         autosave = _par('Autosavestatus') if embody else 'NOT_FOUND'
         filecleanup = _par('Filecleanup') if embody else 'NOT_FOUND'
+        # Clipboard auto-paste watcher: authored default On, and v6.0.251
+        # shipped it baked Off (the dev machine's toggle at bake time --
+        # the Showbuiltinpars leak class), killing the collection-page
+        # "Embody it" copy flow on every fresh install. A fresh install
+        # MUST come up On.
+        clip = _par('Clipboardautopaste') if embody else 'NOT_FOUND'
 
         # CONVOY WAS NEVER CHECKED HERE, and that is exactly how a broken
         # fresh install shipped: on 2026-08-09 a clean v6.0.230 install on a
@@ -438,6 +444,10 @@ def _write_ready_flag(attempt=0):
             problems.append(f'script errors: {errors[:120]}')
         if not upd or upd == 'NOT_FOUND':
             problems.append('Updatestatus is BLANK (v6.0.145 regression)')
+        if str(clip).lower() not in ('1', 'true', 'on'):
+            problems.append(
+                f'Clipboardautopaste={clip!r} on a fresh install '
+                f'(v6.0.251 baked-Off leak class; authored default is On)')
         if convoy_on:
             # Only assert when the user actually opted in -- Convoy off is a
             # legitimate fresh-install state and must not fail the smoke.
@@ -460,6 +470,7 @@ def _write_ready_flag(attempt=0):
             f.write(f'updatestatus={upd}\n')
             f.write(f'autosavestatus={autosave}\n')
             f.write(f'filecleanup={filecleanup}\n')
+            f.write(f'clipboardautopaste={clip}\n')
             f.write(f'convoy_enabled={convoy_enabled}\n')
             f.write(f'convoy_status={convoy_status}\n')
             f.write(f'script_errors={errors}\n')

@@ -891,6 +891,7 @@ def init_git_repo(ext, target_dir):
                   if sys.platform == 'win32' else 0)
         git_kwargs = dict(
             capture_output=True, text=True,
+            encoding='utf-8', errors='replace',
             cwd=str(target_dir), env=clean_env,
             stdin=subprocess.DEVNULL, creationflags=_flags,
         )
@@ -1802,6 +1803,7 @@ def configure_tdn_diff_driver(ext, target_dir, python_cmd):
         # creationflags: no console flash over TD's GUI (see embody_git).
         git_kwargs = dict(cwd=str(target_dir), capture_output=True,
                           text=True, timeout=10,
+                          encoding='utf-8', errors='replace',
                           stdin=subprocess.DEVNULL,
                           creationflags=getattr(
                               subprocess, 'CREATE_NO_WINDOW', 0))

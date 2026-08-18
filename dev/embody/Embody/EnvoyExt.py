@@ -1695,6 +1695,7 @@ class EnvoyMCPServer:
             # creationflags: no console flash over TD's GUI (see embody_git).
             r = subprocess.run(['git', '-C', cwd] + list(args),
                                capture_output=True, text=True, timeout=15,
+                               encoding='utf-8', errors='replace',
                                stdin=subprocess.DEVNULL,
                                creationflags=getattr(
                                    subprocess, 'CREATE_NO_WINDOW', 0))
