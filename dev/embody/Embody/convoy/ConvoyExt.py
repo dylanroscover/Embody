@@ -1,76 +1,38 @@
 """
 ConvoyExt -- this TouchDesigner session's Convoy node registration.
 
-Hosted on the 'convoy' baseCOMP inside the Embody COMP, for the same
-reason UpdaterExt lives on 'updater': extension reinit is per-COMP, and
-every extension DAT on the Embody COMP hot-reloads ALL of that COMP's
-extensions when its file changes. Convoy code inside EnvoyExt.py would
-restart the MCP server on every Convoy iteration. A child COMP keeps the
-blast radius here. The cost, accepted: there is no op.Embody.ext.Convoy.
-The convoy COMP carries the global OP shortcut ``Convoy``, so external
-call sites use op.Convoy.ext.ConvoyExt (Embody-internal code prefers the
-parent-relative parent.Embody.op('convoy'), per the referencing rules).
+Hosted on the 'convoy' baseCOMP (like UpdaterExt on 'updater'): reinit is
+per-COMP, and Convoy code inside EnvoyExt.py would restart the MCP server
+on every iteration. No op.Embody.ext.Convoy; external callers use
+op.Convoy.ext.ConvoyExt, internal code parent.Embody.op('convoy'). The
+host COMP is reached context-free (self.ownerComp.parent.Embody) --
+string-form run() callbacks can resolve with ROOT as context.
 
-The host is reached CONTEXT-FREE (self.ownerComp.parent.Embody), never
-the bare `parent.Embody` global, because the string-form run() callbacks
-below can resolve with ROOT as their execution context.
+MECHANISM: one idempotent main-thread reconciler (_convoyTick), armed
+from __init__, generation-guarded via ownerComp.store('_convoy_gen')
+(a save's strip/restore arms one tick per reinit; only the newest
+generation survives). Each tick computes a desired-state tuple on the
+main thread and compares with the last tuple sent: unchanged + inside
+the heartbeat window = no network call; else one bounded worker. Covers
+register on Envoy start/project open/restart and late/restarted hosts.
+The ~30s heartbeat is load-bearing: envoy_port/runtime_id are per-launch
+and not persisted host-side -- a host restart drops the port and the
+heartbeat heals it. ABSENCE IS NOT AN ERROR: no host app is the normal
+state ('No Convoy host app', one DEBUG line, slow tick -- never a dialog).
 
-WHAT THIS DOES
+THREADING: resolve on main thread -> daemon worker (pure urllib, zero TD
+access) -> generation-tagged plain dict -> bounded run(delayFrames=15)
+poll chain with stale-instance guard. Work runs on one lazy standalone
+ThreadManager TDTask (batches fan out to short-lived TDTasks). Reinit
+signals the old generation's Event/queue sentinel. The convoy_client
+module itself is captured in a local by _beginCall BEFORE queueing --
+`mod.` is a live DAT lookup, a TD access (see _client(), the only
+reference in this file).
 
-One idempotent main-thread reconciler (_convoyTick), armed once per
-extension instance from __init__ and generation-guarded through
-ownerComp.store('_convoy_gen', ...) -- copied from EnvoyExt._watchdogTick,
-whose lesson is that a save's strip/restore arms one tick per reinit and
-they all come due in the same frame. Only the newest generation survives.
-
-Every tick computes a desired-state tuple ON THE MAIN THREAD
-
-    (enabled, project_root, comp_path, convoy_id, envoy_port, host_id)
-
-and compares it with the last tuple actually sent. Unchanged, and inside
-the heartbeat window -> no network call at all. Changed, or the window
-elapsed -> one bounded worker. That single mechanism covers
-register-on-Envoy-start, register-on-project-open, re-register-on-restart,
-host-app-started-late and host-app-restarted.
-
-The ~30 s heartbeat is load-bearing, not cosmetic: envoy_port and
-runtime_id are per-launch and are NOT persisted by the host app, so a host
-restart reloads this node's record WITHOUT a port and dispatch dies
-silently. The heartbeat heals it.
-
-ABSENCE IS NOT AN ERROR. No host app on this machine is the normal state
-of almost every install: status reads 'No Convoy host app', ONE DEBUG line
-on the transition, and the tick slows down. Never an Error, never a dialog.
-
-THREADING (TDResources ThreadManager)
-
-Resolve everything on the main thread -> daemon worker doing pure-Python
-urllib with ZERO TD access -> publish a generation-tagged plain dict to a
-plain attribute -> bounded main-thread run(delayFrames=15) poll chain with
-a stale-instance guard. Ordinary work is submitted to one lazy, long-lived,
-standalone TDTask owned by op.TDResources.ThreadManager. Multi-target batches
-keep that worker as their coordinator and use a small bounded set of
-short-lived ThreadManager TDTasks for parallel target I/O. Extension reinit
-signals the previous generation's Event and queue sentinel; old work may
-finish its current bounded call but can never accept work for the new
-generation. Including, critically, the convoy_client MODULE ITSELF: a
-`mod.` reference is a live DAT lookup, i.e. a TD access that re-resolves
-on every attribute get, so binding the module inside the worker body would
-be a threading violation. It is captured in a local by _beginCall BEFORE
-the task is queued. See _client(), which holds the one and only such
-reference in this file.
-
-STATE THAT MUST OUTLIVE A REINIT BUT NOT THE PROCESS
-
-runtime_id (the per-launch run identity) and node_id (needed to unregister)
-live in a sys attribute keyed by COMP path -- see _session(). Both obvious
-homes are wrong in opposite directions: an instance attribute is re-minted
-on every Ctrl+S (which is not a new run, and re-minting runtime_id
-invalidates every in-flight expected_runtime_id precondition host-side),
-and ownerComp.store() is saved into the .toe (and, with Embedstorageintdns
-on, into convoy.tdn) so it would outlive the process, which a restart must
-not do. sys attributes are the established channel here
-(sys._envoy_server_gen, sys._envoy_queues, sys._envoy_shutdown_events).
+SESSION STATE: runtime_id/node_id live in a sys attribute keyed by COMP
+path (_session()) -- instance attrs re-mint per Ctrl+S (invalidating
+host-side preconditions), ownerComp.store() outlives the process via the
+.toe. Same channel as sys._envoy_server_gen et al.
 """
 
 import hmac
@@ -128,28 +90,14 @@ class ConvoyExt:
     POLL_FRAMES = 15
     POLL_ATTEMPTS = 160
 
-    # The HOST-APP poll chain is far longer than the registration one and
-    # has to be: convoy_install.run_command allows 30 s per supervisor
-    # spawn, install() may issue two spawns fresh -- or up to six on a
-    # repair over a loaded darwin label (print, disable, bootout, settle
-    # print(s), enable, bootstrap) -- plus a graceful-stop wait of up to
-    # EXIT_WAIT_S (15 s) and a label-settle wait of up to EXIT_WAIT_S,
-    # start() three spawns, the install tail waits up to HEALTH_WAIT_S
-    # for /health, and a venv-runtime install may additionally spend up
-    # to six 15 s candidate probes (venv, daemon venv, two Homebrew
-    # paths, two PATH lookups), one VENV_REPAIR_TIMEOUT_S uv reinstall,
-    # one 15 s re-probe, a daemon venv build (three 15 s base version
-    # gates + create 60 s + install 120 s + one 15 s probe, ~240 s), and
-    # install()'s own 15 s verifier re-probe of the winner. The version
-    # tail adds a bounded ~51 s on the stale path only: two settles of
-    # VERSION_SETTLE_ATTEMPTS x VERSION_SETTLE_S (8 s each) around one
-    # automatic restart (EXIT_WAIT_S 15 s + HEALTH_WAIT_S 20 s). Summed
-    # worst case is ~830 s of legitimate work, so the cap is 3400 x 15
-    # frames (~850 s at 60 fps; slower frame rates only lengthen it). It
-    # is a BOUND on a wedged worker, not a timer -- the worker's own
-    # subprocess timeouts are what actually end it. The headroom is now
-    # thin: anything further added to this path needs the cap raised with
-    # it, or Install reports timed_out over work that later succeeds.
+    # Host-app poll cap: the worst-case legitimate install (supervisor
+    # spawns + graceful stop + candidate probes + venv repair + daemon
+    # venv build + verifier re-probe + version settle/restart tail) sums
+    # to ~830 s, so the cap is 3400 x 15 frames (~850 s at 60 fps). A
+    # BOUND on a wedged worker, not a timer -- subprocess timeouts end
+    # the work. Headroom is thin: lengthen this path and the cap must
+    # rise with it, or Install reports timed_out over work that later
+    # succeeds.
     HOST_POLL_ATTEMPTS = 3400
 
     # At most one node call and one host-lifecycle call can be outstanding.
@@ -216,15 +164,11 @@ class ConvoyExt:
     HEALTH_WAIT_S = 20.0
     HEALTH_POLL_S = 1.0
 
-    # How long an install waits for the RESTARTED daemon to report the
-    # version it just wrote. A supervisor respawn during the install window
-    # answers as the outgoing payload for about a second (the launcher
-    # resolves its payload directory from a record written last), so a single
-    # immediate read turns that into a permanent-looking 'stale payload'
-    # verdict -- it did, in three consecutive field logs. Four sleeps of 2 s
-    # covers that comfortably and costs nothing on the common path, where the
-    # first read already matches. Named constants, and carried in the host
-    # ctx, so a test can set them to zero instead of racing a real clock.
+    # Wait for the restarted daemon to report the just-written version:
+    # a supervisor respawn answers as the OUTGOING payload for ~1 s, and
+    # one immediate read turned that into a permanent 'stale payload'
+    # verdict (3 field logs). 4 x 2 s covers it; carried in ctx so tests
+    # zero them.
     VERSION_SETTLE_ATTEMPTS = 5
     VERSION_SETTLE_S = 2.0
 
@@ -350,17 +294,11 @@ class ConvoyExt:
         instance, and the poll chain retires through _staleInstance.
         """
         try:
-            # A host action in flight dies with this instance: its poll
-            # chain is armed against THIS object (run(..., self, ...)), so
-            # the new instance never drains it and the worker's result
-            # lands on a dead slot. Without this the readout is stranded
-            # on a transient string -- 'Installing...' forever -- and
-            # there is no non-mutating action in the UI that can clear it.
-            # Editing ConvoyExt.py is enough to trigger it, because this
-            # is a syncfile DAT and every save reinitializes the class.
-            # _restoreHostStatus puts back the last KNOWN state and
-            # invents nothing, which is exactly right here: an
-            # interrupted install tells us nothing new about the host.
+            # A host action in flight dies with this instance (its poll
+            # chain is armed on THIS object), stranding the readout on
+            # 'Installing...' forever -- any ConvoyExt.py save triggers
+            # it (syncfile reinit). _restoreHostStatus puts back the last
+            # KNOWN state and invents nothing.
             if self._host_busy:
                 self._restoreHostStatus()
             self._result = None
@@ -647,13 +585,8 @@ class ConvoyExt:
         """
         return
 
-    # A host-app state that BLOCKS Convoy (or is mid-flight) outranks the
-    # node's own registration line, because it is the thing the user has to
-    # act on. Anything else lets the node state show through.
-    # Node states the USER must resolve before anything else can help. These
-    # outrank even a blocking host-app line: installing a host app does not
-    # fix an unsaved project, and showing the host line there is a wrong
-    # signpost.
+    # Precedence: user-actionable node states (e.g. unsaved) outrank a
+    # blocking host-app line, which outranks the registration line.
     _ACTIONABLE_NODE_TEXTS = (
         'Waiting for project save',
         'Consent required',
@@ -917,23 +850,12 @@ class ConvoyExt:
     def _restoreNodeRowsNow(self, node_ids):
         """Put optimistically-dropped rows BACK, this frame. MAIN THREAD.
 
-        The synchronous twin of _dropNodeRowsNow, for the rows the daemon
-        refused to forget. Without it the only correction was the next
-        background fetch, so a refused row vanished on click and
-        reappeared two or three seconds later with nothing on screen
-        explaining why -- which reads as the button being broken twice
-        over.
-
-        _network_rows_digest MUST be invalidated first: drop-then-restore
-        of the same set round-trips the digest back to its pre-drop
-        value, and _projectNodeRows suppresses a write whose digest is
-        unchanged, so the restore would be swallowed and the rows would
-        stay missing until the next fetch. It is set to () rather than
-        None on purpose -- None is a DIFFERENT sentinel in this class
-        ("nothing has ever been drawn", the only state in which
-        _applyNetworkNodes may paint the Status-unavailable placeholder
-        over the list), and borrowing it here would let a transient
-        directory failure blank a list that is showing real rows.
+        Sync twin of _dropNodeRowsNow for daemon-refused forgets (else a
+        refused row vanishes and reappears seconds later, unexplained).
+        Invalidate _network_rows_digest first -- drop-then-restore
+        round-trips the digest and the unchanged-digest suppression
+        would swallow the restore. Set to (), not None: None means
+        "never drawn" and would let a transient failure blank real rows.
         """
         restore = {str(i) for i in (node_ids or ())}
         cached = getattr(self, '_last_nodes_result', None)
@@ -1600,15 +1522,10 @@ class ConvoyExt:
         storm uses), and this freshly-armed near-immediate tick becomes
         the one live loop.
         """
-        # ARM FIRST, COMMIT SECOND. The generation is what makes an
-        # already-armed tick stand down, so publishing a number that no
-        # armed tick carries kills the loop outright: the pending tick
-        # fires, sees gen != stored, and returns WITHOUT rescheduling --
-        # and nothing re-arms until the extension reinitializes. Storing
-        # before the run() put that failure one swallowed exception away,
-        # inside a bare `except: pass` that said nothing at any level.
-        # Ordered this way, a failed run() leaves the OLD generation
-        # authoritative and the existing chain still owns the loop.
+        # ARM FIRST, COMMIT SECOND: publishing a generation no armed
+        # tick carries kills the loop (tick sees gen != stored, never
+        # reschedules, nothing re-arms until reinit). This order leaves
+        # the OLD generation authoritative if run() fails.
         try:
             gen = self.ownerComp.fetch('_convoy_gen', 0) + 1
             run("o = op(%r)\nif o and o.valid: o.ext.ConvoyExt._convoyTick(%d)"
@@ -1638,20 +1555,12 @@ class ConvoyExt:
             self._tick_ms = self.TICK_MIN_MS
             return
         if self._host_busy and not self._recoverWedgedHostSlot():
-            # One long-lived worker deliberately serializes registration
-            # with install/start/stop. Do not queue a short registration
-            # behind a potentially long installer and then time out its
-            # shorter poll budget before execution even begins.
-            #
-            # ...but ASK FIRST whether the slot is merely wedged.
-            # _recoverWedgedHostSlot exists precisely to unstick a dead
-            # slot -- its docstring cites the Mac first-install session
-            # this ate in 2026-08-04 -- and its only caller was a user
-            # pressing a host button. So the one loop that runs
-            # continuously, and the one that actually starves when the
-            # slot wedges, was the single path that could not heal it:
-            # a wedged flag stopped registration, heartbeat and the node
-            # list indefinitely while the recovery sat unreachable.
+            # One worker serializes registration with install/start/stop
+            # (never queue a short registration behind a long installer's
+            # budget). But ask _recoverWedgedHostSlot first: when only
+            # button presses could unwedge the slot, a wedged flag
+            # starved registration/heartbeat/node-list forever
+            # (2026-08-04 Mac).
             self._tick_ms = self.TICK_MIN_MS
             return
 
@@ -1841,25 +1750,15 @@ class ConvoyExt:
     def _ensureNodeName(self):
         """Fill Node Name with this machine's `hostname / toe-stem`.
 
-        Deliberately a RUNTIME fill, not a parameter expression: TouchDesigner
-        stores an expression's last evaluated result alongside the expression,
-        and _scrubTransientPars skips expression-mode pars (scrubbing one
-        would destroy the reference) -- so an expression baked this
-        developer's computer name into the released .tox (found 2026-08-03).
-        As a constant it is registered transient, exports empty, and each
-        machine refills its own. A user edit is a persistent override that
-        this never clobbers. Idempotent.
+        A RUNTIME fill, not an expression (TD stores the evaluated result
+        alongside; an expression baked a dev machine name into the
+        release .tox, 2026-08-03). Constant = transient, exports empty,
+        each machine refills; user edits are never clobbered. Idempotent.
 
-        NEVER fills while the project is unsaved: this runs at extension
-        init, which on a fresh install is BEFORE the wizard's save step, so
-        an early fill baked `hostname / NewProject.1` into the parameter and
-        the node then registered under the throwaway name forever (field-
-        reported 2026-08-04, saved as e3 during the wizard yet registered as
-        NewProject.1). Unfilled, _nodeName's automatic fallback computes
-        live from the real .toe each register tick. A previously baked
-        default-project stamp for THIS machine is healed in place -- nobody
-        names a node after TD's placeholder on purpose; real overrides
-        never match the pattern and are untouched.
+        Never fills while unsaved: extension init runs before the
+        wizard's save, and an early fill baked `hostname / NewProject.1`
+        forever (2026-08-04). A baked placeholder stamp for THIS machine
+        is healed in place; real overrides never match the pattern.
         """
         par = getattr(self._embody.par, 'Convoynodename', None)
         if par is None:
@@ -2552,13 +2451,10 @@ class ConvoyExt:
     def _submitSiblingApi(self, kind, request, callback=None,
                           local_error=None):
         """Validate/gate on main, then enqueue one pure worker callable."""
-        # This funnel arms td.run() polls, and worker-side run() silently
-        # corrupts TD state (Derivative-confirmed 2026-08-17) -- so the
-        # documented main-thread contract is enforced, not just stated.
-        # `td` is imported explicitly (the bare name is not reliably bound
-        # in an extension namespace); outside TD (pytest) the import fails
-        # and main thread is assumed. Any other surprise fails OPEN -- the
-        # guard must never be what breaks the API surface.
+        # Enforce the main-thread contract: this funnel arms td.run()
+        # polls, and worker-side run() silently corrupts TD (Derivative-
+        # confirmed 2026-08-17). Outside TD the import fails => assume
+        # main; any other surprise fails OPEN.
         try:
             import td
             on_main = td.isMainThread()
@@ -3264,24 +3160,17 @@ class ConvoyExt:
                 else self.CONVERGING_S))
             self._applyPolicyProjection(result)
             self._applyNetworkNodes(result.get('_network_nodes'))
-            # The same proof fixes the READOUT: a host-app line still
-            # claiming the app is absent or down is stale -- this call
-            # just ran through the daemon. An install can succeed out of
-            # band (another session, another project, a manual repair)
-            # and nothing else refreshes the snapshot; a spawn-blocked
-            # session latched 'Install failed -- see log' for 20 hours
-            # while the daemon it was heartbeating through ran the whole
-            # time (2026-08-10..11).
+            # Same proof fixes the READOUT: this call ran through the
+            # daemon, so an absent/down host line is stale (a session
+            # once latched 'Install failed' for 20 hours while
+            # heartbeating through the running daemon, 2026-08-10..11).
             self._reviveDisprovenHostLine(result, client)
-            # We provably just talked to the daemon: if its own account
-            # of the code it runs is older than this Embody, update it
-            # in place (once per session; see _maybeUpdateHostApp).
-            # DEFERRED out of this drain onto its own frame callback:
-            # InstallHost's main-thread prelude (interpreter probing,
-            # installed.json reads) has no business inside the register
-            # poll, and TD crashed seconds after the first in-drain
-            # firing (2026-08-05, unattributed -- the install itself
-            # completed and the daemon came back healthy).
+            # Daemon provably answered: if its code is older than this
+            # Embody, update in place (once per session,
+            # _maybeUpdateHostApp). DEFERRED to its own frame callback --
+            # InstallHost's prelude has no business inside the register
+            # poll (TD crashed seconds after an in-drain firing,
+            # 2026-08-05).
             sess_flags = self._session()
             self._resetHostUpdateLatchOnUpgrade(sess_flags)
             reported = result.get('host_app_version')
@@ -3596,39 +3485,23 @@ class ConvoyExt:
             self._hostStatus(self.HOST_INSTALL_FAILED)
             return None
 
-    # The host actions that actually START A PROCESS. The rest -- the
-    # uninstall/forget previews and the forget itself -- are audits and
-    # daemon HTTP calls, so a 'WinError 6'/'The handle is invalid' in one
-    # of THEIR failures is an ordinary handle error and must not be
-    # reported as "TouchDesigner cannot launch the Convoy app".
-    # 'status' belongs here too: the host-state refresh queries the
-    # supervisor via installer.run_command(supervisor_argv('status', ...))
-    # -- a real schtasks/launchctl child -- and it runs UNPROMPTED, so in
-    # a spawn-blocked session it is the failure a user sees first.
+    # Host actions that actually SPAWN a child. The rest are audits and
+    # daemon HTTP calls whose 'WinError 6' is an ordinary handle error,
+    # not "TD cannot launch the Convoy app". 'status' spawns too
+    # (schtasks/launchctl) and runs unprompted -- the first failure a
+    # spawn-blocked session sees.
     _SPAWNING_HOST_ACTIONS = ('install', 'start', 'stop', 'uninstall',
                               'status')
 
     def _isBlockedSpawn(self, action, result, text):
         """Does this failure need the cannot-start-any-child explanation?
 
-        Three gates, and each one exists because it was wrong without it:
-
-        1. The action must actually spawn (_SPAWNING_HOST_ACTIONS). The
-           markers include two generic Windows handle errors, which an
-           HTTP call can raise for reasons that have nothing to do with
-           child processes.
-        2. The install path must NOT get it. When every candidate died
-           before Python ran, probe_runtime already returns
-           reason='spawn_blocked' with a detail that IS this paragraph,
-           word for word -- so adding it again logged the same advice
-           twice in one line, ending in two different instructions.
-        3. The marker list is asked, never copied. It lives in
-           convoy_install._SPAWN_FAILURE_MARKERS and is reached through
-           the public is_spawn_failure(); a second copy here had already
-           drifted to two of its four markers. If the module cannot be
-           reached at all, this call has larger problems than its
-           wording, so it falls back to the plain failure line rather
-           than to a stale duplicate of the question.
+        Three gates, each earned: (1) the action must actually spawn --
+        HTTP calls raise the same Windows handle errors; (2) the install
+        path is excluded -- probe_runtime already returns this exact
+        advice as spawn_blocked detail; (3) the marker list is ASKED via
+        is_spawn_failure(), never copied (a local copy had drifted).
+        Module unreachable => plain failure line.
         """
         if action not in self._SPAWNING_HOST_ACTIONS:
             return False
@@ -3736,13 +3609,9 @@ class ConvoyExt:
                      or result.get('reason') or '').strip()
         rejected = result.get('rejected')
         if isinstance(rejected, list) and rejected:
-            # The FULL per-interpreter probe stderr, at DEBUG -- on
-            # SUCCESS as well as failure: a venv that failed its probe
-            # while a later candidate passed (or a repair saved it) must
-            # stay diagnosable. The ring buffer keeps DEBUG entries even
-            # with Verbose off, so `get_logs` recovers the untruncated
-            # dlopen reason a WARNING line cannot afford. Losing this
-            # exact text cost a macOS diagnosis a full round trip.
+            # Full per-interpreter probe stderr at DEBUG, on success AND
+            # failure -- get_logs recovers the untruncated dlopen reason
+            # (losing it cost a macOS diagnosis a full round trip).
             for entry in rejected:
                 if not isinstance(entry, dict):
                     continue
@@ -3758,14 +3627,10 @@ class ConvoyExt:
                 state = self.HOST_INSTALL_FAILED
             text = str(detail or 'unknown')
             if self._isBlockedSpawn(action, result, text):
-                # THE ACTIONS THAT SPAWN. When this TD cannot start ANY
-                # child process -- a session launched by a tool rather
-                # than opened normally inherits a stdin that breaks every
-                # subprocess -- the raw OSError says nothing a user can
-                # act on, and they click the button again. Name the cause
-                # instead, ONCE: the install path already says all of this
-                # in its own detail (see _isBlockedSpawn), so this line is
-                # for the actions that do not.
+                # Spawn-blocked TD (tool-launched sessions inherit a
+                # broken stdin): name the cause once instead of the raw
+                # OSError. Install path already says it in its own
+                # detail (_isBlockedSpawn).
                 self._log(
                     'host %s cannot run: this TouchDesigner process cannot '
                     'start ANY child process, so the Convoy app cannot be '
@@ -3866,13 +3731,10 @@ class ConvoyExt:
                                and project_id != adopted)
                 rebound = ''
                 if need_rebind:
-                    # The machine now sits on the adopted realm, but
-                    # this project's git-tracked binding still names the
-                    # abandoned one. Rebind it to candidate NOW -- the
-                    # user just confirmed the join; a second dialog for
-                    # the same intent would be noise. Other projects on
-                    # this machine offer their own rejoin on their next
-                    # explicit Convoy enable.
+                    # Machine adopted the realm; rebind this project's
+                    # git-tracked binding NOW (the join was just
+                    # confirmed -- no second dialog). Other projects
+                    # offer their own rejoin on next enable.
                     try:
                         rebound = (self._embody.ext.Embody
                                    ._rebindConvoyToCandidate(project_id))
@@ -3916,29 +3778,19 @@ class ConvoyExt:
             return
 
         if action == 'forget_offline':
-            # ARM THE REDRAW FIRST, always -- before any modal and
-            # regardless of `ok`. Mark the register due, then supersede
-            # the armed tick with an immediate one (_kickTick): the
-            # reconcile fires within frames and re-fetches the
-            # directory. Doing this ahead of the dialog matters twice
-            # over: a dialog blocks the main-thread drain while it is
-            # up, and a host that went away after the optimistic drop
-            # would otherwise leave the rows missing until the next
-            # 30-60s heartbeat.
+            # ARM THE REDRAW FIRST, before any modal, regardless of ok:
+            # a dialog blocks the drain, and a host that vanished after
+            # the optimistic drop would leave rows missing until the
+            # next heartbeat.
             session['next_call_at'] = None
             self._tick_ms = self.TICK_MIN_MS
             self._kickTick()
             kept = [k for k in (result.get('kept_busy') or ())]
             forgotten = list(result.get('forgotten') or ())
-            # EVERY row that was not actually forgotten goes back, not
-            # just the refused ones: `skipped` holds rows that came back
-            # ONLINE between the dialog and the apply (a live node -- the
-            # worst one to leave missing) and `failed` holds rows whose
-            # forget errored. Derive the restore set from what was
-            # dropped MINUS what the daemon confirmed gone, rather than
-            # from the three outcome lists: `failed` carries formatted
-            # strings, not ids, and a future outcome bucket would
-            # silently stop being restored.
+            # Restore = dropped MINUS confirmed-gone, never derived from
+            # the outcome lists (failed carries strings not ids; a future
+            # bucket would silently stop restoring). skipped rows may be
+            # back ONLINE -- the worst to leave missing.
             forgotten_set = {str(f) for f in forgotten}
             self._restoreNodeRowsNow([
                 str(n.get('node_id') or '')
@@ -4002,39 +3854,15 @@ class ConvoyExt:
     def _reviveDisprovenHostLine(self, result, client):
         """Replace a stale down-claiming host line after a registration.
 
-        Runs ONLY on the register success path: the call went through
-        the host app, so a line saying the app is absent/stopped/failed
-        (_DISPROVEN_HOST_TEXTS) is disproven by direct evidence. The
-        session's host_state snapshot is rewritten to running/live so
-        _restoreHostStatus cannot resurrect the stale claim and
-        HostStatus() readers see a self-consistent record; the line is
-        recomputed through host_status_text -- the one vocabulary source
-        -- rather than assembled here. pid and detail are DROPPED, not
-        carried: they described the disproven state, and _running_text
-        degrades honestly without a pid.
-
-        Three stand-downs, each a way the "evidence" can be weaker than
-        it looks:
-        - Perform Mode: the readout is frozen for the show, exactly like
-          the sibling guard in _apply. The next post-show register
-          revives it.
-        - A host action in flight (_host_busy): its completion is about
-          to write a FRESHER line; do not fight it.
-        - The line was written AFTER this register was sent
-          (_host_line_seq moved past the send-time snapshot): a Stop or
-          Uninstall completing while the register drained means the
-          daemon this call talked to may be gone -- reviving would be
-          the 20-hour latch inverted. The next heartbeat re-registers
-          with a fresh snapshot and settles it either way.
-
-        One accepted imprecision, deliberately: 'Install failed -- see
-        log' can also be worn by module-integrity failures (a missing
-        convoy_install in the COMP -- 'reinstall Embody'). A completed
-        registration does not disprove THAT, but it does prove the
-        daemon runs and the mesh works; the readout shows the working
-        mesh, the reinstall advice stays in the log this line points
-        to, and any later host ACTION re-fails loudly if the module is
-        genuinely missing.
+        Register success = direct evidence the daemon runs, so a line in
+        _DISPROVEN_HOST_TEXTS is rewritten (via host_status_text, the one
+        vocabulary source; pid/detail dropped -- they described the
+        disproven state). Three stand-downs: Perform Mode (readout frozen
+        for the show); a host action in flight (fresher line coming);
+        line written AFTER this register was sent (the daemon may be
+        gone -- reviving would invert the 20-hour latch). Accepted
+        imprecision: module-integrity 'Install failed' is not disproven,
+        but the mesh works and later actions re-fail loudly.
         """
         host = str(getattr(self, '_host_status_text', '') or '')
         if not host.startswith(self._DISPROVEN_HOST_TEXTS):
@@ -4416,35 +4244,14 @@ class ConvoyExt:
     def _resetHostUpdateLatchOnUpgrade(self, session, version=None):
         """Give a NEWLY UPGRADED Embody its own daemon-update attempt.
 
-        Both guards on the automatic update live in the session store,
-        which hangs off `sys` and is keyed by COMP path -- so it survives
-        an extension reinit AND the COMP being replaced, dying only with
-        the TouchDesigner process. Upgrading Embody does neither: the
-        self-updater swaps the COMP in place without restarting TD, and a
-        drag-and-drop replacement lands at the same path.
-
-        The result was that upgrading in a live session could never
-        update the Convoy App. The steady state before an upgrade is
-        `host_update_checked == <daemon version>` (the daemon matched, so
-        no update was due); after it the daemon reports that SAME
-        version, the marker still matches, and the check is skipped for
-        the rest of the session. The user gets new Embody on an old
-        daemon -- and the daemon is where every node-cleanup sweep
-        actually runs, so nothing they were promised changes and the
-        update looks inert. That is the same hole v6.0.213 closed, one
-        step further along.
-
-        Keying the latch on THIS Embody's version fixes it without
-        re-opening the retry storm the latch exists to prevent: the
-        budget is one attempt per (Embody version, TD session), so a
-        failed install still does not retry until the next upgrade or
-        restart.
-
-        `version` is injectable ONLY so a test can drive an upgrade
-        without writing to the live Version parameter -- which is not a
-        hypothetical: the first draft of the test for this method did
-        exactly that, left the running project reporting 9.9.9, and
-        would have baked a garbage release on the next save.
+        The update guards live in the sys-keyed session store, which an
+        in-place Embody upgrade does not reset -- so the stale
+        host_update_checked latch skipped the check and a live-session
+        upgrade could never update the daemon (v6.0.213's hole, one step
+        along). Latch keyed on THIS Embody's version: one attempt per
+        (Embody version, TD session), no retry storm. `version` is
+        injectable only for tests (writing the live Version par from a
+        test once nearly baked 9.9.9 into a release).
         """
         if version is None:
             try:
@@ -4461,34 +4268,16 @@ class ConvoyExt:
     def _maybeUpdateHostApp(self, reported_version):
         """Update a LIVE but older Convoy App in place, automatically.
 
-        The daemon is the only place node cleanup (supersede, eviction)
-        runs, and it updates ONLY through install() -- before 6.0.213
-        nothing ever compared the running daemon's code to the Embody in
-        front of it, so nine releases shipped while every deployed
-        daemon silently kept running old code, and every registry fix
-        'did not work' in the field. This closes that loop at the
-        moment we provably talked to the daemon: its own register
-        response says what code it runs.
-
-        Guard rails: strictly-older (or version-less pre-6.0.213) only
-        -- _host_update_decision never fires on equal, newer, or
-        unorderable ('source') versions, and plan_install refuses
-        downgrades besides. One attempt per TD session; a slot-busy
-        deferral gives the attempt back so the next heartbeat retries,
-        a real failure does not (it is logged through the normal
-        install status path, and Repair Convoy App stays the manual
-        recovery). Every non-update outcome latches per reported
-        version (host_update_checked), so an up-to-date daemon costs
-        ONE host-context build per session, not one per heartbeat.
-        Concurrent SAME-version TDs racing the update are safe by
-        install()'s own construction (versioned dir, atomic .complete,
-        idempotent supervisor rewrite, graceful stop observers); two
-        DIFFERENT-version Embodies racing from the same old report can
-        interleave into a brief downgrade (plan_install's refusal is
-        checked before the worker writes) -- it self-heals on the newer
-        Embody's next session, and running mixed Embody versions
-        against one daemon is already the NEWER_INSTALL edge the UI
-        names.
+        The daemon only updates through install(), and pre-6.0.213
+        nothing compared its running code to the Embody in front of it
+        (nine releases of silently-old daemons; every registry fix
+        'did not work'). Closes the loop at the moment the register
+        response says what code it runs. Guards: strictly-older or
+        version-less only; one attempt per session (slot-busy gives the
+        attempt back, real failure does not); non-update outcomes latch
+        per reported version. Same-version races are safe by install()'s
+        construction; different-version races can briefly downgrade and
+        self-heal next session (the NEWER_INSTALL edge the UI names).
         """
         if self._staleInstance():
             # The deferral window (600 frames) is long enough for a
@@ -4548,31 +4337,14 @@ class ConvoyExt:
     def InstallHost(self, confirm=True):
         """Install -- or REPAIR -- the Convoy host app for this user.
 
-        This is the repair path as well as the first install, and that is
-        why it re-runs a full install even when plan_install says the
-        version is already current: writing the payload again, rewriting
-        the launcher and re-registering the supervisor is exactly what
-        fixes 'Needs repair -- Python not found (reinstall)' (the runtime is
-        re-resolved here) and 'Installed -- no supervisor'. Every one of
-        those steps is idempotent by construction -- temp + os.replace,
-        .complete written last, schtasks /Create /F rewriting the whole
-        definition.
-
-        The ONE refusal is a downgrade: a host app installed by a NEWER
-        Embody is never replaced by an older project (A-36) -- UNLESS
-        the Python it recorded is gone, in which case that host app is
-        not running and cannot start. Then this takes the second route:
-        installer.repair_runtime re-resolves the interpreter, rewrites
-        the supervisor definition and leaves the installed version and
-        payload untouched. Without it the readout said 'Needs repair --
-        Python not found (reinstall)' while this button answered
-        refuse_downgrade and overwrote that warning with 'installed by a
-        newer Embody' -- a dead daemon with no route back in the UI.
-
-        Registering a program that runs at LOGIN is a different grant
-        from enabling Convoy (A-13 covers minting an id and registering
-        with a host app), so it gets its own confirmation naming exactly
-        what is written, what runs, and where the trust boundary is.
+        Re-runs a full install even at current version: rewriting
+        payload/launcher/supervisor is what fixes 'Needs repair' and
+        'no supervisor', and every step is idempotent. ONE refusal:
+        downgrade over a newer Embody's install (A-36) -- unless its
+        recorded Python is gone, then repair_runtime re-points the
+        interpreter and leaves version/payload alone (else a dead daemon
+        had no UI route back). Login persistence is its own grant
+        (beyond A-13), so it gets its own confirmation.
         """
         if not self._hostActionAllowed('installing the host app'):
             return {'state': 'deferred'}
@@ -4603,14 +4375,9 @@ class ConvoyExt:
             return {'state': 'error', 'detail': 'no vendored host modules'}
         if plan.get('action') == installer.ACTION_REFUSE_DOWNGRADE:
             self._log('install refused: %s' % (plan.get('detail'),), 'WARNING')
-            # TWO DIFFERENT FAILURES ARRIVE AS refuse_downgrade, and they
-            # need opposite words. `installed_version` cannot tell them
-            # apart -- plan_install fills it in from the record either
-            # way -- so ask the same question plan_install asked first:
-            # is OUR version usable as a directory name at all? If not,
-            # nothing can be written and this is not "a newer Embody owns
-            # it", which would send the user hunting for a host app that
-            # is not the problem.
+            # Two failures arrive as refuse_downgrade needing opposite
+            # words -- re-ask plan_install's first question (is OUR
+            # version usable as a dir name?) to tell them apart.
             try:
                 installer.safe_version(ctx['version'])
                 ours_usable = True
@@ -4626,14 +4393,10 @@ class ConvoyExt:
                 self._hostStatus(self.HOST_INSTALL_FAILED)
             return {'state': 'refused', 'detail': plan.get('detail')}
 
-        # Runtime resolution, resolved HERE so the dialog can name the exact
-        # interpreter that will run at login and a machine with no usable
-        # runtime refuses BEFORE the confirmation. Prefer a signed managed
-        # runtime if one is installed; otherwise run the host app under
-        # Embody's own uv-managed venv python -- the same interpreter the rest
-        # of Embody's Python uses, which already carries the crypto floor. The
-        # managed runtime stays the signed-release path; the venv is the
-        # working default.
+        # Runtime resolved HERE so the dialog names the exact login
+        # interpreter and a runtime-less machine refuses BEFORE the
+        # confirmation. Signed managed runtime preferred; Embody's venv
+        # python is the working default.
         interpreter = installer.choose_interpreter(
             installer.find_interpreters(ctx['platform']))
         venv_runtime = False
@@ -4641,14 +4404,10 @@ class ConvoyExt:
             interpreter = ctx.get('venv_python')
             venv_runtime = bool(interpreter)
         if not interpreter:
-            # Name the path that was checked. "No runtime is available" with
-            # nothing else sent a macOS user (and me) hunting blind when the
-            # venv was present and healthy (2026-08-03).
-            # Two different situations, opposite advice. Telling a user who
-            # HAS just enabled Envoy to "enable Envoy first" is how a clean
-            # install read as broken (field log 2026-08-09): the venv simply
-            # did not exist yet, because Envoy builds it on a worker that
-            # runs for minutes after the wizard moves on.
+            # Name the checked path (a bare "no runtime" sent a macOS
+            # diagnosis hunting blind, 2026-08-03) -- and never tell a
+            # user who just enabled Envoy to "enable Envoy first": the
+            # venv build simply has not finished yet (2026-08-09).
             if self._envoyIsBringingTheEnvironment():
                 self._log('the Python environment Convoy shares is '
                           'still being built by Envoy -- the host app cannot '
@@ -4739,19 +4498,12 @@ class ConvoyExt:
         return {'state': 'stopping'}
 
     def PreviewHostUninstall(self):
-        """AUDIT ONLY: what an uninstall would remove, and what it keeps.
+        """AUDIT ONLY: what an uninstall would remove and keep.
 
-        Removes nothing, registers nothing, prompts for nothing, and does
-        not even move the Convoy Host readout -- an audit that altered
-        state would not be an audit. The plan is computed in a worker
-        (plan_host_uninstall lists the payload and reads every job record;
-        on a busy host that is not main-thread work), logged as a summary,
-        and stashed in the session.
-
-        Returns the LAST computed preview plus busy=True while the fresh
-        one is in flight -- the same shape ConvoyStatus uses, and the
-        reason the confirmation path (UninstallHost) does not call this
-        one: it needs the plan in hand before it can ask.
+        Alters nothing -- not even the readout. Plan computed in a worker
+        (reads every job record), logged, stashed in the session. Returns
+        the LAST preview plus busy=True while a fresh one is in flight
+        (why UninstallHost does not call this: it needs the plan in hand).
         """
         if not self._hostActionAllowed('previewing the uninstall'):
             return {'state': 'deferred'}
@@ -4933,18 +4685,11 @@ class ConvoyExt:
     def ForgetOfflineNodes(self):
         """Forget this machine's offline node rows -- after NAMING them.
 
-        The automatic paths (supersede-on-register, dead-project and
-        30-day eviction) cover everything mechanical; what they cannot
-        know is which offline-but-intact project the USER considers
-        dead. This is that judgment call, so the confirmation names the
-        rows that go (the first eight, then a count) and states the
-        consequence (a forgotten node rejoins as a new identity; TD
-        Python approval resets). Two
-        phases on the host slot, mirroring the uninstall preview: list
-        (alters nothing), confirm dialog, apply. Every forget still runs
-        the daemon's own refusal rules -- unresolved work keeps a row,
-        and a row that came back online between the dialog and the apply
-        is skipped, never killed.
+        The user's judgment call the automatic sweeps can't make. The
+        confirmation names the rows and the consequence (rejoin = new
+        identity, TD Python approval resets). Two phases: list, confirm,
+        apply -- the daemon's refusal rules still run, and a row back
+        online between dialog and apply is skipped, never killed.
         """
         if not self._hostActionAllowed('Forget Offline Nodes'):
             return {'state': 'busy'}
@@ -4960,13 +4705,10 @@ class ConvoyExt:
         rows = [r for r in (rows or [])
                 if isinstance(r, dict) and r.get('node_id')]
         if not rows:
-            # Visible, not just logged: a button whose nothing-to-do case
-            # answers only into the log reads as a button that did
-            # nothing (field feedback 2026-08-05). And when the offline
-            # rows the user is LOOKING AT belong to other machines, say
-            # so by name -- "nothing to forget" while TEC-B4A sits
-            # offline in the list reads as broken (same day, second
-            # report).
+            # Visible, not just logged (a log-only nothing-to-do reads
+            # as a broken button) -- and name other machines' offline
+            # rows, else "nothing to forget" contradicts the list
+            # (2026-08-05, twice).
             self._log('no offline nodes to forget on this machine', 'INFO')
             message = ('No offline nodes to forget on this machine -- '
                        'every node this machine owns is online.')
@@ -5081,20 +4823,12 @@ class ConvoyExt:
         self._dialog('Forget Offline Nodes - Nodes Kept', message, ['OK'])
 
     def UninstallHost(self, confirm=True):
-        """Remove the host app in two stages: preview, then confirm.
+        """Remove the host app: preview (worker), then confirm, then run.
 
-        Stage one computes the plan in a worker. Stage two runs on the
-        main thread when it lands: refuse outright if the plan aims at
-        anything retained, then show a confirmation that NAMES the
-        retained paths and COUNTS the job records, and only then start
-        the removal.
-
-        host.json, host.token, host.portfile.json, audit.jsonl and jobs/
-        are never removed. That is checked twice -- once inside
-        plan_host_uninstall, once again in _uninstallTargetsRetained
-        right before the confirmation -- because A-41 forbids uninstall
-        as an evidence-destruction path and a single check is not a
-        guarantee.
+        Refuses outright if the plan touches retained paths (host.json,
+        host.token, portfile, audit.jsonl, jobs/) -- checked twice, in
+        plan_host_uninstall and _uninstallTargetsRetained, because A-41
+        forbids uninstall as an evidence-destruction path.
         """
         if not self._hostActionAllowed('uninstalling the host app'):
             return {'state': 'deferred'}
@@ -5124,29 +4858,16 @@ class ConvoyExt:
     def _convoyRuntimeCandidates(self, venv_python=_UNSET):
         """Interpreters worth PROVING, best first. MAIN THREAD.
 
-        Nothing here is a requirement -- it is a list of things to try. The
-        worker probes each by spawning it and making it genuinely import
-        cryptography and prove TLS 1.3, then uses the first that passes. So
-        a machine with only Embody's own venv works (Windows). On macOS the
-        venv usually CANNOT pass -- its python symlinks TouchDesigner's
-        library-validation-signed binary, which refuses foreign-signed
-        wheels standalone (first read as an architecture mismatch from a
-        truncated log; the full dlopen reason, verified 2026-08-04, is
-        'different Team IDs') -- so the list is really a ladder down to
-        Homebrew python3 and the daemon-venv fallback.
-
-        THIS LIST IS NOT THE PRIORITY ORDER ON WINDOWS. _host_install
-        promotes an existing-or-buildable per-user daemon venv ABOVE the
-        project venv there, because the project venv is machine-scoped
-        state living in one project's directory. What this list still
-        owns is the FALLBACK order once that promotion has failed.
-
-        Embody's venv comes first because it is ours and carries our pinned
-        crypto floor. Homebrew is probed by ABSOLUTE PATH before PATH
-        lookups -- a GUI TD's launchd PATH does not include /opt/homebrew.
-        On macOS the bare /usr/bin/python3 shim is skipped entirely when
-        the Command Line Tools are absent: spawning it would pop Apple's
-        interactive install dialog from a background worker.
+        A try-list, not requirements: the worker spawns each and makes it
+        import cryptography + prove TLS 1.3; first pass wins. On macOS
+        the venv usually CANNOT pass (TD's library-validation-signed
+        python refuses foreign-signed wheels -- 'different Team IDs',
+        2026-08-04), so this is a ladder down to Homebrew + daemon venv.
+        NOT the Windows priority order: _host_install promotes the
+        per-user daemon venv above the project venv there; this list owns
+        the fallback order. Homebrew by ABSOLUTE PATH (GUI launchd PATH
+        lacks /opt/homebrew); /usr/bin/python3 skipped without CLT (would
+        pop Apple's install dialog from a worker).
         """
         candidates = []
         venv = (venv_python if venv_python is not _UNSET
@@ -5155,13 +4876,10 @@ class ConvoyExt:
             candidates.append(venv)
         try:
             import shutil
-            # An ALREADY-BUILT daemon venv is a candidate on EVERY
-            # platform: a healthy prior fallback passes its 15 s probe and
-            # skips a multi-minute rebuild-and-redownload (and keeps
-            # working offline). Probe the exe that will actually be
-            # RECORDED -- on Windows that is pythonw.exe, and proving
-            # python.exe instead would prove a file the supervisor never
-            # launches.
+            # An already-built daemon venv is a candidate everywhere
+            # (15 s probe beats a multi-minute rebuild; works offline).
+            # Probe the exe that gets RECORDED -- pythonw.exe on Windows,
+            # not a file the supervisor never launches.
             spec = self._convoyDaemonVenvSpec() or {}
             existing = spec.get('daemon_python') or spec.get('python')
             if existing and os.path.isfile(existing):
@@ -5290,13 +5008,9 @@ class ConvoyExt:
         candidate = existing_id or embody._mintConvoyId()
         widening = bool(existing_id)
 
-        # ALREADY ANSWERED ON THIS INSTALL -- do not ask again. The user has
-        # read the trusted-LAN explanation once (here, or as the Setup
-        # Wizard's Convoy step, which records the same marker). Asking per
-        # PROJECT turned a one-time explanation into a recurring modal that
-        # new users read as nagging. A new project silently mints its id and
-        # records the same scope; the dangerous gates (TD Python, Full Shell)
-        # are untouched by this and stay local, per-node and default-off.
+        # Already answered on this install -- never ask again (per-project
+        # asking read as nagging). New projects mint silently; the
+        # dangerous gates (TD Python, Full Shell) stay per-node, off.
         if self._installConsentGiven():
             try:
                 recorded = embody._ensureConvoyId(
@@ -5406,39 +5120,24 @@ class ConvoyExt:
         self._reconcile(force=True)
         return self.ConvoyStatus()
 
-    # How long the host install waits for Envoy to finish building the
-    # Python environment it shares, and how often it looks. A fresh install
-    # pip-installs the whole MCP stack into a new venv: minutes on a loaded
-    # machine, and the wizard enables Convoy seconds after Envoy.
-    #
-    # THE BUDGET IS IN FRAMES, NOT SECONDS, so every wall-clock figure here
-    # is "at 60 fps" and a 30 fps project waits twice as long in seconds
-    # (and a 120 fps one, half). 120 x 150 is ~5 minutes at 60 -- long
-    # enough for a slow first install, bounded so a genuinely absent
-    # runtime reports instead of polling forever. The give-up most users
-    # would ever reach is the OTHER one, in _awaitHostRuntime: five
-    # attempts (~10 s at 60 fps) once it is clear Envoy is not coming at
-    # all, because waiting five minutes for something switched off is not
-    # patience, it is silence.
+    # Wait for Envoy to finish building the shared venv (fresh install =
+    # minutes; the wizard enables Convoy seconds after Envoy). Budget is
+    # in FRAMES: 120 x 150 ~ 5 min at 60 fps. The short give-up
+    # (_awaitHostRuntime, ~10 s) covers Envoy switched off -- five
+    # minutes of polling for something disabled is silence, not
+    # patience.
     _HOST_RUNTIME_WAIT_FRAMES = 120
     _HOST_RUNTIME_WAIT_TRIES = 150
 
     @staticmethod
     def _hostRuntimeResolvable(ctx):
-        """Could the host app actually be run right now?
+        """Could the host app actually run right now?
 
-        The SAME resolution the install performs (a signed managed runtime
-        first, then Embody's venv python), asked BEFORE committing to an
-        install, so a runtime that does not exist yet becomes a wait rather
-        than a failure. Kept next to that resolution deliberately: two copies
-        of this question drifting apart is how the status came to name a
-        button that refused.
-
-        STATIC because it reads `ctx` and nothing else. Both callers reach
-        it through `self`, which works unchanged; what the decorator buys
-        is that the suite can drive it without a live COMP and without
-        passing a fake `self` -- which is the whole reason this predicate
-        has CI coverage instead of TouchDesigner-only coverage.
+        The install's own runtime resolution, asked BEFORE committing --
+        a not-yet-built runtime becomes a wait, not a failure. Kept
+        beside that resolution (two drifting copies once made the status
+        name a button that refused). STATIC so CI can drive it without a
+        live COMP.
         """
         try:
             installer = ctx['installer']
@@ -5452,19 +5151,11 @@ class ConvoyExt:
     def _envoyIsBringingTheEnvironment(self):
         """Is Envoy going to produce the venv Convoy shares?
 
-        THE QUESTION IS "IS IT COMING", NOT "IS IT BUILDING RIGHT NOW",
-        and the difference is the whole bug. This used to require Envoy's
-        `_bootstrapping` flag, which is set inside Start() -- and parexec
-        defers Start by 30 frames while the wizard turns Convoy on BEFORE
-        Envoy. So attempt 0 of the wait ALWAYS landed in that window, read
-        an enabled Envoy as an absent one, and logged "Enable Envoy",
-        which is precisely what the user had just done (field log
-        2026-08-09, the same clean install this whole ladder came from).
-
-        The parameter is the honest signal: Envoyenable ON means the
-        environment is on its way, whether or not the worker has started
-        yet. Envoyenable OFF means nobody is going to build it, which is
-        the one case that genuinely needs the user.
+        "Is it COMING", not "is it building right now": gating on the
+        _bootstrapping flag always missed the 30-frame Start() deferral
+        window and told the user to "Enable Envoy" right after they had
+        (2026-08-09). Envoyenable is the honest signal: ON = on its way,
+        OFF = the one case that needs the user.
         """
         try:
             return bool(self._embody.par.Envoyenable.eval())
@@ -5557,14 +5248,11 @@ class ConvoyExt:
                 ctx['data_dir'], ctx['platform'])
             if not installed:
                 if not self._hostRuntimeResolvable(ctx):
-                    # A FRESH INSTALL ENABLES BOTH AT ONCE. Envoy builds its
-                    # venv on a background worker that takes minutes, and the
-                    # wizard enables Convoy seconds later -- so the runtime
-                    # this install needs does not exist YET. Attempting it
-                    # anyway failed the install outright and told the user to
-                    # "Enable Envoy first", which they had just done (field
-                    # log 2026-08-09, a clean install on a clean machine).
-                    # Wait for the environment instead of racing it.
+                    # Fresh install enables both at once: Envoy's venv
+                    # build takes minutes, Convoy follows seconds later.
+                    # Wait for the environment instead of racing it
+                    # (2026-08-09: the race told the user to "Enable
+                    # Envoy first" right after they had).
                     self._awaitHostRuntime()
                     return
                 self._log('Convoy enabled -- installing the host app it '
@@ -5584,24 +5272,14 @@ class ConvoyExt:
                       'WARNING')
 
     def Unregister(self, blocking=False, reason='disabled'):
-        """Best-effort: clear this node's Envoy port on the local host app.
+        """Best-effort: clear this node's Envoy port on the local host.
 
-        One attempt, a 1 s timeout, every outcome a value -- convoy_client's
-        contract, because the callers are a disable and a shutting-down TD.
-        ``disabled`` withdraws membership intent; ``shutdown`` (including
-        the legacy local label ``TD exit``) clears only this runtime so the
-        host can report the enabled node offline and accept its reconnect.
-        Unknown intents fail closed before a request is sent.
-        A hard kill still leaves a stale port; that is covered host-side by
-        the dispatcher's UNREACHABLE backoff, and a true reaper is Phase 4.
-
-        blocking=True runs the probe and the call INLINE on the main thread,
-        for execute.py's onExit() where no run() callback will ever fire
-        again. Cost when nothing was registered: zero (it returns below
-        before touching the filesystem). Cost when a host app is live: a
-        couple of milliseconds. Worst case, a live process holding the host
-        port that answers nothing: the 3 s /health plus the 1 s unregister,
-        on a TD that is already closing.
+        One attempt, 1 s timeout, every outcome a value (callers are a
+        disable and a closing TD). `disabled` withdraws membership;
+        `shutdown` clears only this runtime. Unknown intents fail closed.
+        Hard kills leave a stale port -- dispatcher backoff covers it.
+        blocking=True runs inline for onExit() where run() never fires
+        again; worst case 3 s /health + 1 s unregister on a closing TD.
         """
         session = self._session()
         client = self._safeClient()
@@ -6105,34 +5783,22 @@ def _run_sibling_api_request(client, kind, context, request, progress,
 # HOST-APP WORKER BODIES -- WORKER THREAD, ZERO TD ACCESS
 # ======================================================================
 #
-# Module-level on purpose. A bound method would carry `self`, and `self`
-# is one attribute away from an operator, a parameter or a DAT -- the
-# exact class of access td-python.md forbids off the main thread and the
-# exact mistake that froze TD in the field. These take ONLY the plain
-# context dict _hostContext built on the main thread (two captured module
-# OBJECTS, plus strings and numbers), and they return plain dicts for
-# _finishHost to apply. Nothing here may import td, schedule a frame
-# callback, read a Par, or log -- the poll does all of that.
-#
-# Every one of them is total: convoy_install and convoy_client are
-# written never to raise, and _beginHostCall wraps the call anyway,
-# because a worker that dies leaves the poll spinning to its cap.
+# Module-level on purpose: a bound method carries `self`, one attribute
+# from a TD object -- the access class that froze TD in the field. Input
+# is the plain ctx dict from _hostContext; output plain dicts for
+# _finishHost. No td import, no frame callbacks, no Par reads, no
+# logging -- the
+# poll does all of that. All total: a worker that dies leaves the poll
+# spinning to its cap, so _beginHostCall wraps anyway.
 
 
 def _host_recorded_interpreter_exists(installed):
     """Does the Python installed.json recorded still exist?
 
-    ONE probe, asked by _host_snapshot (which feeds host_state, and so
-    the status readout) and by InstallHost (which feeds plan_install, and
-    so the button). THEIR AGREEMENT IS THE ENTIRE POINT: the readout
-    saying 'Needs repair -- Python not found' while the planner answers
-    refuse_downgrade is the dead end b73fcd0 removed, and two verbatim
-    copies of the question are exactly how that comes back.
-
-    Returns None for UNKNOWN -- no recorded path, or a stat that itself
-    failed -- never False. plan_install's repair branch is strictly
-    `is False` for the same reason: an answer nobody could look up is
-    not evidence.
+    ONE probe shared by _host_snapshot (readout) and InstallHost
+    (planner) -- their agreement is the point (b73fcd0 removed the
+    readout/planner contradiction two copies produce). None = UNKNOWN,
+    never False; plan_install's repair branch is strictly `is False`.
     """
     recorded = (installed or {}).get('interpreter')
     if not recorded:
@@ -6201,26 +5867,14 @@ def _host_snapshot(ctx):
 
 
 def _host_mark_stale_payload(ctx, installed, state):
-    """Re-derive 'the running daemon is older than the install record'.
+    """Re-derive 'running daemon older than install record'.
 
-    DERIVED ON EVERY SNAPSHOT, NOT LATCHED AT INSTALL TIME. The readout is
-    the whole point of this state -- the field complaint was that a stale
-    payload only ever reached the textport -- and a value stamped once by
-    the install is erased by the very next refresh, which fires on every
-    project save (execute.py's onProjectPostSave pulses Refresh). So it is
-    recomputed from the same two witnesses every time: the record on disk,
-    and the daemon's own account of the code it runs.
-
-    Deliberately narrow, because a false 'Needs repair' on a healthy machine
-    would be its own defect:
-      - only over a daemon host_state already calls RUNNING (a stopped or
-        newer-install state has its own, more specific words);
-      - only when both versions are ORDERABLE and the running one is
-        strictly OLDER. A dev checkout's daemon reports 'source', which is
-        unorderable and must never read as broken;
-      - only when the daemon actually answered. Silence claims nothing.
-    A pre-6.0.213 daemon (answers, names no version) IS marked: it cannot be
-    the version just installed, by construction.
+    Derived per snapshot, never latched (a stamped value dies on the
+    next Refresh, which fires per save). Narrow on purpose -- a false
+    'Needs repair' is its own defect: only over RUNNING, only when both
+    versions are orderable and the running one strictly older ('source'
+    is unorderable, never broken), only when the daemon answered. A
+    pre-6.0.213 daemon (answers, no version) IS marked.
     """
     if not isinstance(state, dict):
         return state
@@ -6299,26 +5953,13 @@ def _host_status_body(ctx):
 
 
 def _host_settle_version(ctx, want, attempts=None, sleep=None):
-    """Poll /status until the daemon reports `want`. -> (reported, ok, body).
+    """Poll /status until the daemon reports `want` -> (reported, ok, body).
 
-    WHY THIS IS NOT ONE READ. The daemon's app_version is the directory its
-    running module was imported from (convoy_hostapp._running_app_version), and
-    the generated launcher picks that directory out of installed.json AT LAUNCH
-    TIME. install() writes installed.json LAST, after the supervisor is
-    registered -- and on macOS the LaunchAgent carries RunAtLoad + KeepAlive, so
-    the graceful /shutdown lets launchd respawn the daemon within about a second
-    while the record still names the OLD version. The process answering health
-    is then genuinely the previous payload: not a lie, not a cache, just a
-    process that still has to be replaced.
-
-    A single immediate read turns that transitional second into a permanent
-    verdict. It did, three times in one field log -- every install reporting
-    exactly the version before it, while the payload itself was fine and the
-    next session saw the new one. Settling first is what tells a restart race
-    apart from a genuinely stuck install.
-
-    `sleep` is injected so tests run on a fake clock (CI runners stall, and a
-    real-clock deadline turns that stall into a failure).
+    Not one read: launchd can respawn the OLD payload for ~1 s after the
+    graceful shutdown (installed.json is written last), and a single
+    immediate read turned that second into a permanent 'stale' verdict
+    (3x in one field log). Settling tells a restart race from a stuck
+    install. `sleep` injected for fake-clock tests.
     """
     sleep = sleep or time.sleep
     if attempts is None:
@@ -6586,13 +6227,10 @@ def _announcer_line(announcer):
 # for realms a flooder invented is not a recovery UI.
 _JOIN_OFFER_CAP = 2
 
-# Every genesis-minted realm id has exactly this shape. A realm id on
-# the wire is otherwise near-free text (the identity bound allows 128
-# BYTES of anything >= 0x20 -- including U+2028 line separators, which
-# some renderers break lines on), so join buttons are offered ONLY for
-# canonical ids: the label is then guaranteed printable, short, and
-# collision-free (verify round: naive display-sanitization could
-# collapse two hostile ids into one label and adopt the wrong realm).
+# Genesis-minted realm id shape. Wire realm ids are near-free text (128
+# bytes of anything >= 0x20), so join buttons are offered ONLY for
+# canonical ids: printable, short, collision-free labels (naive
+# sanitization could collapse two hostile ids into one label).
 _CANONICAL_REALM_ID_RE = re.compile(r'^cv_[0-9a-f]{16}$')
 
 
@@ -6606,27 +6244,13 @@ def _display_realm_id(rid):
 def _resolve_dialog_spec(realm, announcers):
     """Pure decision core for the Resolve Realm Conflict dialog.
 
-    Returns {'mode', 'lines', 'buttons', 'joins'} where joins maps a
-    button LABEL to the realm id it adopts. Every rule the review round
-    reversed lives here, testable off-disk:
-
-    - Join targets come from LIVE announcers ONLY. conflict_ids are a
-      latched, accumulating, never-expiring record (a stale entry from a
-      reinstalled daemon or a historical stranger is normal), so uniting
-      them into the offer either hid the button on the exact field
-      machine (>=2 stale ids -> 'ambiguous' forever) or offered adopting
-      a phantom realm nobody announces -- committing the machine, and
-      every git clone of the project, to an unreachable realm with no UI
-      exit. conflict_ids are DISPLAY-ONLY.
-    - One join button PER live foreign realm (capped), each labelled
-      with the full realm id it adopts -- the id the operator is
-      confirming is on the button itself, and a stranger announcing a
-      second bogus realm no longer vetoes the recovery outright.
-    - Copy tells the truth per branch: the sender-denylist promise only
-      appears when there ARE live senders to denylist, and every join
-      button carries its full consequences (including the
-      abandoning-a-working-realm case in the advisory branch, and the
-      earlier-Keep denylist interaction).
+    Returns {'mode', 'lines', 'buttons', 'joins'} (label -> adopted realm
+    id). Rules, each reversed by review once: join targets from LIVE
+    announcers only (conflict_ids are a never-expiring latch -- uniting
+    them hid the button or offered phantom realms; display-only); one
+    join button per live foreign realm, labelled with the full id it
+    adopts; copy tells the truth per branch (denylist promise only with
+    live senders, every button carries its consequences).
     """
     state = str((realm or {}).get('state') or '')
     own_id = str((realm or {}).get('convoy_id') or '')
@@ -7026,21 +6650,11 @@ VENV_REPAIR_TIMEOUT_S = 120.0
 def _host_repair_venv_runtime(ctx, runner=None):
     """ONE-SHOT venv repair from the WORKER: reinstall the crypto pin.
 
-    `uv pip install --reinstall` of Embody's cryptography pin against the
-    venv interpreter re-resolves the wheel for what that interpreter
-    reports TODAY -- the fix when the wheel on disk was resolved for an
-    architecture the interpreter no longer runs as (a TD build swap or a
-    migrated project). The caller gates this to reasons a reinstall can
-    plausibly fix: it is USELESS for the macOS signature refusal, where
-    the interpreter itself rejects every foreign-signed wheel. Strictly
-    once, never a loop: a repair whose re-probe still fails reports
-    honestly and stops.
-
-    Worker-safe: plain data from ctx only, subprocess via the injected
-    runner. `--link-mode copy` is the CLI spelling of the UV_LINK_MODE
-    env var the environment installer sets (the injected runner takes no
-    env); `--no-cache` keeps a poisoned cached wheel from coming
-    straight back.
+    Re-resolves the wheel for what the interpreter reports TODAY (fixes
+    arch-swap staleness; useless for the macOS signature refusal, which
+    the caller gates out). Once, never a loop. Worker-safe: ctx data +
+    injected runner only; --link-mode copy mirrors UV_LINK_MODE,
+    --no-cache keeps a poisoned wheel from returning.
     """
     installer = ctx['installer']
     uv = ctx.get('uv')
@@ -7073,28 +6687,15 @@ DAEMON_VENV_INSTALL_TIMEOUT_S = 120.0
 def _host_build_daemon_venv(ctx, runner=None):
     """Build a DEDICATED daemon venv from a non-TD base Python. WORKER.
 
-    Why this exists: on macOS, TouchDesigner's bundled Python is signed
-    with the hardened runtime's library-validation flag, so spawned
-    standalone it refuses every PyPI wheel signed by another Team ID --
-    no reinstall can ever fix that interpreter. The daemon instead gets
-    its own venv, built under the per-user Convoy data dir from a Python
-    outside TouchDesigner's signature domain (Homebrew, or Apple's CLT
-    once its python reaches 3.11). ONE base is version-gated and built,
-    no loop; `--clear` makes a stale previous fallback rebuild cleanly;
-    the caller re-probes the result with the same verifier every
-    interpreter faces, so a fallback that cannot prove the crypto floor
-    is still refused.
-
-    WINDOWS BUILDS IT FOR A DIFFERENT REASON: nothing there refuses to
-    load, so the venv the daemon would otherwise use is Embody's own --
-    which lives inside the CALLING PROJECT. A machine-scoped daemon then
-    holds a project-scoped interpreter in its Scheduled Task, and
-    deleting or moving that project kills the daemon at the next logon.
-    The build is the same; only the motive differs. The two exes of a
-    Windows venv are NOT interchangeable here: uv is driven over pipes
-    and gets the CONSOLE python.exe, while what is probed, returned and
-    ultimately recorded is the windowless pythonw.exe the supervisor
-    actually launches.
+    macOS: TD's library-validation-signed python refuses foreign wheels
+    forever, so the daemon gets its own venv from a Python outside TD's
+    signature domain (Homebrew / CLT >= 3.11). One version-gated base,
+    no loop; --clear rebuilds stale fallbacks; caller re-probes with the
+    standard verifier. Windows builds it for durability instead: the
+    project venv is project-scoped state a machine-scoped daemon must
+    not pin (move/delete the project = dead daemon at logon). uv drives
+    the CONSOLE python.exe; what is probed and recorded is pythonw.exe,
+    the exe the supervisor actually launches.
     """
     installer = ctx['installer']
     platform = ctx.get('platform') or sys.platform
@@ -7177,14 +6778,10 @@ def _host_build_daemon_venv(ctx, runner=None):
         text = str(err or out or 'uv pip exited %s' % (code,)).strip()
         return {'ok': False, 'reason': 'daemon_venv_build_failed',
                 'detail': text[-400:]}
-    # THE VENV IS BUILT; NOW MAKE ITS WINDOWLESS HALF REAL. uv 0.11.x and
-    # earlier write byte-identical CONSOLE trampolines for python.exe and
-    # pythonw.exe (astral-sh/uv#19226, fixed in 0.12.4), so what the
-    # Scheduled Task launches at logon pops an empty terminal window. The
-    # gate is unconditional rather than uv-version-keyed: a newer uv
-    # fixes new venvs and nothing about the ones already on disk.
-    # NEVER FATAL -- a console window is cosmetic, and refusing the build
-    # over it would leave the machine with no per-user daemon venv at all.
+    # Make the windowless half real: uv <= 0.11.x writes CONSOLE
+    # trampolines for pythonw.exe (uv#19226) -> terminal window at logon.
+    # Unconditional (a newer uv fixes nothing already on disk), never
+    # fatal (cosmetic; refusing would leave no daemon venv at all).
     window_note = ''
     windowless = installer.ensure_windowless_daemon_python(
         venv_dir, base, platform=platform)
@@ -7195,13 +6792,10 @@ def _host_build_daemon_venv(ctx, runner=None):
             % (windowless.get('detail') or windowless.get('reason'),))
     elif windowless.get('note'):
         window_note = ' %s.' % (windowless['note'],)
-    # What the caller probes and records is the SUPERVISOR's interpreter,
-    # not uv's target. They differ only on Windows (pythonw.exe vs
-    # python.exe) and uv builds both -- but if a future uv ever stops
-    # shipping the windowless one, fall back to the console binary rather
-    # than record a path that does not exist. A console window is a
-    # visible annoyance; a recorded-but-absent interpreter is a launcher
-    # refusal every minute, forever, with nothing on screen.
+    # Probe/record the SUPERVISOR's interpreter (pythonw.exe), but fall
+    # back to python.exe if uv ever stops shipping it: a console window
+    # annoys; a recorded-but-absent path is a silent launcher refusal
+    # every minute forever.
     chosen = daemon_python
     if chosen != venv_python and not os.path.isfile(chosen):
         chosen = venv_python
@@ -7212,26 +6806,14 @@ def _host_build_daemon_venv(ctx, runner=None):
 
 
 def _host_ensure_windowless_daemon(ctx, daemon_python):
-    """Repair an ALREADY-BUILT daemon venv's console pythonw.exe. WORKER.
+    """Repair an already-built daemon venv's console pythonw.exe. WORKER.
 
-    The reuse path's counterpart to the build path's gate. A venv built
-    by uv 0.11.x or earlier carries two byte-identical CONSOLE
-    trampolines (astral-sh/uv#19226), and the reuse decision keeps such a
-    venv forever -- so without this, one bad build means an empty
-    terminal window at every logon for the life of the machine.
-
-    Returns a NOTE for the caller's detail line, '' when there is nothing
-    to say. It can never fail an install: the venv still probes healthy
-    either way, and a refusal (typically: the live daemon holds the exe
-    and even the rename aside was denied) is reported, not escalated.
-
-    IT ALWAYS CALLS THE INSTALLER, even when the interpreter is already
-    windowless. A short-circuit here looked free and was not: the ONLY
-    sequence that leaves a pythonw.exe.old-* behind is a repair over a
-    LIVE daemon, and that sequence ends with the venv GUI -- so a
-    GUI-means-skip rung meant those leftovers were never swept and the
-    note promising otherwise was false on every field machine. The
-    installer's own fast path is one PE read plus one listdir.
+    Reuse-path counterpart of the build gate (uv#19226 venvs are kept
+    forever -- one bad build = terminal window at every logon for life).
+    Returns a NOTE ('' = nothing to say); never fails an install.
+    ALWAYS calls the installer, even when already windowless: the only
+    sequence leaving pythonw.exe.old-* behind ends GUI, so a GUI-skip
+    rung never swept them. Fast path = one PE read + one listdir.
     """
     installer = ctx['installer']
     spec = ctx.get('daemon_venv') or {}
@@ -7303,71 +6885,34 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                   venv_runtime=False, repair_only=False):
     """Write the payload, register the supervisor, start it, wait.
 
-    With ``repair_only`` it does everything EXCEPT write a payload: the
-    same probe ladder chooses an interpreter, then
-    installer.repair_runtime re-points an existing install at it and
-    leaves the recorded version alone. That is the one case install()
-    must refuse (a record written by a NEWER Embody) and it shares this
-    ladder deliberately -- a second copy of the probe/repair/build rungs
-    is how the two paths would drift.
-
-    WORKER-SAFE. When ``venv_runtime`` is set the interpreter is Embody's own
-    uv-managed venv python, not a signed managed-runtime bundle, so it is
-    verified by the LIVE crypto-floor probe (Ed25519/X.509/TLS 1.3) rather
-    than the managed-runtime receipt -- the default verifier deliberately
-    refuses a .venv interpreter. probe_runtime spawns the interpreter in
-    isolation and touches no TouchDesigner objects.
+    repair_only = same probe ladder, no payload write: repair_runtime
+    re-points an existing install (the newer-Embody case install() must
+    refuse) -- shared ladder so the paths cannot drift. Worker-safe;
+    venv_runtime interpreters are verified by the LIVE crypto-floor
+    probe, not the managed-runtime receipt.
     """
     installer = ctx['installer']
     verifier = None
     rejected = []
     success_note = ''
     action = 'repair_runtime' if repair_only else 'install'
-    # SEPARATE from repair_note, and initialised OUT here beside
-    # success_note because the detail line below reads it on every path.
-    # It must survive a SUCCESS: falling back still installs a working
-    # daemon, so without its own channel the explanation would be
-    # dropped exactly when the outcome looks fine.
-    #
-    # WHAT IT CARRIES, since it is no longer only bad news: either why
-    # the per-user venv was NOT used, or -- when it WAS -- what had to be
-    # done to it (an in-place windowless repair, a leftover image the
-    # live daemon still holds, a missing vcruntime). It must still never
-    # claim what was used instead: on a failure nothing was installed at
-    # all, and on a success the winner may be a system Python rather than
-    # the project venv. That sentence is added below, once, where the
-    # chosen interpreter is actually known.
-    #
-    # IT ACCUMULATES, it does not overwrite. A reuse attempt can produce
-    # a note ("repaired in place", "this venv now has no interpreter, the
-    # surviving image is at X") and then still fall through to a rebuild;
-    # reassigning there made the loudest warning we have unreachable in
-    # production. Every later assignment therefore PREPENDS what the
-    # reuse rung already said.
-    #
-    # WHAT KEEPS THE 'moved or deleted' SENTENCE BELOW HONEST is not this
-    # string's tone but its gate: that sentence is appended only when the
-    # winning interpreter IS ctx['venv_python']. A note may well carry a
-    # positive clause about the daemon venv and still end on a fallback
-    # to the project venv -- in which case the project-scoped warning is
-    # exactly right, because that is what actually won.
+    # Separate from repair_note; read on every path and must survive a
+    # SUCCESS (a fallback still installs a working daemon). Carries why
+    # the per-user venv was not used, or what had to be done to it --
+    # never what won instead (that sentence is added once, where the
+    # winner is known). ACCUMULATES, never overwrites: reassignment once
+    # made the loudest warning unreachable. The 'moved or deleted'
+    # sentence below is gated on the winner being ctx['venv_python'].
     daemon_note = ''
     if venv_runtime:
         def verifier(data_dir, interp, platform=None, architecture=None,
                      runner=None):
             return installer.probe_runtime(
                 interp, platform, architecture, runner=runner)
-        # PROVE the interpreter, do not assume it. On macOS the venv built
-        # from TouchDesigner's bundled Python could import nothing: its
-        # library-validation-signed binary refuses foreign-signed wheels
-        # when spawned standalone ('different Team IDs' -- verified
-        # 2026-08-04 after a truncated log was first misread as an
-        # architecture mismatch), so a venv that pip had just filled
-        # successfully was useless to the daemon. Probing is the only
-        # honest test -- it spawns the candidate and makes it actually
-        # import cryptography and prove TLS 1.3. Take the first that
-        # passes; when none do, the repair and daemon-venv rungs below
-        # take over.
+        # PROVE the interpreter (spawn it, import cryptography, prove
+        # TLS 1.3) -- a pip-filled venv can still be useless to the
+        # daemon (macOS 'different Team IDs', 2026-08-04). First pass
+        # wins; none => repair and daemon-venv rungs below.
 
         def _probe(candidate):
             probe = verifier(ctx['data_dir'], candidate,
@@ -7389,40 +6934,23 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
         repaired = False
         remedy_named = False
 
-        # ORDER IS THE CORRECTNESS ARGUMENT ON WINDOWS, and it inverts the
-        # macOS one. There, the project venv is tried first and the daemon
-        # venv is the LAST resort, because the daemon venv only exists to
-        # escape library validation -- a rare, diagnosable failure.
-        #
-        # On Windows nothing fails: the project venv probes clean, wins on
-        # the first rung, and gets recorded into a MACHINE-scoped
-        # installed.json and into the Scheduled Task's <Command>. That is
-        # the defect. One machine has one Convoy daemon, and it ends up
-        # pinned to whichever project happened to install it; move,
-        # rename, rebuild or delete that project and the daemon dies at
-        # the next logon, with nothing on screen to say why. So a per-user
-        # venv is preferred here even though the project venv would work
-        # today -- durability, not capability.
-        #
-        # It stays a PREFERENCE, never a requirement: building needs uv, a
-        # 3.11+ base and (for the cryptography wheel) a network. A show
-        # LAN or a locked-down studio has none of those, which is exactly
-        # why the daemon is vendored in the first place -- so a failed
-        # build falls through to the ladder below rather than refusing.
+        # Windows order INVERTS macOS: there the daemon venv is a last
+        # resort; here it is PREFERRED, because a clean-probing project
+        # venv wins rung one and pins a machine-scoped daemon to one
+        # project's directory (move/delete = dead at logon, silently).
+        # Durability, not capability -- and a preference, never a
+        # requirement: building needs uv + 3.11 + network, which a show
+        # LAN lacks, so a failed build falls through to the ladder.
         daemon_spec = ctx.get('daemon_venv') or {}
         daemon_python = (daemon_spec.get('daemon_python')
                          or daemon_spec.get('python'))
         prefer_daemon_venv = (ctx['platform'] == 'win32'
                               and bool(daemon_python))
         if prefer_daemon_venv:
-            # THREE-WAY, not two. An EXISTING venv is reused forever, so
-            # a venv built by an older uv keeps its console pythonw.exe
-            # (astral-sh/uv#19226) and re-pops an empty terminal window at
-            # every logon until something repairs it in place. Rebuilding
-            # is the wrong cure: the venv still probes healthy, and
-            # `uv venv --clear` would try to delete an exe the LIVE daemon
-            # holds open. So: absent -> build; windowless -> reuse
-            # untouched; console or unreadable -> repair, then reuse.
+            # THREE-WAY: absent -> build; windowless -> reuse untouched;
+            # console/unreadable -> repair in place then reuse (rebuild
+            # is wrong: the venv probes healthy and --clear would delete
+            # an exe the LIVE daemon holds open; uv#19226).
             reuse_note = ''
             if os.path.isfile(daemon_python):
                 reuse_note = _host_ensure_windowless_daemon(
@@ -7433,15 +6961,11 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                 chosen = daemon_python
                 daemon_note = reuse_note
             else:
-                # ACCUMULATE, NEVER REASSIGN. The loudest thing
-                # reuse_note can carry is "this venv now has NO daemon
-                # interpreter, and the only surviving image is <path>" --
-                # and that state is exactly what sends control HERE
-                # (isfile is False, so the rebuild runs). Overwriting the
-                # note made the warning unreachable in production while a
-                # stub that left the file on disk kept its test green.
-                # The rebuild does self-heal the venv; the user still has
-                # to be told what happened to the old one.
+                # ACCUMULATE, never reassign: the loudest note ("no
+                # daemon interpreter, surviving image at X") is exactly
+                # the state that sends control here, and overwriting made
+                # it unreachable in production while a stub kept the test
+                # green.
                 built = _host_build_daemon_venv(ctx)
                 if built.get('ok') and _probe(built['python']):
                     chosen = built['python']
@@ -7631,29 +7155,13 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
         started = installer.start(platform=ctx['platform'], uid=ctx['uid'],
                                   home=ctx['home'])
         healthy = _host_await_health(ctx, ctx.get('health_wait_s'))
-        # The install's own lie detector (2026-08-05): this exact flow
-        # once wrote a STALE payload -- the vendored DATs had not
-        # reloaded a changed file yet -- and installed.json happily
-        # claimed the new version while the restarted daemon served old
-        # code. The one honest witness is the daemon itself, so ask it
-        # over the authenticated /status (the version never rides the
-        # pre-token /health): a payload at version X reports
-        # app_version X; a pre-6.0.213 payload reports nothing. Either
-        # way a mismatch must never read as a clean install.
-        #
-        # SETTLE, THEN REPAIR, THEN report (2026-08-16). The detector was
-        # right that a mismatch is real -- and wrong to conclude from ONE
-        # immediate read, because a launchd respawn during the install
-        # window answers as the outgoing payload for about a second. So:
-        # wait for it to converge; if it does not, do the restart the
-        # warning used to ask the user to perform; only a mismatch that
-        # survives both is worth anyone's attention.
-        #
-        # Against the INSTALLED version, not ours. They are the same
-        # thing for an install; for a runtime repair the record keeps a
-        # NEWER version than this project, and comparing against ctx
-        # would make the lie detector itself lie on every successful
-        # repair.
+        # Install lie detector (2026-08-05: a stale payload shipped while
+        # installed.json claimed the new version): the one honest witness
+        # is the daemon's own /status app_version. SETTLE, then repair,
+        # then report (2026-08-16: launchd respawns the OLD payload for
+        # ~1 s; one immediate read made permanent verdicts). Compare
+        # against the INSTALLED version, not ours -- a runtime repair
+        # keeps a newer record, and ctx would make the detector lie.
         want = outcome.get('version')
         reported, matched, body = _host_settle_version(ctx, want)
         # ANSWERED counts, with or without a version. A versionless answer is

@@ -1,11 +1,16 @@
 """
-Embody - Automatic TOX and DAT Externalization for TouchDesigner
+Embody -- version control for TouchDesigner projects.
 
-Embody automatically creates, maintains and updates tox and DAT file
-externalizations for your project, supporting a variety of file formats.
+Core extension on the Embody COMP. Externalizes tagged COMPs and DATs to
+diffable files (.tox / .tdn / .py / .json / ...) on every save, restores
+them on project open, and keeps the tracking table (externalizations.tsv),
+git integration, self-updater, setup wizard, and catalogs in sync.
 
-Simply add your preferred tags for COMPs/DATs to be saved, and on ctrl-s
-external file references will automatically be created and/or updated.
+Siblings on this COMP: EnvoyExt (MCP server), TDNExt (.tdn format),
+CatalogManagerExt. Child COMPs host ConvoyExt (LAN relay) and UpdaterExt --
+separate COMPs so their reinit doesn't restart the MCP server.
+
+Files on disk are the source of truth; the .toe is recoverable from them.
 
 Author: Dylan Roscover
 """
@@ -1875,25 +1880,15 @@ class EmbodyExt:
             self._consent_bulk = False
 
     def _applyWizardExternalize(self, externalize=''):
-        """Apply the wizard's externalization choice (its step 2.6).
+        """Apply the wizard's externalization choice (step 2.6).
 
-        Tokens: '' / 'skip' change nothing; 'auto' turns on auto-externalization
-        of NEW ops; 'full' does that AND offers the project-wide sweep. Anything
-        else is treated as skip (the caller already whitelists + logs, this is
-        the belt-and-braces for direct callers).
-
-        SAFETY -- 'full' is the only wizard action that touches the user's whole
-        project: ExternalizeProject() re-tags every compatible COMP/DAT, and a
-        project-wide re-tag is exactly what destroyed 18 specimen .tdn files on
-        2026-07-01 (.claude/rules/destructive-tests.md). So this path
-          - never runs its own silent bulk externalization: it calls
-            ExternalizeProject(), which keeps its own confirmation dialog and
-            TOX / TDN / +Project-TDN choice, and
-          - refuses outright unless a saved .toe exists on disk at
-            project.folder / project.name -- the recovery point the user would
-            reopen if the sweep is not what they wanted. Same invariant, and the
-            same reasoning, as RunDestructiveTests' gate.
-        Never raises: a failure here must not break the rest of setup."""
+        ''/'skip' = nothing; 'auto' = auto-externalize new ops; 'full' =
+        that plus the project-wide sweep. 'full' is the one wizard action
+        touching the whole project (a project-wide re-tag destroyed 18
+        specimen .tdn on 2026-07-01, see destructive-tests.md): it only
+        calls ExternalizeProject() -- which keeps its own confirmation --
+        and refuses without a reopenable .toe recovery point on disk
+        (RunDestructiveTests' invariant). Never raises."""
         token = (externalize or '').strip().lower()
         if token not in ('auto', 'full'):
             return
@@ -2002,28 +1997,19 @@ class EmbodyExt:
         return self._resolveProjectToe()
 
     def _projectSavedOnDisk(self):
-        """True once this project exists as a .toe on disk.
+        """True once this project has been saved somewhere.
 
-        THE gate for every disk write Embody makes on its own initiative
-        (log files, externalizations.tsv, .embody state): on a fresh
-        never-saved project those writes land in TouchDesigner's default
-        folder and are orphaned the moment the wizard's save step
-        relocates the project -- so nothing is written until the project
-        has a real home. Same on-disk invariant as _wizardRecoveryPoint,
-        ConvoyExt._savedToe and the wizard's _projectSaved; a project
-        cannot become unsaved within a session, so callers may latch a
-        True result. (The latch means a failed first save that already
-        re-pointed project.folder keeps the gate open -- writes then root
-        at the user-chosen folder, which is where they belong anyway.)
+        THE gate for every self-initiated disk write (logs, tsv, .embody
+        state) -- unsaved writes land in TD's default folder and are
+        orphaned by the wizard's save. Single authority; ConvoyExt._savedToe
+        and the wizard delegate here. Latched (a project cannot become
+        unsaved within a session).
 
-        TWO ways to be saved, and the NAME is the authority. A project whose
-        name is not TD's 'NewProject[.N].toe' placeholder has been saved
-        somewhere by definition -- so it passes even when no file answers at
-        project.folder / project.name, which happens routinely: TD reports
-        the next incremental name after a save, and a project can be opened
-        from a drive that later goes offline. Requiring the file made Embody
-        call a fully saved production project unsaved and refuse to enable
-        Convoy (field-reported 2026-08-19). Never raises."""
+        The NAME is the verdict: anything but TD's 'NewProject[.N].toe'
+        placeholder = saved. Never require a file at project.folder /
+        project.name -- TD reports the NEXT incremental name after a save,
+        so that path is routinely absent on a saved project (refused
+        Enable Convoy on a production box, 2026-08-19). Never raises."""
         if getattr(self, '_saved_on_disk', False):
             return True
         if not self._projectNameIsPlaceholder():
@@ -3171,18 +3157,12 @@ class EmbodyExt:
         has_prior_data = table and table.numRows > 1
 
         if has_prior_data:
-            # UPDATE scenario: reconnected to a surviving table with prior
-            # entries. Validate quietly -- the same silent treatment as the
-            # fresh-install branch below. The old Skip/Re-scan dialog wired
-            # 'Re-scan' to Reset(): Disable() synchronously unlinked EVERY
-            # tracked file (bypassing Filecleanup), then Update() re-exported
-            # the whole project in ONE frame -- a minutes-long main-thread
-            # freeze and a crash window with zero files on disk. Validation
-            # never needed that rebuild: UpdateHandler()'s deferred Update()
-            # runs the continuity check over every tracked row, migrates the
-            # table schema, and normalizes paths. A genuine ground-up rebuild
-            # stays available via Disable -> Enable, whose dialog actually
-            # discloses the file deletion.
+            # UPDATE scenario (surviving table): validate quietly via the
+            # deferred UpdateHandler() -- the old Re-scan dialog wired to
+            # Reset(), which unlinked EVERY tracked file then re-exported
+            # the project in one frame (minutes-long freeze, zero files on
+            # disk in the crash window). Ground-up rebuild stays available
+            # via Disable -> Enable, which discloses the deletion.
             self._validateTrackedOperators()
         else:
             # FRESH INSTALL: table was just created (empty). No dialog needed --
@@ -3213,22 +3193,13 @@ class EmbodyExt:
             if self.my.par.Envoyenable.eval():
                 run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=60)
         else:
-            # Genuinely fresh install: empty table AND no config.json found
-            # anywhere (canonical root, alternate roots, ancestor walk-up).
-            # Prompt for explicit opt-in. NOTE the contract change for
-            # issue #60: when a config.json IS found (settings_restored),
-            # the elif above now honors its persisted Envoy decision
-            # without re-prompting -- previously every empty-table project
-            # re-prompted even with restored settings, which nagged users
-            # on every untitled project spawned from a default startup
-            # file. Reset Envoyenable so the prompt is the gate here.
-            # Never queue (or flip Envoy off) while dialogs are suppressed --
-            # a test run OR a project save in progress (_suppressDialogs). One of
-            # three display-time gates (here, _promptEnvoy, _messageBox) that
-            # together guarantee the onboarding modal can neither queue nor show
-            # during a save/test, regardless of how/when Verify is reached.
-            # Without it, queuing here also reset Envoyenable=False, silently
-            # disabling Envoy. Idempotent: don't re-queue if one is already pending.
+            # Genuinely fresh install (empty table, no config.json found
+            # anywhere): prompt for opt-in. A found config.json takes the
+            # elif above and honors its persisted decision -- no re-prompt
+            # nagging on untitled projects (issue #60). Never queue while
+            # dialogs are suppressed (one of three display-time gates with
+            # _promptEnvoy/_messageBox; queuing here also reset
+            # Envoyenable=False). Idempotent.
             if (not self._suppressDialogs()
                     and not getattr(self, '_pending_envoy_prompt', False)):
                 self.my.par.Envoyenable = False
@@ -3237,18 +3208,12 @@ class EmbodyExt:
     def _validateTrackedOperators(self) -> None:
         """Quiet upgrade-path validation of tracked operators.
 
-        Non-destructive by contract: synchronously it deletes no files,
-        clears no table rows, and never touches Status. (The deferred
-        UpdateHandler() may later flip Status Disabled -> Enabled -- that is
-        the normal enable step, not a reset.) Logs the tracked-row count,
-        clears Embody's own
-        externaltox (the freshly dragged-in .tox points it at its drag source
-        -- e.g. a Downloads folder -- and a later project save would overwrite
-        that release file; previously cleared inside Reset(), which no longer
-        runs on this path), then defers UpdateHandler(), whose Update() pass
-        validates every tracked row (continuity check, schema migration, path
-        normalization, stray-tag pickup) and re-exports only genuinely dirty
-        operators.
+        Non-destructive by contract: deletes nothing, clears no rows,
+        never touches Status synchronously. Clears Embody's own
+        externaltox (a dragged-in .tox points at its drag source -- a
+        later save would overwrite that release file), then defers
+        UpdateHandler(), whose Update() validates every tracked row and
+        re-exports only the genuinely dirty.
         """
         table = self.Externalizations
         count = table.numRows - 1 if table else 0
@@ -4178,17 +4143,12 @@ class EmbodyExt:
     def Checkpoint(self, opPath: str) -> bool:
         """Frame-cheap SYNCHRONOUS auto-save checkpoint of one TDN COMP.
 
-        Re-exports the COMP's .tdn with stale-cleanup skipped -- the ~700ms rglob
-        stale-scan is the dominant save cost, and a single-COMP checkpoint orphans
-        nothing, so it is unnecessary (orphans are reclaimed by the continuity
-        sweep / next full save; recovery is tsv-driven so a no-row orphan .tdn is
-        ignored). Measured ~6ms for a typical COMP. The ~40ms fingerprint
-        re-baseline is DEFERRED one frame so it never rides the export frame.
-
-        Returns True on a successful write. Gated on Perform Mode and the save
-        window (table mutation during onProjectPreSave/strip is a fatal crash);
-        the caller (the drain) owns the perf-gate. Unlike SaveTDN, does NOT bump
-        the Build number (a checkpoint must be diff-stable vs the next Ctrl+S).
+        Re-exports with stale-cleanup skipped (the ~700ms rglob is the
+        dominant save cost; a single-COMP checkpoint orphans nothing) --
+        ~6ms typical; the ~40ms fingerprint re-baseline defers one frame.
+        Gated on Perform Mode + the save window (table mutation during
+        strip = fatal crash); caller owns the perf-gate. No Build bump
+        (a checkpoint must be diff-stable vs the next Ctrl+S).
         """
         if self._performMode:
             return False
@@ -4242,26 +4202,14 @@ class EmbodyExt:
     def _refusesEmptyTDNOverwrite(self, oper, abs_path: str) -> bool:
         """True when an AUTOMATIC export must not overwrite this .tdn.
 
-        A COMP with ZERO operator children whose on-disk .tdn holds a
-        non-empty network is almost never a legitimate auto-export: it
-        is the signature of a transiently-emptied shell (an interrupted
-        import, a pre-Phase-8.6 reload) about to destroy the only good
-        copy on disk (field data loss, 2026-08-12). The automatic
-        writers (dirtyHandler, Checkpoint, the pre-save Update sweep)
-        get a loud refusal; a deliberately emptied COMP still saves
-        through the manager's explicit Save (SaveTDN allow_empty=True).
-
-        Polarity on doubt (review): a MISSING file allows the save
-        (nothing to destroy), but an existing file that cannot be
-        PARSED refuses it -- a truncated or corrupt .tdn is the case
-        where the bytes are most valuable (a human can still hand-
-        repair them) and precisely when an empty overwrite must not
-        land. Only annotate children are discounted from the emptiness
-        test (live-verified: .children INCLUDES annotates, and an
-        annotations-only live COMP over a populated file is still the
-        emptied-shell shape). Refusals are warned ONCE per file state
-        via a (path, mtime, size) cache so a stable refusal cannot spam
-        the log or re-parse every sweep.
+        Empty COMP over a non-empty on-disk .tdn = transiently-emptied
+        shell about to destroy the only good copy (field loss,
+        2026-08-12). Automatic writers refuse loudly; the manager's
+        explicit Save still passes allow_empty=True. Polarity on doubt:
+        missing file allows (nothing to destroy), unparseable file
+        refuses (hand-repairable bytes are most valuable exactly then).
+        Annotate children don't count as content. Warned once per
+        (path, mtime, size).
         """
         try:
             if any(c.type != 'annotate' for c in oper.children):
@@ -4367,18 +4315,11 @@ class EmbodyExt:
     _COARSE_SWEEP_CAP = 60   # roots examined in one coarse sweep (bounded work)
 
     def NoteCoarseCheckpointTouch(self) -> None:
-        """Arm a checkpoint after an op that could have touched ANY tracked root.
+        """Arm a checkpoint after an op that could touch ANY tracked root.
 
-        `execute_python` runs arbitrary code, so Envoy cannot hand us a path the
-        way the other mutating tools do -- which is why it was left out of the
-        checkpoint chokepoint entirely. The cost was silent and total: a session
-        doing its work through execute_python (most non-trivial agent work)
-        checkpointed nothing and rotated no .tdn_backup, while the status readout
-        kept displaying the last real checkpoint as though nothing were wrong
-        (measured 2026-08-09: 2h46m stale, still reading 'Saved 14:53:05 UTC').
-
-        This ARMS only. Checkpointing every tracked root here would write and
-        churn every .tdn on every agent call; instead the settle-drain discovers
+        execute_python names no path, so it used to arm nothing -- whole
+        agent sessions checkpointed nothing while the readout looked fine
+        (2h46m stale, 2026-08-09). ARMS only; the settle-drain discovers
         which roots actually changed, once, after the burst.
         """
         try:
@@ -4553,27 +4494,14 @@ class EmbodyExt:
                 pass
 
     def SeedAutosaveStatus(self) -> str:
-        """Show WHEN the work was last written, instead of resting at 'Idle'.
+        """Seed the last-write readout from the table instead of 'Idle'.
 
-        'Idle' is what the release scrub leaves in the shipped .tox so a
-        session's timestamp cannot leak into git (_TRANSIENT_STATUS_PARS).
-        It is the correct thing to SHIP and the wrong thing to display: a
-        freshly opened project then reads 'Idle' until its first
-        checkpoint, which on a project that is not being edited is
-        forever -- and the one question this readout answers is how long
-        ago the work reached disk.
-
-        The externalizations table already records that, per row, so the
-        newest tracked write IS the answer and needs no new bookkeeping.
-        Only ever seeds a resting value: a real checkpoint this session
-        outranks it, and Disabled/Bypassed/failed states are left alone.
-
-        THE DATE IS KEPT, deliberately. The live auto-save writes a bare
-        clock because the save it reports happened seconds ago; these
-        stamps are routinely weeks old, and folding one into a 24-hour
-        clock is how a seven-week-old project reported '1h ago' -- a
-        fabricated recency in the one readout whose entire job is
-        truthful staleness. startup_progress.age_seconds reads the date.
+        'Idle' is right to SHIP (release scrub) and wrong to display --
+        the readout's one job is how long ago work reached disk, and the
+        table's newest tracked write is the answer. Seeds only a resting
+        value (a real checkpoint outranks it; Disabled/Bypassed/failed
+        left alone). Date KEPT deliberately: folding a weeks-old stamp
+        into a 24h clock reported '1h ago' on a seven-week-old project.
         """
         try:
             p = getattr(self.my.par, 'Autosavestatus', None)
@@ -4739,33 +4667,17 @@ class EmbodyExt:
             self.Log(f'_purgeExternalizationTracking failed for {op_path}: {e}',
                      'DEBUG')
 
-    # A-50 (Convoy plan 5.1): custom parameters whose VALUES are runtime
-    # status readouts, never authored state. ONE declarative source, TWO
-    # consumers: TDN export writes the RESTING value in place of the
-    # session value (the v6.0.169 release commit itself baked
-    # 'value: Testing' into git -- an autosave checkpoint caught the
-    # Status par mid-test-run between diff-read and staging), and
-    # ExportPortableTox resets them around the save so released .tox
-    # files never carry one session's status text. Keyed by the owning
-    # comp's GLOBAL OP SHORTCUT so a user parameter that merely shares a
-    # name ('Status' on their own comp) is never touched.
-    #
-    # Values are per-par RESTING states, NEVER par.default: Status's
-    # default is '' -- a state the enable state-machine cannot leave
-    # (UpdateHandler gates on == 'Disabled', the toolbar on ==
-    # 'Enabled'), so shipping it would brick the enable path on cached
-    # installs (Opus panel blocker). The restings mirror the ones
-    # execute.py already applies on project open (Disabled/Idle/
-    # Disabled), keeping the two mechanisms in agreement. A value of
-    # None means "reset to par defaults" and is the only valid entry for
-    # a registered SEQUENCE name (blocks reset to defaults; block COUNT
-    # preserved, never numBlocks=0). Names must be single parameters --
-    # tuplet base names are skipped by every consumer.
-    #
-    # Contract: the registry is the LAST word in every export mode. A
-    # pre_release hook cannot ship a session value for a registered par
-    # -- in live mode the scrub runs after the hook, and in copy mode
-    # the export core scrubs the staged candidate the same way.
+    # A-50: custom pars whose VALUES are runtime status, never authored
+    # state. One registry, two consumers: TDN export writes the RESTING
+    # value ('value: Testing' once shipped in a release commit) and
+    # ExportPortableTox resets them around the save. Keyed by global OP
+    # shortcut so user pars sharing a name are untouched.
+    # RESTING, never par.default: Status's default '' bricks the enable
+    # state-machine on cached installs. None = reset to par defaults,
+    # the only valid entry for a SEQUENCE name (block count preserved).
+    # Single pars only (tuplet base names skipped by every consumer).
+    # The registry is the LAST word in every export mode -- a
+    # pre_release hook cannot ship a session value for a registered par.
     _TRANSIENT_STATUS_PARS = {
         'Embody': {
             'Status': 'Disabled',        # 'Testing'/'Enabled' at runtime
@@ -4800,31 +4712,16 @@ class EmbodyExt:
             # while preserving the block count, so another machine's names,
             # addresses and presence never bake into a TDN or release tox.
             'Convoynodes': None,
-            # A DEVELOPER'S DIALOG PREFERENCE, and it shipped. v6.0.246 was
-            # published with this On (verified 2026-08-16 by loading the
-            # released .tox: Showbuiltinpars True against a False default),
-            # so every download presented TD's Layout/Panel/Look/Common
-            # pages instead of Embody's filtered POPX dialog -- because
-            # whoever cut the release happened to be inspecting built-in
-            # pars at save time. It is not in the config.json prefs
-            # whitelist, so the live value rides in the .toe and the
-            # scrub/restore cycle hands it straight back to the session:
-            # registering it costs the developer nothing and closes the
-            # leak permanently. Reset to its default (Off).
+            # A dev dialog preference that SHIPPED On in v6.0.246 (every
+            # download saw TD's built-in pages instead of the POPX
+            # filter). Not in the config.json whitelist, so the scrub
+            # costs the developer nothing and closes the leak. Reset Off.
             'Showbuiltinpars': None,
-            # A DEVELOPER'S PREFERENCE, and it shipped -- the same class
-            # as Showbuiltinpars, caught from the other direction.
-            # v6.0.251 was published with Clipboardautopaste Off against
-            # a True default (verified 2026-08-18 by toeexpand of the
-            # released .tox: 'Clipboardautopaste ... off' in Embody.parm)
-            # because the dev machine had the watcher quieted at bake
-            # time. Every fresh install therefore shipped with the
-            # collection-page "Embody it" copy flow dead: the envelope
-            # landed on the OS clipboard and the watcher never prompted
-            # (field report, macOS/Chrome 2026-08-18). Reset to its
-            # default (On); the user's own choice is not lost -- the par
-            # is in the _PERSISTED_PARAMS whitelist, so config.json
-            # restores a deliberate Off across sessions and upgrades.
+            # Same leak class, opposite direction: v6.0.251 shipped
+            # Clipboardautopaste Off (dev machine quieted at bake time),
+            # killing the "Embody it" copy flow on fresh installs
+            # (2026-08-18). Reset On; a deliberate user Off persists via
+            # the _PERSISTED_PARAMS whitelist.
             'Clipboardautopaste': None,
         },
     }
@@ -4983,71 +4880,36 @@ class EmbodyExt:
                           save_path: Optional[str] = None,
                           run_hooks: bool = True,
                           hook_mode: str = 'copy') -> bool:
-        """Export a self-contained .tox with all external file references
-        and Embody tags stripped.
+        """Export a self-contained .tox: file refs + Embody tags stripped,
+        saved, then restored. Warns on non-portable absolute paths.
 
-        Strips file, syncfile, and externaltox parameters plus all Embody
-        tags from the target and its descendants, saves the .tox, then
-        restores everything. The resulting .tox has no external file
-        dependencies and no Embody metadata.
-
-        Warns (but does not strip) about non-system absolute paths that won't
-        be portable to other machines.
-
-        Release hooks (issue #74): Text DATs named 'pre_release' and
-        'post_release' that are DIRECT children of the target automate
-        the export.
-
-        Default mode ('copy', the model used by AlphaMoonbase's Private
-        Investigator release manager): the target is copied into the
-        cooking-disabled /sys/quiet staging area; pre_release runs ON THE
-        COPY (me = the copy's hook DAT, parent() = the staged copy), so
-        it shapes the artifact -- reset pars, delete scratch ops --
-        without ever touching the live component; both hook DATs are
-        then deleted from the copy, so hook code NEVER ships inside the
-        .tox; after the save, post_release runs on the ORIGINAL (upload,
-        notify -- parent() = the live comp). Hooks receive the resolved
-        save path as args[0]; post_release also receives the success
-        flag as args[1]. A pre_release raise aborts the export and KEEPS
-        the staged copy (renamed *_release_failed under /sys/quiet) for
-        inspection; post_release then does not run. Once pre_release
-        completes, post_release is guaranteed to run -- even when the
-        save failed.
-
-        The staged copy is neutralized before hooks run: Embody tags
-        removed, file-sync disabled (no write-through to source files).
-        Extensions do NOT initialize on the copy and par callbacks do
-        not fire there (cooking off) -- prep needing extension logic
-        must use hook_mode='live'.
-
-        hook_mode='live' restores in-place semantics: hooks run on the
-        live target around the strip/save/restore cycle, their mutations
-        persist (set in pre, reset in post), and hook DATs ship inside
-        the artifact (dormant). Exports whose target IS the Embody COMP
-        always use live semantics -- a live Embody comp must never be
-        copied (a second Envoy would initialize) -- and hooks on a
-        container that CONTAINS the Embody COMP are skipped with a
-        warning in copy mode. run_hooks=False skips hooks entirely AND
-        ships any hook DATs as-is (machinery flag; the self-updater's
-        backup uses it). An unknown hook_mode aborts with an ERROR and
-        returns False.
+        Release hooks (issue #74): direct-child Text DATs 'pre_release' /
+        'post_release'. Default hook_mode='copy' (Private Investigator
+        model): target copied into cooking-disabled /sys/quiet,
+        pre_release runs ON THE COPY (shapes the artifact, never the
+        live comp), hook DATs deleted from the copy (never ship), then
+        post_release runs on the ORIGINAL. Hooks get args[0]=save path;
+        post_release args[1]=success. A pre_release raise aborts and
+        keeps the copy as *_release_failed; once pre_release completes,
+        post_release always runs, even on a failed save. The copy is
+        neutralized first (tags removed, file-sync off; extensions do
+        NOT init there -- use hook_mode='live' for extension logic).
+        'live' = hooks on the live target, mutations persist, hook DATs
+        ship dormant; forced for targets that ARE the Embody COMP (a
+        copied live Embody would boot a second Envoy); hooks on a
+        container CONTAINING Embody are skipped in copy mode.
+        run_hooks=False skips hooks and ships them as-is (self-updater
+        backup).
 
         Args:
-            target: The COMP to export. Defaults to the Embody COMP itself.
-            save_path: Absolute path for the output .tox. If None, uses the
-                       default release path (release/{name}-v{version}.tox).
-            run_hooks: Run pre_release/post_release hook DATs if present.
-                       Suppressed automatically for nested exports made
-                       from inside a hook.
-            hook_mode: 'copy' (default) stages a throwaway copy for
-                       pre_release and strips hook DATs from the
-                       artifact; 'live' runs hooks on the live target
-                       (mutations persist).
+            target: COMP to export (default: the Embody COMP).
+            save_path: Output .tox path (default release/{name}-v{ver}.tox).
+            run_hooks: Run hook DATs (auto-suppressed for nested exports).
+            hook_mode: 'copy' (default) | 'live'.
 
         Returns:
-            True if the .tox was saved successfully (and no hook failed),
-            False otherwise. When post_release fails after a successful
-            save, the .tox DOES exist on disk but False is returned.
+            True when saved and no hook failed. (post_release failing
+            after a good save returns False with the .tox on disk.)
         """
         if target is None:
             target = self.my

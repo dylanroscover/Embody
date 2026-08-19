@@ -299,22 +299,12 @@ _EFFECTS_INTERNAL_ROOTS = ('/ui', '/sys')  # TD's own UI/system subtrees
 
 
 def _new_error_entries(previous_paths, current_entries, cap):
-    """Diff a fresh error/warning list against the previous snapshot.
+    """Diff fresh errors/warnings against the previous snapshot.
 
-    `previous_paths` is the set of op paths that were already erroring;
-    `current_entries` is get_op_errors-shaped ({'nodePath', 'message'} dicts).
-    Returns (listed, total_new, current_paths) where `listed` is capped at
-    `cap`. `previous_paths` of None means "no baseline yet" -- nothing is new
-    on a session's first write, only the baseline is established.
-
-    Two classes of entry are excluded up front (both observed live on the
-    footer's first field day, 2026-07-29): TD's OWN subtrees (/ui, /sys) --
-    a legacy dialog's cook-loop warning is not something THIS write broke --
-    and pseudo-paths that are really the continuation lines of a multi-line
-    TD warning string ('Parameter: From Range'), which are not op paths at
-    all.
-
-    Pure and TD-free so the diff can be unit-tested with synthetic sets.
+    Returns (listed, total_new, current_paths); previous_paths None =
+    first write, baseline only. Excludes TD's own subtrees (/ui, /sys)
+    and pseudo-paths from multi-line warning strings (both seen on the
+    footer's first field day, 2026-07-29). Pure and TD-free.
     """
     current_paths = set()
     fresh = []
@@ -4618,35 +4608,15 @@ class EnvoyExt:
     def _forceCloseOldServer(self) -> bool:
         """Force-close a stuck old uvicorn server so the port is freed.
 
-        When an old worker thread is stuck (e.g. waiting on a test Event or
-        an HTTP connection), the normal shutdown_event signal may not be enough
-        because uvicorn's event loop is blocked. This method:
-        1. Signals ALL known shutdown events (in case one was orphaned)
-        2. Force-closes the uvicorn server's socket listeners
-        3. Unblocks any stuck test Event
-
-        Returns True ONLY when we actually closed a live uvicorn server
-        handle of ours (`sys._envoy_uvi_server` was set). Re-signaling
-        stale shutdown events for already-exited threads is housekeeping
-        and does NOT flip the return -- waiting on those is pointless.
-        The drain-wait in `_findAvailablePort` keys off this signal to
-        skip the 500ms sleep when the port holder is foreign/zombie.
-
-        CURRENT-GENERATION SAFETY (issue #57 follow-up, 2026-07-15 storm):
-        when rapid start chains overlap (restart backoff + watchdog revive),
-        the live handle -- and the registered shutdown event -- can belong to
-        the CURRENT generation's just-started, healthy worker. Signaling or
-        closing THAT one murders the newborn server and feeds a self-
-        sustaining restart loop. So the staleness determination runs FIRST,
-        and a current-generation live worker makes this a no-op.
-
-        Known trade: a WEDGED current-generation worker (hung but still
-        bound) cannot be force-closed by a manual Stop()+Start() -- the port
-        scan drifts to port+1 for that start. Accepted deliberately: never
-        risk killing a possibly-healthy newborn. The watchdog recovers the
-        stable port once the socket actually probes dead (its revive bumps
-        the generation BEFORE its deferred Start, making force-close
-        effective on that pass).
+        Signals all known shutdown events, force-closes our uvicorn
+        listeners, unblocks stuck test Events. True ONLY when a live
+        handle of OURS was closed (_findAvailablePort keys its drain-wait
+        off this). Staleness check runs FIRST: in a restart storm the
+        handle can belong to the CURRENT generation's healthy newborn,
+        and closing it feeds a self-sustaining loop (2026-07-15) -- so a
+        current-gen live worker makes this a no-op. Accepted trade: a
+        wedged current-gen worker drifts the port +1 until the watchdog's
+        revive (which bumps the generation first) recovers it.
         """
         old_server = getattr(sys, '_envoy_uvi_server', None)
         old_gen = getattr(sys, '_envoy_uvi_gen', 0)
@@ -4712,29 +4682,13 @@ class EnvoyExt:
     def _findAvailablePort(self, base_port: int, range_size: int = 10) -> 'int | None':
         """Find an available port in [base_port, base_port + range_size).
 
-        Checks a test-BIND, the envoy.json registry, and the recent
-        bind-failure blacklist so that two TD instances starting
-        near-simultaneously don't race on the same port.  A port is
-        considered taken if:
-          - We cannot bind it (some socket already holds it), OR
-          - Another instance is registered on it with a live PID, OR
-          - A server worker recently died failing to bind it.
-
-        The probe is a real bind(), NOT a connect(): a zombie TD process can
-        hold a port bound/LISTENING while its accept loop is dead, so
-        connects to it are REFUSED (the old connect probe reported "free")
-        yet uvicorn's bind still fails with WinError 10048 -- and the retry
-        loop re-picked the same poisoned port forever (observed 2026-07-23:
-        a windowless leftover TD instance camped port 9872). Binding probes
-        the exact operation uvicorn will perform, so a dead listener cannot
-        fool it -- and it is faster (no 1s connect timeout per busy port).
-
-        Tries the base port first (fast path for single-instance).  If busy,
-        attempts to force-close a stale server from the same TD process, then
-        scans the remaining range without force-close (those ports belong to
-        other instances).
-
-        Returns the first free port, or None if all are occupied.
+        Taken = cannot bind, OR registered to a live PID in envoy.json,
+        OR on the recent bind-failure blacklist. The probe is a real
+        bind(), never connect(): a zombie TD holds a port bound with a
+        dead accept loop -- connects REFUSED, bind still 10048 -- and the
+        connect probe re-picked that poisoned port forever (2026-07-23).
+        Base port first; if busy, force-close our own stale server, then
+        scan the range. Returns the port or None.
         """
         import socket
         import os as _os
@@ -5441,23 +5395,14 @@ class EnvoyExt:
     # === Liveness watchdog (pure Python run()-loop -- no operator, no timer) ===
 
     def _watchdogTick(self, gen: int = 0) -> None:
-        """Self-healing liveness loop, tied to THIS extension instance's lifetime.
+        """Self-healing liveness loop, one per extension instance.
 
-        Armed once per instance from __init__ (NOT from Start), so it survives a
-        project.save() / extension reinit whose post-reinit auto-start never
-        completes -- the failure that left Envoy down with no watchdog and no
-        recovery (the old server thread's exit callback suppresses itself once a
-        reinit has replaced the instance, and the new instance's Start can be
-        skipped or race the old port). It probes the real socket and revives
-        Envoy whenever it is enabled-but-down (a dropped-socket zombie, a
-        never-bound restart, or a suppressed reinit Start), so every connected
-        bridge reconnects on its own -- no manual toggle.
-
-        Lifecycle: ONE loop per EnvoyExt instance. It dies ONLY when a reinit
-        replaces the instance (the identity guard); the new instance's __init__
-        arms a fresh loop. It does NOT die on a server-generation bump (revive or
-        restart) or on a disable -- it keeps ticking idle while disabled so a
-        re-enable resumes self-healing without needing a reinit.
+        Armed from __init__ (not Start) so it survives a reinit whose
+        post-reinit auto-start never completes. Probes the real socket
+        and revives enabled-but-down Envoy; bridges reconnect on their
+        own. Dies ONLY when a reinit replaces the instance -- not on
+        generation bumps or disable (ticks idle so re-enable resumes
+        self-healing).
         """
         # Collapse the armed-tick storm from a save strip/restore (one tick is
         # armed per reinit, and the run() string re-resolves to the current
@@ -5487,21 +5432,12 @@ class EnvoyExt:
         try:
             enabled = bool(self.ownerComp.par.Envoyenable.eval())
             status = str(self.ownerComp.par.Envoystatus.eval())
-            # The SOCKET is the source of truth, never the internal _starting /
-            # _init_complete flags. A project.save() clears _init_complete and a
-            # reinit resets _starting, and keying off them is exactly what wedged a
-            # dead server forever -- the watchdog went idle and never revived.
-            # Only three idle cases: disabled, Perform Mode, or a one-time deps
-            # install (legit long, never interrupt). An explicit Start 'Error' is
-            # also left alone so a hard failure (e.g. broken venv) is not hammered
-            # every tick. Perform Mode is idle because _enterPerformMode Stop()s
-            # the server deliberately while LEAVING Envoyenable True (config.json
-            # integrity), so enabled-but-dead is the EXPECTED state during a show;
-            # without this gate the watchdog revived Envoy ~4-12s into every
-            # performance and clobbered the 'Perform Mode' status readout with
-            # 'Reviving (watchdog)...'. Gate on the live par (the same authority
-            # the thread-exit hooks use), NEVER the status string -- Stop() and
-            # the hooks overwrite status text.
+            # The SOCKET is the source of truth -- keying off _starting /
+            # _init_complete wedged a dead server forever. Idle cases:
+            # disabled, Perform Mode (enabled-but-dead is EXPECTED during
+            # a show; the watchdog once revived 4-12s into every
+            # performance), one-time deps install, explicit Start Error.
+            # Gate on the live par, never the status string.
             performing = self._performModeActive()
             installing = status.startswith('Installing')
             # 'Preparing' is the fast-path import gate warming the MCP Python
@@ -5608,22 +5544,15 @@ class EnvoyExt:
             return False
 
     def _reviveDeadServer(self, was_running: bool) -> None:
-        """Socket is dead while Envoy is enabled and no thread-exit callback fired.
+        """Socket dead while enabled, no thread-exit callback fired.
 
-        Tear the (possibly stuck) worker down and rebind after a short delay that
-        lets it release the socket -- so the runtime port stays stable on the
-        rebind instead of drifting to port+1, which is what left bridges stranded
-        on a refused port.
-
-        A project.save() strip/restore reinits this extension many times; each
-        reinit arms a watchdog tick, and ~4s later they ALL come due in the same
-        frame and each calls here -- the 18-21x "reviving server" spam plus an
-        equal pile of Start() schedules. Collapse them to ONE revive per short
-        frame cooldown: the same-frame storm fires once; a genuine later outage
-        (dead ticks are >=~8s apart) still revives normally. This runs in the
-        stable fire-frame (not mid-reinit), so the COMP store is reliable here
-        even though the per-reinit generation counter armed during the storm is
-        not -- which is why the dedup lives here and not only on the tick.
+        Tear down and rebind after a short delay (keeps the port stable
+        instead of drifting +1 and stranding bridges). A save reinit
+        storm arms many ticks that all come due in one frame (18-21x
+        revive spam) -- collapsed to ONE revive per frame cooldown; a
+        genuine outage (>=~8s between dead ticks) still revives. Dedup
+        lives here, in the stable fire-frame, because the per-reinit
+        generation counter is unreliable during the storm.
         """
         # Cooldown: collapse a same-frame storm of revive calls (multiple armed
         # watchdog ticks coming due together) into one. Uses time.monotonic() on

@@ -108,13 +108,9 @@ SKIP_PARAMS = {
 	'pageindex',  # UI state (visible parameter page tab), not config
 }
 
-# Embody-managed About page parameters -- excluded from TDN export
-# because they are reconstructed from externalizations.tsv at import time.
-# This trio is the metadata stamp Embody writes on EVERY externalized comp;
-# a page that is only the stamp carries no authored content. The Embody
-# COMP's own, larger About page is NOT dropped (its definitions and help
-# text belong in the diffable record) -- only its churning machine-written
-# values are omitted, via EmbodyExt._TDN_VALUE_OMIT_PARS (A-50).
+# Embody's About-page metadata stamp -- excluded from export, rebuilt from
+# externalizations.tsv at import. The Embody COMP's own larger About page
+# stays; only its churning values are omitted (_TDN_VALUE_OMIT_PARS, A-50).
 _EMBODY_ABOUT_PARS = {'Build', 'Date', 'Touchbuild'}
 
 # Built-in parameter styles to skip (actions, not state)
@@ -188,37 +184,16 @@ DEFAULT_NODE_SIZE = (200, 100)
 DEFAULT_COLOR = (0.545, 0.545, 0.545)
 COLOR_TOLERANCE = 0.01
 
-# Issue #86: Embot's LIVE parts are ephemeral annotateCOMPs named with this
-# prefix (envoy_viz._VIZ_BOT_PREFIX -- kept as a literal here so TDNExt takes no
-# dependency on the viz module DAT). They must never be captured by a .tdn
-# export, and both walks are what make that structural: the SYNC walk
-# (_exportChildren) and the ASYNC one (_collectAllPaths) each skip annotate ops
-# entirely, so every annotation reaches disk through _exportAnnotations and
-# nothing else -- which is where this filter lives. That covers SaveTDN, the
-# autosave checkpoint, ExportNetwork('/'), ExportNetworkAsync's project-wide
-# snapshot and the export_network MCP tool, including the one case botUnsafeNet
-# cannot see: a project-wide export from root that walks networks which are
-# individually safe to park in. (Until the async walk was fixed it collected
-# annotates as ordinary operators, so the project-wide snapshot -- the ONE
-# export that runs over networks Embot is free to stand in -- bypassed this
-# filter completely.)
-#
-# The carve-out is MANDATORY, not optional: the SHIPPED template
-# (Embody/embot_template) is a legitimate saved asset whose nine parts live in
-# Embody.tdn. Filtering it too would strip the asset from the file and force a
-# ~1s nine-annotateCOMP rebuild on every fresh open -- exactly what
-# envoy_viz.ensureTemplate exists to avoid.
-#
-# Cost: a USER annotation literally named envoy_bot_* outside the template is
-# omitted from .tdn export.
-#
-# SOURCE OF TRUTH: envoy_viz._VIZ_BOT_PREFIX and envoy_viz._VIZ_TEMPLATE_COMP.
-# These are mirrored literals, deliberately -- TDNExt must not import the viz
-# module DAT (Envoy is optional in a shipped Embody, and .tdn export must work
-# without it). Drift is SILENT: rename the prefix in envoy_viz and this filter
-# simply stops matching, so live bot parts start reaching .tdn again with no
-# error and no failing test. test_viz_bot_constants_match_the_tdn_exporter
-# asserts equality so the drift fails loudly instead.
+# Issue #86: Embot's live parts (annotateCOMPs with this prefix) must never
+# reach a .tdn. Both walks skip annotate ops, so every annotation goes
+# through _exportAnnotations -- where this filter lives, covering every
+# export path incl. the project-wide snapshot. Carve-out: the SHIPPED
+# embot_template is a real asset in Embody.tdn -- filtering it would force a
+# ~1s rebuild per fresh open. Cost: a user annotation named envoy_bot_*
+# outside the template is omitted.
+# Mirrored literals from envoy_viz (_VIZ_BOT_PREFIX/_VIZ_TEMPLATE_COMP) on
+# purpose: TDNExt must not import the viz DAT (Envoy is optional). Drift is
+# silent; test_viz_bot_constants_match_the_tdn_exporter fails loudly.
 VIZ_BOT_ANNOTATION_PREFIX = 'envoy_bot_'
 VIZ_BOT_TEMPLATE_COMP = 'embot_template'
 
@@ -237,14 +212,10 @@ SKIP_STORAGE_KEYS = {
 	# TDN dirty-detection baselines -- runtime-only, storage-backed so they
 	# survive extension reinit; must never serialize into a .tdn.
 	'_tdn_fingerprints',
-	# Embody-managed recovery/restore markers -- live on the COMP shell in
-	# the .toe, never inside the .tdn (serializing _tdn_rel_path would make
-	# every pasted/imported copy claim the original's file). A serialized
-	# _pending_tdn_restore would be worse still: restored by Phase 6a on
-	# every import, it would clear_first-import the child from the baked
-	# ref path forever -- a one-way ratchet that goes destructive the
-	# moment the ref goes stale or the .tdn is pasted into another project
-	# (review blocker, 2026-08-12).
+	# Recovery/restore markers live on the COMP shell, never in the .tdn:
+	# a serialized _tdn_rel_path makes every pasted copy claim the
+	# original's file; a serialized _pending_tdn_restore is a destructive
+	# one-way import ratchet (review blocker, 2026-08-12).
 	'_tdn_rel_path', '_pending_tox_restore', '_pending_tdn_restore',
 	# Save-window dialog guard. project.save() stores this True for the
 	# duration of the save, and the TDN strip/export runs INSIDE that window
@@ -277,13 +248,9 @@ SKIP_STORAGE_KEYS = {
 	# lets an orphaned completion poll detect it was superseded instead of
 	# filing the wrong run's summary. Session-transient by definition.
 	'_test_run_owner',
-	# Self-rescheduling-loop generation counters. Each is bumped on every
-	# extension reinit purely so a previous instance's pending run() tick
-	# retires itself -- they carry no meaning on disk, and because they
-	# change constantly they rewrote three lines of embody.tdn and
-	# Embody.tdn on EVERY export (measured 2026-07-27: _clip_watch_gen
-	# 884 -> 917 and _shortcut_rec_gen 503 -> 517 across one test run),
-	# producing pure diff churn in committed specimens.
+	# Loop generation counters (bumped per reinit so a prior instance's
+	# pending run() tick retires itself) -- meaningless on disk, and they
+	# rewrote committed .tdn lines on every export (pure diff churn).
 	'_watchdog_gen', '_clip_watch_gen', '_shortcut_rec_gen', '_convoy_gen',
 	# Transient UI/interaction state -- classified as runtime by
 	# EmbodyExt._STORAGE_SKIP_KEYS but previously absent here, so it
@@ -2516,29 +2483,18 @@ class TDNExt:
 					_SYSTEM_PATH_PREFIXES):
 				continue
 
-			# Annotations (annotateCOMP) are captured exclusively by the
-			# dedicated `annotations:` section via _exportAnnotations -- a
-			# compact title/text/box form. Serializing them here too would
-			# double-capture the same COMP and (because _exportCustomPars
-			# emits ALL of an annotate's custom pars, default or not) dump
-			# ~180 lines of Opviewer*/Body* noise per annotation for zero
-			# added fidelity. The import rebuilds them from `annotations:`
-			# (Phase 7a), so the op-list entry is pure dead weight.
+			# Annotations are captured only by the `annotations:` section
+			# (_exportAnnotations); an op-list entry would double-capture
+			# ~180 lines of default-par noise each. Import rebuilds from
+			# `annotations:` (Phase 7a).
 			if child.type == 'annotate':
 				continue
 
-			# Skip COMPs tagged for exclusion -- the whole subtree is
-			# invisible to TDN (no inline export, no tdn_ref). The owning
-			# application manages their lifecycle.
-			#
-			# Exclusion is honored ONLY for direct children (depth 0) of the
-			# exported boundary, because the strip/clear passes only preserve
-			# direct children. A nested excluded COMP (depth > 0) is NOT
-			# preserved by those passes, so if we also skipped it here the
-			# .tdn would omit it while strip destroyed it -- permanent data
-			# loss. Instead we serialize a nested excluded COMP as ordinary
-			# content (it round-trips and survives), and warn that the tag had
-			# no effect at this depth.
+			# Excluded COMPs are invisible to TDN -- but only at depth 0,
+			# where the strip/clear passes preserve them. A nested excluded
+			# COMP is NOT preserved, so skipping it here while strip
+			# destroys it = data loss; serialize it as normal content and
+			# warn that the tag had no effect at this depth.
 			if self._hasExcludeTag(child):
 				if depth == 0:
 					continue
@@ -2568,12 +2524,8 @@ class TDNExt:
 
 	def _exportSingleOp(self, target, options, depth, recurse=True):
 		"""Export a single operator to a dict."""
-		# Backstop: a COMP tagged for exclusion is invisible to TDN, but ONLY
-		# when it is a direct child of the boundary (depth 0) -- the strip/
-		# clear passes only preserve direct children, so a nested excluded
-		# COMP must be serialized as normal content or it is lost. This guards
-		# direct and async callers of the depth-0 case; _exportChildren
-		# already handles the depth>0 warning.
+		# Backstop for the depth-0 exclusion rule (see _exportChildren for
+		# why nested excluded COMPs serialize as normal content instead).
 		if depth == 0 and self._hasExcludeTag(target):
 			return None
 		data = {
@@ -2687,14 +2639,10 @@ class TDNExt:
 			handling = self._resolvePaletteHandling(target) if is_palette else None
 			if is_palette and handling == 'blackbox':
 				data['palette_clone'] = True
-				# For palette clones, the correct comparison baseline
-				# is the clone source's values, not p.default.
-				# _exportBuiltinParams uses p.default, which can differ
-				# from the clone source (e.g. buttontype: p.default is
-				# "momentary" but clone source is "toggledown"). This
-				# causes user-set values that match p.default to be
-				# silently dropped from the export, then lost on rebuild.
-				# Fix: re-check against clone source, add any diffs.
+				# Palette clones diff against the CLONE SOURCE's values,
+				# not p.default (they can differ, e.g. buttontype) --
+				# else user values matching p.default drop from export
+				# and are lost on rebuild.
 				clone_source_params = self._getCloneSourceDiffs(target)
 				if clone_source_params:
 					if 'parameters' not in data:
@@ -2897,17 +2845,10 @@ class TDNExt:
 	def _getCreationFlagDefaults(self, target):
 		"""Per-OPType creation values for the DEFAULT_FLAGS set.
 
-		TD's flag defaults vary by operator type: a fresh geometryCOMP has
-		render=True and display=True, a fresh cameraCOMP has display=True
-		(verified live 2026-07-03), while most families match the global
-		DEFAULT_FLAGS table. Comparing every op against DEFAULT_FLAGS made
-		"render off" on an object COMP look like the default -- it was
-		omitted from export and came back ON after a round-trip (hidden
-		scene objects reappearing in renders).
-
-		Probes one throwaway instance per OPType (same pattern and
-		workspace as _getCreationValueOnTheFly), cached for the extension
-		lifetime. Falls back to DEFAULT_FLAGS on any probe failure.
+		Flag defaults vary by type (geometryCOMP creates render/display
+		ON), so diffing against the global table dropped "render off"
+		through the round-trip. Probes one throwaway instance per OPType,
+		cached for the extension lifetime; falls back to DEFAULT_FLAGS.
 		"""
 		op_type = target.OPType
 		cached = self._flag_defaults_cache.get(op_type)
@@ -3035,31 +2976,18 @@ class TDNExt:
 	def _exportBuiltinSequences(self, target):
 		"""Export built-in parameter sequences with non-default block data.
 
-		Discovers sequences by ITERATING `target.seq` -- the same path the
-		importer uses (`_getSequenceByName`). Discovering them via
-		`target.pars()` + `p.isSequence` instead silently MISSES sequences
-		on an operator that has not cooked yet.
+		Discovers via ITERATING `target.seq` (the importer's path);
+		pars()+isSequence misses sequences on an uncooked POP (measured
+		2026-07-25, fresh linePOP -- dropped a populated sequence,
+		Moonshine v6.0.157).
 
-		Measured 2026-07-25 on TD 099.2025.33070, fresh linePOP:
-		    target.pars() + isSequence -> ['attr']   (misses 'pt' entirely)
-		    iterate target.seq         -> attr(1), pt(2)
-		After a cook, both paths agree. TDNExt already documents this
-		accessor as unreliable on POPs and hardened the LOOKUP path for it
-		(see _getSequenceByName); the DISCOVERY path had the same flaw and
-		dropped a populated sequence from the .tdn (Moonshine v6.0.157).
+		ORDERING CONTRACT: enumerating target.seq MATERIALIZES the block
+		pars -- list(target.seq) must run before the pars()-based
+		grouping or the sequence is found empty (guarded by
+		test_exporter_finds_sequences_on_an_untouched_uncooked_pop).
 
-		ORDERING CONTRACT -- load-bearing, do not reorder: enumerating
-		target.seq MATERIALIZES the block parameters. Only after that do
-		'pt', 'pt0posx', ... appear in target.pars() at all. Since
-		_exportSequenceBlocks still groups block pars from target.pars(),
-		the list(target.seq) below must run BEFORE it, or the sequence is
-		discovered with no values to fill it.
-		test_tdn_roundtrip_invariant.test_exporter_finds_sequences_on_an_untouched_uncooked_pop
-		guards this by calling the exporter as the first touch on a fresh POP.
-
-		Returns dict of {seq_name: [block_data, ...]} or empty dict.
-		Only includes sequences where numBlocks differs from default OR
-		any block parameter has a non-default value.
+		Returns {seq_name: [block_data, ...]}; only sequences with a
+		non-default numBlocks or block value.
 		"""
 		sequences = {}
 		seen = set()
@@ -3204,16 +3132,11 @@ class TDNExt:
 		if not hasattr(target, 'customPages'):
 			return {}
 
-		# Runtime-status scrub (A-50): registered {name: resting} for THIS
-		# comp plus the TDN-only value-omit names -- both scoped by the
-		# comp's global OP shortcut, so every user comp gets empty sets.
-		# Registered values are session state ('Testing', 'Saved <time>',
-		# 'Running on port N'), never authored config: the .tdn records the
-		# RESTING value instead (never par.default -- Status's default ''
-		# is a state the enable machinery cannot leave). Omit names are
-		# machine-written metadata whose value key is dropped while the
-		# definition ships. One registry, one lookup (the registries live
-		# on EmbodyExt; never cache the ext reference).
+		# Runtime-status scrub (A-50), scoped by global OP shortcut (user
+		# comps get empty sets). Registered pars record their RESTING
+		# value (never par.default -- Status's '' is unreachable); omit
+		# names drop the value key, definition ships. Registries live on
+		# EmbodyExt; never cache the ext reference.
 		try:
 			embody_ext = self.ownerComp.ext.Embody
 			transient = embody_ext._transientParNames(target)
@@ -3269,16 +3192,10 @@ class TDNExt:
 							par_def.pop('values', None)
 					par_name = par_def.get('name')
 					if par_name in transient or par_name in omit_names:
-						# Runtime status / machine-written metadata (A-50):
-						# the definition ships (style/label/help), the
-						# session's value does not. Registered status pars
-						# record their RESTING value; omit names drop the
-						# value key outright. Guards: the '='/'~' shorthand
-						# encodes expression/bind mode INTO the value key --
-						# scrubbing it would destroy the reference (the
-						# ExportPortableTox scrub refuses the same); tuplet
-						# 'values' lists are out of the registry's contract
-						# and are left untouched.
+						# A-50 scrub: definition ships, session value does
+						# not. Skip expression/bind values ('='/'~' encodes
+						# the mode INTO the value -- scrubbing destroys the
+						# reference) and tuplet 'values' lists.
 						existing = par_def.get('value')
 						is_ref = (isinstance(existing, str)
 						          and existing[:1] in ('=', '~'))
@@ -3387,15 +3304,9 @@ class TDNExt:
 		if first_par.help:
 			par_def['help'] = first_par.help
 
-		# A MOMENTARY PAR HAS NO VALUE WORTH KEEPING. A Pulse reads True for
-		# the instant it is firing, so an export that catches one in flight
-		# serializes `value: true` -- and the import side re-applies it, so a
-		# committed export can re-fire the pulse on every load. It has
-		# happened twice: v6.0.243 shipped a latched `Refresh` in embody.tdn
-		# and Embody/Embody.tdn (hand-scrubbed in e884000), and the same
-		# post-save refresh latched it again on the very next release export.
-		# Cleaning the file was never the fix; not writing it is. The import
-		# side already agrees ("Pulse has no value", _applyCustomParValues).
+		# Momentary pars never serialize a value: an export catching a
+		# Pulse in flight writes `value: true` and import re-fires it on
+		# every load (shipped twice, v6.0.243/244). Import side agrees.
 		if style in ('Pulse', 'Momentary'):
 			return par_def
 
@@ -3652,12 +3563,9 @@ class TDNExt:
 
 			result.append(data)
 
-		# The filter above cannot tell a live Embot part from a USER annotation
-		# that happens to carry the reserved prefix, and for the second the
-		# omission is data loss. One aggregated line per COMP per export (nine
-		# parts of a live bot are one message, not nine), in the same voice as
-		# execute.py's save-time purge warning -- a filter that drops user
-		# content silently is indistinguishable from a bug.
+		# Warn once per COMP per export: the filter can't tell a live Embot
+		# part from a user annotation with the reserved prefix, and silent
+		# dropping of user content reads as a bug.
 		if omitted_bot:
 			try:
 				self._log(
@@ -3906,26 +3814,13 @@ class TDNExt:
 		return restored
 
 	def _isDATEditable(self, dat_op):
-		"""Test whether a DAT's content is writable, WITHOUT mutating it.
+		"""Is this DAT's content writable? Non-mutating, per-instance.
 
-		Some auto-created companion DATs (e.g. glsl1_info, popto1) are
-		read-only -- TD auto-generates their content and rejects writes
-		with "The operator is not editable". This check is per-instance
-		(not per-OPType) because read-only companions share OPType
-		'textDAT' with regular editable text DATs.
-
-		Uses TD's native `DAT.isEditable`. The previous write-probe
-		(`dat.text = dat.text`) CORRUPTED live table DATs: a table's
-		`.text` is its tab/newline-delimited flattening, which cannot
-		represent cells containing embedded newlines or tabs, so writing
-		it back destroyed those characters in the live network on every
-		export (verified 2026-07-03). isEditable matches the old probe's
-		semantics exactly -- True for locked DATs (content still exports),
-		False for wired and auto-generated DATs -- with zero side effects.
-
-		Fail-open on any error: the import side already downgrades
-		"not editable" write failures gracefully, while returning False
-		here would silently drop user content from the export.
+		Uses DAT.isEditable -- the old write-probe (dat.text = dat.text)
+		corrupted live table DATs holding embedded tabs/newlines on every
+		export (2026-07-03). True for locked DATs (content still
+		exports), False for wired/auto-generated. Fail-open: False here
+		silently drops user content; import downgrades gracefully.
 		"""
 		try:
 			return bool(dat_op.isEditable)
@@ -4122,18 +4017,11 @@ class TDNExt:
 					f'Skipping children of {new_op.path} -- '
 					f'managed by {tdn_ref}', 'DEBUG')
 			elif tox_ref and new_op.isCOMP:
-				# This COMP's contents come from a separate .tox file.
-				# Shell created here; the .tox load happens via
-				# RestoreTOXComps (frame 45 on project open) or the
-				# externalizations-table reconciliation pass after
-				# import. Setting `externaltox` + calling loadTox here
-				# is intentionally NOT done: doing so during a parent
-				# import would conflict with RestoreTOXComps\' own pass
-				# at frame 45 (it loads the .tox and sets externaltox),
-				# and TDN reconstruction (frame 60) runs AFTER that --
-				# so the .tox would be loaded, then wiped by
-				# clear_first=True. Instead we mark the shell with
-				# storage so a post-import pass can re-trigger restore.
+				# Contents come from a separate .tox: shell only here,
+				# marked in storage for the post-import restore pass.
+				# Never loadTox inline -- it races RestoreTOXComps
+				# (frame 45) and reconstruction (frame 60) would wipe
+				# it via clear_first anyway.
 				try:
 					new_op.store('_pending_tox_restore', tox_ref)
 				except Exception:
@@ -5216,32 +5104,14 @@ class TDNExt:
 						  restore_file_links: bool = True) -> list:
 		"""Phase 8.6: Fill empty shells created from tdn_ref entries.
 
-		The TDN counterpart of _restoreTOXShells. _createOps marks any
-		COMP it built from a `tdn_ref` entry with a
-		`_pending_tdn_restore` storage key holding the relative .tdn
-		path. This pass walks `dest`'s subtree and imports each marked
-		shell from its own file (clear_first on an empty shell clears
-		nothing), which re-enters ImportNetwork and so recurses
-		naturally for deeper nesting.
-
-		`seen` is an ANCESTOR CHAIN, not a global visited set: the key
-		is added before the child import and discarded after, so a true
-		ref cycle (A.tdn -> B.tdn -> A.tdn) is refused while two
-		SIBLING shells legitimately pointing at the same file both fill
-		(review finding: a visited set punished the duplicated-ref
-		shape that duplicate detection exists to surface, leaving the
-		second copy permanently empty with a misdiagnosis).
-
-		`restore_file_links` is the CALLER's flag, passed through --
-		the recursion must not escalate a capability the original
-		import declined (review finding).
-
-		With restore=False the markers are only CLEARED: the caller's
-		own loop (startup reconstruction, the post-save restore)
-		imports every tracked TDN COMP itself in depth order, and stale
-		storage must not leak into later imports.
-
-		Returns the list of restored shell paths.
+		TDN counterpart of _restoreTOXShells: walks dest's subtree,
+		imports each _pending_tdn_restore shell from its own file,
+		recursing via ImportNetwork. `seen` is an ANCESTOR CHAIN, not a
+		visited set: refuses true ref cycles while sibling shells
+		pointing at the same file both fill. restore_file_links passes
+		through unescalated. With restore=False only the markers are
+		cleared (the caller's own loop imports every tracked COMP).
+		Returns restored shell paths.
 		"""
 		embody = self.ownerComp.ext.Embody
 		restored = []
@@ -5327,18 +5197,11 @@ class TDNExt:
 			if child.path in SYSTEM_PATHS or child.path.startswith(
 					_SYSTEM_PATH_PREFIXES):
 				continue
-			# Annotations are captured exclusively by the `annotations:` section
-			# (_onExportRefresh calls _exportAnnotations for the root and every
-			# collected COMP), exactly as the sync walk reasons in
-			# _exportChildren -- one seam per walk, so the policy is not
-			# duplicated into _exportSingleOp. Collecting them as ordinary
-			# operators double-captured each annotation as ~180 lines of default
-			# Opviewer*/Body* pars, and -- the reason this is a correctness bug
-			# and not just noise -- routed Embot's live parts AROUND the bot
-			# filter, which lives in _exportAnnotations (see
-			# VIZ_BOT_ANNOTATION_PREFIX). The shipped template's parts still
-			# export: its COMP is still collected, and the carve-out that keeps
-			# them is by parent name.
+			# Annotations go through _exportAnnotations only (same seam as
+			# the sync walk): collecting them as ordinary ops double-
+			# captured each one AND routed Embot's live parts around the
+			# bot filter. The shipped template still exports (carve-out is
+			# by parent name).
 			if child.type == 'annotate':
 				continue
 			# Skip excluded COMPs and their whole subtree -- invisible to TDN.
@@ -5498,22 +5361,13 @@ class TDNExt:
 		return resolved
 
 	def _restrictToTrackedTDN(self, files: set, resolve_cache=None) -> set:
-		"""Restrict stale-cleanup deletion candidates to files Embody tracks.
+		"""Restrict stale-cleanup deletion candidates to tracked files.
 
-		The stale sweep previously treated EVERY pre-existing .tdn under
-		the scan folder as a deletion candidate; anything not just
-		re-written and not in cleanup_protected was unlinked. For a
-		whole-project ('/') export that deleted files Embody never owned
-		(manual snapshots, downloaded specimens awaiting import), and for
-		sub-COMP exports it overrode an explicit "Keep Files" continuity
-		decision (an untracked-but-kept file inside the export subtree).
-
-		A file Embody never tracked is never Embody's to delete: deletion
-		candidates are the intersection with the externalizations table's
-		.tdn paths. Callers intersect BEFORE the write/track step, so a
-		row whose path is about to change still contributes its OLD file
-		as a legitimate candidate. Untracked orphans are left on disk
-		(clutter over data loss); recovery is tsv-driven and ignores them.
+		A file Embody never tracked is never Embody's to delete (the old
+		sweep unlinked manual snapshots and Keep-Files survivors).
+		Candidates = intersection with the table's .tdn paths, taken
+		BEFORE the write/track step so a moving row still contributes its
+		OLD file. Untracked orphans stay (clutter over data loss).
 		"""
 		if not files:
 			return set()
@@ -5556,13 +5410,9 @@ class TDNExt:
 		if root_path == '/':
 			return {str(p) for p in base.rglob('*.tdn')}
 
-		# Scope the SCAN, not merely its result. A sub-COMP's .tdn files can
-		# only ever be `<prefix>.tdn` or live under `<prefix>/`, so rglobbing
-		# the WHOLE project folder and filtering afterwards read the entire
-		# tree on every TDN save -- measured at 150-200ms across runs to
-		# discover 1 relevant file, the single dominant cost of saving an empty
-		# COMP. Identical result set, a fraction of the I/O. Note root '/' still
-		# needs the full scan, so whole-project exports gain nothing here.
+		# Scope the SCAN, not just its result: a sub-COMP's files are only
+		# <prefix>.tdn or under <prefix>/, and rglobbing the whole project
+		# cost 150-200ms per save to find 1 file. Root '/' still full-scans.
 		prefix = root_path.lstrip('/')
 		scoped = set()
 		own = base / f'{prefix}.tdn'
@@ -6032,21 +5882,13 @@ class TDNExt:
 		return tdn_tag in target.tags
 
 	def _hasExcludeTag(self, target):
-		"""Check if a COMP is tagged to be excluded from the TDN system.
+		"""Is this COMP tagged for exclusion from the TDN system?
 
-		An excluded COMP (and its whole subtree) is invisible to TDN:
-		never exported, never written to disk, never stripped on save,
-		never destroyed or recreated by reconstruction. The owning
-		application is solely responsible for its lifecycle. Annotation
-		COMPs are never eligible -- their lifecycle is TDN's, not the app's.
-
-		Exclusion is honored only when the tagged COMP is a DIRECT CHILD of
-		a TDN boundary (the exported/stripped root). The strip and clear
-		passes only preserve direct children, so a COMP tagged for exclusion
-		but nested below a non-excluded intermediate cannot be preserved --
-		it is serialized as normal content instead (with a warning) so it
-		round-trips rather than being lost. To exclude such a COMP, tag the
-		intervening COMP(s) or make it a direct child of the boundary.
+		Excluded = invisible to TDN (never exported, stripped, or
+		reconstructed); the owning app manages its lifecycle. Annotation
+		COMPs are never eligible. Honored only for DIRECT CHILDREN of a
+		TDN boundary -- deeper tags serialize as normal content with a
+		warning (the strip/clear passes only preserve direct children).
 		"""
 		if not target.isCOMP or target.type == 'annotate':
 			return False
@@ -6678,20 +6520,12 @@ class TDNExt:
 		return str(output_file)
 
 	def _trackTDNExport(self, root_path, file_path, build_num=None, touch_build=None):
-		"""Add/update a TDN entry in the externalizations table.
+		"""Add/update a TDN row in the externalizations table.
 
-		Enrollment is deliberate, not a side effect: a NEW row is appended
-		only for COMPs carrying the TDN tag (plus the whole-project root
-		'/', which cannot carry tags and is excluded from strip/reconstruct
-		by _getTDNStrategyComps anyway). Previously ANY ad-hoc file export
-		inside the project folder appended a strategy='tdn' row, silently
-		subscribing an untagged COMP to the full save-strip/reconstruction
-		lifecycle. Updates to EXISTING rows are always applied.
-
-		Tracked COMPs also get a `_tdn_rel_path` storage pointer stamped on
-		the COMP itself -- a redundant recovery breadcrumb that survives in
-		the .toe shell even if the externalizations table is lost (see
-		EmbodyExt.RecoverOrphanShells).
+		NEW rows only for TDN-tagged COMPs (plus root '/') -- ad-hoc file
+		exports must not subscribe untagged COMPs to the strip/reconstruct
+		lifecycle. Existing rows always update. Also stamps _tdn_rel_path
+		on the COMP as a recovery breadcrumb (RecoverOrphanShells).
 		"""
 		try:
 			table = self.ownerComp.ext.Embody.Externalizations
@@ -7042,13 +6876,10 @@ class TDNExt:
 			return {'ok': False, 'reason': 'export_failed', 'detail': (export or {}).get('error')}
 		env = wrap_tdn(export.get('tdn'), source='embody', slug=comp.name)
 		ui.clipboard = to_clipboard_str(env)
-		# Outbound copy: seed the clipboard watcher's "already seen" signature with
-		# what we just wrote, so it does NOT turn around and offer to paste our own
-		# export back in -- the user copied this to share/export (outbound), not to
-		# re-import it (inbound). _clipboardWatchPoll computes sig = (len(raw),
-		# hash(raw)) from ui.clipboard; re-read it here so the sig matches exactly.
-		# An inbound TDN (web "embody it", a foreign envelope) is a different string
-		# -> a different sig -> still prompts, so inbound paste is unaffected.
+		# Seed the clipboard watcher's seen-signature with what we just
+		# wrote so it doesn't offer to paste our own outbound copy back.
+		# Re-read ui.clipboard so the sig matches exactly; inbound TDNs
+		# are different strings and still prompt.
 		try:
 			raw = ui.clipboard or ''
 			self._clip_last_sig = (len(raw), hash(raw))
