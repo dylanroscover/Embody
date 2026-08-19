@@ -1150,20 +1150,45 @@ class ConvoyExt:
         except Exception:
             return False
 
-    @staticmethod
-    def _savedToe():
-        """The .toe on disk for this project, or None if it was never saved.
+    def _savedToe(self):
+        """This project's .toe path, or None if it was never saved.
 
-        Checks the invariant directly (a file at project.folder /
-        project.name) rather than project.modified / project.dirty -- both
-        proxies have failed here in opposite directions, which is why
-        _wizardRecoveryPoint and RunDestructiveTests check the file too.
+        Saved-ness is decided by EmbodyExt (_projectSavedOnDisk), the single
+        authority: TD's 'NewProject[.N].toe' placeholder name means never
+        saved, anything else means the user saved it somewhere. NOT by
+        os.path.isfile(project.folder / project.name) -- that literal path is
+        routinely absent on a perfectly saved project, because TD reports the
+        NEXT incremental name after a save (Control.35.toe on disk,
+        project.name Control.36.toe). That check refused to enable Convoy on
+        a long-saved production project (field-reported 2026-08-19), and it
+        is not project.modified / project.dirty either -- both of those
+        proxies have failed here in opposite directions.
+
+        Returns the resolved file when one is reachable (used for the node's
+        display name), else the nominal path; None only when unsaved.
         """
+        embody = None
         try:
-            path = os.path.join(project.folder, project.name)
-            return path if os.path.isfile(path) else None
+            embody = self._embody.ext.Embody
+        except Exception:
+            embody = None
+        try:
+            nominal = os.path.join(str(project.folder), str(project.name))
+        except Exception:
+            nominal = ''
+        if embody is None:
+            # No extension to ask -- fall back to the file itself.
+            return nominal if nominal and os.path.isfile(nominal) else None
+        try:
+            if not embody._projectSavedOnDisk():
+                return None
         except Exception:
             return None
+        try:
+            resolved = embody._resolveProjectToe()
+        except Exception:
+            resolved = None
+        return resolved or nominal or None
 
     def _readConvoyId(self):
         """This project's convoy id from .embody/project.json, or ''."""
@@ -1852,10 +1877,14 @@ class ConvoyExt:
                 return
         except Exception:
             return
-        if not self._savedToe():
+        saved_toe = self._savedToe()
+        if not saved_toe:
             return
+        # From the RESOLVED file, not project.name -- after an incremental
+        # save project.name is already the next name in the series.
         try:
-            toe_stem = str(project.name or '').rsplit('.', 1)[0] or 'Untitled'
+            toe_stem = os.path.splitext(
+                os.path.basename(str(saved_toe)))[0] or 'Untitled'
         except Exception:
             toe_stem = 'Untitled'
         try:

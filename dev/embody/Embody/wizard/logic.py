@@ -88,7 +88,17 @@ def _permHint():
 	return base
 def _projectSaved():
 	"""A Convoy node is identified by its project folder, so an unsaved
-	project cannot become one -- enabling would flip itself back off."""
+	project cannot become one -- enabling would flip itself back off.
+
+	One authority for saved-ness: EmbodyExt._projectSavedOnDisk (TD's
+	'NewProject[.N].toe' placeholder name = never saved). Testing for a file
+	at project.folder / project.name is WRONG -- TD reports the next
+	incremental name after a save, so that path is missing on projects that
+	have been saved for months."""
+	try:
+		return bool(op.Embody.ext.Embody._projectSavedOnDisk())
+	except Exception:
+		pass
 	try:
 		import os
 		return bool(project.name) and os.path.isfile(

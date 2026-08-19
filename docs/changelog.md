@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.0.253
+
+A project saved months ago could be called "never saved", which blocked Enable Convoy.
+
+- **Saved-ness is decided by the project's NAME, not by a file lookup**: the gate tested whether a file existed at `project.folder / project.name`, but TouchDesigner reports `project.name` as the NEXT name in an incremental series -- `Control.35.toe` on disk, `project.name` `Control.36.toe` -- so the file it looked for legitimately did not exist and Convoy refused to enable with "save the project first" (field-reported 2026-08-19). TD's `NewProject[.N].toe` placeholder now means never saved; any other name means saved. Convoy's gate and the setup wizard's save step delegate to that one authority instead of each running their own file check, and anything that needs the real `.toe` (node name, recovery point) resolves the newest file in the increment series. 11 new tests on both CI legs.
+
 ## v6.0.252
 
 Two macOS field reports from one fresh install: an environment setup that died decoding pip's output, and a copy button that "did nothing" because a dev-machine toggle shipped inside the release.
