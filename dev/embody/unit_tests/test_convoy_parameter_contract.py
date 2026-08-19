@@ -512,6 +512,39 @@ def test_baked_placeholder_on_a_still_unsaved_project_waits():
     assert par.val == "TEC-MBA.local / NewProject.1"
 
 
+def test_a_foreign_machines_stamp_for_this_project_is_healed():
+    """The fill is a constant, so it persists in the .toe and travels:
+    a .toe saved on TEC-A4D shows `TEC-A4D / Render.36` on every other
+    machine that opens it (field 2026-08-19). A foreign-host stamp for
+    THIS project's stem is an auto-stamp, not an override -- refill."""
+    for baked in ("TEC-A4D / Render.36",
+                  "TEC-A4D / Render",
+                  "OLD-NAME-OF-THIS-BOX / Render.12"):
+        ext, par = _name_ext(baked, saved="/work/Render.36.toe",
+                             project_name="Render.37.toe")
+        ext._ensureNodeName()
+        assert par.val == "TEC-MBA.local / Render.36", baked
+
+
+def test_a_foreign_stamp_for_a_DIFFERENT_project_is_kept():
+    """Only this project's stem identifies an auto-stamp; anything else
+    stays -- it may be a deliberate name."""
+    ext, par = _name_ext("TEC-A4D / OtherShow.5", saved="/work/Render.36.toe",
+                         project_name="Render.36.toe")
+    ext._ensureNodeName()
+    assert par.val == "TEC-A4D / OtherShow.5"
+
+
+def test_this_machines_own_current_stamp_is_left_alone():
+    """No churn: a correct own-host stamp is not rewritten even when the
+    increment advanced."""
+    ext, par = _name_ext("TEC-MBA.local / Render.35",
+                         saved="/work/Render.36.toe",
+                         project_name="Render.37.toe")
+    ext._ensureNodeName()
+    assert par.val == "TEC-MBA.local / Render.35"
+
+
 def test_user_override_is_never_clobbered():
     for value in ("My Booth Node",
                   "OTHER-HOST / NewProject.1",   # not THIS machine's stamp

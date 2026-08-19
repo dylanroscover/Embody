@@ -1,5 +1,12 @@
 # Changelog
 
+## v6.0.254
+
+A .toe saved on one machine showed that machine's name as the Convoy Node Name everywhere it was deployed.
+
+- **Foreign node-name stamps heal on open**: the automatic `hostname / toe-stem` fill is a constant parameter, so it persists inside the .toe and travels with it -- every machine that opened a deployed project showed the authoring machine's hostname (`TEC-A4D / Render.36`, field-reported 2026-08-19). A baked stamp whose host half is not this machine but whose project half matches this project is now recognized as a travelled auto-stamp and refilled with the local hostname; deliberate names match neither heal shape and are never touched. Embody-written exports were already scrubbed (v6.0.217) -- the project file itself was the leak. 3 new tests.
+- Also in this build: a comment pass across the main extensions (developer shorthand, ~980 lines of annotation fat removed) and a corrected `EmbodyExt` module header.
+
 ## v6.0.253
 
 A project saved months ago could be called "never saved", which blocked Enable Convoy.

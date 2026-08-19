@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.253-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.254-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-62-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -206,6 +206,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.254**: **A deployed .toe showed the authoring machine's hostname as its Convoy Node Name** -- the automatic `hostname / toe-stem` fill persists as a constant inside the .toe and travels with it; a baked stamp whose host half is another machine but whose project half matches this project now heals to the local hostname on open, while deliberate names are never touched (Embody-written exports were already scrubbed -- the project file itself was the carrier).
 - **6.0.253**: **A saved project could be told to "save the project first"** -- the save gate asked whether a file existed at `project.folder / project.name`, but TouchDesigner reports `project.name` as the NEXT name in an incremental series (`Control.35.toe` on disk, `project.name` `Control.36.toe`), so the lookup failed on projects that had been saved for months and Enable Convoy refused. Saved-ness now comes from the NAME -- TD's `NewProject[.N].toe` placeholder means never saved, anything else means saved -- with Convoy's gate and the wizard's save step delegating to that single authority, and the real `.toe` resolved from the increment series where a file is genuinely needed.
 - **6.0.252**: **A fresh macOS install hit two invisible walls** -- the Envoy venv build died decoding pip's output (GUI-launched macOS TD defaults to US-ASCII; every TD-side subprocess read is now forced UTF-8 and the pip/uv bootstrap runs with `PYTHONPATH`-class variables scrubbed, so the "Python 64-bit Module Path" preference can't contaminate the venv), and the collection "Embody it" copy flow never prompted because v6.0.251 shipped the dev machine's `Clipboardautopaste` toggle baked Off -- it now rests at its default in every export, persists per-user via config.json, and the fresh-install smoke asserts it. The embody.tools copy buttons are also Safari-safe now (ClipboardItem created inside the click gesture).
 - **6.0.251**: **Worker-side `run()` is now caught at write time** -- Derivative confirmed that calling TD's global `run()` from a worker thread silently corrupts TD state (it does not raise), so Envoy statically lints `execute_python` and DAT writes and rides a **THREADING WARNING** back on the response; the full codebase audit came back clean, Envoy's own worker threads stopped printing to the Textport, Convoy's sibling API enforces its main-thread contract, and the shipped rules teach the corrected failure model plus the masked-crash diagnosis recipe.

@@ -1748,17 +1748,13 @@ class ConvoyExt:
         return (value or automatic)[:512]
 
     def _ensureNodeName(self):
-        """Fill Node Name with this machine's `hostname / toe-stem`.
+        """Fill Node Name with `hostname / toe-stem`. Idempotent.
 
-        A RUNTIME fill, not an expression (TD stores the evaluated result
-        alongside; an expression baked a dev machine name into the
-        release .tox, 2026-08-03). Constant = transient, exports empty,
-        each machine refills; user edits are never clobbered. Idempotent.
-
-        Never fills while unsaved: extension init runs before the
-        wizard's save, and an early fill baked `hostname / NewProject.1`
-        forever (2026-08-04). A baked placeholder stamp for THIS machine
-        is healed in place; real overrides never match the pattern.
+        Runtime constant, not an expression (expressions bake into the
+        release .tox, 2026-08-03). Never fills unsaved (2026-08-04).
+        Heals baked auto-stamps only -- own NewProject placeholder, or a
+        foreign host's stamp for this project (travels in the .toe,
+        2026-08-19); user overrides match neither shape.
         """
         par = getattr(self._embody.par, 'Convoynodename', None)
         if par is None:
@@ -1768,12 +1764,9 @@ class ConvoyExt:
         except Exception:
             hostname = 'localhost'
         try:
-            value = str(par.eval() or '').strip()
             if par.mode != ParMode.CONSTANT:
                 return
-            if value and not re.fullmatch(
-                    re.escape(hostname) + r' / NewProject(\.\d+)?', value):
-                return
+            value = str(par.eval() or '').strip()
         except Exception:
             return
         saved_toe = self._savedToe()
@@ -1786,6 +1779,21 @@ class ConvoyExt:
                 os.path.basename(str(saved_toe)))[0] or 'Untitled'
         except Exception:
             toe_stem = 'Untitled'
+        if value:
+            try:
+                own_placeholder = re.fullmatch(
+                    re.escape(hostname) + r' / NewProject(\.\d+)?', value)
+                # Foreign auto-stamp: `<host> / <this toe base>[.N]` with a
+                # host half that is not this machine. Nobody names a node
+                # after another machine's stamp for this exact project.
+                base = re.sub(r'\.\d+$', '', toe_stem)
+                m = re.fullmatch(
+                    r'(\S+) / ' + re.escape(base) + r'(\.\d+)?', value)
+                foreign_stamp = bool(m) and m.group(1) != hostname
+            except Exception:
+                return
+            if not (own_placeholder or foreign_stamp):
+                return
         try:
             par.val = ('%s / %s' % (hostname, toe_stem))[:512]
         except Exception:
