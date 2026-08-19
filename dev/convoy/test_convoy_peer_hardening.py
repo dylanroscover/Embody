@@ -1044,6 +1044,7 @@ def test_new6_a_revocation_does_not_stall_the_whole_host(server):
                                               controller_id="peer:%s:c" % PEER)
             delivery_ids.append(job["delivery_id"])
     worst = [0.0]
+    polls = [0]
     stop = threading.Event()
 
     def poll_lock():
@@ -1055,11 +1056,14 @@ def test_new6_a_revocation_does_not_stall_the_whole_host(server):
             started = time.time()
             with server.app.lock:
                 worst[0] = max(worst[0], time.time() - started)
+                polls[0] += 1
             time.sleep(0.02)
 
     watcher = threading.Thread(target=poll_lock, daemon=True)
     watcher.start()
+    call_started = time.time()
     code, body = server.call("/peers/block", {"host_id": PEER})
+    call_s = time.time() - call_started
     stop.set()
     watcher.join(timeout=10)
 
@@ -1099,9 +1103,26 @@ def test_new6_a_revocation_does_not_stall_the_whole_host(server):
                 "already_terminal", "left_queued", "unknown_state")
                ) == summary["examined"], (
         "the sweep lost records out of its own summary: %r" % summary)
-    assert worst[0] < 1.0, (
-        "the global lock was held for %.2fs by the revocation sweep -- it "
-        "must not be held across O(jobs) file writes" % worst[0])
+    # STRUCTURAL, not wall-clock. The old `worst < 1.0s` ceiling could not
+    # tell the violation (lock held across the sweep's O(jobs) file
+    # writes) from ONE legitimate short hold whose single file write
+    # stalled on a shared runner -- windows-latest stalled 3.1s inside a
+    # correct critical section on the v6.0.252 tag run (2026-08-18) and
+    # went red on code that had passed the same leg three times that day.
+    # The discriminator is the poller's ACQUISITION COUNT: with the lock
+    # released between per-job writes, the 20ms poller keeps re-acquiring
+    # for the whole duration of the call, however slow the disk is; a
+    # lock held across the sweep starves it to ~1 acquisition total.
+    # Require an average of one acquisition per second of call time -- an
+    # order of magnitude below correct discipline, far above
+    # monopolization -- with worst-wait reported as evidence, not
+    # asserted (a wall-clock deadline on CI measures the runner, per
+    # commit-push-checklist).
+    assert polls[0] >= max(2.0, call_s / 1.0), (
+        "the lock poller got in only %d time(s) across a %.2fs "
+        "/peers/block call (worst single wait %.2fs) -- the revocation "
+        "sweep is holding the global lock across its O(jobs) file writes"
+        % (polls[0], call_s, worst[0]))
 
 
 def test_new7_the_host_originable_states_constant_is_ENFORCED(tmp_path):
