@@ -593,6 +593,24 @@ PHASE1_OPERATIONS = {
                       "restarts_server": True},
         async_job={"kind": "save_project", "key_arg": "idempotency_key",
                    "caller_args": (), "inject": {}}),
+    # Bounded self-update: the node's own UpdaterExt fetches the official
+    # GitHub release, verifies the sha256-pinned manifest, refuses
+    # downgrades and TD-build-floor violations, and swaps the component in
+    # place. No caller-supplied code or URL ever crosses the wire, so this
+    # is NOT arbitrary-code -- the whole point is that patching a fleet
+    # must not require the TD Python grant (field 2026-08-19).
+    # Remote-exposed unlike run_tests/save_project (finding 544): those are
+    # excluded for caller-code execution and unprotected 15s+ main-thread
+    # blocks; this one runs no caller code and the node itself refuses in
+    # Perform Mode, so it is no more consequential than the already-remote
+    # delete_op/set_parameter surface.
+    "update_embody": _operation(
+        {}, mutating=True, executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=True, batch_eligible=False,
+        side_effects={"replaces_component": True, "network_fetch": True,
+                      "restarts_server": True},
+        async_job={"kind": "update_embody", "key_arg": "idempotency_key",
+                   "caller_args": (), "inject": {}}),
     # A batch is a neutral container. Its effective gates are the union of
     # every validated child, computed recursively before admission and again
     # before dispatch. Envoy itself rejects nested batches, so the host does
@@ -5303,17 +5321,33 @@ class HostApp:
 
             controller_counts = self._controller_counts_locked(convoy_id)
 
-            local_rows = [
-                self._public_node_row(
-                    row, address=local_address,
+            local_rows = []
+            for record in local_records:
+                if not bool(record.get("enabled", True)):
+                    continue
+                if convoy_id is not None and \
+                        record.get("convoy_id") != convoy_id:
+                    continue
+                row = self._public_node_row(
+                    record, address=local_address,
                     controller_count=controller_counts.get(
-                        row.get("node_id"), 0))
-                for row in local_records
-                if bool(row.get("enabled", True))
-                and (convoy_id is None or row.get("convoy_id") == convoy_id)
-            ]
-            for row in local_rows:
+                        record.get("node_id"), 0))
                 row["compatibility"] = "compatible"
+                # Loopback-only capability projection, LOCAL rows only --
+                # _public_node_row deliberately never crosses the LAN with
+                # capability approvals (target-marking), so peer rows carry
+                # no `capabilities` key: absent = unknown, never allowed.
+                # Lets a controller see a shut gate on call #1 instead of
+                # planning around a blocked mechanism (field 2026-08-19).
+                try:
+                    row["capabilities"] = {
+                        "td_python": bool(self.policy.allow_td_python(
+                            record.get("node_id"))),
+                        "full_shell": self.policy.allow_full_shell() is True,
+                    }
+                except Exception:
+                    pass
+                local_rows.append(row)
             queries = []
             refused = []
             for peer in peer_records:

@@ -43,6 +43,8 @@ Several Embody nodes can run on one computer. They share that computer's single 
 
 The first time you enable Convoy on a machine, Embody asks once for confirmation, naming the trusted-LAN scope it grants and the background host app it will install. That consent is remembered per install: later projects mint their identity silently, and the Setup Wizard's Convoy step counts as the same answer, so you are never asked twice. The node's convoy identity and the granted scope are recorded in the committed `.embody/project.json`, which project clones inherit. A project that has never been saved cannot enable Convoy -- Embody explains why and turns the toggle back off until you save.
 
+Some deployments deliberately do **not** track `.embody/project.json` -- a fleet where the same repo is mirrored onto every machine and the convoy identity is managed per box. Embody respects that choice: when the repo's own `.gitignore` rules make the file effectively ignored, Envoy stops re-adding its `!.embody/project.json` entry and warns once in the log that the identity no longer travels via git (see [Auto-managed .gitignore](../embody/getting-started.md#auto-managed-gitignore)). On such a fleet, either pre-seed `.embody/project.json` from a machine already on the right Convoy when provisioning, or simply enable Convoy on the fresh machine and let it adopt the established realm automatically during the listen window described above -- a freshly minted identity only becomes its own separate Convoy when no established one is heard on the LAN.
+
 A project whose committed binding names a *different* established Convoy -- a clone of a repo from another studio's LAN, for example -- is refused rather than merged, and its **Status** reads `Refused: local_realm_conflict`. Toggling **Enable Convoy** on arms a one-shot offer for about two minutes: when the refusal arrives inside that window, Embody opens **Rejoin Local Convoy**, naming both realms. **Keep Binding** leaves the project bound as it is and refused on this LAN; **Rejoin Local Mesh** rebinds the git-tracked `.embody/project.json` to this machine's mesh, which it adopts on the next registration. That rebind travels to every clone of the repo, so clones still on the original mesh will be refused there until they rejoin the same way. If the *machine* itself is in conflict, resolve that first -- see [Recovering from a realm conflict](host-app.md#recovering-from-a-realm-conflict).
 
 Convoy does not require an attached AI client. When **AI Client** is **None**, enabling Convoy keeps Envoy's loopback command server running only as Convoy's internal TouchDesigner relay; it does not generate client configuration or launch a coding tool. Turning Convoy off stops that otherwise-unused internal server.
@@ -204,6 +206,8 @@ Convoy's ordinary registered TouchDesigner tools are available when the node is 
 | Arbitrary TouchDesigner Python | Off | Turn on **Allow Execute TD Python** locally on that node |
 | Arbitrary operating-system shell | Off | Turn on **Allow Full Shell** locally on that computer |
 
+Self-updating Embody on a node (`update_embody`, the operation behind `convoy_update_embody`) is a registered operation, not TD Python: it installs only the sha256-verified official release and refuses downgrades, so patching a fleet never requires the dangerous grant.
+
 Structured Git and GitHub actions use named, bounded operations rather than accepting an arbitrary command line. The initial catalog focuses on repository status, remotes, branches/revision, safe fetch/pull/push, and read-only GitHub inspection; destructive Git history rewrites and force operations are not part of the default surface.
 
 **Allow Execute TD Python** is effectively code execution as the user running TouchDesigner. TD Python can access files, the network, credentials available to TD, and process APIs. It is a separate gate from **Allow Full Shell**; leaving Full Shell off does not sandbox Python.
@@ -243,6 +247,8 @@ Those explicit copies are outside the runtime quota and are yours to retain, del
 
 Use the same Embody version on all nodes. That is the supported and easiest-to-debug configuration.
 
+Keeping a fleet current is one call: `convoy_update_embody(all=true)` dispatches each node's own bounded self-update (official release, sha256-verified, downgrade-refusing) as a durable per-node job -- no per-machine visits and no **Allow Execute TD Python** grant involved. See [Fleet Updates](fleet-updates.md).
+
 Convoy checks capabilities per operation, so a minor mismatch does not have to hide a node completely. Presence and some read-only actions may continue while unsupported mutations are marked **Limited** or refused. A fundamentally incompatible version or safety contract is not bypassed for convenience.
 
 The compatibility target is:
@@ -266,6 +272,7 @@ Owlette command submission has an additional local host opt-in: set `EMBODY_CONV
 ## Next steps
 
 - [Setup and Troubleshooting](host-app.md)
+- [Fleet Updates](fleet-updates.md)
 - [Setup Wizard](../embody/setup-wizard.md)
 - [Convoy Parameter Reference](../embody/parameters.md#convoy)
 - [Envoy Tools Reference](../envoy/tools-reference.md)

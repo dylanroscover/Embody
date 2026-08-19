@@ -288,7 +288,10 @@ BRIDGE_TOOLS = [
         "description": (
             "List the local and reachable remote Embody nodes known to "
             "this machine's Convoy host. Returns stable host/node/runtime "
-            "identities, connection state, address, and version metadata."
+            "identities, connection state, address, and version metadata. "
+            "Local nodes carry a capabilities field (td_python, "
+            "full_shell); remote nodes deliberately do not -- absent "
+            "means unknown, never allowed."
         ),
         "inputSchema": {
             "type": "object",
@@ -297,6 +300,41 @@ BRIDGE_TOOLS = [
                     "type": "string",
                     "minLength": 1,
                     "description": "Optional Convoy namespace filter.",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "convoy_update_embody",
+        "description": (
+            "Self-update Embody on Convoy nodes to the latest GitHub "
+            "release -- one node or the whole fleet -- without the TD "
+            "Python grant. Dispatches the bounded update_embody operation "
+            "(sha256-pinned manifest, downgrade-refusing) as a durable "
+            "job per node and returns the handles; poll convoy_get_job. "
+            "Nodes must run Embody >= 6.0.255 to serve the operation."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "node": {
+                    "type": "string", "minLength": 1,
+                    "description": (
+                        "Target one node by node_id, node_name, or "
+                        "hostname. Mutually exclusive with all."
+                    ),
+                },
+                "all": {
+                    "type": "boolean", "default": False,
+                    "description": (
+                        "Dispatch to every online, enabled, awake node."
+                    ),
+                },
+                "convoy_id": {"type": "string", "minLength": 1},
+                "timeout_s": {
+                    "type": "number", "minimum": 0.1, "maximum": 3600,
+                    "default": 30,
                 },
             },
             "required": [],
@@ -2905,6 +2943,123 @@ def _convoy_call_body(params):
     return body, None
 
 
+def handle_convoy_update_embody(params):
+    """Fan the bounded update_embody operation out over Convoy nodes.
+
+    Fleet updates must not require the TD Python grant (field
+    2026-08-19): update_embody is its own registered operation, so this
+    dispatches durable jobs and hands back the delivery handles rather
+    than parking on a fleet-wide wait.
+    """
+    if not isinstance(params, dict):
+        return _convoy_invalid_arguments("arguments must be an object")
+    node = params.get("node")
+    do_all = params.get("all", False)
+    if node is not None and (not isinstance(node, str) or not node.strip()):
+        return _convoy_invalid_arguments(
+            "node must be a non-empty string when supplied")
+    if not isinstance(do_all, bool):
+        return _convoy_invalid_arguments("all must be true or false")
+    if bool(node) == bool(do_all):
+        return _convoy_invalid_arguments(
+            "pass exactly one of node=<id|name|hostname> or all=true")
+    listing_args = {}
+    if params.get("convoy_id") is not None:
+        listing_args["convoy_id"] = params["convoy_id"]
+    listing = handle_convoy_list_nodes(listing_args)
+    if not isinstance(listing, dict) or not listing.get("ok"):
+        return listing if isinstance(listing, dict) else {
+            "ok": False, "reason": "convoy_host_bad_response"}
+    rows = listing.get("nodes")
+    if not isinstance(rows, list):
+        return {"ok": False, "reason": "convoy_host_bad_response",
+                "detail": "the node directory response carried no nodes"}
+
+    def _label(row):
+        return (row.get("node_name") or row.get("hostname")
+                or row.get("node_id") or "?")
+
+    if node:
+        needle = node.strip()
+        matched = [row for row in rows if isinstance(row, dict) and needle in
+                   (row.get("node_id"), row.get("node_name"),
+                    row.get("hostname"))]
+        if not matched:
+            return {"ok": False, "reason": "node_not_found",
+                    "detail": "no node matched %r by node_id, node_name, "
+                              "or hostname" % needle,
+                    "known": [_label(row) for row in rows
+                              if isinstance(row, dict)][:32]}
+        if len(matched) > 1:
+            return {"ok": False, "reason": "node_ambiguous",
+                    "detail": "%d nodes matched %r -- use the node_id"
+                              % (len(matched), needle),
+                    "matches": [{"node_id": row.get("node_id"),
+                                 "node_name": row.get("node_name")}
+                                for row in matched]}
+        candidates = matched
+    else:
+        candidates = [row for row in rows if isinstance(row, dict)]
+
+    dispatched, skipped = [], []
+    for row in candidates:
+        label = _label(row)
+        if not bool(row.get("enabled", True)):
+            skipped.append({"node": label, "reason": "disabled"})
+            continue
+        if row.get("status") != "online" or not row.get("online"):
+            skipped.append({"node": label, "reason": "offline"})
+            continue
+        if bool(row.get("perform_mode")):
+            # Envoy is suspended during a show; the update cannot land.
+            skipped.append({"node": label, "reason": "perform_mode"})
+            continue
+        required = (row.get("host_id"), row.get("convoy_id"),
+                    row.get("node_id"))
+        if not all(isinstance(v, str) and v for v in required):
+            skipped.append({"node": label, "reason": "incomplete_row"})
+            continue
+        call = {
+            "target_host_id": row["host_id"],
+            "convoy_id": row["convoy_id"],
+            "target_node_id": row["node_id"],
+            "operation": "update_embody",
+            "arguments": {},
+            "wait": False,
+            "timeout_s": params.get("timeout_s", 30),
+            "idempotency_key": "update-embody-" + uuid.uuid4().hex,
+        }
+        outcome = handle_convoy_call(call)
+        outcome = (dict(outcome) if isinstance(outcome, dict)
+                   else {"ok": False, "reason": "convoy_host_bad_response"})
+        entry = {
+            "node": label,
+            "node_id": row["node_id"],
+            "host_id": row["host_id"],
+            "embody_version": row.get("embody_version"),
+            "ok": bool(outcome.get("ok")),
+            "idempotency_key": call["idempotency_key"],
+        }
+        if outcome.get("delivery_id"):
+            entry["delivery_id"] = outcome["delivery_id"]
+        if not outcome.get("ok"):
+            entry["reason"] = outcome.get("reason")
+            entry["detail"] = outcome.get("detail")
+        dispatched.append(entry)
+
+    return {
+        "ok": True,
+        "dispatched": dispatched,
+        "skipped": skipped,
+        "wakes_touchdesigner": True,
+        "hint": "Each dispatch is a durable per-node job: poll with "
+                "convoy_get_job(delivery_id=...). A node already at the "
+                "latest release finishes 'done' with versions equal; a "
+                "node older than 6.0.255 refuses update_embody as an "
+                "unknown operation and needs one manual update first.",
+    }
+
+
 def handle_convoy_call(params):
     body, error = _convoy_call_body(params)
     if error is not None:
@@ -2972,7 +3127,11 @@ def handle_convoy_call(params):
             "POST", "/relay/job", dict(poll),
             timeout=min(CONVOY_HOST_TIMEOUT_S, remaining))
         if current.get("ok"):
-            accepted["remote"] = current
+            # `job` is promoted to accepted["job"] below -- carrying it
+            # inside `remote` too shipped every result payload TWICE
+            # (~2x tokens on each remote call; field report 2026-08-19).
+            accepted["remote"] = {k: v for k, v in current.items()
+                                  if k != "job"}
             remote_job = current.get("job")
             if isinstance(remote_job, dict):
                 accepted["job"] = remote_job
@@ -4183,6 +4342,8 @@ def handle_bridge_tool(name, params, state):
         result = handle_convoy_start_node(params)
     elif name == "convoy_restart_node":
         result = handle_convoy_restart_node(params)
+    elif name == "convoy_update_embody":
+        result = handle_convoy_update_embody(params)
     elif name == "convoy_call":
         result = handle_convoy_call(params)
     elif name == "convoy_batch":

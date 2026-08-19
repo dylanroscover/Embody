@@ -101,6 +101,7 @@ nav:
   - Convoy:
     - convoy/index.md
     - Setup & Troubleshooting: convoy/host-app.md
+    - Fleet Updates: convoy/fleet-updates.md
   - TDN:
     - tdn/index.md
     - Specification: tdn/specification.md

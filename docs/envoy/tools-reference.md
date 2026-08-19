@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 62 MCP tools for interacting with TouchDesigner, plus 20 bridge meta-tools: 4 TD-lifecycle tools and 16 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 63 MCP tools for interacting with TouchDesigner, plus 21 bridge meta-tools: 4 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 Two of the 62 (`convoy_lifecycle_state`, `convoy_lifecycle_quit`) are internal Convoy host-lifecycle tools: they refuse any session other than the Convoy host app's dedicated loopback session and are not for agent use.
 
@@ -174,6 +174,7 @@ Long operations that outlive the 30-second operation timeout run as disk-backed 
 |------|-----------|-------------|
 | `get_job_status` | `job_id?` | One job record (status `running`/`done`/`error`, result when done, `stale` when a running record stopped updating), or the 16 newest records without `job_id`. A finished `run_tests` job carries the summary with failures listed first; a finished `save_project` job carries `version_before`/`version_after` |
 | `save_project` | `idempotency_key?` | Save the project as a tracked job. Refused while a test run is active (a mid-run save bakes test-forced parameters into the export); idempotent -- a second call while a save is in flight returns the existing handle, and the same `idempotency_key` extends that dedupe to a retry of any age, reconciling it to the original save instead of queuing a second one. The next call after a save may fail once while the bridge reconnects |
+| `update_embody` | `idempotency_key?` | Self-update Embody to the latest GitHub release as a tracked job -- bounded and non-interactive (sha256-pinned manifest, downgrade-refusing, TD-build-floor-gated), so it never needs the TD Python grant. Refused in Perform Mode and while a test run is active. A finished record carries `version_before`/`version_after`; an up-to-date node finishes `done` with them equal. The install restarts the MCP server -- expect one reconnect blip |
 
 ## Bridge Meta-Tools
 
@@ -193,7 +194,7 @@ The remaining 16 meta-tools drive [Convoy](../convoy/index.md), relaying work to
 | Tool | Description |
 |------|-------------|
 | `get_convoy_status` | Is the local Convoy host app available, and what does it know |
-| `convoy_list_nodes` | Local and reachable remote nodes |
+| `convoy_list_nodes` | Local and reachable remote nodes, with `embody_version` per node and a `capabilities` field (`td_python`, `full_shell`) on local nodes -- remote nodes carry none by design (grants are never advertised across the LAN; absent = unknown) |
 | `convoy_list_controllers` | Live client sessions, selected targets, leases, and active work |
 | `convoy_ping` | One node's liveness through its host app, without waking TouchDesigner |
 | `convoy_select_node` | Pin this session to one exact node so ordinary Envoy tools run there (`clear=true` to unpin) |
@@ -207,6 +208,7 @@ The remaining 16 meta-tools drive [Convoy](../convoy/index.md), relaying work to
 | `convoy_save_artifact` | Verify an artifact and save it into the current project (`overwrite=true` required to replace) |
 | `convoy_start_node` | Reopen a previously registered, currently offline node |
 | `convoy_restart_node` | Safely replace one exact running TouchDesigner process (requires the current runtime id and an idempotency key) |
+| `convoy_update_embody` | Self-update Embody on Convoy nodes to the latest release -- one node (`node=<id\|name\|hostname>`) or the whole fleet (`all=true`) -- by dispatching the bounded `update_embody` operation as a durable per-node job (no TD Python grant involved). Skips offline, disabled, and Perform Mode nodes by name; poll the returned delivery handles with `convoy_get_job`. See [Fleet Updates](../convoy/fleet-updates.md) |
 | `convoy_owlette` | Optional read-mostly bridge to an Owlette site; fails closed without credentials |
 
 !!! info "Bridge architecture"

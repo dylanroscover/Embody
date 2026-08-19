@@ -59,6 +59,7 @@ _WRITE_OPERATIONS = frozenset({
     'remove_externalization_tag', 'save_externalization',
     'create_extension', 'import_network', 'create_annotation',
     'set_annotation', 'run_tests', 'batch_operations', 'save_project',
+    'update_embody',
 })
 
 # Coarse scopes for operations whose footprint is not a single op path.
@@ -66,6 +67,7 @@ _SPECIAL_SCOPES = {
     'execute_python': 'project:python',
     'run_tests': 'project:tests',
     'save_project': 'project:save',
+    'update_embody': 'project:update',
 }
 
 _TOUCH_WINDOW_S = 600     # advisories consider touches this recent
@@ -3693,6 +3695,31 @@ class EnvoyMCPServer:
             return self._execute_in_td('save_project',
                                        {'idempotency_key': idempotency_key})
 
+        @self.mcp.tool()
+        def update_embody(idempotency_key: str = None) -> dict:
+            """
+            Self-update Embody to the latest GitHub release, as a job.
+
+            Bounded and non-interactive: the node's own updater fetches
+            the official release, verifies the sha256-pinned manifest,
+            refuses downgrades and TD-build-floor violations, then swaps
+            the component in place (no caller code or URL is involved --
+            this never needs the TD Python grant). Returns a job id
+            immediately; poll get_job_status(job_id). A finished record
+            carries version_before/version_after; an up-to-date node
+            finishes 'done' with versions equal. The install restarts
+            the MCP server, so expect one reconnect blip.
+
+            Args:
+                idempotency_key: Stable key making a RETRY safe -- a
+                    redelivery reconciles to the original update job.
+
+            Returns:
+                {'job_id', 'status': 'running', 'hint'} or {'error'}.
+            """
+            return self._execute_in_td('update_embody',
+                                       {'idempotency_key': idempotency_key})
+
         # Host-private lifecycle helpers.  They are visible in the local MCP
         # manifest because FastMCP has no hidden-tool concept, but calls are
         # accepted only from Convoy's dedicated loopback session and Convoy's
@@ -5717,7 +5744,8 @@ class EnvoyExt:
     # === Thread Manager Callbacks (run on main thread) ===
 
     _GATED_OPERATIONS = ('delete_op', 'import_network', 'run_tests',
-                         'batch_operations', 'save_project')
+                         'batch_operations', 'save_project',
+                         'update_embody')
 
     def _destructiveTargets(self, operation, params):
         """(scopes, reason) the destructive gate protects for this
@@ -5740,6 +5768,9 @@ class EnvoyExt:
         if operation == 'save_project':
             # A save re-exports every externalized file -- project-global.
             return ['project:save'], 'save_project'
+        if operation == 'update_embody':
+            # Replaces the Embody component in place -- project-global.
+            return ['project:update'], 'update_embody'
         if operation == 'batch_operations':
             gated = []
             subs = params.get('operations') or []
@@ -6527,6 +6558,7 @@ class EnvoyExt:
             # Testing
             'run_tests': self._run_tests,
             'save_project': self._save_project,
+            'update_embody': self._update_embody,
             # Dedicated Convoy host lifecycle leg (session-gated wrappers).
             'convoy_lifecycle_state': self._convoy_lifecycle_state,
             'convoy_lifecycle_quit': self._convoy_lifecycle_quit,
@@ -7330,6 +7362,155 @@ class EnvoyExt:
                         'server, so the NEXT call may fail once with a '
                         'connection error -- just retry it; the bridge '
                         'reconnects between calls.'}
+
+    _UPDATE_JOB_TIMEOUT_S = 900   # download + install ceiling
+    # Updatestatus texts that mean the update machinery is still working;
+    # anything else while a job runs is terminal (success or refusal).
+    _UPDATE_ACTIVE_PREFIXES = ('Checking for updates', 'Downloading',
+                               'Installing')
+
+    def _activeUpdateJob(self):
+        """The in-flight update_embody record, or None. Two-hour scan cap."""
+        try:
+            now = time.time()
+            for record in _list_jobs(now):
+                if (record.get('kind') == 'update_embody'
+                        and record.get('status') == 'running'
+                        and now - float(record.get('started', 0)) < 7200):
+                    return record
+        except Exception:
+            pass
+        return None
+
+    def _update_embody(self, idempotency_key=None) -> dict:
+        """Start a self-update as a tracked job (main thread).
+
+        Refusals from the updater's own guards (dev checkout, update
+        already in progress) return {'error'} with NO job minted. The
+        install swaps this whole component in place, so completion is
+        stamped by _pollUpdateJob, which re-resolves the comp BY PATH
+        each tick -- the NEW instance finishes the record.
+        """
+        if idempotency_key:
+            try:
+                prior = _job_for_key(idempotency_key,
+                                     expected_kind='update_embody')
+            except _IdemMarkerUnreadable as e:
+                return {'error': 'Idempotency marker unreadable (%s) -- '
+                                 'refusing to risk a duplicate update.' % e}
+            except _IdemKeyConflict as e:
+                return {'error': 'idempotency_key is already bound to a '
+                                 'different operation (%s).' % e}
+            if prior is not None:
+                return {'job_id': prior['id'],
+                        'status': prior.get('status', 'running'),
+                        'hint': 'Reconciled to the original update for this '
+                                'idempotency_key.'}
+        try:
+            if op.Embody.ext.Embody._testRunnerActive():
+                return {'error': 'A test run is active -- an update swaps '
+                                 'the component mid-run. Wait for it.'}
+        except Exception:
+            pass
+        active = self._activeUpdateJob()
+        if active is not None:
+            return {'job_id': active['id'], 'status': 'running',
+                    'hint': 'An update is already in flight -- returning '
+                            'its existing job handle.'}
+        try:
+            if op.Embody.ext.Embody._performMode:
+                return {'error': 'This node is in Perform Mode -- never '
+                                 'update a machine mid-show.'}
+        except Exception:
+            pass
+        try:
+            updater = self.ownerComp.op('updater').ext.UpdaterExt
+        except Exception:
+            return {'error': 'Updater is unavailable on this component.'}
+        started = updater.CheckForUpdate(interactive=False,
+                                         auto_install=True)
+        if isinstance(started, dict) and started.get('error'):
+            return {'error': started['error']}
+        job = _new_job('update_embody', {}, idempotency_key=idempotency_key)
+        try:
+            job['version_before'] = str(op.Embody.par.Version.eval())
+        except Exception:
+            pass
+        _write_job(job)
+        if _read_job(job['id']) is None:
+            return {'error': 'Job records unavailable (project root not '
+                             'resolved yet) -- retry shortly.'}
+        if idempotency_key:
+            _record_job_key(idempotency_key, job['id'])
+        self._armUpdatePoll(job['id'])
+        return {'job_id': job['id'], 'status': 'running',
+                'hint': 'The updater is checking/downloading; poll '
+                        'get_job_status(job_id=...). A successful install '
+                        'restarts the MCP server -- expect one reconnect '
+                        'blip; the finished record carries '
+                        'version_before/version_after.'}
+
+    def _armUpdatePoll(self, job_id, delay_frames=60):
+        """Arm one poll tick that SURVIVES the component swap.
+
+        Deliberately no fromOP: the install destroys this comp, and a
+        fromOP-bound run dies with it -- the tick re-resolves the comp by
+        path and lands on the NEW instance (which ships this method from
+        this version on; getattr-guarded for safety)."""
+        try:
+            run("o = op(%r)\n"
+                "f = (o and o.valid) and getattr(o.ext.Envoy, "
+                "'_pollUpdateJob', None) or None\n"
+                "f and f(%r)" % (self.ownerComp.path, job_id),
+                delayFrames=delay_frames)
+        except Exception:
+            pass
+
+    def _pollUpdateJob(self, job_id):
+        """Finalize an update job from live state. Main thread, swap-proof.
+
+        Terminal when: Version moved past version_before (done), the
+        updater status left the active set ('Up to date'/'Updated to' ->
+        done, refusal/failure text -> error), or the ceiling passed."""
+        job = _read_job(job_id)
+        if not isinstance(job, dict) or job.get('status') != 'running':
+            return
+        try:
+            version_now = str(op.Embody.par.Version.eval())
+        except Exception:
+            version_now = ''
+        try:
+            status = str(op.Embody.par.Updatestatus.eval() or '')
+        except Exception:
+            status = ''
+        before = str(job.get('version_before') or '')
+        elapsed = time.time() - float(job.get('started', 0) or 0)
+        working = (any(status.startswith(pfx)
+                       for pfx in self._UPDATE_ACTIVE_PREFIXES)
+                   or status.endswith('available'))
+        terminal = None
+        if version_now and before and version_now != before:
+            terminal = ('done', '')
+        elif status.startswith('Updated to') or status.startswith(
+                'Up to date'):
+            terminal = ('done', '')
+        elif status and not working:
+            # The updater rested on a refusal/failure text.
+            terminal = ('error', status)
+        elif elapsed > self._UPDATE_JOB_TIMEOUT_S:
+            terminal = ('error', 'update did not finish within %ds '
+                                 '(last status: %s)'
+                        % (self._UPDATE_JOB_TIMEOUT_S, status or 'none'))
+        if terminal is None:
+            self._armUpdatePoll(job_id)
+            return
+        job['status'] = terminal[0]
+        if terminal[1]:
+            job['error'] = terminal[1]
+        job['version_after'] = version_now
+        job['update_status'] = status
+        job['finished'] = time.time()
+        _write_job(job)
 
     def _runSaveJob(self, job_id):
         """Main-thread body of a save_project job.
