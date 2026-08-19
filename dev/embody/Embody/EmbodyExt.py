@@ -1923,19 +1923,83 @@ class EmbodyExt:
                  f'"{recovery}". Confirm the format in the dialog.', 'WARNING')
         self._scheduleProjectExternalization()
 
+    # TouchDesigner's never-saved placeholder name. A project TD has never
+    # written to disk is 'NewProject.toe' (and 'NewProject.N.toe' once an
+    # incremental save has bumped it). ANY other name means the user saved
+    # this project somewhere -- that is the whole test. See
+    # _projectSavedOnDisk for why the on-disk file is NOT a reliable test.
+    _PLACEHOLDER_TOE_RE = re.compile(r'^NewProject(\.\d+)?\.toe$',
+                                     re.IGNORECASE)
+
+    @staticmethod
+    def _projectNameIsPlaceholder() -> bool:
+        """True while this project still carries TD's never-saved name.
+
+        An unreadable/empty project.name reads as a placeholder, so the
+        conservative answer (treat as unsaved) survives. Never raises."""
+        try:
+            name = str(project.name or '').strip()
+        except Exception:
+            return True
+        if not name:
+            return True
+        return bool(EmbodyExt._PLACEHOLDER_TOE_RE.match(name))
+
+    @staticmethod
+    def _resolveProjectToe():
+        """The .toe file on disk this project came from, or None.
+
+        project.folder / project.name is only the FIRST candidate, never the
+        verdict: after an incremental save TouchDesigner reports project.name
+        as the NEXT name in the series while disk still holds the current one
+        ('D:/node-touchdesigner/Control.35.toe' saved, project.name
+        'Control.36.toe'). Checking only the literal path therefore calls a
+        long-saved production project unsaved (field-reported 2026-08-19,
+        and the same drift blocked the smoke harness on 2026-08-10). So fall
+        back to the newest file in the same increment series. Never raises."""
+        try:
+            folder = str(project.folder or '')
+            name = str(project.name or '')
+            if not folder or not name:
+                return None
+            literal = os.path.join(folder, name)
+            if os.path.isfile(literal):
+                return literal
+            # Same series, any increment: 'Control.toe', 'Control.35.toe'.
+            stem = name[:-4] if name.lower().endswith('.toe') else name
+            base = re.sub(r'\.\d+$', '', stem)
+            if not base:
+                return None
+            pattern = re.compile(r'^' + re.escape(base) + r'(\.\d+)?\.toe$',
+                                 re.IGNORECASE)
+            newest, newest_mtime = None, -1.0
+            for entry in os.listdir(folder):
+                if not pattern.match(entry):
+                    continue
+                candidate = os.path.join(folder, entry)
+                try:
+                    if not os.path.isfile(candidate):
+                        continue
+                    mtime = os.path.getmtime(candidate)
+                except Exception:
+                    continue
+                if mtime > newest_mtime:
+                    newest, newest_mtime = candidate, mtime
+            return newest
+        except Exception:
+            return None
+
     def _wizardRecoveryPoint(self):
         """The saved .toe a whole-project externalization can be undone by
         reopening, or None when there is none on disk.
 
-        Checks the invariant directly (a file at project.folder /
-        project.name) rather than project.modified / project.dirty -- both
+        Resolves the real file (see _resolveProjectToe) rather than trusting
+        project.name, and never project.modified / project.dirty -- those two
         proxies have failed here, in opposite directions; see
-        .claude/rules/destructive-tests.md rule 3. Never raises."""
-        try:
-            toe_path = os.path.join(project.folder, project.name)
-            return toe_path if os.path.isfile(toe_path) else None
-        except Exception:
-            return None
+        .claude/rules/destructive-tests.md rule 3. This one deliberately
+        stays file-based: an unreachable .toe is no recovery point, whatever
+        the project is named. Never raises."""
+        return self._resolveProjectToe()
 
     def _projectSavedOnDisk(self):
         """True once this project exists as a .toe on disk.
@@ -1951,10 +2015,21 @@ class EmbodyExt:
         True result. (The latch means a failed first save that already
         re-pointed project.folder keeps the gate open -- writes then root
         at the user-chosen folder, which is where they belong anyway.)
-        Never raises."""
+
+        TWO ways to be saved, and the NAME is the authority. A project whose
+        name is not TD's 'NewProject[.N].toe' placeholder has been saved
+        somewhere by definition -- so it passes even when no file answers at
+        project.folder / project.name, which happens routinely: TD reports
+        the next incremental name after a save, and a project can be opened
+        from a drive that later goes offline. Requiring the file made Embody
+        call a fully saved production project unsaved and refuse to enable
+        Convoy (field-reported 2026-08-19). Never raises."""
         if getattr(self, '_saved_on_disk', False):
             return True
-        if self._wizardRecoveryPoint() is not None:
+        if not self._projectNameIsPlaceholder():
+            self._saved_on_disk = True
+            return True
+        if self._resolveProjectToe() is not None:
             self._saved_on_disk = True
             return True
         return False

@@ -53,4 +53,10 @@ gh release create TAG ASSET_FILES... \
 ## 6. Verify and Report
 
 - Run `gh release view TAG` to confirm creation.
+- **The tag push triggers its own CI runs** (`gh run list --limit 5` will show
+  runs on the tag ref alongside the branch runs). Watch those to completion
+  too -- the v6.0.252 tag run went red on a windows-latest stall AFTER dev,
+  the PR ref, and main had all passed the same code, and it went unnoticed
+  until the user asked. A red tag run needs the same immediate triage as a
+  red branch run.
 - Report the release URL to the user.
