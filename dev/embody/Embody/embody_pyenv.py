@@ -699,22 +699,55 @@ def _write_json_atomic(path, data) -> None:
 def _pid_alive(pid) -> bool:
     """Best-effort liveness, erring toward ALIVE: stealing a live
     holder's lock is the failure the lock exists to prevent, so only a
-    definitive no-such-process verdict reads as dead. An elevated /
-    other-user TD raises SystemError (not PermissionError) from
-    os.kill(pid, 0) on Windows -- that is a LIVE process we simply
-    cannot open (2026-08-19 review)."""
+    definitive no-such-process verdict reads as dead.
+
+    win32: NEVER os.kill -- CPython maps signal 0 to
+    GenerateConsoleCtrlEvent(CTRL_C_EVENT), which broadcasts a real
+    Ctrl-C into the shared console (KeyboardInterrupt'd the CI runner's
+    pytest, 2026-08-19). ctypes OpenProcess probe instead; canonical
+    copy: convoy_client._win32_pid_is_alive."""
     try:
-        os.kill(int(pid), 0)
+        pid = int(pid)
+    except (ValueError, TypeError):
+        return False  # garbage pid in the record
+    if pid <= 0:
+        return False
+    if sys.platform == 'win32':
+        try:
+            import ctypes
+            from ctypes import wintypes
+            k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+            k32.OpenProcess.restype = wintypes.HANDLE
+            k32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL,
+                                        wintypes.DWORD)
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            h = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                False, pid)
+            if not h:
+                # ERROR_ACCESS_DENIED (5) = alive but unopenable
+                # (elevated / other-user TD); anything else = dead.
+                return ctypes.get_last_error() == 5
+            try:
+                STILL_ACTIVE = 259
+                code = wintypes.DWORD()
+                k32.GetExitCodeProcess.argtypes = (
+                    wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+                if k32.GetExitCodeProcess(h, ctypes.byref(code)):
+                    return code.value == STILL_ACTIVE
+                return True
+            finally:
+                k32.CloseHandle(h)
+        except Exception:
+            return True  # cannot probe -- assume alive
+    try:
+        os.kill(pid, 0)
         return True
     except ProcessLookupError:
         return False
-    except (ValueError, TypeError):
-        return False  # garbage pid in the record
     except OSError:
-        # Windows raises plain OSError (WinError 87) for a missing pid.
         return False
     except Exception:
-        return True  # SystemError et al: cannot probe -- assume alive
+        return True  # cannot probe -- assume alive
 
 
 def _lock_stale_after(purpose: str) -> float:
