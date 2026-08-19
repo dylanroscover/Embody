@@ -1,6 +1,6 @@
 # Changelog
 
-## v6.0.256
+## v6.0.257
 
 A production fleet's field reports, fixed end to end: supervisor-launched TouchDesigner could not install the Convoy host app, relaunched nodes never re-registered, and Embody fought a repo that manages `.embody/project.json` per machine. Plus remote fleet updates and a public project Python environment.
 

@@ -31,7 +31,7 @@ or in Perform Mode -- never update a machine mid-show.
 
 ## Requirements and caveats
 
-- **The target must run Embody >= 6.0.256.** Older nodes do not serve the
+- **The target must run Embody >= 6.0.257.** Older nodes do not serve the
   `update_embody` operation and refuse it as unknown -- they need one manual
   update first (or the update via TD Python where that is already granted).
 - **The node needs GitHub reachability.** The updater fetches

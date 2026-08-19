@@ -67,7 +67,7 @@ Use one dedicated logged-in user for an unattended show machine. The host app is
 
 ### Supervisor-launched TouchDesigner (Owlette, service wrappers)
 
-A TouchDesigner started by a process supervisor rather than a double-click -- [Owlette](https://owlette.app), NSSM, a studio's own relauncher -- is a first-class session: enabling Convoy installs and starts the host app from it like any other, with no console visit. (Releases before 6.0.256 failed here with `OSError: [WinError 50]` on every interpreter candidate and blamed the session; the actual cause was Embody's own spawn call inheriting the supervisor's stdin handle, fixed in 6.0.256.)
+A TouchDesigner started by a process supervisor rather than a double-click -- [Owlette](https://owlette.app), NSSM, a studio's own relauncher -- is a first-class session: enabling Convoy installs and starts the host app from it like any other, with no console visit. (Releases before 6.0.257 failed here with `OSError: [WinError 50]` on every interpreter candidate and blamed the session; the actual cause was Embody's own spawn call inheriting the supervisor's stdin handle, fixed in 6.0.257.)
 
 If an install ever reports that the operating system refused to start a child process, the failure message now carries the session facts needed to diagnose a headless machine remotely -- session id, whether a console is attached, Job object membership and limit flags, the active-process cap, and whether breakaway is permitted. Include that line when reporting the problem.
 
