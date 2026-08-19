@@ -234,6 +234,11 @@ class EmbodyExt:
         'PYTHONDONTWRITEBYTECODE', 'PYTHONNOUSERSITE', 'PYTHONSTARTUP',
         'QT_PLUGIN_PATH', 'QT_QPA_PLATFORM_PLUGIN_PATH',
         '__CFBundleIdentifier',
+        # link_env sets this to the project venv; a launched terminal
+        # inheriting it (plus the venv Scripts/ on PATH -- launch_env
+        # strips that too) would silently point bare pip/python at the
+        # MCP stack's venv, bypassing InstallPackages' refusals.
+        'VIRTUAL_ENV',
     })
 
     # Duplicate-path prompt: above this many operators in one group, a
@@ -377,6 +382,20 @@ class EmbodyExt:
         # _restoreSettings() have run. Calling it here (based on the baked
         # Envoyenable value) would bypass the opt-in prompt on fresh .tox drop.
 
+        # An EXISTING healthy venv is wired at init though (2026-08-19):
+        # pure sys/os state, no subprocess, no prompt -- user extensions
+        # with module-level imports need the venv importable BEFORE Envoy
+        # start (and with Envoy disabled entirely). Never blocks init.
+        try:
+            self._initPythonEnv()
+        except Exception as e:
+            # Loud on purpose: an AttributeError here usually means the
+            # embody_pyenv module DAT is missing from the COMP -- a state
+            # where Envoy's bootstrap will also fail (2026-08-19 review).
+            self.Log(f'Python env init wiring failed: {e!r}. If this '
+                     f'names embody_pyenv, the module DAT is missing '
+                     f'from the Embody COMP.', 'WARNING')
+
     # ==========================================================================
     # PYTHON ENVIRONMENT SETUP (uv)
     # ==========================================================================
@@ -391,6 +410,14 @@ class EmbodyExt:
     # next Start -- users never rebuild a venv by hand.
     MCP_MIN_VERSION = '2.0.0'
 
+    # The venv machinery lives in mod.embody_pyenv (extracted 2026-08-19;
+    # one module owns spec building, uv invocation, stamping, wiring, the
+    # import gate, and the user-extras layer). The same-named facades below
+    # keep every call site (ConvoyExt, embody_admin, tests) unchanged.
+    # FACADES ARE MAIN-THREAD ONLY: mod.* is a TD object lookup. Worker
+    # threads receive module functions pre-resolved on the main thread
+    # (EnvoyExt._beginAsyncBootstrap pattern) -- never a facade.
+
     def _venvPaths(self) -> dict:
         """Compute venv / site-packages paths and the dependency list.
 
@@ -399,136 +426,44 @@ class EmbodyExt:
         worker thread (see _installDependencies), which is the whole point of
         separating it from the install work.
         """
-        project_dir = project.folder
-        venv_dir = os.path.join(project_dir, '.venv')
-        python_exe = sys.executable  # current interpreter (cross-platform)
-        # pyyaml: powers the .tdn git textconv driver (the committed-diff
-        # counterpart to diff_tdn). git invokes that driver via THIS venv
-        # python, and v6 .tdn files are YAML, so the venv must carry yaml even
-        # though the Envoy bridge itself never imports it.
-        ceiling_major = int(self.MCP_MIN_VERSION.split('.')[0]) + 1
-        # cryptography: the Convoy host app runs under THIS venv python and
-        # needs Ed25519 + X.509 + TLS 1.3 for LAN peer identity/mutual-TLS.
-        # It usually arrives transitively, but Convoy depends on it directly,
-        # so pin an explicit floor (matches the bridge-suite CI floor) rather
-        # than relying on another package to keep pulling it in. FLOOR, no
-        # upper bound -- an exact pin is what broke fresh installs at mcp 2.0.
-        # (The one exception is a ceiling on x86_64 macOS interpreters --
-        # see _cryptographyPin for why that target cannot take 49+.)
-        deps = [f'mcp>={self.MCP_MIN_VERSION},<{ceiling_major}', 'attrs<25',
-                'pyyaml', self._cryptographyPin(sys.platform,
-                                                platform.machine())]
-        if sys.platform.startswith('win'):
-            site_packages = os.path.join(venv_dir, 'Lib', 'site-packages')
-            venv_python = os.path.join(venv_dir, 'Scripts', 'python.exe')
-            deps.append('pywin32>=311')  # mcp 2.x floor on win32
-        else:
-            py_ver = f'python{sys.version_info.major}.{sys.version_info.minor}'
-            site_packages = os.path.join(venv_dir, 'lib', py_ver, 'site-packages')
-            venv_python = os.path.join(venv_dir, 'bin', 'python')
-        return {
-            'project_dir': project_dir,
-            'venv_dir': venv_dir,
-            'site_packages': site_packages,
-            'venv_python': venv_python,
-            'python_exe': python_exe,
-            'deps': deps,
-            'mcp_min_version': self.MCP_MIN_VERSION,
-            'mcp_ceiling_major': ceiling_major,
-            # What the stamp records / compares. Binary wheels (pydantic_core,
-            # cryptography, pywin32) are ABI-tied to the interpreter, so a TD
-            # upgrade that bumps embedded Python must rebuild the venv.
-            'python_tag': f'{sys.version_info.major}.{sys.version_info.minor}',
-            # ... and ARCHITECTURE-tied too: platform.machine() of the TD
-            # process that built the venv. Swapping the Intel TD build for
-            # the Apple Silicon one (or migrating a project between Macs)
-            # leaves wheels the interpreter can no longer dlopen, with
-            # every version check reading clean. (Distinct from macOS
-            # library validation, where TD's signed python refuses even a
-            # correct-arch foreign wheel standalone -- Convoy handles that
-            # with its daemon venv; no stamp can.)
-            'machine': platform.machine(),
-            'stamp_path': os.path.join(venv_dir, 'embody-env.json'),
-        }
+        declared = []
+        root = None
+        try:
+            # Rides on the spec so worker-side freeze_constraints can
+            # exclude the user's own extras from the core snapshot.
+            root = str(self._findProjectRoot())
+            declared = mod.embody_pyenv.read_declared_extras(root)
+        except Exception:
+            pass
+        # state_root: .embody/ state (the install lock) belongs at the
+        # PROJECT ROOT like every other .embody consumer -- rooted at
+        # project.folder it lands outside the managed gitignore when the
+        # .toe sits in a repo subfolder (review find, 2026-08-19).
+        return mod.embody_pyenv.venv_paths(
+            project.folder, self.MCP_MIN_VERSION, declared_extras=declared,
+            state_root=root)
 
     @staticmethod
     def _cryptographyPin(platform_name: str, machine: str) -> str:
-        """The venv's cryptography requirement for this interpreter target.
-
-        cryptography 49.0.0 (2026-06) stopped publishing x86_64 macOS
-        wheels -- macOS wheels are arm64-only from there on, while 48.x
-        and older shipped universal2 (loads under BOTH architectures).
-        An x86_64-running interpreter on macOS (the Intel TD build,
-        including under Rosetta) resolving the unbounded pin therefore
-        gets either a wheel it can never dlopen or a source build needing
-        a Rust toolchain. Cap below 49 on that one target so uv resolves
-        the universal2 48.x wheel; everywhere else the pin stays a pure
-        floor (an exact pin is what broke fresh installs at mcp 2.0).
-        """
-        if platform_name == 'darwin' and str(machine).lower() in (
-                'x86_64', 'x64', 'amd64'):
-            return 'cryptography>=3.4,<49'
-        return 'cryptography>=3.4'
+        """The venv's cryptography pin for this target -- see embody_pyenv."""
+        return mod.embody_pyenv.cryptography_pin(platform_name, machine)
 
     @staticmethod
     def _stampNeedsArchMigration(stamp_machine: str,
                                  platform_name: str) -> bool:
-        """Should a stamp with NO recorded machine force one rebuild?
-
-        Pre-arch stamps exist exactly on the fleet that can hold
-        wrong-arch wheels invisibly (macOS: two TD architectures, one
-        Rosetta), so darwin migrates each such venv once to an
-        arch-stamped one. Windows venvs with old stamps stay untouched
-        -- a single supported architecture cannot flip. Static and
-        parameterized so the in-TD suite (which runs on Windows) can
-        exercise the darwin branch.
-        """
-        return not stamp_machine and platform_name == 'darwin'
+        """Pre-arch-stamp darwin migration verdict -- see embody_pyenv."""
+        return mod.embody_pyenv.stamp_needs_arch_migration(
+            stamp_machine, platform_name)
 
     @staticmethod
     def _measureVenvArch(venv_python) -> 'str | None':
-        """The architecture the venv interpreter runs as when spawned
-        FRESH, or None. This is what uv's wheel resolution keyed on and
-        what a login daemon (launchd / Scheduled Task) actually gets --
-        inside TD, platform.machine() reports the TD process instead,
-        and under Rosetta the two can differ. Recorded in the stamp as a
-        diagnostic breadcrumb; the rebuild TRIGGER compares TD-process
-        values only (see _environmentNeedsInstall), which cannot loop.
-
-        WORKER-THREAD SAFE: one bounded subprocess, no TD objects.
-        """
-        try:
-            proc = subprocess.run(
-                [venv_python, '-I', '-c',
-                 'import platform; print(platform.machine())'],
-                capture_output=True, text=True, timeout=15,
-                encoding='utf-8', errors='replace',
-                stdin=subprocess.DEVNULL, creationflags=NO_WINDOW)
-            if proc.returncode != 0:
-                return None
-            return (proc.stdout or '').strip() or None
-        except Exception:
-            return None
+        """Fresh-spawn architecture of the venv python -- see embody_pyenv."""
+        return mod.embody_pyenv.measure_venv_arch(venv_python)
 
     @staticmethod
     def _venvPythonTag(venv_dir) -> 'str | None':
-        """major.minor of the interpreter a venv was built for, from its
-        pyvenv.cfg (uv writes ``version_info = 3.11.15``; stdlib venv writes
-        ``version = 3.11.15``). None when the cfg is missing or unparseable.
-        Pure filesystem -- worker-thread safe.
-        """
-        try:
-            with open(os.path.join(venv_dir, 'pyvenv.cfg'), 'r',
-                      encoding='utf-8') as f:
-                for line in f:
-                    key, _, val = line.partition('=')
-                    if key.strip().lower() in ('version', 'version_info'):
-                        parts = val.strip().split('.')
-                        if len(parts) >= 2:
-                            return f'{int(parts[0])}.{int(parts[1])}'
-        except Exception:
-            pass
-        return None
+        """major.minor a venv was built for (pyvenv.cfg) -- see embody_pyenv."""
+        return mod.embody_pyenv.venv_python_tag(venv_dir)
 
     def _environmentNeedsInstall(self, spec: Optional[dict] = None) -> bool:
         """Cheap, non-blocking check: does the venv need a (slow) install?
@@ -552,89 +487,7 @@ class EmbodyExt:
         interpreter ABI.
         """
         spec = spec or self._venvPaths()
-        site_packages = spec['site_packages']
-        if not os.path.isdir(os.path.join(site_packages, 'mcp')):
-            return True
-        # PyYAML powers the .tdn git textconv driver, which git runs via this
-        # venv python. An older venv built before that dependency lacks it, so
-        # treat its absence as "needs install" to upgrade existing venvs.
-        if not os.path.isdir(os.path.join(site_packages, 'yaml')):
-            return True
-        # The venv's OWN record of the interpreter that built it, checked
-        # before any stamp logic: a TD upgrade that bumps embedded Python
-        # must REBUILD (binary wheels are ABI-tied), including pre-stamp
-        # venvs and combined python+deps upgrades where a deps-first check
-        # would return early and install in place onto the wrong ABI.
-        cfg_tag = self._venvPythonTag(spec.get('venv_dir', ''))
-        if cfg_tag and cfg_tag != spec['python_tag']:
-            spec['recreate_venv'] = True
-            return True
-        # Spec stamp: what this venv was built for. Missing (any pre-stamp
-        # venv) or different (a pin changed, a dep added) -> reinstall.
-        try:
-            with open(spec['stamp_path'], 'r', encoding='utf-8') as f:
-                stamp = json.load(f)
-        except Exception:
-            stamp = None
-        if not isinstance(stamp, dict):
-            return True
-        if stamp.get('python') != spec['python_tag']:
-            # Secondary to the pyvenv.cfg probe (a cfg-less venv still gets
-            # caught here) -- checked before deps so the rebuild verdict wins
-            # over the in-place-upgrade verdict when both changed.
-            spec['recreate_venv'] = True
-            return True
-        stamp_machine = str(stamp.get('machine') or '')
-        if stamp_machine and stamp_machine != str(spec.get('machine') or ''):
-            # Binary wheels are ARCHITECTURE-tied as well as ABI-tied.
-            # Swapping the Intel TD build for the Apple Silicon one (or
-            # migrating the project between machines) leaves wheels the
-            # interpreter can no longer dlopen while every version check
-            # reads clean -- cryptography's Rust .dylib refusing to load
-            # was exactly this. Same placement rule as the python check:
-            # BEFORE deps, so recreate wins over in-place install (uv
-            # would resolve wrong-arch-but-present wheels as satisfied).
-            spec['recreate_venv'] = True
-            return True
-        if (spec.get('machine')
-                and self._stampNeedsArchMigration(stamp_machine,
-                                                  sys.platform)):
-            # Guarded on the CURRENT machine value: if platform.machine()
-            # ever returned '' here, a rebuild could not stamp anything
-            # better and the migration would re-fire every start -- a
-            # permanent rebuild loop for zero information gained.
-            spec['recreate_venv'] = True
-            return True
-        if sorted(stamp.get('deps') or []) != sorted(spec['deps']):
-            return True
-        ver = self._mcpDistVersion(site_packages)
-        if ver is None:
-            # mcp present but no parseable metadata -- the old fast path
-            # accepted this and proceeded to the import check, so no install
-            # is required.
-            return False
-        try:
-            installed = tuple(int(x) for x in ver.split('.')[:3])
-            minimum = tuple(int(x) for x in spec['mcp_min_version'].split('.'))
-            if installed < minimum:
-                return True
-            # At or above the unsupported next major (a hand-installed newer
-            # mcp, or the unpinned-resolver era that pulled 2.0.0 under 1.x
-            # code -- issue #81): reinstall walks it back inside the pin.
-            if installed >= (spec['mcp_ceiling_major'],):
-                return True
-        except Exception:
-            return False
-        # attrs 25.x conflicts with TD's bundled attr module -- needs a downgrade.
-        try:
-            attrs_infos = glob(os.path.join(site_packages, 'attrs-*.dist-info'))
-            if attrs_infos:
-                aver = os.path.basename(attrs_infos[0])[len('attrs-'):-len('.dist-info')]
-                if int(aver.split('.')[0]) >= 25:
-                    return True
-        except Exception:
-            pass
-        return False
+        return mod.embody_pyenv.environment_needs_install(spec)
 
     def _wirePythonPaths(self, spec: Optional[dict] = None) -> bool:
         """Wire the Envoy venv paths into this interpreter.
@@ -644,14 +497,7 @@ class EmbodyExt:
         main-thread convenience path by resolving _venvPaths() first.
         """
         spec = spec or self._venvPaths()
-        venv_dir = spec.get('venv_dir')
-        site_packages = spec.get('site_packages')
-        if not venv_dir or not os.path.isdir(venv_dir):
-            return False
-        if not site_packages or not os.path.isdir(site_packages):
-            return False
-        self._addSitePackages(site_packages)
-        return True
+        return mod.embody_pyenv.wire_python_paths(spec)
 
     @staticmethod
     def _importGateCheck(site_packages: 'str | None' = None) -> tuple[bool, str]:
@@ -672,90 +518,17 @@ class EmbodyExt:
         process), so the only safe exit is a TD restart -- say so instead of
         trying.
         """
-        needed = 'mcp.server.mcpserver'
-        disk_ver = (EmbodyExt._mcpDistVersion(site_packages)
-                    if site_packages else None)
-        loaded_ver = getattr(sys, '_envoy_mcp_loaded_version', None)
-        stale = (loaded_ver and disk_ver and disk_ver != loaded_ver
-                 and 'mcp' in sys.modules)
-        # A fully-loaded 1.x stack identifies itself by its fastmcp module --
-        # 2.x has none. New-generation code gating over a LIVE 1.x stack
-        # always needs a restart, whatever the disk state (even mid-install,
-        # when disk metadata may be absent): purging a live stack to reimport
-        # is the documented pydantic_core abort() vector. A half-loaded
-        # FAILED import (parent 'mcp' without fastmcp) is NOT this case and
-        # still takes the recovery purge below.
-        legacy_loaded = ('mcp.server.fastmcp' in sys.modules
-                         and needed not in sys.modules)
-        if stale or legacy_loaded:
-            # Kill the process-wide fast-path flag: a refusal must make EVERY
-            # subsequent Start re-run this gate (and re-refuse) rather than
-            # short-circuit into _continueStart and import a mixed stack.
-            sys._envoy_import_gate_ok = False
-            return False, (
-                f'Envoy dependencies were upgraded on disk (installed mcp '
-                f'{disk_ver or "unknown"}, loaded {loaded_ver or "1.x"}) but '
-                f'the old stack is already imported in this session. Save '
-                f'your work and restart TouchDesigner to finish the upgrade.'
-            )
-        if needed in sys.modules:
-            sys._envoy_import_gate_ok = True
-            return True, ''
-        try:
-            import importlib
-            # First import attempt of this session, or recovery from a prior
-            # failed import: clear any half-loaded mcp.* entries so the loader
-            # genuinely re-runs (a failed import leaves the parent package
-            # behind but not the submodule).
-            for mod in list(sys.modules):
-                if mod == 'mcp' or mod.startswith('mcp.'):
-                    del sys.modules[mod]
-            importlib.import_module(needed)
-            sys._envoy_import_gate_ok = True
-            if disk_ver:
-                # Remember which dist this interpreter imported so a future
-                # on-disk upgrade is detected as restart-required, not
-                # hot-swapped into a mixed stack.
-                sys._envoy_mcp_loaded_version = disk_ver
-            return True, ''
-        except BaseException as e:
-            sys._envoy_import_gate_ok = False
-            return False, str(e) or e.__class__.__name__
+        return mod.embody_pyenv.import_gate_check(site_packages)
 
     @staticmethod
     def _mcpDistVersion(site_packages) -> 'str | None':
-        """Newest parseable mcp version among mcp-*.dist-info directories.
-
-        Version-sorted, not filesystem-order: an interrupted uninstall can
-        leave an old dist-info beside the current one, and reading the stale
-        name would wedge needs-install True forever (uv already satisfied)
-        and feed the gate a wrong disk version. None when no parseable
-        metadata exists. Pure filesystem -- worker-thread safe.
-        """
-        try:
-            best = None
-            for p in glob(os.path.join(site_packages, 'mcp-*.dist-info')):
-                v = os.path.basename(p)[len('mcp-'):-len('.dist-info')]
-                try:
-                    key = tuple(int(x) for x in v.split('.')[:3])
-                except Exception:
-                    continue
-                if best is None or key > best[0]:
-                    best = (key, v)
-            return best[1] if best else None
-        except Exception:
-            return None
+        """Newest parseable mcp dist-info version -- see embody_pyenv."""
+        return mod.embody_pyenv.mcp_dist_version(site_packages)
 
     @staticmethod
     def _importGateFailureMessage(site_packages, message):
-        if 'restart TouchDesigner' in message:
-            return message  # the restart notice is the complete instruction
-        return (
-            f'Dependencies installed but mcp.server.mcpserver failed to '
-            f'import: {message}. '
-            f'Inspect {site_packages} for partial installs and try deleting '
-            f'.venv/ to force a clean rebuild.'
-        )
+        return mod.embody_pyenv.import_gate_failure_message(
+            site_packages, message)
 
     def _setupEnvironment(self):
         """
@@ -797,8 +570,20 @@ class EmbodyExt:
                 'ERROR',
             )
             return False
+        # PATH/DLL/VIRTUAL_ENV linking is main-thread-only and separate
+        # from sys.path wiring; a rebuild invalidates the retained DLL
+        # handle first (Windows re-resolution across delete/recreate of
+        # the same dir is not guaranteed).
+        if spec.get('recreate_venv'):
+            mod.embody_pyenv.unlink_dll_dir(spec['venv_dir'])
+        self._linkEnv(spec)
         if sys.platform.startswith('win'):
             self._fixPywin32Dlls(site_packages)
+
+        # A rebuild wiped user extras with the venv -- re-arm the
+        # non-gating reconcile (the async path does this in
+        # _pollBootstrap; this is the synchronous/wizard path's twin).
+        self._scheduleExtrasApply(delay_frames=1)
 
         # Opportunistic, non-blocking check for a newer mcp on PyPI.
         try:
@@ -810,121 +595,21 @@ class EmbodyExt:
         return self._verifyMcpImportable(site_packages)
 
     def _installDependencies(self, spec: dict, log) -> bool:
-        """Build the venv and pip-install Envoy's dependencies.
+        """Build the venv and pip-install Envoy's CORE dependencies.
 
-        WORKER-THREAD SAFE: touches no TouchDesigner objects. Every path is
-        precomputed in ``spec`` (see _venvPaths, which must run on the main
-        thread), and every message goes through the ``log(message, level)``
-        callback -- never self.Log, which writes the FIFO DAT and reads
-        parameters (illegal off the main thread). Returns True if uv, the venv,
-        and the dependencies all installed cleanly.
-
-        Does NOT touch sys.path or import mcp -- callers do that separately
-        (see _setupEnvironment / EnvoyExt._beginAsyncBootstrap), so the
-        delicate pydantic_core import can run off the TD main thread.
+        MAIN-THREAD facade (the mod lookup): EnvoyExt's async bootstrap
+        binds mod.embody_pyenv.install_dependencies on the main thread and
+        hands THAT (worker-safe) function to its worker -- never this
+        facade. Does NOT touch sys.path or import mcp -- callers do that
+        separately so the delicate pydantic_core import can run off the TD
+        main thread.
         """
-        venv_dir = spec['venv_dir']
-        venv_python = spec['venv_python']
-        python_exe = spec['python_exe']
-        deps = spec['deps']
-        try:
-            uv = self._findOrInstallUv(python_exe, log=log)
-            if not uv:
-                log('uv not found and could not be installed -- Envoy cannot '
-                    'bootstrap. Install uv manually (https://docs.astral.sh/uv/) '
-                    'and ensure it is on PATH visible to TouchDesigner (macOS GUI '
-                    'apps do not inherit shell PATH).', 'ERROR')
-                return False
-
-            # Create venv if it doesn't exist.
-            # stdin=DEVNULL: subprocess.run from inside TD on Windows raises
-            # [WinError 50] without it -- subprocess.py's stdin=None path
-            # calls DuplicateHandle on TD's stdin handle, which is not
-            # duplicatable for a GUI process. DEVNULL routes through NUL.
-            # UV_LINK_MODE=copy: uv defaults to HARDLINKING packages from
-            # its global cache into the venv. If ANY venv on the machine
-            # ever hardlinked a cache entry from inside a cloud-synced
-            # folder (Dropbox/OneDrive use the Windows cloud-files
-            # filter), that cache inode is poisoned and every NEW
-            # hardlink to it fails with os error 396 ("cloud operation
-            # ... incompatible hardlinks") -- fresh installs then die
-            # with "Python environment not ready" (caught by the
-            # v6.0.151 fresh-install smoke). Copy mode trades a few MB
-            # of one-time disk for immunity to that entire class.
-            uv_env = self._bootstrapEnv(UV_LINK_MODE='copy')
-
-            recreate = bool(spec.get('recreate_venv'))
-            if recreate or not os.path.isdir(venv_dir):
-                log('Rebuilding virtual environment (Python version changed)...'
-                    if recreate else 'Creating virtual environment...')
-                cmd = [uv, 'venv', venv_dir, '--python', python_exe]
-                if recreate:
-                    # uv owns the removal of the stale-ABI venv; Embody never
-                    # recursive-deletes it by hand.
-                    cmd.append('--clear')
-                subprocess.run(
-                    cmd,
-                    check=True, capture_output=True, text=True,
-                    encoding='utf-8', errors='replace',
-                    stdin=subprocess.DEVNULL, env=uv_env,
-                    creationflags=NO_WINDOW,
-                )
-
-            # Name the spec in the log line: when an install resolves the
-            # wrong thing in the field, this line is the evidence (issue #81
-            # was diagnosed from a log that couldn't show what pip saw).
-            log(f'Installing dependencies ({", ".join(deps)})...')
-            subprocess.run(
-                [uv, 'pip', 'install'] + deps + ['--python', venv_python],
-                check=True, capture_output=True, text=True,
-                encoding='utf-8', errors='replace',
-                stdin=subprocess.DEVNULL, env=uv_env,
-                creationflags=NO_WINDOW,
-            )
-            # Best-effort: what the venv interpreter runs AS when spawned
-            # fresh (can differ from the TD process under Rosetta). Pure
-            # breadcrumb for the stamp; never blocks the install.
-            spec['venv_arch'] = self._measureVenvArch(venv_python)
-            self._writeEnvStamp(spec)
-            log('Python environment ready', 'SUCCESS')
-            return True
-
-        except subprocess.CalledProcessError as e:
-            log(f'Environment setup failed: {e.stderr or e}', 'ERROR')
-            return False
-        except Exception as e:
-            log(f'Environment setup failed: {e}', 'ERROR')
-            return False
+        return mod.embody_pyenv.install_dependencies(spec, log)
 
     @staticmethod
     def _writeEnvStamp(spec: dict) -> None:
-        """Record what the venv was built for (dep spec + Python tag).
-
-        WORKER-THREAD SAFE: pure filesystem write on paths precomputed in
-        ``spec``. _environmentNeedsInstall compares this stamp against the
-        current spec, which is what makes every Embody upgrade that changes a
-        pin auto-upgrade every existing venv on its next Start. A torn or
-        missing stamp just reads as needs-install -- self-healing, so no
-        atomic-rename dance is needed.
-        """
-        stamp = {
-            'schema': 1,
-            'deps': sorted(spec['deps']),
-            'python': spec['python_tag'],
-            # TD-process architecture at build time -- the value the
-            # rebuild trigger compares (loop-free: after a rebuild it
-            # always equals the current process). Older readers ignore
-            # unknown keys, so this is silently backward-compatible.
-            'machine': spec.get('machine') or '',
-            # What the venv interpreter reported when spawned fresh, or
-            # the TD value when that probe failed. Diagnostic only.
-            'arch': spec.get('venv_arch') or spec.get('machine') or '',
-        }
-        try:
-            with open(spec['stamp_path'], 'w', encoding='utf-8') as f:
-                json.dump(stamp, f, indent=2)
-        except Exception:
-            pass  # unstamped venv reinstalls next Start -- never block install
+        """Record what the venv was built for -- see embody_pyenv."""
+        mod.embody_pyenv.write_env_stamp(spec)
 
     def _verifyMcpImportable(self, site_packages):
         """Final gate: confirm mcp.server.mcpserver imports inside TD's process.
@@ -955,7 +640,9 @@ class EmbodyExt:
 
         Starts from TD's environment (children may need TD's loader vars)
         but drops the variables that redirect Python's module search:
-        PYTHONPATH, PYTHONSTARTUP, PYTHONUSERBASE, PYTHONNOUSERSITE.
+        PYTHONPATH, PYTHONSTARTUP, PYTHONUSERBASE, PYTHONNOUSERSITE, plus
+        VIRTUAL_ENV (2026-08-19: tdPyEnvManager sets it process-wide to
+        ITS env and uv honors it when --python is absent).
         TouchDesigner's 'Python 64-bit Module Path' preference reaches
         child processes through the environment on macOS, and users also
         set PYTHONPATH globally (the TD-documented alternative to the
@@ -968,103 +655,388 @@ class EmbodyExt:
 
         WORKER-THREAD SAFE: reads os.environ only.
         """
-        env = {k: v for k, v in os.environ.items()
-               if k not in ('PYTHONPATH', 'PYTHONSTARTUP',
-                            'PYTHONUSERBASE', 'PYTHONNOUSERSITE')}
-        env['PYTHONIOENCODING'] = 'utf-8'
-        env.update(extra)
-        return env
+        return mod.embody_pyenv.bootstrap_env(**extra)
 
     @staticmethod
     def _resolveUv() -> 'str | None':
-        """Locate an existing uv WITHOUT installing one, or None.
-
-        PATH first, then the common pip --user locations. The fallback
-        list matters inside a GUI TouchDesigner: macOS GUI apps get the
-        launchd PATH, which excludes ~/.local/bin and
-        ~/Library/Python/3.x/bin -- exactly where the pip --user install
-        below puts uv. A PATH-only lookup therefore reports 'no uv' on
-        the very machine whose venv uv itself built (that blind spot
-        silently disabled Convoy's venv repair on macOS). Resolve-only
-        and subprocess-free, so main-thread callers may use it.
-        """
-        uv = shutil.which('uv')
-        if uv:
-            return uv
-        if sys.platform.startswith('win'):
-            appdata = os.environ.get('APPDATA', '')
-            if appdata:
-                for candidate in glob(os.path.join(
-                        appdata, 'Python', 'Python*', 'Scripts', 'uv.exe')):
-                    if os.path.isfile(candidate):
-                        return candidate
-        else:
-            home = os.path.expanduser('~')
-            for candidate in (
-                    glob(os.path.join(home, 'Library', 'Python', '3.*',
-                                      'bin', 'uv'))
-                    + [os.path.join(home, '.local', 'bin', 'uv')]):
-                if os.path.isfile(candidate):
-                    return candidate
-        return None
+        """Locate an existing uv WITHOUT installing -- see embody_pyenv."""
+        return mod.embody_pyenv.resolve_uv()
 
     def _findOrInstallUv(self, python_exe, log=None):
-        """Find uv (PATH or user-install locations), or install it via
-        pip --user. Returns path to uv executable or None.
-
-        ``log`` is a ``log(message, level='INFO')`` callback. It defaults to
-        self.Log for main-thread callers; worker-thread callers
-        (_installDependencies) MUST pass a thread-safe collector instead, since
-        self.Log writes the FIFO DAT and reads parameters.
-        """
-        log = log or self.Log
-        uv = self._resolveUv()
-        if uv:
-            return uv
-
-        # Install uv via pip --user (avoids needing admin for Program Files)
-        log('uv not found - installing via pip...')
-        try:
-            subprocess.run(
-                [python_exe, '-m', 'pip', 'install', '--user', 'uv'],
-                check=True, capture_output=True, text=True,
-                encoding='utf-8', errors='replace',
-                stdin=subprocess.DEVNULL, env=self._bootstrapEnv(),
-                creationflags=NO_WINDOW,
-            )
-        except subprocess.CalledProcessError as e:
-            log(f'Failed to install uv: {e.stderr or e}', 'ERROR')
-            return None
-
-        uv = self._resolveUv()
-        if uv:
-            return uv
-
-        log('Could not find uv after install - is Python user Scripts on PATH?', 'ERROR')
-        return None
+        """Find uv or install it via pip --user -- see embody_pyenv.
+        MAIN-THREAD facade; workers get the module function pre-resolved."""
+        return mod.embody_pyenv.find_or_install_uv(python_exe, log or self.Log)
 
     def _addSitePackages(self, site_packages):
-        """Add venv site-packages (and pywin32 subdirs on Windows) to sys.path."""
-        paths = [site_packages]
-        if sys.platform.startswith('win'):
-            paths.append(os.path.join(site_packages, 'win32'))
-            paths.append(os.path.join(site_packages, 'win32', 'lib'))
-        for p in paths:
-            if os.path.isdir(p) and p not in sys.path:
-                sys.path.insert(0, p)
+        """Add venv site-packages to sys.path -- see embody_pyenv."""
+        mod.embody_pyenv.add_site_packages(site_packages)
 
     def _fixPywin32Dlls(self, site_packages):
-        """Copy pywin32 DLLs to win32/ so they're importable without post-install."""
-        src_dir = os.path.join(site_packages, 'pywin32_system32')
-        dst_dir = os.path.join(site_packages, 'win32')
-        if not os.path.isdir(src_dir) or not os.path.isdir(dst_dir):
+        """Copy pywin32 DLLs to win32/ -- see embody_pyenv."""
+        mod.embody_pyenv.fix_pywin32_dlls(site_packages)
+
+    # ------------------------------------------------------------------
+    # Public Python-environment surface (2026-08-19). The project venv is
+    # SHARED: any script in TD can import from it once wired, external
+    # tools can run VenvPython, and declared extras travel in the
+    # committed .embody/project.json (python.extras) -- surviving venv
+    # rebuilds, TD upgrades, and machine moves. Extras never gate Envoy.
+    # ------------------------------------------------------------------
+
+    @property
+    def VenvPython(self) -> str:
+        """Absolute path to the project venv's python interpreter, or ''
+        when the venv does not exist yet. For running external scripts
+        against the project environment. macOS caveat: TD's signed python
+        can refuse foreign NATIVE modules when spawned standalone (library
+        validation) -- inside TD the same packages import fine."""
+        spec = self._venvPaths()
+        p = spec['venv_python']
+        return p if os.path.isfile(p) else ''
+
+    @property
+    def VenvSitePackages(self) -> str:
+        """Absolute path to the project venv's site-packages, or ''."""
+        spec = self._venvPaths()
+        p = spec['site_packages']
+        return p if os.path.isdir(p) else ''
+
+    def InstallPackages(self, packages, allow_shadow: bool = False) -> dict:
+        """Add third-party Python packages to the shared project venv.
+
+        Validates each requirement (plain name-based specs only; Embody's
+        pinned core stack and TouchDesigner-bundled packages are refused
+        -- shadowing TD's numpy/opencv is a crash class; override
+        per-call with ``allow_shadow=True``, which is recorded in the
+        declaration so the opt-in survives rebuilds). Accepted specs are
+        written to the COMMITTED ``.embody/project.json`` under
+        ``python.extras`` -- the declaration other machines see -- and
+        acknowledged in the machine-local ``.embody/local.json`` (this
+        machine's consent; a pulled declaration never installs without
+        it). The install runs in the background, wheels-only,
+        constrained by the frozen core closure. Non-blocking: returns
+        {'accepted', 'refused', 'declared', 'status'} immediately;
+        install results land in the Embody log, including a
+        restart-required notice when a changed dist is already imported.
+        To remove a package, delete it from python.extras (takes effect
+        at the next venv rebuild) or uninstall it via VenvPython.
+        """
+        if isinstance(packages, str):
+            packages = [packages]
+        packages = [str(p).strip() for p in (packages or []) if str(p).strip()]
+        pyenv = mod.embody_pyenv
+        spec = self._venvPaths()
+        accepted, refused = pyenv.check_extras_specs(
+            packages, spec, allow_shadow)
+        root = str(self._findProjectRoot())
+        declared = pyenv.read_declared_extras(root)
+        result = {'accepted': accepted, 'refused': refused,
+                  'declared': declared, 'status': 'nothing to do'}
+        for s, reason in refused.items():
+            self.Log(f'InstallPackages refused {s!r}: {reason}', 'WARNING')
+        if not accepted:
+            return result
+        # Merge keyed by DIST NAME, new spec superseding old: unioning
+        # raw strings left 'requests>=2.28' AND 'requests==2.31' both
+        # declared, feeding uv two constraints on one dist forever
+        # (2026-08-19 review).
+        by_name = {}
+        for s in declared:
+            by_name.setdefault(pyenv.spec_dist_name(s) or s, s)
+        for s in accepted:
+            by_name[pyenv.spec_dist_name(s) or s] = s
+        merged = sorted(set(by_name.values()))
+        shadow_names = ([pyenv.spec_dist_name(s) for s in accepted]
+                        if allow_shadow else None)
+        if not pyenv.write_declared_extras(root, merged, self.Log,
+                                           allow_shadow_names=shadow_names):
+            result['status'] = 'error: could not update .embody/project.json'
+            return result
+        result['declared'] = merged
+        # This call IS this machine's consent -- record it so the
+        # background reconcile may act on these specs. A failed consent
+        # write must not report 'scheduled' (the reconcile would classify
+        # the specs unacknowledged and install nothing).
+        if not pyenv.acknowledge_extras(root, accepted, self.Log):
+            result['status'] = ('error: could not record consent in '
+                                '.embody/local.json -- retry')
+            return result
+        # A re-requested spec that failed before should retry NOW, not
+        # stay suppressed behind its failure record.
+        pyenv.clear_extras_failures(spec, accepted)
+        if pyenv.environment_needs_install(spec):
+            result['status'] = ('deferred: the Python environment is not '
+                                'built yet -- extras install after the '
+                                'core bootstrap (enable Envoy or run the '
+                                'setup wizard)')
+            self.Log(f'Extras declared ({", ".join(accepted)}) but the '
+                     f'venv is not built yet -- they install after the '
+                     f'core bootstrap.', 'WARNING')
+            return result
+        result['status'] = 'scheduled'
+        self.Log(
+            f'Extras declared ({", ".join(accepted)}) -- installing in '
+            f'the background. Commit .embody/project.json so the '
+            f'declaration travels with the project.', 'INFO')
+        self._scheduleExtrasApply(delay_frames=1)
+        return result
+
+    def ApplyDeclaredExtras(self) -> dict:
+        """Consent to and install EVERY package declared in
+        .embody/project.json's python.extras on THIS machine.
+
+        A declaration pulled from git never auto-installs (installing is
+        code execution; consent is machine-local). This is the explicit
+        yes: it acknowledges all currently-declared installable specs in
+        .embody/local.json and kicks the background install. Returns the
+        reconcile status (refused entries stay refused).
+        """
+        pyenv = mod.embody_pyenv
+        root = str(self._findProjectRoot())
+        declared = pyenv.read_declared_extras(root)
+        spec = self._venvPaths()
+        status = pyenv.extras_status(
+            spec, declared, acknowledged=None,
+            allow_shadow_names=pyenv.read_allow_shadow_names(root))
+        installable = [s for s in declared
+                       if s not in (status.get('refused') or {})]
+        if installable:
+            if not pyenv.acknowledge_extras(root, installable, self.Log):
+                self.Log('Could not record consent in .embody/local.json '
+                         '-- nothing installed; retry.', 'ERROR')
+                return status
+            self.Log(f'Acknowledged {len(installable)} declared extra(s) '
+                     f'on this machine -- installing in the background.',
+                     'INFO')
+            self._scheduleExtrasApply(delay_frames=1)
+        else:
+            self.Log('No installable extras declared.', 'INFO')
+        return status
+
+    def _declaredExtras(self) -> list:
+        """The committed extras declaration -- see embody_pyenv."""
+        return mod.embody_pyenv.read_declared_extras(
+            str(self._findProjectRoot()))
+
+    def _linkEnv(self, spec: Optional[dict] = None) -> bool:
+        """PATH/DLL/VIRTUAL_ENV linking -- MAIN THREAD ONLY facade."""
+        return mod.embody_pyenv.link_env(spec or self._venvPaths())
+
+    def _initPythonEnv(self):
+        """Wire an existing healthy venv at extension init (2026-08-19).
+
+        tdPyEnvManager links pre-cook and Embody historically waited for
+        Envoy Start (frame 30+), so module-level imports in user
+        extensions failed on cold open and worked on re-cook -- the worst
+        bug shape. sys.path + PATH/DLL wiring only: no subprocess, no
+        install, no prompt (the deliberate exclusion of _setupEnvironment
+        from __init__ stands). Also runs the read-only tdPyEnvManager
+        co-existence check once per session, adopts any extras install a
+        replaced instance left running, and arms the non-gating extras
+        reconcile.
+        """
+        spec = self._venvPaths()
+        pyenv = mod.embody_pyenv
+        if (os.path.isdir(spec['site_packages'])
+                and not pyenv.environment_needs_install(spec)):
+            pyenv.wire_python_paths(spec)
+            pyenv.link_env(spec)  # __init__ runs on the main thread
+        if not getattr(sys, '_embody_pyenv_tdpem_checked', False):
+            sys._embody_pyenv_tdpem_checked = True
+            try:
+                finding = pyenv.detect_tdpyenvmanager(
+                    str(self._findProjectRoot()), spec['venv_dir'], app,
+                    extra_dirs=[spec['project_dir']])
+                notice = pyenv.tdpyenvmanager_notice(finding)
+                if notice:
+                    self.Log(notice[1], notice[0])
+            except Exception:
+                pass
+        # A replaced instance may have a worker mid-install: adopt its
+        # result instead of orphaning it (reinit is routine here --
+        # source DATs hot-sync). The sys-level result slot makes the
+        # hand-off instance-independent.
+        if getattr(sys, '_embody_pyenv_installing', None) is not None:
+            run('args[0]._pollExtrasInstall()', self, delayFrames=30)
             return
-        for dll in os.listdir(src_dir):
-            if dll.endswith('.dll'):
-                src = os.path.join(src_dir, dll)
-                dst = os.path.join(dst_dir, dll)
-                if not os.path.exists(dst):
-                    shutil.copy2(src, dst)
+        # Reconcile declared extras well after the startup restore phases
+        # (frames 30/45/60) so a fresh open never races them.
+        self._scheduleExtrasApply(delay_frames=120)
+
+    def _scheduleExtrasApply(self, delay_frames: int = 120) -> None:
+        """Arm the non-gating extras reconcile; cheap no-op when nothing
+        is declared, pending, acknowledged, or the venv needs its CORE
+        install (the bootstrap owns the venv then and re-arms us after).
+        Surfaces refused and unacknowledged declarations once per
+        session -- never silently dropped. Pure JSON reads."""
+        try:
+            pyenv = mod.embody_pyenv
+            root = str(self._findProjectRoot())
+            declared = pyenv.read_declared_extras(root)
+            if not declared:
+                return
+            if not getattr(sys, '_embody_pyenv_root_logged', False):
+                sys._embody_pyenv_root_logged = True
+                self.Log(f'Python extras declaration: '
+                         f'{os.path.join(root, ".embody", "project.json")}',
+                         'DEBUG')
+            spec = self._venvPaths()
+            if pyenv.environment_needs_install(spec):
+                return
+            status = pyenv.extras_status(
+                spec, declared,
+                acknowledged=pyenv.read_acknowledged_extras(root),
+                allow_shadow_names=pyenv.read_allow_shadow_names(root))
+            refused = status.get('refused') or {}
+            if refused and (getattr(sys, '_embody_pyenv_refused_logged', None)
+                            != set(refused)):
+                sys._embody_pyenv_refused_logged = set(refused)
+                applied_now = set(status.get('applied') or [])
+                for s, reason in refused.items():
+                    tail = ''
+                    if s in applied_now:
+                        # Refused-but-already-installed: warning alone
+                        # leaves the package live on sys.path -- name the
+                        # remediation (2026-08-19 review).
+                        tail = (' NOTE: this package is ALREADY installed '
+                                'and still active -- remove it with: uv '
+                                'pip uninstall <name> --python '
+                                '<op.Embody.VenvPython>.')
+                    self.Log(f'Declared extra not installable: {reason}.'
+                             f'{tail}', 'WARNING')
+            unack = status.get('unacknowledged') or []
+            if unack and (getattr(sys, '_embody_pyenv_unack_logged', None)
+                          != set(unack)):
+                sys._embody_pyenv_unack_logged = set(unack)
+                self.Log(
+                    f'{len(unack)} Python package(s) are declared in '
+                    f'.embody/project.json but have not been approved on '
+                    f'this machine: {", ".join(unack)}. Installing them '
+                    f'runs third-party code -- review the declaration, '
+                    f'then run op.Embody.ApplyDeclaredExtras() to '
+                    f'install.', 'WARNING')
+            exhausted = status.get('exhausted') or []
+            if exhausted and (getattr(sys, '_embody_pyenv_exhausted_logged',
+                                      None) != set(exhausted)):
+                sys._embody_pyenv_exhausted_logged = set(exhausted)
+                self.Log(
+                    f'Gave up on {", ".join(exhausted)} after 3 failed '
+                    f'attempts (transient errors each time). Re-request '
+                    f'via op.Embody.InstallPackages() to try again.',
+                    'WARNING')
+            if not status['to_install']:
+                return
+            run('args[0]._applyDeclaredExtras()', self,
+                delayFrames=max(1, int(delay_frames)))
+        except Exception:
+            pass
+
+    def _applyDeclaredExtras(self) -> None:
+        """Main-thread entry: spawn the worker installing declared extras.
+
+        Everything TD-flavored (mod resolution, project root, spec) is
+        resolved HERE; the worker receives plain data and a pure module
+        function, and publishes its result to a SYS-LEVEL slot so a
+        replaced instance's poll (or the next instance) can consume it --
+        reinit is routine. The busy flag stores (monotonic, thread) and
+        is stale only when its worker thread is dead: a wall-clock expiry
+        alone started a second concurrent uv under any install longer
+        than the window (2026-08-19 review). Cross-process safety is the
+        module's O_EXCL install lock, not this flag."""
+        try:
+            if self.my.ext.Embody is not self:
+                return  # stale instance; the fresh one re-arms at init
+        except Exception:
+            return
+        busy = getattr(sys, '_embody_pyenv_installing', None)
+        if busy:
+            thread = busy.get('thread') if isinstance(busy, dict) else None
+            if thread is not None and thread.is_alive():
+                # Genuine install in flight -- check back rather than
+                # dropping this request on the floor.
+                run('args[0]._pollExtrasInstall()', self, delayFrames=60)
+                return
+            sys._embody_pyenv_installing = None  # dead worker: reclaim
+        try:
+            pyenv = mod.embody_pyenv  # MAIN-THREAD resolution
+            root = str(self._findProjectRoot())
+            declared = pyenv.read_declared_extras(root)
+            spec = self._venvPaths()
+            if pyenv.environment_needs_install(spec):
+                return
+            to_install = pyenv.extras_status(
+                spec, declared,
+                acknowledged=pyenv.read_acknowledged_extras(root),
+                allow_shadow_names=pyenv.read_allow_shadow_names(root)
+            )['to_install']
+            if not to_install:
+                return
+            install_extras = pyenv.install_extras  # worker-safe function
+        except Exception:
+            return
+        sys._embody_pyenv_result = None
+        import threading
+        import time as _time
+
+        def worker():
+            msgs = []
+            try:
+                res = install_extras(
+                    spec, to_install,
+                    lambda m, lvl='INFO': msgs.append((lvl, m)))
+            except BaseException as e:
+                res = {'installed': [], 'failed': {},
+                       'transient': {s: str(e) for s in to_install},
+                       'restart_required': [], 'deferred': ''}
+            # Sys-level atomic publish: any instance's poll may consume.
+            sys._embody_pyenv_result = (msgs, res)
+
+        t = threading.Thread(target=worker, daemon=True)
+        sys._embody_pyenv_installing = {'t0': _time.monotonic(), 'thread': t}
+        t.start()
+        run('args[0]._pollExtrasInstall()', self, delayFrames=30)
+
+    def _pollExtrasInstall(self) -> None:
+        """Main-thread poll consuming the sys-level extras result slot,
+        replaying the worker's log lines, and re-arming the reconcile
+        (deferred installs retry; queued requests drain)."""
+        try:
+            if self.my.ext.Embody is not self:
+                return  # the fresh instance's init adopts the poll
+        except Exception:
+            return
+        result = getattr(sys, '_embody_pyenv_result', None)
+        if result is None:
+            busy = getattr(sys, '_embody_pyenv_installing', None)
+            if busy is None:
+                # Nothing in flight and nothing to consume: an orphaned
+                # poll (another poller already drained the slots) -- stop
+                # instead of self-rescheduling for the whole session
+                # (2026-08-19 review: one perpetual chain per reinit).
+                return
+            thread = busy.get('thread') if isinstance(busy, dict) else None
+            if thread is not None and not thread.is_alive():
+                # Worker died without publishing -- clear, give up loudly,
+                # and keep the reconcile armed for the rest of the session.
+                sys._embody_pyenv_installing = None
+                self.Log('Extras install worker ended without a result -- '
+                         'see the Embody log folder for details; retry '
+                         'with op.Embody.ApplyDeclaredExtras().', 'ERROR')
+                self._scheduleExtrasApply(delay_frames=1800)
+                return
+            run('args[0]._pollExtrasInstall()', self, delayFrames=30)
+            return
+        sys._embody_pyenv_result = None
+        sys._embody_pyenv_installing = None
+        msgs, res = result
+        for lvl, m in msgs:
+            self.Log(m, lvl)
+        if res.get('deferred'):
+            self.Log(f'Extras install deferred: {res["deferred"]}', 'INFO')
+            self._scheduleExtrasApply(delay_frames=1800)  # ~30s at 60fps
+        else:
+            # Drain anything declared while this install ran.
+            self._scheduleExtrasApply(delay_frames=60)
 
     def _checkMCPUpdate(self, installed: str):
         """Check PyPI for a newer MCP version in a background thread. Logs a
@@ -9583,6 +9555,16 @@ class EmbodyExt:
 
     def ReconstructTDNComps(self) -> None:
         """Reconstruct all TDN-strategy COMPs from .tdn files on project open."""
+        # Convoy: registration lives in ConvoyExt's tick, which starts at
+        # extension CONSTRUCTION -- and TD constructs extensions lazily. In
+        # TDN mode off/export nothing touches the convoy COMP at open, so an
+        # enabled node sat 'Disabled' until first incidental access (field
+        # 2026-08-19: 18 min dormant after a relaunch). Touch .ext past the
+        # TDN window; construction never raises a consent dialog.
+        run("o = op(%r)\n"
+            "if o and o.valid and o.par.Convoyenable.eval() and o.op('convoy'):\n"
+            "    o.op('convoy').ext.ConvoyExt" % (self.my.path,),
+            delayFrames=15)
         # Fingerprint baselines persisted into the .toe reflect the LAST
         # SAVE's network; the network is freshly restored now, so drop them
         # and let the first sweep re-seed against the current live state.

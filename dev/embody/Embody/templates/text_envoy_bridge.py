@@ -313,7 +313,7 @@ BRIDGE_TOOLS = [
             "Python grant. Dispatches the bounded update_embody operation "
             "(sha256-pinned manifest, downgrade-refusing) as a durable "
             "job per node and returns the handles; poll convoy_get_job. "
-            "Nodes must run Embody >= 6.0.255 to serve the operation."
+            "Nodes must run Embody >= 6.0.256 to serve the operation."
         ),
         "inputSchema": {
             "type": "object",
@@ -3055,7 +3055,7 @@ def handle_convoy_update_embody(params):
         "hint": "Each dispatch is a durable per-node job: poll with "
                 "convoy_get_job(delivery_id=...). A node already at the "
                 "latest release finishes 'done' with versions equal; a "
-                "node older than 6.0.255 refuses update_embody as an "
+                "node older than 6.0.256 refuses update_embody as an "
                 "unknown operation and needs one manual update first.",
     }
 

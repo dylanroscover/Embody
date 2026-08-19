@@ -5853,7 +5853,10 @@ class TestConvoyInstallIsTouchDesignerFree(EmbodyTestCase):
         """No third-party dependency may creep in: this module has to
         import cleanly inside TD's interpreter and on a bare CI runner
         with nothing but pytest installed."""
-        allowed = {'hashlib', 'json', 'ntpath', 'os', 'platform',
+        # ctypes: spawn_environment_summary's job/session forensics
+        # (2026-08-19, Owlette fleet report) -- stdlib, imported inside
+        # the function, win32-guarded.
+        allowed = {'ctypes', 'hashlib', 'json', 'ntpath', 'os', 'platform',
                    'posixpath', 're', 'stat', 'subprocess', 'sys', 'time',
                    'xml', 'zipfile'}
         for module in _imported_modules(_module_ast()):

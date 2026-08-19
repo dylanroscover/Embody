@@ -7087,27 +7087,41 @@ def _host_install(ctx, modules, interpreter, supervisor=None,
                             'enable Convoy again.')
             if rejected and all(r['reason'] == 'runtime_spawn_blocked'
                                 for r in rejected):
-                # EVERY candidate died before Python ran: this TD process
-                # cannot spawn children at all (a bridge-launched session
-                # inherits a NUL stdin -- WinError 50 on every attempt).
-                # Blaming the interpreters here sends the user to install a
-                # Python they already have; the only fix is a normally
-                # launched TouchDesigner.
+                # EVERY candidate died before Python ran: the OS refused
+                # the spawn, not the interpreters. Historical culprit was
+                # our own run_command inheriting a non-duplicatable stdin
+                # (fixed 2026-08-19, stdin=DEVNULL); what remains is a
+                # genuinely restricted session, so report session facts
+                # and prescribe nothing absolute.
+                # getattr: test fakes drive this ladder without the helper.
+                summarize = getattr(installer, 'spawn_environment_summary',
+                                    None)
+                try:
+                    facts = str(summarize() or '') if summarize else ''
+                except Exception:
+                    # The diagnostic must never replace the verdict it
+                    # decorates -- this is the path where nothing spawns.
+                    facts = ''
                 return {'ok': False, 'action': action,
                         'reason': 'spawn_blocked',
                         'rejected': rejected[:8],
+                        'spawn_environment': facts,
                         'detail':
-                            'this TouchDesigner process cannot start ANY '
-                            'child process, so no interpreter could be '
-                            'tested -- every candidate failed the same way '
-                            'before Python ran (' + ', '.join(
+                            'every interpreter candidate failed the same '
+                            'way before Python ran (' + ', '.join(
                                 sorted({(r.get('snippet') or r.get('detail')
                                          or r.get('reason') or '')[:60]
-                                        for r in rejected if r})) + '). This is '
-                            'the session, not your Python: it happens when '
-                            'TouchDesigner was started by a tool rather '
-                            'than opened normally. Quit TouchDesigner, open '
-                            'the project yourself, and enable Convoy again. '
+                                        for r in rejected if r})) + ') -- the '
+                            'operating system refused to start the child '
+                            'process, so no interpreter could be tested. '
+                            'This is the session, not your Python: the '
+                            'process that launched TouchDesigner is '
+                            'restricting child processes'
+                            + (' (' + facts + ')' if facts else '') + '. '
+                            'If a supervisor or service runs TouchDesigner, '
+                            'check its job-object limits; opening the '
+                            'project in a normally launched TouchDesigner '
+                            'and enabling Convoy again also works. '
                             'Tried: ' + '; '.join(described) + '.'}
             return {'ok': False, 'action': action,
                     'reason': 'no_usable_runtime',

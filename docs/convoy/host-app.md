@@ -65,6 +65,14 @@ The daemon venv is built once per user per machine and reused by every later ins
 
 Use one dedicated logged-in user for an unattended show machine. The host app is per user, not a system service, so a different user account has a separate identity, settings, jobs, and artifact quota.
 
+### Supervisor-launched TouchDesigner (Owlette, service wrappers)
+
+A TouchDesigner started by a process supervisor rather than a double-click -- [Owlette](https://owlette.app), NSSM, a studio's own relauncher -- is a first-class session: enabling Convoy installs and starts the host app from it like any other, with no console visit. (Releases before 6.0.256 failed here with `OSError: [WinError 50]` on every interpreter candidate and blamed the session; the actual cause was Embody's own spawn call inheriting the supervisor's stdin handle, fixed in 6.0.256.)
+
+If an install ever reports that the operating system refused to start a child process, the failure message now carries the session facts needed to diagnose a headless machine remotely -- session id, whether a console is attached, Job object membership and limit flags, the active-process cap, and whether breakaway is permitted. Include that line when reporting the problem.
+
+A host app that is already installed and running is attached to, not reinstalled: TouchDesigner discovers it through the per-user data directory and a local health probe, spawns nothing, and skips install and start entirely. When login startup is owned by an external supervisor, **Status** shows `Managed by another supervisor` (see the table above) and repair belongs to that supervisor.
+
 ## Network and firewall requirements
 
 Convoy is for a trusted local network. For the initial release, participating computers should be on the same local discovery domain. Guest Wi-Fi isolation, client isolation, strict VLAN boundaries, VPN routing, or blocked local discovery traffic can keep otherwise reachable machines from finding each other.
@@ -84,7 +92,7 @@ Allow both on the private/trusted profile. The host app's own API stays on `127.
 - Avoid manually forwarding Convoy ports to the internet.
 - A changing DHCP address is expected. Convoy uses stable node identities and should reconnect automatically.
 
-Automatic first contact assumes the LAN is trusted. Do not “test briefly” on airport, hotel, coffee-shop, conference, guest, or public Wi-Fi.
+Automatic first contact assumes the LAN is trusted. Do not "test briefly" on airport, hotel, coffee-shop, conference, guest, or public Wi-Fi.
 
 ## Reading status
 
@@ -193,7 +201,7 @@ Detailed controller listing is non-waking. It is part of the intended public too
 
 ## Jobs, timeouts, and cancellation
 
-A Convoy tool call can return before the remote work finishes. Keep its delivery/job ID and use `convoy_get_job` to reconcile it after a timeout or reconnect. A timeout means “the client stopped waiting,” not “the operation definitely did not run.”
+A Convoy tool call can return before the remote work finishes. Keep its delivery/job ID and use `convoy_get_job` to reconcile it after a timeout or reconnect. A timeout means "the client stopped waiting," not "the operation definitely did not run."
 
 Never submit a new mutation merely because the first response was lost. First query the existing job or repeat with the same returned retry identity. If the final state remains uncertain, inspect the target before making another change.
 

@@ -31,25 +31,35 @@ or in Perform Mode -- never update a machine mid-show.
 
 ## Requirements and caveats
 
-- **The target must run Embody >= 6.0.255.** Older nodes do not serve the
+- **The target must run Embody >= 6.0.256.** Older nodes do not serve the
   `update_embody` operation and refuse it as unknown -- they need one manual
   update first (or the update via TD Python where that is already granted).
 - **The node needs GitHub reachability.** The updater fetches
   `releases/latest` and the release assets itself; an offline show LAN
   reports a network error in the job record instead of updating.
 - **`update_embody` never needs the TD Python grant.** It is classified
-  `executes_arbitrary_code=False` in the Convoy operation registry, exactly
-  like `run_tests` and `save_project`.
+  `executes_arbitrary_code=False` in the Convoy operation registry, and it
+  is deliberately the remote-exposed one of the fleet verbs -- `run_tests`
+  counts as arbitrary code, and `save_project` is local-only.
 - **Persistence**: the updater installs into the live component. If your
   project embeds Embody inside a `.tox` you manage yourself, re-save that
   component (or the project) after the update, or the machine reverts on
-  its next open. `save_project` is relayable the same way.
+  its next open. Saving is a local step -- `save_project` is deliberately
+  not remote-exposed -- so save from a session on that machine, or use
+  `convoy_restart_node` with its `save_then_restart` policy.
 
 ## Traps (learned in the field)
 
 - The Embody **Update** pulse is *not* the self-updater -- it re-exports
   externalizations. The self-update entry is `Checkforupdate` /
   `UpdaterExt.CheckForUpdate`.
+- A **dev checkout** refuses the update (the updater protects a source
+  checkout); the refusal lands in the job record instead of a swap.
+- A second `update_embody` while one is **already in flight** reconciles
+  to the existing job handle -- poll that job, don't expect a new one.
+- A **disabled local node** never appears in `convoy_list_nodes` (the host
+  filters it before the bridge sees it), so it reads as missing from the
+  list, not as `skipped`.
 - `CheckForUpdate(interactive=True)` (the parameter pulse's default) raises
   a blocking modal -- on an unattended machine use the `update_embody`
   operation, which always runs `interactive=False, auto_install=True`.

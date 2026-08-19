@@ -4929,6 +4929,9 @@ class EnvoyExt:
                 'ERROR',
             )
             return
+        # PATH/DLL/VIRTUAL_ENV linking is main-thread-only, so it lives
+        # here (Start runs on the main thread), never in the worker.
+        Embody._linkEnv(spec)
 
         if getattr(sys, '_envoy_import_gate_ok', False):
             self._continueStart(git_root)
@@ -4946,7 +4949,10 @@ class EnvoyExt:
             'after install/upgrade can take a few seconds; TD stays responsive.',
             'INFO',
         )
-        import_gate_check = op.Embody.ext.Embody._importGateCheck
+        # Module function, resolved on the MAIN thread (mod.* is a TD
+        # lookup); the EmbodyExt facade would re-resolve mod inside the
+        # worker (extracted to embody_pyenv 2026-08-19).
+        import_gate_check = mod.embody_pyenv.import_gate_check
 
         def worker():
             try:
@@ -5033,10 +5039,10 @@ class EnvoyExt:
 
         Keeps TouchDesigner responsive during the venv build / pip install that
         a fresh install or a version upgrade triggers. The worker runs
-        EmbodyExt._installDependencies, wires sys.path, and warms the MCP import
-        gate; its log lines are captured and replayed on the main thread by
-        _pollBootstrap, because EmbodyExt.Log writes the FIFO DAT and reads
-        parameters.
+        embody_pyenv.install_dependencies (pre-resolved on the main thread),
+        wires sys.path, and warms the MCP import gate; its log lines are
+        captured and replayed on the main thread by _pollBootstrap, which
+        also owns the main-thread-only PATH/DLL linking epilogue.
         """
         self._bootstrapping = True
         self._bootstrap_result = None
@@ -5047,16 +5053,20 @@ class EnvoyExt:
             'Installing Envoy Python dependencies in the background (one-time '
             'setup). TouchDesigner stays responsive; MCP will connect when this '
             'finishes.')
-        Embody = op.Embody.ext.Embody
-        wire_python_paths = Embody._wirePythonPaths
-        import_gate_check = Embody._importGateCheck
+        # Pure module functions, resolved on the MAIN thread (mod.* is a
+        # TD lookup, illegal from the worker); the EmbodyExt facades would
+        # re-resolve mod at call time (extracted to embody_pyenv 2026-08-19).
+        pyenv = mod.embody_pyenv
+        install_dependencies = pyenv.install_dependencies
+        wire_python_paths = pyenv.wire_python_paths
+        import_gate_check = pyenv.import_gate_check
 
         def worker():
             msgs = []
             gate_ok = False
             gate_msg = ''
             try:
-                ok = Embody._installDependencies(
+                ok = install_dependencies(
                     spec, log=lambda m, lvl='INFO': msgs.append((lvl, m)))
             except BaseException as e:
                 ok = False
@@ -5152,6 +5162,20 @@ class EnvoyExt:
             )
             return
         sys._envoy_import_gate_ok = True
+        # Main-thread epilogue for the worker's install: PATH/DLL/
+        # VIRTUAL_ENV linking (never on the worker -- os.environ writes
+        # off-main are the setenv-corruption class), with the retained
+        # DLL handle invalidated first when the venv was rebuilt. Then
+        # re-arm the non-gating extras reconcile: a --clear rebuild wiped
+        # user extras with the venv.
+        try:
+            Embody = op.Embody.ext.Embody
+            if spec.get('recreate_venv'):
+                mod.embody_pyenv.unlink_dll_dir(spec['venv_dir'])
+            Embody._linkEnv(spec)
+            Embody._scheduleExtrasApply(delay_frames=1)
+        except Exception:
+            pass
         self._continueStart(git_root)
 
     @staticmethod

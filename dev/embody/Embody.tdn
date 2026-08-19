@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1167
-generator: Embody/6.0.254
+build: 1164
+generator: Embody/6.0.256
 td_build: 099.2025.33070
-source_file: Embody-6.254.toe
-exported_at: '2026-08-19T17:05:44Z'
+source_file: Embody-6.256.toe
+exported_at: '2026-08-19T21:10:22Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -817,7 +817,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.254
+    value: 6.0.256
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -1206,8 +1206,8 @@ operators:
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
-  - py
   - TDExtension
+  - py
 - name: mousein1
   type: mouseinCHOP
   parameters:
@@ -1588,6 +1588,17 @@ operators:
     file: embody/Embody/embody_admin.py
     syncfile: true
   position: [-700, 300]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
+- name: embody_pyenv
+  type: textDAT
+  parameters:
+    file: embody/Embody/embody_pyenv.py
+    syncfile: true
+    extension: py
+  position: [-500, 300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:

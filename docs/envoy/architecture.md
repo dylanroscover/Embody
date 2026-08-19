@@ -89,7 +89,7 @@ Each Envoy instance registers itself on startup and deregisters on graceful shut
 
 Embody writes this file on `onProjectPostSave` and once at startup (frame 80), idempotent so unchanged builds skip the write. It is **gitignored** like the rest of `.embody/` — the pin used to live in the committed `project.json`, but a committed pin churns whenever collaborators run different TD builds, so it was retired (Embody removes a legacy `td_build` key from `project.json` automatically; a still-present legacy key is tolerated as a fallback by the bridge).
 
-`.embody/project.json` remains **committed** (`.embody/*` + `!.embody/project.json` in `.gitignore`) as the home for project-level metadata that genuinely travels with the repo. Embody stewards it with key-level ownership: it only ever touches keys it owns, preserves everything else, and never overwrites a file it cannot parse.
+`.embody/project.json` remains **committed** (`.embody/*` + `!.embody/project.json` in `.gitignore`) as the home for project-level metadata that genuinely travels with the repo. Embody stewards it with key-level ownership: it only ever touches keys it owns, preserves everything else, and never overwrites a file it cannot parse. A repo can opt out by ignoring the file itself: Envoy checks what git actually does (`git check-ignore`) rather than pattern-matching, and when the repo's own rules ignore the file it stops adding `!.embody/project.json` and logs a warning — the metadata is then per-machine instead of shared through git.
 
 When `launch_td` runs, the bridge reads the pin (local first, legacy committed key second), scans the platform's standard install locations, and picks a TouchDesigner:
 

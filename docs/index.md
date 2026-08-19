@@ -33,7 +33,7 @@ Embody is four tools working together — *lateral velocity*, *forward velocity*
 
     ---
 
-    Convoy-enabled Embody nodes on a trusted LAN discover, inspect, and control each other — one AI session relaying builds, test runs, saves, screenshots, and restarts to every machine in the room. A small per-user background app keeps each node reachable even while TouchDesigner is closed.
+    Convoy-enabled Embody nodes on a trusted LAN discover, inspect, and control each other — one AI session relaying builds, test runs, saves, screenshots, restarts, and Embody updates to every machine in the room. A small per-user background app keeps each node reachable even while TouchDesigner is closed.
 
     [:octicons-arrow-right-24: Join the Convoy](convoy/index.md)
 
@@ -78,7 +78,7 @@ You describe what you want. The AI works with your live network — operators, c
 | :material-sync: | **Automated Externalization** | Tag COMPs and DATs — or opt in to auto-tagging what the AI builds — and Embody keeps the external files in sync, auto-restoring from disk on project open |
 | :material-robot: | **Envoy MCP Server** | 63 tools connect AI assistants to your live TD session |
 | :material-account-group: | **Multi-Session Coordination** | Run several AI sessions on one project — scoped claims, peer advisories, and gated destructive operations |
-| :material-lan: | **Convoy LAN Relay** | Convoy-enabled nodes on a trusted LAN discover, inspect, and control each other — relay test runs, saves, screenshots, and restarts to other machines from one AI session ([Convoy guide](convoy/index.md)) |
+| :material-lan: | **Convoy LAN Relay** | Convoy-enabled nodes on a trusted LAN discover, inspect, and control each other — relay test runs, saves, screenshots, restarts, and [fleet-wide Embody updates](convoy/fleet-updates.md) to other machines from one AI session ([Convoy guide](convoy/index.md)) |
 | :material-file-document: | **TDN Format** | Export/import operator networks as diffable YAML for code review and snapshots |
 | :material-keyboard: | **Keyboard Shortcuts** | Double-tap ++lctrl++ to tag, ++ctrl+shift+u++ to save — and every binding is remappable (type or record) |
 | :material-cog: | **Parameter Tracking** | Automatically detects parameter changes and marks COMPs dirty |

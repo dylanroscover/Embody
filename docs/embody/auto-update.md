@@ -4,6 +4,8 @@ Embody can check GitHub for new releases and update itself in place — no
 manual download, no drag-and-drop, and no loss of your settings or
 externalizations.
 
+Running a Convoy fleet? Nodes take the same update remotely -- `update_embody` / `convoy_update_embody`, no per-machine visit and no TD Python grant. See [Fleet Updates](../convoy/fleet-updates.md).
+
 !!! note "Availability"
     Self-update ships with Embody v6.0.143+. Older installs update manually
     one last time (drag in the new release `.tox` as before); from then on

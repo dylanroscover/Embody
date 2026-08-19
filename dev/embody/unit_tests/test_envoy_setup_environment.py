@@ -275,7 +275,10 @@ class TestVerifyMcpImportableFastPath(EmbodyTestCase):
 		self.assertEqual(msg, '')
 		self.assertTrue(getattr(sys, '_envoy_import_gate_ok', False))
 
-		gate = self.ext._importGateCheck
+		# Facades are MAIN-THREAD-ONLY (mod.* lookup); the worker contract
+		# is the module function resolved on the main thread first --
+		# exactly what EnvoyExt._beginAsyncBootstrap does (2026-08-19).
+		gate = self.embody.op('embody_pyenv').module.import_gate_check
 		result = []
 
 		def worker():
@@ -649,17 +652,20 @@ class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
 	def setUp(self):
 		super().setUp()
 		self.ext = self.embody.ext.Embody
-		self.mod = self.embody.op('EmbodyExt').module
+		# The implementation lives in the embody_pyenv module DAT
+		# (extracted 2026-08-19) -- stubs target ITS globals now; the
+		# EmbodyExt facade only forwards.
+		self.pyenv = self.embody.op('embody_pyenv').module
 		self.tmp = tempfile.mkdtemp(prefix='embody_instest_')
-		self._real_sub = self.mod.subprocess
-		self._real_find = self.ext._findOrInstallUv
+		self._real_sub = self.pyenv.subprocess
+		self._real_find = self.pyenv.find_or_install_uv
 		# Trip-wire: if _installDependencies ever calls self.Log, record it.
 		self._log_calls = []
 		self.ext.Log = lambda *a, **k: self._log_calls.append((a, k))
 
 	def tearDown(self):
-		self.mod.subprocess = self._real_sub
-		self.ext._findOrInstallUv = self._real_find
+		self.pyenv.subprocess = self._real_sub
+		self.pyenv.find_or_install_uv = self._real_find
 		try:
 			del self.ext.Log
 		except Exception:
@@ -688,12 +694,13 @@ class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
 		class _FakeSub:
 			DEVNULL = getattr(real, 'DEVNULL', -3)
 			CalledProcessError = real.CalledProcessError
+			TimeoutExpired = real.TimeoutExpired
 			run = staticmethod(run_fn)
 
-		self.mod.subprocess = _FakeSub
+		self.pyenv.subprocess = _FakeSub
 
 	def test_success_logs_via_callback_not_Log_and_writes_stamp(self):
-		self.ext._findOrInstallUv = lambda python_exe, log=None: '/fake/uv'
+		self.pyenv.find_or_install_uv = lambda python_exe, log=None: '/fake/uv'
 		runs = []
 		self._stub_subprocess(lambda *a, **k: runs.append(a))
 		msgs = []
@@ -718,7 +725,7 @@ class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
 		"""The stamp must carry the TD-process machine (the rebuild
 		comparator) and the venv interpreter's fresh-spawn arch (the
 		diagnostic breadcrumb), measured through the stubbed subprocess."""
-		self.ext._findOrInstallUv = lambda python_exe, log=None: '/fake/uv'
+		self.pyenv.find_or_install_uv = lambda python_exe, log=None: '/fake/uv'
 		spec = self._spec(machine='AMD64')
 
 		class _Result:
@@ -748,7 +755,7 @@ class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
 	def test_recreate_flag_rebuilds_venv_with_clear(self):
 		"""spec['recreate_venv'] (stale-ABI venv after a TD Python bump) must
 		route the rebuild through uv venv --clear -- uv owns the removal."""
-		self.ext._findOrInstallUv = lambda python_exe, log=None: '/fake/uv'
+		self.pyenv.find_or_install_uv = lambda python_exe, log=None: '/fake/uv'
 		calls = []
 		self._stub_subprocess(lambda *a, **k: calls.append(a[0]))
 		msgs = []
@@ -764,7 +771,7 @@ class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
 		self.assertIn('--clear', venv_calls[0])
 
 	def test_existing_venv_without_flag_skips_venv_creation(self):
-		self.ext._findOrInstallUv = lambda python_exe, log=None: '/fake/uv'
+		self.pyenv.find_or_install_uv = lambda python_exe, log=None: '/fake/uv'
 		calls = []
 		self._stub_subprocess(lambda *a, **k: calls.append(a[0]))
 		spec = self._spec()
@@ -776,7 +783,7 @@ class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
 			'an existing venv must be upgraded in place, not recreated')
 
 	def test_failure_returns_false_and_reports_stderr(self):
-		self.ext._findOrInstallUv = lambda python_exe, log=None: '/fake/uv'
+		self.pyenv.find_or_install_uv = lambda python_exe, log=None: '/fake/uv'
 
 		def boom(*a, **k):
 			raise self._real_sub.CalledProcessError(1, 'uv', stderr='kaboom')
@@ -793,7 +800,7 @@ class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
 			'a failed install must not stamp the venv as current')
 
 	def test_no_uv_returns_false(self):
-		self.ext._findOrInstallUv = lambda python_exe, log=None: None
+		self.pyenv.find_or_install_uv = lambda python_exe, log=None: None
 		self._stub_subprocess(lambda *a, **k: None)
 		msgs = []
 		ok = self.ext._installDependencies(

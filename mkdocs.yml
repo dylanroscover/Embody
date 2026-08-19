@@ -84,6 +84,7 @@ nav:
     - Manager UI: embody/manager-ui.md
     - Supported Formats: embody/supported-formats.md
     - Configuration: embody/configuration.md
+    - Python Environment: embody/python-environment.md
     - Auto-Update: embody/auto-update.md
     - Parameter Reference: embody/parameters.md
     - Troubleshooting: embody/troubleshooting.md
