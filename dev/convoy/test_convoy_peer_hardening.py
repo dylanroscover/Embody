@@ -1103,26 +1103,20 @@ def test_new6_a_revocation_does_not_stall_the_whole_host(server):
                 "already_terminal", "left_queued", "unknown_state")
                ) == summary["examined"], (
         "the sweep lost records out of its own summary: %r" % summary)
-    # STRUCTURAL, not wall-clock. The old `worst < 1.0s` ceiling could not
-    # tell the violation (lock held across the sweep's O(jobs) file
-    # writes) from ONE legitimate short hold whose single file write
-    # stalled on a shared runner -- windows-latest stalled 3.1s inside a
-    # correct critical section on the v6.0.252 tag run (2026-08-18) and
-    # went red on code that had passed the same leg three times that day.
-    # The discriminator is the poller's ACQUISITION COUNT: with the lock
-    # released between per-job writes, the 20ms poller keeps re-acquiring
-    # for the whole duration of the call, however slow the disk is; a
-    # lock held across the sweep starves it to ~1 acquisition total.
-    # Require an average of one acquisition per second of call time -- an
-    # order of magnitude below correct discipline, far above
-    # monopolization -- with worst-wait reported as evidence, not
-    # asserted (a wall-clock deadline on CI measures the runner, per
-    # commit-push-checklist).
-    assert polls[0] >= max(2.0, call_s / 1.0), (
-        "the lock poller got in only %d time(s) across a %.2fs "
-        "/peers/block call (worst single wait %.2fs) -- the revocation "
-        "sweep is holding the global lock across its O(jobs) file writes"
-        % (polls[0], call_s, worst[0]))
+    # Starvation check, structural not wall-clock (a runner stall inside
+    # one legit hold went red on the v6.0.252 tag run). Discriminator:
+    # a lock released between per-job writes lets the 20ms poller keep
+    # re-acquiring; a lock held across the sweep starves it to ~1 total.
+    # Only meaningful when the call ran long enough for the poller to
+    # accumulate turns -- a sub-second sweep IS the no-stall outcome this
+    # test wants (macos flaked red at call_s=0.10s / 1 poll / worst 0.00s,
+    # 2026-08-19: the >=2 floor is unsatisfiable in one 20ms period).
+    if call_s >= 0.5:
+        assert polls[0] >= max(2.0, call_s / 1.0), (
+            "the lock poller got in only %d time(s) across a %.2fs "
+            "/peers/block call (worst single wait %.2fs) -- the revocation "
+            "sweep is holding the global lock across its O(jobs) file writes"
+            % (polls[0], call_s, worst[0]))
 
 
 def test_new7_the_host_originable_states_constant_is_ENFORCED(tmp_path):
