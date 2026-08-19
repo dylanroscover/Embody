@@ -4659,7 +4659,8 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
                  'convoy_restart_node', 'convoy_call', 'convoy_batch',
                  'convoy_get_job', 'convoy_ack_job', 'convoy_get_artifact',
                  'convoy_save_artifact',
-                 'convoy_cancel_job', 'convoy_forget_node'}
+                 'convoy_cancel_job', 'convoy_forget_node',
+                 'convoy_update_embody'}
         self.assertTrue(names.issubset(bridge.BRIDGE_TOOL_NAMES))
         response = {'result': {'tools': []}}
         bridge.augment_tools_list(response)
@@ -4684,6 +4685,7 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
             ('convoy_save_artifact', 'handle_convoy_save_artifact'),
             ('convoy_cancel_job', 'handle_convoy_cancel_job'),
             ('convoy_forget_node', 'handle_convoy_forget_node'),
+            ('convoy_update_embody', 'handle_convoy_update_embody'),
         )
         for tool_name, handler_name in handlers:
             with self.subTest(tool_name=tool_name), \
@@ -7235,3 +7237,119 @@ class TestBridgeStreamingDocumentedLimits(EmbodyTestCase):
             'INDEPENDENT', head,
             'mirror, line buffer and frame data are separate accumulators, '
             'so peak memory is a MULTIPLE of _MAX_BODY_BYTES -- say so')
+
+
+class TestConvoyUpdateEmbody(EmbodyTestCase):
+    """convoy_update_embody: fleet self-update without the TD Python grant."""
+
+    ROWS = [
+        {'node_id': 'n-1', 'host_id': 'h-1', 'convoy_id': 'studio',
+         'node_name': 'TEC-A / Render', 'hostname': 'TEC-A',
+         'embody_version': '6.0.246', 'status': 'online', 'online': True,
+         'enabled': True, 'perform_mode': False},
+        {'node_id': 'n-2', 'host_id': 'h-2', 'convoy_id': 'studio',
+         'node_name': 'TEC-B / Show', 'hostname': 'TEC-B',
+         'embody_version': '6.0.253', 'status': 'offline', 'online': False,
+         'enabled': True, 'perform_mode': False},
+        {'node_id': 'n-3', 'host_id': 'h-1', 'convoy_id': 'studio',
+         'node_name': 'TEC-C / Stage', 'hostname': 'TEC-C',
+         'embody_version': '6.0.253', 'status': 'online', 'online': True,
+         'enabled': True, 'perform_mode': True},
+    ]
+
+    def _listing(self):
+        return {'ok': True, 'nodes': [dict(r) for r in self.ROWS]}
+
+    def test_requires_exactly_one_of_node_or_all(self):
+        for params in ({}, {'node': 'x', 'all': True}):
+            out = bridge.handle_convoy_update_embody(params)
+            self.assertFalse(out.get('ok'))
+            self.assertEqual(out.get('reason'), 'invalid_arguments')
+
+    def test_all_dispatches_online_awake_nodes_and_names_the_skips(self):
+        calls = []
+
+        def fake_call(call):
+            calls.append(dict(call))
+            return {'ok': True, 'delivery_id': 'd-%d' % len(calls)}
+
+        with patch.object(bridge, 'handle_convoy_list_nodes',
+                          return_value=self._listing()), \
+             patch.object(bridge, 'handle_convoy_call',
+                          side_effect=fake_call):
+            out = bridge.handle_convoy_update_embody({'all': True})
+        self.assertTrue(out['ok'])
+        # Only n-1 dispatches: n-2 is offline, n-3 is mid-show.
+        self.assertEqual([d['node_id'] for d in out['dispatched']], ['n-1'])
+        self.assertEqual(
+            sorted(row['reason'] for row in out['skipped']),
+            ['offline', 'perform_mode'])
+        call = calls[0]
+        self.assertEqual(call['operation'], 'update_embody')
+        self.assertIs(call['wait'], False)
+        self.assertEqual(call['target_host_id'], 'h-1')
+        self.assertTrue(call['idempotency_key'].startswith('update-embody-'))
+        self.assertEqual(out['dispatched'][0]['delivery_id'], 'd-1')
+
+    def test_node_matches_by_name_id_or_hostname_and_refuses_ambiguity(self):
+        with patch.object(bridge, 'handle_convoy_list_nodes',
+                          return_value=self._listing()), \
+             patch.object(bridge, 'handle_convoy_call',
+                          return_value={'ok': True, 'delivery_id': 'd'}):
+            by_host = bridge.handle_convoy_update_embody({'node': 'TEC-A'})
+            missing = bridge.handle_convoy_update_embody({'node': 'nope'})
+        self.assertTrue(by_host['ok'])
+        self.assertEqual(by_host['dispatched'][0]['node_id'], 'n-1')
+        self.assertEqual(missing['reason'], 'node_not_found')
+        self.assertIn('TEC-A / Render', missing['known'])
+        twins = {'ok': True, 'nodes': [
+            dict(self.ROWS[0]), dict(self.ROWS[0], node_id='n-9')]}
+        with patch.object(bridge, 'handle_convoy_list_nodes',
+                          return_value=twins):
+            ambiguous = bridge.handle_convoy_update_embody({'node': 'TEC-A'})
+        self.assertEqual(ambiguous['reason'], 'node_ambiguous')
+
+    def test_directory_failure_is_returned_not_swallowed(self):
+        with patch.object(bridge, 'handle_convoy_list_nodes', return_value={
+                'ok': False, 'reason': 'convoy_host_unreachable'}):
+            out = bridge.handle_convoy_update_embody({'all': True})
+        self.assertEqual(out['reason'], 'convoy_host_unreachable')
+
+    def test_a_refused_dispatch_is_reported_per_node(self):
+        with patch.object(bridge, 'handle_convoy_list_nodes',
+                          return_value=self._listing()), \
+             patch.object(bridge, 'handle_convoy_call', return_value={
+                 'ok': False, 'reason': 'unknown_operation',
+                 'detail': 'node predates update_embody'}):
+            out = bridge.handle_convoy_update_embody({'node': 'n-1'})
+        self.assertTrue(out['ok'])
+        entry = out['dispatched'][0]
+        self.assertFalse(entry['ok'])
+        self.assertEqual(entry['reason'], 'unknown_operation')
+
+
+class TestConvoyCallPayloadDedup(EmbodyTestCase):
+    """The terminal job payload rides ONCE: in job, never again in remote."""
+
+    def test_remote_envelope_carries_no_duplicate_job(self):
+        submit = {'ok': True, 'job': {'delivery_id': 'd-1',
+                                      'state': 'queued', 'updated': 1.0}}
+        terminal = {'ok': True, 'cursor': 2.0,
+                    'job': {'delivery_id': 'd-1', 'state': 'succeeded',
+                            'updated': 2.0,
+                            'result': {'payload': 'X' * 512}}}
+        responses = [submit, terminal]
+
+        def fake_host_call(method, path, body=None, timeout=None):
+            return dict(responses.pop(0)) if responses else dict(terminal)
+
+        with patch.object(bridge, 'convoy_host_call',
+                          side_effect=fake_host_call):
+            out = bridge.handle_convoy_call({
+                'target_host_id': 'h-1', 'convoy_id': 'studio',
+                'target_node_id': 'n-1', 'operation': 'query_network'})
+        self.assertEqual(out['job']['state'], 'succeeded')
+        self.assertEqual(out['job']['result']['payload'], 'X' * 512)
+        self.assertIn('remote', out)
+        self.assertNotIn('job', out['remote'],
+                         'the job payload must not ship twice')

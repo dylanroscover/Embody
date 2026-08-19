@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **123 test suites** and **3,684 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **129 test suites** and **3,876 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -177,7 +177,7 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_convoy_host_install` | 105 | ConvoyExt's host-app orchestration (install plan) |
 | `test_convoy_ext` | 73 | ConvoyExt, the node-side Convoy reconciler |
 | `test_convoy_parameter_contract` | 33 | Off-TD contract for Convoy's user-facing parameter scaffold |
-| `test_convoy_host_ladder` | 47 | The runtime ladder that decides WHICH interpreter the daemon runs under, and the register-success revive that replaces a stale down-claiming host line |
+| `test_convoy_host_ladder` | 78 | The runtime ladder that decides WHICH interpreter the daemon runs under, the register-success revive, the spawn-blocked verdict (supervisor-launched TD), and the startup construction kick |
 | `test_convoy_realm_recovery` | 23 | The TD-side realm-conflict recovery: `Resolve Realm Conflict` / `Join Other Realm` worker bodies and the rejoin rebind |
 | `test_wizard_convoy_contract` | 20 | Plain-Python contracts for Convoy's setup-wizard routing |
 | `test_convoy_forget_ux` | 5 | The Forget Offline Nodes daemon -> panel contract |
@@ -196,7 +196,8 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_template_sync` | 6 | Template map, disk, release-table, and orphan allowlist sync |
 | `test_release_hooks` | 52 | `ExportPortableTox` release hooks (issue #74) |
 | `test_updater` | 20 | UpdaterExt self-update logic (no network, no swap) |
-| `test_config_migration` | 24 | Repo-config writers across a VERSION BUMP -- the migration axis a single-run test cannot see (duplicate managed headers, block consolidation that never swallows user content, `.gitattributes` backfill, the order-dependent `.embody/*` / `!.embody/project.json` pair) |
+| `test_config_migration` | 29 | Repo-config writers across a VERSION BUMP -- the migration axis a single-run test cannot see (duplicate managed headers, block consolidation that never swallows user content, `.gitattributes` backfill, the order-dependent `.embody/*` / `!.embody/project.json` pair, and the `git check-ignore` respect for a repo that deliberately ignores `project.json`) |
+| `test_embody_pyenv` | 55 | The shared project Python environment -- constraints, declared extras stewardship, DLL-path parity, tdPyEnvManager detection |
 | `test_wizard_externalize` | 20 | The setup wizard's externalize step, its recovery point, and the already-externalized detection |
 | `test_dialog_wrap` | 5 | Every dialog's prose wraps to readable lines (`ui.messageBox` sizes itself to its longest line) |
 

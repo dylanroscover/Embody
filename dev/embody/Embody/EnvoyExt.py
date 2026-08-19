@@ -59,6 +59,7 @@ _WRITE_OPERATIONS = frozenset({
     'remove_externalization_tag', 'save_externalization',
     'create_extension', 'import_network', 'create_annotation',
     'set_annotation', 'run_tests', 'batch_operations', 'save_project',
+    'update_embody',
 })
 
 # Coarse scopes for operations whose footprint is not a single op path.
@@ -66,6 +67,7 @@ _SPECIAL_SCOPES = {
     'execute_python': 'project:python',
     'run_tests': 'project:tests',
     'save_project': 'project:save',
+    'update_embody': 'project:update',
 }
 
 _TOUCH_WINDOW_S = 600     # advisories consider touches this recent
@@ -299,22 +301,12 @@ _EFFECTS_INTERNAL_ROOTS = ('/ui', '/sys')  # TD's own UI/system subtrees
 
 
 def _new_error_entries(previous_paths, current_entries, cap):
-    """Diff a fresh error/warning list against the previous snapshot.
+    """Diff fresh errors/warnings against the previous snapshot.
 
-    `previous_paths` is the set of op paths that were already erroring;
-    `current_entries` is get_op_errors-shaped ({'nodePath', 'message'} dicts).
-    Returns (listed, total_new, current_paths) where `listed` is capped at
-    `cap`. `previous_paths` of None means "no baseline yet" -- nothing is new
-    on a session's first write, only the baseline is established.
-
-    Two classes of entry are excluded up front (both observed live on the
-    footer's first field day, 2026-07-29): TD's OWN subtrees (/ui, /sys) --
-    a legacy dialog's cook-loop warning is not something THIS write broke --
-    and pseudo-paths that are really the continuation lines of a multi-line
-    TD warning string ('Parameter: From Range'), which are not op paths at
-    all.
-
-    Pure and TD-free so the diff can be unit-tested with synthetic sets.
+    Returns (listed, total_new, current_paths); previous_paths None =
+    first write, baseline only. Excludes TD's own subtrees (/ui, /sys)
+    and pseudo-paths from multi-line warning strings (both seen on the
+    footer's first field day, 2026-07-29). Pure and TD-free.
     """
     current_paths = set()
     fresh = []
@@ -3703,6 +3695,31 @@ class EnvoyMCPServer:
             return self._execute_in_td('save_project',
                                        {'idempotency_key': idempotency_key})
 
+        @self.mcp.tool()
+        def update_embody(idempotency_key: str = None) -> dict:
+            """
+            Self-update Embody to the latest GitHub release, as a job.
+
+            Bounded and non-interactive: the node's own updater fetches
+            the official release, verifies the sha256-pinned manifest,
+            refuses downgrades and TD-build-floor violations, then swaps
+            the component in place (no caller code or URL is involved --
+            this never needs the TD Python grant). Returns a job id
+            immediately; poll get_job_status(job_id). A finished record
+            carries version_before/version_after; an up-to-date node
+            finishes 'done' with versions equal. The install restarts
+            the MCP server, so expect one reconnect blip.
+
+            Args:
+                idempotency_key: Stable key making a RETRY safe -- a
+                    redelivery reconciles to the original update job.
+
+            Returns:
+                {'job_id', 'status': 'running', 'hint'} or {'error'}.
+            """
+            return self._execute_in_td('update_embody',
+                                       {'idempotency_key': idempotency_key})
+
         # Host-private lifecycle helpers.  They are visible in the local MCP
         # manifest because FastMCP has no hidden-tool concept, but calls are
         # accepted only from Convoy's dedicated loopback session and Convoy's
@@ -4618,35 +4635,15 @@ class EnvoyExt:
     def _forceCloseOldServer(self) -> bool:
         """Force-close a stuck old uvicorn server so the port is freed.
 
-        When an old worker thread is stuck (e.g. waiting on a test Event or
-        an HTTP connection), the normal shutdown_event signal may not be enough
-        because uvicorn's event loop is blocked. This method:
-        1. Signals ALL known shutdown events (in case one was orphaned)
-        2. Force-closes the uvicorn server's socket listeners
-        3. Unblocks any stuck test Event
-
-        Returns True ONLY when we actually closed a live uvicorn server
-        handle of ours (`sys._envoy_uvi_server` was set). Re-signaling
-        stale shutdown events for already-exited threads is housekeeping
-        and does NOT flip the return -- waiting on those is pointless.
-        The drain-wait in `_findAvailablePort` keys off this signal to
-        skip the 500ms sleep when the port holder is foreign/zombie.
-
-        CURRENT-GENERATION SAFETY (issue #57 follow-up, 2026-07-15 storm):
-        when rapid start chains overlap (restart backoff + watchdog revive),
-        the live handle -- and the registered shutdown event -- can belong to
-        the CURRENT generation's just-started, healthy worker. Signaling or
-        closing THAT one murders the newborn server and feeds a self-
-        sustaining restart loop. So the staleness determination runs FIRST,
-        and a current-generation live worker makes this a no-op.
-
-        Known trade: a WEDGED current-generation worker (hung but still
-        bound) cannot be force-closed by a manual Stop()+Start() -- the port
-        scan drifts to port+1 for that start. Accepted deliberately: never
-        risk killing a possibly-healthy newborn. The watchdog recovers the
-        stable port once the socket actually probes dead (its revive bumps
-        the generation BEFORE its deferred Start, making force-close
-        effective on that pass).
+        Signals all known shutdown events, force-closes our uvicorn
+        listeners, unblocks stuck test Events. True ONLY when a live
+        handle of OURS was closed (_findAvailablePort keys its drain-wait
+        off this). Staleness check runs FIRST: in a restart storm the
+        handle can belong to the CURRENT generation's healthy newborn,
+        and closing it feeds a self-sustaining loop (2026-07-15) -- so a
+        current-gen live worker makes this a no-op. Accepted trade: a
+        wedged current-gen worker drifts the port +1 until the watchdog's
+        revive (which bumps the generation first) recovers it.
         """
         old_server = getattr(sys, '_envoy_uvi_server', None)
         old_gen = getattr(sys, '_envoy_uvi_gen', 0)
@@ -4712,29 +4709,13 @@ class EnvoyExt:
     def _findAvailablePort(self, base_port: int, range_size: int = 10) -> 'int | None':
         """Find an available port in [base_port, base_port + range_size).
 
-        Checks a test-BIND, the envoy.json registry, and the recent
-        bind-failure blacklist so that two TD instances starting
-        near-simultaneously don't race on the same port.  A port is
-        considered taken if:
-          - We cannot bind it (some socket already holds it), OR
-          - Another instance is registered on it with a live PID, OR
-          - A server worker recently died failing to bind it.
-
-        The probe is a real bind(), NOT a connect(): a zombie TD process can
-        hold a port bound/LISTENING while its accept loop is dead, so
-        connects to it are REFUSED (the old connect probe reported "free")
-        yet uvicorn's bind still fails with WinError 10048 -- and the retry
-        loop re-picked the same poisoned port forever (observed 2026-07-23:
-        a windowless leftover TD instance camped port 9872). Binding probes
-        the exact operation uvicorn will perform, so a dead listener cannot
-        fool it -- and it is faster (no 1s connect timeout per busy port).
-
-        Tries the base port first (fast path for single-instance).  If busy,
-        attempts to force-close a stale server from the same TD process, then
-        scans the remaining range without force-close (those ports belong to
-        other instances).
-
-        Returns the first free port, or None if all are occupied.
+        Taken = cannot bind, OR registered to a live PID in envoy.json,
+        OR on the recent bind-failure blacklist. The probe is a real
+        bind(), never connect(): a zombie TD holds a port bound with a
+        dead accept loop -- connects REFUSED, bind still 10048 -- and the
+        connect probe re-picked that poisoned port forever (2026-07-23).
+        Base port first; if busy, force-close our own stale server, then
+        scan the range. Returns the port or None.
         """
         import socket
         import os as _os
@@ -4948,6 +4929,9 @@ class EnvoyExt:
                 'ERROR',
             )
             return
+        # PATH/DLL/VIRTUAL_ENV linking is main-thread-only, so it lives
+        # here (Start runs on the main thread), never in the worker.
+        Embody._linkEnv(spec)
 
         if getattr(sys, '_envoy_import_gate_ok', False):
             self._continueStart(git_root)
@@ -4965,7 +4949,10 @@ class EnvoyExt:
             'after install/upgrade can take a few seconds; TD stays responsive.',
             'INFO',
         )
-        import_gate_check = op.Embody.ext.Embody._importGateCheck
+        # Module function, resolved on the MAIN thread (mod.* is a TD
+        # lookup); the EmbodyExt facade would re-resolve mod inside the
+        # worker (extracted to embody_pyenv 2026-08-19).
+        import_gate_check = mod.embody_pyenv.import_gate_check
 
         def worker():
             try:
@@ -5052,10 +5039,10 @@ class EnvoyExt:
 
         Keeps TouchDesigner responsive during the venv build / pip install that
         a fresh install or a version upgrade triggers. The worker runs
-        EmbodyExt._installDependencies, wires sys.path, and warms the MCP import
-        gate; its log lines are captured and replayed on the main thread by
-        _pollBootstrap, because EmbodyExt.Log writes the FIFO DAT and reads
-        parameters.
+        embody_pyenv.install_dependencies (pre-resolved on the main thread),
+        wires sys.path, and warms the MCP import gate; its log lines are
+        captured and replayed on the main thread by _pollBootstrap, which
+        also owns the main-thread-only PATH/DLL linking epilogue.
         """
         self._bootstrapping = True
         self._bootstrap_result = None
@@ -5066,16 +5053,20 @@ class EnvoyExt:
             'Installing Envoy Python dependencies in the background (one-time '
             'setup). TouchDesigner stays responsive; MCP will connect when this '
             'finishes.')
-        Embody = op.Embody.ext.Embody
-        wire_python_paths = Embody._wirePythonPaths
-        import_gate_check = Embody._importGateCheck
+        # Pure module functions, resolved on the MAIN thread (mod.* is a
+        # TD lookup, illegal from the worker); the EmbodyExt facades would
+        # re-resolve mod at call time (extracted to embody_pyenv 2026-08-19).
+        pyenv = mod.embody_pyenv
+        install_dependencies = pyenv.install_dependencies
+        wire_python_paths = pyenv.wire_python_paths
+        import_gate_check = pyenv.import_gate_check
 
         def worker():
             msgs = []
             gate_ok = False
             gate_msg = ''
             try:
-                ok = Embody._installDependencies(
+                ok = install_dependencies(
                     spec, log=lambda m, lvl='INFO': msgs.append((lvl, m)))
             except BaseException as e:
                 ok = False
@@ -5171,6 +5162,20 @@ class EnvoyExt:
             )
             return
         sys._envoy_import_gate_ok = True
+        # Main-thread epilogue for the worker's install: PATH/DLL/
+        # VIRTUAL_ENV linking (never on the worker -- os.environ writes
+        # off-main are the setenv-corruption class), with the retained
+        # DLL handle invalidated first when the venv was rebuilt. Then
+        # re-arm the non-gating extras reconcile: a --clear rebuild wiped
+        # user extras with the venv.
+        try:
+            Embody = op.Embody.ext.Embody
+            if spec.get('recreate_venv'):
+                mod.embody_pyenv.unlink_dll_dir(spec['venv_dir'])
+            Embody._linkEnv(spec)
+            Embody._scheduleExtrasApply(delay_frames=1)
+        except Exception:
+            pass
         self._continueStart(git_root)
 
     @staticmethod
@@ -5441,23 +5446,14 @@ class EnvoyExt:
     # === Liveness watchdog (pure Python run()-loop -- no operator, no timer) ===
 
     def _watchdogTick(self, gen: int = 0) -> None:
-        """Self-healing liveness loop, tied to THIS extension instance's lifetime.
+        """Self-healing liveness loop, one per extension instance.
 
-        Armed once per instance from __init__ (NOT from Start), so it survives a
-        project.save() / extension reinit whose post-reinit auto-start never
-        completes -- the failure that left Envoy down with no watchdog and no
-        recovery (the old server thread's exit callback suppresses itself once a
-        reinit has replaced the instance, and the new instance's Start can be
-        skipped or race the old port). It probes the real socket and revives
-        Envoy whenever it is enabled-but-down (a dropped-socket zombie, a
-        never-bound restart, or a suppressed reinit Start), so every connected
-        bridge reconnects on its own -- no manual toggle.
-
-        Lifecycle: ONE loop per EnvoyExt instance. It dies ONLY when a reinit
-        replaces the instance (the identity guard); the new instance's __init__
-        arms a fresh loop. It does NOT die on a server-generation bump (revive or
-        restart) or on a disable -- it keeps ticking idle while disabled so a
-        re-enable resumes self-healing without needing a reinit.
+        Armed from __init__ (not Start) so it survives a reinit whose
+        post-reinit auto-start never completes. Probes the real socket
+        and revives enabled-but-down Envoy; bridges reconnect on their
+        own. Dies ONLY when a reinit replaces the instance -- not on
+        generation bumps or disable (ticks idle so re-enable resumes
+        self-healing).
         """
         # Collapse the armed-tick storm from a save strip/restore (one tick is
         # armed per reinit, and the run() string re-resolves to the current
@@ -5487,21 +5483,12 @@ class EnvoyExt:
         try:
             enabled = bool(self.ownerComp.par.Envoyenable.eval())
             status = str(self.ownerComp.par.Envoystatus.eval())
-            # The SOCKET is the source of truth, never the internal _starting /
-            # _init_complete flags. A project.save() clears _init_complete and a
-            # reinit resets _starting, and keying off them is exactly what wedged a
-            # dead server forever -- the watchdog went idle and never revived.
-            # Only three idle cases: disabled, Perform Mode, or a one-time deps
-            # install (legit long, never interrupt). An explicit Start 'Error' is
-            # also left alone so a hard failure (e.g. broken venv) is not hammered
-            # every tick. Perform Mode is idle because _enterPerformMode Stop()s
-            # the server deliberately while LEAVING Envoyenable True (config.json
-            # integrity), so enabled-but-dead is the EXPECTED state during a show;
-            # without this gate the watchdog revived Envoy ~4-12s into every
-            # performance and clobbered the 'Perform Mode' status readout with
-            # 'Reviving (watchdog)...'. Gate on the live par (the same authority
-            # the thread-exit hooks use), NEVER the status string -- Stop() and
-            # the hooks overwrite status text.
+            # The SOCKET is the source of truth -- keying off _starting /
+            # _init_complete wedged a dead server forever. Idle cases:
+            # disabled, Perform Mode (enabled-but-dead is EXPECTED during
+            # a show; the watchdog once revived 4-12s into every
+            # performance), one-time deps install, explicit Start Error.
+            # Gate on the live par, never the status string.
             performing = self._performModeActive()
             installing = status.startswith('Installing')
             # 'Preparing' is the fast-path import gate warming the MCP Python
@@ -5608,22 +5595,15 @@ class EnvoyExt:
             return False
 
     def _reviveDeadServer(self, was_running: bool) -> None:
-        """Socket is dead while Envoy is enabled and no thread-exit callback fired.
+        """Socket dead while enabled, no thread-exit callback fired.
 
-        Tear the (possibly stuck) worker down and rebind after a short delay that
-        lets it release the socket -- so the runtime port stays stable on the
-        rebind instead of drifting to port+1, which is what left bridges stranded
-        on a refused port.
-
-        A project.save() strip/restore reinits this extension many times; each
-        reinit arms a watchdog tick, and ~4s later they ALL come due in the same
-        frame and each calls here -- the 18-21x "reviving server" spam plus an
-        equal pile of Start() schedules. Collapse them to ONE revive per short
-        frame cooldown: the same-frame storm fires once; a genuine later outage
-        (dead ticks are >=~8s apart) still revives normally. This runs in the
-        stable fire-frame (not mid-reinit), so the COMP store is reliable here
-        even though the per-reinit generation counter armed during the storm is
-        not -- which is why the dedup lives here and not only on the tick.
+        Tear down and rebind after a short delay (keeps the port stable
+        instead of drifting +1 and stranding bridges). A save reinit
+        storm arms many ticks that all come due in one frame (18-21x
+        revive spam) -- collapsed to ONE revive per frame cooldown; a
+        genuine outage (>=~8s between dead ticks) still revives. Dedup
+        lives here, in the stable fire-frame, because the per-reinit
+        generation counter is unreliable during the storm.
         """
         # Cooldown: collapse a same-frame storm of revive calls (multiple armed
         # watchdog ticks coming due together) into one. Uses time.monotonic() on
@@ -5788,7 +5768,8 @@ class EnvoyExt:
     # === Thread Manager Callbacks (run on main thread) ===
 
     _GATED_OPERATIONS = ('delete_op', 'import_network', 'run_tests',
-                         'batch_operations', 'save_project')
+                         'batch_operations', 'save_project',
+                         'update_embody')
 
     def _destructiveTargets(self, operation, params):
         """(scopes, reason) the destructive gate protects for this
@@ -5811,6 +5792,9 @@ class EnvoyExt:
         if operation == 'save_project':
             # A save re-exports every externalized file -- project-global.
             return ['project:save'], 'save_project'
+        if operation == 'update_embody':
+            # Replaces the Embody component in place -- project-global.
+            return ['project:update'], 'update_embody'
         if operation == 'batch_operations':
             gated = []
             subs = params.get('operations') or []
@@ -6598,6 +6582,7 @@ class EnvoyExt:
             # Testing
             'run_tests': self._run_tests,
             'save_project': self._save_project,
+            'update_embody': self._update_embody,
             # Dedicated Convoy host lifecycle leg (session-gated wrappers).
             'convoy_lifecycle_state': self._convoy_lifecycle_state,
             'convoy_lifecycle_quit': self._convoy_lifecycle_quit,
@@ -7401,6 +7386,155 @@ class EnvoyExt:
                         'server, so the NEXT call may fail once with a '
                         'connection error -- just retry it; the bridge '
                         'reconnects between calls.'}
+
+    _UPDATE_JOB_TIMEOUT_S = 900   # download + install ceiling
+    # Updatestatus texts that mean the update machinery is still working;
+    # anything else while a job runs is terminal (success or refusal).
+    _UPDATE_ACTIVE_PREFIXES = ('Checking for updates', 'Downloading',
+                               'Installing')
+
+    def _activeUpdateJob(self):
+        """The in-flight update_embody record, or None. Two-hour scan cap."""
+        try:
+            now = time.time()
+            for record in _list_jobs(now):
+                if (record.get('kind') == 'update_embody'
+                        and record.get('status') == 'running'
+                        and now - float(record.get('started', 0)) < 7200):
+                    return record
+        except Exception:
+            pass
+        return None
+
+    def _update_embody(self, idempotency_key=None) -> dict:
+        """Start a self-update as a tracked job (main thread).
+
+        Refusals from the updater's own guards (dev checkout, update
+        already in progress) return {'error'} with NO job minted. The
+        install swaps this whole component in place, so completion is
+        stamped by _pollUpdateJob, which re-resolves the comp BY PATH
+        each tick -- the NEW instance finishes the record.
+        """
+        if idempotency_key:
+            try:
+                prior = _job_for_key(idempotency_key,
+                                     expected_kind='update_embody')
+            except _IdemMarkerUnreadable as e:
+                return {'error': 'Idempotency marker unreadable (%s) -- '
+                                 'refusing to risk a duplicate update.' % e}
+            except _IdemKeyConflict as e:
+                return {'error': 'idempotency_key is already bound to a '
+                                 'different operation (%s).' % e}
+            if prior is not None:
+                return {'job_id': prior['id'],
+                        'status': prior.get('status', 'running'),
+                        'hint': 'Reconciled to the original update for this '
+                                'idempotency_key.'}
+        try:
+            if op.Embody.ext.Embody._testRunnerActive():
+                return {'error': 'A test run is active -- an update swaps '
+                                 'the component mid-run. Wait for it.'}
+        except Exception:
+            pass
+        active = self._activeUpdateJob()
+        if active is not None:
+            return {'job_id': active['id'], 'status': 'running',
+                    'hint': 'An update is already in flight -- returning '
+                            'its existing job handle.'}
+        try:
+            if op.Embody.ext.Embody._performMode:
+                return {'error': 'This node is in Perform Mode -- never '
+                                 'update a machine mid-show.'}
+        except Exception:
+            pass
+        try:
+            updater = self.ownerComp.op('updater').ext.UpdaterExt
+        except Exception:
+            return {'error': 'Updater is unavailable on this component.'}
+        started = updater.CheckForUpdate(interactive=False,
+                                         auto_install=True)
+        if isinstance(started, dict) and started.get('error'):
+            return {'error': started['error']}
+        job = _new_job('update_embody', {}, idempotency_key=idempotency_key)
+        try:
+            job['version_before'] = str(op.Embody.par.Version.eval())
+        except Exception:
+            pass
+        _write_job(job)
+        if _read_job(job['id']) is None:
+            return {'error': 'Job records unavailable (project root not '
+                             'resolved yet) -- retry shortly.'}
+        if idempotency_key:
+            _record_job_key(idempotency_key, job['id'])
+        self._armUpdatePoll(job['id'])
+        return {'job_id': job['id'], 'status': 'running',
+                'hint': 'The updater is checking/downloading; poll '
+                        'get_job_status(job_id=...). A successful install '
+                        'restarts the MCP server -- expect one reconnect '
+                        'blip; the finished record carries '
+                        'version_before/version_after.'}
+
+    def _armUpdatePoll(self, job_id, delay_frames=60):
+        """Arm one poll tick that SURVIVES the component swap.
+
+        Deliberately no fromOP: the install destroys this comp, and a
+        fromOP-bound run dies with it -- the tick re-resolves the comp by
+        path and lands on the NEW instance (which ships this method from
+        this version on; getattr-guarded for safety)."""
+        try:
+            run("o = op(%r)\n"
+                "f = (o and o.valid) and getattr(o.ext.Envoy, "
+                "'_pollUpdateJob', None) or None\n"
+                "f and f(%r)" % (self.ownerComp.path, job_id),
+                delayFrames=delay_frames)
+        except Exception:
+            pass
+
+    def _pollUpdateJob(self, job_id):
+        """Finalize an update job from live state. Main thread, swap-proof.
+
+        Terminal when: Version moved past version_before (done), the
+        updater status left the active set ('Up to date'/'Updated to' ->
+        done, refusal/failure text -> error), or the ceiling passed."""
+        job = _read_job(job_id)
+        if not isinstance(job, dict) or job.get('status') != 'running':
+            return
+        try:
+            version_now = str(op.Embody.par.Version.eval())
+        except Exception:
+            version_now = ''
+        try:
+            status = str(op.Embody.par.Updatestatus.eval() or '')
+        except Exception:
+            status = ''
+        before = str(job.get('version_before') or '')
+        elapsed = time.time() - float(job.get('started', 0) or 0)
+        working = (any(status.startswith(pfx)
+                       for pfx in self._UPDATE_ACTIVE_PREFIXES)
+                   or status.endswith('available'))
+        terminal = None
+        if version_now and before and version_now != before:
+            terminal = ('done', '')
+        elif status.startswith('Updated to') or status.startswith(
+                'Up to date'):
+            terminal = ('done', '')
+        elif status and not working:
+            # The updater rested on a refusal/failure text.
+            terminal = ('error', status)
+        elif elapsed > self._UPDATE_JOB_TIMEOUT_S:
+            terminal = ('error', 'update did not finish within %ds '
+                                 '(last status: %s)'
+                        % (self._UPDATE_JOB_TIMEOUT_S, status or 'none'))
+        if terminal is None:
+            self._armUpdatePoll(job_id)
+            return
+        job['status'] = terminal[0]
+        if terminal[1]:
+            job['error'] = terminal[1]
+        job['version_after'] = version_now
+        job['update_status'] = status
+        job['finished'] = time.time()
+        _write_job(job)
 
     def _runSaveJob(self, job_id):
         """Main-thread body of a save_project job.

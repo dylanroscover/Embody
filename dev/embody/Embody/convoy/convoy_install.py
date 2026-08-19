@@ -3980,12 +3980,16 @@ def run_command(argv, timeout_s=30.0):
     forever on a wedged service.
     """
     try:
-        # creationflags: schtasks/launchctl are console programs, and this runs
-        # inside TD (a GUI process, no console) -- without this Windows opens a
-        # visible console window for each call. See embody_git.NO_WINDOW.
+        # creationflags: console programs spawned from TD (a GUI process)
+        # flash a visible console without NO_WINDOW.
+        # stdin=DEVNULL: an inherited stdin makes subprocess DuplicateHandle
+        # TD's stdin -- not duplicatable under a supervisor/bridge-launched
+        # TD; every spawn dies with WinError 50 before CreateProcess (field
+        # 2026-08-19, Owlette fleet). Canonical: EmbodyExt._installDependencies.
         proc = subprocess.run(list(argv), capture_output=True, text=True,
                               encoding='utf-8', errors='replace',
                               timeout=timeout_s,
+                              stdin=subprocess.DEVNULL,
                               creationflags=getattr(
                                   subprocess, "CREATE_NO_WINDOW", 0))
     except subprocess.TimeoutExpired:
@@ -3993,6 +3997,84 @@ def run_command(argv, timeout_s=30.0):
     except OSError as e:
         return 1, "", "%s: %s" % (type(e).__name__, e)
     return proc.returncode, proc.stdout or "", proc.stderr or ""
+
+
+# JOBOBJECT_BASIC_LIMIT_INFORMATION flag bits (winnt.h) read by
+# spawn_environment_summary: an active-process cap and the two breakaway
+# permissions are the job facts that decide whether children can exist.
+_JOB_LIMIT_ACTIVE_PROCESS = 0x8
+_JOB_LIMIT_BREAKAWAY_OK = 0x800
+_JOB_LIMIT_SILENT_BREAKAWAY_OK = 0x1000
+
+
+def spawn_environment_summary(platform=None):
+    """Spawn-relevant session facts, one line, for a spawn_blocked report.
+
+    Session id, console, job membership/limits, breakaway -- what a
+    headless operator needs to judge a genuine spawn refusal (Owlette
+    fleet request, 2026-08-19). win32 only; TOTAL -- runs inside a
+    failure path, so any ctypes surprise degrades to "".
+    """
+    platform = platform or sys.platform
+    if platform != "win32":
+        return ""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        # PRIVATE WinDLL, never ctypes.windll: prototypes on the shared
+        # cached kernel32 leak process-wide. HANDLE argtypes load-bearing
+        # on 64-bit: without them GetCurrentProcess()'s -1 truncates and
+        # IsProcessInJob silently fails (caught 2026-08-19).
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.GetCurrentProcess.restype = wintypes.HANDLE
+        k32.GetConsoleWindow.restype = wintypes.HWND
+        k32.IsProcessInJob.argtypes = (wintypes.HANDLE, wintypes.HANDLE,
+                                       ctypes.POINTER(wintypes.BOOL))
+        k32.QueryInformationJobObject.argtypes = (
+            wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p,
+            wintypes.DWORD, ctypes.POINTER(wintypes.DWORD))
+        parts = []
+        sid = wintypes.DWORD(0)
+        if k32.ProcessIdToSessionId(k32.GetCurrentProcessId(),
+                                    ctypes.byref(sid)):
+            parts.append("session=%d" % sid.value)
+        parts.append("console=%s"
+                     % ("yes" if k32.GetConsoleWindow() else "no"))
+        in_job = wintypes.BOOL(0)
+        if k32.IsProcessInJob(k32.GetCurrentProcess(), None,
+                              ctypes.byref(in_job)):
+            parts.append("job=%s" % ("yes" if in_job.value else "no"))
+            if in_job.value:
+                class _BasicLimits(ctypes.Structure):
+                    _fields_ = [
+                        ("PerProcessUserTimeLimit", ctypes.c_longlong),
+                        ("PerJobUserTimeLimit", ctypes.c_longlong),
+                        ("LimitFlags", wintypes.DWORD),
+                        ("MinimumWorkingSetSize", ctypes.c_size_t),
+                        ("MaximumWorkingSetSize", ctypes.c_size_t),
+                        ("ActiveProcessLimit", wintypes.DWORD),
+                        ("Affinity", ctypes.c_size_t),
+                        ("PriorityClass", wintypes.DWORD),
+                        ("SchedulingClass", wintypes.DWORD),
+                    ]
+                info = _BasicLimits()
+                # 2 = JobObjectBasicLimitInformation; a None job handle
+                # queries the job of the CALLING process.
+                if k32.QueryInformationJobObject(
+                        None, 2, ctypes.byref(info),
+                        ctypes.sizeof(info), None):
+                    flags = int(info.LimitFlags)
+                    parts.append("job_limit_flags=0x%x" % flags)
+                    if flags & _JOB_LIMIT_ACTIVE_PROCESS:
+                        parts.append("active_process_limit=%d"
+                                     % info.ActiveProcessLimit)
+                    breakaway = flags & (_JOB_LIMIT_BREAKAWAY_OK
+                                         | _JOB_LIMIT_SILENT_BREAKAWAY_OK)
+                    parts.append("breakaway=%s"
+                                 % ("ok" if breakaway else "denied"))
+        return " ".join(parts)
+    except Exception:
+        return ""
 
 
 def parse_supervisor_status(platform, stdout, stderr="", returncode=None):

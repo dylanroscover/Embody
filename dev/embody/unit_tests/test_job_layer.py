@@ -331,3 +331,76 @@ class TestIdempotencyReconcile(EmbodyTestCase):
         self._seed('run_tests', 'crossed')
         out = self.envoy._save_project(idempotency_key='crossed')
         self.assertIn('different operation', out.get('error', ''))
+
+class TestUpdateEmbodyJob(EmbodyTestCase):
+    """update_embody: the bounded self-update job (Convoy fleet path)."""
+
+    def setUp(self):
+        super().setUp()
+        self.tmp = tempfile.mkdtemp(prefix='embody_upd_')
+        self._real_jobs_dir = _envoy_mod._jobs_dir
+        _envoy_mod._jobs_dir = lambda: self.tmp
+        # These tests RUN inside a test run, and _update_embody's
+        # test-run guard would fire before the paths under test --
+        # stub it False on the instance for the duration.
+        self._embody_ext = op.Embody.ext.Embody
+        self._real_runner_active = self._embody_ext._testRunnerActive
+        self._embody_ext._testRunnerActive = lambda: False
+
+    def tearDown(self):
+        self._embody_ext._testRunnerActive = self._real_runner_active
+        _envoy_mod._jobs_dir = self._real_jobs_dir
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        super().tearDown()
+
+    @property
+    def envoy(self):
+        return op.Embody.ext.Envoy
+
+    def test_dev_checkout_refuses_with_no_job_minted(self):
+        """On the dev checkout the updater's own guard refuses -- the
+        refusal must come back as a clean {'error'} and mint NO job
+        record (a running record here would block real updates)."""
+        before = {j['id'] for j in _envoy_mod._list_jobs(__import__('time').time())}
+        out = self.envoy._update_embody()
+        self.assertIn('error', out)
+        self.assertIn('dev checkout', out['error'])
+        after = {j['id'] for j in _envoy_mod._list_jobs(__import__('time').time())}
+        self.assertEqual(before, after, 'a refused update minted a job')
+
+    def test_in_flight_update_returns_the_existing_handle(self):
+        job = _envoy_mod._new_job('update_embody', {})
+        _envoy_mod._write_job(job)
+        try:
+            out = self.envoy._update_embody()
+            self.assertEqual(out.get('job_id'), job['id'])
+            self.assertIn('already in flight', out.get('hint', ''))
+        finally:
+            job['status'] = 'error'
+            job['finished'] = __import__('time').time()
+            _envoy_mod._write_job(job)
+
+    def test_poll_finalizes_done_when_version_moved(self):
+        job = _envoy_mod._new_job('update_embody', {})
+        job['version_before'] = '0.0.1'   # any version != the live one
+        _envoy_mod._write_job(job)
+        self.envoy._pollUpdateJob(job['id'])
+        record = _envoy_mod._read_job(job['id'])
+        self.assertEqual(record['status'], 'done')
+        self.assertEqual(record['version_after'],
+                         str(op.Embody.par.Version.eval()))
+
+    def test_poll_finalizes_error_on_a_resting_refusal_text(self):
+        job = _envoy_mod._new_job('update_embody', {})
+        job['version_before'] = str(op.Embody.par.Version.eval())
+        _envoy_mod._write_job(job)
+        prior = op.Embody.par.Updatestatus.eval()
+        updater = op.Embody.op('updater').ext.UpdaterExt
+        try:
+            updater._status('Update check failed (network error)')
+            self.envoy._pollUpdateJob(job['id'])
+        finally:
+            updater._status(prior)
+        record = _envoy_mod._read_job(job['id'])
+        self.assertEqual(record['status'], 'error')
+        self.assertIn('network error', record['error'])

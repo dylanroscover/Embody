@@ -144,9 +144,25 @@ def launch_env(ext) -> dict:
     (the "dock icon bounces, then closes" bug) -- plus LD_LIBRARY_PATH/DYLD_*
     and PYTHON* pointing into TD's own bundle. `open` forwards the caller's
     environment to the launched app, so these must be stripped here.
+
+    The venv's Scripts/bin dir is also dropped from PATH (link_env
+    prepends it in-process, 2026-08-19): a terminal inheriting it would
+    point bare pip/python at the MCP stack's venv, bypassing
+    InstallPackages' refusals entirely.
     """
-    return {k: v for k, v in os.environ.items()
-            if k not in ext._LAUNCH_ENV_STRIP and not k.startswith('DYLD_')}
+    env = {k: v for k, v in os.environ.items()
+           if k not in ext._LAUNCH_ENV_STRIP and not k.startswith('DYLD_')}
+    try:
+        venv_dir = ext._venvPaths()['venv_dir']
+        bin_dir = os.path.join(
+            venv_dir, 'Scripts' if sys.platform.startswith('win') else 'bin')
+        norm = os.path.normcase(os.path.normpath(bin_dir))
+        parts = [p for p in env.get('PATH', '').split(os.pathsep)
+                 if p and os.path.normcase(os.path.normpath(p)) != norm]
+        env['PATH'] = os.pathsep.join(parts)
+    except Exception:
+        pass
+    return env
 
 
 def launch_editor(ext, cwd, app_name, bundle_id=None, win_exe_candidates=(),

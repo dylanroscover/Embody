@@ -1,5 +1,22 @@
 # Changelog
 
+## v6.0.257
+
+A production fleet's field reports, fixed end to end: supervisor-launched TouchDesigner could not install the Convoy host app, relaunched nodes never re-registered, and Embody fought a repo that manages `.embody/project.json` per machine. Plus remote fleet updates and a public project Python environment.
+
+- **Convoy host install works under a process supervisor (Owlette, service wrappers)**: every Convoy spawn inherited TouchDesigner's stdin, which a supervised session can hold non-duplicatable -- so CreateProcess died with `WinError 50` before any interpreter ran, on all nine machines of the reporting fleet. Children now get an explicit NUL stdin (the hardening Envoy's env setup already had), and a genuine OS spawn refusal reports session forensics (session id, console, Job object limits, breakaway) instead of prescribing a console visit.
+- **Nodes register at every project open**: TouchDesigner constructs extensions lazily and nothing touched ConvoyExt in a supervisor-relaunched session, so an enabled node sat `Disabled` until someone opened the Convoy page -- half the reporting fleet was stale. Startup now constructs it explicitly; registration lands seconds into every open.
+- **A deliberate ignore of `.embody/project.json` is respected**: Envoy asks `git check-ignore` instead of string-matching, withholds its un-ignore entry with a logged warning when the repo's own rules decide the file (the realm id then stays per-machine -- pre-seed it when provisioning), never migrates lines outside its own managed block, and repairs a wrong-ordered ignore/negation pair it previously returned early on.
+- **Fleet self-update**: `update_embody` / `convoy_update_embody` update a Convoy node's Embody in place from the official GitHub release -- sha256-pinned manifest, downgrade and TD-build-floor refusals, durable job -- with no **Allow Execute TD Python** grant. New docs page: Fleet Updates.
+- **The project Python environment goes public (PyEnv v1)**: the per-project `.venv` Embody builds is now a documented, shared surface -- wired into `sys.path` inside TouchDesigner, declared extras, DLL-path parity, tdPyEnvManager detection -- with the machinery extracted to `embody_pyenv`. New docs page: Python Environment.
+
+## v6.0.254
+
+A .toe saved on one machine showed that machine's name as the Convoy Node Name everywhere it was deployed.
+
+- **Foreign node-name stamps heal on open**: the automatic `hostname / toe-stem` fill is a constant parameter, so it persists inside the .toe and travels with it -- every machine that opened a deployed project showed the authoring machine's hostname (`TEC-A4D / Render.36`, field-reported 2026-08-19). A baked stamp whose host half is not this machine but whose project half matches this project is now recognized as a travelled auto-stamp and refilled with the local hostname; deliberate names match neither heal shape and are never touched. Embody-written exports were already scrubbed (v6.0.217) -- the project file itself was the leak. 3 new tests.
+- Also in this build: a comment pass across the main extensions (developer shorthand, ~980 lines of annotation fat removed) and a corrected `EmbodyExt` module header.
+
 ## v6.0.253
 
 A project saved months ago could be called "never saved", which blocked Enable Convoy.

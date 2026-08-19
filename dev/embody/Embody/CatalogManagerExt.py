@@ -32,13 +32,9 @@ _ABSTRACT_TYPES = frozenset({
 	'ObjectCOMP',
 })
 
-# Palette .tox stems (case-insensitive) skipped during the one-time
-# first-launch scan. They either run invasive init on loadTox (messageBoxes,
-# project.cookRate changes, TDImportCache creation) OR fail loudly because
-# their dependencies are absent (Ableton Live, VR hardware, Windows-only
-# ctypes.windll) - flooding the textport with harmless-but-alarming errors
-# that read like Embody is broken. Loss of palette-clone detection for these
-# is acceptable; almost nobody diffs them in TDN networks.
+# Palette .tox stems (case-insensitive) skipped by the first-launch scan:
+# invasive init on loadTox (messageBoxes, cookRate changes) or loud failures
+# on absent deps. Losing clone detection for these is acceptable.
 _PALETTE_SCAN_BLOCKLIST = frozenset({
 	'tdvr',                # forces 90fps, shows VR framerate messageBox
 	'autoui',              # shows "Widget Package Required" messageBox
@@ -46,14 +42,9 @@ _PALETTE_SCAN_BLOCKLIST = frozenset({
 	'resources',           # VRWorldExt + findMouse (Windows-only windll)
 	'world',               # VRWorldExt + findMouse (Windows-only windll)
 	'system',              # findMouse (Windows-only ctypes.windll)
-	'geopanel',            # can wedge TD 2025.33070's frame loop within 1-2
-	                       # frames of loadTox returning (2026-07-17: 6 of 7
-	                       # runs wedged incl. an Embody-free isolation .toe;
-	                       # one real-project full scan survived, so the
-	                       # trigger is a timing/UI-state race - TD-side, the
-	                       # file is md5-identical to 32820's; ships per-frame
-	                       # panel.interactTouch/interactMouse executors +
-	                       # Leap SDK init)
+	'geopanel',            # wedges TD 33070's frame loop 1-2 frames after
+	                       # loadTox (TD-side race, 2026-07-17; see
+	                       # td-33070-palette-wedge memory)
 	'chromakey',           # same wedge class on 33070: full-palette probe
 	                       # with geopanel excluded wedged right after
 	                       # chromaKey loaded (2026-07-17)
@@ -81,24 +72,17 @@ class CatalogManagerExt:
 		self._palette_queue = []          # list of rel_path strings
 		self._palette_results = {}        # {name: placed_type}
 		self._palette_workspace = None
-		# Guard against double-starting a scan: EnsureCatalogs can be
-		# reached more than once while a chunked scan is still in flight
-		# (an op-type-only catalog on disk does not trip the TDNExt
-		# idempotency check). Set when a scan starts, cleared when the
-		# palette phase finalizes or bails.
+		# Double-start guard: EnsureCatalogs can re-enter while a chunked
+		# scan is in flight. Cleared when the palette phase ends.
 		self._scan_in_flight = False
-		# Palette results already checkpointed to disk (see
-		# _checkpointPaletteScan); lets an interrupted first launch
-		# resume instead of restarting from zero (issue #60).
+		# Palette results already on disk (_checkpointPaletteScan) so an
+		# interrupted first launch resumes, not restarts (issue #60).
 		self._palette_checkpointed = 0
 		# (op_catalog, done_results) staged by EnsureCatalogs for the
 		# deferred resume (fired by _resumePaletteScan at ~frame 70).
 		self._pending_resume = None
-		# Component stems poisoned by a previous session: the in-flight
-		# sentinel names the most recently loaded palette .tox; if a
-		# launch finds one on disk, that session was killed or wedged
-		# (TD 2025.33070 wedges its frame loop within a frame of
-		# geoPanel.tox loading) and the component is skipped for good.
+		# Stems poisoned by a prior session: an in-flight sentinel left
+		# on disk names the .tox that wedged/killed it -- skip for good.
 		# Persisted through checkpoints under '_palette_blocked'.
 		self._palette_blocked = set()
 		# Background (toeexpand) palette scan plumbing: the worker thread
@@ -109,35 +93,22 @@ class CatalogManagerExt:
 		self._tox_scan_stop = None
 		self._tox_scan_total = 0
 		self._tox_scan_fail_count = 0
-		# True only after THIS session wrote an in-flight sentinel (a
-		# legacy loadTox scan ran); gates the teardown clear so a normal
-		# session's onDestroyTD never touches files or other extensions.
+		# True only if THIS session wrote a sentinel; gates the teardown
+		# clear so a normal onDestroyTD does zero file/extension I/O.
 		self._sentinel_written = False
 		self._sentinel_path_cache = None
-		# Timeline / cook state snapshot, re-taken at the START of every
-		# palette chunk and restored right after that chunk's loadTox calls.
-		# Loading some palette .tox files runs their init code, which can
-		# mutate GLOBAL timeline state (pause playback, change cookRate);
-		# the per-chunk bracket undoes that without ever fighting the USER:
-		# a pause/rate change made between chunks is captured by the next
-		# chunk's snapshot and honored, not reverted (issue #60).
+		# Timeline/cook snapshot per palette chunk: some .tox init mutates
+		# global timeline state; the per-chunk bracket restores it without
+		# fighting user changes made between chunks (issue #60).
 		self._time_snapshot = None
 
 	def onDestroyTD(self):
-		"""Clean up workspace if scan was interrupted.
+		"""Clean up workspace if a scan was interrupted.
 
-		Also drops the in-flight sentinel - but ONLY when this session
-		actually wrote one (i.e. a legacy loadTox scan ran): a clean
-		teardown means the session did not wedge, so the most recently
-		loaded component must not be blamed. The guard matters doubly:
-		(1) teardown fires from ExportPortableTox's file-ref strip DURING
-		project.save() - the sentinel clear used to resolve
-		ext.Embody._findProjectRoot() right there and wedged the save
-		(v6.0.133 release regression, 2026-07-17); with the guard, a
-		normal session's teardown does zero file I/O and zero extension
-		lookups. (2) A session that wrote nothing must not delete a
-		sibling instance's live sentinel (panel finding). A hard kill /
-		frame-loop wedge still leaves the sentinel behind either way.
+		Drops the in-flight sentinel ONLY when this session wrote one:
+		a clean teardown must do zero file/extension I/O (the clear once
+		wedged project.save, v6.0.133) and must never delete a sibling
+		instance's live sentinel. A hard kill still leaves it behind.
 		"""
 		self._cleanupWorkspace()
 		if self._sentinel_written:
@@ -191,15 +162,10 @@ class CatalogManagerExt:
 					# Still check for cross-build patches
 					self._patchCrossBuildDefaults(catalog)
 					return
-				# Incomplete: the op-type half is cached, but the palette
-				# phase never started (missing key) or was interrupted
-				# (partial checkpoint). Resume it instead of returning
-				# with a permanently incomplete catalog (issue #60:
-				# killing a struggling TD mid-scan used to restart from
-				# zero). Populate the OP-TYPE half only -- pushing a
-				# partial palette into TDNExt would trip the idempotency
-				# guard above after a mid-resume extension reinit and
-				# wedge the resume until the next launch.
+				# Op-type half cached, palette phase missing/interrupted:
+				# resume it (issue #60). Push the OP-TYPE half only -- a
+				# partial palette would trip the idempotency guard after
+				# a mid-resume reinit and wedge the resume.
 				op_catalog = {k: v for k, v in catalog.items()
 							  if not k.startswith('_')}
 				done = catalog.get('_palette', {})
@@ -280,18 +246,10 @@ class CatalogManagerExt:
 	def _publishScanProgress(self):
 		"""Redraw the status readout after a scan status write.
 
-		The scan occupies hundreds of consecutive main-thread frames, so
-		the redraw is told from this choke point rather than trusted to
-		the panel's parameter-execute DAT alone (that DAT's callback body
-		lives only in the .toe, so the choke-point call is the redraw
-		path that version control can actually vouch for).
-
-		Stated plainly: on a DISABLED Embody the guard above skips the
-		par write, the readout keeps saying Disabled, and this call
-		redraws nothing new -- a disabled Embody's scan is invisible by
-		contract, not by accident.
-
-		Best-effort -- a viewer problem must never abort a catalog scan.
+		Called from this choke point because the panel's parameter-exec
+		callback lives only in the .toe. Disabled Embody: par write is
+		skipped above, readout stays Disabled by contract. Best-effort --
+		a viewer problem must never abort a scan.
 		"""
 		try:
 			publisher = self.ownerComp.op('viz_status/status_publish')
@@ -416,13 +374,9 @@ class CatalogManagerExt:
 		# Run cross-build patch check (uses op-type catalog)
 		self._patchCrossBuildDefaults(self._scan_results)
 
-		# Persist the op-type half NOW, before the palette phase begins.
-		# The palette scan takes seconds, and the combined write used to
-		# be the ONLY write - a TD closed/killed mid-palette-scan lost
-		# everything and restarted from zero on the next launch (issue
-		# #60). With this file on disk (no '_palette' key = palette phase
-		# incomplete), the next EnsureCatalogs resumes at the palette
-		# phase instead.
+		# Persist the op-type half NOW: a kill mid-palette-scan then
+		# resumes at the palette phase (no '_palette' key = incomplete)
+		# instead of restarting from zero (issue #60).
 		self._writeCatalog(self._getCatalogPath(self._build_str),
 						   dict(self._scan_results))
 
@@ -451,13 +405,10 @@ class CatalogManagerExt:
 			self._finalizePaletteScan()
 			return
 
-		# Bootstrap miss - scan the palette WITHOUT loading anything into
-		# TD: toeexpand (ships in TD's bin folder) unpacks each .tox on a
-		# worker thread and the root type + child count are read from the
-		# expansion. Zero main-thread work per component, zero dropped
-		# frames, and no palette component's init code ever executes -- the
-		# class of freeze where a component wedges the frame loop on load
-		# (geoPanel, chromaKey on TD 2025.33070) cannot occur here.
+		# Bootstrap miss - scan via toeexpand on a worker thread, nothing
+		# loaded into TD: zero main-thread work, and no palette init code
+		# runs, so the loadTox wedge class (geoPanel/chromaKey on 33070)
+		# cannot occur.
 		if self._startToeexpandScan(op_catalog, resume_results=resume_results):
 			return
 
@@ -943,16 +894,10 @@ class CatalogManagerExt:
 		palette_dir = self._getPaletteDir()
 		total = len(self._palette_results) + len(self._palette_queue) + len(chunk)
 
-		# Bracket THIS chunk's loadTox calls: snapshot now, restore right
-		# after. The snapshot must be per-chunk, not per-scan - a user
-		# pausing the timeline between chunks is captured here and
-		# honored, while a palette component's own pause/cookRate
-		# mutation inside the bracket is still undone (issue #60: the
-		# old scan-wide snapshot un-paused the user's timeline after
-		# every chunk for the whole scan). Accepted tradeoff: a palette
-		# component that mutates timeline state via a DEFERRED run()
-		# lands between brackets and reads as user state - if such a
-		# component surfaces, add it to _PALETTE_SCAN_BLOCKLIST.
+		# Bracket THIS chunk's loadTox calls (per-chunk, not per-scan:
+		# user timeline changes between chunks are honored, component
+		# mutations inside the bracket undone -- issue #60). A deferred
+		# run() mutation lands between brackets; blocklist such comps.
 		self._snapshotTimeState()
 		try:
 			for rel_path in chunk:
@@ -965,19 +910,13 @@ class CatalogManagerExt:
 						existing.destroy()
 
 					wrapper = self._palette_workspace.create(baseCOMP, wrapper_name)
-					# Loaded palette components must never COOK: geoPanel
-					# ships per-frame panel.interactTouch()/interactMouse()
-					# executors that fire the moment the network exists
-					# (and wedge TD 2025.33070's frame loop). The census
-					# below only reads names/types/child counts - none of
-					# that needs cooking.
+					# Never cook loaded palette comps (geoPanel per-frame
+					# executors wedge 33070); the census only reads names,
+					# types, child counts.
 					wrapper.allowCooking = False
-					# Forensics marker: if TD is killed or wedges from here
-					# until the NEXT sentinel write (a wedge can land 1-2
-					# frames after loadTox returns - observed with
-					# geoPanel.tox on TD 2025.33070), the next launch reads
-					# this component's name and skips it. Removed only at
-					# scan finalize, graceful abort, or extension teardown.
+					# Forensics: a kill/wedge before the NEXT sentinel write
+					# blames this component and the next launch skips it.
+					# Removed only on finalize / abort / teardown.
 					self._writeInflightSentinel(name, rel_path)
 					wrapper.loadTox(tox_path)
 
@@ -1040,12 +979,9 @@ class CatalogManagerExt:
 			self._finalizePaletteScan()
 			return
 
-		# 3 frames, not 1: the gap keeps the in-flight sentinel naming
-		# THIS component while any deferred wedge it scheduled lands
-		# (observed: geoPanel kills the frame loop 1-2 frames after
-		# loadTox returns). A 1-frame cadence would overwrite the
-		# sentinel with the next - innocent - component first. This path
-		# is fallback-only, so the 3x slower sweep is irrelevant.
+		# 3 frames, not 1: keeps the sentinel naming THIS comp while any
+		# deferred wedge lands (geoPanel wedges 1-2 frames post-loadTox);
+		# 1 frame would blame the next, innocent, comp. Fallback-only.
 		run('args[0]._processPaletteChunk()', self, delayFrames=3)
 
 	def _checkpointPaletteScan(self):
@@ -1460,18 +1396,10 @@ class CatalogManagerExt:
 	def _writeInflightSentinel(self, name, rel_path):
 		"""Record the palette component being loaded (freeze forensics).
 
-		Written right before every palette loadTox, overwriting the
-		previous entry, and deleted only on clean outcomes (scan
-		finalize, graceful abort, extension teardown). A sentinel found
-		at scan start therefore names the most recent load of a session
-		that was killed or wedged - including wedges that land a frame
-		or two AFTER loadTox returns (geoPanel.tox on TD 2025.33070).
-		Best-effort: a failure here must never break the scan.
-
-		Skipped while the project is unsaved (the write-gate rule):
-		accepted tradeoff -- a legacy-fallback palette scan that wedges
-		TD before the first save leaves no forensics for the next launch.
-		That path needs no toeexpand AND no bootstrap rows, pre-save.
+		Written before every palette loadTox, deleted only on clean
+		outcomes -- a sentinel at scan start names the load that killed
+		the last session (wedges can land 1-2 frames post-loadTox).
+		Best-effort; skipped while unsaved (write-gate rule).
 		"""
 		if not self._projectSavedOnDisk():
 			return
@@ -1554,17 +1482,11 @@ class CatalogManagerExt:
 			return None
 
 	def _writeCatalog(self, path, catalog):
-		"""Write catalog dict to JSON file (atomic: tmp + replace).
+		"""Write catalog dict to JSON (atomic tmp + replace, so a crash
+		never leaves a truncated file to force a rescan -- issue #60).
 
-		A TD crash mid-write must not leave a truncated
-		catalog_<build>.json - _readCatalog would fail to parse it and
-		silently trigger a full rescan on the next launch (issue #60).
-
-		On a never-saved project the write is skipped entirely: the path
-		roots at TD's default folder and would be orphaned by the wizard's
-		save step. The scan's in-memory result still serves this session;
-		the catalog is written by the post-save flush (execute.py
-		onProjectPostSave) or rebuilt at the real root on the next open.
+		Skipped while unsaved (write-gate rule); the in-memory result
+		serves this session and the post-save flush writes it for real.
 		"""
 		if not self._projectSavedOnDisk():
 			# Keep the newest payload for the post-save flush; each later

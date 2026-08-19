@@ -988,6 +988,139 @@ class TestABlockedSpawnIsNotABadInterpreter(EmbodyTestCase):
             'runtime_probe_failed')
 
 
+class TestRunCommandNeverInheritsTDStdin(EmbodyTestCase):
+    """run_command must hand every child an explicit NUL stdin.
+
+    THE OWLETTE FLEET FAILURE (2026-08-19, 9-machine installation):
+    with capture_output set and stdin left to inherit, subprocess
+    DuplicateHandles TouchDesigner's stdin -- not duplicatable when a
+    supervisor (Owlette) or the Envoy bridge launched TD -- and EVERY
+    Convoy spawn died with [WinError 50] before CreateProcess, while
+    Envoy's own pip/uv spawns (which pass stdin=DEVNULL for exactly this
+    reason, EmbodyExt._installDependencies) succeeded seconds earlier in
+    the SAME session. The host app could never install on a supervised
+    machine. stdin=DEVNULL makes subprocess open its own NUL handle
+    instead of duplicating TD's.
+    """
+
+    _SENTINEL = 'embody-test-run-command-sentinel'
+
+    def test_run_command_passes_devnull_stdin(self):
+        real_run = install_mod.subprocess.run
+        seen = {}
+
+        def recording_run(argv, **kw):
+            if argv and argv[0] == self._SENTINEL:
+                seen.update(kw)
+
+                class _Done:
+                    returncode = 0
+                    stdout = ''
+                    stderr = ''
+                return _Done()
+            # Any concurrent caller of the SHARED subprocess module gets
+            # the real thing -- the patch window must never leak a fake
+            # result outside this test.
+            return real_run(argv, **kw)
+
+        install_mod.subprocess.run = recording_run
+        try:
+            code, out, err = install_mod.run_command([self._SENTINEL])
+        finally:
+            install_mod.subprocess.run = real_run
+        self.assertEqual(code, 0, (out, err))
+        self.assertIs(seen.get('stdin'), install_mod.subprocess.DEVNULL,
+                      'an inherited stdin is what killed every spawn on '
+                      'the Owlette fleet')
+        self.assertTrue(seen.get('capture_output'))
+
+
+class TestSpawnEnvironmentSummaryIsTotal(EmbodyTestCase):
+    """The forensics line is win32-only, one line, and can never raise.
+
+    It runs INSIDE the spawn_blocked failure path -- the report the
+    Owlette fleet asked for (session id, console, job membership,
+    breakaway) is only useful if producing it can never break the
+    delivery of the failure itself.
+    """
+
+    def test_non_windows_platforms_report_nothing(self):
+        for platform in ('darwin', 'linux'):
+            self.assertEqual(
+                install_mod.spawn_environment_summary(platform), '',
+                platform)
+
+    def test_win32_reports_session_facts_or_degrades_to_empty(self):
+        summary = install_mod.spawn_environment_summary('win32')
+        self.assertIsInstance(summary, str)
+        if sys.platform == 'win32':
+            # Real ctypes on a real Windows box: the facts must be there.
+            self.assertIn('session=', summary)
+            self.assertIn('console=', summary)
+            self.assertIn('job=', summary)
+        else:
+            # ctypes.windll does not exist off Windows; asked for win32
+            # facts anyway, the helper must swallow the AttributeError
+            # and stay quiet, never raise.
+            self.assertEqual(summary, '')
+
+
+class TestABlockedSpawnReportsTheSessionNotThePython(_LadderBase):
+    """The spawn_blocked verdict names the OS refusal, carries the
+    session forensics, and no longer swears a hand-opened TouchDesigner
+    is the only fix.
+
+    The old detail ("cannot start ANY child process ... Quit
+    TouchDesigner, open the project yourself") prescribed exactly the
+    remedy a supervised fleet cannot perform -- Owlette relaunches TD
+    automatically on every machine, unattended, in a public exhibition.
+    """
+
+    _BLOCKED = {'ok': False, 'reason': 'runtime_spawn_blocked',
+                'detail':
+                    'OSError: [WinError 50] The request is not supported'}
+
+    def test_every_candidate_blocked_returns_the_new_verdict(self):
+        self.buildVenv(subsystem=install_mod.PE_SUBSYSTEM_GUI)
+        self.script({PROJECT_VENV: dict(self._BLOCKED),
+                     self.daemon_py: dict(self._BLOCKED),
+                     self.console_py: dict(self._BLOCKED)})
+        got = self.install()
+        self.assertFalse(got['ok'], got)
+        self.assertEqual(got['reason'], 'spawn_blocked', got)
+        self.assertIn('operating system refused', got['detail'])
+        self.assertIn('spawn_environment', got,
+                      'the forensics ride the result even when empty')
+        self.assertNotIn('cannot start ANY child process', got['detail'])
+        self.assertNotIn('open the project yourself', got['detail'],
+                         'the console-visit prescription is gone')
+
+
+class TestStartupConstructsConvoyExt(EmbodyTestCase):
+    """TDN mode off/export never touches the convoy COMP at open, and TD
+    constructs extensions LAZILY -- so an enabled node sat 'Disabled'
+    (registration tick never started) until first incidental access
+    (field 2026-08-19: 18 min dormant after a relaunch). The startup
+    phase must schedule a construction kick on EVERY TDN-mode path.
+    """
+
+    def test_reconstruct_schedules_the_construction_kick(self):
+        path = os.path.join(_REPO_ROOT, 'dev', 'embody', 'Embody',
+                            'EmbodyExt.py')
+        with open(path, 'r', encoding='utf-8') as f:
+            src = f.read()
+        body = src.split('def ReconstructTDNComps', 1)[1]
+        head = body.split('def ', 1)[0]
+        self.assertIn('.ext.ConvoyExt', head,
+                      'the startup construction kick is gone')
+        self.assertIn('Convoyenable', head,
+                      'the kick must stay gated on the enable toggle')
+        self.assertLess(
+            head.index('.ext.ConvoyExt'), head.index('unstore'),
+            'the kick must precede the mode branches so off/export '
+            'paths get it too')
+
+
 class TestTheBlockedSpawnMessageIsSaidONCE(EmbodyTestCase):
     """Naming the cause is right; naming it twice in one line is not.
 

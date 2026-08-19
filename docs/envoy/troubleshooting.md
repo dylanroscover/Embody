@@ -5,10 +5,7 @@
 **Symptoms:** Toggling Envoy Enable does nothing, no port number appears in the toolbar, or errors in the Textport.
 
 1. **Check the Textport** (Alt+T) — Embody logs all startup messages there. Look for lines starting with `[Envoy]`.
-2. **Dependency install in progress:** On first enable (or after a version upgrade), Envoy builds its virtual environment and installs `mcp`, `uvicorn`, and other packages. This runs in a background thread — the status reads `Installing deps... (one-time)` and the port appears only when it finishes. A fresh install can take a minute or two; wait for it rather than re-toggling. If it **failed** (e.g., no internet, Python version mismatch), the status shows `Error: Python environment not ready`. Check for pip errors in the Textport and try installing manually:
-   ```
-   pip install "mcp>=2.0.0,<3" "attrs<25" pyyaml cryptography
-   ```
+2. **Dependency install in progress:** On first enable (or after a version upgrade), Envoy builds its virtual environment and installs `mcp`, `uvicorn`, and other packages. This runs in a background thread — the status reads `Installing deps... (one-time)` and the port appears only when it finishes. A fresh install can take a minute or two; wait for it rather than re-toggling. If it **failed** (e.g., no internet, Python version mismatch), the status shows `Error: Python environment not ready`. Check for the error in the Textport, then toggle Envoy off and on to rebuild. Never pip-install into `.venv` yourself — Embody owns that environment and rebuilds it (including your declared extras) on its own; see [Python Environment](../embody/python-environment.md).
    On Windows, also add `"pywin32>=311"`.
 3. **Port already in use:** If another process is using port 9870 (the default), the server will fail to bind. Change the **Envoy Port** parameter on the Embody COMP to a different port (e.g., 9871).
 4. **TD version too old:** Envoy requires TouchDesigner **2025.33070** or later.
@@ -115,7 +112,7 @@ Envoy scans 10 ports (default: 9870–9879). If all are occupied, it can't start
 **Fix:**
 
 1. Delete the broken venv: `rm -rf <project_dir>/.venv`
-2. Toggle Envoy off and on in TouchDesigner (or restart TD) — Envoy will recreate the venv automatically
+2. Toggle Envoy off and on in TouchDesigner (or restart TD) — Envoy will recreate the venv automatically, re-installing your declared `python.extras` with it
 3. Reopen your Claude Code session so the bridge reconnects with the new venv Python
 
 !!! note

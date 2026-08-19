@@ -6,9 +6,9 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.253-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.257-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
-[![MCP Tools](https://img.shields.io/badge/MCP_tools-62-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
+[![MCP Tools](https://img.shields.io/badge/MCP_tools-63-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/dylanroscover/Embody?style=flat-square&labelColor=181e1e&color=6ee668)](https://github.com/dylanroscover/Embody/stargazers)
 [![Downloads](https://img.shields.io/github/downloads/dylanroscover/Embody/total?style=flat-square&labelColor=181e1e&color=6ee668)](https://github.com/dylanroscover/Embody/releases)
@@ -35,17 +35,18 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 | | What | Why it matters |
 |---|---|---|
-| 🤖 | **Envoy MCP Server** | 62 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
+| 🤖 | **Envoy MCP Server** | 63 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
 | 📄 | **TDN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdn` file. |
 | 📦 | **Automatic Restoration** | Externalized files are written on save, so any COMP can be recovered from disk. By default (Export-on-Save) the `.toe` stays authoritative on open; switch to Roundtrip mode to rebuild TDN-strategy COMPs from `.tdn` on every open. |
 | 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
+| 🐍 | **Project Python Environment** | One `.venv` per project, built against TouchDesigner's own interpreter — Envoy runs from it, your packages import inside TD from it, and AI agents manage it hands-free. [Python Environment](https://dylanroscover.github.io/Embody/embody/python-environment/) |
 | 🛰️ | **Convoy LAN Relay** | Convoy-enabled Embody nodes on a trusted LAN discover, inspect, and control each other through Envoy — relay test runs, saves, screenshots, and restarts to other machines from one AI session. [Convoy guide](https://dylanroscover.github.io/Embody/convoy/) |
 
 ---
 
 ## Quick Start
 
-**Requirements:** TouchDesigner **2025.33070 or later** (Windows / macOS). No Python setup needed — Envoy installs its own dependencies on first enable. No special folder structure either: Embody works in any project folder, and if you happen to use git, every change is also a clean diff for free.
+**Requirements:** TouchDesigner **2025.33070 or later** (Windows / macOS). No Python setup needed — Embody builds a per-project Python environment (`.venv`) matched to TouchDesigner's own interpreter, and [your own packages can live in it too](https://dylanroscover.github.io/Embody/embody/python-environment/). No special folder structure either: Embody works in any project folder, and if you happen to use git, every change is also a clean diff for free.
 
 ### 1. Install
 
@@ -100,7 +101,7 @@ The generated config runs Envoy's bridged STDIO transport (recommended — it ca
 | `create_extension` | Scaffold a full extension (COMP + DAT + wiring) |
 | `get_op_errors` | Inspect errors on any operator and its children |
 
-...and 55 more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
+...and 56 more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
 
 When Envoy starts, it always generates an `AGENTS.md` file in your project root with TD development patterns and project-specific guidance. It also writes a client-specific config for whichever assistant you select in the `Aiclient` parameter (`CLAUDE.md` + `.claude/` for Claude Code, `opencode.json` + `.claude/` for OpenCode, Cursor/Windsurf rules, Copilot instructions, `GEMINI.md` for Gemini; Codex and OpenCode read `AGENTS.md` directly). For OpenCode and local-model setups, see the [Local Models & Open Clients](https://dylanroscover.github.io/Embody/envoy/local-models/) guide.
 
@@ -175,7 +176,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **128 test suites** (3,830 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **129 test suites** (3,876 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -206,6 +207,8 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.257**: **Supervisor-managed fleets are first-class** -- the Convoy host app installs from supervisor-launched TouchDesigner (an inherited stdin killed every spawn with `WinError 50` before any interpreter ran; children now get an explicit NUL stdin, and a genuine OS refusal reports session/Job forensics), nodes re-register deterministically at every project open (lazy extension construction left supervisor-relaunched nodes `Disabled` until someone opened the Convoy page), a repo that deliberately ignores `.embody/project.json` keeps that choice (per `git check-ignore`, with a logged warning that the realm id is now per-machine), fleets update Embody remotely with `update_embody`/`convoy_update_embody` (sha256-pinned manifest, downgrade/build-floor refusals, no TD Python grant), and the per-project `.venv` becomes a public, documented Python environment (`embody_pyenv`, extras, in-TD `sys.path` wiring).
+- **6.0.254**: **A deployed .toe showed the authoring machine's hostname as its Convoy Node Name** -- the automatic `hostname / toe-stem` fill persists as a constant inside the .toe and travels with it; a baked stamp whose host half is another machine but whose project half matches this project now heals to the local hostname on open, while deliberate names are never touched (Embody-written exports were already scrubbed -- the project file itself was the carrier).
 - **6.0.253**: **A saved project could be told to "save the project first"** -- the save gate asked whether a file existed at `project.folder / project.name`, but TouchDesigner reports `project.name` as the NEXT name in an incremental series (`Control.35.toe` on disk, `project.name` `Control.36.toe`), so the lookup failed on projects that had been saved for months and Enable Convoy refused. Saved-ness now comes from the NAME -- TD's `NewProject[.N].toe` placeholder means never saved, anything else means saved -- with Convoy's gate and the wizard's save step delegating to that single authority, and the real `.toe` resolved from the increment series where a file is genuinely needed.
 - **6.0.252**: **A fresh macOS install hit two invisible walls** -- the Envoy venv build died decoding pip's output (GUI-launched macOS TD defaults to US-ASCII; every TD-side subprocess read is now forced UTF-8 and the pip/uv bootstrap runs with `PYTHONPATH`-class variables scrubbed, so the "Python 64-bit Module Path" preference can't contaminate the venv), and the collection "Embody it" copy flow never prompted because v6.0.251 shipped the dev machine's `Clipboardautopaste` toggle baked Off -- it now rests at its default in every export, persists per-user via config.json, and the fresh-install smoke asserts it. The embody.tools copy buttons are also Safari-safe now (ClipboardItem created inside the click gesture).
 - **6.0.251**: **Worker-side `run()` is now caught at write time** -- Derivative confirmed that calling TD's global `run()` from a worker thread silently corrupts TD state (it does not raise), so Envoy statically lints `execute_python` and DAT writes and rides a **THREADING WARNING** back on the response; the full codebase audit came back clean, Envoy's own worker threads stopped printing to the Textport, Convoy's sibling API enforces its main-thread contract, and the shipped rules teach the corrected failure model plus the masked-crash diagnosis recipe.

@@ -167,7 +167,24 @@ def compute_uninstall_plan(ext, target_dir=None):
     if v:
         p = _abs(v['path'])
         if p.exists():
-            _add('delete', p, kind='dir', why='Embody-created virtual environment')
+            # Name the user's declared extras in the plan (2026-08-19):
+            # "Embody created it, so Embody removes it" predates user
+            # packages living in this venv -- deleting a 3 GB torch
+            # install deserves an explicit line in the preview. The
+            # declaration survives in .embody/project.json either way,
+            # so a reinstall brings the extras back.
+            why = 'Embody-created virtual environment'
+            try:
+                extras = ext._declaredExtras()
+                if extras:
+                    why += (f' -- CARRIES {len(extras)} user package(s) '
+                            f'({", ".join(extras[:6])}'
+                            f'{", ..." if len(extras) > 6 else ""}); the '
+                            f'declaration in .embody/project.json is kept, '
+                            f'so reinstalling Embody restores them')
+            except Exception:
+                pass
+            _add('delete', p, kind='dir', why=why)
         else:
             plan['missing'].append(v['path'])
 

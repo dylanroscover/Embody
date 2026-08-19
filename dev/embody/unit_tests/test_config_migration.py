@@ -140,6 +140,104 @@ class TestConfigMigration(EmbodyTestCase):
             lines.index('.embody/*'), lines.index('!.embody/project.json'),
             f'negation must follow the ignore it negates: {lines}')
 
+    def _setup_mod(self):
+        return op.Embody.op('envoy_setup').module
+
+    def test_a_deliberate_user_ignore_withholds_the_negation(self):
+        """THE OWLETTE FLEET COMPLAINT (2026-08-19): a repo deliberately
+        ignoring .embody/project.json got the negation re-appended and
+        carried a permanent conflict. When git names a NON-managed rule
+        as decider, withhold the negation and warn."""
+        setup = self._setup_mod()
+        real = setup._project_json_ignore_decider
+        setup._project_json_ignore_decider = (
+            lambda root: ('.embody/project.json', '.gitignore'))
+        try:
+            self._configure()
+        finally:
+            setup._project_json_ignore_decider = real
+        self.assertNotIn('!.embody/project.json', self._text())
+        self.assertNotIn('.embody/*', self._text(),
+                         'the ignore half is withheld TOO: adding it would '
+                         'make our rule the last file-level match on the '
+                         'next startup, flip the decider to managed, and '
+                         're-add the negation -- the withhold must be '
+                         'stable across runs')
+
+    def test_the_withhold_is_stable_across_repeated_runs(self):
+        """Run twice with a user rule deciding: neither run may add
+        either half of the managed pair."""
+        setup = self._setup_mod()
+        real = setup._project_json_ignore_decider
+        setup._project_json_ignore_decider = (
+            lambda root: ('.embody/project.json', '.gitignore'))
+        try:
+            self._configure()
+            self._configure()
+        finally:
+            setup._project_json_ignore_decider = real
+        self.assertNotIn('!.embody/project.json', self._text())
+        self.assertNotIn('.embody/*', self._text())
+
+    def test_our_own_rule_as_decider_still_appends_the_pair(self):
+        """'.embody/*' deciding is OUR half of the pair mid-append,
+        never a user opt-out."""
+        setup = self._setup_mod()
+        real = setup._project_json_ignore_decider
+        setup._project_json_ignore_decider = (
+            lambda root: ('.embody/*', '.gitignore'))
+        try:
+            self._configure()
+        finally:
+            setup._project_json_ignore_decider = real
+        self.assertIn('!.embody/project.json', self._text())
+
+    def test_probe_failure_fails_open(self):
+        """No repo / no git -> None -> exactly the old behavior. The
+        REAL probe runs here: self.tmp is not a git repository."""
+        self._configure()
+        self.assertIn('!.embody/project.json', self._text())
+
+    def test_wrong_order_is_repaired_even_with_nothing_missing(self):
+        """Both lines present but negation ABOVE the ignore used to
+        return early -- the committed metadata stayed silently
+        untracked."""
+        self._configure()
+        lines = [ln for ln in self._lines()
+                 if ln.strip() != '!.embody/project.json']
+        idx = next(i for i, ln in enumerate(lines)
+                   if ln.strip() == '.embody/*')
+        lines.insert(idx, '!.embody/project.json')
+        self.gitignore.write_text('\n'.join(lines) + '\n',
+                                  encoding='utf-8')
+        self._configure()
+        s = [ln.strip() for ln in self._lines()]
+        self.assertLess(s.index('.embody/*'),
+                        s.index('!.embody/project.json'),
+                        'negation must be re-seated BELOW the ignore')
+
+    def test_stale_line_outside_a_managed_block_is_user_content(self):
+        """A user-authored '.embody/' outside any Embody header survives
+        migration; the same line INSIDE a managed block is our legacy
+        and is stripped (Owlette fleet lesson, 2026-08-19)."""
+        self.gitignore.write_text(
+            '# mine\n.embody/\n\n'
+            '# Embody / Envoy (auto-managed)\n.embody/\n.venv/\n',
+            encoding='utf-8')
+        self._configure()
+        lines = self._lines()
+        self.assertEqual('.embody/', lines[1].strip(),
+                         'user-authored line survives')
+        hdr = next(i for i, ln in enumerate(lines)
+                   if ln.strip().startswith(HEADER))
+        block = []
+        j = hdr + 1
+        while j < len(lines) and lines[j].strip():
+            block.append(lines[j].strip())
+            j += 1
+        self.assertNotIn('.embody/', block,
+                         'legacy in-block entry is migrated away')
+
     def test_duplicate_headers_are_consolidated(self):
         """Repos already carrying duplicate headers (Embody's own had 3)
         must get healed, not merely stop accumulating more."""

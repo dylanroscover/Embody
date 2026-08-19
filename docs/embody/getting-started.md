@@ -24,7 +24,7 @@ If your project is inside a git repository, Envoy automatically adds the followi
 | `Backup/` | TouchDesigner versioned `.toe` backups |
 | `logs/` | Embody log files |
 | `CrashAutoSave*` | TouchDesigner crash auto-save files |
-| `.venv/` | Python virtual environment (auto-created for Envoy dependencies) |
+| `.venv/` | The project's shared [Python environment](python-environment.md) (auto-built; machine-local) |
 | `.mcp.json` | MCP client config (auto-generated per machine) |
 | `.tdn_backup/` | Rotated `.tdn` crash-recovery copies (`.bak`/`.bak2`) — see [Read, Import & Export](../tdn/import-export.md#crash-safety-and-tdn_backup) |
 | `opencode.json` | OpenCode client config (embeds absolute venv/bridge paths, so it's machine-specific) |
@@ -35,6 +35,11 @@ If your project is inside a git repository, Envoy automatically adds the followi
 | `briefs/` | Task briefs compiled by the `/brief` skill (working documents) |
 | `__pycache__/` | Python bytecode cache |
 | `.DS_Store` | macOS Finder metadata |
+
+Envoy never fights your own `.gitignore`:
+
+- **Your lines are yours.** Envoy only adds or removes entries inside its own `# Embody / Envoy` block. Anything you wrote elsewhere in the file is left alone.
+- **If you ignore `.embody/project.json` yourself, that wins.** By default that one file stays tracked so project metadata — like the Convoy identity — travels with the repo. If your own rules ignore it, Envoy leaves it ignored and notes in the log that this metadata is now per-machine. (Running a fleet that way? See [How membership works](../convoy/index.md#how-membership-works).)
 
 ## Installation
 

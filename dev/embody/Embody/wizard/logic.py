@@ -150,20 +150,11 @@ def _pressed(o):
 def _afterRelease(button, fn, waited=0):
 	"""Run fn() once `button` is no longer held. Bounded.
 
-	NEVER OPEN A MODAL FROM INSIDE THE CLICK CALLBACK. The OS dialog takes
-	the input, so TouchDesigner never delivers the mouse-UP that ends the
-	click: the panel is left mid-press, and the user's NEXT click merely
-	completes that phantom press instead of registering on the button under
-	the cursor. That is the two-clicks-to-continue bug -- the first Next
-	after choosing the folder did nothing while looking perfectly enabled.
-
-	WAITING ON THE RELEASE IS THE POINT, AND A FRAME COUNT IS NOT IT. A
-	fixed deferral is a guess about how long a human holds a button: two
-	frames is ~33 ms at 60 fps against a press that normally lasts 80-150
-	ms, so the dialog opened with the button still down and the bug
-	survived its own fix. _RELEASE_WAIT_FRAMES is only the ceiling, so a
-	button that never reports a release (no panel, a fake COMP) still gets
-	its dialog rather than never getting one."""
+	Never open a modal from inside the click callback: the OS dialog eats
+	the mouse-UP, leaving the panel mid-press -- the two-clicks-to-continue
+	bug. And wait on the actual release, not a frame count (a 2-frame defer
+	lost to a normal 80-150ms press). _RELEASE_WAIT_FRAMES is only a
+	ceiling so a button with no panel still gets its dialog."""
 	if _pressed(button) and waited<_RELEASE_WAIT_FRAMES:
 		run('args[0](args[1], args[2], args[3])', _afterRelease,
 			button, fn, waited+1, delayFrames=1)
@@ -174,12 +165,9 @@ def _saveStepDeferred():
 	w=_w()
 	try:
 		if not w or w.fetch('step_id','')!='save':
-			# The wizard closed, or moved on, while we waited for the
-			# release. render() past that point writes the step label,
-			# title, hint and button colours back over the _resetUI() that
-			# has already run -- and those are ordinary parameters that
-			# Embody's own .tdn export captures and ships in the release
-			# .tox (see _resetUI).
+			# Wizard closed/moved on while waiting for the release --
+			# rendering now would overwrite _resetUI() with par values
+			# the .tdn export ships in the release .tox.
 			return
 		done=_saveProjectNow()
 		try:
@@ -252,12 +240,9 @@ def click(name):
 			# exactly what the save card had to stop doing.
 			nb=_nav('next')
 			if cur=='summary':
-				# Same one-dialog-per-click guard the save card has, for
-				# the same reason: a click queued while chooseFolder is up
-				# is delivered after dismissal, the wizard's step is still
-				# 'summary', and a second finish() schedules a second
-				# _applyWizardSetup. Never cleared here -- finish() closes
-				# the wizard, and start() clears it on the next open.
+				# One-dialog-per-click guard (see opt_savenow): a click
+				# queued behind chooseFolder would schedule a second
+				# finish(). Cleared by start() on next open, not here.
 				if w.fetch('finish_pending',False): return
 				w.store('finish_pending',True)
 				_afterRelease(nb, finish)
@@ -265,13 +250,9 @@ def click(name):
 		return
 	d=DEFS[cur]; g=_grp(cur)
 	if cur=='save' and name=='opt_savenow':
-		# The dialog opens on the mouse-UP -- see _afterRelease for why a
-		# frame deferral is not good enough. ONE dialog per click: a
-		# repeat press while the first is up is queued by TouchDesigner
-		# and delivered after dismissal, and without this flag it
-		# scheduled a second dialog that reopened the one the user had
-		# just cancelled (the same symptom clicks.py closes off for the
-		# release edge).
+		# Dialog opens on mouse-UP (see _afterRelease). One dialog per
+		# click: a press queued behind the open dialog would re-open the
+		# one the user just cancelled.
 		if w.fetch('save_pending',False): return
 		w.store('save_pending',True)
 		_afterRelease(g.op('opt_savenow') if g else None, _saveStepDeferred)

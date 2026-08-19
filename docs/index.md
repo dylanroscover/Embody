@@ -25,7 +25,7 @@ Embody is four tools working together — *lateral velocity*, *forward velocity*
 
     ---
 
-    An embedded [MCP](https://modelcontextprotocol.io/) server with **62 tools** that lets Claude Code, OpenCode, Codex, Gemini, Cursor, Windsurf, and GitHub Copilot via VS Code talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen in your live session. Small changes can land in seconds, depending on your model; a complete network is a 5-20 minute autonomous build you can hand off, parallelize across sessions, and check back on.
+    An embedded [MCP](https://modelcontextprotocol.io/) server with **63 tools** that lets Claude Code, OpenCode, Codex, Gemini, Cursor, Windsurf, and GitHub Copilot via VS Code talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen in your live session. Small changes can land in seconds, depending on your model; a complete network is a 5-20 minute autonomous build you can hand off, parallelize across sessions, and check back on.
 
     [:octicons-arrow-right-24: Setup Envoy](envoy/setup.md)
 
@@ -33,7 +33,7 @@ Embody is four tools working together — *lateral velocity*, *forward velocity*
 
     ---
 
-    Convoy-enabled Embody nodes on a trusted LAN discover, inspect, and control each other — one AI session relaying builds, test runs, saves, screenshots, and restarts to every machine in the room. A small per-user background app keeps each node reachable even while TouchDesigner is closed.
+    Convoy-enabled Embody nodes on a trusted LAN discover, inspect, and control each other — one AI session relaying builds, test runs, saves, screenshots, restarts, and Embody updates to every machine in the room. A small per-user background app keeps each node reachable even while TouchDesigner is closed.
 
     [:octicons-arrow-right-24: Join the Convoy](convoy/index.md)
 
@@ -76,9 +76,9 @@ You describe what you want. The AI works with your live network — operators, c
 | | Feature | Description |
 |---|---------|-------------|
 | :material-sync: | **Automated Externalization** | Tag COMPs and DATs — or opt in to auto-tagging what the AI builds — and Embody keeps the external files in sync, auto-restoring from disk on project open |
-| :material-robot: | **Envoy MCP Server** | 62 tools connect AI assistants to your live TD session |
+| :material-robot: | **Envoy MCP Server** | 63 tools connect AI assistants to your live TD session |
 | :material-account-group: | **Multi-Session Coordination** | Run several AI sessions on one project — scoped claims, peer advisories, and gated destructive operations |
-| :material-lan: | **Convoy LAN Relay** | Convoy-enabled nodes on a trusted LAN discover, inspect, and control each other — relay test runs, saves, screenshots, and restarts to other machines from one AI session ([Convoy guide](convoy/index.md)) |
+| :material-lan: | **Convoy LAN Relay** | Convoy-enabled nodes on a trusted LAN discover, inspect, and control each other — relay test runs, saves, screenshots, restarts, and [fleet-wide Embody updates](convoy/fleet-updates.md) to other machines from one AI session ([Convoy guide](convoy/index.md)) |
 | :material-file-document: | **TDN Format** | Export/import operator networks as diffable YAML for code review and snapshots |
 | :material-keyboard: | **Keyboard Shortcuts** | Double-tap ++lctrl++ to tag, ++ctrl+shift+u++ to save — and every binding is remappable (type or record) |
 | :material-cog: | **Parameter Tracking** | Automatically detects parameter changes and marks COMPs dirty |

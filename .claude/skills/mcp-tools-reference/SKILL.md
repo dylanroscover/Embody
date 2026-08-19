@@ -167,6 +167,7 @@ For visual work, success is verified by capturing and judging the output TOP, no
 | `run_tests` | `suite_name?`, `test_name?`, `override?`, `background?` | Run Embody unit-test suites (all, one suite, or one test; 300s timeout). Destructive and agent tiers are excluded -- they run only via their dedicated entry points. Gated by the multi-session destructive-op gate; `override` bypasses it (say so when you do). `background=True` (recommended for full runs) returns a job id immediately -- poll `get_job_status`; the synchronous mode is severed by the watchdog suites' server restart |
 | `get_job_status` | `job_id?` | Status of background jobs (`run_tests background=True`, `save_project`). Disk-backed (`.embody/jobs/`), so results survive server restarts and extension reinits; omit `job_id` to list recent jobs. Finished run_tests jobs carry the summary + failing tests |
 | `save_project` | _(none)_ | Save the project as a tracked job: returns a job id immediately, the save runs a few frames later (a synchronous call is severed by the save's own main-thread block + extension reinit). Finished record carries version_before/version_after |
+| `update_embody` | `idempotency_key?` | Self-update Embody to the latest GitHub release as a tracked job -- bounded (sha256-pinned manifest, downgrade-refusing), non-interactive, never needs the TD Python grant. Refused in Perform Mode / during test runs. Finished record carries version_before/version_after; the install restarts the server (one reconnect blip) |
 
 ## Bridge Meta-Tools
 
@@ -181,7 +182,7 @@ These run locally on the STDIO bridge — they work even when TD is not running.
 
 ### Convoy Tools (LAN work relay)
 
-Sixteen additional meta-tools drive Convoy, relaying work to Convoy-enabled Embody nodes on the trusted LAN through the local per-user host app. Status and inventory calls (`get_convoy_status`, `convoy_list_nodes`, `convoy_list_controllers`, `convoy_ping`) never wake TouchDesigner.
+Seventeen additional meta-tools drive Convoy, relaying work to Convoy-enabled Embody nodes on the trusted LAN through the local per-user host app. Status and inventory calls (`get_convoy_status`, `convoy_list_nodes`, `convoy_list_controllers`, `convoy_ping`) never wake TouchDesigner.
 
 - `convoy_select_node` pins THIS session to one exact node -- ordinary Envoy tools then run there until `convoy_select_node` with `clear=true`.
 - `convoy_call` / `convoy_batch` run registered operations on explicit one-off targets; pass a unique `idempotency_key` per intended action so a retry reconciles instead of double-running.
@@ -189,6 +190,7 @@ Sixteen additional meta-tools drive Convoy, relaying work to Convoy-enabled Embo
 - `convoy_forget_node` deletes a stale node row on THIS machine's host app (a renamed, moved, or deleted project's leftover). It refuses only while the node has a delivery that has not FINISHED, and names the blocking delivery ids in its refusal (a finished-but-unacknowledged result never holds a row -- results are fetched by delivery id and outlive it); dead and long-unseen rows are also evicted automatically by the host's retention sweep.
 - `convoy_get_artifact` / `convoy_save_artifact` fetch results BY ARTIFACT REFERENCE and verify them locally -- never open a remote `C:\...` or `/Users/...` path as if it were local.
 - `convoy_start_node` / `convoy_restart_node` manage node lifecycle; restarts require the node's CURRENT runtime id (from `convoy_list_nodes`) plus a unique `idempotency_key`, and the default policy refuses dirty or unverifiable project state.
+- `convoy_update_embody` self-updates Embody on one node (`node=<id|name|hostname>`) or the whole fleet (`all=true`) by dispatching the bounded `update_embody` operation as durable per-node jobs -- no TD Python grant involved; offline/disabled/Perform Mode nodes are skipped by name.
 - `convoy_owlette` is an optional read-mostly site bridge that fails closed without credentials.
 
 ## Batch Operations

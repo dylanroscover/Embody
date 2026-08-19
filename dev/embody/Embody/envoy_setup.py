@@ -1432,11 +1432,45 @@ def remove_from_registry(ext, git_root=None):
         ext._log(f'Could not deregister from envoy.json: {e}', 'WARNING')
 
 
+def _project_json_ignore_decider(git_root):
+    """The rule that DECIDES .embody/project.json, per `git check-ignore -v`.
+
+    Returns (pattern, source), or None when not ignored / not a repo / no
+    git -- callers fail OPEN to prior behavior. git is the authority:
+    exact-string matching of our own entries is what let this module fight
+    a repo that deliberately ignores the file (Owlette fleet, 2026-08-19).
+    """
+    try:
+        proc = subprocess.run(
+            ['git', '-C', str(git_root), 'check-ignore', '-v', '--',
+             '.embody/project.json'],
+            capture_output=True, text=True, encoding='utf-8',
+            errors='replace', timeout=10,
+            stdin=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    except Exception:
+        return None
+    lines = (proc.stdout or '').strip().splitlines()
+    if not lines:
+        return None
+    # '<source>:<linenum>:<pattern>\t<path>'; parse from the RIGHT -- a
+    # Windows source path carries its own ':'.
+    left = lines[0].split('\t', 1)[0]
+    head, _, pattern = left.rpartition(':')
+    source = head.rpartition(':')[0]
+    if not pattern:
+        return None
+    return pattern.strip(), (source.strip() or '.gitignore')
+
+
 def configure_gitignore(ext, git_root):
     """Ensure .gitignore in the git root contains entries for
     Embody/Envoy auto-generated files.
     Idempotent -- only appends missing entries, preserves all existing content.
-    Migrates old `.claude/` blanket entry to specific entries."""
+    Migrates old `.claude/` blanket entry to specific entries -- only inside
+    the managed block; identical lines elsewhere are user content.
+    Respects a repo that deliberately ignores .embody/project.json (per
+    git check-ignore): the negation is withheld with a WARNING."""
     MANAGED_ENTRIES = [
         # TouchDesigner project
         'Backup/',
@@ -1470,7 +1504,23 @@ def configure_gitignore(ext, git_root):
             existing_content = gitignore.read_text(encoding='utf-8')
             existing_lines = existing_content.splitlines()
 
-        # Migrate: remove stale entries from older Embody versions.
+        HEADER = '# Embody / Envoy (auto-managed)'
+        MARKER = '# Embody / Envoy'
+
+        def _managed_block_indexes(lines):
+            idx = set()
+            for i, ln in enumerate(lines):
+                if not ln.strip().startswith(MARKER):
+                    continue
+                j = i + 1
+                while j < len(lines) and lines[j].strip():
+                    idx.add(j)
+                    j += 1
+            return idx
+
+        # Migrate: remove stale entries from older Embody versions -- ONLY
+        # inside a managed block. An identical line elsewhere is user
+        # content, never our legacy (Owlette fleet lesson, 2026-08-19).
         # NOTE: .envoy-tools-cache.json is intentionally kept gitignored
         # (v5.0.356+) because a root-level cache can still be written
         # by legacy paths; we don't want to accidentally commit it.
@@ -1479,22 +1529,15 @@ def configure_gitignore(ext, git_root):
                          '.embody/envoy-bridge.py',
                          '.embody/envoy-tools-cache.json',
                          # v5.0.387: replaced by '.embody/*' + '!.embody/project.json'
-                         # so .embody/project.json (committed td_build pin) is tracked.
+                         # so .embody/project.json (committed metadata) is tracked.
                          '.embody/'}
-        existing_stripped = {line.strip() for line in existing_lines}
-        found_stale = STALE_ENTRIES & existing_stripped
+        stale_idx = {i for i in _managed_block_indexes(existing_lines)
+                     if existing_lines[i].strip() in STALE_ENTRIES}
+        found_stale = {existing_lines[i].strip() for i in stale_idx}
         if found_stale:
-            existing_lines = [
-                line for line in existing_lines
-                if line.strip() not in STALE_ENTRIES
-            ]
-            existing_content = '\n'.join(existing_lines)
-            if existing_content and not existing_content.endswith('\n'):
-                existing_content += '\n'
+            existing_lines = [ln for i, ln in enumerate(existing_lines)
+                              if i not in stale_idx]
             ext._log(f'Migrated .gitignore: removed stale entries {found_stale}')
-
-        HEADER = '# Embody / Envoy (auto-managed)'
-        MARKER = '# Embody / Envoy'
 
         # Consolidate duplicate managed headers left by older builds (this
         # repo accumulated three). ONLY a block whose every line is a known
@@ -1542,7 +1585,43 @@ def configure_gitignore(ext, git_root):
         existing_stripped = {line.strip() for line in existing_lines}
         missing = [e for e in MANAGED_ENTRIES if e not in existing_stripped]
 
-        if not missing and not found_stale and not merged:
+        # Respect a deliberate user ignore of .embody/project.json: when
+        # git names a NON-managed rule as decider, withhold the negation
+        # instead of fighting the repo (Owlette fleet, 2026-08-19).
+        NEG = '!.embody/project.json'
+        if NEG in missing:
+            decider = _project_json_ignore_decider(git_root)
+            if (decider and not decider[0].startswith('!')
+                    and decider[0] not in managed_set):
+                missing.remove(NEG)
+                # Leave '.embody/*' to the user too: appending it would
+                # make OUR rule git's last file-level match on the next
+                # startup, flip the decider to managed, and re-add the
+                # negation -- the withhold must be stable across runs
+                # (review find, 2026-08-19).
+                if '.embody/*' in missing:
+                    missing.remove('.embody/*')
+                ext._log(
+                    'this repo deliberately ignores .embody/project.json '
+                    f"(rule '{decider[0]}' in {decider[1]}) -- respecting "
+                    'it: Embody will not re-include the file and leaves '
+                    'all .embody/ ignore rules to the repo. The Convoy '
+                    'realm id and other committed project metadata will '
+                    'NOT travel via git; pre-seed .embody/project.json '
+                    'when provisioning machines instead.', 'WARNING')
+
+        # git is LAST-match-wins: the negation must sit BELOW '.embody/*'
+        # or the committed metadata is silently untracked. Detect a wrong
+        # order even when nothing is missing -- that state used to return
+        # early and stay broken forever.
+        def _misordered(lines):
+            s = [ln.strip() for ln in lines]
+            return (NEG in s and '.embody/*' in s
+                    and s.index(NEG) < s.index('.embody/*'))
+
+        needs_reorder = _misordered(existing_lines)
+        if (not missing and not found_stale and not merged
+                and not needs_reorder):
             ext._log('.gitignore already configured', 'DEBUG')
             return
 
@@ -1575,22 +1654,19 @@ def configure_gitignore(ext, git_root):
                 new_lines = (existing_lines[:end] + list(missing)
                              + existing_lines[end:])
 
-            # git is LAST-match-wins, so '!.embody/project.json' must sit
-            # BELOW '.embody/*' or the committed td_build pin silently
-            # stops being tracked. Insertion order alone does not
-            # guarantee that: the ignore may already exist further down
-            # the file (or below a blank line that ended our block scan),
-            # in which case the negation we just added lands above it.
-            # Enforce the invariant on the final content instead.
-            neg, ign = '!.embody/project.json', '.embody/*'
-            stripped_new = [ln.strip() for ln in new_lines]
-            if neg in stripped_new and ign in stripped_new:
-                if stripped_new.index(neg) < stripped_new.index(ign):
-                    new_lines.pop(stripped_new.index(neg))
-                    stripped_new = [ln.strip() for ln in new_lines]
-                    new_lines.insert(stripped_new.index(ign) + 1, neg)
         else:
-            new_lines = list(existing_lines)   # stale-removal / merge only
+            new_lines = list(existing_lines)   # stale/merge/reorder only
+
+        # Enforce the ordering invariant on the FINAL content -- insertion
+        # order alone cannot guarantee it (see _misordered above).
+        reordered = False
+        stripped_new = [ln.strip() for ln in new_lines]
+        if NEG in stripped_new and '.embody/*' in stripped_new:
+            if stripped_new.index(NEG) < stripped_new.index('.embody/*'):
+                new_lines.pop(stripped_new.index(NEG))
+                stripped_new = [ln.strip() for ln in new_lines]
+                new_lines.insert(stripped_new.index('.embody/*') + 1, NEG)
+                reordered = True
 
         new_content = '\n'.join(new_lines)
         if new_content and not new_content.endswith('\n'):
@@ -1602,9 +1678,12 @@ def configure_gitignore(ext, git_root):
                 ext._log(f'Added {len(missing)} entries to .gitignore: {", ".join(missing)}')
             elif found_stale:
                 ext._log(f'Removed stale .gitignore entries: {", ".join(sorted(found_stale))}')
-            else:
+            elif merged:
                 ext._log(f'Consolidated {merged} duplicate Embody block(s) '
                          f'in .gitignore')
+            else:
+                ext._log('Reordered !.embody/project.json below .embody/* '
+                         'in .gitignore')
             try:  # record the marked block so Uninstall strips only it (never the user's file)
                 Embody = op.Embody.ext.Embody
                 Embody._manifestRecordAppendedFile(
@@ -1622,18 +1701,23 @@ def configure_gitignore(ext, git_root):
                       f'entr{"y" if len(missing) == 1 else "ies"} to '
                       f'.gitignore in {git_root}')
             details = list(missing)
-        elif not found_stale:
-            action = (f'consolidate {merged} duplicate Embody block(s) in '
-                      f'.gitignore in {git_root}')
-            details = [f'{merged} redundant "{HEADER}" header(s) merged '
-                       f'into the first; no entries added or removed']
-        else:
+        elif found_stale:
             # Name the effect honestly: this branch DELETES lines from a
             # git-tracked user file.
             action = (f'remove {len(found_stale)} obsolete Embody '
                       f'entr{"y" if len(found_stale) == 1 else "ies"} from '
                       f'.gitignore in {git_root}')
             details = sorted(found_stale)
+        elif merged:
+            action = (f'consolidate {merged} duplicate Embody block(s) in '
+                      f'.gitignore in {git_root}')
+            details = [f'{merged} redundant "{HEADER}" header(s) merged '
+                       f'into the first; no entries added or removed']
+        else:
+            action = ('reorder !.embody/project.json below .embody/* in '
+                      f'.gitignore in {git_root}')
+            details = ['git is last-match-wins; the committed '
+                       '.embody/project.json was silently untracked']
         op.Embody.ext.Embody._guardFileWrite(
             'Git config', action, details, _write)
 

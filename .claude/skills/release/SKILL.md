@@ -108,7 +108,7 @@ This table is the source of truth for what ships; keep it in sync with `_TEMPLAT
 
 Templates should be UTF-8 with LF line endings and no BOM. Each template carries an Embody/Envoy generated-by HTML comment, and otherwise must match its `.claude/` counterpart in content -- diff them (normalizing any legacy BOM + line endings) and fix any drift.
 
-Dev-only rules and skills (e.g. `.claude/rules/commit-push-checklist.md`, `.claude/rules/skill-prerequisites.md`, `.claude/skills/release/` (this skill, incl. `references/github-release.md`), `.claude/skills/agent-tests/`, `.claude/skills/add-mcp-tool/`, `.claude/skills/run-tests/`) live under `.claude/` for Embody developers only and are NOT shipped to user projects -- they have no template counterpart. The root `CLAUDE.md` and `dev/embody/Embody/templates/text_claude.md` serve different audiences and are maintained independently.
+Dev-only rules and skills (e.g. `.claude/rules/commit-push-checklist.md`, `.claude/rules/skill-prerequisites.md`, `.claude/rules/code-brevity.md`, `.claude/rules/multi-agent-review.md`, `.claude/rules/destructive-tests.md`, `.claude/rules/embody-code-conventions.md`, `.claude/rules/refresh-after-commit.md`, `.claude/skills/release/` (this skill, incl. `references/github-release.md`), `.claude/skills/agent-tests/`, `.claude/skills/add-mcp-tool/`, `.claude/skills/run-tests/`) live under `.claude/` for Embody developers only and are NOT shipped to user projects -- they have no template counterpart. The root `CLAUDE.md` and `dev/embody/Embody/templates/text_claude.md` serve different audiences and are maintained independently.
 
 ## 4b. Re-Vendor the Convoy Host App
 
