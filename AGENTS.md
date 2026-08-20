@@ -87,3 +87,22 @@ op.Embody.ext.Envoy.Start()
 ```
 
 **NEVER cache extension references in variables** — always call inline.
+
+## Third-Party Python Packages
+
+The project shares Embody's uv-managed venv (`.venv/` beside the .toe); its
+site-packages is importable from any DAT or extension once Embody initializes.
+To add a package, ASK THE USER FIRST (installs execute code and persist across
+sessions), then call `op.Embody.InstallPackages(['pkg>=1.0'])` via
+`execute_python` — it accepts plain name-based requirements only (never URLs,
+git refs, or file paths), validates against Embody's core pins and TD's
+bundled packages, records the request in the committed `.embody/project.json`,
+and installs wheels-only in the background (watch the Embody log for
+completion). Packages declared by OTHER machines via git do not auto-install:
+they surface as a warning and need the user's explicit
+`op.Embody.ApplyDeclaredExtras()`. Never INSTALL into `.venv` by calling
+pip/uv yourself — installs go through InstallPackages only (removal is the
+one sanctioned direct call: `uv pip uninstall <name> --python <VenvPython>`,
+and only when the user asks). Never install packages TD bundles (numpy,
+opencv — crash class), and treat a logged "restart TouchDesigner" notice as
+authoritative. External scripts run under `op.Embody.VenvPython`.

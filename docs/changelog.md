@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.0.259
+
+A day inside a production fleet's Convoy page: every node wore the same name, offline ghosts never left, and no node anywhere could be remotely launched.
+
+- **Remote launch works, everywhere, for the first time**: registration claimed `sys.executable`, which inside TouchDesigner is the bundled `python.exe` -- the host app's process probe could never match it to the real `TouchDesigner.exe`, so every launch profile was refused `runtime_unverifiable`, every node on every machine reported `remotely_launchable: false`, and the audit log took two lines per 30-second heartbeat (~5,700/day/node). Registration now claims the probed process image (`GetModuleFileNameW` / `proc_pidpath`, mirroring the host's own inspector), and the register/lifecycle audit events log on transitions only.
+- **Ghost rows retire themselves**: a row that never lived past its first 15 minutes (a smoke run, an install probe, a one-shot registration) clears after an hour of silence instead of 30 days -- unless it holds an explicit TD Python grant, which marks deliberate setup. A row with no heartbeat stamp at all now ages from its durable first-seen instead of being spared forever, and node listings fall back to the durable stamp after a daemon restart instead of reading "Unavailable".
+- **Node names heal harder and can no longer mask machines**: a foreign auto-stamp heals regardless of project name (cloned fleets deployed under new toe names escaped the v6.0.254 heal -- eight machines all read `TEC-A4D / Render.36`), an own-host stamp refreshes on version drift, and the node list prefixes the live hostname whenever a name omits it.
+- **Honest readouts**: enabling Convoy shows `Installing...` through the environment wait instead of holding `Disabled` until the firewall prompt; Last Seen reads `Never` instead of `Unavailable`; the Forget Offline Nodes all-clear explains that other machines' rows clean themselves. 13 new tests across both CI legs.
+
 ## v6.0.257
 
 A production fleet's field reports, fixed end to end: supervisor-launched TouchDesigner could not install the Convoy host app, relaunched nodes never re-registered, and Embody fought a repo that manages `.embody/project.json` per machine. Plus remote fleet updates and a public project Python environment.
