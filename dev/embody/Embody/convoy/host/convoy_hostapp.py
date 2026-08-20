@@ -1867,6 +1867,20 @@ class HostApp:
         # stale -- a closed TD stays listed and remotely launchable.
         self.node_retention_s = 30 * 24 * 3600.0
         self.node_dead_grace_s = 1800.0
+        # TRANSIENT rows are the exception to "offline is never stale": a
+        # row that never LIVED past node_transient_lived_s (a smoke run,
+        # a one-shot registration, an install probe) is debris, not a
+        # launchable node, and waiting out 30 days on it is what filled
+        # fleet pages with dead Offline rows (field 2026-08-19). Cleared
+        # after node_transient_retention_s of silence -- unless the user
+        # explicitly granted it td_python, which proves deliberate setup.
+        self.node_transient_lived_s = 900.0
+        self.node_transient_retention_s = 3600.0
+        # lifecycle_profile_unavailable transitions per node_id: the same
+        # failure used to be audited on EVERY 30s heartbeat (~5.7k
+        # lines/day/node, field 2026-08-19). Process-local by design --
+        # one line per node per daemon run is the desired cadence.
+        self._lifecycle_profile_reasons = {}
         # Last time a PASSIVE read path reconciled operation claims. Mutation
         # and dispatch paths still reconcile eagerly; this only bounds the
         # per-claim file I/O the read paths would otherwise do on every call.
@@ -3345,6 +3359,12 @@ class HostApp:
                                       "not accepted",
                         }
                 elif self.lifecycle is not None and td_executable:
+                    # Audited on TRANSITION only: register is the 30s
+                    # heartbeat, and a standing failure repeated per beat
+                    # buried the audit log (~5.7k lines/day/node, field
+                    # 2026-08-19). One line when it breaks, one when it
+                    # recovers.
+                    profile_reason = None
                     try:
                         self.lifecycle.record_registration(
                             record, td_executable, launch_eligible=True)
@@ -3355,15 +3375,21 @@ class HostApp:
                         # Convoy routing remains usable if this particular TD
                         # process cannot be proven launchable. Lifecycle calls
                         # then fail closed with unknown_profile/profile state.
-                        self._audit_best_effort(
-                            "lifecycle_profile_unavailable",
-                            {"node_id": record["node_id"],
-                             "reason": exc.code})
+                        profile_reason = exc.code
                     except Exception:
+                        profile_reason = "internal_error"
+                    reasons = self._lifecycle_profile_reasons
+                    if profile_reason is None:
+                        if reasons.pop(record["node_id"], None):
+                            self._audit_best_effort(
+                                "lifecycle_profile_recorded",
+                                {"node_id": record["node_id"]})
+                    elif reasons.get(record["node_id"]) != profile_reason:
+                        reasons[record["node_id"]] = profile_reason
                         self._audit_best_effort(
                             "lifecycle_profile_unavailable",
                             {"node_id": record["node_id"],
-                             "reason": "internal_error"})
+                             "reason": profile_reason})
             except identity.IdentityError as e:
                 return self._refuse(
                     "register", e.reason, e.detail,
@@ -3382,10 +3408,34 @@ class HostApp:
                      "rolled_back": True})
                 return 500, {"ok": False, "reason": "persist_failed",
                              "detail": f"{type(e).__name__}: {e}"}
-            self._audit_best_effort(
-                "node_registered",
-                {"node_id": record["node_id"], "comp_path": comp_path,
-                 "node_discriminator": record.get("node_discriminator")})
+            # Audited only when the register CHANGED something -- register
+            # doubles as the 30s heartbeat, and a line per beat buried the
+            # audit log (field 2026-08-19). "comeback" marks the first
+            # register after silence (including after a daemon restart,
+            # when the process-local beat is gone).
+            register_cause = None
+            if newly_minted:
+                register_cause = "minted"
+            elif previous is not None:
+                if previous.get("runtime_id") != record.get("runtime_id"):
+                    register_cause = "new_runtime"
+                elif previous.get("envoy_port") != record.get("envoy_port"):
+                    register_cause = "port_changed"
+                else:
+                    beat = previous.get("last_heartbeat_unix")
+                    try:
+                        silent = (beat is None or self._now() - float(beat)
+                                  >= self.node_dead_grace_s)
+                    except (TypeError, ValueError):
+                        silent = True
+                    if silent:
+                        register_cause = "comeback"
+            if register_cause:
+                self._audit_best_effort(
+                    "node_registered",
+                    {"node_id": record["node_id"], "comp_path": comp_path,
+                     "node_discriminator": record.get("node_discriminator"),
+                     "cause": register_cause})
             self._invalidate_network_nodes_cache_locked()
             self.request_lan_refresh()
             return 200, {
@@ -3684,6 +3734,7 @@ class HostApp:
         # live session.
         self._forget_launch_profile(node_id)
         self._drop_retired_node_policy(node_id)
+        self._lifecycle_profile_reasons.pop(node_id, None)
         return True
 
     def _queued_delivery_survives_retirement(self, operation):
@@ -3966,6 +4017,7 @@ class HostApp:
         self.directory.forget(node_id)
         self._forget_launch_profile(node_id)
         self._drop_retired_node_policy(node_id)
+        self._lifecycle_profile_reasons.pop(node_id, None)
         self._invalidate_network_nodes_cache_locked()
         self._audit_best_effort("node_forgotten", {"node_id": node_id})
         return 200, {"ok": True, "forgotten": True, "node_id": node_id}
@@ -4058,15 +4110,19 @@ class HostApp:
 
         Offline is NOT stale (a closed TD stays remotely launchable); a row
         is evicted only when it is silent AND either its .toe is provably
-        deleted (dead_project, after node_dead_grace_s of silence) or it
-        has been silent past node_retention_s (retired_unseen). Every
-        eviction honors the /nodes/forget idle rules: no live Envoy port,
-        no unresolved or unacknowledged work (fail closed on an unreadable
-        job store -- and this is also what spares an in-flight remote
-        start: the start job stays non-terminal for the whole
-        spawn-to-register window), and no live launch reservation. A node
-        with NO liveness stamp at all is spared: age cannot be proven, so
-        staleness cannot be either. Nothing is evicted during the first
+        deleted (dead_project, after node_dead_grace_s of silence), it
+        has been silent past node_retention_s (retired_unseen), or it
+        never LIVED past node_transient_lived_s and has been silent past
+        node_transient_retention_s (transient_unseen -- smoke runs and
+        one-shot registrations; an explicit td_python grant spares it as
+        deliberate setup). Every eviction honors the /nodes/forget idle
+        rules: no live Envoy port, no unresolved or unacknowledged work
+        (fail closed on an unreadable job store -- and this is also what
+        spares an in-flight remote start: the start job stays
+        non-terminal for the whole spawn-to-register window), and no live
+        launch reservation. A row with no heartbeat stamp is aged from
+        its durable first_seen (it used to be spared FOREVER, field
+        2026-08-19). Nothing is evicted during the first
         node_dead_grace_s of daemon uptime, so running TDs get a full
         heartbeat cycle to re-register after a daemon restart.
 
@@ -4083,22 +4139,32 @@ class HostApp:
             for record in list(self.directory.nodes()):
                 if record.get("envoy_port"):
                     continue
+                node_id = record.get("node_id")
+                first = self.db.node_first_seen(node_id)
                 latest = self._node_last_activity(record)
+                if latest is None:
+                    latest = first      # mint time is still provable age
                 if latest is None:
                     continue
                 silent_s = now - latest
                 if silent_s < self.node_dead_grace_s:
                     continue
+                lived_s = (max(0.0, latest - first)
+                           if first is not None else None)
                 toe = str((record.get("metadata") or {})
                           .get("toe_path") or "")
-                candidates.append((record.get("node_id"), silent_s, toe))
+                candidates.append((node_id, silent_s, toe, lived_s))
         if not candidates:
             return []
         # Phase 2: judge OUTSIDE the lock -- this is where stats happen.
         judged = []
-        for node_id, silent_s, toe in candidates:
+        for node_id, silent_s, toe, lived_s in candidates:
             if silent_s >= self.node_retention_s:
                 judged.append((node_id, "retired_unseen", silent_s))
+            elif (lived_s is not None
+                    and lived_s < self.node_transient_lived_s
+                    and silent_s >= self.node_transient_retention_s):
+                judged.append((node_id, "transient_unseen", silent_s))
             elif toe and os.path.isabs(toe) \
                     and self._path_provably_deleted(toe):
                 judged.append((node_id, "dead_project", silent_s))
@@ -4117,8 +4183,16 @@ class HostApp:
                 if record is None or record.get("envoy_port"):
                     continue
                 latest = self._node_last_activity(record)
+                if latest is None:
+                    latest = self.db.node_first_seen(node_id)
                 if latest is None or now - latest < self.node_dead_grace_s:
                     continue
+                if cause == "transient_unseen":
+                    try:
+                        if self.policy.allow_td_python(node_id):
+                            continue    # deliberate setup, not debris
+                    except Exception:
+                        continue        # unknowable grant state: spare
                 census = self._node_work_census(
                     node_id, evict_index, evict_unreadable)
                 if census["unreadable"] or census["pending"]:
@@ -4141,6 +4215,7 @@ class HostApp:
                 self.directory.forget(node_id)
                 self._forget_launch_profile(node_id)
                 self._drop_retired_node_policy(node_id)
+                self._lifecycle_profile_reasons.pop(node_id, None)
                 evicted.append({"node_id": node_id, "cause": cause,
                                 "silent_s": round(silent_s, 1)})
             if evicted:
@@ -4969,6 +5044,19 @@ class HostApp:
                 last_seen_age_s = None
         except (KeyError, TypeError, ValueError, OverflowError):
             last_seen_age_s = None
+        if last_seen_age_s is None:
+            # The process-local beat dies with the daemon; the durable
+            # stamp survives it. Without this every row read "Unavailable"
+            # after a daemon restart until its TD re-registered.
+            try:
+                seen = self.db.node_last_seen(record.get("node_id"))
+                if seen is not None:
+                    last_seen_age_s = max(0.0, float(self._now())
+                                          - float(seen))
+                    if not math.isfinite(last_seen_age_s):
+                        last_seen_age_s = None
+            except Exception:
+                last_seen_age_s = None
         if (isinstance(controller_count, bool)
                 or not isinstance(controller_count, int)
                 or controller_count < 0):

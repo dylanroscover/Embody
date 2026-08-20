@@ -1126,6 +1126,165 @@ def test_no_eviction_during_the_daemon_boot_grace(server, tmp_path):
         server.app.started = original
 
 
+# -- transient-ghost fast retention (field 2026-08-19) ------------------
+#
+# Fleet pages filled with Offline rows nobody could clear: smoke runs,
+# install probes, and one-shot registrations each minted a row that then
+# waited out the full 30-day horizon. A row that never LIVED is debris,
+# not a launchable node -- unless the user explicitly configured it.
+
+def test_transient_ghost_clears_after_its_own_short_horizon(
+        server, tmp_path):
+    node, _toe = _register_with_toe(server, tmp_path, "smoke", port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    evicted = _sweep(server, server.app.node_transient_retention_s + 60)
+    assert [e["node_id"] for e in evicted] == [node["node_id"]]
+    assert evicted[0]["cause"] == "transient_unseen", \
+        "a never-lived row must not wait out 30 days on an intact project"
+
+
+def test_transient_ghost_rides_out_the_transient_window(server, tmp_path):
+    node, _toe = _register_with_toe(server, tmp_path, "young", port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    assert _sweep(server, server.app.node_transient_retention_s - 60) == [], \
+        "inside the transient window the row is still a comeback candidate"
+
+
+def test_a_node_that_lived_is_not_transient(server, tmp_path):
+    """An established node that heartbeat past the lived threshold keeps
+    the full 30-day launchable retention."""
+    node, _toe = _register_with_toe(server, tmp_path, "veteran", port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    row = server.app.db._state["nodes"][node["node_id"]]
+    row["first_seen"] = row["last_seen"] - (
+        server.app.node_transient_lived_s + 60)
+    assert _sweep(server, server.app.node_transient_retention_s + 60) == []
+
+
+def test_td_python_grant_spares_a_transient_row(server, tmp_path):
+    """An explicit approval is deliberate setup, not debris."""
+    node, _toe = _register_with_toe(server, tmp_path, "granted", port=9981)
+    approve_td_python(server.app, node["node_id"])
+    server.call("/unregister", {"node_id": node["node_id"]})
+    assert _sweep(server, server.app.node_transient_retention_s + 60) == []
+
+
+def test_a_row_with_no_heartbeat_ages_from_first_seen(server, tmp_path):
+    """A row with no liveness stamp at all used to be spared FOREVER; its
+    durable first_seen is still provable age."""
+    node, _toe = _register_with_toe(server, tmp_path, "stampless", port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    server.app.db._state["nodes"][node["node_id"]].pop("last_seen", None)
+    for record in server.app.directory.nodes():
+        record.pop("last_heartbeat_unix", None)
+    evicted = _sweep(server, server.app.node_transient_retention_s + 60)
+    assert [e["node_id"] for e in evicted] == [node["node_id"]]
+
+
+def test_listing_ages_from_the_durable_stamp_after_restart(
+        server, tmp_path):
+    """After a daemon restart the process-local beat is gone; the row's
+    age must come from the durable stamp instead of rendering as
+    'Unavailable' until its TD re-registers."""
+    node, _toe = _register_with_toe(server, tmp_path, "aged", port=9981)
+    server.call("/unregister", {"node_id": node["node_id"]})
+    reborn = ha.HostApp(
+        server.app.data_dir,
+        artifact_cache_path=os.path.join(server.app.data_dir,
+                                         "test-artifacts-3"))
+    record = reborn.directory.lookup(node["node_id"])
+    assert record.get("last_heartbeat_unix") is None, \
+        "precondition: the replayed row has no process-local beat"
+    row = reborn._public_node_row(record)
+    assert row["last_seen_age_s"] is not None
+
+
+# -- heartbeat audit noise (field 2026-08-19) ---------------------------
+#
+# register doubles as the 30s heartbeat; auditing every beat wrote
+# ~5.7k lines/day/node. Only a CHANGE is worth a line.
+
+def _heartbeat_body(toe, port=9981, runtime_id="rt_beat"):
+    return {"project_root": str(toe.parent), "convoy_id": "cv",
+            "comp_path": "/Embody", "envoy_port": port,
+            "runtime_id": runtime_id, "metadata": {"toe_path": str(toe)}}
+
+
+def test_heartbeat_registers_audit_once(server, tmp_path):
+    toe = tmp_path / "beat" / "beat.toe"
+    toe.parent.mkdir(parents=True, exist_ok=True)
+    toe.write_bytes(b"toe")
+    body = _heartbeat_body(toe)
+    node_ids = set()
+    for _ in range(3):
+        code, node = server.call("/register", body)
+        assert code == 200
+        node_ids.add(node["node_id"])
+    assert len(node_ids) == 1
+    audited = [r for r in server.app.db.audit_tail()
+               if r["event"] == "node_registered"]
+    assert len(audited) == 1
+    assert audited[0]["detail"]["cause"] == "minted"
+
+
+def test_a_comeback_register_is_audited(server, tmp_path):
+    toe = tmp_path / "back" / "back.toe"
+    toe.parent.mkdir(parents=True, exist_ok=True)
+    toe.write_bytes(b"toe")
+    body = _heartbeat_body(toe)
+    _, node = server.call("/register", body)
+    record = server.app.directory.lookup(node["node_id"])
+    record["last_heartbeat_unix"] -= server.app.node_dead_grace_s + 60
+    server.call("/register", body)
+    causes = [r["detail"].get("cause")
+              for r in server.app.db.audit_tail()
+              if r["event"] == "node_registered"]
+    assert causes == ["minted", "comeback"]
+
+
+def test_a_new_runtime_register_is_audited(server, tmp_path):
+    toe = tmp_path / "rerun" / "rerun.toe"
+    toe.parent.mkdir(parents=True, exist_ok=True)
+    toe.write_bytes(b"toe")
+    server.call("/register", _heartbeat_body(toe, runtime_id="rt_one"))
+    server.call("/register", _heartbeat_body(toe, runtime_id="rt_two"))
+    causes = [r["detail"].get("cause")
+              for r in server.app.db.audit_tail()
+              if r["event"] == "node_registered"]
+    assert causes == ["minted", "new_runtime"]
+
+
+def test_lifecycle_profile_failure_audits_on_transition_only(
+        server, tmp_path):
+    """The same standing failure repeated per heartbeat is noise; a NEW
+    reason is signal. One line per transition."""
+    if server.app.lifecycle is None:
+        pytest.skip("no lifecycle backend on this platform")
+    toe = tmp_path / "prof" / "prof.toe"
+    toe.parent.mkdir(parents=True, exist_ok=True)
+    toe.write_bytes(b"toe")
+    body = _heartbeat_body(toe, runtime_id="rt_prof")
+    body["metadata"]["process_id"] = os.getpid()
+    body["td_executable"] = str(tmp_path / "prof" / "no-such-exe")
+    for _ in range(3):
+        code, _node = server.call("/register", body)
+        assert code == 200
+    reasons = [r["detail"]["reason"]
+               for r in server.app.db.audit_tail()
+               if r["event"] == "lifecycle_profile_unavailable"]
+    assert reasons == ["executable_missing"], \
+        "a standing failure must audit once, not per heartbeat"
+    # A DIFFERENT failure is a transition: this file exists but is not
+    # the running process's image, so the probe mismatches.
+    body["td_executable"] = os.path.abspath(__file__)
+    server.call("/register", body)
+    server.call("/register", body)
+    reasons = [r["detail"]["reason"]
+               for r in server.app.db.audit_tail()
+               if r["event"] == "lifecycle_profile_unavailable"]
+    assert reasons == ["executable_missing", "runtime_unverifiable"]
+
+
 def test_an_unplugged_volume_is_never_a_deletion(tmp_path):
     """The mount-container rule is platform-shaped: an absent child of
     /Volumes (macOS) or /media (Linux) is an unplugged drive; on Windows

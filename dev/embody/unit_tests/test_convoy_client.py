@@ -571,6 +571,28 @@ class TestConvoyClientPayload(EmbodyTestCase):
         self.assertEqual(payload['launch_reservation_id'], reservation)
         self.assertEqual(json.loads(json.dumps(payload)), payload)
 
+    def test_process_executable_is_the_real_process_image(self):
+        """Inside TD, sys.executable names the BUNDLED bin/python.exe --
+        registering with it can never match the host inspector's probe,
+        so every launch profile died runtime_unverifiable and the whole
+        fleet read remotely_launchable:false (field 2026-08-19).
+        process_executable must name the actual process image."""
+        import os as _os
+        import sys as _sys
+        path = client.process_executable()
+        self.assertTrue(path, 'a probe result (or fallback) is required')
+        self.assertTrue(_os.path.isabs(path))
+        self.assertTrue(_os.path.isfile(path))
+        base = _os.path.basename(path).lower()
+        if _sys.platform in ('win32', 'darwin'):
+            # This suite runs inside TouchDesigner: the process image is
+            # TD itself, never the bundled python that sys.executable
+            # names on these platforms.
+            self.assertIn('touchdesigner', base)
+            self.assertNotIn('python', base)
+        self.assertIs(client.process_executable(), path,
+                      'cached per process -- the image cannot change')
+
     def test_launch_proof_and_executable_are_strictly_bounded(self):
         base = ('/r', '/Embody', 'cv', 'rt_1234')
         bad = (

@@ -526,29 +526,35 @@ def test_a_foreign_machines_stamp_for_this_project_is_healed():
         assert par.val == "TEC-MBA.local / Render.36", baked
 
 
-def test_a_foreign_stamp_for_a_DIFFERENT_project_is_kept():
-    """Only this project's stem identifies an auto-stamp; anything else
-    stays -- it may be a deliberate name."""
+def test_a_foreign_stamp_for_a_DIFFERENT_project_is_healed():
+    """A foreign host half ALWAYS heals: the field fleet's clones were
+    deployed under NEW toe names, so matching only this project's stem
+    left every one of them wearing the authoring machine's name
+    (2026-08-19). A foreign hostname misleads more than it ever
+    deliberately names."""
     ext, par = _name_ext("TEC-A4D / OtherShow.5", saved="/work/Render.36.toe",
                          project_name="Render.36.toe")
     ext._ensureNodeName()
-    assert par.val == "TEC-A4D / OtherShow.5"
+    assert par.val == "TEC-MBA.local / Render.36"
 
 
-def test_this_machines_own_current_stamp_is_left_alone():
-    """No churn: a correct own-host stamp is not rewritten even when the
-    increment advanced."""
+def test_this_machines_own_stale_stamp_is_refreshed():
+    """An own-host stamp at an OLD version of this project's stem is the
+    bake one save later, not an override -- 'TEC-A4D / Embody-6.236' on a
+    6.257 project read as a different node fleet-wide (2026-08-19). The
+    earlier no-churn rule kept it stale forever."""
     ext, par = _name_ext("TEC-MBA.local / Render.35",
                          saved="/work/Render.36.toe",
                          project_name="Render.37.toe")
     ext._ensureNodeName()
-    assert par.val == "TEC-MBA.local / Render.35"
+    assert par.val == "TEC-MBA.local / Render.36"
 
 
 def test_user_override_is_never_clobbered():
+    """Not stamp-shaped, or an own-host custom tail: the user's name."""
     for value in ("My Booth Node",
-                  "OTHER-HOST / NewProject.1",   # not THIS machine's stamp
-                  "TEC-MBA.local / NewProject.1 (stage)"):
+                  "TEC-MBA.local / NewProject.1 (stage)",
+                  "TEC-MBA.local / front wall"):
         ext, par = _name_ext(value, saved="/work/e3.toe",
                              project_name="e3.toe")
         ext._ensureNodeName()

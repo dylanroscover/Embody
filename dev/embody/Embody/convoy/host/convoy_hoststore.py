@@ -487,11 +487,22 @@ class HostStore:
         survives daemon restarts (written on every save_node), used by
         the stale-node eviction sweep to prove silence.
         """
+        return self._node_stamp(node_id, "last_seen")
+
+    def node_first_seen(self, node_id):
+        """The durable first_seen stamp for a node row, or None.
+
+        With last_seen it bounds how long a row ever LIVED -- the
+        transient-ghost eviction tier's evidence (see hostapp
+        _evict_stale_nodes)."""
+        return self._node_stamp(node_id, "first_seen")
+
+    def _node_stamp(self, node_id, key):
         row = self._state["nodes"].get(node_id)
         if not row:
             return None
         try:
-            value = row.get("last_seen")
+            value = row.get(key)
             return float(value) if value is not None else None
         except (TypeError, ValueError):
             return None

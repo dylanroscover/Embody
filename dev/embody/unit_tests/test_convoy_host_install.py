@@ -2146,7 +2146,10 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.assertIn('No offline nodes', message)
         self.assertIn('TEC-B4A', message,
                       'the machine that owns the offline rows is named')
-        self.assertIn('run Forget Offline Nodes there', message)
+        self.assertIn('Run Forget Offline Nodes there', message)
+        self.assertIn('retires its own stale rows automatically', message,
+                      'the all-clear also says rows self-clean now, so '
+                      'walking to five machines is optional')
         self.assertEqual(self.client.count('host_post'), 0)
 
 

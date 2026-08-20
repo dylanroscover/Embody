@@ -684,6 +684,38 @@ class TestNetworkStatusProjection(ConvoyExtBase):
         self.assertEqual(rows[1]['Nodestatus'], 'Offline')
         self.assertEqual(rows[1]['Lastseen'], '2m ago')
 
+    def test_a_traveled_stamp_cannot_mask_the_real_hostname(self):
+        """A node_name stamped on another machine travels inside the .toe;
+        a whole fleet read 'TEC-A4D / Render.36' (2026-08-19). The row's
+        live hostname is prefixed whenever the name does not contain it,
+        so nodes stay tellable-apart even before the stamp heals."""
+        rows = self.convoy._nodeStatusRows({
+            'state': 'nodes',
+            'nodes': [
+                {'node_id': '1' * 32, 'host_id': 'a' * 32,
+                 'hostname': 'INF-FLEX-2',
+                 'node_name': 'TEC-A4D / Render.36', 'ip': '10.0.0.4',
+                 'status': 'online', 'online': True,
+                 'last_seen_age_s': 3.0},
+                {'node_id': '2' * 32, 'host_id': 'b' * 32,
+                 'hostname': 'INF-FLEX-3',
+                 'node_name': 'INF-FLEX-3 / Render', 'ip': '10.0.0.5',
+                 'status': 'online', 'online': True,
+                 'last_seen_age_s': 3.0},
+            ],
+        })
+        self.assertEqual(rows[0]['Nodename'],
+                         'INF-FLEX-2 (TEC-A4D / Render.36)')
+        self.assertEqual(rows[1]['Nodename'], 'INF-FLEX-3 / Render',
+                         'a name already carrying its hostname is not '
+                         'double-prefixed')
+
+    def test_last_seen_without_an_age_reads_never(self):
+        """'Unavailable' read like an error state (field 2026-08-19);
+        'Never' says what is known. Online rows still read 'Now'."""
+        self.assertEqual(self.convoy._lastSeenText(None, False), 'Never')
+        self.assertEqual(self.convoy._lastSeenText(None, True), 'Now')
+
     def test_a_failed_directory_read_means_leave_existing_rows(self):
         for value in (None, {}, {'state': 'unreachable'},
                       {'state': 'host_error'}):

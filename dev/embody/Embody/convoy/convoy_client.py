@@ -1504,6 +1504,49 @@ def _answer_state(status, answer):
 
 # -- per-launch run identity -------------------------------------------
 
+_PROCESS_EXECUTABLE = {"cached": False, "path": None}
+
+
+def process_executable():
+    """This process's REAL executable image, for td_executable claims.
+
+    Inside TouchDesigner sys.executable names the bundled bin/python.exe,
+    not the running TouchDesigner.exe, so a register that sent it could
+    never match the host inspector's process probe: every launch profile
+    died runtime_unverifiable and the whole fleet read
+    remotely_launchable:false (field 2026-08-19). Mirror the inspector's
+    own probes instead -- GetModuleFileNameW on win32, proc_pidpath on
+    macOS -- falling back to sys.executable only when a probe fails.
+    Cached per process: the image cannot change while we run.
+    """
+    cache = _PROCESS_EXECUTABLE
+    if cache["cached"]:
+        return cache["path"]
+    path = None
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            buf = ctypes.create_unicode_buffer(32768)
+            if ctypes.windll.kernel32.GetModuleFileNameW(None, buf, 32768):
+                path = buf.value or None
+        elif sys.platform == "darwin":
+            import ctypes
+            libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+            buf = ctypes.create_string_buffer(4096)
+            if libproc.proc_pidpath(os.getpid(), buf, len(buf)) > 0:
+                path = os.fsdecode(buf.value) or None
+    except Exception:
+        path = None
+    if not path:
+        try:
+            path = sys.executable or None
+        except Exception:
+            path = None
+    cache["path"] = path
+    cache["cached"] = True
+    return path
+
+
 def mint_runtime_id():
     """A fresh per-launch identifier, in convoy_identity's format.
 

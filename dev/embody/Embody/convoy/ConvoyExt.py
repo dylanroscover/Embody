@@ -690,7 +690,10 @@ class ConvoyExt:
             if not math.isfinite(age):
                 raise ValueError
         except (TypeError, ValueError, OverflowError):
-            return 'Now' if online else 'Unavailable'
+            # No age at all: never seen (or a pre-257 host that omits
+            # ages). 'Unavailable' read like an error state (field
+            # 2026-08-19); 'Never' says what is actually known.
+            return 'Now' if online else 'Never'
         if age < 1.5:
             return 'Now'
         if age < 60:
@@ -725,6 +728,13 @@ class ConvoyExt:
                 status = '%s (v%s)' % (status, version[:32])
             name = str(node.get('node_name') or node.get('hostname') or
                        node.get('toe_name') or 'Unnamed node')[:512]
+            host = str(node.get('hostname') or '').strip()
+            if host and host.lower() not in name.lower():
+                # A traveled auto-stamp wears another machine's name
+                # (.toe-travel leak: a whole fleet read 'TEC-A4D /
+                # Render.36', 2026-08-19). The row's live hostname is the
+                # ground truth that tells nodes apart.
+                name = ('%s (%s)' % (host, name))[:512]
             ip = str(node.get('ip') or '-')[:255]
             rows.append({
                 'Nodename': name,
@@ -1779,23 +1789,35 @@ class ConvoyExt:
                 os.path.basename(str(saved_toe)))[0] or 'Untitled'
         except Exception:
             toe_stem = 'Untitled'
+        automatic = ('%s / %s' % (hostname, toe_stem))[:512]
         if value:
+            # Heal the AUTO-STAMP SHAPE ('<host> / <tail>'). A FOREIGN
+            # host half always heals: it traveled here inside the .toe (a
+            # cloned fleet all read 'TEC-A4D / Render.36', 2026-08-19),
+            # and matching only this project's stem missed clones deployed
+            # under new names. An OWN host half heals only when the tail
+            # is this project's stem at any version -- or the NewProject
+            # placeholder -- so 'TEC-A4D / Embody-6.236' refreshes on a
+            # 6.257 project (same field day) while a custom own-host tail
+            # stays the user's. Not stamp-shaped: always the user's.
             try:
-                own_placeholder = re.fullmatch(
-                    re.escape(hostname) + r' / NewProject(\.\d+)?', value)
-                # Foreign auto-stamp: `<host> / <this toe base>[.N]` with a
-                # host half that is not this machine. Nobody names a node
-                # after another machine's stamp for this exact project.
-                base = re.sub(r'\.\d+$', '', toe_stem)
-                m = re.fullmatch(
-                    r'(\S+) / ' + re.escape(base) + r'(\.\d+)?', value)
-                foreign_stamp = bool(m) and m.group(1) != hostname
+                m = re.fullmatch(r'(\S+) / (.+)', value)
+                if not m:
+                    return
+                if m.group(1) == hostname:
+                    if value == automatic:
+                        return
+                    base = re.sub(r'\.\d+$', '', toe_stem)
+                    own_auto = (
+                        re.fullmatch(re.escape(base) + r'(\.\d+)?',
+                                     m.group(2))
+                        or re.fullmatch(r'NewProject(\.\d+)?', m.group(2)))
+                    if not own_auto:
+                        return
             except Exception:
                 return
-            if not (own_placeholder or foreign_stamp):
-                return
         try:
-            par.val = ('%s / %s' % (hostname, toe_stem))[:512]
+            par.val = automatic
         except Exception:
             pass
 
@@ -2971,7 +2993,10 @@ class ConvoyExt:
                 wake_active=bool(state[14]),
                 wake_port=state[15], wake_token=state[16],
                 wake_grace_s=state[17], binding_state=state[18],
-                td_executable=sys.executable,
+                # NEVER sys.executable: in TD that is the bundled
+                # python.exe, and the host's process probe then refuses
+                # every launch profile runtime_unverifiable (2026-08-19).
+                td_executable=client.process_executable(),
                 launch_token=os.environ.get(
                     'EMBODY_CONVOY_LAUNCH_TOKEN'),
                 launch_reservation_id=os.environ.get(
@@ -3859,6 +3884,17 @@ class ConvoyExt:
         self._host_status_text = str(text)[:160]
         self._publishStatus()
 
+    def _clearHostLineIf(self, prefix):
+        """Drop a self-authored transient host line when its wait chain
+        dies without a completing action (disable mid-venv-wait would
+        otherwise pin 'Installing...' over a disabled readout)."""
+        host = str(getattr(self, '_host_status_text', '') or '')
+        if not host.startswith(prefix):
+            return
+        self._host_line_seq = getattr(self, '_host_line_seq', 0) + 1
+        self._host_status_text = ''
+        self._publishStatus()
+
     def _reviveDisprovenHostLine(self, result, client):
         """Replace a stale down-claiming host line after a registration.
 
@@ -4725,9 +4761,11 @@ class ConvoyExt:
                 message = (
                     'No offline nodes to forget on this machine. The '
                     'offline node(s) in the list belong to %s -- each '
-                    'computer can only forget its own nodes, so run '
-                    'Forget Offline Nodes there (or let that machine\'s '
-                    'own cleanup retire them).' % (', '.join(names[:5]),))
+                    'computer can only forget its own nodes. Run Forget '
+                    'Offline Nodes there, or just wait: every host now '
+                    'retires its own stale rows automatically (short-'
+                    'lived ghosts within about an hour).'
+                    % (', '.join(names[:5]),))
             self._dialog('Forget Offline Nodes', message, ['OK'])
             return
 
@@ -5181,9 +5219,11 @@ class ConvoyExt:
         """
         try:
             if not self._enabled() or self._performing():
+                self._clearHostLineIf('Installing...')
                 return
             ctx = self._safeHostContext()
             if ctx is None:
+                self._clearHostLineIf('Installing...')
                 return
             if self._hostRuntimeResolvable(ctx):
                 self._log('the shared Python environment is ready -- '
@@ -5260,7 +5300,12 @@ class ConvoyExt:
                     # build takes minutes, Convoy follows seconds later.
                     # Wait for the environment instead of racing it
                     # (2026-08-09: the race told the user to "Enable
-                    # Envoy first" right after they had).
+                    # Envoy first" right after they had). Say Installing
+                    # NOW: the readout held 'Disabled' through this whole
+                    # wait, which reads as a dead toggle (field
+                    # 2026-08-19). The wait IS the install's first phase;
+                    # the give-up paths replace the line themselves.
+                    self._hostStatus(self.HOST_INSTALLING)
                     self._awaitHostRuntime()
                     return
                 self._log('Convoy enabled -- installing the host app it '
