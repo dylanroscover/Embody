@@ -216,6 +216,8 @@ Structured Git and GitHub actions use named, bounded operations rather than acce
 
 **Allow Full Shell** permits arbitrary operating-system commands as the logged-in user. It applies to the computer's Convoy host, including its local nodes, and can only be enabled locally. Leave it off on show machines unless a specific workflow requires it. Convoy peers cannot remotely turn on either dangerous permission.
 
+Both toggles display the host app's current approval, not a stored project setting. Turning one on asks the local host app for the change: the toggle returns to its approved value and a confirmation dialog appears -- the grant takes effect (and the toggle shows On) once you confirm. If no dialog appears, the request did not reach the host app and nothing was granted. A value carried inside a saved `.toe`, a clone, or a script write is reverted automatically and never grants anything.
+
 Git, GitHub CLI, and shell actions use the tools and credentials already configured for the logged-in user. Convoy does not create a second GitHub identity.
 
 ## Screenshots, files, and Artifact Quota

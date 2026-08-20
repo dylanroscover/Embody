@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.260
+
+A hosted extension doing a module-level `import` of a venv package could construct before Embody wired `sys.path` on a cold open -- and silently lose its entire promoted API.
+
+- **TD pre-cook venv linking**: Embody now authors `TDPyEnvManagerContext.yaml` beside the `.toe`, so TouchDesigner's own startup helper links `.venv` **before any COMP cooks** -- module-level venv imports work even in extensions that construct first, with Embody's extension-time wiring as the fallback. Foreign/tdPyEnvManager contexts are never touched; deleting the file opts out durably (`InitEnvoy` re-asserts it); the file is auto-removed while the venv needs (re)install so TD never pre-cook-links stale wheels; manifest-tracked, uninstall-reversible, gitignored, and disclosed in the wizard's footprint step. Verified against the shipped helper source and a cold-open probe. 45 new tests across the pytest and in-TD tiers.
+- **Self-update no longer flushes dirty toxes**: update validation runs `Update(save_dirty=False)` -- it flags, never writes (the root cause of the node-pa-td multi-tox mystery) -- and per-operator dirty state is runtime-only now, de-persisted from the externalizations table.
+- **Convoy's "Allow TD Python" no longer flips off on save**: deferred parameter callbacks voided the projection flag; a deviation-based reconcile plus a tick hook replaces it, and policy challenges defer under save suppression instead of minting stuck gates. 13 new contract tests.
+
 ## v6.0.259
 
 A day inside a production fleet's Convoy page: every node wore the same name, offline ghosts never left, and no node anywhere could be remotely launched.

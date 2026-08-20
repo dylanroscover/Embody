@@ -496,6 +496,63 @@ def manifest_record_venv(ext, target_dir, venv_path):
         ext.Log(f'Install-manifest venv record failed: {e}', 'DEBUG')
 
 
+def manifest_unrecord_created_file(ext, target_dir, path):
+    """Forget a files_created record when EMBODY removed the file itself.
+    A record whose file is gone but still listed marks a USER deletion --
+    the tombstone _ensurePyEnvContext respects -- so self-removals must
+    un-record or the rewrite after a venv reinstall would be blocked."""
+    try:
+        rel = manifest_rel_path(ext, target_dir, path)
+        m = load_install_manifest(ext, target_dir)
+        if rel in m['files_created']:
+            m['files_created'].remove(rel)
+            save_install_manifest(ext, target_dir, m)
+    except Exception as e:
+        ext.Log(f'Install-manifest unrecord failed for {path}: {e}', 'DEBUG')
+
+
+def ensure_gitignore_entry(ext, git_root, entry) -> bool:
+    """Append ONE entry to .gitignore's managed block iff no line anywhere
+    in the file already matches it (hand-added lines count). For
+    per-project additions that must not ship in MANAGED_ENTRIES -- an
+    unanchored TDPyEnvManagerContext.yaml there would silently ignore
+    FOREIGN contexts a fleet deliberately commits. Returns True when the
+    file changed; the caller owns any consent gating."""
+    try:
+        gi = Path(git_root) / '.gitignore'
+        lines = (gi.read_text(encoding='utf-8').splitlines()
+                 if gi.exists() else [])
+        # An unanchored basename line ('TDPyEnvManagerContext.yaml')
+        # already ignores the file at every level -- treat it as covering
+        # the anchored form, never write a near-duplicate.
+        covering = {entry, entry.lstrip('/'), entry.rsplit('/', 1)[-1]}
+        if any(ln.strip() in covering for ln in lines):
+            return False
+        # Marker strings must match envoy_setup.configure_gitignore's
+        # HEADER/MARKER (the canonical managed-block writer).
+        for i, ln in enumerate(lines):
+            if ln.strip().startswith('# Embody / Envoy'):
+                j = i + 1
+                while j < len(lines) and lines[j].strip():
+                    j += 1
+                lines[j:j] = [entry]
+                break
+        else:
+            if lines and lines[-1].strip():
+                lines.append('')
+            lines += ['# Embody / Envoy (auto-managed)', entry]
+        # newline='\n': without it Windows rewrites the WHOLE file CRLF
+        # (.gitattributes does not cover .gitignore; matches envoy_setup's
+        # configure_gitignore).
+        gi.write_text('\n'.join(lines) + '\n', encoding='utf-8',
+                      newline='\n')
+        ext.Log(f'.gitignore: added {entry}')
+        return True
+    except Exception as e:
+        ext.Log(f'.gitignore entry add failed ({entry}): {e}', 'WARNING')
+        return False
+
+
 def manifest_record_git_config(ext, target_dir, keys):
     """Record git config keys Embody set (un-set on uninstall)."""
     try:
@@ -655,6 +712,9 @@ def init_envoy(ext) -> None:
         try:
             envoy._configureMCPClient(port, target_dir=target_dir)
             ext._extractAIConfig()  # AI client config
+            # force: InitEnvoy is the explicit re-assert path past the
+            # user-deletion tombstone on the TD pre-cook venv context.
+            ext._ensurePyEnvContext(force=True)
         finally:
             ext._consent_bulk = prior
         ext.Log(
@@ -665,7 +725,9 @@ def init_envoy(ext) -> None:
         'AI & MCP config',
         f'(re)write MCP + AI client config for {client_label} in {target_dir}',
         [f'{target_dir}/.mcp.json', f'{target_dir}/AGENTS.md',
-         f'{target_dir}/ (rules/instructions for {client_label})'],
+         f'{target_dir}/ (rules/instructions for {client_label})',
+         'TDPyEnvManagerContext.yaml (TD pre-cook venv link) + its '
+         '.gitignore entry'],
         _apply)
 
 

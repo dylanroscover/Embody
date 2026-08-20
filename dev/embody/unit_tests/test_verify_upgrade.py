@@ -82,6 +82,57 @@ class TestVerifyUpgradePath(EmbodyTestCase):
             '_validateTrackedOperators', src,
             'the quiet validation helper must exist in EmbodyExt')
 
+    def test_validation_never_saves_dirty_content(self):
+        """save_dirty=False: dirty COMPs are flagged, never written.
+
+        THE FIELD EVENT (2026-08-19, node-pa-td): a self-update's
+        post-apply validation ran the full Update() sweep and saved 4
+        toxes the user never chose to save -- indistinguishable in git
+        from a bulk save the user did not perform. An update must not
+        write user content.
+        """
+        import os
+        ext = self.embody_ext
+        comp = self.sandbox.create(baseCOMP, 'probe_savedirty')
+        try:
+            ext.applyTagToOperator(comp, self.embody.par.Toxtag.val)
+            # handleAddition is the real tagging flow: it mints the table
+            # row and the externaltox path, then writes the first save --
+            # a bare Save() on a rowless COMP refuses.
+            ext.handleAddition(comp)
+            rel = ext.getExternalPath(comp)
+            path = str(ext.buildAbsolutePath(rel))
+            self.assertTrue(os.path.isfile(path))
+            comp.create(textDAT, 'dirt')
+            # Sandbox COMPs never raise oper.dirty, so plant the one flag
+            # the sweep PRESERVES ('Par' -- cleared only by a real Save):
+            # validation must neither write the file nor lose the flag.
+            ext._setDirtyState(comp.path, 'Par')
+            m0 = os.path.getmtime(path)
+
+            ext.Update(suppress_refresh=True, save_dirty=False)
+
+            self.assertEqual(
+                os.path.getmtime(path), m0,
+                'validation mode must not write a dirty COMP to disk')
+            self.assertEqual(
+                ext.DirtyState(comp.path), 'Par',
+                'the dirty flag must survive validation for the UI')
+        finally:
+            # Through the Embody COMP: bare `mod` resolves relative to the
+            # TEST DAT and cannot see Embody's internal module DATs.
+            self.embody.op('envoy_ops').module.remove_externalization_tag(
+                self.embody.ext.Envoy, comp.path, delete_file=True)
+
+    def test_validation_defers_a_no_save_update(self):
+        """The helper's deferred UpdateHandler must carry save_dirty=False
+        -- the parameter is the whole fix; losing it re-arms the flush."""
+        src = self.embody.op('EmbodyExt').text
+        start = src.index('def _validateTrackedOperators')
+        end = src.index('\n    def ', start + 1)
+        self.assertIn('save_dirty=False', src[start:end],
+                      'upgrade validation must never flush dirty saves')
+
     def test_validation_helper_stays_quiet(self):
         """The helper body must contain no dialog and no Reset call.
 

@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **129 test suites** and **3,876 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **131 test suites** and **4,105 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -198,6 +198,7 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_updater` | 20 | UpdaterExt self-update logic (no network, no swap) |
 | `test_config_migration` | 29 | Repo-config writers across a VERSION BUMP -- the migration axis a single-run test cannot see (duplicate managed headers, block consolidation that never swallows user content, `.gitattributes` backfill, the order-dependent `.embody/*` / `!.embody/project.json` pair, and the `git check-ignore` respect for a repo that deliberately ignores `project.json`) |
 | `test_embody_pyenv` | 55 | The shared project Python environment -- constraints, declared extras stewardship, DLL-path parity, tdPyEnvManager detection |
+| `test_pyenv_context` | 36 | TD pre-cook venv context authoring -- render/classify/status/refresh, the foreign-context hands-off contract, gitignore + manifest footprint helpers |
 | `test_wizard_externalize` | 20 | The setup wizard's externalize step, its recovery point, and the already-externalized detection |
 | `test_dialog_wrap` | 5 | Every dialog's prose wraps to readable lines (`ui.messageBox` sizes itself to its longest line) |
 

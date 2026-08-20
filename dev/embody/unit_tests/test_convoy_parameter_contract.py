@@ -95,6 +95,11 @@ def _plain_ext(**values):
     return ext, pars
 
 
+def _policy(allow_td=False, allow_shell=False, quota=1024, generation=0):
+    return {"generation": generation, "allow_td_python": allow_td,
+            "allow_full_shell": allow_shell, "artifact_quota_mb": quota}
+
+
 def test_forget_offline_nodes_pulse_is_present_and_honest():
     """The manual cleanup path: a Pulse right after the nodes sequence,
     whose help states the enumerating confirmation and the consequence
@@ -218,32 +223,236 @@ def test_danger_gates_are_not_project_config_persisted():
 
 def test_saved_danger_projections_reset_fail_closed():
     ext, pars = _plain_ext(Convoyallowtdpython=1, Convoyallowfullshell=True)
+    ext._session = lambda: {}
+    calls = []
+    ext._beginPolicyCall = lambda action, **request: calls.append(action)
     ext._resetUntrustedDangerProjections()
     assert pars.Convoyallowtdpython.eval() == 0
     assert pars.Convoyallowfullshell.eval() == 0
     assert ext._contract_logs and ext._contract_logs[-1][0] == "WARNING"
+    assert calls == []  # a loaded value is never a user request
 
 
 def test_synthetic_on_request_cannot_create_local_approval():
     ext, pars = _plain_ext(Convoyallowtdpython=1, Convoyallowfullshell=0)
-    ext._projecting_policy = False
+    ext._post_init_done = True
     ext._policy_busy = False
-    ext._session = lambda: {
-        "node_id": "n" * 32,
-        "policy": {
-            "allow_td_python": False,
-            "allow_full_shell": False,
-            "artifact_quota_mb": 1024,
-        },
-    }
+    ext._session = lambda: {"node_id": "n" * 32, "policy": _policy()}
     calls = []
     ext._beginPolicyCall = lambda action, **request: calls.append(
         (action, request)) or True
     result = ext.LocalDangerGateChanged("Convoyallowtdpython", True)
-    assert result == {"ok": True, "pending": True, "enabled": False}
+    assert result == {"ok": True, "pending": True,
+                      "requested": "Convoyallowtdpython",
+                      "reverted": ["Convoyallowtdpython"]}
     assert pars.Convoyallowtdpython.eval() == 0
     assert calls == [("policy_begin", {
         "setting": "td_python", "node_id": "n" * 32})]
+
+
+# -- the deviation rule (retired _projecting_policy, field 2026-08-20) --
+#
+# TD defers parexec onValueChange to the next cook, so a write-time flag
+# can never mark the extension's own writes: every projection re-entered
+# LocalDangerGateChanged as if a human had toggled it, and a callback
+# swallowed by a suppressed window (a save, settings restore) left an
+# unauthorized, unenforced On standing until the next startup. The rule
+# that replaced the flag: the extension only writes authoritative
+# values, so any observed deviation is someone else's write -- snap it,
+# and route it as the user's request. These pin both halves.
+
+
+def test_projection_writes_do_not_route_on_their_deferred_callbacks():
+    ext, pars = _plain_ext(Convoyallowtdpython=0, Convoyallowfullshell=0,
+                           Convoyartifactquota=1024)
+    session = {"node_id": "n" * 32}
+    ext._session = lambda: session
+    ext._post_init_done = True
+    ext._policy_busy = False
+    calls = []
+    ext._beginPolicyCall = lambda action, **request: calls.append(
+        action) or True
+    assert ext._applyPolicyProjection(
+        {"policy": _policy(allow_td=True, quota=2048)}) is True
+    assert pars.Convoyallowtdpython.eval() == 1
+    assert pars.Convoyartifactquota.eval() == 2048
+    # the deferred callbacks TD queued for those writes arrive NOW:
+    for name in ("Convoyallowtdpython", "Convoyallowfullshell"):
+        late = ext.LocalDangerGateChanged(
+            name, bool(getattr(pars, name).eval()))
+        assert late == {"ok": True, "in_sync": True}, name
+    assert ext.LocalArtifactQuotaChanged(2048) == {"ok": True,
+                                                   "in_sync": True}
+    assert calls == []
+
+
+def test_stuck_unauthorized_on_is_reconciled_without_a_callback():
+    """The tick path: a swallowed callback no longer leaves a standing
+    unenforced On -- the next reconcile snaps it and routes the
+    request."""
+    ext, pars = _plain_ext(Convoyallowfullshell=1)
+    ext._session = lambda: {"node_id": ""}
+    ext._post_init_done = True
+    ext._policy_busy = False
+    calls = []
+    ext._beginPolicyCall = lambda action, **request: calls.append(
+        (action, request.get("setting"))) or True
+    result = ext._reconcileDangerGates()
+    assert pars.Convoyallowfullshell.eval() == 0
+    assert result["ok"] is True and result["pending"] is True
+    assert calls == [("policy_begin", "full_shell")]
+
+
+def test_deviation_before_postinit_snaps_without_routing():
+    """A dialog must never pop from startup state (A-13): deviations seen
+    before _postInit are snapped silently, exactly like route=False."""
+    ext, pars = _plain_ext(Convoyallowtdpython=1)
+    ext._session = lambda: {"node_id": "n" * 32}
+    calls = []
+    ext._beginPolicyCall = lambda action, **request: calls.append(
+        action) or True
+    result = ext._reconcileDangerGates()
+    assert pars.Convoyallowtdpython.eval() == 0
+    assert result == {"ok": False, "reason": "not_routed",
+                      "reverted": ["Convoyallowtdpython"]}
+    assert calls == []
+
+
+def test_off_request_routes_policy_disable():
+    """Authoritative On + observed Off is a revocation request: the par
+    keeps showing the granted value until the host accepts the disable."""
+    ext, pars = _plain_ext(Convoyallowtdpython=0)
+    ext._session = lambda: {"node_id": "n" * 32,
+                            "policy": _policy(allow_td=True)}
+    ext._post_init_done = True
+    ext._policy_busy = False
+    calls = []
+    ext._beginPolicyCall = lambda action, **request: calls.append(
+        (action, request.get("setting"))) or True
+    result = ext._reconcileDangerGates()
+    assert pars.Convoyallowtdpython.eval() == 1
+    assert result["pending"] is True
+    assert calls == [("policy_disable", "td_python")]
+
+
+def test_td_python_request_waits_for_registration():
+    ext, pars = _plain_ext(Convoyallowtdpython=1)
+    ext._session = lambda: {"node_id": ""}
+    ext._post_init_done = True
+    ext._policy_busy = False
+    calls = []
+    ext._beginPolicyCall = lambda action, **request: calls.append(
+        action) or True
+    result = ext._reconcileDangerGates()
+    assert pars.Convoyallowtdpython.eval() == 0
+    assert result == {"ok": False, "reason": "node_not_registered",
+                      "reverted": ["Convoyallowtdpython"]}
+    assert calls == []
+
+
+def test_quota_deviation_routes_a_cas_update():
+    ext, pars = _plain_ext(Convoyartifactquota=2048)
+    ext._session = lambda: {"node_id": "n" * 32}
+    ext._post_init_done = True
+    ext._policy_busy = False
+    calls = []
+    ext._beginPolicyCall = lambda action, **request: calls.append(
+        (action, dict(request))) or True
+    result = ext._reconcileDangerGates()
+    assert pars.Convoyartifactquota.eval() == 1024
+    assert result["pending"] is True
+    assert calls == [("policy_quota", {"quota_mb": 2048})]
+
+
+def test_quota_out_of_bounds_is_snapped_not_routed():
+    ext, pars = _plain_ext(Convoyartifactquota=2 * 1024 * 1024)
+    ext._session = lambda: {"node_id": "n" * 32}
+    ext._post_init_done = True
+    ext._policy_busy = False
+    calls = []
+    ext._beginPolicyCall = lambda action, **request: calls.append(
+        action) or True
+    result = ext._reconcileDangerGates()
+    assert pars.Convoyartifactquota.eval() == 1024
+    assert result == {"ok": False, "reason": "invalid_quota",
+                      "reverted": ["Convoyartifactquota"]}
+    assert calls == []
+
+
+def test_busy_slot_still_snaps_but_defers_routing():
+    ext, pars = _plain_ext(Convoyallowfullshell=1)
+    ext._session = lambda: {"node_id": "n" * 32}
+    ext._post_init_done = True
+    ext._policy_busy = True
+    ext._policy_result = None
+    ext._policy_busy_since = 10 ** 12  # just started, in effect
+    calls = []
+    ext._beginPolicyCall = lambda action, **request: calls.append(
+        action) or True
+    result = ext._reconcileDangerGates()
+    assert pars.Convoyallowfullshell.eval() == 0
+    assert result == {"ok": False, "reason": "policy_busy",
+                      "reverted": ["Convoyallowfullshell"]}
+    assert calls == []
+
+
+# -- deferred local confirmation (the save-window auto-decline) ---------
+
+
+def _challenge_result(setting="full_shell"):
+    return {"state": "challenge",
+            "challenge": {"setting": setting, "confirmation": "phrase",
+                          "challenge_id": "c1", "generation": 0}}
+
+
+def _finish_ext(suppressed):
+    ext, _ = _plain_ext()
+    ext._staleInstance = lambda: False
+    ext._safeClient = lambda: None
+    embody = ext.ownerComp.parent.Embody
+    embody.fetch = lambda key, default=False, search=False: suppressed
+    ext._scheduled = []
+    g = type(ext)._finishPolicyCall.__globals__
+    g["run"] = lambda *args, **kwargs: ext._scheduled.append((args, kwargs))
+    ext._dialogs = []
+    ext._dialog = lambda *a: ext._dialogs.append(a) or -1
+    ext._policy_calls = []
+    ext._beginPolicyCall = lambda action, **request: ext._policy_calls.append(
+        (action, request)) or True
+    ext._policy_busy = False
+    return ext
+
+
+def test_challenge_defers_while_dialogs_are_suppressed():
+    """A save window suppresses dialogs; auto-answering used to DECLINE
+    an enable requested seconds before a Ctrl+S. The finish re-arms
+    itself until the window lifts, carrying a bounded wait counter."""
+    ext = _finish_ext(suppressed=True)
+    ext._finishPolicyCall("policy_begin", _challenge_result(), {})
+    assert ext._dialogs == []
+    assert ext._policy_calls == []
+    assert len(ext._scheduled) == 1
+    args, kwargs = ext._scheduled[0]
+    assert args[4]["_challenge_wait"] == 1
+    assert kwargs["delayFrames"] == type(ext).CHALLENGE_WAIT_FRAMES
+
+
+def test_challenge_wait_budget_exhaustion_still_declines():
+    ext = _finish_ext(suppressed=True)
+    ext._finishPolicyCall(
+        "policy_begin", _challenge_result(),
+        {"_challenge_wait": type(ext).CHALLENGE_WAIT_MAX})
+    assert ext._scheduled == []
+    assert len(ext._dialogs) == 1          # asked; -1 = suppressed decline
+    assert ext._policy_calls and ext._policy_calls[0][0] == "policy_decline"
+
+
+def test_challenge_shows_immediately_when_dialogs_are_not_suppressed():
+    ext = _finish_ext(suppressed=False)
+    ext._finishPolicyCall("policy_begin", _challenge_result(), {})
+    assert ext._scheduled == []
+    assert len(ext._dialogs) == 1
+    assert ext._policy_calls and ext._policy_calls[0][0] == "policy_decline"
 
 
 def test_node_name_override_is_bounded_and_empty_falls_back():

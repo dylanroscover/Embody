@@ -161,10 +161,14 @@ class TestDeferredDirtySweep(_SyntheticTable):
         self.assertEqual(expected, t.text)
 
     def test_marks_dirty_and_clears_clean(self):
+        # Runtime-only since 2026-08-20: the sweep flags DirtyState and
+        # the tsv cell stays blank by contract.
         t, clean, dirty = self._two_comps()
         self._drain()
-        self.assertEqual('True', t[dirty.path, 'dirty'].val)
-        self.assertEqual('', t[clean.path, 'dirty'].val)
+        self.assertEqual('True', self.embody_ext.DirtyState(dirty.path))
+        self.assertEqual('', self.embody_ext.DirtyState(clean.path))
+        self.assertEqual('', t[dirty.path, 'dirty'].val,
+                         'dirty never persists into the table')
 
     def test_budget_is_checked_after_the_work_so_it_always_advances(self):
         """A budget checked BEFORE the work would re-arm forever and the sweep
@@ -207,7 +211,7 @@ class TestDeferredDirtySweep(_SyntheticTable):
         self.embody_ext._dirty_queue = ['/no/such/comp', dirty.path]
         self.embody_ext._dirty_idx = 0
         self.embody_ext._sweepTDNDirtyChunk(self.embody_ext._dirty_gen)
-        self.assertEqual('True', t[dirty.path, 'dirty'].val,
+        self.assertEqual('True', self.embody_ext.DirtyState(dirty.path),
                          'a vanished path must not abort the rest of the queue')
 
     def test_root_and_excluded_comps_never_enter_the_queue(self):

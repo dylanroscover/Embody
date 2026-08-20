@@ -102,7 +102,7 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one batch_operat
 | `announce_task` | `title`, `scopes?`, `note?` | Announce a unit of work to the shared task ledger (`.embody/tasks.json`) so parallel sessions see what is being worked on and what is FINISHED but uncommitted. Announce at the start of substantive work (a feature, fix, refactor); keep it honest with `update_task`. Active entries ride on `get_sessions` for every session |
 | `update_task` | `task_id`, `status?`, `note?`, `commit?` | Transition a ledger task: `done_uncommitted` when the work is finished but sitting uncommitted in the tree (the state peers MUST see), `committed` with the sha once it lands (a sha alone implies the transition), `abandoned` when dropped. Any session may update any task -- non-owner writes record `updated_by` |
 ${ROWS}
-| `preflight_landing` | `worktree_path` | Landing safety check for a worktree diff -- intersects the files it would land with main-tree dirt, peer `file:` claims/touches, and unsaved live TDN state (tsv `dirty` column). Run BEFORE porting any worktree diff; verdict `conflicts` means reconcile first |
+| `preflight_landing` | `worktree_path` | Landing safety check for a worktree diff -- intersects the files it would land with main-tree dirt, peer `file:` claims/touches, and unsaved live TDN state (runtime dirty state; legacy tsv `dirty` columns still honored). Run BEFORE porting any worktree diff; verdict `conflicts` means reconcile first |
 
 ## MCP Prompts
 

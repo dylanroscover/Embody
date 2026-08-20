@@ -136,11 +136,11 @@ def onValueChange(par, prev):
 			convoy.ext.ConvoyExt.WakeSettingsChanged()
 
 	elif par.name in ('Convoyallowtdpython', 'Convoyallowfullshell'):
-		# A generic parameter callback cannot distinguish a human click from
-		# remote set_parameters/Python. It may project a host-authoritative
-		# decision, but it can never CREATE one. The extension currently fails
-		# closed and reverts On until the host's local confirmation/CAS route is
-		# available; saved/imported/synthetic values therefore cannot grant.
+		# Fast path only: TD defers this callback to the next cook, so it
+		# can be stale, coalesced, or one of ConvoyExt's own writes. The
+		# extension reconciles live par values against host policy (any
+		# deviation = a request: snap + challenge/disable) and repeats
+		# that on its tick, so a swallowed callback cannot grant either.
 		convoy = parent.Embody.op('convoy')
 		if convoy:
 			convoy.ext.ConvoyExt.LocalDangerGateChanged(

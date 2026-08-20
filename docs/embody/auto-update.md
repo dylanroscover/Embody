@@ -6,6 +6,8 @@ externalizations.
 
 Running a Convoy fleet? Nodes take the same update remotely -- `update_embody` / `convoy_update_embody`, no per-machine visit and no TD Python grant. See [Fleet Updates](../convoy/fleet-updates.md).
 
+An update never writes your content: the post-update validation reconciles Embody's tracking without saving dirty externalizations -- anything you had unsaved stays exactly as unsaved as it was, flagged in the manager for you to save when you choose.
+
 !!! note "Availability"
     Self-update ships with Embody v6.0.143+. Older installs update manually
     one last time (drag in the new release `.tox` as before); from then on

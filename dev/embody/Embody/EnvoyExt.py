@@ -829,9 +829,11 @@ def compute_landing_conflicts(landing_files, main_dirty, peer_files,
 
 def read_tsv_dirty_paths(repo_root: str) -> set:
     """Repo-relative paths of externalized files whose live TDN/DAT state
-    is UNSAVED (dirty column truthy in externalizations.tsv). Pure file
-    read -- safe on the worker thread. Returns an empty set when the
-    table cannot be found or parsed."""
+    is UNSAVED (dirty column truthy in externalizations.tsv). LEGACY
+    tsvs only since 2026-08-20 -- the live project's dirty state is
+    runtime-only and merged from the sys mirror at the call site. Pure
+    file read -- safe on the worker thread. Returns an empty set when
+    the table cannot be found or parsed."""
     dirty = set()
     try:
         root = os.path.normpath(repo_root)
@@ -1718,6 +1720,16 @@ class EnvoyMCPServer:
             return {'error': 'git preflight failed: %s' % e}
 
         tdn_unsaved = read_tsv_dirty_paths(root)
+        # Dirty is runtime-only since 2026-08-20 (the tsv column is blank
+        # by contract): merge the live mirror EmbodyExt._setDirtyState
+        # maintains in a sys slot -- worker-safe, no TD objects. The file
+        # scan above stays for foreign/legacy tsvs in the tree.
+        try:
+            tdn_unsaved |= set(
+                dict(getattr(sys, '_embody_dirty_files', {}) or {})
+                .values())
+        except Exception:
+            pass
 
         # Peer file territory: file: claims + recent file: write touches
         # from OTHER sessions.
@@ -5174,6 +5186,11 @@ class EnvoyExt:
                 mod.embody_pyenv.unlink_dll_dir(spec['venv_dir'])
             Embody._linkEnv(spec)
             Embody._scheduleExtrasApply(delay_frames=1)
+            # startup=True: this poll can resolve during a project OPEN
+            # (fresh clone / version bump) before _continueStart arms
+            # _startup_config_pass -- an Advanced-mode modal here would
+            # block the frame loop (review 2026-08-20).
+            Embody._ensurePyEnvContext(startup=True)
         except Exception:
             pass
         self._continueStart(git_root)

@@ -101,7 +101,10 @@ class TestAutosave(EmbodyTestCase):
         ok = self.embody_ext.Checkpoint(comp.path)
         self.assertTrue(ok)
         self.assertTrue(os.path.isfile(abs_tdn))
-        self.assertEqual(self.embody_ext.Externalizations[comp.path, 'dirty'].val, '')
+        self.assertEqual(self.embody_ext.Externalizations[comp.path, 'dirty'].val, '',
+                         'tsv dirty cell stays blank (runtime-only, 2026-08-20)')
+        self.assertEqual(self.embody_ext.DirtyState(comp.path), '',
+                         'checkpoint clears the runtime dirty flag')
 
     def test_checkpoint_captures_current_state(self):
         comp, abs_tdn = self._make_tdn('cp_state')

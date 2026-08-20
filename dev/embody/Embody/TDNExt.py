@@ -212,6 +212,9 @@ SKIP_STORAGE_KEYS = {
 	# TDN dirty-detection baselines -- runtime-only, storage-backed so they
 	# survive extension reinit; must never serialize into a .tdn.
 	'_tdn_fingerprints',
+	# Runtime dirty flags (2026-08-20) -- same contract as the
+	# fingerprints: storage-backed for reinit survival, never on disk.
+	'_dirty_states',
 	# Recovery/restore markers live on the COMP shell, never in the .tdn:
 	# a serialized _tdn_rel_path makes every pasted copy claim the
 	# original's file; a serialized _pending_tdn_restore is a destructive

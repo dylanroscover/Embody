@@ -1389,7 +1389,9 @@ def get_externalizations(ext) -> dict:
                 'file_path': rel,
                 'absolute_path': abs_path,
                 'timestamp': table[row, 'timestamp'].val,
-                'dirty': table[row, 'dirty'].val,
+                # Runtime-only since 2026-08-20; the tsv column is blank.
+                'dirty': op.Embody.ext.Embody.DirtyState(
+                    table[row, 'path'].val),
                 'build': table[row, 'build'].val,
                 # Hint so an agent seeing a dirty TDN row knows the tool
                 # that explains exactly what changed (live vs on-disk).
@@ -1436,7 +1438,8 @@ def get_externalization_status(ext, op_path: str) -> dict:
                     'file_path': rel,
                     'absolute_path': abs_path,
                     'timestamp': table[row, 'timestamp'].val,
-                    'dirty': table[row, 'dirty'].val,
+                    # Runtime-only since 2026-08-20; tsv column is blank.
+                    'dirty': op.Embody.ext.Embody.DirtyState(op_path),
                     'build': table[row, 'build'].val,
                     'touch_build': table[row, 'touch_build'].val,
                     # Hint so an agent seeing a dirty TDN row knows the

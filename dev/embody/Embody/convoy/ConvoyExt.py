@@ -84,6 +84,13 @@ class ConvoyExt:
     TICK_MIN_MS = 4000
     TICK_MAX_MS = 60000
 
+    # Deferred-challenge retry: while dialogs are suppressed (a save
+    # window) the local confirmation re-arms instead of auto-declining.
+    # 20 x 60 frames ~ 20 s at 60 fps -- far past the 120-frame post-save
+    # suppression, bounded so a stuck flag still declines eventually.
+    CHALLENGE_WAIT_FRAMES = 60
+    CHALLENGE_WAIT_MAX = 20
+
     # Worker poll chain. Worst case in the worker is a 3 s /health plus a
     # 10 s /register; the budget is >= 3x that (160 x 15 frames ~= 40 s at
     # 60 fps), matching UpdaterExt's sizing rule.
@@ -216,7 +223,6 @@ class ConvoyExt:
         self._policy_result = None
         self._policy_gen = 0
         self._policy_busy = False
-        self._projecting_policy = False
         self._post_init_done = False
         self._logged = ''        # last logged status class (transitions only)
         self._tick_ms = self.TICK_MIN_MS
@@ -307,7 +313,6 @@ class ConvoyExt:
             self._host_busy = False
             self._policy_result = None
             self._policy_busy = False
-            self._projecting_policy = False
         except Exception:
             pass
         finally:
@@ -935,47 +940,118 @@ class ConvoyExt:
         if par is not None:
             par.val = 1 if value else 0
 
-    def _resetUntrustedDangerProjections(self):
-        """Reset saved host-policy projections. MAIN THREAD ONLY.
+    def _authoritativeCapabilityValues(self):
+        """The host-truth projection for the three capability pars.
 
-        TD Python approval is node/host-private and Full Shell approval is
-        host-private. Neither may be granted by a project file, config restore,
-        clone, peer update, or synthetic parameter callback. The host API that
-        will own local confirmation is not present yet, so this scaffold only
-        supports the safe state and never sends either value in registration.
+        Derived from the session's last authenticated policy; with none
+        cached, the only truthful projection is the fail-closed default
+        state (gates off, default quota).
         """
-        reset = []
-        self._projecting_policy = True
-        try:
-            for name, safe in (
-                    ('Convoyallowtdpython', 0),
-                    ('Convoyallowfullshell', 0),
-                    ('Convoyartifactquota', 1024)):
-                par = getattr(self._embody.par, name, None)
-                if par is None:
-                    continue
-                try:
-                    if par.eval() != safe:
-                        par.val = safe
-                        reset.append(name)
-                except Exception:
-                    try:
-                        par.val = safe
-                    except Exception:
-                        pass
-        finally:
-            self._projecting_policy = False
-        if reset:
-            self._log('ignored saved capability approval projection(s): %s; '
-                      'the local host policy is authoritative'
-                      % (', '.join(reset),), 'WARNING')
+        policy = (self._session().get('policy') or {})
+        return {
+            'Convoyallowtdpython': 1 if policy.get('allow_td_python') else 0,
+            'Convoyallowfullshell': 1 if policy.get('allow_full_shell') else 0,
+            'Convoyartifactquota': int(policy.get('artifact_quota_mb', 1024)),
+        }
 
-    def PolicyProjectionActive(self):
-        """True only during a host-authored parameter projection."""
-        return bool(self._projecting_policy)
+    def _reconcileDangerGates(self, route=True):
+        """Snap the capability pars to host policy; route deviations.
+
+        The extension only ever WRITES authoritative values into these
+        pars, so any observed deviation is someone else's write -- a
+        click, a synthetic set, or a value whose parexec callback was
+        deferred past a suppressed window or swallowed by one (TD defers
+        onValueChange to the next cook, so a write-time guard flag can
+        never mark self-writes; field 2026-08-20). Deviations are
+        snapped immediately and, once _postInit has run, forwarded as
+        the user's request: policy_begin to enable (host challenge +
+        local confirmation), policy_disable to revoke, policy_quota to
+        resize. Runs from the reconcile tick AND the parexec fast path;
+        idempotent. route=False (startup) snaps without sending -- a
+        loaded value is not a user request.
+        """
+        session = self._session()
+        deviations = []
+        for name, value in self._authoritativeCapabilityValues().items():
+            par = getattr(self._embody.par, name, None)
+            if par is None:
+                continue
+            try:
+                observed = par.eval()
+                if int(observed) == int(value):
+                    continue
+                par.val = value
+            except Exception:
+                continue
+            deviations.append((name, observed))
+        if not deviations:
+            return {'ok': True, 'in_sync': True}
+        reverted = [name for name, _ in deviations]
+        if not route or not getattr(self, '_post_init_done', False):
+            self._log('ignored unauthorized capability value(s): %s -- '
+                      'the local host policy is authoritative'
+                      % (', '.join(reverted),), 'WARNING')
+            return {'ok': False, 'reason': 'not_routed', 'reverted': reverted}
+        if self._policyBusyBlocked():
+            self._log('another Convoy safety-policy request is still in '
+                      'progress', 'INFO')
+            return {'ok': False, 'reason': 'policy_busy',
+                    'reverted': reverted}
+        node_id = str(session.get('node_id') or '')
+        blocked = None
+        for name, observed in deviations:
+            if name == 'Convoyallowtdpython':
+                if not node_id:
+                    self._log('Allow Execute TD Python waits until this '
+                              'node has registered with the Convoy host app',
+                              'WARNING')
+                    blocked = blocked or 'node_not_registered'
+                    continue
+                self._beginPolicyCall(
+                    'policy_begin' if observed else 'policy_disable',
+                    setting='td_python', node_id=node_id)
+            elif name == 'Convoyallowfullshell':
+                self._beginPolicyCall(
+                    'policy_begin' if observed else 'policy_disable',
+                    setting='full_shell', node_id=node_id)
+            else:
+                try:
+                    quota = int(observed)
+                except (TypeError, ValueError, OverflowError):
+                    blocked = blocked or 'invalid_quota'
+                    continue
+                if quota < 0 or quota > 1024 * 1024:
+                    blocked = blocked or 'invalid_quota'
+                    continue
+                self._beginPolicyCall('policy_quota', quota_mb=quota)
+            self._log('Convoy safety-policy change requested (%s); the '
+                      'parameter shows the approved value until the host '
+                      'accepts' % (name,), 'INFO')
+            return {'ok': True, 'pending': True, 'requested': name,
+                    'reverted': reverted}
+        return {'ok': False, 'reason': blocked or 'not_routed',
+                'reverted': reverted}
+
+    def _resetUntrustedDangerProjections(self):
+        """Startup snap: capability pars to host truth, never routing.
+
+        A saved .toe/TDN/clone may arrive with a stale On, but a loaded
+        value must never become authority. With no cached policy the snap
+        is the fail-closed default state; after a mid-session reinit (the
+        per-process session survives) it is that policy. Nothing is
+        sent -- a baked value is not a user request.
+        """
+        return self._reconcileDangerGates(route=False)
 
     def _applyPolicyProjection(self, result):
-        """Project one validated convoy_client policy result. MAIN THREAD."""
+        """Project one validated convoy_client policy result. MAIN THREAD.
+
+        The policy is cached BEFORE the pars are written: each write
+        queues a deferred parexec callback whose reconcile compares pars
+        against the cached policy -- caching first makes those callbacks
+        no-ops, and a partial write self-heals on the next tick instead
+        of fighting the projection.
+        """
         policy = (result or {}).get('policy')
         if not isinstance(policy, dict):
             return False
@@ -983,14 +1059,9 @@ class ConvoyExt:
                     'artifact_quota_mb')
         if any(name not in policy for name in required):
             return False
-        values = {
-            'Convoyallowtdpython': 1 if policy['allow_td_python'] else 0,
-            'Convoyallowfullshell': 1 if policy['allow_full_shell'] else 0,
-            'Convoyartifactquota': int(policy['artifact_quota_mb']),
-        }
-        self._projecting_policy = True
+        self._session()['policy'] = dict(policy)
         try:
-            for name, value in values.items():
+            for name, value in self._authoritativeCapabilityValues().items():
                 par = getattr(self._embody.par, name, None)
                 if par is not None and par.eval() != value:
                     par.val = value
@@ -998,74 +1069,24 @@ class ConvoyExt:
             self._log('could not project host safety policy: %s' % (e,),
                       'DEBUG')
             return False
-        finally:
-            self._projecting_policy = False
-        self._session()['policy'] = dict(policy)
         return True
 
     def LocalDangerGateChanged(self, par_name, requested):
-        """Request a local host-policy change; the parameter is projection."""
+        """Parexec fast path: reconcile the capability pars NOW.
+
+        `requested` is advisory (the par value at callback time). TD
+        defers onValueChange to the next cook, so by now the change may
+        be stale, coalesced, or one of the extension's own writes; the
+        reconcile reads live values against cached policy and routes
+        only true deviations, so none of that can mis-route.
+        """
         if par_name not in ('Convoyallowtdpython', 'Convoyallowfullshell'):
             return {'ok': False, 'reason': 'unknown_capability'}
-        if getattr(self, '_projecting_policy', False):
-            return {'ok': True, 'projected': True}
-        setting = ('td_python' if par_name == 'Convoyallowtdpython'
-                   else 'full_shell')
-        session = self._session()
-        policy = session.get('policy') or {}
-        authoritative = bool(policy.get(
-            'allow_td_python' if setting == 'td_python'
-            else 'allow_full_shell', False))
-        par = getattr(self._embody.par, par_name, None)
-        self._projecting_policy = True
-        try:
-            if par is not None:
-                # The host has not accepted anything yet. Restore its last
-                # projection immediately so a saved/synthetic On can never be
-                # authority during the confirmation round trip.
-                par.val = 1 if authoritative else 0
-        finally:
-            self._projecting_policy = False
-        if self._policyBusyBlocked():
-            self._log('another Convoy safety-policy request is still in '
-                      'progress', 'INFO')
-            return {'ok': False, 'reason': 'policy_busy'}
-        node_id = str(session.get('node_id') or '')
-        if setting == 'td_python' and not node_id:
-            self._log('Allow Execute TD Python waits until this node has '
-                      'registered with the Convoy host app', 'WARNING')
-            return {'ok': False, 'reason': 'node_not_registered'}
-        action = 'policy_begin' if bool(requested) else 'policy_disable'
-        self._beginPolicyCall(action, setting=setting, node_id=node_id)
-        return {'ok': True, 'pending': True, 'enabled': authoritative}
+        return self._reconcileDangerGates()
 
     def LocalArtifactQuotaChanged(self, requested):
-        """CAS a host-wide quota, reverting the Par until host acceptance."""
-        if getattr(self, '_projecting_policy', False):
-            return {'ok': True, 'projected': True}
-        session = self._session()
-        current = int((session.get('policy') or {}).get(
-            'artifact_quota_mb', 1024))
-        par = getattr(self._embody.par, 'Convoyartifactquota', None)
-        self._projecting_policy = True
-        try:
-            if par is not None:
-                par.val = current
-        finally:
-            self._projecting_policy = False
-        try:
-            requested_number = float(requested)
-            requested = int(requested_number)
-        except (TypeError, ValueError, OverflowError):
-            return {'ok': False, 'reason': 'invalid_quota'}
-        if requested_number != requested:
-            return {'ok': False, 'reason': 'invalid_quota'}
-        if requested < 0 or requested > 1024 * 1024:
-            return {'ok': False, 'reason': 'invalid_quota'}
-        if self._policyBusyBlocked():
-            return {'ok': False, 'reason': 'policy_busy'}
-        self._beginPolicyCall('policy_quota', quota_mb=requested)
-        return {'ok': True, 'pending': True}
+        """Parexec fast path for the quota par: the same reconcile."""
+        return self._reconcileDangerGates()
 
     def _performing(self):
         """True while Embody's Perform Mode is on.
@@ -1558,6 +1579,15 @@ class ConvoyExt:
         # happens to be refetched.
         try:
             self._refreshLastSeen()
+        except Exception:
+            pass
+        # Capability pars reconcile on EVERY tick too: a change whose
+        # parexec callback was deferred past a suppressed window (save,
+        # settings restore) or swallowed by one would otherwise stand as
+        # an unauthorized, unenforced On until the next startup
+        # (field 2026-08-20).
+        try:
+            self._reconcileDangerGates()
         except Exception:
             pass
         if self._busy:
@@ -2897,6 +2927,11 @@ class ConvoyExt:
         return True
 
     def _finishPolicyCall(self, action, result, request):
+        # A deferred-challenge retry (below) can outlive a reinit; the
+        # request dies with its instance, like every other in-flight
+        # host action (see onDestroyTD).
+        if self._staleInstance():
+            return
         result = result if isinstance(result, dict) else {
             'state': 'error', 'detail': 'no policy result'}
         state = str(result.get('state') or '')
@@ -2909,6 +2944,23 @@ class ConvoyExt:
             return
         if state == 'challenge':
             challenge = result.get('challenge') or {}
+            # A save window suppresses dialogs (_suppress_dialogs); the
+            # auto-answer silently DECLINED an enable requested seconds
+            # before a Ctrl+S. Re-arm the finish until the window lifts,
+            # bounded so a stuck flag still declines eventually.
+            try:
+                suppressed = bool(self._embody.fetch(
+                    '_suppress_dialogs', False, search=False))
+            except Exception:
+                suppressed = False
+            waited = int((request or {}).get('_challenge_wait', 0))
+            if suppressed and waited < self.CHALLENGE_WAIT_MAX:
+                deferred = dict(request or {})
+                deferred['_challenge_wait'] = waited + 1
+                run('args[0]._finishPolicyCall(args[1], args[2], args[3])',
+                    self, action, result, deferred,
+                    delayFrames=self.CHALLENGE_WAIT_FRAMES)
+                return
             setting = str(challenge.get('setting') or '')
             phrase = str(challenge.get('confirmation') or '')
             if setting == 'td_python':

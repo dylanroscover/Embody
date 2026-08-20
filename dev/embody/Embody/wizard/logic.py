@@ -10,7 +10,7 @@ DEFS={
  'assistant':{'g':'grp_assistant','sel':'sel_assistant','title':'Turn on the AI assistant (Envoy)?','hint':'It lets AI tools work in your network. Easy to remove later.'},
  'client':{'g':'grp_client','sel':'sel_client','title':'Pick your AI coding tool','hint':'Embody will generate its config.'},
  'git':{'g':'grp_git','sel':'sel_git','title':'Make this project a Git repository?','hint':'Externalized files diff and restore best under version control.'},
- 'footprint':{'g':'grp_footprint','sel':'sel_root','title':'Review what Embody will add','hint':'Embody will add a Python env (.venv) + MCP server, config files (.mcp.json, .embody, AI rules), .gitignore/.gitattributes entries + a .tdn diff driver, and the Embot assistant in your network. Everything is recorded and reversible via Uninstall.'},
+ 'footprint':{'g':'grp_footprint','sel':'sel_root','title':'Review what Embody will add','hint':'Embody will add a Python env (.venv) + MCP server, config files (.mcp.json, .embody, TDPyEnvManagerContext.yaml, AI rules), .gitignore/.gitattributes entries + a .tdn diff driver, and the Embot assistant in your network. Everything is recorded and reversible via Uninstall.'},
  'permissions':{'g':'grp_permissions','sel':'sel_permissions','title':'How should the AI ask permission?','hint':'Claude Code asks before each AI tool by default. Pick how much to auto-approve (changeable later on the Envoy parameters).'},
  'summary':{'g':None,'sel':None,'title':'Ready to set up Embody','hint':''},
 }
@@ -199,7 +199,7 @@ def _convoyHint():
 def _footprintHint():
 	w=_w()
 	if w.fetch('sel_assistant','')=='none' and w.fetch('sel_convoy','')=='enable':
-		return 'Convoy-only setup adds a Python env (.venv), the internal local Envoy command service, and .embody runtime state. It does not generate AI-client config or launch an AI coding tool. Enabling Convoy also installs and starts its small per-user host app, consented in the Convoy step. Everything Embody adds is recorded and reversible via Uninstall.'
+		return 'Convoy-only setup adds a Python env (.venv + TDPyEnvManagerContext.yaml), the internal local Envoy command service, and .embody runtime state. It does not generate AI-client config or launch an AI coding tool. Enabling Convoy also installs and starts its per-user host app, consented in the Convoy step. Everything Embody adds is recorded and reversible via Uninstall.'
 	return DEFS['footprint']['hint']
 def render():
 	w=_w(); sp=spine(); cur=w.fetch('step_id','mode')

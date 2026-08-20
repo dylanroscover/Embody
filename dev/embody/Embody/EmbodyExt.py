@@ -584,6 +584,7 @@ class EmbodyExt:
         # non-gating reconcile (the async path does this in
         # _pollBootstrap; this is the synchronous/wizard path's twin).
         self._scheduleExtrasApply(delay_frames=1)
+        self._ensurePyEnvContext()
 
         # Opportunistic, non-blocking check for a newer mcp on PyPI.
         try:
@@ -822,6 +823,91 @@ class EmbodyExt:
         """PATH/DLL/VIRTUAL_ENV linking -- MAIN THREAD ONLY facade."""
         return mod.embody_pyenv.link_env(spec or self._venvPaths())
 
+    def _ensurePyEnvContext(self, force=False, startup=False):
+        """Keep TD's pre-cook venv context current (mechanism: the
+        embody_pyenv "TD pre-cook venv context authoring" section).
+        Never touches a foreign context; a user-deleted file stays
+        deleted (manifest tombstone) unless ``force`` (InitEnvoy);
+        ``startup`` defers Advanced-mode consent, never a modal on open.
+        MAIN THREAD ONLY, never raises."""
+        if getattr(app, 'pyEnvHelper', None) is None:
+            return  # pre-2025.32280 TD: no pre-cook channel
+        try:
+            self._ensurePyEnvContextInner(force, startup)
+        except Exception as e:
+            # Best-effort everywhere it is called from (extension init,
+            # install epilogues, InitEnvoy) -- upkeep of this file must
+            # never take down env setup or startup.
+            self.Log(f'TD pre-cook venv context upkeep failed: {e}',
+                     'WARNING')
+
+    def _ensurePyEnvContextInner(self, force, startup):
+        """The state machine behind _ensurePyEnvContext (which owns the
+        docstring and the never-raise wrapper)."""
+        pyenv = mod.embody_pyenv
+        spec = self._venvPaths()
+        project_dir = spec['project_dir']
+        root = str(self._findProjectRoot())
+        ctx_path = os.path.join(project_dir, pyenv.TD_CONTEXT_FILENAME)
+        if (not os.path.isdir(spec['site_packages'])
+                or pyenv.environment_needs_install(spec)):
+            # TD must not pre-cook-link a venv Embody refuses to wire.
+            # Un-record so the rewrite after the next successful install
+            # is not read as a user deletion.
+            if pyenv.remove_td_context_if_ours(project_dir,
+                                               spec['venv_dir'],
+                                               log=self.Log):
+                self._manifestUnrecordCreatedFile(root, ctx_path)
+                self.Log('Removed the TD pre-cook venv context -- the venv '
+                         'needs (re)install. It returns after the next '
+                         'successful install.', 'WARNING')
+            return
+        status = pyenv.td_context_status(
+            project_dir, spec['venv_dir'], spec['python_tag'])
+        if status == 'foreign':
+            # detect_tdpyenvmanager owns routine messaging; an explicit
+            # re-assert (InitEnvoy) deserves a direct answer.
+            if force:
+                self.Log(f'A TD env context Embody does not own sits at '
+                         f'{project_dir} -- left untouched. Remove or '
+                         f'repair it to hand the pre-cook link to Embody.',
+                         'INFO')
+            return
+        if status == 'ok':
+            return
+        if status == 'absent' and not force:
+            manifest = mod.embody_git.load_install_manifest(self, root)
+            if (self._manifestRelPath(root, ctx_path)
+                    in manifest.get('files_created', [])):
+                return  # user deleted it -- InitEnvoy re-asserts
+
+        def _write():
+            # refresh: surgical pythonVersion update so TD/palette-written
+            # keys (extraPaths, ...) survive a TD-python bump.
+            (pyenv.refresh_td_context if status == 'refresh'
+             else pyenv.write_td_context)(project_dir, spec['python_tag'])
+            self._manifestRecordCreatedFile(root, ctx_path)
+            # Anchored ignore entry ('/x' at root, 'dev/x' in a subdir) so
+            # FOREIGN contexts elsewhere in the repo stay commit-able.
+            rel = self._manifestRelPath(root, ctx_path)
+            if not os.path.isabs(rel) and os.path.exists(
+                    os.path.join(root, '.git')):
+                entry = rel if '/' in rel else '/' + rel
+                mod.embody_git.ensure_gitignore_entry(self, root, entry)
+            self.Log(f'TD pre-cook venv context written: {ctx_path}')
+
+        action = (f'{"refresh" if status == "refresh" else "write"} '
+                  f'{pyenv.TD_CONTEXT_FILENAME} in {project_dir} '
+                  f'(TouchDesigner pre-cook venv link)')
+        details = [ctx_path,
+                   f'{root}/.gitignore (anchored ignore entry, if missing)']
+        prior = self._startup_config_pass
+        self._startup_config_pass = prior or startup
+        try:
+            self._guardFileWrite('Python env', action, details, _write)
+        finally:
+            self._startup_config_pass = prior
+
     def _initPythonEnv(self):
         """Wire an existing healthy venv at extension init (2026-08-19).
 
@@ -852,6 +938,11 @@ class EmbodyExt:
                     self.Log(notice[1], notice[0])
             except Exception:
                 pass
+        # TD's pre-cook context is ensured off the init path (after the
+        # frame-30/45/60 restore phases) -- it only helps the NEXT launch,
+        # and deferring keeps any Advanced-mode consent off frame 0.
+        run('args[0]._ensurePyEnvContext(startup=True)', self,
+            delayFrames=90)
         # A replaced instance may have a worker mid-install: adopt its
         # result instead of orphaning it (reinit is routine here --
         # source DATs hot-sync). The sys-level result slot makes the
@@ -2771,6 +2862,10 @@ class EmbodyExt:
         """Record that Embody CREATED the venv -- see embody_git."""
         return mod.embody_git.manifest_record_venv(self, target_dir, venv_path)
 
+    def _manifestUnrecordCreatedFile(self, target_dir, path):
+        """Forget a files_created record (Embody removed the file itself) -- see embody_git."""
+        return mod.embody_git.manifest_unrecord_created_file(self, target_dir, path)
+
     def _manifestRecordGitConfig(self, target_dir, keys):
         """Record git config keys Embody set -- see embody_git."""
         return mod.embody_git.manifest_record_git_config(self, target_dir, keys)
@@ -2916,6 +3011,21 @@ class EmbodyExt:
 
         migrations = []
 
+        # Migration 0: blank legacy 'dirty' cells ONCE (2026-08-20).
+        # Dirty is runtime-only now; the column stays for schema compat
+        # but persisted values are legacy churn. One normalization write,
+        # then the tsv never changes from dirty flips again.
+        if 'dirty' in headers:
+            blanked = 0
+            for i in range(1, table.numRows):
+                if str(self._cellVal(i, 'dirty') or ''):
+                    table[i, 'dirty'] = ''
+                    blanked += 1
+            if blanked:
+                migrations.append(
+                    f'blanked {blanked} legacy dirty cell(s) '
+                    f'(dirty state is runtime-only now)')
+
         # Migration 1: Add strategy column (v5.0.176+)
         if 'strategy' not in headers:
             type_idx = headers.index('type') if 'type' in headers else 1
@@ -2965,7 +3075,7 @@ class EmbodyExt:
             migrations.append('node_x/node_y/node_color columns')
 
         if migrations:
-            self.Log(f'Schema migration: added {", ".join(migrations)}', 'SUCCESS')
+            self.Log(f'Schema migration: {", ".join(migrations)}', 'SUCCESS')
 
     @staticmethod
     def _resolveOsLabel(os_name: str, os_version: str, win_build) -> str:
@@ -3181,11 +3291,11 @@ class EmbodyExt:
         """Quiet upgrade-path validation of tracked operators.
 
         Non-destructive by contract: deletes nothing, clears no rows,
-        never touches Status synchronously. Clears Embody's own
-        externaltox (a dragged-in .tox points at its drag source -- a
-        later save would overwrite that release file), then defers
-        UpdateHandler(), whose Update() validates every tracked row and
-        re-exports only the genuinely dirty.
+        never touches Status synchronously, and WRITES NO CONTENT --
+        save_dirty=False keeps the deferred Update() to membership/tag
+        reconciliation. The self-update's post-apply sweep used to flush
+        every user-dirty externalization to disk (field 2026-08-19: an
+        auto-update saved 4 toxes the user never chose to save).
         """
         table = self.Externalizations
         count = table.numRows - 1 if table else 0
@@ -3193,7 +3303,8 @@ class EmbodyExt:
             f'{count} externalized operator(s) found -- '
             'validating tracked operators', 'INFO')
         self.my.par.externaltox = ''
-        run(f"op('{self.my}').UpdateHandler()", delayFrames=10)
+        run(f"op('{self.my}').UpdateHandler(save_dirty=False)",
+            delayFrames=10)
 
     # ==========================================================================
     # SAFE FILE TRACKING
@@ -3460,8 +3571,12 @@ class EmbodyExt:
         elif choice == 2:
             self.Disable(self.ExternalizationsFolder, True)
 
-    def UpdateHandler(self) -> None:
-        """Enable/Update handler - main entry point for initialization."""
+    def UpdateHandler(self, save_dirty: bool = True) -> None:
+        """Enable/Update handler - main entry point for initialization.
+
+        save_dirty=False (the upgrade-path validation) reconciles
+        membership and tags without writing dirty content -- see
+        _validateTrackedOperators."""
         if self.my.par.Status == 'Disabled':
             self.Log("Enabled", "SUCCESS")
             self.my.par.Status = 'Enabled'
@@ -3487,7 +3602,7 @@ class EmbodyExt:
         # parameters based on Off / Export / Full).
         self._applyTdnModeGating()
 
-        run(f"op('{self.my}').Update()", delayFrames=1)
+        run(f"op('{self.my}').Update(save_dirty={save_dirty})", delayFrames=1)
 
     def normalizeAllPaths(self) -> None:
         """Normalize all paths in table and on operators for cross-platform support."""
@@ -3518,13 +3633,18 @@ class EmbodyExt:
     # MAIN UPDATE LOOP
     # ==========================================================================
 
-    def Update(self, suppress_refresh: bool = False) -> None:
+    def Update(self, suppress_refresh: bool = False,
+               save_dirty: bool = True) -> None:
         """Main update method - process additions, subtractions, and dirty ops.
 
         Args:
             suppress_refresh: If True, skip the delayed Refresh pulse. Used by
                 onProjectPreSave() to prevent the continuity check from firing
                 during the TDN strip/restore window.
+            save_dirty: False = membership/tag reconciliation only; dirty
+                COMPs are flagged, never written. The upgrade-path
+                validation uses it -- an update must not save content the
+                user did not choose to save (field 2026-08-19).
         """
         # Skip ONLY when Embody is explicitly Disabled. Status takes other
         # transient values during normal operation -- 'Scanning defaults (X/N)'
@@ -3566,8 +3686,9 @@ class EmbodyExt:
         # Check for parameter changes on TOX-strategy COMPs
         for comp in self.getExternalizedOps(COMP, strategy='tox'):
             if self.param_tracker.compareParameters(comp):
-                self.Externalizations[comp.path, 'dirty'] = 'Par'
-                self.Save(comp.path)
+                self._setDirtyState(comp.path, 'Par')
+                if save_dirty:
+                    self.Save(comp.path)
 
         # TDN-strategy COMP dirty detection + export is handled once, below,
         # by dirtyHandler(True) -- a single fingerprint sweep per Refresh that
@@ -3641,7 +3762,7 @@ class EmbodyExt:
                 self.handleSubtraction(oper)
 
             # Handle dirty COMPs (TOX + TDN)
-            dirties = self.dirtyHandler(True)
+            dirties = self.dirtyHandler(save_dirty)
         finally:
             self.my.ext.TDN.FlushLockedWarnBatch()
 
@@ -3991,7 +4112,7 @@ class EmbodyExt:
             self.param_tracker.updateParamStore(oper)
             # build/touch_build (from above) + timestamp + dirty in ONE write.
             row_changes['timestamp'] = timestamp
-            row_changes['dirty'] = False
+            self._setDirtyState(opPath, '')
             # Position/color merges into the SAME write -- see _positionCells.
             row_changes.update(self._positionCells(oper))
             self._updateRowCells(opPath, row_changes, strategy='tox')
@@ -4098,8 +4219,9 @@ class EmbodyExt:
             if result.get('success'):
                 timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
                 self.param_tracker.updateParamStore(oper)
-                # timestamp + dirty + position in ONE row write.
-                tdn_changes = {'timestamp': timestamp, 'dirty': ''}
+                # timestamp + position in ONE row write; dirty is runtime.
+                self._setDirtyState(opPath, '')
+                tdn_changes = {'timestamp': timestamp}
                 tdn_changes.update(self._positionCells(oper))
                 self._updateRowCells(opPath, tdn_changes, strategy='tdn')
                 # Snapshot the network structure so _isTDNDirty returns False
@@ -4155,9 +4277,9 @@ class EmbodyExt:
             # recovery restores the boundary's own node_x/y/color from the
             # TABLE (not the .tdn) -- a moved or recolored COMP would otherwise
             # come back at stale coordinates.
+            self._setDirtyState(opPath, '')
             cp_changes = {
                 'timestamp': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
-                'dirty': '',
             }
             cp_changes.update(self._positionCells(oper))
             self._updateRowCells(opPath, cp_changes, strategy='tdn')
@@ -5853,6 +5975,58 @@ class EmbodyExt:
         """Kick off an ASYNC git-uncommitted scan on a worker thread -- see embody_git."""
         return mod.embody_git.update_git_status(self)
 
+    # Dirty state is RUNTIME-ONLY (field 2026-08-20: persisting it made
+    # every refresh sweep churn the committed tsv, so one save read as a
+    # multi-file git event). The tsv keeps a blank 'dirty' column for
+    # schema compatibility; _migrateTableSchema blanks legacy values once.
+    # Keys are op paths; stale keys after a delete/rename are harmless --
+    # readers walk table rows, and the next sweep re-derives.
+    def _setDirtyState(self, path: str, value) -> None:
+        states = self._dirtyStates()
+        text = ('' if value in (None, False, '', 'False')
+                else ('True' if value is True else str(value)))
+        if text:
+            states[str(path)] = text
+        else:
+            states.pop(str(path), None)
+        # Worker-readable mirror {op_path: repo-relative file} in a sys
+        # slot (reload-proof, like sys._embody_pyenv_*): EnvoyExt's
+        # preflight runs on the worker thread and may not touch TD
+        # objects, so the repo-relative path is resolved HERE, on the
+        # main thread. Total -- a mirror failure must never break a sweep.
+        try:
+            mirror = getattr(sys, '_embody_dirty_files', None)
+            if mirror is None:
+                mirror = sys._embody_dirty_files = {}
+            if text:
+                rel = self.normalizePath(
+                    self._cellVal(str(path), 'rel_file_path') or '')
+                if rel:
+                    prefix = os.path.relpath(
+                        project.folder,
+                        str(self._findProjectRoot())).replace('\\', '/')
+                    mirror[str(path)] = (
+                        rel if prefix == '.' else prefix + '/' + rel)
+            else:
+                mirror.pop(str(path), None)
+        except Exception:
+            pass
+
+    def _dirtyStates(self) -> dict:
+        """The dirty-state dict, ownerComp-storage-backed like
+        _tdn_fingerprints: an instance dict is wiped by every extension
+        reinit, and the next sweep would adopt unsaved 'Par' changes as
+        clean (the 2026-07-20 fingerprint incident class)."""
+        states = self.my.fetch('_dirty_states', None, search=False)
+        if states is None:
+            states = {}
+            self.my.store('_dirty_states', states)
+        return states
+
+    def DirtyState(self, path: str) -> str:
+        """Runtime dirty flag for a tracked op: '' | 'True' | 'Par'."""
+        return self._dirtyStates().get(str(path), '')
+
     def dirtyHandler(self, update: bool) -> list[str]:
         """Check and optionally update dirty COMPs (both TOX and TDN)."""
         updates = []
@@ -5864,8 +6038,8 @@ class EmbodyExt:
                 # Preserve 'Par' dirty state when oper.dirty is False --
                 # parameter changes are tracked independently from TD's
                 # native dirty flag and should only be cleared on Save.
-                if dirty or self._cellVal(oper.path, 'dirty') != 'Par':
-                    self.Externalizations[oper.path, 'dirty'] = dirty
+                if dirty or self.DirtyState(oper.path) != 'Par':
+                    self._setDirtyState(oper.path, dirty)
             except Exception as e:
                 self.Log(f"Failed to update dirty state for {oper.path}: {e}", "DEBUG")
             if dirty and update:
@@ -5892,17 +6066,7 @@ class EmbodyExt:
                 if oper.path == '/' or exclude_tag in oper.tags:
                     continue
                 dirty = self._isTDNDirty(oper, tdn_paths, exclude_tag)
-                try:
-                    if dirty:
-                        self.Externalizations[oper.path, 'dirty'] = 'True'
-                    elif self._cellVal(oper.path, 'dirty'):
-                        # Clean now -- clear any stale dirty flag left by a
-                        # prior scan (e.g. an edit that was reverted). Without
-                        # this the indicator sticks on 'True'/'Par' until a
-                        # real SaveTDN runs.
-                        self.Externalizations[oper.path, 'dirty'] = ''
-                except Exception as e:
-                    self.Log(f"Failed to update dirty state for {oper.path}: {e}", "DEBUG")
+                self._setDirtyState(oper.path, 'True' if dirty else '')
                 if dirty and update:
                     if self.SaveTDN(oper.path):
                         updates.append(oper.path)
@@ -5937,8 +6101,8 @@ class EmbodyExt:
             try:
                 # Preserve 'Par' dirty state when oper.dirty is False -- see
                 # dirtyHandler; parameter changes clear only on Save.
-                if dirty or self._cellVal(oper.path, 'dirty') != 'Par':
-                    self.Externalizations[oper.path, 'dirty'] = dirty
+                if dirty or self.DirtyState(oper.path) != 'Par':
+                    self._setDirtyState(oper.path, dirty)
             except Exception as e:
                 self.Log(f"Failed to update dirty state for {oper.path}: {e}",
                          "DEBUG")
@@ -6012,11 +6176,7 @@ class EmbodyExt:
             # A detached callback must not be able to fail silently.
             try:
                 dirty = self._isTDNDirty(oper, tdn_paths, exclude_tag)
-                if dirty:
-                    self.Externalizations[oper.path, 'dirty'] = 'True'
-                elif self._cellVal(oper.path, 'dirty'):
-                    # Clean now -- clear a stale flag left by a prior scan.
-                    self.Externalizations[oper.path, 'dirty'] = ''
+                self._setDirtyState(oper.path, 'True' if dirty else '')
             except Exception as e:
                 self.Log(f"Dirty scan failed for {oper.path}: {e}", "WARNING")
             # Always finish the COMP in hand: a single fingerprint is not
@@ -6101,7 +6261,7 @@ class EmbodyExt:
             
             if oper.family == 'COMP' and self.param_tracker.compareParameters(oper):
                 param_changes.append(oper.path)
-                self.Externalizations[oper.path, 'dirty'] = 'Par'
+                self._setDirtyState(oper.path, 'Par')
 
         if param_changes:
             plural = 's' if len(param_changes) > 1 else ''
@@ -6337,7 +6497,13 @@ class EmbodyExt:
 
     def _addToTable(self, oper, rel_file_path, timestamp, dirty,
                      build_num, touch_build, strategy: str = ''):
-        """Add or update operator entry in externalizations table."""
+        """Add or update operator entry in externalizations table.
+
+        The dirty ARG is accepted for caller compatibility but routed to
+        the runtime store -- the tsv's dirty column stays blank by
+        contract (runtime-only since 2026-08-20)."""
+        self._setDirtyState(oper.path, dirty)
+        dirty = ''
         normalized_path = self.normalizePath(rel_file_path)
 
         has_strategy_col = self.Externalizations[0, 'strategy'] is not None
@@ -11579,11 +11745,11 @@ class EmbodyExt:
         falling back to the cached 'Par' table value for parameter changes.
 
         For TDN-strategy COMPs, oper.dirty is ALWAYS True (their externaltox is
-        empty), so it is meaningless -- the fingerprint-derived 'dirty' value
-        maintained in the table by dirtyHandler is authoritative. Using
+        empty), so it is meaningless -- the fingerprint-derived runtime
+        DirtyState maintained by dirtyHandler is authoritative. Using
         oper.dirty here counted every clean TDN COMP as dirty.
 
-        For DATs and missing operators, uses the cached table value.
+        For DATs and missing operators, uses the runtime DirtyState.
         """
         if self._performMode:
             return 0
@@ -11594,7 +11760,7 @@ class EmbodyExt:
         for i in range(1, table.numRows):
             op_path = str(self._cellVal(i, 'path'))
             oper = op(op_path)
-            val = str(self._cellVal(i, 'dirty'))
+            val = self.DirtyState(op_path)
             if oper and oper.valid and oper.family == 'COMP':
                 # TDN COMPs: oper.dirty is always True -- trust the table.
                 if self._cellVal(i, 'strategy') == 'tdn':

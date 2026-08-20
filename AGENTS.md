@@ -91,7 +91,9 @@ op.Embody.ext.Envoy.Start()
 ## Third-Party Python Packages
 
 The project shares Embody's uv-managed venv (`.venv/` beside the .toe); its
-site-packages is importable from any DAT or extension once Embody initializes.
+site-packages is importable from any DAT or extension — wired pre-cook via
+TD's `TDPyEnvManagerContext.yaml` (Embody authors it) so even module-level
+extension imports work on a cold open, with Embody's init as the fallback.
 To add a package, ASK THE USER FIRST (installs execute code and persist across
 sessions), then call `op.Embody.InstallPackages(['pkg>=1.0'])` via
 `execute_python` — it accepts plain name-based requirements only (never URLs,

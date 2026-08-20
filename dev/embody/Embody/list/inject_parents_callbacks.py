@@ -35,6 +35,10 @@ def onCook(scriptOp):
 	for i in range(1, inp.numRows):
 		row = {h: inp[i, j].val for j, h in enumerate(in_headers)}
 		path = row['path']
+		# Dirty is runtime-only (2026-08-20): the tsv column is blank by
+		# contract, so overlay the live state here -- every downstream
+		# read (filters, strategy_state) keys off row['dirty'].
+		row['dirty'] = parent.Embody.ext.Embody.DirtyState(path)
 		data_rows[path] = row
 		oper = op(path)
 		if oper and oper.family == 'COMP':

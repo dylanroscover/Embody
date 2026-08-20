@@ -174,7 +174,10 @@ class TestTDNDirtyState(EmbodyTestCase):
     def test_dirtyHandler_clears_stale_dirty_when_clean(self):
         comp = self.sandbox.create(baseCOMP, 'revert_comp')
         comp.create(constantCHOP, 'c')
-        t = self._tdn_table(comp.path, dirty='True')  # stale 'dirty' from a prior scan
+        t = self._tdn_table(comp.path)
+        # Stale runtime flag from a prior scan (dirty is runtime-only
+        # since 2026-08-20; the tsv column stays blank by contract).
+        self.embody_ext._setDirtyState(comp.path, 'True')
         self.embody.par.Tdnmode = 'full'
         # Prime the baseline so the live network reads CLEAN (matches baseline).
         self.embody_ext._storeTDNFingerprint(comp)
@@ -182,9 +185,12 @@ class TestTDNDirtyState(EmbodyTestCase):
         # Passive scan: the COMP is clean now, so the stale flag must clear.
         self.embody_ext.dirtyHandler(False)
         self.assertEqual(
-            t[comp.path, 'dirty'].val, '',
+            self.embody_ext.DirtyState(comp.path), '',
             'A clean TDN COMP must have its stale dirty flag cleared by the '
             'passive scan (otherwise the indicator sticks after a revert)')
+        self.assertEqual(
+            t[comp.path, 'dirty'].val, '',
+            'the tsv dirty cell must stay blank -- dirty never persists')
 
     def test_dirtyHandler_marks_dirty_when_changed(self):
         comp = self.sandbox.create(baseCOMP, 'change_comp')
@@ -197,36 +203,80 @@ class TestTDNDirtyState(EmbodyTestCase):
         comp.create(constantCHOP, 'c2')
         self.embody_ext.dirtyHandler(False)
         self.assertEqual(
-            t[comp.path, 'dirty'].val, 'True',
+            self.embody_ext.DirtyState(comp.path), 'True',
             'A structurally changed TDN COMP must be flagged dirty')
+        self.assertEqual(
+            t[comp.path, 'dirty'].val, '',
+            'the tsv dirty cell must stay blank -- dirty never persists')
 
-    # --- Fix #4: DirtyCount trusts the table for TDN COMPs, not oper.dirty ---
+    # --- Fix #4: DirtyCount trusts the runtime state for TDN COMPs, not
+    # oper.dirty (state moved from the tsv to DirtyState, 2026-08-20) ---
 
     def test_DirtyCount_clean_tdn_comp_not_counted(self):
         comp = self.sandbox.create(baseCOMP, 'count_clean')
         comp.create(constantCHOP, 'c')
-        self._tdn_table(comp.path, dirty='')
+        self._tdn_table(comp.path)
+        self.embody_ext._setDirtyState(comp.path, '')
         self.assertEqual(
             self.embody_ext.DirtyCount(), 0,
-            'A clean TDN COMP (table dirty="") must NOT be counted')
+            'A clean TDN COMP (DirtyState "") must NOT be counted')
 
-    def test_DirtyCount_counts_dirty_tdn_comp_from_table(self):
-        # The decisive case: the table says 'True' while live oper.dirty is
-        # False. The OLD DirtyCount counted COMPs only via oper.dirty or a
-        # 'Par' table value, so it MISSED a 'True' TDN row (and, in real use
-        # where oper.dirty is always True for TDN COMPs, OVER-counted clean
-        # ones). The strategy-aware branch reads the table value for TDN COMPs
-        # regardless of oper.dirty.
+    def test_DirtyCount_counts_dirty_tdn_comp_from_runtime(self):
+        # The decisive case: the runtime state says 'True' while live
+        # oper.dirty is False. DirtyCount must read DirtyState for TDN
+        # COMPs regardless of oper.dirty (which is always True for real
+        # TDN COMPs and would over-count clean ones).
         comp = self.sandbox.create(baseCOMP, 'count_dirty')
         comp.create(constantCHOP, 'c')
         self.assertFalse(comp.dirty,
             'precondition: synthetic sandbox COMP reads oper.dirty=False, so '
-            'only the table-driven branch can produce a nonzero count here')
-        self._tdn_table(comp.path, dirty='True')
-        self.assertEqual(
-            self.embody_ext.DirtyCount(), 1,
-            'A TDN COMP flagged dirty in the table must be counted even when '
-            'live oper.dirty is False')
+            'only the runtime-driven branch can produce a nonzero count here')
+        self._tdn_table(comp.path)
+        self.embody_ext._setDirtyState(comp.path, 'True')
+        try:
+            self.assertEqual(
+                self.embody_ext.DirtyCount(), 1,
+                'A TDN COMP flagged dirty at runtime must be counted even '
+                'when live oper.dirty is False')
+        finally:
+            self.embody_ext._setDirtyState(comp.path, '')
+
+
+class TestDirtyNeverPersists(EmbodyTestCase):
+    """THE FIELD COMPLAINT (2026-08-20, node-pa-td): every refresh sweep
+    rewrote the committed tsv's dirty column, so one targeted save read
+    in git as a multi-file event. Dirty is runtime-only now: the tsv
+    changes when externalizations are added/removed or actually saved --
+    never from a dirty flip."""
+
+    def test_dirty_sweep_never_touches_the_tsv_file(self):
+        import os
+        ext = self.embody_ext
+        comp = self.sandbox.create(baseCOMP, 'probe_nochurn')
+        try:
+            ext.applyTagToOperator(comp, self.embody.par.Toxtag.val)
+            ext.handleAddition(comp)
+            tsv = str(ext.buildAbsolutePath('embody/externalizations.tsv'))
+            self.assertTrue(os.path.isfile(tsv))
+            comp.create(textDAT, 'dirt')
+            # Sandbox COMPs never raise oper.dirty (see the DirtyCount
+            # precondition above), so drive the flip directly -- the
+            # property under test is the FILE contract, not detection.
+            ext._setDirtyState(comp.path, 'True')
+            m0 = os.path.getmtime(tsv)
+
+            ext.dirtyHandler(False)
+            ext.updateDirtyStates(ext.ExternalizationsFolder)
+
+            self.assertEqual(
+                os.path.getmtime(tsv), m0,
+                'a dirty flip must not rewrite the committed tsv')
+            self.assertEqual(
+                str(ext.Externalizations[comp.path, 'dirty']), '',
+                'the tsv dirty cell stays blank by contract')
+        finally:
+            self.embody.op('envoy_ops').module.remove_externalization_tag(
+                self.embody.ext.Envoy, comp.path, delete_file=True)
 
 
 class TestTDNFingerprintPersistence(EmbodyTestCase):

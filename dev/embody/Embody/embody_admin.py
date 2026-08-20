@@ -152,6 +152,18 @@ def compute_uninstall_plan(ext, target_dir=None):
             _add('review', p,
                  why='created by Embody but may hold your permission edits -- kept')
             continue
+        if p.name == mod.embody_pyenv.TD_CONTEXT_FILENAME:
+            # No marker survives TD's rewrite of this file (yaml.safe_dump
+            # strips comments) -- classify semantically instead (2026-08-20).
+            if mod.embody_pyenv.classify_td_context(
+                    str(p.parent), str(p.parent / '.venv')) == 'ours':
+                _add('delete', p, kind='file',
+                     why='TD pre-cook venv context authored by Embody')
+            else:
+                _add('review', p,
+                     why='recorded by Embody but no longer points at its '
+                         '.venv -- kept')
+            continue
         _classify_into(p)
 
     for e in m.get('files_appended', []):

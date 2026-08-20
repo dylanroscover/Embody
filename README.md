@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.259-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.260-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-63-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -176,7 +176,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **129 test suites** (3,880 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **131 test suites** (4,105 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -207,6 +207,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.260**: **Module-level venv imports survive a cold open** -- Embody authors TouchDesigner's pre-cook venv context (`TDPyEnvManagerContext.yaml` beside the `.toe`), so `.venv` is on `sys.path` before any COMP cooks and an extension that constructs before Embody can still `import` its packages (foreign contexts are never touched, deleting the file opts out, uninstall reverses it, and the wizard's footprint step discloses it); self-update validation no longer flushes dirty toxes to disk (dirty state is runtime-only now); Convoy's "Allow TD Python" gate no longer flips off on save (deviation-based reconcile replaces the voided projection flag).
 - **6.0.259**: **Fleet Convoy triage: remote launch fixed everywhere, ghost rows self-clean, names can't mask machines** -- registration claimed `sys.executable` (TouchDesigner's bundled `python.exe`), so the host app's process probe refused every launch profile `runtime_unverifiable` and no node anywhere was remotely launchable (registration now claims the probed process image, and the heartbeat audit spam that came with it -- ~5,700 lines/day/node -- logs on transitions only); short-lived ghost rows retire after an hour of silence instead of 30 days; foreign name stamps heal regardless of project name and the node list prefixes the live hostname whenever a name omits it; enabling Convoy shows `Installing...` instead of holding `Disabled`, and Last Seen reads `Never` instead of `Unavailable`.
 - **6.0.257**: **Supervisor-managed fleets are first-class** -- the Convoy host app installs from supervisor-launched TouchDesigner (an inherited stdin killed every spawn with `WinError 50` before any interpreter ran; children now get an explicit NUL stdin, and a genuine OS refusal reports session/Job forensics), nodes re-register deterministically at every project open (lazy extension construction left supervisor-relaunched nodes `Disabled` until someone opened the Convoy page), a repo that deliberately ignores `.embody/project.json` keeps that choice (per `git check-ignore`, with a logged warning that the realm id is now per-machine), fleets update Embody remotely with `update_embody`/`convoy_update_embody` (sha256-pinned manifest, downgrade/build-floor refusals, no TD Python grant), and the per-project `.venv` becomes a public, documented Python environment (`embody_pyenv`, extras, in-TD `sys.path` wiring).
 - **6.0.254**: **A deployed .toe showed the authoring machine's hostname as its Convoy Node Name** -- the automatic `hostname / toe-stem` fill persists as a constant inside the .toe and travels with it; a baked stamp whose host half is another machine but whose project half matches this project now heals to the local hostname on open, while deliberate names are never touched (Embody-written exports were already scrubbed -- the project file itself was the carrier).

@@ -1698,7 +1698,8 @@ def _record_extras_outcome(spec: dict, result: dict) -> None:
 
 
 # ==========================================================================
-# tdPyEnvManager co-existence detection (read-only, warn-don't-mutate)
+# tdPyEnvManager co-existence detection (read-only, warn-don't-mutate --
+# Embody's OWN context authoring lives in the section below)
 # ==========================================================================
 
 def detect_tdpyenvmanager(project_root, venv_dir, app_obj=None,
@@ -1708,8 +1709,10 @@ def detect_tdpyenvmanager(project_root, venv_dir, app_obj=None,
     ``app_obj`` is TD's ``app`` global, passed by the main-thread facade
     (TD constructs app.pyEnvHelper in every session and links any context
     file found in cwd BEFORE any COMP cooks). Returns
-    {'present': bool, 'kind': 'none'|'same_venv'|'different_env'|'conda',
-     'env_path': str|None, 'context_files': [...]}.
+    {'present': bool, 'kind': 'none'|'ours_linked'|'ours_unlinked'|
+     'same_venv'|'different_env'|'conda', 'env_path': str|None,
+     'context_files': [...]} -- the ours_* kinds mean every context found
+    is Embody's own (see classify_td_context below).
     """
     finding = {'present': False, 'kind': 'none', 'env_path': None,
                'context_files': []}
@@ -1769,18 +1772,31 @@ def detect_tdpyenvmanager(project_root, venv_dir, app_obj=None,
         return finding
     finding['present'] = True
     finding['env_path'] = env_path
+    # 'ours' only when EVERY context found is Embody's own -- a coexisting
+    # foreign file keeps the loud different_env warning.
+    owned = bool(finding['context_files']) and all(
+        p.endswith(TD_CONTEXT_FILENAME)
+        and classify_td_context(os.path.dirname(p), venv_dir) == 'ours'
+        for p in finding['context_files'])
     if conda:
         finding['kind'] = 'conda'
     elif env_path:
         same = (os.path.normcase(os.path.normpath(env_path))
                 == os.path.normcase(os.path.normpath(str(venv_dir or ''))))
-        finding['kind'] = 'same_venv' if same else 'different_env'
+        if same:
+            # Embody's own context linked = the healthy expected state
+            # (silent); a user-authored context on .venv keeps its INFO.
+            finding['kind'] = 'ours_linked' if owned else 'same_venv'
+        else:
+            finding['kind'] = 'different_env'
     else:
         # Context file exists but nothing is linked (or the helper is
         # unreadable) -- still worth a note: active:false does NOT stop
         # tdPyEnvManager's startup link (verified against the shipped
         # helper source, 2026-08-19), so a stale context keeps acting.
-        finding['kind'] = 'different_env'
+        # Embody's own unlinked context gets its own diagnostic (see
+        # tdpyenvmanager_notice).
+        finding['kind'] = 'ours_unlinked' if owned else 'different_env'
     return finding
 
 
@@ -1789,6 +1805,8 @@ def tdpyenvmanager_notice(finding: dict) -> 'tuple | None':
     if not finding.get('present'):
         return None
     kind = finding.get('kind')
+    if kind == 'ours_linked':
+        return None  # Embody's own pre-cook link, healthy -- silence
     if kind == 'same_venv':
         return ('INFO', (
             'tdPyEnvManager is active on this project and points at '
@@ -1801,6 +1819,15 @@ def tdpyenvmanager_notice(finding: dict) -> 'tuple | None':
             'sit on sys.path, and name collisions resolve unpredictably. '
             'Conda stays under tdPyEnvManager\'s control -- Embody will '
             'not convert or touch it.'))
+    if kind == 'ours_unlinked':
+        return ('WARNING', (
+            'Embody\'s TD pre-cook venv context exists but TouchDesigner '
+            'did not link it this session -- module-level venv imports in '
+            'other extensions fall back to Embody\'s later wiring. Check '
+            'TDLogs/TDPyEnvManagerHelper_<pid>.log: it only exists when '
+            'the link was REFUSED; if it is absent, TD\'s working '
+            f'directory at launch (now {os.getcwd()}) was not the '
+            'context\'s folder, so the helper never saw the file.'))
     env_path = finding.get('env_path') or 'unknown'
     return ('WARNING', (
         f'tdPyEnvManager is linked to a DIFFERENT environment '
@@ -1812,3 +1839,177 @@ def tdpyenvmanager_notice(finding: dict) -> 'tuple | None':
         f'(op.Embody.InstallPackages). Note: setting active:false in its '
         f'context file does NOT stop the startup link -- remove the '
         f'context file to fully hand off.'))
+
+
+# ==========================================================================
+# TD pre-cook venv context authoring (TDPyEnvManagerContext.yaml)
+# ==========================================================================
+# TD's app.pyEnvHelper links the context found in the process CWD BEFORE any
+# COMP cooks; TD chdirs to the .toe folder at launch (verified live
+# 2026-08-20), so a context in project.folder covers every launch surface.
+# This closes the cold-open race the extension-time wiring cannot: a sibling
+# extension's module-level venv import constructing before Embody (the
+# node-pa-td outage, docs/reports/feature-td-pyenv-context.md). envPath in
+# the file is IGNORED by TD -- it recomputes from envName + installPath,
+# both CWD-relative -- so the content is machine-independent and gitignored.
+# Stance: write only when no context exists or the existing one is already
+# ours; a foreign context is NEVER touched (EmbodyExt._ensurePyEnvContext
+# owns the gating: guard, manifest tombstone, gitignore entry).
+
+TD_CONTEXT_FILENAME = 'TDPyEnvManagerContext.yaml'
+
+
+def render_td_context(python_tag) -> str:
+    """The minimal context TD needs to link <cwd>/.venv pre-cook.
+    Hand-rolled ASCII YAML: stable key order, no yaml import (this module
+    bootstraps the venv that carries PyYAML). autoSetup stays false --
+    Embody owns provisioning; TD's auto-setup must never race it."""
+    return (
+        'contextVersion: 2\n'
+        'mode: Python vEnv\n'
+        'envName: .venv\n'
+        'installPath: .\n'
+        f"pythonVersion: '{python_tag}'\n"
+        'autoSetup: false\n'
+    )
+
+
+def _td_context_value(text, key) -> 'str | None':
+    """One TOP-LEVEL scalar from context YAML/TOML text, quotes stripped.
+    Regex, not yaml/toml -- neither parser may be wired at extension-init
+    time. Column-0 anchor: an indented duplicate under a nested mapping
+    must never shadow the real key (that flipped foreign to ours in
+    review, 2026-08-20)."""
+    m = re.search(rf'(?m)^{key}\s*[:=]\s*(.+?)\s*$', text)
+    if not m:
+        return None
+    v = m.group(1).strip()
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in ('"', "'"):
+        v = v[1:-1]
+    return v
+
+
+def classify_td_context(context_dir, venv_dir) -> str:
+    """Ownership verdict for the TD env context in ``context_dir``:
+    'absent', 'ours' (a Python-vEnv context resolving to ``venv_dir``), or
+    'foreign' (pyproject section, legacy JSON, conda, another env, or
+    unreadable -- all hands-off). Mirrors the shipped helper's resolution:
+    pyproject wins the precedence, an envName carrying a path separator is
+    a path of its own, and relative paths resolve against the context's
+    directory (= TD's CWD at load time)."""
+    d = str(context_dir or '')
+    try:
+        py = os.path.join(d, 'pyproject.toml')
+        if os.path.isfile(py):
+            with open(py, 'r', encoding='utf-8', errors='replace') as f:
+                # Bare-name substring: the helper LOADS via tomllib, which
+                # also accepts the inline-table spelling its own section
+                # regex misses. Over-matching fails safe (hands-off).
+                if 'TDPyEnvManagerContext' in f.read():
+                    return 'foreign'
+    except OSError:
+        pass
+    yaml_path = os.path.join(d, TD_CONTEXT_FILENAME)
+    if not os.path.isfile(yaml_path):
+        # Legacy JSON matters only when no yaml exists -- the helper
+        # migrates/reads it ONLY then (postInit:106), so a stray JSON
+        # beside Embody's yaml must not orphan the live context.
+        if os.path.isfile(os.path.join(d, 'TDPyEnvManagerContext.json')):
+            return 'foreign'
+        return 'absent'
+    try:
+        with open(yaml_path, 'r', encoding='utf-8', errors='replace') as f:
+            text = f.read()
+    except OSError:
+        return 'foreign'
+    mode = _td_context_value(text, 'mode')
+    # Missing/null mode = the helper's vEnv default (linkEnv treats any
+    # non-'Conda Env' mode as vEnv; TD can write-back 'mode: null').
+    if mode is not None and mode.lower() not in ('python venv', 'null',
+                                                 '~', ''):
+        return 'foreign'
+    env_name = _td_context_value(text, 'envName')
+    if not env_name:
+        return 'foreign'
+    if os.path.isabs(env_name) or '/' in env_name or '\\' in env_name:
+        env_path = env_name if os.path.isabs(env_name) \
+            else os.path.join(d, env_name)
+    else:
+        install = _td_context_value(text, 'installPath') or '.'
+        root = install if os.path.isabs(install) else os.path.join(d, install)
+        env_path = os.path.join(root, env_name)
+    same = (os.path.normcase(os.path.normpath(env_path))
+            == os.path.normcase(os.path.normpath(str(venv_dir or ''))))
+    return 'ours' if same else 'foreign'
+
+
+def td_context_status(project_dir, venv_dir, python_tag) -> str:
+    """Ensure-step verdict: 'foreign' (never touch), 'ok' (ours, current),
+    'refresh' (ours but pythonVersion drifted -- the posix site-packages
+    path derives from it), or 'absent'."""
+    kind = classify_td_context(project_dir, venv_dir)
+    if kind != 'ours':
+        return kind
+    try:
+        with open(os.path.join(project_dir, TD_CONTEXT_FILENAME), 'r',
+                  encoding='utf-8', errors='replace') as f:
+            text = f.read()
+    except OSError:
+        return 'refresh'
+    current = _td_context_value(text, 'pythonVersion') == str(python_tag)
+    return 'ok' if current else 'refresh'
+
+
+def write_td_context(project_dir, python_tag) -> str:
+    """Serialize Embody's context file (atomic: tmp + os.replace, so a
+    crash mid-write cannot strand a half-file classify calls foreign);
+    returns its path. The caller owns every gate (classify / guard /
+    tombstone)."""
+    path = os.path.join(project_dir, TD_CONTEXT_FILENAME)
+    tmp = path + '.embody-tmp'
+    with open(tmp, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(render_td_context(python_tag))
+    os.replace(tmp, path)
+    return path
+
+
+def refresh_td_context(project_dir, python_tag) -> str:
+    """Update ONLY pythonVersion in an existing (ours) context, preserving
+    keys TD or the palette wrote back (extraPaths, autoSetupReqs, active,
+    ...). Atomic like write_td_context; full render when the file cannot
+    be read or the key line is missing."""
+    path = os.path.join(project_dir, TD_CONTEXT_FILENAME)
+    try:
+        with open(path, 'r', encoding='utf-8', errors='replace') as f:
+            text = f.read()
+    except OSError:
+        return write_td_context(project_dir, python_tag)
+    new_line = f"pythonVersion: '{python_tag}'"
+    updated, n = re.subn(r'(?m)^pythonVersion\s*:.*$', new_line, text,
+                         count=1)
+    if not n:
+        updated = text.rstrip('\n') + '\n' + new_line + '\n'
+    tmp = path + '.embody-tmp'
+    with open(tmp, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(updated)
+    os.replace(tmp, path)
+    return path
+
+
+def remove_td_context_if_ours(project_dir, venv_dir, log=None) -> bool:
+    """Delete Embody's own context: TD must not pre-cook-link a venv
+    Embody itself refuses to wire (stale-ABI wheels). Foreign contexts
+    are never touched. A removal FAILURE is loud via ``log`` -- a stale
+    context TD keeps linking must never disappear silently."""
+    path = os.path.join(project_dir, TD_CONTEXT_FILENAME)
+    if classify_td_context(project_dir, venv_dir) != 'ours':
+        return False
+    try:
+        os.remove(path)
+        return True
+    except OSError as e:
+        if log:
+            log(f'Could not remove the TD pre-cook venv context at '
+                f'{path}: {e} -- TD may keep linking a stale venv.',
+                'WARNING')
+        return False
