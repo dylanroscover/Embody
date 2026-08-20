@@ -584,12 +584,16 @@ class TestConvoyClientPayload(EmbodyTestCase):
         self.assertTrue(_os.path.isabs(path))
         self.assertTrue(_os.path.isfile(path))
         base = _os.path.basename(path).lower()
-        if _sys.platform in ('win32', 'darwin'):
-            # This suite runs inside TouchDesigner: the process image is
-            # TD itself, never the bundled python that sys.executable
-            # names on these platforms.
+        # This suite runs on BOTH legs. Inside TouchDesigner the image is
+        # TD itself, never the bundled python that sys.executable names;
+        # under plain pytest the process genuinely IS python and the probe
+        # must agree with that instead (CI red 2026-08-20: the first cut
+        # asserted 'touchdesigner' unconditionally).
+        if 'td' in _sys.modules and _sys.platform in ('win32', 'darwin'):
             self.assertIn('touchdesigner', base)
             self.assertNotIn('python', base)
+        elif _sys.platform in ('win32', 'darwin'):
+            self.assertIn('python', base)
         self.assertIs(client.process_executable(), path,
                       'cached per process -- the image cannot change')
 
