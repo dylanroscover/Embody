@@ -622,6 +622,48 @@ class TestInstallExtras(_PyenvCase):
         self.assertEqual(lines, ['anyio==4.4.0'])
 
 
+class TestWiringDiagnostics(_PyenvCase):
+    """A False from wire_python_paths used to be the QUIETEST line in the
+    boot log -- and it is exactly the state a cold-open
+    ModuleNotFoundError comes from (field 2026-08-20)."""
+
+    def _log(self):
+        seen = []
+        return seen, lambda m, lvl='INFO': seen.append((lvl, m))
+
+    def test_missing_venv_names_the_venv_dir(self):
+        seen, log = self._log()
+        self.assertFalse(pyenv.wire_python_paths(self.spec, log=log))
+        self.assertEqual(len(seen), 1)
+        level, msg = seen[0]
+        self.assertEqual(level, 'WARNING')
+        self.assertIn(self.spec['venv_dir'], msg)
+
+    def test_incomplete_venv_names_site_packages(self):
+        os.makedirs(self.spec['venv_dir'], exist_ok=True)
+        seen, log = self._log()
+        self.assertFalse(pyenv.wire_python_paths(self.spec, log=log))
+        self.assertEqual(len(seen), 1)
+        level, msg = seen[0]
+        self.assertEqual(level, 'WARNING')
+        self.assertIn(self.spec['site_packages'], msg)
+
+    def test_success_is_silent(self):
+        os.makedirs(self.spec['site_packages'], exist_ok=True)
+        seen, log = self._log()
+        try:
+            self.assertTrue(pyenv.wire_python_paths(self.spec, log=log))
+        finally:
+            while self.spec['site_packages'] in sys.path:
+                sys.path.remove(self.spec['site_packages'])
+        self.assertEqual(seen, [])
+
+    def test_no_log_callback_still_returns_false(self):
+        """Start / _setupEnvironment report the failure themselves and
+        pass no log -- that path must not raise."""
+        self.assertFalse(pyenv.wire_python_paths(self.spec))
+
+
 class TestEnvWiring(_PyenvCase):
 
     def setUp(self):

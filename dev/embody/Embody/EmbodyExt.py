@@ -489,15 +489,16 @@ class EmbodyExt:
         spec = spec or self._venvPaths()
         return mod.embody_pyenv.environment_needs_install(spec)
 
-    def _wirePythonPaths(self, spec: Optional[dict] = None) -> bool:
+    def _wirePythonPaths(self, spec: Optional[dict] = None, log=None) -> bool:
         """Wire the Envoy venv paths into this interpreter.
 
         Worker-thread safe when ``spec`` is provided: touches only os/sys state
         and never reads TD objects or logs. ``spec=None`` preserves the legacy
         main-thread convenience path by resolving _venvPaths() first.
+        ``log`` names the failing precondition -- see wire_python_paths.
         """
         spec = spec or self._venvPaths()
-        return mod.embody_pyenv.wire_python_paths(spec)
+        return mod.embody_pyenv.wire_python_paths(spec, log=log)
 
     @staticmethod
     def _importGateCheck(site_packages: 'str | None' = None) -> tuple[bool, str]:
@@ -925,8 +926,23 @@ class EmbodyExt:
         pyenv = mod.embody_pyenv
         if (os.path.isdir(spec['site_packages'])
                 and not pyenv.environment_needs_install(spec)):
-            pyenv.wire_python_paths(spec)
+            pyenv.wire_python_paths(spec, log=self.Log)
             pyenv.link_env(spec)  # __init__ runs on the main thread
+            sys._embody_pyenv_unwired_logged = False
+        elif not getattr(sys, '_embody_pyenv_unwired_logged', False):
+            # Nothing is wired at all -- the state a cold-open
+            # ModuleNotFoundError actually comes from, and it was silent
+            # (field 2026-08-20). Once per session: reinit is routine
+            # here (source DATs hot-sync). The flag clears on a
+            # successful wire, so a later break reports again.
+            sys._embody_pyenv_unwired_logged = True
+            self.Log(
+                f'Python environment NOT wired: the project venv at '
+                f'{spec["venv_dir"]} is missing or needs (re)install, so '
+                f'nothing installed in it can import this session -- a '
+                f'module-level import in an extension will fail. Enable '
+                f'Envoy (or call op.Embody.InstallPackages) to build it.',
+                'WARNING')
         if not getattr(sys, '_embody_pyenv_tdpem_checked', False):
             sys._embody_pyenv_tdpem_checked = True
             try:

@@ -5085,7 +5085,9 @@ class EnvoyExt:
                 msgs.append(('ERROR', f'Dependency install crashed: {e}'))
             if ok:
                 try:
-                    if wire_python_paths(spec):
+                    if wire_python_paths(
+                            spec,
+                            log=lambda m, lvl='INFO': msgs.append((lvl, m))):
                         # site_packages arms the stale-interpreter
                         # (restart-required) detection after an upgrade
                         # install replaced the packages on disk.

@@ -406,18 +406,34 @@ def unlink_dll_dir(venv_dir) -> None:
             pass
 
 
-def wire_python_paths(spec: dict) -> bool:
+def wire_python_paths(spec: dict, log=None) -> bool:
     """Wire the venv's site-packages into sys.path. WORKER-THREAD SAFE
     (sys.path mutation only). PATH/DLL/VIRTUAL_ENV linking is link_env's
     job and happens separately on the MAIN thread -- do not fold it back
     in here (2026-08-19 review: it briefly lived here and put os.environ
     writes on EnvoyExt's bootstrap worker).
+
+    ``log`` names WHICH precondition failed. Pass one unless the caller
+    reports the failure itself (Start / _setupEnvironment do): an
+    unreported False is the state a cold-open ModuleNotFoundError comes
+    from, and it used to be the quietest line in the boot log
+    (field 2026-08-20).
     """
     venv_dir = spec.get('venv_dir')
     site_packages = spec.get('site_packages')
     if not venv_dir or not os.path.isdir(venv_dir):
+        if log:
+            log(f'Python environment NOT wired: no venv at '
+                f'{venv_dir or "(unset)"}. Packages installed there will '
+                f'not import in TouchDesigner until it is built.',
+                'WARNING')
         return False
     if not site_packages or not os.path.isdir(site_packages):
+        if log:
+            log(f'Python environment NOT wired: the venv at {venv_dir} has '
+                f'no site-packages at {site_packages or "(unset)"} -- the '
+                f'environment is incomplete. Deleting .venv/ forces a '
+                f'clean rebuild.', 'WARNING')
         return False
     add_site_packages(site_packages)
     return True
