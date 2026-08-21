@@ -38,6 +38,27 @@ try {
 // CERTIFICATE_VERIFY_FAILED. The PaneType guard keeps it working when run
 // from a DOCKED textport pane. Change it only with a real Textport test on
 // both platforms.
+// Which version the pasted command will install RIGHT NOW: the same
+// latest-release manifest the installer itself fetches -- never baked at
+// build time (site deploys and GitHub releases are not atomic; a baked
+// number lies in the gap). Edge-cached 5 min; on any failure the meta
+// line simply omits the version.
+let installVersion = "";
+try {
+  const mfRes = await fetch(
+    "https://github.com/dylanroscover/Embody/releases/latest/download/embody-release.json",
+    { cf: { cacheTtl: 300, cacheEverything: true } } as RequestInit
+  );
+  if (mfRes.ok) {
+    const mf = (await mfRes.json()) as { version?: unknown };
+    if (typeof mf.version === "string" && /^[\w.-]+$/.test(mf.version)) {
+      installVersion = mf.version;
+    }
+  }
+} catch {
+  // keep the meta line version-free
+}
+
 const INSTALL_CMD =
   "import requests, hashlib, tempfile, os; h = {'User-Agent': 'Embody-Install'}; mf = requests.get('https://github.com/dylanroscover/Embody/releases/latest/download/embody-release.json', headers=h, timeout=30).json(); b = requests.get('https://github.com/dylanroscover/Embody/releases/download/%s/%s' % (mf['tag'], mf['asset']), headers=h, timeout=120).content; assert hashlib.sha256(b).hexdigest() == mf['sha256'], 'checksum mismatch'; f = os.path.join(tempfile.gettempdir(), mf['asset']); open(f, 'wb').write(b); n = ui.panes.current; n = n if n.type == PaneType.NETWORKEDITOR else next(x for x in ui.panes if x.type == PaneType.NETWORKEDITOR); print('Embody', mf['version'], 'installed at', n.owner.loadTox(f).path)";
 
@@ -103,7 +124,7 @@ const jsonLd = {
             <span class="copy-button__label">copy</span>
           </button>
         </div>
-        <p class="install__meta">sha256-verified &middot; same as drag and drop &middot; TD pauses briefly while it fetches</p>
+        <p class="install__meta">{installVersion && <>installs v{installVersion} &middot; </>}sha256-verified &middot; same as drag and drop &middot; TD pauses briefly while it fetches</p>
       </div>
 
       <div class="hero__ctas">
