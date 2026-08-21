@@ -67,12 +67,22 @@ Pushing is ONLY done when the user explicitly asks. When they do:
 Every push that can trigger a workflow gets a follow-up, in the same
 session:
 
-1. Start a background watcher on the pushed sha's runs (`gh run list`
-   polled, or `gh run watch`). Do not declare the push done while its
-   runs are pending.
-2. A failed run is addressed IMMEDIATELY: read `--log-failed`, root-cause,
-   fix, re-push. Never leave dev red overnight, and never stack more
-   pushes on top of a red run without triaging it first.
+1. Start a background watcher on the pushed sha's runs (`gh run list
+   --commit <sha>` polled, or `gh run watch`). Do not declare the push
+   done while its runs are pending.
+2. A failed run is AUTO-REMEDIATED immediately -- never just reported:
+   - `gh run view <id> --log-failed`; identify the failing test/step.
+   - Triage flake vs real: the same sha green on another branch/leg, a
+     failure in a file the push never touched, or a known stall-class
+     assertion (real-clock deadline) all say flake.
+   - Flake: `gh run rerun <id> --failed` ONCE -- and harden the flaky
+     test in the same session (usually the fake-clock conversion below);
+     a rerun without the hardening just re-arms the next failure.
+   - Real failure: fix, run the affected suite locally, commit, re-push,
+     and watch the new runs. Loop until every workflow on the pushed
+     branch's tip is green.
+   Never leave dev red overnight, and never stack more pushes on a red
+   run without this triage.
 
 ## CI runners are slower than this machine -- write stall-proof tests
 

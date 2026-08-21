@@ -1206,11 +1206,17 @@ def test_cancellation_after_quit_commit_is_deferred_until_replacement(tmp_path):
 
 
 def test_deadline_after_restart_commit_is_deferred_until_replacement(tmp_path):
+    # Fake clock, like its deadline siblings: a real sleep raced the real
+    # .1s budget, and a runner stall landing pre-commit aborted instead
+    # of deferring (windows-latest, 2026-08-21). Advancing the clock
+    # INSIDE the quit pins the expiry to the post-commit window.
     manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
+    monotonic = ManualMonotonic()
+    manager._monotonic = monotonic
     ordinary_quit = runtime.quit
 
     def slow_committed_quit(*args, **kwargs):
-        time.sleep(.12)
+        monotonic.advance(.12)
         return ordinary_quit(*args, **kwargs)
 
     runtime.quit = slow_committed_quit

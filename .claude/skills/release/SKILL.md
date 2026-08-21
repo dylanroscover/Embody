@@ -167,4 +167,10 @@ When the user asks to push a release:
 
 `git log origin/main..HEAD --oneline -- docs/ mkdocs.yml` lists doc commits that have not reached `main` yet -- run it against `origin/main`, since a local `main` branch can be many commits stale and makes the gap look larger than it is.
 
+The push also triggers CI (bridge-tests, Actions Security). Watch EVERY
+triggered run to green and auto-remediate failures per
+`.claude/rules/commit-push-checklist.md` (After Pushing) before
+reporting the deploy done -- a deploy is not finished with a red run on
+either branch.
+
 This step is NOT release-only: the same chain applies to any standalone docs fix. See `.claude/rules/commit-push-checklist.md` (Documentation Audit).
