@@ -1,6 +1,6 @@
 # Changelog
 
-## v6.0.261
+## v6.0.263
 
 A TDN export could silently throw away every line of code it was meant to preserve; an agent could not see a shader that had failed to compile, could not read CHOP or POP data at all, and a cross-build parameter repair had never once run.
 
@@ -11,6 +11,8 @@ A TDN export could silently throw away every line of code it was meant to preser
 - **CHOP and POP data are readable**: `get_chop_data` reduces a CHOP to per-channel min/max/mean/std (never a raw dump) and diffs it against another operator -- the "what did this chain actually do to my data" read. `get_pop_data` returns POP attribute metadata for free (0.02ms at any point count) and gates value readback on total point count, because `POP.points(attr, start, count)` accepts and **ignores** both slicing arguments: reading 4,096 points off a 160k POP measured slower (80ms) than reading all of them, and a full readback costs ~4 frames at 60fps.
 - **Reads shaped for comprehension**: `get_op` collapses parameter sequences into 0-indexed blocks (delegating to TDN's exporter rather than re-deriving it) and carries a one-line summary; `get_dat_content(format='stats')` reduces a table to per-column stats plus edge rows, measured 17x smaller than a full dump; `get_docs` now fuses the wiki page with the build-accurate creation defaults Embody already harvests, so a documented parameter also reports what a fresh operator on THIS build is actually created with.
 - **A repair that had never run**: `CatalogManager._patchComp` walked `findChildren(depth=-1)`. TD's `depth` matches an EXACT relative depth, so it matched nothing and the entire cross-build default repair was a silent no-op with zero test coverage. Fixed and pinned. Also removed 191 lines of provably dead code, including `deleteFile` -- an unwired delete path carrying a false safety docstring that bypassed all four guards its live replacement enforces.
+- **The write-effect footer stays affordable**: the new shader pass originally ran project-wide on every mutating call. Reading an Info DAT COOKS it, so on a cold session that cooked ~213 docked operators and took 3.36s against the footer's 0.25s budget -- tripping its ONE-WAY disable latch and silently killing the whole footer for the session. The footer now scans only the operators the write actually touched (walking a touched dock up to its host, so editing `<name>_pixel` still reports its host's compile error); an explicit `get_op_errors` call still walks the project, because that is a deliberate request rather than a per-write tax.
+- **Convoy classifies the new tools**: `get_chop_data` and `get_pop_data` landed without a Convoy registry entry, which the host-app drift guard correctly refused -- a new MCP tool must arrive with a reviewed classification, never a permissive default. Both are registered read-only, remote-exposed and batch-eligible with `may_cook`, and the vendored host app was re-vendored so the shipped `.tox` carries them.
 
 The CHOP/DAT reduction contract ("never a blind dump") is adapted from the `view` tool in Marius Alwan Meyer's code-mode fork of Embody (github.com/sporqist/Embody, MIT), as is the idea of fusing live introspection into documentation lookups. The POP half, the readback ceiling, and the measurements behind both are ours.
 

@@ -14,6 +14,13 @@ key. The three properties that matter:
   - a HEALTHY shader is not (no false positives)
   - a NON-shader returns None, never an empty "clean" result (no silent
     false negative -- CLAUDE.md "fail loud")
+
+COST (2026-08-21): reading an Info DAT's .text COOKS it. A project-wide
+shader pass on a cold session therefore cooked ~213 docked ops and took
+3.36s, blowing the write-effect footer's 0.25s budget and tripping its
+ONE-WAY disable latch -- killing the whole footer for that session. So the
+footer passes include_shaders=False and does its own pass over the ops the
+write touched; only an explicit get_op_errors call walks the project.
 """
 
 BROKEN_PIXEL = (
@@ -130,3 +137,43 @@ class TestShaderDiagnostics(EmbodyTestCase):
         g.cook(force=True)
         r = self.envoy._get_op_errors(self.sandbox.path, False)
         self.assertNotIn('shaderErrors', r)
+
+    # ------------------------------------------------------------------
+    # Cost containment
+    # ------------------------------------------------------------------
+
+    def test_include_shaders_false_skips_the_walk(self):
+        """The per-write footer must be able to opt OUT of the shader walk.
+
+        Reading Info DATs cooks them; a project-wide pass measured 3.36s
+        cold, which trips the footer's one-way scan-disable latch.
+        """
+        g = self._broken_glsl('glsl_costly')
+        with_shaders = self.envoy._get_op_errors(g.path, False)
+        self.assertIn('shaderErrors', with_shaders)
+
+        without = self.read.get_op_errors(
+            self.envoy, g.path, False, include_shaders=False)
+        self.assertNotIn('shaderErrors', without,
+            'include_shaders=False must suppress the Info DAT walk entirely')
+        # The ordinary error/warning contract is untouched either way.
+        for key in ('errorCount', 'warningCount', 'hasErrors', 'errors'):
+            self.assertIn(key, without)
+
+    def test_shader_errors_reachable_from_a_touched_dock(self):
+        """Editing shader SOURCE targets the docked pixel DAT, which owns no
+        Info DAT -- the diagnostics live on its host. The footer walks
+        dock -> host so set_dat_content on '<name>_pixel' still reports."""
+        g = self._broken_glsl('glsl_docked')
+        pixel = self.sandbox.op('glsl_docked_pixel')
+        self.assertIsNotNone(pixel)
+
+        # The DAT itself reports nothing -- it is a dock, not a host.
+        self.assertIsNone(self.read.shader_compile_log(pixel))
+        # Its host is where the compile log lives, and dock points at it.
+        self.assertIsNotNone(pixel.dock)
+        self.assertEqual(pixel.dock.path, g.path)
+        host_log = self.read.shader_compile_log(pixel.dock)
+        self.assertIsNotNone(host_log)
+        self.assertTrue(host_log['lines'],
+            'walking dock -> host must surface the compile error')

@@ -412,6 +412,24 @@ PHASE1_OPERATIONS = {
         {"op_path": "string", "format": "string?"}, mutating=False,
         executes_arbitrary_code=False, remote_exposed=True,
         runtime_required=False, batch_eligible=True),
+    # Reduced family reads. Both force-cook their target before reading
+    # (the capture_top precedent), hence may_cook. get_pop_data is the
+    # expensive one: reading point VALUES is a GPU->CPU readback measured
+    # at ~69ms for 160k points, so it is gated node-side on the operator's
+    # total point count (max_points, default 50k) and returns metadata
+    # only unless samples>0 is asked for.
+    "get_chop_data": _operation(
+        {"op_path": "string", "channels": "string?", "samples": "int?",
+         "compare_to": "string?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True,
+        side_effects={"may_cook": True}),
+    "get_pop_data": _operation(
+        {"op_path": "string", "attributes": "string?", "samples": "int?",
+         "max_points": "int?"}, mutating=False,
+        executes_arbitrary_code=False, remote_exposed=True,
+        runtime_required=False, batch_eligible=True,
+        side_effects={"may_cook": True}),
     "set_dat_content": _operation(
         {"op_path": "string", "text": "string?", "rows": "list?",
          "clear": "bool?", "confirm_wipe": "bool?"}, mutating=True,

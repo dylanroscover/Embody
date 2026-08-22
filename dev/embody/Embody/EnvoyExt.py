@@ -6354,7 +6354,7 @@ class EnvoyExt:
         except Exception:
             return None
 
-    def _attachEffects(self, result, operation, sid=None):
+    def _attachEffects(self, result, operation, sid=None, scopes=None):
         """After a MUTATING call, ride back what THIS write just did to the
         project: operator errors/warnings that did not exist before it, and a
         meaningful frame-rate drop. Diffed against a per-session baseline so
@@ -6385,7 +6385,8 @@ class EnvoyExt:
             snapshot = None
             if getattr(self, '_effects_error_scan_ok', True):
                 started = time.time()
-                snapshot = mod.envoy_read.get_op_errors(self, '/', True)
+                snapshot = mod.envoy_read.get_op_errors(
+                    self, '/', True, include_shaders=False)
                 elapsed = time.time() - started
                 if elapsed > _EFFECTS_SCAN_BUDGET_S:
                     self._effects_error_scan_ok = False
@@ -6415,9 +6416,28 @@ class EnvoyExt:
                 # extra dock walk measured 2.7ms over 1920 ops (2026-08-21),
                 # ~1% of _EFFECTS_SCAN_BUDGET_S, so it rides the existing
                 # budget rather than earning a second latch.
+                # Shader pass scoped to the ops this write actually
+                # touched. Never project-wide: reading an Info DAT cooks it
+                # (3.36s cold across the project, 2026-08-21).
+                touched = []
+                for scope in (scopes or []):
+                    if not isinstance(scope, str) or not scope.startswith('/'):
+                        continue
+                    target = mod.envoy_read.resolve_op(self, scope)
+                    if target is None:
+                        continue
+                    # Editing shader SOURCE targets the docked pixel/compute
+                    # DAT, which owns no Info DAT -- the diagnostics live on
+                    # its host. Walk up so set_dat_content('/x/glsl_a_pixel')
+                    # still reports /x/glsl_a's compile errors.
+                    for probe in (target, getattr(target, 'dock', None)):
+                        if probe is None:
+                            continue
+                        touched.extend(
+                            mod.envoy_read.shader_errors(self, probe, True))
                 shaders, shader_total, shader_paths = _new_error_entries(
                     None if first_write else state.get('shaders'),
-                    snapshot.get('shaderErrors') or [], _EFFECTS_ERROR_CAP)
+                    touched, _EFFECTS_ERROR_CAP)
                 state['shaders'] = shader_paths
                 if shaders:
                     effects['new_shader_errors'] = shaders
@@ -6442,7 +6462,8 @@ class EnvoyExt:
         except Exception:
             pass
 
-    def _send_response(self, request_id, result, sid=None, operation=None):
+    def _send_response(self, request_id, result, sid=None, operation=None,
+                       scopes=None):
         """Send a response back to the worker thread (token-lean log piggyback).
 
         `operation` is optional so nothing else has to change: pass it for a
@@ -6451,7 +6472,7 @@ class EnvoyExt:
         moved) and only the existing attachments apply."""
         self._attachRecoveryHints(result)
         self._attachNotableLogs(result, sid)
-        self._attachEffects(result, operation, sid)
+        self._attachEffects(result, operation, sid, scopes)
 
         self.response_queue.put({
             'id': request_id,
@@ -6565,7 +6586,8 @@ class EnvoyExt:
             except Exception:
                 pass
 
-            self._send_response(request_id, result, sid, operation=operation)
+            self._send_response(request_id, result, sid, operation=operation,
+                                scopes=scopes)
 
         # Live build visualization (opt-in): camera follow + node pulse + the
         # dancing builder-bot. Runs every frame AFTER the drain loop. Wrapped so

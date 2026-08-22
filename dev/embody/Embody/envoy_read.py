@@ -514,7 +514,8 @@ def shader_errors(ext, target, recurse: bool = True) -> list:
     return found
 
 
-def get_op_errors(ext, op_path: str, recurse: bool = True) -> dict:
+def get_op_errors(ext, op_path: str, recurse: bool = True,
+                  include_shaders: bool = True) -> dict:
     """Get error and warning messages for an operator and its children"""
     target = resolve_op(ext, op_path)
     if not target:
@@ -576,7 +577,15 @@ def get_op_errors(ext, op_path: str, recurse: bool = True) -> dict:
     }
     # Added only when non-empty: op.errors() cannot see GLSL compile failures,
     # so without this a broken shader reads as a clean operator.
-    shader = shader_errors(ext, target, recurse)
+    #
+    # include_shaders=False is for the per-write footer, which scans the WHOLE
+    # project: reading an Info DAT's .text COOKS it, so a project-wide pass on
+    # a cold session cooked ~213 docked ops and took 3.36s (measured
+    # 2026-08-21), blowing the footer's budget and tripping its one-way
+    # disable latch. The footer does its own pass over touched ops instead.
+    # An explicit get_op_errors call is an agent's deliberate request, so it
+    # keeps the full walk.
+    shader = shader_errors(ext, target, recurse) if include_shaders else None
     if shader:
         result['shaderErrors'] = shader
         result['hasErrors'] = True

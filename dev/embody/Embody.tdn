@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 1173
-generator: Embody/6.0.261
+generator: Embody/6.0.263
 td_build: 099.2025.33070
-source_file: Embody-6.261.toe
-exported_at: '2026-08-22T03:14:11Z'
+source_file: Embody-6.263.toe
+exported_at: '2026-08-22T05:05:07Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -817,7 +817,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.261
+    value: 6.0.263
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -915,6 +915,7 @@ sequences:
   - {}
   - {}
   - {}
+  - {}
 flags:
 - display
 - viewer
@@ -979,124 +980,106 @@ operators:
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   dat_content:
-  - - '20:09:37 6977039 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/stray_guard'' delete_file=False rows=310'
-  - - '20:09:37 6977039 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/stray_guard.tdn'' delete_file=False'
-  - - '20:09:38 6977051 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_stability_hardening\orphan_ptr.tdn'
-  - - '20:09:38 6977051 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_ptr'' delete_file=False rows=310'
-  - - '20:09:38 6977051 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_ptr.tdn'' delete_file=False'
-  - - '20:09:38 6977051 WARNING EmbodyExt: Found 1 TDN-tagged empty COMP(s) with a recoverable .tdn but no tracking row: /embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_ptr'
-  - - '20:09:38 6977051 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_ptr'
-  - - '20:09:38 6977051 SUCCESS EmbodyExt: Orphan-shell recovery restored 1 COMP(s) and re-tracked them'
-  - - '20:09:38 6977051 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_ptr'' delete_file=False rows=310'
-  - - '20:09:38 6977051 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_ptr.tdn'' delete_file=False'
-  - - '20:09:39 6977063 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_stability_hardening\orphan_conv.tdn'
-  - - '20:09:39 6977063 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_conv'' delete_file=False rows=310'
-  - - '20:09:39 6977063 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_conv.tdn'' delete_file=False'
-  - - '20:09:39 6977063 WARNING EmbodyExt: Found 1 TDN-tagged empty COMP(s) with a recoverable .tdn but no tracking row: /embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_conv'
-  - - '20:09:39 6977063 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_conv'
-  - - '20:09:39 6977063 SUCCESS EmbodyExt: Orphan-shell recovery restored 1 COMP(s) and re-tracked them'
-  - - '20:09:39 6977063 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_conv'' delete_file=False rows=310'
-  - - '20:09:39 6977063 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_conv.tdn'' delete_file=False'
-  - - '20:09:40 6977075 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_stability_hardening\not_orphan.tdn'
-  - - '20:09:40 6977075 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/not_orphan'' delete_file=False rows=310'
-  - - '20:09:40 6977075 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/not_orphan.tdn'' delete_file=False'
-  - - '20:09:43 6977111 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_yaml/legacy_json_target'
-  - - '20:09:45 6977135 WARNING TestRunnerExt: SKIP: test_tdn_yaml.test_tdn_boilerplate_omission - glslTOP does not dock a <name>_compute DAT here'
-  - - '20:10:08 6977391 SUCCESS envoy_setup:816: Created .claude/settings.local.json (tool permissions: all) at C:\Users\admin\AppData\Local\Temp\tmpsgtqi_68\.claude\settings.local.json'
-  - - '20:10:08 6977391 SUCCESS envoy_setup:816: Created .claude/settings.local.json (tool permissions: prompt) at C:\Users\admin\AppData\Local\Temp\tmpp4hbpjfa\.claude\settings.local.json'
-  - - '20:10:10 6977403 SUCCESS envoy_setup:816: Created .claude/settings.local.json (tool permissions: all) at C:\Users\admin\AppData\Local\Temp\tmp5gknw_24\.claude\settings.local.json'
-  - - '20:10:12 6977427 SUCCESS envoy_setup:816: Updated .claude/settings.local.json (tool permissions: all) at C:\Users\admin\AppData\Local\Temp\tmplkz766bc\.claude\settings.local.json'
-  - - '20:10:13 6977439 INFO    envoy_setup:361: Mirrored AI config into sibling worktrees (2 file(s))'
-  - - '20:10:19 6977511 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 2'
-  - - '20:10:19 6977511 SUCCESS EmbodyExt: Reset externaltox for ''/embody/unit_tests/test_sandbox/sandbox_test_toxdrop_expr/dropped1'''
-  - - '20:10:19 6977511 INFO    EmbodyExt: Dropped .tox expression handling set to Always Clean'
-  - - '20:10:20 6977523 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 3'
-  - - '20:10:20 6977523 INFO    EmbodyExt: Dropped .tox expression handling set to Always Ignore'
-  - - '20:10:21 6977535 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 0'
-  - - '20:10:21 6977535 SUCCESS EmbodyExt: Reset externaltox for ''/embody/unit_tests/test_sandbox/sandbox_test_toxdrop_expr/dropped1'''
-  - - '20:10:22 6977547 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 1'
-  - - '20:10:24 6977571 WARNING EmbodyExt: [test] No response seeded for "Dropped .tox Expression Detected"; returning -1 instead of opening modal dialog. Seed it via op.Embody.store("_smoke_test_responses", {...}).'
-  - - '20:10:25 6977583 WARNING EmbodyExt: [test] No response seeded for "Dropped .tox Expression Detected"; returning -1 instead of opening modal dialog. Seed it via op.Embody.store("_smoke_test_responses", {...}).'
-  - - '20:10:30 6977619 SUCCESS EmbodyExt: Reset externaltox for ''/embody/Embody/_test_toxdrop_internal'''
-  - - '20:10:31 6977643 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 1'
-  - - '20:10:32 6977655 SUCCESS EmbodyExt: Reset externaltox for ''/embody/unit_tests/test_sandbox/sandbox_test_toxdrop_expr/dropped1'''
-  - - '20:10:45 6977787 WARNING embody_admin:328: Uninstall: refusing to remove C:\Users\admin\AppData\Local\Temp\embody_outside_9ravkvl1 -- outside C:\Users\admin\AppData\Local\Temp\embody_uninstall_exec_c3b0txil'
-  - - '20:10:48 6977823 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall" -> button 0'
-  - - '20:10:48 6977823 INFO    embody_admin:559: Uninstall cancelled -- nothing was changed.'
-  - - '20:10:49 6977835 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall" -> button 1'
-  - - '20:10:49 6977835 SUCCESS embody_admin:501: Uninstall complete: {''deleted'': 1, ''stripped'': 0, ''unset'': 0, ''kept_review'': 1, ''errors'': 0, ''ran'': True}'
-  - - '20:10:49 6977835 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall Complete" -> button 0'
-  - - '20:10:50 6977847 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall" -> button 1'
-  - - '20:10:51 6977847 SUCCESS embody_admin:501: Uninstall complete: {''deleted'': 2, ''stripped'': 0, ''unset'': 0, ''kept_review'': 0, ''errors'': 0, ''ran'': True}'
-  - - '20:10:51 6977847 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall Complete" -> button 0'
-  - - '20:10:52 6977859 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall" -> button 0'
-  - - '20:10:52 6977859 INFO    embody_admin:524: Uninstall: nothing to remove at C:\Users\admin\AppData\Local\Temp\embody_uninstall_handler_4riedj04.'
-  - - '20:10:54 6977871 WARNING EmbodyExt: [test] No response seeded for "Embody -- Uninstall"; returning -1 instead of opening modal dialog. Seed it via op.Embody.store("_smoke_test_responses", {...}).'
-  - - '20:10:54 6977871 INFO    embody_admin:559: Uninstall cancelled -- nothing was changed.'
-  - - |-
-      20:11:05 6977991 INFO    embody_admin:312: Uninstall preview for C:\Users\admin\AppData\Local\Temp\embody_uninstall_test_936la6fh (sources: fallback)
-        REMOVE (2):
-          - CLAUDE.md  [file] -- Embody-generated, unmodified
-          - .embody  [dir] -- Embody runtime state (manifest, bridge, config, hashes)
-  - - '20:12:22 6978879 WARNING TDNExt: Failed to track TDN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_chomp_pe2dho04\\one_nl.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
-  - - '20:12:22 6978879 SUCCESS TDNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_chomp_pe2dho04\one_nl.tdn'
-  - - '20:12:22 6978879 INFO    TDNExt: Importing from C:\Users\admin\AppData\Local\Temp\v6h_chomp_pe2dho04\one_nl.tdn into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/one_nl_target...'
-  - - '20:12:22 6978879 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/one_nl_target'
-  - - '20:12:23 6978891 WARNING TDNExt: Failed to track TDN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_chomp_xq873ihy\\two_nl.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
-  - - '20:12:23 6978891 SUCCESS TDNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_chomp_xq873ihy\two_nl.tdn'
-  - - '20:12:23 6978891 INFO    TDNExt: Importing from C:\Users\admin\AppData\Local\Temp\v6h_chomp_xq873ihy\two_nl.tdn into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/two_nl_target...'
-  - - '20:12:23 6978891 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/two_nl_target'
-  - - '20:12:32 6978999 WARNING TDNExt: Failed to track TDN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_load_s_bkfiy2\\ver.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
-  - - '20:12:32 6978999 SUCCESS TDNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_load_s_bkfiy2\ver.tdn'
-  - - '20:12:44 6979131 INFO    EmbodyExt: 308 externalized operator(s) found -- validating tracked operators'
-  - - '20:12:45 6979143 SUCCESS EmbodyExt: Tag ''tox'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
-  - - '20:12:45 6979143 SUCCESS EmbodyExt: Added ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
-  - - '20:12:45 6979143 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
-  - - |-
-      20:12:48 6979167 ERROR   TestRunnerExt: FAIL: test_version_sync.test_mcp_tool_count_claims_match_reality - Lists differ: [] != [('README badge', 63), ('README.md prose',[173 chars] 63)]
-
-      Second list contains 7 additional elements.
-      First extra element 0:
-      ('README badge', 63)
-
-      - []
-      + [('README badge', 63),
-      +  ('README.md prose', 63),
-      +  ('docs/index.md prose', 63),
-      +  ('docs/index.md prose', 63),
-      +  ('docs/envoy/index.md prose', 63),
-      +  ('docs/envoy/index.md prose', 63),
-      +  ('docs/envoy/tools-reference.md prose', 63)] : 7 user-facing tool-count claim(s) disagree with the 65 registered tools: [('README badge', 63), ('README.md prose', 63), ('docs/index.md prose', 63), ('docs/index.md prose', 63), ('docs/envoy/index.md prose', 63), ('docs/envoy/index.md prose', 63), ('docs/envoy/tools-reference.md prose', 63)]
-  - - '20:12:52 6979239 SUCCESS EmbodyExt: Tag ''tdn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
-  - - '20:12:52 6979239 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
-  - - '20:12:52 6979239 SUCCESS EmbodyExt: Added TDN ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
-  - - '20:12:52 6979239 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
-  - - '20:12:52 6979239 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
-  - - '20:12:52 6979239 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
-  - - '20:12:52 6979239 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
-  - - '20:12:52 6979239 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
-  - - '20:12:52 6979239 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
-  - - '20:12:52 6979239 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'' delete_file=True rows=310'
-  - - '20:12:52 6979239 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard.tdn'' delete_file=True'
-  - - '20:13:03 6979335 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '20:13:05 6979359 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '20:13:05 6979359 WARNING EmbodyExt: Skipping the whole-project externalization: no saved .toe on disk to fall back on, and it re-tags every COMP and DAT in the project. Save the project first, then run Externalize Full Project from the Embody parameters. New work is still externalized automatically.'
-  - - '20:13:06 6979371 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '20:13:07 6979371 WARNING EmbodyExt: Whole-project externalization requested -- it re-tags every compatible COMP and DAT. Recovery point on disk: "/tmp/fake-project.toe". Confirm the format in the dialog.'
-  - - '20:13:14 6979455 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
-  - - '20:13:15 6979467 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '20:13:15 6979467 WARNING EmbodyExt: Skipping the whole-project externalization: no saved .toe on disk to fall back on, and it re-tags every COMP and DAT in the project. Save the project first, then run Externalize Full Project from the Embody parameters. New work is still externalized automatically.'
-  - - '20:13:15 6979467 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
-  - - '20:13:16 6979479 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '20:13:16 6979479 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
-  - - '20:13:18 6979491 WARNING EmbodyExt: Setup wizard: unrecognized externalize choice "externalize-everything!!" -- skipping externalization setup.'
-  - - '20:13:18 6979491 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
-  - - '20:13:24 6979551 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '20:13:26 6979575 ERROR   TestRunnerExt: Tests complete: 3863/3976 passed, 1 failed, 112 skipped'
-  - - '20:13:30 6979838 WARNING EnvoyExt: Watchdog: Embody Status stranded at ''Testing'' with no test run live -- restoring the saved status'
-  - - '20:14:09 6982149 INFO    EnvoyExt: Processing: execute_python'
-  - - "20:14:09 6982149 INFO    EnvoyExt: execute_python: \n# Mirror what the test's _registered_tool_count() does: count TD-side tool\n# wrappers registered in _register_tools (bridge meta-tools are separate).\nimport re\nsrc = op.Embody.op('EnvoyExt').text\nblo..."
-  - - '20:14:09 6982149 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '19:11:37 6830721 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_export_import/rt_nested_target'
+  - - '19:11:37 6830724 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_export_import/roundtrip_target'
+  - - '19:11:38 6830728 WARNING TDNExt: Type mismatch: TDN expects baseCOMP but destination is containerCOMP'
+  - - '19:11:38 6830728 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_export_import/xy_dst'
+  - - '19:11:38 6830734 SUCCESS TestRunnerExt: Tests complete: 51/51 passed'
+  - - '19:11:51 6831550 INFO    EnvoyExt: Processing: execute_python'
+  - - '19:11:51 6831550 INFO    EnvoyExt: execute_python: result = {    ''par_Version'': op.Embody.par.Version.eval(),    ''readme_badge'': ''6.0.260'',    ''changelog_top'': ''v6.0.260'',}'
+  - - '19:11:51 6831550 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '19:11:53 6831621 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '19:11:53 6831622 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '19:13:05 6835985 INFO    EnvoyExt: Processing: run_tests'
+  - - '19:13:05 6835985 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
+  - - '19:13:06 6836002 SUCCESS TestRunnerExt: Tests complete: 6/6 passed'
+  - - '19:14:33 6841269 INFO    EnvoyExt: Processing: run_tests'
+  - - '19:14:33 6841269 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
+  - - '19:14:34 6841290 SUCCESS TestRunnerExt: Tests complete: 8/8 passed'
+  - - '19:14:37 6841465 INFO    EnvoyExt: Processing: run_tests'
+  - - '19:14:37 6841465 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
+  - - '19:14:37 6841477 SUCCESS TestRunnerExt: Tests complete: 6/6 passed'
+  - - '19:42:26 6941613 INFO    EnvoyExt: Processing: save_project'
+  - - '19:42:26 6941613 INFO    envoy_setup:1334: Registered instance "Embody-6.261" in envoy.json (port 9870)'
+  - - '19:42:27 6941613 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '19:42:27 6941613 SUCCESS EmbodyExt: Exported TDN for /embody/Embody'
+  - - '19:42:27 6941613 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '19:42:27 6941613 SUCCESS EmbodyExt: Exported TDN for /embody'
+  - - '19:42:27 6941613 SUCCESS EmbodyExt: Saved 2 externalizations'
+  - - '19:42:29 6941613 INFO    EmbodyExt: Exporting portable .tox: stripping 577 file reference(s) and 157 tagged operator(s) from /embody/Embody'
+  - - '22:00:17       3 INFO    execute:10: Embody v6.0.261 | TouchDesigner 099.2025.33070 | Windows 11'
+  - - '22:00:17       3 INFO    embody_admin:1292: Restored 69 settings from config.json'
+  - - '22:00:17       3 INFO    CatalogManagerExt: [CatalogManager] Loaded catalog for build 099.2025.33070'
+  - - '22:00:18      15 INFO    envoy_setup:861: Found git repo at C:\Users\admin\Documents\Git\Embody'
+  - - '22:00:18      15 INFO    EnvoyExt: Warming the MCP Python stack on a background thread -- first open after install/upgrade can take a few seconds; TD stays responsive.'
+  - - '22:00:18      62 INFO    EmbodyExt: TDN mode=export -- additive recovery only, existing COMPs kept (no full reconstruction)'
+  - - '22:00:20     118 INFO    ConvoyExt: Convoy: Registered -- Envoy port pending'
+  - - '22:00:33     866 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
+  - - '22:00:33     866 INFO    envoy_setup:1334: Registered instance "Embody-6.261" in envoy.json (port 9870)'
+  - - '22:00:38    1163 INFO    EnvoyExt: Processing: get_op_errors'
+  - - '22:00:46    1621 INFO    EnvoyExt: Processing: execute_python'
+  - - '22:00:46    1621 INFO    EnvoyExt: execute_python: envoy = op.Embody.ext.Envoyhost = op.Embody.op(''convoy'').op(''host'') if op.Embody.op(''convoy'') else Nonehostapp = Noneif host:    d = host.op(''convoy_hostapp'')    hostapp = (''get_chop_data'' in (d...'
+  - - '22:00:46    1621 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '22:00:49    1621 WARNING EnvoyExt: Write-effect error scan took 3.36s (budget 0.25s) -- disabling it for this session so it cannot tax every write. Use get_op_errors on demand instead.'
+  - - '22:00:55    1964 INFO    EnvoyExt: Processing: save_project'
+  - - '22:00:55    1964 INFO    envoy_setup:1334: Registered instance "Embody-6.262" in envoy.json (port 9870)'
+  - - '22:01:02    1964 INFO    EmbodyExt: Exporting portable .tox: stripping 577 file reference(s) and 157 tagged operator(s) from /embody/Embody'
+  - - '22:01:07    1976 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '22:01:07    1976 SUCCESS EmbodyExt: Exported TDN for /embody/Embody'
+  - - '22:01:07    1976 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '22:01:08    1976 SUCCESS EmbodyExt: Exported TDN for /embody'
+  - - '22:01:12    2230 INFO    ConvoyExt: Convoy: Registered -- Envoy port pending'
+  - - '22:01:16    2455 WARNING EnvoyExt: Watchdog: enabled but socket dead (status ''Running on port 9870'') -- reviving'
+  - - '22:01:16    2455 WARNING EnvoyExt: Watchdog: MCP socket on port None unreachable while enabled (running=False) -- reviving server'
+  - - '22:01:16    2473 INFO    envoy_setup:861: Found git repo at C:\Users\admin\Documents\Git\Embody'
+  - - '22:01:17    2473 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
+  - - '22:01:22    2808 INFO    ConvoyExt: Convoy: Convoy App update: the running Convoy App is 6.0.261, this Embody ships 6.0.262 -- updating it in place now (automatic; Repair Convoy App remains the manual path)'
+  - - '22:01:57    4926 INFO    EnvoyExt: Processing: execute_python'
+  - - '22:01:57    4926 INFO    EnvoyExt: execute_python: import timeenvoy = op.Embody.ext.Envoyrd = op.Embody.op(''envoy_read'').moduleroot = op(''/'')def timed(fn, *a, **k):    t0 = time.perf_counter(); r = fn(*a, **k); return (time.perf_counter()-t0)*1...'
+  - - '22:01:57    4926 ERROR   EnvoyExt: execute_python failed: get_op_errors() takes from 2 to 3 positional arguments but 4 were given'
+  - - '22:01:59    4997 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '22:02:00    4998 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '22:02:04    5305 INFO    EnvoyExt: Processing: execute_python'
+  - - '22:02:04    5305 INFO    EnvoyExt: execute_python: import timeenvoy = op.Embody.ext.Envoyrd = op.Embody.op(''envoy_read'').moduleroot = op(''/'')def timed(fn, *a):    t0 = time.perf_counter(); r = fn(*a); return (time.perf_counter()-t0)*1000, rt_...'
+  - - '22:02:04    5305 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '22:02:56    8377 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
+  - - '22:03:12    9324 INFO    EnvoyExt: Processing: execute_python'
+  - - '22:03:12    9324 INFO    EnvoyExt: execute_python: import timeenvoy = op.Embody.ext.Envoyrd = op.Embody.op(''envoy_read'').moduledef timed(fn, *a, **k):    t0 = time.perf_counter(); r = fn(*a, **k); return round((time.perf_counter()-t0)*1000, 1), ...'
+  - - '22:03:12    9324 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '22:03:14    9395 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '22:03:14    9396 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '22:03:18    9665 INFO    EnvoyExt: Processing: set_dat_content'
+  - - '22:03:20    9697 WARNING TDNExt: Omitted 9 annotation(s) named "envoy_bot_*" from the .tdn export of /embody/scoped_check (envoy_bot_arm_l, envoy_bot_arm_r, envoy_bot_body, envoy_bot_eye_l, envoy_bot_eye_r, envoy_bot_head, envoy_bot_leg_l, envoy_bot_leg_r, envoy_bot_speech) -- that prefix is reserved for Embot''s live parts. Rename them to keep them in the file.'
+  - - '22:03:20    9697 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '22:03:35   10638 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
+  - - '22:03:38   10774 INFO    EnvoyExt: Processing: set_dat_content'
+  - - '22:03:39   10845 WARNING TDNExt: Omitted 9 annotation(s) named "envoy_bot_*" from the .tdn export of /embody/scoped_check (envoy_bot_arm_l, envoy_bot_arm_r, envoy_bot_body, envoy_bot_eye_l, envoy_bot_eye_r, envoy_bot_head, envoy_bot_leg_l, envoy_bot_leg_r, envoy_bot_speech) -- that prefix is reserved for Embot''s live parts. Rename them to keep them in the file.'
+  - - '22:03:39   10845 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '22:03:43   11065 INFO    EnvoyExt: Processing: set_dat_content'
+  - - '22:03:44   11124 WARNING TDNExt: Omitted 9 annotation(s) named "envoy_bot_*" from the .tdn export of /embody/scoped_check (envoy_bot_arm_l, envoy_bot_arm_r, envoy_bot_body, envoy_bot_eye_l, envoy_bot_eye_r, envoy_bot_head, envoy_bot_leg_l, envoy_bot_leg_r, envoy_bot_speech) -- that prefix is reserved for Embot''s live parts. Rename them to keep them in the file.'
+  - - '22:03:44   11124 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '22:03:57   11900 INFO    EnvoyExt: Processing: execute_python'
+  - - '22:03:57   11900 INFO    EnvoyExt: execute_python: home = op.Embody.parent()c = home.op(''scoped_check'')gone = c.path if c else Noneif c: c.destroy()result = {''destroyed'': gone or ''nothing to clean''}'
+  - - '22:03:57   11900 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '22:03:59   11959 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '22:03:59   11960 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '22:04:41   14501 INFO    EnvoyExt: Processing: run_tests'
+  - - '22:04:41   14501 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
+  - - '22:04:43   14576 SUCCESS TestRunnerExt: Tests complete: 10/10 passed'
+  - - '22:04:47   14792 INFO    EnvoyExt: Processing: run_tests'
+  - - '22:04:47   14792 INFO    TestRunnerExt: Discovered 9 test suite(s) [deferred-per-test]'
+  - - '22:04:48   14873 SUCCESS TestRunnerExt: Tests complete: 60/60 passed'
+  - - '22:04:58   15463 INFO    EnvoyExt: Processing: run_tests'
+  - - '22:04:58   15463 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
+  - - '22:04:59   15508 SUCCESS TestRunnerExt: Tests complete: 22/22 passed'
+  - - '22:05:02   15706 INFO    EnvoyExt: Processing: save_project'
+  - - '22:05:02   15708 INFO    envoy_setup:1334: Registered instance "Embody-6.263" in envoy.json (port 9870)'
+  - - '22:05:02   15708 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '22:05:02   15708 SUCCESS EmbodyExt: Exported TDN for /embody/Embody'
+  - - '22:05:03   15708 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '22:05:03   15708 SUCCESS EmbodyExt: Exported TDN for /embody'
+  - - '22:05:03   15708 SUCCESS EmbodyExt: Saved 2 externalizations'
+  - - '22:05:03   15708 INFO    EmbodyExt: Exporting portable .tox: stripping 577 file reference(s) and 157 tagged operator(s) from /embody/Embody'
   dat_content_format: table
 - name: null2
   type: nullCHOP
@@ -1703,7 +1686,7 @@ operators:
       - '0.4500'
       - '1'
     - - r0c1
-      - v6.0.261
+      - v6.0.263
       - '0.4000'
       - '0.4400'
       - '0.5000'
@@ -1721,7 +1704,7 @@ operators:
       - ''
       - '1'
     - - r1c0
-      - ✓ Saved 9m ago
+      - ✓ Saved 1s ago
       - '0.3500'
       - '0.7800'
       - '0.4500'
