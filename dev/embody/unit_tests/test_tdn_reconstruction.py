@@ -1245,13 +1245,38 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertIsNotNone(rd)
 
 	def test_G06_content_excluded_toggle(self):
-		"""DAT content excluded when include_dat_content=False."""
+		"""File-backed DAT content excluded when include_dat_content=False.
+
+		Reframed 2026-08-21: the toggle means "skip content already saved
+		elsewhere", never "throw authored code away" -- an unbacked DAT is
+		now always embedded (see test_G06b).
+		"""
+		import os, tempfile
+		backing = os.path.join(tempfile.gettempdir(), 'g06_backed.txt')
+		with open(backing, 'w', encoding='utf-8') as f:
+			f.write('should not appear')
 		d = self.sandbox.create(textDAT, 'd')
+		d.par.file = backing
 		d.text = 'should not appear'
 		orig = self.tdn.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=False)
 		entry = orig['tdn']['operators'][0]
-		self.assertNotIn('dat_content', entry)
+		self.assertNotIn('dat_content', entry,
+			'File-backed DAT content duplicated into the .tdn')
+
+	def test_G06b_unbacked_content_always_embedded(self):
+		"""An unbacked DAT survives include_dat_content=False.
+
+		The .tdn is the only place that code lives; dropping it is how a
+		crash costs a project every shader and callback.
+		"""
+		d = self.sandbox.create(textDAT, 'd')
+		d.text = 'must survive'
+		orig = self.tdn.ExportNetwork(
+			root_path=self.sandbox.path, include_dat_content=False)
+		entry = orig['tdn']['operators'][0]
+		self.assertEqual(entry.get('dat_content'), 'must survive',
+			'Unbacked DAT content DROPPED -- silent data-loss bug')
 
 	# =================================================================
 	# H. Deep Nesting (5 tests)

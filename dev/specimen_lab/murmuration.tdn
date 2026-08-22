@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 3
-generator: Embody/6.0.62
-td_build: 099.2025.32820
-source_file: Embody-6.63.toe
-exported_at: '2026-07-01T00:54:32Z'
+generator: Embody/6.0.260
+td_build: 099.2025.33070
+source_file: Embody-6.261.toe
+exported_at: '2026-08-22T02:42:28Z'
 network_path: /specimen_lab/murmuration
 options:
   include_dat_content: false
@@ -269,18 +269,21 @@ operators:
     op: glsl_color
   position: [3000, -120]
   dock: glsl_color
+  dat_read_only: true
 - name: glsl_flock_info
   type: infoDAT
   parameters:
     op: glsl_flock
   position: [1800, -120]
   dock: glsl_flock
+  dat_read_only: true
 - name: sprite_dot_info
   type: infoDAT
   parameters:
     op: sprite_dot
   position: [0, -440]
   dock: sprite_dot
+  dat_read_only: true
 - name: sprite_dot_pixel
   type: textDAT
   parameters:

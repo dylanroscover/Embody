@@ -23,6 +23,30 @@ from __future__ import annotations
 import math
 
 
+def _op_summary(target, info) -> str:
+    """One-line orientation for get_op: type, wiring, and what was folded.
+
+    Deliberately mechanical -- composed from facts get_op already holds. No
+    per-optype special-casing: a hand-tuned phrase per operator type is a
+    maintenance surface that goes stale as TD adds operators.
+    """
+    bits = ["%s '%s'" % (target.OPType, target.name)]
+    ins = sum(1 for i in info.get('inputs') or [] if i)
+    outs = sum(1 for o in info.get('outputs') or [] if o)
+    bits.append('in:%d out:%d' % (ins, outs))
+    npar = len(info.get('parameters') or {})
+    if npar:
+        bits.append('%d non-default par%s' % (npar, '' if npar == 1 else 's'))
+    seqs = info.get('sequences') or {}
+    if seqs:
+        bits.append('seq ' + ', '.join('%s[%d]' % (k, len(v))
+                                       for k, v in list(seqs.items())[:3]))
+    kids = info.get('children')
+    if kids:
+        bits.append('%d child%s' % (len(kids), '' if len(kids) == 1 else 'ren'))
+    return ' | '.join(bits)
+
+
 def get_op(ext, op_path: str, include_defaults: bool = False) -> dict:
     """Get operator information"""
     target = resolve_op(ext, op_path)
@@ -37,10 +61,36 @@ def get_op(ext, op_path: str, include_defaults: bool = False) -> dict:
         'valid': target.valid,
     }
 
+    # Sequence collapse. Delegates to TDNExt's exporter rather than
+    # re-deriving block grouping here -- that code carries hard-won gotchas
+    # (uncooked-POP discovery, the list(target.seq) ordering contract,
+    # sequenceBlock wrapper identity). scrub_transient=False because this is
+    # a LIVE read: an export ships no runtime-status values, a read must.
+    # Only in the compact mode -- include_defaults=True keeps the flat dump
+    # that test_mcp_tdn_tools' read_tdn-vs-get_op ratio test measures.
+    sequences = {}
+    if not include_defaults:
+        try:
+            tdn = getattr(ext.ownerComp.ext, 'TDN', None)
+            if tdn is not None:
+                sequences = tdn._exportBuiltinSequences(
+                    target, scrub_transient=False) or {}
+        except Exception as e:
+            ext._log(f'Sequence collapse unavailable for {op_path}: {e}',
+                     'DEBUG')
+
     # Get parameters
     params = {}
     parameters_omitted = 0
+    sequence_pars_collapsed = 0
     for p in target.pars():
+        if sequences:
+            try:
+                if p.sequence is not None and not p.isSequence:
+                    sequence_pars_collapsed += 1
+                    continue
+            except Exception:
+                pass
         if not include_defaults:
             include_param = True
             try:
@@ -80,6 +130,10 @@ def get_op(ext, op_path: str, include_defaults: bool = False) -> dict:
     info['parameters'] = params
     if parameters_omitted > 0:
         info['parameters_omitted'] = parameters_omitted
+    if sequences:
+        info['sequences'] = sequences
+    if sequence_pars_collapsed:
+        info['sequence_pars_collapsed'] = sequence_pars_collapsed
 
     # Get inputs/outputs. inputConnectors, never OP.inputs: inputs is a
     # COMPACTED list of connected sources, so a wire on connector 1 with
@@ -94,6 +148,7 @@ def get_op(ext, op_path: str, include_defaults: bool = False) -> dict:
     if hasattr(target, 'children'):
         info['children'] = [child.name for child in target.children]
 
+    info['summary'] = _op_summary(target, info)
     return ext._maybe_offload_to_file(info, 'get_op')
 
 
@@ -366,6 +421,99 @@ def get_focus(ext) -> dict:
     return result
 
 
+# GLSL compile errors do NOT reach op.errors() -- TD reports only a WARNING
+# ("The GLSL Shader has compile errors (Use Info DAT to see details)") and
+# puts the actual text in the auto-docked <name>_info DAT. Cost the project a
+# full debug cycle once: a `half` reserved-word error rendered TD's fallback
+# while op.errors() said "(none)" (.claude/rules/multi-agent-review.md:15).
+# Reading the DOCKED info DAT is non-mutating -- TD creates it with the op.
+
+_SHADER_ERROR_MARKERS = ('error', 'failed', 'invalid')
+_SHADER_LOG_LINE_CAP = 6
+_SHADER_LOG_CHAR_CAP = 200
+
+
+def _docked_info_dat(target):
+    """The op's own docked Info DAT, or None.
+
+    Matched on dat.type == 'info' (short form, per EmbodyExt's
+    _TD_MANAGED_DAT_TYPES note), NOT on a '<name>_info' name: rename_op
+    renames only the host, never its docks, so name-matching goes stale.
+    An infoDAT docked to A can point its `op` par at B, so the target is
+    confirmed before its text is trusted.
+    """
+    try:
+        docked = target.docked or []
+    except Exception:
+        return None
+    for d in docked:
+        try:
+            if d.family != 'DAT' or d.type != 'info':
+                continue
+            ref = d.par.op.eval()
+            if ref is None or ref is target:
+                return d
+        except Exception:
+            continue
+    return None
+
+
+def shader_compile_log(target):
+    """Compile diagnostics for one operator, read from its docked Info DAT.
+
+    Returns None when the op docks no Info DAT (i.e. it is not a shader op),
+    so callers can tell "not a shader" from "shader, no errors" -- reporting
+    a clean bill of health for an absent DAT is a silent false negative.
+    """
+    info = _docked_info_dat(target)
+    if info is None:
+        return None
+    try:
+        text = info.text or ''
+    except Exception:
+        return {'infoDat': None, 'unreadable': True, 'lines': []}
+    lines = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or not any(m in line.lower()
+                               for m in _SHADER_ERROR_MARKERS):
+            continue
+        if len(lines) >= _SHADER_LOG_LINE_CAP:
+            lines.append('... (truncated)')
+            break
+        lines.append(line[:_SHADER_LOG_CHAR_CAP])
+    return {'infoDat': info.path, 'lines': lines}
+
+
+def shader_errors(ext, target, recurse: bool = True) -> list:
+    """Shader compile errors for an op and (optionally) its descendants.
+
+    Entries use the SAME shape as get_op_errors' errors[] so the write-effect
+    differ (_new_error_entries) consumes them unchanged.
+    """
+    ops = [target]
+    if recurse:
+        try:
+            # maxDepth, never depth -- TD's `depth` is an EXACT relative depth.
+            ops.extend(target.findChildren(maxDepth=99))
+        except Exception:
+            pass
+    found = []
+    for o in ops:
+        log = shader_compile_log(o)
+        if not log or not log.get('lines'):
+            continue
+        for line in log['lines']:
+            found.append({
+                'nodePath': o.path,
+                'nodeName': o.name,
+                'opType': o.OPType,
+                'message': line,
+                'infoDat': log.get('infoDat'),
+            })
+    return found
+
+
 def get_op_errors(ext, op_path: str, recurse: bool = True) -> dict:
     """Get error and warning messages for an operator and its children"""
     target = resolve_op(ext, op_path)
@@ -417,7 +565,7 @@ def get_op_errors(ext, op_path: str, recurse: bool = True) -> dict:
             except Exception as e:
                 ext._log(f'Error getting {severity}s from {op_path}: {e}', 'WARNING')
 
-    return {
+    result = {
         'path': target.path,
         'errorCount': len(all_errors),
         'warningCount': len(all_warnings),
@@ -426,6 +574,13 @@ def get_op_errors(ext, op_path: str, recurse: bool = True) -> dict:
         'errors': all_errors,
         'warnings': all_warnings,
     }
+    # Added only when non-empty: op.errors() cannot see GLSL compile failures,
+    # so without this a broken shader reads as a clean operator.
+    shader = shader_errors(ext, target, recurse)
+    if shader:
+        result['shaderErrors'] = shader
+        result['hasErrors'] = True
+    return result
 
 
 def exec_op_method(ext, op_path: str, method: str,
@@ -582,6 +737,57 @@ def process_result(ext, result) -> object:
     return str(result)
 
 
+_DAT_STATS_EDGE_ROWS = 5
+
+
+def _reduce_dat(target) -> dict:
+    """Reduce a table DAT to per-column stats + edge rows, never a full dump.
+
+    A 5000-row table is 5000 rows of context; this is a shape-and-range read.
+    Numeric columns report min/max/mean, text columns report distinct counts.
+    """
+    ncols, nrows = target.numCols, target.numRows
+    has_header = nrows > 0
+    columns = []
+    for c in range(ncols):
+        name = target[0, c].val if has_header else f'col{c}'
+        values = [target[rr, c].val for rr in range(1 if has_header else 0,
+                                                    nrows)]
+        entry = {'name': name, 'count': len(values)}
+        numeric = []
+        for v in values:
+            try:
+                numeric.append(float(v))
+            except (TypeError, ValueError):
+                numeric = None
+                break
+        if numeric:
+            entry.update({
+                'numeric': True,
+                'min': min(numeric), 'max': max(numeric),
+                'mean': sum(numeric) / len(numeric),
+            })
+        else:
+            entry['numeric'] = False
+            entry['distinct'] = len(set(values))
+        columns.append(entry)
+
+    edge = _DAT_STATS_EDGE_ROWS
+    body_start = 1 if has_header else 0
+    rows = [[target[rr, c].val for c in range(ncols)]
+            for rr in range(nrows)]
+    head = rows[:body_start + edge]
+    tail = rows[-edge:] if nrows > body_start + edge * 2 else []
+    out = {
+        'numRows': nrows, 'numCols': ncols,
+        'columns': columns, 'head': head,
+    }
+    if tail:
+        out['tail'] = tail
+        out['rowsOmitted'] = nrows - len(head) - len(tail)
+    return out
+
+
 def get_dat_content(ext, op_path: str, format: str = "auto") -> dict:
     """Get DAT content as text or table data"""
     target = resolve_op(ext, op_path)
@@ -598,6 +804,14 @@ def get_dat_content(ext, op_path: str, format: str = "auto") -> dict:
             'isTable': target.isTable,
             'isText': target.isText,
         }
+
+        if format == "stats":
+            if not target.isTable:
+                return {'error': f'{op_path} is not a table DAT -- '
+                                 f'"stats" reduces tables only'}
+            result.update(_reduce_dat(target))
+            result['format'] = 'stats'
+            return result
 
         use_table = (format == "table") or (format == "auto" and target.isTable)
 
@@ -930,6 +1144,190 @@ def sample_grid_top(ext, target, grid) -> dict:
         return result
     except Exception as e:
         return {'error': f'sample_grid failed: {e}'}
+
+
+# --- CHOP / POP data readers -------------------------------------------
+# Reduced reads, never a blind dump: a 4x600 CHOP is 2400 floats that would
+# otherwise land in an agent's context as raw numbers. The reduce-don't-dump
+# contract is adapted from the `view` tool in Marius Alwan Meyer's codemode
+# fork (github.com/sporqist/Embody, MIT); the POP half and the readback
+# ceiling below are ours.
+
+_CHOP_CHAN_CAP = 32           # channels reduced per call before truncating
+_POP_READBACK_POINTS = 50000  # see the cost contract in get_pop_data
+
+
+def _chan_stats(chan, samples: int) -> dict:
+    """Per-channel reduction. numpyArray() when available, Channel API else.
+
+    Channel exposes min()/max()/average() but NOT numSamples -- use len(chan)
+    (verified live on 2025.33070; the obvious chan.numSamples raises).
+    """
+    entry = {'name': chan.name}
+    try:
+        arr = chan.numpyArray()
+        entry.update({
+            'min': float(arr.min()), 'max': float(arr.max()),
+            'mean': float(arr.mean()), 'std': float(arr.std()),
+            'first': float(arr[0]), 'last': float(arr[-1]),
+        })
+        if samples > 0:
+            entry['head'] = [float(v) for v in arr[:samples]]
+            if len(arr) > samples:
+                entry['tail'] = [float(v) for v in arr[-samples:]]
+    except Exception:
+        n = len(chan)
+        entry.update({
+            'min': float(chan.min()), 'max': float(chan.max()),
+            'mean': float(chan.average()),
+            'first': float(chan[0]) if n else None,
+            'last': float(chan[n - 1]) if n else None,
+        })
+    return entry
+
+
+def _reduce_chop(target, channels=None, samples: int = 0) -> dict:
+    """Reduce a CHOP to per-channel stats (shared by read and diff paths)."""
+    import fnmatch
+    chans = list(target.chans())
+    if channels:
+        chans = [c for c in chans if fnmatch.fnmatch(c.name, channels)]
+    omitted = max(0, len(chans) - _CHOP_CHAN_CAP)
+    out = {
+        'path': target.path,
+        'numChans': target.numChans,
+        'numSamples': target.numSamples,
+        'rate': target.rate,
+        'isTimeSlice': target.isTimeSlice,
+        'channels': [_chan_stats(c, samples) for c in chans[:_CHOP_CHAN_CAP]],
+    }
+    if omitted:
+        out['channelsOmitted'] = omitted
+    return out
+
+
+def get_chop_data(ext, op_path: str, channels: str = None, samples: int = 0,
+                  compare_to: str = None) -> dict:
+    """Reduce a CHOP to per-channel statistics, optionally diffed vs another.
+
+    Args:
+        op_path: the CHOP to read
+        channels: glob on channel name (e.g. 'chan*') -- omit for all
+        samples: head/tail raw values per channel (0 = stats only)
+        compare_to: another CHOP path -- returns per-channel deltas, the
+            "what did this chain do to my data" read
+
+    Returns:
+        dict with numChans/numSamples/rate/isTimeSlice + channels[], each
+        {name, min, max, mean, std, first, last}; 'diff' when compare_to set.
+    """
+    target = resolve_op(ext, op_path)
+    if not target:
+        return {'error': f'Operator not found: {op_path}'}
+    if target.family != 'CHOP':
+        return {'error': f'{op_path} is not a CHOP (family: {target.family})'}
+    try:
+        target.cook(force=True)   # same precedent as capture_top
+        result = _reduce_chop(target, channels, samples)
+        if compare_to:
+            other = resolve_op(ext, compare_to)
+            if not other:
+                return {'error': f'compare_to not found: {compare_to}'}
+            if other.family != 'CHOP':
+                return {'error': f'compare_to is not a CHOP: {compare_to}'}
+            other.cook(force=True)
+            ref = _reduce_chop(other, channels, 0)
+            by_name = {c['name']: c for c in ref['channels']}
+            mine = {c['name'] for c in result['channels']}
+            deltas = []
+            for c in result['channels']:
+                o = by_name.get(c['name'])
+                if not o:
+                    deltas.append({'name': c['name'], 'only_in': target.path})
+                    continue
+                deltas.append({'name': c['name'], **{
+                    k: round(c[k] - o[k], 6) for k in ('min', 'max', 'mean')
+                    if c.get(k) is not None and o.get(k) is not None}})
+            deltas.extend({'name': n, 'only_in': other.path}
+                          for n in by_name if n not in mine)
+            result['diff'] = {'against': other.path, 'channels': deltas}
+        return ext._maybe_offload_to_file(result, 'get_chop_data')
+    except Exception as e:
+        return {'error': f'Failed to read CHOP: {e}'}
+
+
+def get_pop_data(ext, op_path: str, attributes: str = None, samples: int = 0,
+                 max_points: int = _POP_READBACK_POINTS) -> dict:
+    """Read a POP: attribute metadata always, point values only on request.
+
+    COST CONTRACT (measured on 2025.33070, gridPOP, 2026-08-21):
+      metadata only ............ 0.02 ms, flat, ANY point count
+      readback, 16k points ..... ~9.5 ms
+      readback, 160k points .... ~69 ms  (~4 frames at 60fps)
+    The `count` argument of POP.points() cannot bound this: it is accepted
+    and IGNORED (points('P', 5, 3) returns every point), so reading 4096
+    points off a 160k POP measured SLOWER (80ms) than reading all of them.
+    The guard is numPoints, never sample size. Do not "optimize" this by
+    passing a count and dropping the ceiling -- the count does nothing.
+
+    Args:
+        attributes: glob on attribute name (e.g. 'P') -- omit for all
+        samples: head point values to read (0 = metadata only, the default)
+        max_points: refuse a readback above this many points
+    """
+    import fnmatch
+    target = resolve_op(ext, op_path)
+    if not target:
+        return {'error': f'Operator not found: {op_path}'}
+    if target.family != 'POP':
+        return {'error': f'{op_path} is not a POP (family: {target.family})'}
+    try:
+        target.cook(force=True)
+        n = target.numPoints()
+
+        def _attrs(seq):
+            out = []
+            for a in seq:
+                if attributes and not fnmatch.fnmatch(a.name, attributes):
+                    continue
+                out.append({'name': a.name, 'size': a.size,
+                            'type': str(a.type).split('.')[-1]})
+            return out
+
+        result = {
+            'path': target.path,
+            'numPoints': n,
+            'pointAttributes': _attrs(target.pointAttributes),
+            'primAttributes': _attrs(target.primAttributes),
+            'vertAttributes': _attrs(target.vertAttributes),
+        }
+        if samples <= 0:
+            result['note'] = ('metadata only -- pass samples>0 for point '
+                              'values (GPU readback, see max_points)')
+            return result
+        if n > max_points:
+            result['readbackRefused'] = (
+                f'{n} points exceeds max_points={max_points}; a readback this '
+                f'size stalls the main thread (~69ms at 160k points). Raise '
+                f'max_points deliberately if you accept the cost.')
+            return result
+
+        for entry in result['pointAttributes']:
+            # Slice in PYTHON: POP.points(attr, startIndex, count) accepts
+            # both args and IGNORES them -- points('P', 5, 3) returned all 64
+            # points of an 8x8 grid (verified 2025.33070, 2026-08-21). That is
+            # also why the readback ceiling below is the only real guard.
+            raw = target.points(entry['name'])
+            take = min(samples, n)
+            vals = [raw[i] for i in range(take)]
+            if entry['size'] > 1:
+                entry['head'] = [tuple(round(float(v), 6) for v in p)
+                                 for p in vals]
+            else:
+                entry['head'] = [round(float(p[0]), 6) for p in vals]
+        return ext._maybe_offload_to_file(result, 'get_pop_data')
+    except Exception as e:
+        return {'error': f'Failed to read POP: {e}'}
 
 
 def get_op_flags(ext, op_path: str) -> dict:

@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 63 MCP tools for interacting with TouchDesigner, plus 21 bridge meta-tools: 4 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 65 MCP tools for interacting with TouchDesigner, plus 21 bridge meta-tools: 4 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 Two of the 62 (`convoy_lifecycle_state`, `convoy_lifecycle_quit`) are internal Convoy host-lifecycle tools: they refuse any session other than the Convoy host app's dedicated loopback session and are not for agent use.
 
@@ -45,9 +45,23 @@ Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mod
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `get_dat_content` | `op_path`, `format?` | Get DAT text or table data (`"text"`, `"table"`, or `"auto"`) |
+| `get_dat_content` | `op_path`, `format?` | Get DAT text or table data (`"text"`, `"table"`, `"auto"`), or `"stats"` to reduce a table to per-column min/max/mean (numeric) or distinct counts (text) plus head/tail rows -- use it instead of dumping a large table into context |
 | `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?`, `confirm_wipe?` | Full-replace DAT content. Wipe guardrail refuses `text=""`, `rows=[]`, or `clear=True` with no content unless `confirm_wipe=True` is passed. For partial edits to text DATs, prefer `edit_dat_content` -- it sends only the changed substring. |
 | `edit_dat_content` | `op_path`, `old_string`, `new_string`, `replace_all?`, `confirm_wipe?` | Surgical text edit on a DAT (mirrors Claude Code's Edit tool). Replaces `old_string` with `new_string`. By default `old_string` must appear exactly once -- pass `replace_all=True` to replace every occurrence. Token-efficient: only the changed substring crosses the wire. Text DATs only; use `set_dat_content(rows=...)` for tables. |
+
+## CHOP / POP Data
+
+Reduced reads -- never a blind dump. A 4x600 CHOP is 2,400 raw floats; these
+return the shape and range instead.
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_chop_data` | `op_path`, `channels?`, `samples?`, `compare_to?` | Per-channel `min`/`max`/`mean`/`std`/`first`/`last`, capped at 32 channels. `channels` is a name glob; `samples>0` adds head/tail raw values. `compare_to` another CHOP adds a `diff` of per-channel deltas -- the "what did this chain do to my data" read |
+| `get_pop_data` | `op_path`, `attributes?`, `samples?`, `max_points?` | Point/prim/vert attribute metadata (name, size, type). Metadata costs ~0.02ms at ANY point count; reading point VALUES is a GPU->CPU readback (~9.5ms at 16k points, ~69ms at 160k -- about 4 frames at 60fps), so `samples>0` is opt-in and refused above `max_points` (default 50,000) |
+
+**Why the POP guard is on point count, not sample count**: `POP.points(attr, startIndex, count)` accepts both slicing arguments and ignores them (verified on 2025.33070) -- the readback happens regardless. Asking for 4,096 points from a 160k POP measured *slower* than reading all of them. Reach for `samples` only when you actually need values, and prefer a smaller upstream POP for inspection.
+
+The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view` tool in Marius Alwan Meyer's code-mode fork of Embody ([sporqist/Embody](https://github.com/sporqist/Embody), MIT). The POP reader and its readback ceiling are Embody's own.
 
 ## Operator Flags
 

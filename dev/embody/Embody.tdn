@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1169
-generator: Embody/6.0.260
+build: 1173
+generator: Embody/6.0.261
 td_build: 099.2025.33070
-source_file: Embody-6.260.toe
-exported_at: '2026-08-20T21:16:29Z'
+source_file: Embody-6.261.toe
+exported_at: '2026-08-22T03:14:11Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -817,7 +817,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.260
+    value: 6.0.261
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -914,6 +914,7 @@ sequences:
   - {}
   - {}
   - {}
+  - {}
 flags:
 - display
 - viewer
@@ -977,6 +978,126 @@ operators:
   position: [-275, 200]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - '20:09:37 6977039 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/stray_guard'' delete_file=False rows=310'
+  - - '20:09:37 6977039 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/stray_guard.tdn'' delete_file=False'
+  - - '20:09:38 6977051 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_stability_hardening\orphan_ptr.tdn'
+  - - '20:09:38 6977051 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_ptr'' delete_file=False rows=310'
+  - - '20:09:38 6977051 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_ptr.tdn'' delete_file=False'
+  - - '20:09:38 6977051 WARNING EmbodyExt: Found 1 TDN-tagged empty COMP(s) with a recoverable .tdn but no tracking row: /embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_ptr'
+  - - '20:09:38 6977051 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_ptr'
+  - - '20:09:38 6977051 SUCCESS EmbodyExt: Orphan-shell recovery restored 1 COMP(s) and re-tracked them'
+  - - '20:09:38 6977051 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_ptr'' delete_file=False rows=310'
+  - - '20:09:38 6977051 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_ptr.tdn'' delete_file=False'
+  - - '20:09:39 6977063 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_stability_hardening\orphan_conv.tdn'
+  - - '20:09:39 6977063 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_conv'' delete_file=False rows=310'
+  - - '20:09:39 6977063 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_conv.tdn'' delete_file=False'
+  - - '20:09:39 6977063 WARNING EmbodyExt: Found 1 TDN-tagged empty COMP(s) with a recoverable .tdn but no tracking row: /embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_conv'
+  - - '20:09:39 6977063 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_conv'
+  - - '20:09:39 6977063 SUCCESS EmbodyExt: Orphan-shell recovery restored 1 COMP(s) and re-tracked them'
+  - - '20:09:39 6977063 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_conv'' delete_file=False rows=310'
+  - - '20:09:39 6977063 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/orphan_conv.tdn'' delete_file=False'
+  - - '20:09:40 6977075 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_stability_hardening\not_orphan.tdn'
+  - - '20:09:40 6977075 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/not_orphan'' delete_file=False rows=310'
+  - - '20:09:40 6977075 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_tdn_stability_hardening/not_orphan.tdn'' delete_file=False'
+  - - '20:09:43 6977111 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_yaml/legacy_json_target'
+  - - '20:09:45 6977135 WARNING TestRunnerExt: SKIP: test_tdn_yaml.test_tdn_boilerplate_omission - glslTOP does not dock a <name>_compute DAT here'
+  - - '20:10:08 6977391 SUCCESS envoy_setup:816: Created .claude/settings.local.json (tool permissions: all) at C:\Users\admin\AppData\Local\Temp\tmpsgtqi_68\.claude\settings.local.json'
+  - - '20:10:08 6977391 SUCCESS envoy_setup:816: Created .claude/settings.local.json (tool permissions: prompt) at C:\Users\admin\AppData\Local\Temp\tmpp4hbpjfa\.claude\settings.local.json'
+  - - '20:10:10 6977403 SUCCESS envoy_setup:816: Created .claude/settings.local.json (tool permissions: all) at C:\Users\admin\AppData\Local\Temp\tmp5gknw_24\.claude\settings.local.json'
+  - - '20:10:12 6977427 SUCCESS envoy_setup:816: Updated .claude/settings.local.json (tool permissions: all) at C:\Users\admin\AppData\Local\Temp\tmplkz766bc\.claude\settings.local.json'
+  - - '20:10:13 6977439 INFO    envoy_setup:361: Mirrored AI config into sibling worktrees (2 file(s))'
+  - - '20:10:19 6977511 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 2'
+  - - '20:10:19 6977511 SUCCESS EmbodyExt: Reset externaltox for ''/embody/unit_tests/test_sandbox/sandbox_test_toxdrop_expr/dropped1'''
+  - - '20:10:19 6977511 INFO    EmbodyExt: Dropped .tox expression handling set to Always Clean'
+  - - '20:10:20 6977523 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 3'
+  - - '20:10:20 6977523 INFO    EmbodyExt: Dropped .tox expression handling set to Always Ignore'
+  - - '20:10:21 6977535 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 0'
+  - - '20:10:21 6977535 SUCCESS EmbodyExt: Reset externaltox for ''/embody/unit_tests/test_sandbox/sandbox_test_toxdrop_expr/dropped1'''
+  - - '20:10:22 6977547 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 1'
+  - - '20:10:24 6977571 WARNING EmbodyExt: [test] No response seeded for "Dropped .tox Expression Detected"; returning -1 instead of opening modal dialog. Seed it via op.Embody.store("_smoke_test_responses", {...}).'
+  - - '20:10:25 6977583 WARNING EmbodyExt: [test] No response seeded for "Dropped .tox Expression Detected"; returning -1 instead of opening modal dialog. Seed it via op.Embody.store("_smoke_test_responses", {...}).'
+  - - '20:10:30 6977619 SUCCESS EmbodyExt: Reset externaltox for ''/embody/Embody/_test_toxdrop_internal'''
+  - - '20:10:31 6977643 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 1'
+  - - '20:10:32 6977655 SUCCESS EmbodyExt: Reset externaltox for ''/embody/unit_tests/test_sandbox/sandbox_test_toxdrop_expr/dropped1'''
+  - - '20:10:45 6977787 WARNING embody_admin:328: Uninstall: refusing to remove C:\Users\admin\AppData\Local\Temp\embody_outside_9ravkvl1 -- outside C:\Users\admin\AppData\Local\Temp\embody_uninstall_exec_c3b0txil'
+  - - '20:10:48 6977823 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall" -> button 0'
+  - - '20:10:48 6977823 INFO    embody_admin:559: Uninstall cancelled -- nothing was changed.'
+  - - '20:10:49 6977835 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall" -> button 1'
+  - - '20:10:49 6977835 SUCCESS embody_admin:501: Uninstall complete: {''deleted'': 1, ''stripped'': 0, ''unset'': 0, ''kept_review'': 1, ''errors'': 0, ''ran'': True}'
+  - - '20:10:49 6977835 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall Complete" -> button 0'
+  - - '20:10:50 6977847 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall" -> button 1'
+  - - '20:10:51 6977847 SUCCESS embody_admin:501: Uninstall complete: {''deleted'': 2, ''stripped'': 0, ''unset'': 0, ''kept_review'': 0, ''errors'': 0, ''ran'': True}'
+  - - '20:10:51 6977847 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall Complete" -> button 0'
+  - - '20:10:52 6977859 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall" -> button 0'
+  - - '20:10:52 6977859 INFO    embody_admin:524: Uninstall: nothing to remove at C:\Users\admin\AppData\Local\Temp\embody_uninstall_handler_4riedj04.'
+  - - '20:10:54 6977871 WARNING EmbodyExt: [test] No response seeded for "Embody -- Uninstall"; returning -1 instead of opening modal dialog. Seed it via op.Embody.store("_smoke_test_responses", {...}).'
+  - - '20:10:54 6977871 INFO    embody_admin:559: Uninstall cancelled -- nothing was changed.'
+  - - |-
+      20:11:05 6977991 INFO    embody_admin:312: Uninstall preview for C:\Users\admin\AppData\Local\Temp\embody_uninstall_test_936la6fh (sources: fallback)
+        REMOVE (2):
+          - CLAUDE.md  [file] -- Embody-generated, unmodified
+          - .embody  [dir] -- Embody runtime state (manifest, bridge, config, hashes)
+  - - '20:12:22 6978879 WARNING TDNExt: Failed to track TDN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_chomp_pe2dho04\\one_nl.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:12:22 6978879 SUCCESS TDNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_chomp_pe2dho04\one_nl.tdn'
+  - - '20:12:22 6978879 INFO    TDNExt: Importing from C:\Users\admin\AppData\Local\Temp\v6h_chomp_pe2dho04\one_nl.tdn into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/one_nl_target...'
+  - - '20:12:22 6978879 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/one_nl_target'
+  - - '20:12:23 6978891 WARNING TDNExt: Failed to track TDN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_chomp_xq873ihy\\two_nl.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:12:23 6978891 SUCCESS TDNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_chomp_xq873ihy\two_nl.tdn'
+  - - '20:12:23 6978891 INFO    TDNExt: Importing from C:\Users\admin\AppData\Local\Temp\v6h_chomp_xq873ihy\two_nl.tdn into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/two_nl_target...'
+  - - '20:12:23 6978891 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/two_nl_target'
+  - - '20:12:32 6978999 WARNING TDNExt: Failed to track TDN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_load_s_bkfiy2\\ver.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:12:32 6978999 SUCCESS TDNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_load_s_bkfiy2\ver.tdn'
+  - - '20:12:44 6979131 INFO    EmbodyExt: 308 externalized operator(s) found -- validating tracked operators'
+  - - '20:12:45 6979143 SUCCESS EmbodyExt: Tag ''tox'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
+  - - '20:12:45 6979143 SUCCESS EmbodyExt: Added ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
+  - - '20:12:45 6979143 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
+  - - |-
+      20:12:48 6979167 ERROR   TestRunnerExt: FAIL: test_version_sync.test_mcp_tool_count_claims_match_reality - Lists differ: [] != [('README badge', 63), ('README.md prose',[173 chars] 63)]
+
+      Second list contains 7 additional elements.
+      First extra element 0:
+      ('README badge', 63)
+
+      - []
+      + [('README badge', 63),
+      +  ('README.md prose', 63),
+      +  ('docs/index.md prose', 63),
+      +  ('docs/index.md prose', 63),
+      +  ('docs/envoy/index.md prose', 63),
+      +  ('docs/envoy/index.md prose', 63),
+      +  ('docs/envoy/tools-reference.md prose', 63)] : 7 user-facing tool-count claim(s) disagree with the 65 registered tools: [('README badge', 63), ('README.md prose', 63), ('docs/index.md prose', 63), ('docs/index.md prose', 63), ('docs/envoy/index.md prose', 63), ('docs/envoy/index.md prose', 63), ('docs/envoy/tools-reference.md prose', 63)]
+  - - '20:12:52 6979239 SUCCESS EmbodyExt: Tag ''tdn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
+  - - '20:12:52 6979239 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
+  - - '20:12:52 6979239 SUCCESS EmbodyExt: Added TDN ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
+  - - '20:12:52 6979239 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
+  - - '20:12:52 6979239 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
+  - - '20:12:52 6979239 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
+  - - '20:12:52 6979239 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
+  - - '20:12:52 6979239 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
+  - - '20:12:52 6979239 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
+  - - '20:12:52 6979239 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'' delete_file=True rows=310'
+  - - '20:12:52 6979239 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard.tdn'' delete_file=True'
+  - - '20:13:03 6979335 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '20:13:05 6979359 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '20:13:05 6979359 WARNING EmbodyExt: Skipping the whole-project externalization: no saved .toe on disk to fall back on, and it re-tags every COMP and DAT in the project. Save the project first, then run Externalize Full Project from the Embody parameters. New work is still externalized automatically.'
+  - - '20:13:06 6979371 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '20:13:07 6979371 WARNING EmbodyExt: Whole-project externalization requested -- it re-tags every compatible COMP and DAT. Recovery point on disk: "/tmp/fake-project.toe". Confirm the format in the dialog.'
+  - - '20:13:14 6979455 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
+  - - '20:13:15 6979467 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '20:13:15 6979467 WARNING EmbodyExt: Skipping the whole-project externalization: no saved .toe on disk to fall back on, and it re-tags every COMP and DAT in the project. Save the project first, then run Externalize Full Project from the Embody parameters. New work is still externalized automatically.'
+  - - '20:13:15 6979467 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
+  - - '20:13:16 6979479 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '20:13:16 6979479 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
+  - - '20:13:18 6979491 WARNING EmbodyExt: Setup wizard: unrecognized externalize choice "externalize-everything!!" -- skipping externalization setup.'
+  - - '20:13:18 6979491 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
+  - - '20:13:24 6979551 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '20:13:26 6979575 ERROR   TestRunnerExt: Tests complete: 3863/3976 passed, 1 failed, 112 skipped'
+  - - '20:13:30 6979838 WARNING EnvoyExt: Watchdog: Embody Status stranded at ''Testing'' with no test run live -- restoring the saved status'
+  - - '20:14:09 6982149 INFO    EnvoyExt: Processing: execute_python'
+  - - "20:14:09 6982149 INFO    EnvoyExt: execute_python: \n# Mirror what the test's _registered_tool_count() does: count TD-side tool\n# wrappers registered in _register_tools (bridge meta-tools are separate).\nimport re\nsrc = op.Embody.op('EnvoyExt').text\nblo..."
+  - - '20:14:09 6982149 INFO    EnvoyExt: execute_python: completed successfully'
+  dat_content_format: table
 - name: null2
   type: nullCHOP
   parameters:
@@ -1538,6 +1659,152 @@ operators:
     type: tableDAT
     position: [300, 0]
     color: [0.67, 0.67, 0.67]
+    dat_content:
+    - - name
+      - value
+      - r
+      - g
+      - b
+      - show
+    - - font
+      - '41.0909'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - rowh
+      - '120'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - pad
+      - '14'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - c0w0
+      - '240'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row0
+      - ''
+      - ''
+      - ''
+      - ''
+      - '1'
+    - - r0c0
+      - ✓ Embody
+      - '0.3500'
+      - '0.7800'
+      - '0.4500'
+      - '1'
+    - - r0c1
+      - v6.0.261
+      - '0.4000'
+      - '0.4400'
+      - '0.5000'
+      - '1'
+    - - c0w1
+      - '375'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row1
+      - ''
+      - ''
+      - ''
+      - ''
+      - '1'
+    - - r1c0
+      - ✓ Saved 9m ago
+      - '0.3500'
+      - '0.7800'
+      - '0.4500'
+      - '1'
+    - - r1c1
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    - - c0w2
+      - '217'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row2
+      - ''
+      - ''
+      - ''
+      - ''
+      - '1'
+    - - r2c0
+      - ✓ Envoy
+      - '0.3500'
+      - '0.7800'
+      - '0.4500'
+      - '1'
+    - - r2c1
+      - ✓ Convoy
+      - '0.3500'
+      - '0.7800'
+      - '0.4500'
+      - '1'
+    - - c0w3
+      - '59'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row3
+      - ''
+      - ''
+      - ''
+      - ''
+      - '0'
+    - - r3c0
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    - - r3c1
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    - - c0w4
+      - '59'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row4
+      - ''
+      - ''
+      - ''
+      - ''
+      - '0'
+    - - r4c0
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    - - r4c1
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    dat_content_format: table
   - name: parexec_status
     type: parameterexecuteDAT
     parameters:
@@ -1546,6 +1813,8 @@ operators:
     position: [600, 0]
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
+    dat_content: "# Any parameter the status readout SHOWS is an event: republish, once.\n# Scoped to those parameters (see the Parameters par) so unrelated Embody\n# parameter traffic -- which is constant -- never redraws the panel.\n#\n# me.parent() rather than a relative op() path: inside a DAT, op('../x')\n# resolves a level above this network and silently returns None, which is\n# exactly how this callback failed quietly the first time.\n\ndef onValueChange(par, prev):\n\tpublisher = me.parent().op('status_publish')\n\tif publisher is not None:\n\t\tpublisher.module.Refresh()\n\treturn\n"
+    dat_content_format: text
   - name: status_publish
     type: textDAT
     parameters:
@@ -1574,6 +1843,7 @@ operators:
     fromop: =parent()
   position: [-300, -275]
   size: [130, 90]
+  dat_read_only: true
 - name: embody_admin
   type: textDAT
   parameters:
@@ -1997,6 +2267,8 @@ operators:
         - viewer
         position: [66, -83]
         size: [128, 66]
+        dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select :\n\t\tparent().panel.state = par.eval()\n\treturn"
+        dat_content_format: text
       - name: panelexec1
         type: panelexecuteDAT
         parameters:
@@ -2010,6 +2282,8 @@ operators:
         - viewer
         position: [247, -81]
         size: [126, 62]
+        dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+        dat_content_format: text
     - name: title_callbacks
       type: textDAT
       flags:
@@ -2018,6 +2292,8 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: title
+      dat_content: "# Text Component callbacks\n\nfrom typing import Any, Dict\n\ndef onValueChange(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason\n\tincluding typing in the text window or changing the parameter directly. The\n\tcallback is equivalent to the onValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp: textCOMP):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp: textCOMP, info: Dict[str, str]):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In\n\tregular editing mode this is right after the contents are saved back to the\n\tvalue parameter. This function is called everytime the viewer loses focus,\n\teven if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus\n\t\t\t\te.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp: textCOMP):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when\n\ttyping a character, deleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not\n\tcalled in 'Continuous Edit' mode. Use onTextEdit and onFocusEnd when using\n\tcontinuous editing.\n\n\tNote: Any Python undo blocks created by this callback will be included in\n\tthe undo step for the change to the text field.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n"
+      dat_content_format: text
     - name: status_callbacks
       type: textDAT
       flags:
@@ -2026,6 +2302,8 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: status
+      dat_content: "# Text Component callbacks\n\nfrom typing import Any, Dict\n\ndef onValueChange(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason\n\tincluding typing in the text window or changing the parameter directly. The\n\tcallback is equivalent to the onValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp: textCOMP):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp: textCOMP, info: Dict[str, str]):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In\n\tregular editing mode this is right after the contents are saved back to the\n\tvalue parameter. This function is called everytime the viewer loses focus,\n\teven if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus\n\t\t\t\te.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp: textCOMP):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when\n\ttyping a character, deleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not\n\tcalled in 'Continuous Edit' mode. Use onTextEdit and onFocusEnd when using\n\tcontinuous editing.\n\n\tNote: Any Python undo blocks created by this callback will be included in\n\tthe undo step for the change to the text field.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n"
+      dat_content_format: text
   - name: panelexec_cancel
     type: panelexecuteDAT
     parameters:
@@ -2033,6 +2311,8 @@ operators:
     position: [200, -200]
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
+    dat_content: "# Cancel button for the chunked TDN export progress dialog.\n\ndef onOffToOn(panelValue):\n\tparent.Embody.ext.TDN.CancelExport()\n\treturn\n"
+    dat_content_format: text
 - name: window_tagging_menu
   type: windowCOMP
   parameters:

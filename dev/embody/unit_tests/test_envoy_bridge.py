@@ -116,6 +116,59 @@ class TestBridgeParseArgs(EmbodyTestCase):
             self.assertEqual(config, '/tmp/c.json')
 
 
+class TestBridgeStdioUTF8Pin(EmbodyTestCase):
+    """pin_stdio_utf8: the STDIO transport must not decode via the locale.
+
+    MCP clients send UTF-8 JSON-RPC; Python binds stdin/stdout to the host
+    codepage (CP1252 on Western Windows), so an em dash arrived as three
+    mojibake characters -- or killed the read loop on a decode error.
+    """
+
+    class _FakeStream:
+        def __init__(self, raises=None):
+            self.calls = []
+            self._raises = raises
+
+        def reconfigure(self, **kwargs):
+            self.calls.append(kwargs)
+            if self._raises:
+                raise self._raises
+
+    def test_pins_all_three_streams_to_utf8(self):
+        streams = {n: self._FakeStream() for n in ('stdin', 'stdout', 'stderr')}
+        with patch.object(sys, 'stdin', streams['stdin']),              patch.object(sys, 'stdout', streams['stdout']),              patch.object(sys, 'stderr', streams['stderr']):
+            pinned = bridge.pin_stdio_utf8()
+
+        self.assertEqual(pinned, ['stdin', 'stdout', 'stderr'])
+        for name, stream in streams.items():
+            self.assertEqual(
+                stream.calls, [{'encoding': 'utf-8', 'errors': 'replace'}],
+                f'{name} not pinned to UTF-8')
+
+    def test_skips_streams_without_reconfigure(self):
+        """A harness-replaced stream (io.StringIO) must be left alone."""
+        with patch.object(sys, 'stdin', io.StringIO()),              patch.object(sys, 'stdout', io.StringIO()),              patch.object(sys, 'stderr', io.StringIO()):
+            self.assertEqual(bridge.pin_stdio_utf8(), [])
+
+    def test_reconfigure_failure_is_swallowed(self):
+        """A stream that refuses re-binding must never take the bridge down."""
+        bad = self._FakeStream(raises=ValueError('detached'))
+        good = self._FakeStream()
+        with patch.object(sys, 'stdin', bad),              patch.object(sys, 'stdout', good),              patch.object(sys, 'stderr', io.StringIO()):
+            self.assertEqual(bridge.pin_stdio_utf8(), ['stdout'])
+
+    def test_main_pins_stdio(self):
+        """The pin is wired into main() -- never at import.
+
+        Import-time would mutate TouchDesigner's own streams: this very
+        suite execs the bridge module inside TD.
+        """
+        with patch.object(bridge, 'pin_stdio_utf8') as pin:
+            with patch.object(sys, 'stdin', io.StringIO('')),                  patch.object(sys, 'stdout', io.StringIO()),                  patch.object(sys, 'stderr', io.StringIO()),                  patch.object(sys, 'argv', ['envoy_bridge.py']),                  patch.object(bridge, 'wait_for_envoy', return_value=True),                  patch.object(bridge, 'find_td_pid', return_value=None),                  patch.object(bridge, 'kill_stale_bridges'),                  patch('time.sleep'):
+                bridge.main()
+        pin.assert_called_once()
+
+
 # =====================================================================
 # HTTP Forwarding & SSE Parsing
 # =====================================================================

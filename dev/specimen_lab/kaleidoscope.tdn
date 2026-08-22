@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 3
-generator: Embody/6.0.62
-td_build: 099.2025.32820
-source_file: Embody-6.63.toe
-exported_at: '2026-07-01T00:54:33Z'
+generator: Embody/6.0.260
+td_build: 099.2025.33070
+source_file: Embody-6.261.toe
+exported_at: '2026-08-22T02:42:28Z'
 network_path: /specimen_lab/kaleidoscope
 options:
   include_dat_content: false
@@ -224,12 +224,14 @@ operators:
     op: glsl_source
   position: [0, -420]
   dock: glsl_source
+  dat_read_only: true
 - name: glsl_kaleido_info
   type: infoDAT
   parameters:
     op: glsl_kaleido
   position: [1300, -270]
   dock: glsl_kaleido
+  dat_read_only: true
 - name: glsl_source_pixel
   type: textDAT
   parameters:

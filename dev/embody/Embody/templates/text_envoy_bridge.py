@@ -849,6 +849,36 @@ def log(msg):
             pass
 
 
+def pin_stdio_utf8():
+    """Force the STDIO transport to UTF-8, whatever the host locale says.
+
+    MCP clients send UTF-8 JSON-RPC, but Python binds sys.stdin/stdout to the
+    LOCALE codepage -- CP1252 on Western Windows, US-ASCII on a GUI-launched
+    macOS process. Every non-ASCII character in an incoming frame then decodes
+    to mojibake (an em dash, E2 80 94, arrives as three characters) or dies on
+    a UnicodeDecodeError that kills the read loop outright.
+
+    errors="replace" over strict: a bad byte must never take the bridge down
+    mid-session -- the same tradeoff the SSE/line readers already make.
+
+    MUST be called from main(), never at import: the unit tests exec this
+    module inside TouchDesigner, and an import-time pin would mutate TD's own
+    streams. Returns the stream names actually re-bound (for tests).
+    """
+    pinned = []
+    for name in ("stdin", "stdout", "stderr"):
+        stream = getattr(sys, name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue  # replaced/redirected by a harness -- leave it alone
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+            pinned.append(name)
+        except (ValueError, OSError, AttributeError):
+            pass
+    return pinned
+
+
 def parse_args():
     port = DEFAULT_PORT
     config_path = None
@@ -5749,6 +5779,7 @@ def _install_signal_diagnostics():
 
 
 def main():
+    pin_stdio_utf8()
     cli_port, config_path = parse_args()
     _init_file_logging(config_path)
 

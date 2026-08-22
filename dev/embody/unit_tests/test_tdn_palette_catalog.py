@@ -391,10 +391,19 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 			'include_dat_content=False')
 
 	def test_E02_standalone_dat_respects_content_flag(self):
-		"""Regular DAT (not inside animationCOMP) still respects the flag."""
+		"""File-backed DAT (not inside animationCOMP) respects the flag.
+
+		Reframed 2026-08-21: the flag skips content already on disk; an
+		unbacked DAT is always embedded so its content cannot be lost.
+		"""
+		import os, tempfile
+		backing = os.path.join(tempfile.gettempdir(), 'standalone_tbl.tsv')
+		with open(backing, 'w', encoding='utf-8') as f:
+			f.write('a\tb\n')
 		tbl = self.sandbox.create(tableDAT, 'standalone_tbl')
 		tbl.clear()
 		tbl.appendRow(['a', 'b'])
+		tbl.par.file = backing
 		result = self.tdn.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=False)
 		self.assertTrue(result.get('success'))
