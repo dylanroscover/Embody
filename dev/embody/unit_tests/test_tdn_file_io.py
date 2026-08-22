@@ -879,8 +879,16 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertGreater(len(lines), 1)
 
 	def test_export_dat_content_excluded_when_disabled(self):
-		"""DAT content should be absent when include_dat_content=False."""
+		"""File-backed DAT content is absent when include_dat_content=False.
+
+		Reframed 2026-08-21: the flag skips content a file already holds; an
+		unbacked DAT is always embedded (test_export_unbacked_dat_content_kept).
+		"""
+		backing = str(Path(self._temp_dir) / 'no_content_backing.txt')
+		with open(backing, 'w', encoding='utf-8') as f:
+			f.write('should not appear')
 		dat = self.sandbox.create(textDAT, 'no_content')
+		dat.par.file = backing
 		dat.text = 'should not appear'
 		fp = str(Path(self._temp_dir) / 'no_dc.tdn')
 		self.embody.ext.TDN.ExportNetwork(
@@ -889,7 +897,25 @@ class TestTDNFileIO(EmbodyTestCase):
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = yaml.safe_load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'no_content'][0]
-		self.assertNotIn('dat_content', entry)
+		self.assertNotIn('dat_content', entry,
+			'File-backed DAT content duplicated into the .tdn')
+
+	def test_export_unbacked_dat_content_kept(self):
+		"""An unbacked DAT is embedded even with include_dat_content=False.
+
+		The .tdn is the only copy; dropping it loses the user's code.
+		"""
+		dat = self.sandbox.create(textDAT, 'unbacked')
+		dat.text = 'must survive'
+		fp = str(Path(self._temp_dir) / 'unbacked.tdn')
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=self.sandbox.path, output_file=fp,
+			include_dat_content=False)
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = yaml.safe_load(f)
+		entry = [o for o in data['operators'] if o['name'] == 'unbacked'][0]
+		self.assertEqual(entry.get('dat_content'), 'must survive',
+			'Unbacked DAT content DROPPED -- silent data-loss bug')
 
 	def test_export_multiple_families_in_one_file(self):
 		"""Multiple operator families should coexist in one file."""

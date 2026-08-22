@@ -74,6 +74,25 @@ def _slow_clock(start, step=0.01):
     return _tick
 
 
+def _monotonic_steps(*readings):
+    """A time.monotonic() stand-in that never runs out.
+
+    patch.object(bridge.time, 'monotonic', ...) replaces the attribute on the
+    STDLIB time module, so every thread in the process draws from it for the
+    duration of the with-block -- not just the code under test. A finite
+    side_effect tuple therefore raises StopIteration whenever a background
+    thread (Envoy server, watchdog) happens to call monotonic() inside the
+    window: the test passes alone and dies in a long full-suite run
+    (field 2026-08-21). Returns each reading in order, then pins the last.
+    """
+    values = list(readings)
+
+    def _next():
+        return values.pop(0) if len(values) > 1 else values[0]
+
+    return _next
+
+
 class TestBridgeParseArgs(EmbodyTestCase):
 
     def test_default_port(self):
@@ -114,6 +133,59 @@ class TestBridgeParseArgs(EmbodyTestCase):
             port, config = bridge.parse_args()
             self.assertEqual(port, 9999)
             self.assertEqual(config, '/tmp/c.json')
+
+
+class TestBridgeStdioUTF8Pin(EmbodyTestCase):
+    """pin_stdio_utf8: the STDIO transport must not decode via the locale.
+
+    MCP clients send UTF-8 JSON-RPC; Python binds stdin/stdout to the host
+    codepage (CP1252 on Western Windows), so an em dash arrived as three
+    mojibake characters -- or killed the read loop on a decode error.
+    """
+
+    class _FakeStream:
+        def __init__(self, raises=None):
+            self.calls = []
+            self._raises = raises
+
+        def reconfigure(self, **kwargs):
+            self.calls.append(kwargs)
+            if self._raises:
+                raise self._raises
+
+    def test_pins_all_three_streams_to_utf8(self):
+        streams = {n: self._FakeStream() for n in ('stdin', 'stdout', 'stderr')}
+        with patch.object(sys, 'stdin', streams['stdin']),              patch.object(sys, 'stdout', streams['stdout']),              patch.object(sys, 'stderr', streams['stderr']):
+            pinned = bridge.pin_stdio_utf8()
+
+        self.assertEqual(pinned, ['stdin', 'stdout', 'stderr'])
+        for name, stream in streams.items():
+            self.assertEqual(
+                stream.calls, [{'encoding': 'utf-8', 'errors': 'replace'}],
+                f'{name} not pinned to UTF-8')
+
+    def test_skips_streams_without_reconfigure(self):
+        """A harness-replaced stream (io.StringIO) must be left alone."""
+        with patch.object(sys, 'stdin', io.StringIO()),              patch.object(sys, 'stdout', io.StringIO()),              patch.object(sys, 'stderr', io.StringIO()):
+            self.assertEqual(bridge.pin_stdio_utf8(), [])
+
+    def test_reconfigure_failure_is_swallowed(self):
+        """A stream that refuses re-binding must never take the bridge down."""
+        bad = self._FakeStream(raises=ValueError('detached'))
+        good = self._FakeStream()
+        with patch.object(sys, 'stdin', bad),              patch.object(sys, 'stdout', good),              patch.object(sys, 'stderr', io.StringIO()):
+            self.assertEqual(bridge.pin_stdio_utf8(), ['stdout'])
+
+    def test_main_pins_stdio(self):
+        """The pin is wired into main() -- never at import.
+
+        Import-time would mutate TouchDesigner's own streams: this very
+        suite execs the bridge module inside TD.
+        """
+        with patch.object(bridge, 'pin_stdio_utf8') as pin:
+            with patch.object(sys, 'stdin', io.StringIO('')),                  patch.object(sys, 'stdout', io.StringIO()),                  patch.object(sys, 'stderr', io.StringIO()),                  patch.object(sys, 'argv', ['envoy_bridge.py']),                  patch.object(bridge, 'wait_for_envoy', return_value=True),                  patch.object(bridge, 'find_td_pid', return_value=None),                  patch.object(bridge, 'kill_stale_bridges'),                  patch('time.sleep'):
+                bridge.main()
+        pin.assert_called_once()
 
 
 # =====================================================================
@@ -5350,7 +5422,7 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
              patch.object(bridge, 'convoy_host_download_artifact',
                           return_value=downloaded) as download, \
              patch.object(bridge.time, 'monotonic',
-                          side_effect=(100.0, 102.5)):
+                          side_effect=_monotonic_steps(100.0, 102.5)):
             result = bridge.handle_convoy_get_artifact(params)
         sent = host_call.call_args_list[0].args[2]
         self.assertEqual(host_call.call_args_list[0].args[:2],
@@ -5391,8 +5463,8 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
                 {'ok': True, 'released': True},
         )) as host_call, patch.object(
                 bridge, 'convoy_host_download_artifact',
-                return_value=downloaded), patch.object(
-                bridge.time, 'monotonic', side_effect=(100.0, 101.0)):
+                return_value=downloaded), patch.object(bridge.time, 'monotonic',
+                          side_effect=_monotonic_steps(100.0, 101.0)):
             result = bridge.handle_convoy_get_artifact(params)
         self.assertTrue(result['ok'])
         self.assertEqual(host_call.call_args_list[2].args, (
@@ -5510,7 +5582,7 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
              patch.object(bridge, 'convoy_host_call',
                           side_effect=export), \
              patch.object(bridge.time, 'monotonic',
-                          side_effect=(100.0, 102.5)):
+                          side_effect=_monotonic_steps(100.0, 102.5)):
             result = bridge.handle_convoy_save_artifact(params, state)
         self.assertTrue(result['ok'])
         self.assertTrue(result['acknowledgement']['ok'])
@@ -5532,7 +5604,7 @@ class TestConvoyBridgePublicTools(EmbodyTestCase):
              patch.object(bridge, 'convoy_host_call', return_value={
                  'ok': False, 'reason': 'artifact_exists'}), \
              patch.object(bridge.time, 'monotonic',
-                          side_effect=(20.0, 20.1)):
+                          side_effect=_monotonic_steps(20.0, 20.1)):
             result = bridge.handle_convoy_save_artifact({
                 'target_host_id': 'host-remote', 'convoy_id': 'studio',
                 'target_node_id': 'node-remote', 'artifact': reference}, state)

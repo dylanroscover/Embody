@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 245
-generator: Embody/6.0.259
+build: 249
+generator: Embody/6.0.263
 td_build: 099.2025.33070
-source_file: Embody-6.260.toe
-exported_at: '2026-08-20T21:16:25Z'
+source_file: Embody-6.264.toe
+exported_at: '2026-08-22T15:28:54Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -36,7 +36,7 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 3396
+    rows: 3445
     cols: 5
   flags:
   - viewer
@@ -139,6 +139,12 @@ operators:
   flags:
   - viewer
   position: [0, -800]
+  color: [0.9, 0.3, 0.4]
+- name: test_data_readers
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_data_readers.py
+  position: [600, -3800]
   color: [0.9, 0.3, 0.4]
 - name: test_envoy_bridge
   type: textDAT
@@ -412,6 +418,12 @@ operators:
   - viewer
   position: [600, -1600]
   color: [0.9, 0.3, 0.4]
+- name: test_shader_diagnostics
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_shader_diagnostics.py
+  position: [800, -3800]
+  color: [0.9, 0.3, 0.4]
 - name: test_tdn_reconstruction
   type: textDAT
   parameters:
@@ -445,6 +457,12 @@ operators:
   parameters:
     file: embody/unit_tests/test_tdn_palette_catalog.py
   position: [750, 0]
+  color: [0.9, 0.3, 0.4]
+- name: test_catalog_default_patch
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_catalog_default_patch.py
+  position: [1000, -3800]
   color: [0.9, 0.3, 0.4]
 - name: test_rename_move_lifecycle
   type: textDAT

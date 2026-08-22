@@ -33,9 +33,21 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one batch_operat
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `get_dat_content` | `op_path`, `format?` | Get DAT text or table data (`"text"`, `"table"`, `"auto"`) |
+| `get_dat_content` | `op_path`, `format?` | Get DAT text or table data (`"text"`, `"table"`, `"auto"`), or `"stats"` to reduce a table to per-column stats + head/tail rows |
 | `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?`, `confirm_wipe?` | Full-replace DAT content. Refuses no-action calls and wipes (`text=""`, `rows=[]`, or `clear=True` with no content) unless `confirm_wipe=True`. For partial text edits prefer `edit_dat_content`; use this for tables, full rewrites, or intentional wipes. |
 | `edit_dat_content` | `op_path`, `old_string`, `new_string`, `replace_all?`, `confirm_wipe?` | Surgical text edit on a text DAT. `old_string` must appear exactly once by default; widen with context or pass `replace_all=True`. Refuses empty/identical strings and wipes unless `confirm_wipe=True`; not-found errors include diagnostics. Tables go through `set_dat_content(rows=...)`. |
+
+## CHOP / POP Data
+
+Reduced reads -- never a blind dump. A 4x600 CHOP is 2,400 raw floats; these
+return the shape and range instead.
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_chop_data` | `op_path`, `channels?`, `samples?`, `compare_to?` | Per-channel `min`/`max`/`mean`/`std`/`first`/`last`, capped at 32 channels. `channels` is a name glob; `samples>0` adds head/tail raw values. `compare_to` another CHOP adds a `diff` of per-channel deltas -- the "what did this chain do to my data" read |
+| `get_pop_data` | `op_path`, `attributes?`, `samples?`, `max_points?` | Point/prim/vert attribute metadata (name, size, type). Metadata costs ~0.02ms at ANY point count; reading point VALUES is a GPU->CPU readback (~9.5ms at 16k points, ~69ms at 160k -- about 4 frames at 60fps), so `samples>0` is opt-in and refused above `max_points` (default 50,000) |
+
+**Why the POP guard is on point count, not sample count**: `POP.points(attr, startIndex, count)` accepts both slicing arguments and ignores them (verified on 2025.33070) -- the readback happens regardless. Asking for 4,096 points from a 160k POP measured *slower* than reading all of them. Reach for `samples` only when you actually need values, and prefer a smaller upstream POP for inspection.
 
 ## Operator Flags
 

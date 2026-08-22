@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 1
-generator: Embody/6.0.62
-td_build: 099.2025.32820
-source_file: Embody-6.63.toe
-exported_at: '2026-07-01T00:54:31Z'
+generator: Embody/6.0.260
+td_build: 099.2025.33070
+source_file: Embody-6.261.toe
+exported_at: '2026-08-22T02:42:28Z'
 network_path: /specimen_lab/plasma_interference
 options:
   include_dat_content: false
@@ -145,6 +145,7 @@ operators:
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   dock: glsl_plasma
+  dat_read_only: true
 - name: glsl_plasma_pixel
   type: textDAT
   parameters:

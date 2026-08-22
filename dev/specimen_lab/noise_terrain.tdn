@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 3
-generator: Embody/6.0.82
-td_build: 099.2025.32820
-source_file: Embody-6.83.toe
-exported_at: '2026-07-03T19:34:10Z'
+generator: Embody/6.0.260
+td_build: 099.2025.33070
+source_file: Embody-6.261.toe
+exported_at: '2026-08-22T02:42:28Z'
 network_path: /specimen_lab/noise_terrain
 options:
   include_dat_content: false
@@ -253,6 +253,7 @@ operators:
     op: glsl_sky
   position: [900, -450]
   dock: glsl_sky
+  dat_read_only: true
 - name: glsl_sky_pixel
   type: textDAT
   parameters:
@@ -266,6 +267,7 @@ operators:
     op: glsl_snow
   position: [-150, -450]
   dock: glsl_snow
+  dat_read_only: true
 - name: glsl_snow_pixel
   type: textDAT
   parameters:

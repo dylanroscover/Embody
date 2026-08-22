@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1169
-generator: Embody/6.0.260
+build: 1174
+generator: Embody/6.0.264
 td_build: 099.2025.33070
-source_file: Embody-6.260.toe
-exported_at: '2026-08-20T21:16:29Z'
+source_file: Embody-6.264.toe
+exported_at: '2026-08-22T15:32:21Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -817,7 +817,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.260
+    value: 6.0.264
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -914,6 +914,10 @@ sequences:
   - {}
   - {}
   - {}
+  - {}
+  - {}
+  - {}
+  - {}
 flags:
 - display
 - viewer
@@ -977,6 +981,108 @@ operators:
   position: [-275, 200]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
+  dat_content:
+  - - '23:48:20  314543 INFO    EmbodyExt: 308 externalized operator(s) found -- validating tracked operators'
+  - - '23:48:21  314555 SUCCESS EmbodyExt: Tag ''tox'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
+  - - '23:48:21  314555 SUCCESS EmbodyExt: Added ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
+  - - '23:48:22  314555 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
+  - - '23:48:31  314651 SUCCESS EmbodyExt: Tag ''tdn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
+  - - '23:48:31  314651 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
+  - - '23:48:31  314651 SUCCESS EmbodyExt: Added TDN ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
+  - - '23:48:31  314651 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
+  - - '23:48:31  314651 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
+  - - '23:48:31  314651 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
+  - - '23:48:31  314651 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
+  - - '23:48:31  314651 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
+  - - '23:48:31  314651 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
+  - - '23:48:31  314651 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'' delete_file=True rows=310'
+  - - '23:48:31  314651 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard.tdn'' delete_file=True'
+  - - '23:48:41  314747 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '23:48:43  314771 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '23:48:43  314771 WARNING EmbodyExt: Skipping the whole-project externalization: no saved .toe on disk to fall back on, and it re-tags every COMP and DAT in the project. Save the project first, then run Externalize Full Project from the Embody parameters. New work is still externalized automatically.'
+  - - '23:48:44  314783 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '23:48:44  314783 WARNING EmbodyExt: Whole-project externalization requested -- it re-tags every compatible COMP and DAT. Recovery point on disk: "/tmp/fake-project.toe". Confirm the format in the dialog.'
+  - - '23:48:52  314867 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
+  - - '23:48:53  314879 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '23:48:53  314879 WARNING EmbodyExt: Skipping the whole-project externalization: no saved .toe on disk to fall back on, and it re-tags every COMP and DAT in the project. Save the project first, then run Externalize Full Project from the Embody parameters. New work is still externalized automatically.'
+  - - '23:48:53  314879 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
+  - - '23:48:55  314891 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '23:48:55  314891 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
+  - - '23:48:55  314903 WARNING EmbodyExt: Setup wizard: unrecognized externalize choice "externalize-everything!!" -- skipping externalization setup.'
+  - - '23:48:55  314903 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
+  - - '23:49:00  314963 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '23:49:03  314987 ERROR   TestRunnerExt: Tests complete: 3865/3978 passed, 1 errors, 112 skipped'
+  - - '23:49:10  315402 WARNING EnvoyExt: Watchdog: Embody Status stranded at ''Testing'' with no test run live -- restoring the saved status'
+  - - '23:49:24  316237 INFO    EnvoyExt: Processing: run_tests'
+  - - '23:49:24  316237 INFO    TestRunnerExt: Discovered 45 test suite(s) [deferred-per-test]'
+  - - '23:49:24  316244 SUCCESS TestRunnerExt: Tests complete: 1/1 passed'
+  - - '23:49:29  316543 INFO    EnvoyExt: Processing: run_tests'
+  - - '23:49:29  316543 INFO    TestRunnerExt: Discovered 45 test suite(s) [deferred-per-test]'
+  - - '23:50:13  317957 SUCCESS TestRunnerExt: Tests complete: 438/438 passed'
+  - - '23:51:11  321454 INFO    EnvoyExt: Processing: run_tests'
+  - - '23:51:12  321454 INFO    TestRunnerExt: Discovered 45 test suite(s) [deferred-per-test]'
+  - - '23:52:03  322981 SUCCESS TestRunnerExt: Tests complete: 438/438 passed'
+  - - '23:52:23  324188 INFO    EnvoyExt: Processing: execute_python'
+  - - '23:52:23  324188 INFO    EnvoyExt: execute_python: # 1. Does the hardened helper survive extra calls (the actual failure mode)?import importlib.util, ospath = os.path.join(project.folder, ''embody'', ''unit_tests'', ''test_envoy_bridge.py'')src = open(p...'
+  - - '23:52:23  324188 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '23:52:25  324259 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '23:52:25  324260 WARNING EmbodyExt: REFUSED auto-export of /embody/unit_tests/test_sandbox: the COMP is empty but its .tdn on disk holds a non-empty network -- overwriting would destroy the only good copy. If the empty state is intentional, use the manager Save button.'
+  - - '23:52:25  324272 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '23:53:56  329733 INFO    EnvoyExt: Processing: execute_python'
+  - - '23:53:56  329733 INFO    EnvoyExt: execute_python: # READ-ONLY: ask the local Convoy daemon for its node projection and compare# each row''s host_id against the daemon''s own host_id -- the exact test# ConvoyExt._host_offline_rows uses to decide "min...'
+  - - '23:53:56  329733 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '23:54:08  330447 INFO    EnvoyExt: Processing: execute_python'
+  - - '23:54:08  330447 INFO    EnvoyExt: execute_python: # READ-ONLY probe of the local Convoy daemon''s node projection.result = {}try:    comp = op.Embody.op(''convoy'')    client = comp.op(''convoy_client'').module    data_dir = client.data_dir()    pr...'
+  - - '23:54:08  330447 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '23:54:38  332252 INFO    EnvoyExt: Processing: execute_python'
+  - - '23:54:38  332252 INFO    EnvoyExt: execute_python: # Does each smoke row hold a td_python grant? That is the exact predicate# _evict_stale_nodes uses to SPARE a transient row from the 1h sweep.result = {}try:    comp = op.Embody.op(''convoy'')    ...'
+  - - '23:54:38  332252 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '23:54:57  333365 INFO    EnvoyExt: Processing: execute_python'
+  - - '23:54:57  333365 INFO    EnvoyExt: execute_python: result = {}try:    comp = op.Embody.op(''convoy'')    client = comp.op(''convoy_client'').module    probe = client.probe(data_dir=client.data_dir())    code, raw = client.host_get(probe.handle, ''/n...'
+  - - '23:54:57  333365 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '23:55:02  333686 INFO    EnvoyExt: Processing: execute_python'
+  - - '23:55:02  333686 INFO    EnvoyExt: execute_python: result = {}try:    comp = op.Embody.op(''convoy'')    client = comp.op(''convoy_client'').module    probe = client.probe(data_dir=client.data_dir())    code, raw = client.host_get(probe.handle, ''/no...'
+  - - '23:55:02  333686 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '23:55:12  334287 INFO    EnvoyExt: Processing: execute_python'
+  - - '23:55:12  334287 INFO    EnvoyExt: execute_python: import timeresult = {}try:    comp = op.Embody.op(''convoy'')    client = comp.op(''convoy_client'').module    probe = client.probe(data_dir=client.data_dir())    code, raw = client.host_get(probe....'
+  - - '23:55:13  334287 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '00:21:17  428150 INFO    EnvoyExt: Processing: execute_python'
+  - - '00:21:17  428150 INFO    EnvoyExt: execute_python: # _host_forget_offline_plan is documented "Alters nothing" -- it just lists# what the confirm dialog WOULD offer on this machine.result = {}try:    comp = op.Embody.op(''convoy'')    ext_mod = com...'
+  - - '00:21:17  428150 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '00:25:11  442209 INFO    ConvoyExt: Convoy: Connected'
+  - - '00:25:21  442785 INFO    EnvoyExt: Processing: run_tests'
+  - - '00:25:21  442785 INFO    TestRunnerExt: Discovered 12 test suite(s) [deferred-per-test]'
+  - - '00:27:32  443082 SUCCESS TestRunnerExt: Tests complete: 107/107 passed'
+  - - '00:28:07  445248 INFO    EnvoyExt: Processing: run_tests'
+  - - '00:28:08  445248 INFO    TestRunnerExt: Discovered 12 test suite(s) [deferred-per-test]'
+  - - '00:30:18  445552 SUCCESS TestRunnerExt: Tests complete: 108/108 passed'
+  - - '08:19:59 2136375 INFO    EnvoyExt: Processing: execute_python'
+  - - '08:19:59 2136375 INFO    EnvoyExt: execute_python: # Is each changed file INSIDE the Embody COMP that the release .tox exports?emb = op.Embodychecks = {}for p in (''/embody/Embody/convoy/ConvoyExt'',          ''/embody/unit_tests/test_envoy_bridge'',...'
+  - - '08:19:59 2136375 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '08:20:00 2136446 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '08:20:00 2136447 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '08:28:52 2168350 INFO    EnvoyExt: Processing: save_project'
+  - - '08:28:52 2168350 INFO    envoy_setup:1334: Registered instance "Embody-6.264" in envoy.json (port 9876)'
+  - - '08:28:54 2168350 INFO    EmbodyExt: Exporting portable .tox: stripping 577 file reference(s) and 157 tagged operator(s) from /embody/Embody'
+  - - '08:29:01 2168362 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '08:29:02 2168362 SUCCESS EmbodyExt: Exported TDN for /embody/Embody'
+  - - '08:29:02 2168362 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '08:29:02 2168362 SUCCESS EmbodyExt: Exported TDN for /embody'
+  - - '08:29:06 2168616 INFO    ConvoyExt: Convoy: Registered -- Envoy port pending'
+  - - '08:29:10 2168841 WARNING EnvoyExt: Watchdog: enabled but socket dead (status ''Running on port 9876'') -- reviving'
+  - - '08:29:10 2168841 WARNING EnvoyExt: Watchdog: MCP socket on port None unreachable while enabled (running=False) -- reviving server'
+  - - '08:29:10 2168859 INFO    envoy_setup:861: Found git repo at C:\Users\admin\Documents\Git\Embody'
+  - - '08:29:10 2168859 INFO    EnvoyExt: Port 9870 in use, attempting to free it...'
+  - - '08:29:10 2168859 INFO    EnvoyExt: Port 9870 held by another process, scanning range...'
+  - - '08:29:10 2168859 INFO    EnvoyExt: Port 9870 in use by another instance, using 9873'
+  - - '08:29:10 2168859 INFO    EnvoyExt: Starting Envoy MCP server on port 9873'
+  - - '08:29:11 2168859 INFO    envoy_setup:1334: Registered instance "Embody-6.264" in envoy.json (port 9873)'
+  - - '08:29:11 2168859 INFO    envoy_setup:290: Wrote MCP config to C:\Users\admin\Documents\Git\Embody\.mcp.json (STDIO bridge -> port 9873)'
+  - - '08:29:16 2169177 INFO    ConvoyExt: Convoy: Convoy App update: the running Convoy App is 6.0.263, this Embody ships 6.0.264 -- updating it in place now (automatic; Repair Convoy App remains the manual path)'
+  - - '08:32:20 2180203 INFO    EnvoyExt: Processing: execute_python'
+  - - "08:32:20 2180203 INFO    EnvoyExt: execute_python: \nimport os\nd = op.Embody.op('convoy').op('ConvoyExt')\nlive = d.text or ''\ndisk_path = os.path.join(project.folder, 'embody', 'Embody', 'convoy', 'ConvoyExt.py')\ndisk = open(disk_path, encoding='utf-8'..."
+  - - '08:32:20 2180203 INFO    EnvoyExt: execute_python: completed successfully'
+  dat_content_format: table
 - name: null2
   type: nullCHOP
   parameters:
@@ -1538,6 +1644,152 @@ operators:
     type: tableDAT
     position: [300, 0]
     color: [0.67, 0.67, 0.67]
+    dat_content:
+    - - name
+      - value
+      - r
+      - g
+      - b
+      - show
+    - - font
+      - '41.0909'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - rowh
+      - '120'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - pad
+      - '14'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - c0w0
+      - '240'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row0
+      - ''
+      - ''
+      - ''
+      - ''
+      - '1'
+    - - r0c0
+      - ✓ Embody
+      - '0.3500'
+      - '0.7800'
+      - '0.4500'
+      - '1'
+    - - r0c1
+      - v6.0.264
+      - '0.4000'
+      - '0.4400'
+      - '0.5000'
+      - '1'
+    - - c0w1
+      - '375'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row1
+      - ''
+      - ''
+      - ''
+      - ''
+      - '1'
+    - - r1c0
+      - ✓ Saved 3m ago
+      - '0.3500'
+      - '0.7800'
+      - '0.4500'
+      - '1'
+    - - r1c1
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    - - c0w2
+      - '217'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row2
+      - ''
+      - ''
+      - ''
+      - ''
+      - '1'
+    - - r2c0
+      - ✓ Envoy
+      - '0.3500'
+      - '0.7800'
+      - '0.4500'
+      - '1'
+    - - r2c1
+      - ✓ Convoy
+      - '0.3500'
+      - '0.7800'
+      - '0.4500'
+      - '1'
+    - - c0w3
+      - '59'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row3
+      - ''
+      - ''
+      - ''
+      - ''
+      - '0'
+    - - r3c0
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    - - r3c1
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    - - c0w4
+      - '59'
+      - ''
+      - ''
+      - ''
+      - ''
+    - - row4
+      - ''
+      - ''
+      - ''
+      - ''
+      - '0'
+    - - r4c0
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    - - r4c1
+      - ''
+      - '0'
+      - '0'
+      - '0'
+      - '0'
+    dat_content_format: table
   - name: parexec_status
     type: parameterexecuteDAT
     parameters:
@@ -1546,6 +1798,8 @@ operators:
     position: [600, 0]
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
+    dat_content: "# Any parameter the status readout SHOWS is an event: republish, once.\n# Scoped to those parameters (see the Parameters par) so unrelated Embody\n# parameter traffic -- which is constant -- never redraws the panel.\n#\n# me.parent() rather than a relative op() path: inside a DAT, op('../x')\n# resolves a level above this network and silently returns None, which is\n# exactly how this callback failed quietly the first time.\n\ndef onValueChange(par, prev):\n\tpublisher = me.parent().op('status_publish')\n\tif publisher is not None:\n\t\tpublisher.module.Refresh()\n\treturn\n"
+    dat_content_format: text
   - name: status_publish
     type: textDAT
     parameters:
@@ -1574,6 +1828,7 @@ operators:
     fromop: =parent()
   position: [-300, -275]
   size: [130, 90]
+  dat_read_only: true
 - name: embody_admin
   type: textDAT
   parameters:
@@ -1997,6 +2252,8 @@ operators:
         - viewer
         position: [66, -83]
         size: [128, 66]
+        dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select :\n\t\tparent().panel.state = par.eval()\n\treturn"
+        dat_content_format: text
       - name: panelexec1
         type: panelexecuteDAT
         parameters:
@@ -2010,6 +2267,8 @@ operators:
         - viewer
         position: [247, -81]
         size: [126, 62]
+        dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+        dat_content_format: text
     - name: title_callbacks
       type: textDAT
       flags:
@@ -2018,6 +2277,8 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: title
+      dat_content: "# Text Component callbacks\n\nfrom typing import Any, Dict\n\ndef onValueChange(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason\n\tincluding typing in the text window or changing the parameter directly. The\n\tcallback is equivalent to the onValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp: textCOMP):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp: textCOMP, info: Dict[str, str]):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In\n\tregular editing mode this is right after the contents are saved back to the\n\tvalue parameter. This function is called everytime the viewer loses focus,\n\teven if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus\n\t\t\t\te.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp: textCOMP):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when\n\ttyping a character, deleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not\n\tcalled in 'Continuous Edit' mode. Use onTextEdit and onFocusEnd when using\n\tcontinuous editing.\n\n\tNote: Any Python undo blocks created by this callback will be included in\n\tthe undo step for the change to the text field.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n"
+      dat_content_format: text
     - name: status_callbacks
       type: textDAT
       flags:
@@ -2026,6 +2287,8 @@ operators:
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
       dock: status
+      dat_content: "# Text Component callbacks\n\nfrom typing import Any, Dict\n\ndef onValueChange(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason\n\tincluding typing in the text window or changing the parameter directly. The\n\tcallback is equivalent to the onValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp: textCOMP):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp: textCOMP, info: Dict[str, str]):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In\n\tregular editing mode this is right after the contents are saved back to the\n\tvalue parameter. This function is called everytime the viewer loses focus,\n\teven if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus\n\t\t\t\te.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp: textCOMP):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when\n\ttyping a character, deleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not\n\tcalled in 'Continuous Edit' mode. Use onTextEdit and onFocusEnd when using\n\tcontinuous editing.\n\n\tNote: Any Python undo blocks created by this callback will be included in\n\tthe undo step for the change to the text field.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n"
+      dat_content_format: text
   - name: panelexec_cancel
     type: panelexecuteDAT
     parameters:
@@ -2033,6 +2296,8 @@ operators:
     position: [200, -200]
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
+    dat_content: "# Cancel button for the chunked TDN export progress dialog.\n\ndef onOffToOn(panelValue):\n\tparent.Embody.ext.TDN.CancelExport()\n\treturn\n"
+    dat_content_format: text
 - name: window_tagging_menu
   type: windowCOMP
   parameters:

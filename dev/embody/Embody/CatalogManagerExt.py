@@ -1149,7 +1149,11 @@ class CatalogManagerExt:
 		"""
 		patches = []
 
-		for child in comp.findChildren(depth=-1, includeUtility=False):
+		# maxDepth, never depth: TD's `depth` matches an EXACT relative
+		# depth, so the old depth=-1 matched nothing and this loop never
+		# ran -- the whole cross-build default repair was a silent no-op
+		# (found 2026-08-21).
+		for child in comp.findChildren(includeUtility=False):
 			op_type = child.OPType
 			if op_type not in shifted:
 				continue

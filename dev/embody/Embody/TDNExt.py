@@ -2612,12 +2612,23 @@ class TDNExt:
 
 		# DAT content -- include when the include_dat_content option is True,
 		# OR when the DAT lives inside an animationCOMP (keys, channels, graph,
-		# attributes tableDATs hold all keyframe data -- must always be saved).
+		# attributes tableDATs hold all keyframe data -- must always be saved),
+		# OR when the content exists NOWHERE ELSE on disk.
+		#
+		# include_dat_content=False means "skip content already saved
+		# elsewhere", never "throw authored code away". It is the DEFAULT, and
+		# it used to drop every unbacked DAT: a TDN COMP could export 185
+		# operators and zero lines of code, so a crash took every shader and
+		# callback with it (fork field report, 2026-08-21). Mirrors
+		# EmbodyExt._findAtRiskDATs so the warning and the export cannot
+		# disagree about what counts as safe.
+		#
 		# Skip content for read-only DATs (e.g. glsl1_info, popto1) --
 		# TD auto-generates their content and rejects writes on import.
 		if target.family == 'DAT' and (
 				options.get('include_dat_content', True) or
-				self._isInsideAnimationCOMP(target)):
+				self._isInsideAnimationCOMP(target) or
+				not self._isDATContentSavedOnDisk(target)):
 			if self._isDATEditable(target):
 				content_data = self._exportDATContent(target)
 				if content_data:
@@ -2976,7 +2987,7 @@ class TDNExt:
 
 		return params
 
-	def _exportBuiltinSequences(self, target):
+	def _exportBuiltinSequences(self, target, scrub_transient=True):
 		"""Export built-in parameter sequences with non-default block data.
 
 		Discovers via ITERATING `target.seq` (the importer's path);
@@ -3018,7 +3029,10 @@ class TDNExt:
 			seq_data = self._exportSequenceBlocks(target, seq)
 			# Truthiness, not `is not None`: an empty list is unimportable
 			# (TD refuses numBlocks=0), so it must never reach the file.
-			if seq_data and seq.name in transient_names:
+			# scrub_transient=False is the LIVE-read path (get_op): a runtime
+			# status sequence must report its real values there, while an
+			# EXPORT still ships none of them (A-50).
+			if scrub_transient and seq_data and seq.name in transient_names:
 				# Registered runtime-status sequence (A-50): ship no
 				# session values. At the type-default block count the
 				# whole key is omitted (default-omission, the amendment's
@@ -3815,6 +3829,27 @@ class TDNExt:
 				f'Restored {restored} external connection(s) on {comp.path}',
 				'INFO')
 		return restored
+
+	def _isDATContentSavedOnDisk(self, dat_op):
+		"""Does this DAT's content already live in a file on disk?
+
+		True = embedding it in the .tdn would DUPLICATE what a .py/.txt
+		already holds; False = the .tdn is the only place it can survive.
+		Backed means an externalization tag or a `file` par -- the same pair
+		EmbodyExt._findAtRiskDATs treats as safe.
+
+		Fail-safe: on any doubt return False, so the content gets embedded.
+		A redundant copy costs bytes; a missing one costs the user's code.
+		"""
+		try:
+			if dat_op.tags & set(self.ownerComp.ext.Embody.getTags('DAT')):
+				return True
+		except Exception:
+			pass
+		try:
+			return bool(dat_op.par.file.eval())
+		except Exception:
+			return False
 
 	def _isDATEditable(self, dat_op):
 		"""Is this DAT's content writable? Non-mutating, per-instance.

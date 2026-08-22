@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 1
-generator: Embody/6.0.62
-td_build: 099.2025.32820
-source_file: Embody-6.63.toe
-exported_at: '2026-07-01T00:54:30Z'
+generator: Embody/6.0.260
+td_build: 099.2025.33070
+source_file: Embody-6.261.toe
+exported_at: '2026-08-22T02:42:27Z'
 network_path: /specimen_lab/waveform_stack
 options:
   include_dat_content: false
@@ -334,12 +334,14 @@ operators:
     op: glsl_scope
   position: [300, -120]
   dock: glsl_scope
+  dat_read_only: true
 - name: glsl_finish_info
   type: infoDAT
   parameters:
     op: glsl_finish
   position: [4500, -120]
   dock: glsl_finish
+  dat_read_only: true
 - name: glsl_scope_pixel
   type: textDAT
   parameters:
@@ -366,6 +368,7 @@ operators:
     op: glsl_bloomblur
   position: [3900, -120]
   dock: glsl_bloomblur
+  dat_read_only: true
 - name: glsl_finish_compute
   type: textDAT
   parameters:

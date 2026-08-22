@@ -1161,7 +1161,8 @@ class EnvoyMCPServer:
         # which the main thread may not have resolved yet at construction.
         self._tasks: dict = {}
 
-        self._docs_state = {'resolved': False, 'root': None, 'index': None, 'cache': {}}
+        self._docs_state = {'resolved': False, 'root': None, 'index': None, 'cache': {},
+                            'build': None, 'defaults': None}
         # get_guidance index: the project's own .claude rules/skills, scanned
         # from disk on the worker thread. {'ts': float, 'root': str,
         # 'index': {topic_id: entry}, 'searched': [dirs]}; rebuilt when older
@@ -2540,15 +2541,18 @@ class EnvoyMCPServer:
 
         @self.mcp.tool()
         def get_dat_content(op_path: str,
-                            format: Literal["auto", "text",
-                                            "table"] = "auto") -> dict:
+                            format: Literal["auto", "text", "table",
+                                            "stats"] = "auto") -> dict:
             """
             Get the content of a DAT operator (text or table data).
 
             Args:
                 op_path: Path to the DAT operator
                 format: "text" for raw text, "table" for row/column data,
-                       "auto" to detect based on DAT type
+                       "auto" to detect based on DAT type, "stats" to reduce
+                       a table to per-column min/max/mean (numeric) or
+                       distinct counts (text) plus head/tail rows -- use it
+                       instead of dumping a large table into context
 
             Returns:
                 Dict with DAT content (text string or table rows/cols)
@@ -2556,6 +2560,68 @@ class EnvoyMCPServer:
             return self._execute_in_td('get_dat_content', {
                 'op_path': op_path,
                 'format': format
+            })
+
+        @self.mcp.tool()
+        def get_chop_data(op_path: str, channels: str = None,
+                          samples: int = 0, compare_to: str = None) -> dict:
+            """
+            Read a CHOP as per-channel STATISTICS, never a blind dump.
+
+            A 4x600 CHOP is 2400 raw floats; this returns min/max/mean/std +
+            first/last per channel instead. Pass samples>0 only when the raw
+            values matter.
+
+            Args:
+                op_path: Path to the CHOP operator
+                channels: Glob on channel name (e.g. "chan*"); omit for all
+                    (capped at 32 channels, with channelsOmitted reported)
+                samples: Head/tail raw values per channel (0 = stats only)
+                compare_to: Another CHOP path -- adds a 'diff' block of
+                    per-channel min/max/mean deltas. The "what did this chain
+                    actually do to my data" read.
+
+            Returns:
+                Dict with numChans/numSamples/rate/isTimeSlice and channels[]
+            """
+            return self._execute_in_td('get_chop_data', {
+                'op_path': op_path,
+                'channels': channels,
+                'samples': samples,
+                'compare_to': compare_to
+            })
+
+        @self.mcp.tool()
+        def get_pop_data(op_path: str, attributes: str = None,
+                         samples: int = 0, max_points: int = 50000) -> dict:
+            """
+            Read a POP: attribute metadata always, point values on request.
+
+            Metadata (numPoints + point/prim/vert attribute names, sizes and
+            types) costs ~0.02ms regardless of point count. Reading actual
+            point VALUES is a GPU->CPU readback that stalls the main thread:
+            measured ~9.5ms at 16k points and ~69ms at 160k (~4 frames at
+            60fps) on 2025.33070. Sampling is therefore opt-in and gated on
+            the operator's TOTAL point count, not on how many you ask for --
+            POP.points(count=N) does not bound the readback.
+
+            Args:
+                op_path: Path to the POP operator
+                attributes: Glob on attribute name (e.g. "P"); omit for all
+                samples: Head point values to read (0 = metadata only)
+                max_points: Refuse the readback above this many points;
+                    the response then carries readbackRefused explaining why
+
+            Returns:
+                Dict with numPoints and pointAttributes/primAttributes/
+                vertAttributes (each name/size/type), plus head values when
+                samples>0 and the point count is within max_points
+            """
+            return self._execute_in_td('get_pop_data', {
+                'op_path': op_path,
+                'attributes': attributes,
+                'samples': samples,
+                'max_points': max_points
             })
 
         @self.mcp.tool()
@@ -3882,12 +3948,111 @@ class EnvoyMCPServer:
                 result['url'] = doc['url']
             if truncated:
                 result['truncated'] = True
+            # Wiki prose says what a parameter MEANS; this says what a fresh
+            # op on THIS build is actually created with. Cached with the page.
+            live = self._docsLiveDefaults(query, doc.get('title'))
+            if live:
+                result['live'] = live
             cache[cache_key] = result
             if len(cache) > 20:
                 cache.pop(next(iter(cache)))
             return result
         except Exception as e:
             return {'error': f'Documentation lookup failed: {e}'}
+
+    # --- Live parameter defaults fused into get_docs -----------------
+    # The wiki documents a parameter; it does not tell you what a FRESH op on
+    # THIS build actually creates it with -- and Par.default lies for menus.
+    # Embody already harvests the truth per build (CatalogManager probes real
+    # instances; divergent_defaults.tsv is the shipped bootstrap), so the
+    # fusion READS that catalog instead of probing again. Worker-thread safe:
+    # pure file I/O, no mod.*, no TD objects (see _get_docs's thread note).
+    # Idea adapted from describe(docs) in Marius Alwan Meyer's codemode fork
+    # (github.com/sporqist/Embody, MIT); the catalog source is ours.
+
+    _DOCS_PAR_CAP = 80
+
+    def _docsDefaultsIndex(self) -> dict:
+        """{op_type_lower: {par_name: default}} of creation defaults.
+
+        Source priority mirrors TDNExt._loadDivergentDefaults so the two
+        cannot disagree about what a default IS:
+          1. .embody/catalog_<build>.json -- probed from real instances on
+             THIS build by CatalogManager (~650 op types, complete).
+          2. divergent_defaults.tsv -- the shipped bootstrap, which records
+             only DIVERGENT params and only for the builds it shipped with.
+        Read once per session and cached; any failure yields {} so a missing
+        catalog degrades docs to wiki-only rather than breaking them.
+        """
+        if self._docs_state.get('defaults') is not None:
+            return self._docs_state['defaults']
+        index = {}
+        root = getattr(sys, '_envoy_repo_root', None)
+        build = self._docs_state.get('build')
+
+        # 1. per-build catalog
+        try:
+            if root and build:
+                cat = os.path.join(root, '.embody', f'catalog_{build}.json')
+                if os.path.isfile(cat):
+                    with open(cat, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    for op_type, pars in data.items():
+                        # '_'-prefixed keys are reserved metadata (_palette)
+                        if op_type.startswith('_') or not isinstance(pars, dict):
+                            continue
+                        index[op_type.lower()] = pars
+        except Exception as e:
+            self._log(f'Docs catalog unreadable: {e}', 'DEBUG')
+
+        # 2. bootstrap tsv (only fills types the catalog did not supply)
+        if not index:
+            try:
+                tsv = os.path.join(root or '', 'dev', 'embody', 'Embody',
+                                   'divergent_defaults.tsv')
+                if os.path.isfile(tsv):
+                    with open(tsv, 'r', encoding='utf-8') as f:
+                        rows = [ln.rstrip('\n').split('\t')
+                                for ln in f if ln.strip()]
+                    header, data = rows[0], rows[1:]
+                    col = (header.index(build) if build in header
+                           else len(header) - 1)
+                    for r in data:
+                        if len(r) > col and r[col]:
+                            index.setdefault(r[0].lower(), {})[r[1]] = r[col]
+            except Exception as e:
+                self._log(f'Docs defaults bootstrap unreadable: {e}', 'DEBUG')
+
+        self._docs_state['defaults'] = index
+        return index
+
+    def _docsLiveDefaults(self, query, title):
+        """Authoritative creation defaults for the op type a docs page is
+        about, or None. Matched on the page title first, then the query."""
+        index = self._docsDefaultsIndex()
+        if not index:
+            return None
+        for candidate in (title, query):
+            if not candidate:
+                continue
+            key = str(candidate).strip().lower().replace(' ', '')
+            for suffix in ('', 'top', 'chop', 'sop', 'dat', 'comp', 'mat', 'pop'):
+                hit = index.get(key + suffix)
+                if hit:
+                    pars = dict(list(hit.items())[:self._DOCS_PAR_CAP])
+                    live = {
+                        'opType': key + suffix,
+                        'build': self._docs_state.get('build'),
+                        'source': 'Embody catalog for this TD build',
+                        'note': ('creation defaults probed from a real '
+                                 'instance -- authoritative where '
+                                 'Par.default is not (menus especially)'),
+                        'parameters': pars,
+                    }
+                    if len(hit) > len(pars):
+                        live['parametersOmitted'] = len(hit) - len(pars)
+                    return live
+        return None
 
     def _docsOfflineRoot(self):
         if self._docs_state['resolved']:
@@ -3906,6 +4071,7 @@ class EnvoyMCPServer:
             root_path = None
         self._docs_state['resolved'] = True
         self._docs_state['root'] = root_path
+        self._docs_state['build'] = result.get('build')
         return root_path
 
     def _docsOffline(self, query):
@@ -6188,7 +6354,7 @@ class EnvoyExt:
         except Exception:
             return None
 
-    def _attachEffects(self, result, operation, sid=None):
+    def _attachEffects(self, result, operation, sid=None, scopes=None):
         """After a MUTATING call, ride back what THIS write just did to the
         project: operator errors/warnings that did not exist before it, and a
         meaningful frame-rate drop. Diffed against a per-session baseline so
@@ -6219,7 +6385,8 @@ class EnvoyExt:
             snapshot = None
             if getattr(self, '_effects_error_scan_ok', True):
                 started = time.time()
-                snapshot = mod.envoy_read.get_op_errors(self, '/', True)
+                snapshot = mod.envoy_read.get_op_errors(
+                    self, '/', True, include_shaders=False)
                 elapsed = time.time() - started
                 if elapsed > _EFFECTS_SCAN_BUDGET_S:
                     self._effects_error_scan_ok = False
@@ -6243,6 +6410,38 @@ class EnvoyExt:
                 if warnings:
                     effects['new_warnings'] = warnings
                     effects['new_warnings_total'] = warning_total
+                # GLSL compile failures ride the same differ and cap: they
+                # already share errors[]' entry shape. Kept OUT of errors[]
+                # so errorCount/hasErrors keep meaning what they meant. The
+                # extra dock walk measured 2.7ms over 1920 ops (2026-08-21),
+                # ~1% of _EFFECTS_SCAN_BUDGET_S, so it rides the existing
+                # budget rather than earning a second latch.
+                # Shader pass scoped to the ops this write actually
+                # touched. Never project-wide: reading an Info DAT cooks it
+                # (3.36s cold across the project, 2026-08-21).
+                touched = []
+                for scope in (scopes or []):
+                    if not isinstance(scope, str) or not scope.startswith('/'):
+                        continue
+                    target = mod.envoy_read.resolve_op(self, scope)
+                    if target is None:
+                        continue
+                    # Editing shader SOURCE targets the docked pixel/compute
+                    # DAT, which owns no Info DAT -- the diagnostics live on
+                    # its host. Walk up so set_dat_content('/x/glsl_a_pixel')
+                    # still reports /x/glsl_a's compile errors.
+                    for probe in (target, getattr(target, 'dock', None)):
+                        if probe is None:
+                            continue
+                        touched.extend(
+                            mod.envoy_read.shader_errors(self, probe, True))
+                shaders, shader_total, shader_paths = _new_error_entries(
+                    None if first_write else state.get('shaders'),
+                    touched, _EFFECTS_ERROR_CAP)
+                state['shaders'] = shader_paths
+                if shaders:
+                    effects['new_shader_errors'] = shaders
+                    effects['new_shader_errors_total'] = shader_total
 
             # --- meaningful frame-rate drop ---
             fps = self._sampleProjectFps()
@@ -6263,7 +6462,8 @@ class EnvoyExt:
         except Exception:
             pass
 
-    def _send_response(self, request_id, result, sid=None, operation=None):
+    def _send_response(self, request_id, result, sid=None, operation=None,
+                       scopes=None):
         """Send a response back to the worker thread (token-lean log piggyback).
 
         `operation` is optional so nothing else has to change: pass it for a
@@ -6272,7 +6472,7 @@ class EnvoyExt:
         moved) and only the existing attachments apply."""
         self._attachRecoveryHints(result)
         self._attachNotableLogs(result, sid)
-        self._attachEffects(result, operation, sid)
+        self._attachEffects(result, operation, sid, scopes)
 
         self.response_queue.put({
             'id': request_id,
@@ -6386,7 +6586,8 @@ class EnvoyExt:
             except Exception:
                 pass
 
-            self._send_response(request_id, result, sid, operation=operation)
+            self._send_response(request_id, result, sid, operation=operation,
+                                scopes=scopes)
 
         # Live build visualization (opt-in): camera follow + node pulse + the
         # dancing builder-bot. Runs every frame AFTER the drain loop. Wrapped so
@@ -6550,6 +6751,8 @@ class EnvoyExt:
             'execute_python': self._execute_python,
             # DAT content
             'get_dat_content': self._get_dat_content,
+            'get_chop_data': self._get_chop_data,
+            'get_pop_data': self._get_pop_data,
             'set_dat_content': self._set_dat_content,
             'edit_dat_content': self._edit_dat_content,
             # Operator flags
@@ -6698,8 +6901,10 @@ class EnvoyExt:
     # Embot mascot + network-editor camera follow. The whole subsystem now lives
     # in the envoy_viz module DAT (mod.envoy_viz); all _VIZ_* constants moved
     # there. State (self._viz_*) stays on this ext (see __init__). The methods
-    # below are delegating stubs -- external callers (execute.py _vizCleanup,
-    # _onRefresh ticks, the dispatch chokepoint) keep working.
+    # below are delegating stubs, and only the ones with live callers remain
+    # (execute.py _vizCleanup, _onRefresh ticks, the dispatch chokepoint) --
+    # 28 unreferenced pass-throughs were dropped 2026-08-21; call
+    # mod.envoy_viz directly rather than re-adding one.
     # Main-thread only.
 
     def _noteVizActivity(self, operation: str, params: dict, result) -> None:
@@ -6869,115 +7074,21 @@ class EnvoyExt:
         """Once-per-frame visualization driver -- see envoy_viz."""
         return mod.envoy_viz.vizTick(self)
 
-    def _vizPumpQueue(self, now: float) -> None:
-        """Advance queued follow hops one at a time -- see envoy_viz."""
-        return mod.envoy_viz.vizPumpQueue(self, now)
-
-    def _pendingHopsIn(self, queue, netpath) -> int:
-        """Queued hops targeting one network (batch evidence) -- see envoy_viz."""
-        return mod.envoy_viz.pendingHopsIn(queue, netpath)
-
-    def _netRelocationOK(self, netpath, queue, now) -> bool:
-        """True when Embot + camera may relocate to a network -- see envoy_viz."""
-        return mod.envoy_viz.netRelocationOK(self, netpath, queue, now)
-
-    def _commitRelocation(self, netpath, now) -> None:
-        """Stamp a network as viz's home after a landed spawn -- see envoy_viz."""
-        return mod.envoy_viz.commitRelocation(self, netpath, now)
-
-    def _pathInsideSubtree(self, netpath, root_path) -> bool:
-        """True if a path is at or under a subtree root -- see envoy_viz."""
-        return mod.envoy_viz.pathInsideSubtree(netpath, root_path)
-
-    def _noteWriteRetire(self, path, now) -> None:
-        """Bar re-entry into a just-serialized COMP -- see envoy_viz."""
-        return mod.envoy_viz.noteWriteRetire(self, path, now)
-
-    def _writeSuppressed(self, netpath, now) -> bool:
-        """True while a net is barred after a .tox write retire -- see envoy_viz."""
-        return mod.envoy_viz.writeSuppressed(self, netpath, now)
-
-    def _trackActive(self, now: float, follow: bool, show_bot: bool) -> None:
-        """Stand Embot on / pan camera to the active op -- see envoy_viz."""
-        return mod.envoy_viz.trackActive(self, now, follow, show_bot)
-
-    def _pickFollowPane(self, net: 'COMP'):
-        """Choose the pane to follow a network in -- see envoy_viz."""
-        return mod.envoy_viz.pickFollowPane(self, net)
-
     def _userTookOver(self, pane) -> bool:
         """True while the user has navigated the follow pane away -- see envoy_viz."""
         return mod.envoy_viz.userTookOver(self, pane)
-
-    def _navigateAndFrame(self, pane, net: 'COMP', target: 'OP') -> None:
-        """Cut a pane into a network and frame the target op -- see envoy_viz."""
-        return mod.envoy_viz.navigateAndFrame(self, pane, net, target)
 
     def _glideStep(self, pane, target: 'OP') -> None:
         """One eased frame of the camera glide toward the op -- see envoy_viz."""
         return mod.envoy_viz.glideStep(self, pane, target)
 
-    def _highlightOp(self, target: 'OP') -> None:
-        """Select + make-current the op being worked -- see envoy_viz."""
-        return mod.envoy_viz.highlightOp(self, target)
-
-    def _pulseStart(self, target: 'OP', now: float) -> None:
-        """Begin a colour pulse on the active op -- see envoy_viz."""
-        return mod.envoy_viz.pulseStart(self, target, now)
-
-    def _pulseTick(self, now: float) -> None:
-        """Fade the active pulse back to the op's colour -- see envoy_viz."""
-        return mod.envoy_viz.pulseTick(self, now)
-
-    def _restorePulse(self) -> None:
-        """Restore the pulsing op's original colour -- see envoy_viz."""
-        return mod.envoy_viz.restorePulse(self)
-
     def _placeBot(self, net: 'COMP', target: 'OP', now: float) -> None:
         """Bring Embot to stand on the active op -- see envoy_viz."""
         return mod.envoy_viz.placeBot(self, net, target, now)
 
-    def _stageOffset(self, net: 'COMP') -> float:
-        """Off-view staging offset for spread assembly -- see envoy_viz."""
-        return mod.envoy_viz.stageOffset(self, net)
-
-    def _botFootGap(self) -> float:
-        """Figure-centre to feet distance -- see envoy_viz."""
-        return mod.envoy_viz.botFootGap(self)
-
-    def _ensureTemplate(self):
-        """Build/return Embot's source template -- see envoy_viz."""
-        return mod.envoy_viz.ensureTemplate(self)
-
     def _ensureBot(self, net: 'COMP') -> bool:
         """Ensure Embot is present/assembling in a network -- see envoy_viz."""
         return mod.envoy_viz.ensureBot(self, net)
-
-    def _netIsDisplayed(self, net: 'COMP') -> bool:
-        """True if a network-editor pane shows the net -- see envoy_viz."""
-        return mod.envoy_viz.netIsDisplayed(self, net)
-
-    def _spawnWouldBeSeen(self, displayed, follow_on, takeover_active,
-                          has_neteditor) -> bool:
-        """Truth table behind the visibility spawn gate -- see envoy_viz."""
-        return mod.envoy_viz.spawnWouldBeSeen(displayed, follow_on,
-                                              takeover_active, has_neteditor)
-
-    def _botWouldBeSeen(self, net: 'COMP') -> bool:
-        """True if a spawn into the net would be visible -- see envoy_viz."""
-        return mod.envoy_viz.botWouldBeSeen(self, net)
-
-    def _botWritesNeeded(self, net: 'COMP') -> bool:
-        """True if botDance should write to the editor -- see envoy_viz."""
-        return mod.envoy_viz.botWritesNeeded(self, net)
-
-    def _blockSpawn(self, net: 'COMP') -> None:
-        """One-shot block copy of all parts into an off-screen net -- see envoy_viz."""
-        return mod.envoy_viz.blockSpawn(self, net)
-
-    def _assembleStep(self, net: 'COMP') -> None:
-        """Copy one queued template part into the net -- see envoy_viz."""
-        return mod.envoy_viz.assembleStep(self, net)
 
     def _assembleTick(self) -> None:
         """Drive Embot's spread assembly per frame -- see envoy_viz."""
@@ -6987,10 +7098,6 @@ class EnvoyExt:
         """Fire Embot's swoop from staging onto his op -- see envoy_viz."""
         return mod.envoy_viz.startEntrance(self)
 
-    def _cleanupDeadBots(self) -> None:
-        """Tear down a left-behind bot, one net per frame -- see envoy_viz."""
-        return mod.envoy_viz.cleanupDeadBots(self)
-
     def _botDance(self, now: float) -> None:
         """Animate the figure: hop, hover, gesture, colour -- see envoy_viz."""
         return mod.envoy_viz.botDance(self, now)
@@ -6999,17 +7106,9 @@ class EnvoyExt:
         """True if a bot must not be created in the net -- see envoy_viz."""
         return mod.envoy_viz.botUnsafeNet(self, net)
 
-    def _destroyBot(self) -> None:
-        """Remove all figure parts if present -- see envoy_viz."""
-        return mod.envoy_viz.destroyBot(self)
-
     def _vizCleanup(self) -> None:
         """Retire all live visualization artifacts -- see envoy_viz."""
         return mod.envoy_viz.vizCleanup(self)
-
-    def _destroyPartsIn(self, netpath) -> int:
-        """Destroy the Embot parts sitting in one network -- see envoy_viz."""
-        return mod.envoy_viz.destroyPartsIn(self, netpath)
 
     def _purgeVizArtifacts(self, root=None) -> int:
         """Structural sweep of loose Embot parts (save path) -- see envoy_viz."""
@@ -7018,18 +7117,6 @@ class EnvoyExt:
     def _vizRetireForWrite(self, path: str) -> bool:
         """Retire Embot if he is inside a COMP about to be written -- see envoy_viz."""
         return mod.envoy_viz.vizRetireForWrite(self, path)
-
-    def _viewTuple(self, pane) -> tuple:
-        """Comparable snapshot of a pane's view state -- see envoy_viz."""
-        return mod.envoy_viz.viewTuple(self, pane)
-
-    def _recordView(self, pane) -> None:
-        """Remember what we last set the pane to -- see envoy_viz."""
-        return mod.envoy_viz.recordView(self, pane)
-
-    # === TD Operations (Main Thread Only) ===
-
-    # --- Logging ---
 
     def _get_logs(self, level=None, count=50, since_id=None, source=None):
         """Get filtered log entries from Embody's ring buffer -- see envoy_read."""
@@ -8204,7 +8291,9 @@ class EnvoyExt:
         try:
             samples = str(app.samplesFolder).replace('\\', '/').rstrip('/')
             roots = [samples + '/Learn/offlineHelp/https.docs.derivative.ca']
-            return {'roots': roots}
+            # build rides along so the worker-side docs fusion can pick the
+            # right catalog column without its own main-thread round-trip.
+            return {'roots': roots, 'build': f'{app.version}.{app.build}'}
         except Exception as e:
             return {'roots': [], 'error': f'Failed to get docs roots: {e}'}
 
@@ -8242,6 +8331,18 @@ class EnvoyExt:
     def _get_dat_content(self, op_path: str, format: str = "auto") -> dict:
         """Get DAT content as text or table data -- see envoy_read."""
         return mod.envoy_read.get_dat_content(self, op_path, format)
+
+    def _get_chop_data(self, op_path: str, channels: str = None,
+                       samples: int = 0, compare_to: str = None) -> dict:
+        """Reduce a CHOP to per-channel stats -- see envoy_read."""
+        return mod.envoy_read.get_chop_data(
+            self, op_path, channels, samples, compare_to)
+
+    def _get_pop_data(self, op_path: str, attributes: str = None,
+                      samples: int = 0, max_points: int = 50000) -> dict:
+        """Read POP attribute metadata (+ optional points) -- see envoy_read."""
+        return mod.envoy_read.get_pop_data(
+            self, op_path, attributes, samples, max_points)
 
     def _set_dat_content(self, op_path: str, text: str = None,
                         rows: list = None, clear: bool = False,
@@ -8490,7 +8591,8 @@ class EnvoyExt:
         'get_op', 'get_op_errors', 'get_op_flags', 'get_op_position',
         'get_op_performance', 'get_project_performance', 'get_parameter',
         'get_connections', 'get_annotations', 'get_network_layout',
-        'get_dat_content', 'get_docs', 'get_guidance', 'get_module_help',
+        'get_chop_data', 'get_dat_content', 'get_docs', 'get_guidance',
+        'get_module_help', 'get_pop_data',
         'get_logs', 'get_focus', 'get_job_status',
         'get_externalizations', 'get_externalization_status', 'get_sessions',
         'query_network', 'find_children', 'get_enclosed_ops',

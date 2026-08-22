@@ -4810,14 +4810,41 @@ class ConvoyExt:
                        'every node this machine owns is online.')
             names = [str(h) for h in (remote_hosts or []) if str(h).strip()]
             if names:
+                # Compare the owning host's NAME against this machine before
+                # telling anyone to walk to it: ownership is decided by
+                # host_id, and a computer name is neither unique nor
+                # authoritative (a cloned image, a rebuilt box reusing the
+                # name). Without this the dialog sends the user to the
+                # machine they are already sitting at (field 2026-08-22).
+                try:
+                    me = str(socket.gethostname() or '').strip()
+                except Exception:
+                    me = ''
+                shared = [n for n in names
+                          if me and n.strip().lower() == me.lower()]
+                if shared:
+                    where = ('a different Convoy host that also reports the '
+                             'computer name %s -- a second machine, or this '
+                             'one reinstalled' % (me,))
+                    howto = ('Only that host can forget them, and it is not '
+                             'this Embody.')
+                else:
+                    where = ', '.join(names[:5])
+                    howto = 'Run Forget Offline Nodes there.'
+                # Say what self-cleanup ACTUALLY does. The old text promised
+                # "short-lived ghosts within about an hour", which is false
+                # for any row that ran longer than node_transient_lived_s --
+                # those wait out the 30-day retention, and the user was
+                # looking at 2h and 17h rows while being told to just wait.
                 message = (
-                    'No offline nodes to forget on this machine. The '
-                    'offline node(s) in the list belong to %s -- each '
-                    'computer can only forget its own nodes. Run Forget '
-                    'Offline Nodes there, or just wait: every host now '
-                    'retires its own stale rows automatically (short-'
-                    'lived ghosts within about an hour).'
-                    % (', '.join(names[:5]),))
+                    'No offline nodes to forget on this machine. A node is '
+                    'forgotten from the computer that owns it, and the '
+                    'offline row(s) here belong to %s. %s\n\n'
+                    'Rows also clear themselves: about half an hour after '
+                    'their project file is deleted, or about an hour if the '
+                    'node only ever ran for a few minutes. Anything else '
+                    'stays until it is forgotten.'
+                    % (where, howto))
             self._dialog('Forget Offline Nodes', message, ['OK'])
             return
 

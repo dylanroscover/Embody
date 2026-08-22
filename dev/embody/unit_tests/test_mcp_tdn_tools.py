@@ -58,8 +58,23 @@ class TestMCPTDNTools(EmbodyTestCase):
     # ------------------------------------------------------------------
 
     def test_read_tdn_include_dat_content_toggle(self):
+        """The toggle suppresses content that a file on disk already holds.
+
+        Reframed 2026-08-21: it used to assert the toggle drops an UNBACKED
+        DAT too, which is the data-loss bug (a .tdn exporting 185 operators
+        and zero lines of code). include_dat_content=False now means "skip
+        what is saved elsewhere", so the toggle is exercised with a
+        file-backed DAT -- its remaining job.
+        """
+        import os, tempfile
+        backing = os.path.join(tempfile.gettempdir(), 'tdn_toggle_backed.txt')
+        with open(backing, 'w', encoding='utf-8') as f:
+            f.write('MARKER_CONTENT_42')
+
         dat = self.fixture.op('notes')
+        dat.par.file = backing
         dat.text = 'MARKER_CONTENT_42'
+
         with_content = self.envoy._read_tdn(
             comp_path=self.fixture.path, include_dat_content=True)
         serialized = json.dumps(with_content['tdn'])
@@ -70,7 +85,27 @@ class TestMCPTDNTools(EmbodyTestCase):
             comp_path=self.fixture.path, include_dat_content=False)
         serialized = json.dumps(without['tdn'])
         self.assertNotIn('MARKER_CONTENT_42', serialized,
-            'DAT content leaked when include_dat_content=False')
+            'File-backed DAT content duplicated when '
+            'include_dat_content=False')
+
+    def test_read_tdn_always_embeds_unbacked_dat(self):
+        """An unbacked DAT's code survives include_dat_content=False.
+
+        The .tdn is the ONLY place that content can live, so the toggle must
+        never drop it -- otherwise a crash costs every shader and callback in
+        the COMP.
+        """
+        dat = self.fixture.op('notes')
+        dat.text = 'MARKER_UNBACKED_99'
+        self.assertFalse(dat.par.file.eval(),
+            'Fixture DAT must be unbacked for this test to mean anything')
+
+        without = self.envoy._read_tdn(
+            comp_path=self.fixture.path, include_dat_content=False)
+        serialized = json.dumps(without['tdn'])
+        self.assertIn('MARKER_UNBACKED_99', serialized,
+            'Unbacked DAT content DROPPED when include_dat_content=False -- '
+            'this is the silent data-loss bug')
 
     # ------------------------------------------------------------------
     # C. Mode-agnostic read

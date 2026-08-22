@@ -3394,49 +3394,6 @@ class EmbodyExt:
             self.Log(f"Error deleting file: {resolved}", "ERROR", str(e))
             return False
 
-    def safeDeleteTrackedFiles(self, folder_path: Union[str, Path]) -> tuple[int, int]:
-        """
-        Delete only the files in a folder that Embody is tracking.
-        Non-Embody files are left untouched.
-
-        Args:
-            folder_path: Path to scan for tracked files
-
-        Returns:
-            tuple: (deleted_count, skipped_count)
-        """
-        if isinstance(folder_path, str):
-            folder_path = Path(folder_path)
-        
-        if not folder_path.exists():
-            return (0, 0)
-        
-        tracked_files = self.getTrackedFilePaths()
-        deleted = 0
-        skipped = 0
-        
-        # Walk through folder and delete only tracked files
-        for file_path in folder_path.rglob('*'):
-            if file_path.is_file():
-                resolved = file_path.resolve()
-                if resolved in tracked_files:
-                    try:
-                        resolved.unlink()
-                        self.Log(f"Deleted tracked file: {resolved}", "INFO")
-                        deleted += 1
-                    except Exception as e:
-                        self.Log(f"Error deleting: {resolved}", "ERROR", str(e))
-                else:
-                    skipped += 1
-        
-        if skipped > 0:
-            self.Log(f"SAFETY: Preserved {skipped} untracked file(s) in {folder_path}", "INFO")
-        
-        return (deleted, skipped)
-
-    # ==========================================================================
-    # ENABLE / DISABLE
-    # ==========================================================================
 
     def Disable(self, prevFolder: Union[str, bool, None] = False, removeTags: Union[bool, int] = False) -> None:
         """
@@ -11676,36 +11633,6 @@ class EmbodyExt:
     # FILE UTILITIES
     # ==========================================================================
 
-    def deleteFile(self, oper: OP, externalizationsFolder: str) -> None:
-        """
-        Delete externalized file for an operator.
-        SAFETY: This only deletes files at paths we generate for tracked operators.
-        """
-        abs_folder_path, save_file_path, _, _ = self.getOpPaths(oper, externalizationsFolder)
-        if save_file_path is None:
-            return
-
-        save_file = save_file_path.resolve()
-        try:
-            if save_file.exists():
-                save_file.unlink()
-                self.Log(f"Deleted file: {save_file}", "INFO")
-                try:
-                    # Only remove directory if empty
-                    abs_folder_path.rmdir()
-                except OSError:
-                    pass  # Directory not empty - this is fine
-        except FileNotFoundError:
-            self.Log(f"File not found: {save_file}", "WARNING")
-        except PermissionError as e:
-            self.Log(f"Permission denied deleting file {save_file}: {e}", "WARNING")
-            pass
-        except Exception as e:
-            self.Log(f"Unexpected error deleting file {save_file}: {e}", "WARNING")
-            pass
-
-    # Directories that must never be touched by empty-dir cleanup
-    _SCM_DIRS = {'.git', '.svn', '.hg'}
 
     def deleteEmptyDirectories(self, path: Union[str, Path]) -> None:
         """

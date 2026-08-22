@@ -83,20 +83,51 @@ class TestTDNExportImport(EmbodyTestCase):
         self.assertIsNotNone(dat_entry)
         self.assertDictHasKey(dat_entry, 'dat_content')
 
+    def _datEntry(self, tdn, name):
+        for o in tdn['operators']:
+            if o['name'] == name:
+                return o
+        return None
+
     def test_export_dat_content_excluded(self):
+        """include_dat_content=False skips content a FILE already holds.
+
+        Reframed 2026-08-21 with the export gate: it used to assert the
+        flag drops an UNBACKED DAT too, which is the silent data-loss bug
+        (a .tdn with 185 operators and zero lines of code). The flag's
+        remaining job is not duplicating what is on disk, so the exclusion
+        is now asserted against a file-backed DAT.
+        """
+        import os, tempfile
+        backing = os.path.join(tempfile.gettempdir(), 'nocontent_dat.txt')
+        with open(backing, 'w', encoding='utf-8') as f:
+            f.write('secret')
         dat = self.sandbox.create(textDAT, 'nocontent_dat')
+        dat.par.file = backing
         dat.text = 'secret'
         result = self.tdn.ExportNetwork(
             root_path=self.sandbox.path, include_dat_content=False)
-        tdn = result['tdn']
-        dat_entry = None
-        for o in tdn['operators']:
-            if o['name'] == 'nocontent_dat':
-                dat_entry = o
-                break
+        dat_entry = self._datEntry(result['tdn'], 'nocontent_dat')
         self.assertIsNotNone(dat_entry)
-        # Should not have dat_content key
-        self.assertNotIn('dat_content', dat_entry)
+        self.assertNotIn('dat_content', dat_entry,
+            'File-backed DAT content duplicated into the .tdn')
+
+    def test_export_keeps_unbacked_dat_content(self):
+        """An unbacked DAT is embedded even with include_dat_content=False.
+
+        The .tdn is the ONLY place that code can live. Dropping it is how a
+        crash costs a project every shader and callback.
+        """
+        dat = self.sandbox.create(textDAT, 'unbacked_dat')
+        dat.text = 'authored_code_42'
+        self.assertFalse(dat.par.file.eval(),
+            'Fixture must be unbacked for this test to mean anything')
+        result = self.tdn.ExportNetwork(
+            root_path=self.sandbox.path, include_dat_content=False)
+        dat_entry = self._datEntry(result['tdn'], 'unbacked_dat')
+        self.assertIsNotNone(dat_entry)
+        self.assertEqual(dat_entry.get('dat_content'), 'authored_code_42',
+            'Unbacked DAT content DROPPED -- silent data-loss bug')
 
     # --- v2.0: multi-line text dat_content stored as a plain string ---
 
