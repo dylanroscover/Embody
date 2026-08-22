@@ -23,9 +23,51 @@ dev box and landed flagged "unverified on mac" (commit e28b73e).
 import builtins
 import os
 import shutil
+import sys
 import tempfile
 import types
 import unittest
+
+
+# The interpreter this suite is CONTRACTED to run on: TouchDesigner's own.
+# Local pytest on a different Python does not test what ships -- it silently
+# exercises an interpreter no user and no CI leg has. The failure is not
+# loud either: on 3.9 six embody_git tests failed because
+# Path.write_text(newline=) is 3.10+, the TypeError was swallowed by a broad
+# except, and the helper just returned False (field 2026-08-22).
+#
+# KEEP THIS IN LOCK-STEP WITH TD. Two tests enforce it and will fail the
+# moment it drifts -- see test_version_sync:
+#   - TD's live sys.version_info must equal this tuple
+#   - .github/workflows/bridge-tests.yml python-version must equal it
+TD_PYTHON_TARGET = (3, 11)
+
+
+def _require_td_python():
+    """Refuse to run on an interpreter TouchDesigner does not ship.
+
+    Module level, NOT a pytest_configure hook: this file already
+    defines pytest_configure further down, and a second def would
+    simply replace it (which is exactly what happened first try).
+    """
+    running = sys.version_info[:2]
+    if running == TD_PYTHON_TARGET:
+        return
+    want = '%d.%d' % TD_PYTHON_TARGET
+    have = '%d.%d' % running
+    raise SystemExit(
+        "\nThis suite must run on Python %s -- the version TouchDesigner "
+        "ships and CI pins.\nYou are on Python %s (%s).\n\n"
+        "Results from another interpreter are misleading: they exercise "
+        "code paths\nno user has, and they can fail (or pass) for reasons "
+        "that do not exist in TD.\n\n"
+        "Use a %s interpreter, e.g. the project venv:\n"
+        "    dev/.venv/Scripts/python.exe -m pytest\n"
+        % (want, have, sys.executable, want))
+
+
+_require_td_python()
+
 
 # unit_tests/ -> embody/ -> dev/  (TD's project.folder is the .toe dir)
 _DEV_DIR = os.path.dirname(

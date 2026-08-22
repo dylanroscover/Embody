@@ -395,6 +395,48 @@ class TestVersionSync(EmbodyTestCase):
             f'{len(wrong)} user-facing tool-count claim(s) disagree with the '
             f'{actual} registered tools: {wrong}')
 
+    # ------------------------------------------------------------------
+    # Local pytest must run on TouchDesigner's own Python
+    # ------------------------------------------------------------------
+
+    def _conftest_target(self):
+        """The TD_PYTHON_TARGET tuple declared in the pytest shim."""
+        text = self._read('dev', 'embody', 'unit_tests', 'conftest.py')
+        m = re.search(r'TD_PYTHON_TARGET\s*=\s*\((\d+),\s*(\d+)\)', text)
+        self.assertIsNotNone(
+            m, 'conftest.py no longer declares TD_PYTHON_TARGET -- the local '
+               'pytest interpreter guard has been removed or renamed')
+        return (int(m.group(1)), int(m.group(2)))
+
+    def test_pytest_target_matches_this_touchdesigner(self):
+        """The declared target must equal the Python TD actually ships.
+
+        This is the test that keeps the pin honest: the moment a TD upgrade
+        moves the interpreter, this fails and names both halves, instead of
+        local pytest quietly drifting onto a version nothing else uses.
+        """
+        import sys as _sys
+        live = _sys.version_info[:2]
+        declared = self._conftest_target()
+        self.assertEqual(
+            declared, live,
+            'conftest.TD_PYTHON_TARGET is %d.%d but this TouchDesigner runs '
+            'Python %d.%d -- update TD_PYTHON_TARGET and the python-version '
+            'in .github/workflows/bridge-tests.yml together'
+            % (declared + live))
+
+    def test_ci_python_matches_the_pytest_target(self):
+        """CI pins an interpreter too; it must be the same one."""
+        workflow = self._read('.github', 'workflows', 'bridge-tests.yml')
+        found = re.findall(r"python-version:\s*'([\d.]+)'", workflow)
+        self.assertTrue(found, 'bridge-tests.yml pins no python-version')
+        declared = '%d.%d' % self._conftest_target()
+        for pinned in found:
+            self.assertEqual(
+                pinned, declared,
+                'CI pins Python %s but conftest.TD_PYTHON_TARGET is %s -- '
+                'local, CI and TD must all agree' % (pinned, declared))
+
     def test_badge_regexes_hit_current_readme(self):
         # The anchors/regexes in updateVersionDocs must keep matching the
         # real README -- if the badge markup is ever restyled, this fails
