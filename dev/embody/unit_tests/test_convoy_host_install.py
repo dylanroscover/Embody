@@ -2125,6 +2125,34 @@ class TestForgetOfflineNodes(ConvoyHostBase):
                          'nothing was forgotten, nothing redraws early')
         self.assertEqual(self.convoy._tick_ms, self.convoy.TICK_MAX_MS)
 
+    def test_all_clear_does_not_send_you_to_the_machine_you_are_on(self):
+        """Ownership is host_id; the message names a HOSTNAME. A computer
+        name is neither unique nor authoritative (a cloned image, a rebuilt
+        box reusing the name), so the owning host can carry THIS machine's
+        name -- and the dialog then told the user to walk to the machine
+        they were already sitting at (field 2026-08-22, the dev box).
+        """
+        import socket
+        me = socket.gethostname()
+        self.client.get_results = [
+            (200, {'ok': True, 'host_id': 'h' * 32, 'nodes': [
+                {'host_id': 'p' * 32, 'node_id': 'd' * 32, 'online': False,
+                 'hostname': me, 'node_name': '%s / smoke' % me,
+                 'toe_name': 'smoke.1.toe', 'last_seen_age_s': 9999.0},
+            ]})]
+        self.convoy.ForgetOfflineNodes()
+        self.assertLen(self.dialogs, 1)
+        _title, message, buttons = self.dialogs[0]
+        self.assertEqual(buttons, ['OK'])
+        self.assertIn('also reports the computer name', message,
+                      'the all-clear must explain that a DIFFERENT host '
+                      'carries this machine name, not send the user here')
+        self.assertNotIn('Run Forget Offline Nodes there', message,
+                         'never instruct the user to walk to the machine '
+                         'they are already using')
+        self.assertEqual(self.client.count('host_post'), 0,
+                         'the all-clear path forgets nothing')
+
     def test_all_clear_names_the_computers_that_own_the_offline_rows(self):
         """'Nothing to forget' while the user is LOOKING at offline rows
         reads as broken (field report 2026-08-05, the dev box): when the
@@ -2147,9 +2175,14 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.assertIn('TEC-B4A', message,
                       'the machine that owns the offline rows is named')
         self.assertIn('Run Forget Offline Nodes there', message)
-        self.assertIn('retires its own stale rows automatically', message,
-                      'the all-clear also says rows self-clean now, so '
-                      'walking to five machines is optional')
+        self.assertIn('forgotten from the computer that owns it', message,
+                      'the all-clear states the ownership rule plainly')
+        self.assertIn('clear themselves', message,
+                      'the all-clear still explains self-cleanup')
+        self.assertNotIn('about an hour).', message,
+                         'the old blanket "ghosts clear within an hour" '
+                         'promise was false for any row that ran longer '
+                         'than the transient tier (field 2026-08-22)')
         self.assertEqual(self.client.count('host_post'), 0)
 
 
