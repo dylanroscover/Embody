@@ -10951,6 +10951,14 @@ class EmbodyExt:
         errors = []
         try:
             for child in comp.findChildren():
+                # Python tracebacks sit on a SEPARATE surface. This method's
+                # docstring has always promised "scripts", but errors()
+                # cannot see them -- the same blind spot get_op_errors had
+                # until 2026-08-22. Kept whole (not split per line) so one
+                # traceback counts as one error in the startup report.
+                script_str = child.scriptErrors()
+                if script_str:
+                    errors.append(f'{child.path}: {script_str.strip()}')
                 err_str = child.errors()
                 if err_str:
                     for err in err_str.split('\n'):

@@ -8,7 +8,7 @@ description: "TRIGGER when operator errors appear or user reports broken behavio
 
 Systematic approach to diagnosing TD operator errors:
 
-1. **Get errors and warnings**: `get_op_errors` with `recurse=true` on the suspected operator and its children
+1. **Get errors and warnings**: `get_op_errors` with `recurse=true` on the suspected operator and its children. It covers all three surfaces TD paints red: cook errors, Python tracebacks (`kind: 'script'` entries), and GLSL compile failures (`shaderErrors`)
 2. **Inspect the operator**: `get_op` to see type, family, parameters, inputs, outputs, children
 3. **Check connections**: `get_connections` to verify input/output wiring is correct
 4. **Read DAT content**: `get_dat_content` if the operator is a DAT with script errors
@@ -17,10 +17,11 @@ Systematic approach to diagnosing TD operator errors:
 
 ## Common Error Patterns
 
-- **Missing input**: Operator requires a specific input type — check connections
+- **Missing input**: Operator requires a specific input type -- check connections
 - **Script error in DAT**: Read the DAT content and fix the Python/expression
 - **Parameter out of range**: Check parameter values against valid ranges
 - **Missing operator reference**: An expression or parameter references a non-existent operator
-- **Cook error**: The operator can't process its inputs — check input data types match expectations
+- **Script error (Python traceback)**: A raising callback, DAT script, or expression shows a red X but is NOT a cook error -- TD keeps it on a separate surface (`OP.scriptErrors()`), and `op.errors()` reports the op as perfectly clean. Two consequences: read the traceback from `get_op_errors`' `kind: 'script'` entries, and remember these errors PERSIST until cleared. An error thrown during an extension re-init window (the extension object is briefly the old one, so a method added later is missing) stays red long after the code is correct again -- re-cook the owning op, confirm it runs clean, then `clearScriptErrors(recurse=True, error='*')` to clear the stale badge. Field case 2026-08-22: Embody's own manager list sat red on `'EmbodyExt' object has no attribute 'DirtyState'` while the live extension had the method all along.
+- **Cook error**: The operator can't process its inputs -- check input data types match expectations
 - **Black or empty render**: Use `capture_top` on the intended output TOP, then check display/render flags on the output and upstream ops; missing light or camera (a 3D scene renders black without both); no cooking Null terminating the chain; a bypass flag left on; resolution is 0; alpha is premultiplied/zero so the image is present but invisible; and whether the op is cooking (check `cookedThisFrame` via `get_op_performance`, or force a cook). After each fix, use `capture_top` again to confirm the frame renders correctly.
 - **Stale content after a file change (cooks clean, shows old pixels)**: An op can cook with NO errors and the RIGHT resolution yet still hold STALE content. A Movie File In whose `par.file` changed serves its previous cached texture until it cooks on a real frame advance -- `cook(force=True)` in the same frame is not enough. And when a TOP chain's output looks exactly ONE frame stale, suspect same-pass reload propagation: a reload applied mid-pass may not reach downstream ops until the next real frame, even under forced cooks in dependency order. Verify CONTENT, not cook state -- read pixels back (`numpyArray()` / `capture_top`) at the POINT OF CAPTURE (the chain's output, not the source) and confirm they actually changed across a real frame advance. See rules/td-python.md (Cook Model) and rules/performance.md (Movie Export).

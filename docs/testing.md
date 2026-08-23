@@ -94,7 +94,7 @@ AI-client connectivity tier, listed separately under
 | `test_mcp_operators` | 20 | Create, delete, copy, rename, query, find |
 | `test_mcp_annotations` | 31 | Creating and managing annotations |
 | `test_mcp_dat_content` | 19 | DAT text/table ops + surgical `edit_dat_content` + wipe guards |
-| `test_mcp_diagnostics` | 16 | Error checking, class introspection, module help, log retrieval |
+| `test_mcp_diagnostics` | 21 | Error checking across all three surfaces (cook, script tracebacks, shader), class introspection, module help, log retrieval |
 | `test_mcp_flags_position` | 16 | Operator flags, positioning, and `get_network_layout` |
 | `test_mcp_project_performance` | 14 | Project-level FPS, memory, hotspots |
 | `test_mcp_parameters` | 11 | Get/set parameters, modes, expressions |
@@ -113,7 +113,7 @@ AI-client connectivity tier, listed separately under
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_tdn_reconstruction` | 208 | Reconstruction round-trip fidelity |
+| `test_tdn_reconstruction` | 209 | Reconstruction round-trip fidelity + script-error reporting in the rebuild report |
 | `test_tdn_file_io` | 92 | TDN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
 | `test_tdn_helpers` | 67 | TDN serialization utility functions |
 | `test_tdn_export_import` | 48 | Network export/import + storage round-trip |

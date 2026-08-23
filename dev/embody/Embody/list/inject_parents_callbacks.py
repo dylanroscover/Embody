@@ -38,7 +38,14 @@ def onCook(scriptOp):
 		# Dirty is runtime-only (2026-08-20): the tsv column is blank by
 		# contract, so overlay the live state here -- every downstream
 		# read (filters, strategy_state) keys off row['dirty'].
-		row['dirty'] = parent.Embody.ext.Embody.DirtyState(path)
+		# Guarded: a raise here leaves a PERMANENT red X, because TD
+		# keeps script errors until cleared. One cook inside an
+		# extension re-init window (ext object briefly predates
+		# DirtyState) badges this node long after the code is fine
+		# (field 2026-08-22).
+		embody_ext = parent.Embody.ext.Embody
+		row['dirty'] = (embody_ext.DirtyState(path)
+			if hasattr(embody_ext, 'DirtyState') else '')
 		data_rows[path] = row
 		oper = op(path)
 		if oper and oper.family == 'COMP':

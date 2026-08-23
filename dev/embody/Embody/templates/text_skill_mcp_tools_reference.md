@@ -100,7 +100,7 @@ return the shape and range instead.
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_td_info` | _(none)_ | TD version, build, OS, Envoy version |
-| `get_op_errors` | `op_path`, `recurse?` | Get error and warning messages for op and children |
+| `get_op_errors` | `op_path`, `recurse?` | Errors and warnings for op and children. Covers cook errors, Python tracebacks (`kind: "script"` entries -- invisible to `op.errors()`), and GLSL compile failures (`shaderErrors`) |
 | `exec_op_method` | `op_path`, `method`, `args?`, `kwargs?` | Call a method on an operator |
 | `get_td_classes` | _(none)_ | List all Python classes in `td` module |
 | `get_td_class_details` | `class_name` | Get methods, properties, docs for a TD class |

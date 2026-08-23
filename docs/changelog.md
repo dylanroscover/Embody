@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.0.265
+
+An operator could sit red in the network while every Envoy error tool called it clean.
+
+- **Python tracebacks are visible at last**: TD reports errors on three surfaces and `get_op_errors` read two of them. A DAT whose `onCook` raised showed a red X in the network while the tool reported zero errors, and the write-effect footer was equally blind -- the single most common failure in a TD project was invisible to the whole agent toolchain. Script errors now merge into `errors[]` as `kind: 'script'`, so `errorCount`/`hasErrors` mean "what the network shows red" and a traceback rides back on the very write that caused it. Measured 11ms project-wide against the footer's 0.25s budget, so unlike `shaderErrors` it always runs rather than hiding behind an opt-out. Found the hard way: Embody's own manager list sat badged with `'EmbodyExt' object has no attribute 'DirtyState'` while a project-wide sweep reported everything clean.
+- **The TDN rebuild report stops under-reporting**: `_verifyReconstructedComp` has always promised "broken connections, scripts, etc." in its docstring but read only `errors()`/`warnings()`, so a COMP rebuilt from `.tdn` whose callback raises was reported as reconstructed clean. It reads the script surface now, counting one traceback as one error rather than one per line, and gains the test coverage it never had.
+- **A transient no longer leaves a permanent badge**: script errors persist until explicitly cleared, so one cook inside an extension re-init window -- where the extension object is briefly the previous one -- badges a node long after the code is correct again. The manager list's `DirtyState` call is guarded, and the debug-operator skill now documents the surface and the `clearScriptErrors` recovery.
+
+6 new tests.
+
 ## v6.0.264
 
 A TDN export could silently throw away every line of code it was meant to preserve; an agent could not see a shader that had failed to compile, could not read CHOP or POP data at all, and a cross-build parameter repair had never once run.

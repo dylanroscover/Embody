@@ -4006,3 +4006,25 @@ class TestTDNReconstruction(EmbodyTestCase):
 			f'Operator names changed after round-trip.\n'
 			f'Before: {pre_names}\n'
 			f'After:  {post_names}')
+
+	# =================================================================
+	# Reconstruction verify: the script-error surface
+	# =================================================================
+
+	def test_verify_reports_script_errors(self):
+		"""_verifyReconstructedComp promises "scripts" in its docstring
+		but read only errors()/warnings(), which CANNOT see a Python
+		traceback -- so a rebuilt COMP whose callback raises was
+		reported as reconstructed clean (field 2026-08-22).
+		"""
+		host = self.sandbox.create(baseCOMP, 'verify_host')
+		child = host.create(textDAT, 'boom')
+		child.addScriptError('VERIFY_PROBE: synthetic traceback')
+		self.assertTrue(child.scriptErrors(),
+			'addScriptError did not take -- test proves nothing')
+		self.assertEqual(child.errors(), '',
+			'TD now routes script errors through errors() -- revisit')
+
+		found = self.embody.ext.Embody._verifyReconstructedComp(host)
+		self.assertTrue(any('VERIFY_PROBE' in e for e in found),
+			'script error missing from the reconstruction report')
