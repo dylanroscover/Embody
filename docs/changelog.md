@@ -1,5 +1,25 @@
 # Changelog
 
+## v6.0.266
+
+Embody could tell you a package "ships inside TouchDesigner itself" when TouchDesigner had never heard of it.
+
+- **"Bundled" now means shipped with the interpreter**: `td_bundled_dist_names` credited TouchDesigner with every `site-packages` on `sys.path` -- a `--user` install, the "Python 64-bit Module Path" preference dir, or a PREVIOUSLY-OPENED project's venv (`sys.path` only ever grows, so opening a second project in one TD session leaves the first one's venv on it). Declaring such a package was refused as *"X ships inside TouchDesigner itself; a different version loaded from the project venv can crash TD ops"* -- a claim TD's own site-packages listing disproves, and clearable only by `allow_shadow=True`, which is COMMITTED to `project.json` and ships the false opt-in to the whole team. The scan is now restricted to `sys.base_prefix`, which is what "TouchDesigner ships it" actually means.
+- **`extras_applied` is verified, not believed**: `extras_status` read the stamp and never looked at the venv. Running the `uv pip uninstall` line Embody's OWN log prints left the extra declared, stamped, uninstalled and never reinstalled -- `ModuleNotFoundError` at runtime on the machine that ran it, while a fresh clone worked fine. It now checks the installed dist-info and lets a missing extra fall back into `to_install`. Fails safe: an absent or unreadable site-packages still trusts the stamp rather than mass-reinstalling against a half-built venv.
+- **The local pytest tier is a contract, not tribal knowledge**: `dev/embody/unit_tests/requirements-test.txt` pins the set (pytest, `cryptography`, PyYAML) and CI installs FROM it, so prose can no longer be the thing that drifts -- `pytest.ini` still claimed ONE third-party dependency after PyYAML became the second, and a venv built from that prose aborts COLLECTION on `import yaml`, running zero tests while looking like a broken suite. `conftest`'s remediation line no longer sends developers to `dev/.venv` (Embody's live Envoy runtime venv, which carries no pytest and whose mutation hits the running MCP server); `docs/testing.md` and `CONTRIBUTING.md` now document the headless tier CONTRIBUTING said did not exist.
+
+4 new tests. One existing test was rewritten: it had pinned the old contract, asserting that another project's venv counts as TouchDesigner's.
+
+## v6.0.265
+
+An operator could sit red in the network while every Envoy error tool called it clean.
+
+- **Python tracebacks are visible at last**: TD reports errors on three surfaces and `get_op_errors` read two of them. A DAT whose `onCook` raised showed a red X in the network while the tool reported zero errors, and the write-effect footer was equally blind -- the single most common failure in a TD project was invisible to the whole agent toolchain. Script errors now merge into `errors[]` as `kind: 'script'`, so `errorCount`/`hasErrors` mean "what the network shows red" and a traceback rides back on the very write that caused it. Measured 11ms project-wide against the footer's 0.25s budget, so unlike `shaderErrors` it always runs rather than hiding behind an opt-out. Found the hard way: Embody's own manager list sat badged with `'EmbodyExt' object has no attribute 'DirtyState'` while a project-wide sweep reported everything clean.
+- **The TDN rebuild report stops under-reporting**: `_verifyReconstructedComp` has always promised "broken connections, scripts, etc." in its docstring but read only `errors()`/`warnings()`, so a COMP rebuilt from `.tdn` whose callback raises was reported as reconstructed clean. It reads the script surface now, counting one traceback as one error rather than one per line, and gains the test coverage it never had.
+- **A transient no longer leaves a permanent badge**: script errors persist until explicitly cleared, so one cook inside an extension re-init window -- where the extension object is briefly the previous one -- badges a node long after the code is correct again. The manager list's `DirtyState` call is guarded, and the debug-operator skill now documents the surface and the `clearScriptErrors` recovery.
+
+6 new tests.
+
 ## v6.0.264
 
 A TDN export could silently throw away every line of code it was meant to preserve; an agent could not see a shader that had failed to compile, could not read CHOP or POP data at all, and a cross-build parameter repair had never once run.

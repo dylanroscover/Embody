@@ -431,6 +431,7 @@ def get_focus(ext) -> dict:
 _SHADER_ERROR_MARKERS = ('error', 'failed', 'invalid')
 _SHADER_LOG_LINE_CAP = 6
 _SHADER_LOG_CHAR_CAP = 200
+_SCRIPT_ERROR_CHAR_CAP = 1200
 
 
 def _docked_info_dat(target):
@@ -514,9 +515,78 @@ def shader_errors(ext, target, recurse: bool = True) -> list:
     return found
 
 
+def script_errors(ext, target, recurse: bool = True) -> list:
+    """Python tracebacks -- callback, DAT-script and expression errors.
+
+    TD keeps these on OP.scriptErrors(), a SEPARATE surface from
+    OP.errors(): a DAT whose onCook raises shows a red X in the network yet
+    reads as a perfectly clean op through errors()/warnings() alone (field
+    2026-08-22 -- a stale "'EmbodyExt' object has no attribute 'DirtyState'"
+    on Embody's own manager list, which get_op_errors called 0 errors).
+    One cheap call and nothing cooks, so unlike shader_errors this always
+    runs and merges straight into errors[].
+
+    Entries use the SAME shape as get_op_errors' errors[] (plus
+    kind='script') so the write-effect differ consumes them unchanged.
+    """
+    if not hasattr(target, 'scriptErrors'):
+        return []
+    try:
+        output = target.scriptErrors(recurse=recurse) or ''
+    except Exception:
+        return []
+
+    found = []
+    block = []
+
+    def _flush(path):
+        message = '\n'.join(block).strip()
+        del block[:]
+        if not message:
+            return
+        node = op(path)
+        known = bool(node) and node.valid
+        found.append({
+            'nodePath': node.path if known else path,
+            'nodeName': node.name if known else '',
+            'opType': node.OPType if known else '',
+            'message': message[:_SCRIPT_ERROR_CHAR_CAP],
+            'kind': 'script',
+        })
+
+    for raw in output.split('\n'):
+        line = raw.strip()
+        if not line:
+            continue
+        path = None
+        # A block ENDS on its trailing " (/op/path)" line. The leading slash
+        # is what makes that safe: a traceback's own last line -- e.g.
+        # "TypeError: f() takes 2 positional arguments (3 given)" -- has no
+        # slash there, so it cannot split the block early.
+        if line.endswith(')'):
+            head, sep, tail = line.rpartition('(')
+            if sep and tail[:-1].startswith('/'):
+                path = tail[:-1]
+                line = head.strip()
+        if line:
+            block.append(line)
+        if path is not None:
+            _flush(path)
+    if block:
+        # No terminator seen: attribute the tail to the op we asked about
+        # rather than dropping it (CLAUDE.md "fail loud").
+        _flush(target.path)
+    return found
+
+
 def get_op_errors(ext, op_path: str, recurse: bool = True,
                   include_shaders: bool = True) -> dict:
-    """Get error and warning messages for an operator and its children"""
+    """Errors and warnings for an operator and its children.
+
+    errors[] carries TD's cook errors AND Python tracebacks (kind='script');
+    shader compile failures ride a separate shaderErrors key because reading
+    those cooks Info DATs -- see script_errors / shader_errors.
+    """
     target = resolve_op(ext, op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
@@ -565,6 +635,11 @@ def get_op_errors(ext, op_path: str, recurse: bool = True,
                             })
             except Exception as e:
                 ext._log(f'Error getting {severity}s from {op_path}: {e}', 'WARNING')
+
+    # Python tracebacks come from TD's own error API and cost one cheap
+    # call, so they COUNT: errorCount/hasErrors must mean "what the network
+    # shows red". shaderErrors stays a side key only because it must cook.
+    all_errors.extend(script_errors(ext, target, recurse))
 
     result = {
         'path': target.path,

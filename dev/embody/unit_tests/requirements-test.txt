@@ -1,0 +1,22 @@
+# Dependency set for the local pytest tier -- the ONE source of truth,
+# shared with .github/workflows/bridge-tests.yml so CI and a developer
+# box cannot drift. They did: pytest.ini's prose still said "ONE
+# third-party dependency" after PyYAML became the second, and a venv
+# built from that prose aborts COLLECTION on `import yaml` -- zero tests
+# run, which reads like a broken tier rather than a missing package
+# (field 2026-08-23).
+#
+# Install into a DEDICATED venv built from TouchDesigner's own
+# interpreter, so the Python version matches what ships without
+# inheriting TD's bundled site-packages:
+#
+#   "<TD>/bin/python.exe" -m venv dev/.venv-tests
+#   dev/.venv-tests/Scripts/python.exe -m pip install -r dev/embody/unit_tests/requirements-test.txt
+#   dev/.venv-tests/Scripts/python.exe -m pytest
+#
+# NEVER install these into dev/.venv -- that is Embody's live Envoy
+# runtime venv, managed by embody_pyenv, and test-only packages there can
+# mask a missing dependency in the shipped path.
+pytest
+cryptography>=3.4
+pyyaml

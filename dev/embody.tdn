@@ -1,20 +1,14 @@
 format: tdn
 version: '2.0'
-build: 1084
-generator: Embody/6.0.264
+build: 1090
+generator: Embody/6.0.266
 td_build: 099.2025.33070
-source_file: Embody-6.264.toe
-exported_at: '2026-08-22T15:32:22Z'
+source_file: Embody-6.266.toe
+exported_at: '2026-08-23T06:12:46Z'
 network_path: /embody
 options:
   include_dat_content: false
   include_storage: true
-type_defaults:
-  baseCOMP:
-    size: [160, 130]
-    color: [0.3, 0.5, 0.9]
-    tags:
-    - tdn
 type: containerCOMP
 parameters:
   w: 960
@@ -36,12 +30,6 @@ color: [0.3, 0.5, 0.9]
 tags:
 - tdn
 operators:
-- name: base1
-  type: baseCOMP
-  flags:
-  - viewer
-  position: [200, -275]
-  tdn_ref: embody/base1.tdn
 - name: Embody
   type: containerCOMP
   parameters:
@@ -80,9 +68,6 @@ operators:
     - {}
     - {}
     Convoynodes:
-    - {}
-    - {}
-    - {}
     - {}
     - {}
     - {}
@@ -874,7 +859,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.264
+      value: 6.0.266
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -950,6 +935,10 @@ operators:
     - {}
     - {}
   position: [400, 102]
+  size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   tdn_ref: embody/unit_tests.tdn
 - name: execute_src_ctrl
   type: executeDAT
@@ -971,7 +960,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 309
+    rows: 308
     cols: 11
   flags:
   - viewer

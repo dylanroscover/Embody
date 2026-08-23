@@ -2348,7 +2348,10 @@ class EnvoyMCPServer:
         def get_op_errors(op_path: str, recurse: bool = True) -> dict:
             """
             Get error and warning messages for an operator and optionally its children.
-            Useful for debugging TD networks -- returns both errors and warnings.
+            Useful for debugging TD networks -- covers all three surfaces TD
+            reports red: cook errors, Python tracebacks from callbacks/DAT
+            scripts/expressions (OP.scriptErrors, tagged kind='script' in
+            errors[]), and GLSL compile failures (shaderErrors key).
 
             Args:
                 op_path: Path to the operator to check

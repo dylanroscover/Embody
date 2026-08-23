@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.264-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.266-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-65-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -176,7 +176,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **134 test suites** (4,153 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **134 test suites** (4,163 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -207,6 +207,8 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.266**: **A package TouchDesigner never shipped, refused as TouchDesigner's own** -- "bundled" meant any `site-packages` on `sys.path`, so a `--user` install or a second project's venv got credited to TD and refused with a false reason. Also: `extras_applied` is now verified against the venv instead of believed, and the local pytest tier has a pinned requirements file.
+- **6.0.265**: **A red operator that every error tool called clean** -- `get_op_errors` never read `OP.scriptErrors()`, so a Python traceback on a DAT was invisible to agents while the network showed it red. Script errors now count toward `errorCount` and ride the write-effect footer; the TDN rebuild report reads the same surface.
 - **6.0.264**: **An agent can finally see a shader that failed to compile** -- `op.errors()` reports "(none)" for a GLSL compile failure (TouchDesigner emits only a vague warning and writes the real text to the auto-docked Info DAT), so `get_op_errors` now reads that DAT and the write-effect footer carries the compile error back on the response to the very write that caused it. New `get_chop_data` and `get_pop_data` readers reduce rather than dump -- per-channel stats with op-vs-op diffing for CHOPs, and free attribute metadata for POPs with value readback gated on point count (`POP.points()` accepts and ignores its own slicing arguments, and a 160k-point readback costs ~4 frames). `get_op` collapses parameter sequences, `get_dat_content(format='stats')` reduces a table 17x, and `get_docs` fuses the wiki page with the build-accurate creation defaults Embody already harvests. Plus a cross-build parameter repair that had never once run (`findChildren(depth=-1)` matches nothing) and 191 lines of dead code removed, including an unwired delete path whose safety docstring was false.
 - **6.0.260**: **Module-level venv imports survive a cold open** -- Embody authors TouchDesigner's pre-cook venv context (`TDPyEnvManagerContext.yaml` beside the `.toe`), so `.venv` is on `sys.path` before any COMP cooks and an extension that constructs before Embody can still `import` its packages (foreign contexts are never touched, deleting the file opts out, uninstall reverses it, and the wizard's footprint step discloses it); self-update validation no longer flushes dirty toxes to disk (dirty state is runtime-only now); Convoy's "Allow TD Python" gate no longer flips off on save (deviation-based reconcile replaces the voided projection flag).
 - **6.0.259**: **Fleet Convoy triage: remote launch fixed everywhere, ghost rows self-clean, names can't mask machines** -- registration claimed `sys.executable` (TouchDesigner's bundled `python.exe`), so the host app's process probe refused every launch profile `runtime_unverifiable` and no node anywhere was remotely launchable (registration now claims the probed process image, and the heartbeat audit spam that came with it -- ~5,700 lines/day/node -- logs on transitions only); short-lived ghost rows retire after an hour of silence instead of 30 days; foreign name stamps heal regardless of project name and the node list prefixes the live hostname whenever a name omits it; enabling Convoy shows `Installing...` instead of holding `Disabled`, and Last Seen reads `Never` instead of `Unavailable`.
