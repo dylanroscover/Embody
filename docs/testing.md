@@ -4,6 +4,29 @@ Embody includes a comprehensive automated test suite with **131 test suites** an
 
 ## Running Tests
 
+### Local pytest tier
+
+Most suites run only inside TouchDesigner, but the TD-import-free ones
+(listed in `pytest.ini`: the Convoy host app plus the pure-Python Embody
+suites) also run headless under pytest -- the same set CI runs on the
+windows + macOS matrix.
+
+Use a **dedicated venv built from TouchDesigner's own interpreter**. The
+version has to match what ships (`conftest.py` refuses any other), but the
+venv must not inherit TD's bundled packages -- whatever is importable in
+the running interpreter can change a test's verdict:
+
+```bash
+"<TD>/bin/python.exe" -m venv dev/.venv-tests
+dev/.venv-tests/Scripts/python.exe -m pip install -r dev/embody/unit_tests/requirements-test.txt
+dev/.venv-tests/Scripts/python.exe -m pytest
+```
+
+`requirements-test.txt` is the single source of truth for that dependency
+set -- CI installs from the same file. Do **not** install test packages
+into `dev/.venv`: that is Embody's live Envoy runtime venv, and test-only
+packages there can mask a missing dependency in the shipped path.
+
 ### From TouchDesigner
 
 ```python
@@ -197,7 +220,7 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_release_hooks` | 52 | `ExportPortableTox` release hooks (issue #74) |
 | `test_updater` | 20 | UpdaterExt self-update logic (no network, no swap) |
 | `test_config_migration` | 29 | Repo-config writers across a VERSION BUMP -- the migration axis a single-run test cannot see (duplicate managed headers, block consolidation that never swallows user content, `.gitattributes` backfill, the order-dependent `.embody/*` / `!.embody/project.json` pair, and the `git check-ignore` respect for a repo that deliberately ignores `project.json`) |
-| `test_embody_pyenv` | 55 | The shared project Python environment -- constraints, declared extras stewardship, DLL-path parity, tdPyEnvManager detection |
+| `test_embody_pyenv` | 63 | The shared project Python environment -- constraints, declared extras stewardship, DLL-path parity, tdPyEnvManager detection |
 | `test_pyenv_context` | 36 | TD pre-cook venv context authoring -- render/classify/status/refresh, the foreign-context hands-off contract, gitignore + manifest footprint helpers |
 | `test_wizard_externalize` | 20 | The setup wizard's externalize step, its recovery point, and the already-externalized detection |
 | `test_dialog_wrap` | 5 | Every dialog's prose wraps to readable lines (`ui.messageBox` sizes itself to its longest line) |

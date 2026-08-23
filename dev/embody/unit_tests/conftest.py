@@ -61,8 +61,17 @@ def _require_td_python():
         "Results from another interpreter are misleading: they exercise "
         "code paths\nno user has, and they can fail (or pass) for reasons "
         "that do not exist in TD.\n\n"
-        "Use a %s interpreter, e.g. the project venv:\n"
-        "    dev/.venv/Scripts/python.exe -m pytest\n"
+        "Use a %s interpreter -- a venv built FROM TouchDesigner's own\n"
+        "python, so the version matches what ships without inheriting TD's\n"
+        "bundled site-packages (that is how a stray --user or bundled\n"
+        "package silently flips a verdict):\n"
+        "    <TD>/bin/python.exe -m venv dev/.venv-tests\n"
+        "    dev/.venv-tests/Scripts/python.exe -m pip install -r dev/embody/unit_tests/requirements-test.txt\n"
+        "    dev/.venv-tests/Scripts/python.exe -m pytest\n"
+        "\n"
+        "NOT dev/.venv -- that is Embody's live Envoy runtime venv: it carries\n"
+        "no pytest, and installing one there mutates the running MCP server\n"
+        "(field 2026-08-23).\n"
         % (want, have, sys.executable, want))
 
 

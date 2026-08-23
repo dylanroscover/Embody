@@ -190,6 +190,31 @@ class TestExtrasStatus(_PyenvCase):
         st = pyenv.extras_status(self.spec, ['a', 'b'])
         self.assertEqual(st['to_install'], ['a', 'b'])
 
+    def test_applied_is_verified_against_the_venv(self):
+        """A stamp claim is not evidence. Running the `uv pip uninstall`
+        line Embody's own log prints left the claim behind, so a declared
+        extra read as satisfied forever while the venv lacked it -- no
+        reinstall, ModuleNotFoundError at runtime, and a fresh clone
+        silently diverging from the box that ran it (field 2026-08-23).
+        """
+        sp = self.spec['site_packages']
+        os.makedirs(os.path.join(sp, 'kept-1.0.dist-info'), exist_ok=True)
+        with open(self.spec['stamp_path'], 'w', encoding='utf-8') as f:
+            json.dump({'extras_applied': ['kept', 'vanished']}, f)
+        st = pyenv.extras_status(self.spec, ['kept', 'vanished'])
+        self.assertEqual(st['to_install'], ['vanished'])
+        self.assertEqual(st['applied'], ['kept'])
+
+    def test_applied_verification_fails_safe_without_site_packages(self):
+        """No readable site-packages -> trust the stamp. The alternative
+        is mass-reinstalling every extra against a half-built venv."""
+        os.makedirs(self.spec['venv_dir'], exist_ok=True)
+        with open(self.spec['stamp_path'], 'w', encoding='utf-8') as f:
+            json.dump({'extras_applied': ['a']}, f)
+        st = pyenv.extras_status(self.spec, ['a'])
+        self.assertEqual(st['to_install'], [])
+        self.assertEqual(st['applied'], ['a'])
+
     def test_declared_core_names_never_reconcile(self):
         """A hand-edited (or git-pulled) declaration must not route
         around the core-pin boundary at reconcile time."""
@@ -760,16 +785,62 @@ class TestEnvWiring(_PyenvCase):
     def test_td_bundled_sibling_prefix_not_excluded(self):
         """'.venv2' must not ride '.venv's exclusion (2026-08-19 review:
         bare startswith matched the sibling and silently weakened the
-        shadow refusal)."""
-        sibling = os.path.join(self.root, '.venv2', 'Lib', 'site-packages')
+        shadow refusal).
+
+        Staged under a faked sys.base_prefix because since 2026-08-23
+        "bundled" ALSO requires the dir to ship with the interpreter --
+        this test pins the separator property, not the location rule.
+        """
+        fake_base = os.path.join(self.root, 'fake_td')
+        spec = pyenv.venv_paths(fake_base, '2.0.0')
+        sibling = os.path.join(fake_base, '.venv2', 'Lib', 'site-packages')
         os.makedirs(os.path.join(sibling, 'siblingpkg-1.0.dist-info'),
                     exist_ok=True)
+        real_base = sys.base_prefix
+        sys.base_prefix = fake_base
         sys.path.insert(0, sibling)
+        try:
+            names = pyenv.td_bundled_dist_names(spec['venv_dir'])
+        finally:
+            sys.path.remove(sibling)
+            sys.base_prefix = real_base
+        self.assertIn('siblingpkg', names)
+
+    def test_td_bundled_ignores_site_packages_outside_the_interpreter(self):
+        """A site-packages that is not under sys.base_prefix belongs to
+        someone else: a --user install, TD's "Python 64-bit Module Path"
+        preference dir, or a PREVIOUSLY-OPENED project's venv (sys.path
+        only ever grows). Crediting those to TouchDesigner refused the
+        package as "ships inside TouchDesigner itself" -- false, and
+        clearable only by an allow_shadow opt-in that gets COMMITTED and
+        shipped to the whole team (field 2026-08-23).
+        """
+        foreign = os.path.join(self.root, 'elsewhere', 'Lib', 'site-packages')
+        os.makedirs(os.path.join(foreign, 'foreignpkg-1.0.dist-info'),
+                    exist_ok=True)
+        sys.path.insert(0, foreign)
         try:
             names = pyenv.td_bundled_dist_names(self.spec['venv_dir'])
         finally:
-            sys.path.remove(sibling)
-        self.assertIn('siblingpkg', names)
+            sys.path.remove(foreign)
+        self.assertNotIn('foreignpkg', names)
+
+    def test_td_bundled_still_counts_the_interpreters_own_install(self):
+        """The other half of the rule -- narrowing it must not stop the
+        shadow guard from protecting TD's own linked builds."""
+        fake_base = os.path.join(self.root, 'fake_td')
+        base_sp = os.path.join(fake_base, 'Lib', 'site-packages')
+        os.makedirs(os.path.join(base_sp, 'bundledpkg-1.0.dist-info'),
+                    exist_ok=True)
+        real_base = sys.base_prefix
+        sys.base_prefix = fake_base
+        sys.path.insert(0, base_sp)
+        try:
+            names = pyenv.td_bundled_dist_names(self.spec['venv_dir'])
+        finally:
+            sys.path.remove(base_sp)
+            sys.base_prefix = real_base
+        self.assertIn('bundledpkg', names)
 
     def test_bootstrap_env_hardened_scrubs_uv_pip(self):
         os.environ['UV_INDEX_URL'] = 'http://evil.example/simple'

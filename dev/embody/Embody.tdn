@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1177
-generator: Embody/6.0.265
+build: 1179
+generator: Embody/6.0.266
 td_build: 099.2025.33070
-source_file: Embody-6.265.toe
-exported_at: '2026-08-23T03:27:38Z'
+source_file: Embody-6.266.toe
+exported_at: '2026-08-23T06:12:46Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -817,7 +817,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.265
+    value: 6.0.266
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -979,6 +979,56 @@ operators:
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   dat_content:
+  - - '17:22:09 4086695 INFO    EnvoyExt: Processing: run_tests'
+  - - '17:22:09 4086695 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
+  - - '17:22:10 4086708 ERROR   TestMCPDiagnostics: an error for the filter test'
+  - - '17:22:10 4086709 INFO    TestMCPDiagnostics: test_get_logs marker'
+  - - '17:22:10 4086711 INFO    TestMCPDiagnostics: before the cursor'
+  - - '17:22:10 4086711 INFO    TestMCPDiagnostics: after the cursor'
+  - - '17:22:10 4086737 SUCCESS TestRunnerExt: Tests complete: 21/21 passed'
+  - - '17:22:45 4088831 INFO    EnvoyExt: Processing: execute_python'
+  - - '17:22:45 4088831 INFO    EnvoyExt: execute_python: import timeread = op(''/embody/Embody/envoy_read'').moduleenv = op.Embody.ext.Envoy# --- isolated cost of the new call, project-wide ---t0 = time.time(); s = root.scriptErrors(recurse=True); t_scri...'
+  - - '17:22:45 4088831 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '17:22:47 4088902 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '17:22:47 4088903 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '17:22:50 4089090 INFO    EnvoyExt: Processing: get_op_errors'
+  - - '17:23:08 4090167 INFO    EnvoyExt: Processing: execute_python'
+  - - '17:23:08 4090167 INFO    EnvoyExt: execute_python: env = op.Embody.ext.Envoyt = op(''/embody/unit_tests/test_sandbox'')t.clearScriptErrors(recurse=True, error=''*'')env._effects_error_scan_ok = True          # re-arm the footer scanresult = {''probe_cl...'
+  - - '17:23:08 4090167 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '17:23:11 4090339 INFO    EnvoyExt: Processing: execute_python'
+  - - '17:23:11 4090339 INFO    EnvoyExt: execute_python: op(''/embody/unit_tests/test_sandbox'').addScriptError(''FOOTER_PROBE: does this ride back?'')result = ''injected'''
+  - - '17:23:11 4090339 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '17:23:21 4090963 INFO    EnvoyExt: Processing: execute_python'
+  - - '17:23:21 4090963 INFO    EnvoyExt: execute_python: t = op(''/embody/unit_tests/test_sandbox'')t.clearScriptErrors(recurse=True, error=''*'')result = {''clean'': not bool(t.scriptErrors(recurse=False)),          ''project_script_errors'': (root.scriptErrors...'
+  - - '17:23:21 4090963 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '17:23:23 4091034 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '17:23:23 4091035 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '17:25:25 4098381 INFO    EnvoyExt: Processing: execute_python'
+  - - '17:25:25 4098381 INFO    EnvoyExt: execute_python: cb = op(''/embody/Embody/list/inject_parents_callbacks'')owner = op(''/embody/Embody/list/inject_parents'')owner.cook(force=True)result = {  ''list_rows'': owner.numRows,  ''cb_script_errors'': (cb.scrip...'
+  - - '17:25:25 4098381 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '17:25:27 4098452 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '17:25:27 4098453 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '17:25:38 4099165 INFO    EnvoyExt: Processing: run_tests'
+  - - '17:25:38 4099165 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
+  - - '17:25:39 4099196 SUCCESS TestRunnerExt: Tests complete: 10/10 passed'
+  - - '17:25:41 4099310 INFO    EnvoyExt: Processing: run_tests'
+  - - '17:25:41 4099310 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
+  - - '17:25:41 4099320 ERROR   TestMCPDiagnostics: an error for the filter test'
+  - - '17:25:41 4099321 INFO    TestMCPDiagnostics: test_get_logs marker'
+  - - '17:25:41 4099323 INFO    TestMCPDiagnostics: before the cursor'
+  - - '17:25:41 4099323 INFO    TestMCPDiagnostics: after the cursor'
+  - - '17:25:41 4099347 SUCCESS TestRunnerExt: Tests complete: 21/21 passed'
+  - - '17:25:43 4099474 INFO    EnvoyExt: Processing: run_tests'
+  - - '17:25:43 4099474 INFO    TestRunnerExt: Discovered 0 test suite(s) [deferred-per-test]'
+  - - '17:25:43 4099474 SUCCESS TestRunnerExt: Tests complete: 0/0 passed'
+  - - '17:26:23 4101830 INFO    EnvoyExt: Processing: get_op_errors'
+  - - '19:20:21 4512150 INFO    EnvoyExt: Port 9870 in use, attempting to free it...'
+  - - '19:20:21 4512150 INFO    EnvoyExt: Port 9870 held by another process, scanning range...'
+  - - '19:20:21 4512150 INFO    EnvoyExt: Port 9870 in use by another instance, using 9873'
+  - - '19:20:22 4512150 INFO    EnvoyExt: Starting Envoy MCP server on port 9873'
+  - - '19:20:23 4512252 INFO    EnvoyExt: Processing: run_tests'
+  - - '19:20:24 4512252 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
+  - - '19:20:24 4512252 ERROR   EmbodyExt: Reconstruction error: /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/verify_host/boom: Error: VERIFY_PROBE: synthetic traceback (/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/verify_host/boom)'
   - - '19:20:24 4512259 SUCCESS TestRunnerExt: Tests complete: 1/1 passed'
   - - '20:21:05 4721906 INFO    ConvoyExt: Convoy: Connected'
   - - '20:22:09 4723704 INFO    EnvoyExt: Processing: save_project'
@@ -990,101 +1040,45 @@ operators:
   - - '20:22:13 4723704 SUCCESS EmbodyExt: Exported TDN for /embody'
   - - '20:22:13 4723704 SUCCESS EmbodyExt: Saved 2 externalizations'
   - - '20:22:15 4723704 INFO    EmbodyExt: Exporting portable .tox: stripping 577 file reference(s) and 157 tagged operator(s) from /embody/Embody'
-  - - '20:22:23 4723716 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '20:22:23 4723716 SUCCESS EmbodyExt: Exported TDN for /embody/Embody'
-  - - '20:22:23 4723716 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '20:22:23 4723716 SUCCESS EmbodyExt: Exported TDN for /embody'
-  - - '20:22:30 4724112 INFO    ConvoyExt: Convoy: Registered -- Envoy port pending'
-  - - '20:22:31 4724197 WARNING EnvoyExt: Watchdog: enabled but socket dead (status ''Running on port 9873'') -- reviving'
-  - - '20:22:31 4724197 WARNING EnvoyExt: Watchdog: MCP socket on port None unreachable while enabled (running=False) -- reviving server'
-  - - '20:22:32 4724216 INFO    envoy_setup:861: Found git repo at C:\Users\admin\Documents\Git\Embody'
-  - - '20:22:32 4724216 INFO    EnvoyExt: Port 9870 in use, attempting to free it...'
-  - - '20:22:32 4724216 INFO    EnvoyExt: Port 9870 held by another process, scanning range...'
-  - - '20:22:32 4724216 INFO    EnvoyExt: Port 9870 in use by another instance, using 9873'
-  - - '20:22:32 4724216 INFO    EnvoyExt: Starting Envoy MCP server on port 9873'
-  - - '20:22:40 4724649 INFO    ConvoyExt: Convoy: Convoy App update: the running Convoy App is 6.0.264, this Embody ships 6.0.265 -- updating it in place now (automatic; Repair Convoy App remains the manual path)'
-  - - '20:23:11 4726515 INFO    EnvoyExt: Processing: run_tests'
-  - - '20:23:11 4726515 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
-  - - '20:23:11 4726533 INFO    TestSmokeRelease: [test] smoke test log check'
-  - - '20:23:11 4726535 INFO    EmbodyExt: [test] Auto-responded to "Test Dialog" -> button 1'
-  - - '20:23:11 4726536 INFO    EmbodyExt: [test] Auto-responded to "Dialog A" -> button 0'
-  - - '20:23:11 4726536 INFO    EmbodyExt: [test] Auto-responded to "Dialog B" -> button 2'
-  - - '20:23:11 4726544 INFO    EmbodyExt: [test] Auto-responded to "Embody - AI Coding Assistant Integration" -> button 1'
-  - - '20:23:11 4726544 INFO    EmbodyExt: Setting up Envoy...'
-  - - '20:23:11 4726544 INFO    envoy_setup:951: Found git repo at C:\Users\admin\Documents\Git\Embody'
-  - - '20:23:12 4726544 WARNING embody_git:357: CLAUDE.md already exists (not generated by Embody). Wrote MCP reference to C:\Users\admin\Documents\Git\Embody\ENVOY.md instead.'
-  - - '20:23:12 4726544 INFO    embody_git:600: Kept your edits to .claude/skills/create-operator/SKILL.md (delete the file to regenerate it from the template).'
-  - - '20:23:12 4726544 INFO    embody_git:600: Kept your edits to .claude/skills/debug-operator/SKILL.md (delete the file to regenerate it from the template).'
-  - - '20:23:12 4726544 INFO    embody_git:600: Kept your edits to .claude/skills/externalize-operator/SKILL.md (delete the file to regenerate it from the template).'
-  - - '20:23:12 4726544 INFO    embody_git:600: Kept your edits to .claude/skills/manage-annotations/SKILL.md (delete the file to regenerate it from the template).'
-  - - '20:23:12 4726544 INFO    embody_git:600: Kept your edits to .claude/skills/td-api-reference/SKILL.md (delete the file to regenerate it from the template).'
-  - - '20:23:12 4726544 INFO    embody_git:600: Kept your edits to .claude/skills/td-recovery/SKILL.md (delete the file to regenerate it from the template).'
-  - - '20:23:12 4726544 INFO    embody_git:600: Kept your edits to .claude/skills/multi-session-etiquette/SKILL.md (delete the file to regenerate it from the template).'
-  - - '20:23:12 4726544 INFO    embody_git:600: Kept your edits to .claude/skills/mcp-tools-reference/SKILL.md (delete the file to regenerate it from the template).'
-  - - '20:23:12 4726544 INFO    embody_git:600: Kept your edits to .claude/skills/visual-aesthetics/SKILL.md (delete the file to regenerate it from the template).'
-  - - '20:23:12 4726544 SUCCESS embody_git:168: Generated 6 .claude/ files at C:\Users\admin\Documents\Git\Embody'
-  - - '20:23:12 4726544 SUCCESS EmbodyExt: Envoy enabled! Config generated for AI Client. Connect your AI coding assistant via MCP.'
-  - - '20:23:12 4726546 INFO    EmbodyExt: [test] Auto-responded to "Embody - AI Coding Assistant Integration" -> button 0'
-  - - '20:23:12 4726546 INFO    EmbodyExt: Envoy skipped. Enable later via Envoyenable parameter.'
-  - - '20:23:12 4726558 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox.tdn'
-  - - '20:23:12 4726558 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox'
-  - - '20:23:13 4726558 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '20:23:13 4726558 SUCCESS EmbodyExt: Exported TDN for /embody/Embody'
-  - - '20:23:13 4726558 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '20:23:13 4726558 SUCCESS EmbodyExt: Exported TDN for /embody'
-  - - '20:23:13 4726558 SUCCESS EmbodyExt: Saved 3 externalizations'
-  - - '20:23:15 4726590 SUCCESS EmbodyExt: Tag ''glsl'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_smoke_release/v6_glsl_host/shader'''
-  - - '20:23:16 4726590 SUCCESS EmbodyExt: Added ''/embody/unit_tests/test_sandbox/sandbox_test_smoke_release/v6_glsl_host/shader'''
-  - - '20:23:16 4726590 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox.tdn'
-  - - '20:23:16 4726590 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox'
-  - - '20:23:16 4726590 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '20:23:16 4726590 SUCCESS EmbodyExt: Exported TDN for /embody/Embody'
-  - - '20:23:17 4726590 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '20:23:17 4726590 SUCCESS EmbodyExt: Exported TDN for /embody'
-  - - '20:23:17 4726590 SUCCESS EmbodyExt: Saved 3 externalizations'
-  - - '20:23:17 4726590 SUCCESS EmbodyExt: Added 1 operators in total'
-  - - '20:23:17 4726590 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_smoke_release/v6_glsl_host/shader'''
-  - - '20:23:17 4726591 WARNING ConvoyExt: Convoy: host install: installed 6.0.265 under C:\Users\admin\AppData\Local\EmbodyConvoy\runtime-venv\Scripts\pythonw.exe -- version unverified: the restarted daemon did not answer in time'
-  - - '20:23:18 4726603 WARNING TDNExt: Excluded COMP /embody/unit_tests/test_sandbox/sandbox_test_smoke_release/v6_feature_src/intermediate/excluded_child is nested under a non-excluded COMP -- whole-subtree exclusion only applies to direct children of a TDN boundary. It will be serialized as normal content. Tag the intervening COMP(s), or make it a direct child, to exclude it.'
-  - - '20:23:18 4726603 SUCCESS TDNExt: Imported 5 operators into /embody/unit_tests/test_sandbox/sandbox_test_smoke_release/v6_feature_target'
-  - - '20:23:18 4726615 WARNING TDNExt: Failed to track TDN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\smoke_tdn_jix4z6b2\\roundtrip.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
-  - - '20:23:18 4726615 SUCCESS TDNExt: Exported network to C:\Users\admin\AppData\Local\Temp\smoke_tdn_jix4z6b2\roundtrip.tdn'
-  - - '20:23:18 4726615 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_smoke_release/v6_yaml_target'
-  - - '20:23:18 4726632 SUCCESS TestRunnerExt: Tests complete: 34/34 passed'
-  - - '20:23:35 4727684 WARNING EnvoyExt: Watchdog: status stuck at ''Starting...'' ~24s while enabled -- forcing restart'
-  - - '20:23:35 4727684 WARNING EnvoyExt: Watchdog: MCP socket on port 9873 unreachable while enabled (running=True) -- reviving server'
-  - - '20:23:36 4727702 INFO    EnvoyExt: Port 9870 in use, attempting to free it...'
-  - - '20:23:36 4727702 INFO    EnvoyExt: Port 9870 held by another process, scanning range...'
-  - - '20:23:36 4727702 INFO    EnvoyExt: Port 9870 in use by another instance, using 9873'
-  - - '20:23:36 4727702 INFO    EnvoyExt: Starting Envoy MCP server on port 9873'
-  - - '20:25:21 4733977 INFO    EnvoyExt: Processing: run_tests'
-  - - '20:25:21 4733977 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
-  - - '20:25:22 4734018 SUCCESS EmbodyExt: Tag ''tdn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
-  - - '20:25:22 4734018 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
-  - - '20:25:22 4734018 SUCCESS EmbodyExt: Added TDN ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
-  - - '20:25:22 4734018 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
-  - - '20:25:22 4734018 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
-  - - '20:25:22 4734018 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
-  - - '20:25:22 4734018 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
-  - - '20:25:22 4734018 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
-  - - '20:25:22 4734018 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
-  - - '20:25:22 4734018 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'' delete_file=True rows=310'
-  - - '20:25:22 4734018 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard.tdn'' delete_file=True'
-  - - '20:25:25 4734063 SUCCESS TestRunnerExt: Tests complete: 17/17 passed'
-  - - '20:25:49 4735512 INFO    ConvoyExt: Convoy: host app answered registration -- replacing the stale host-app line (Installed -- not running (restarts within a minute))'
-  - - '20:25:49 4735512 INFO    ConvoyExt: Convoy: Connected'
-  - - '20:27:36 4741935 INFO    EnvoyExt: Processing: execute_python'
-  - - |-
-      20:27:36 4741935 INFO    EnvoyExt: execute_python: sb = op('/embody/unit_tests/test_sandbox')
-      leftovers = [c.name for c in sb.children]
-      for c in list(sb.children):
-          c.destroy()
-      op.Embody.par.Refresh.pulse()
-      result = {'removed': leftovers, 'remainin...
-  - - '20:27:36 4741935 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '20:27:37 4741939 WARNING EmbodyExt: Operator for TDN entry ''/embody/base1'' no longer exists'
-  - - '20:27:37 4741939 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/base1'' delete_file=False rows=309'
-  - - '20:27:37 4741939 INFO    EmbodyExt: _removeTDNStrategy: found row 304, rel_path=''embody/base1.tdn'' delete_file=False'
+  - - '22:35:07       5 INFO    execute:10: Embody v6.0.265 | TouchDesigner 099.2025.33070 | Windows 11'
+  - - '22:35:07       5 INFO    embody_admin:1292: Restored 69 settings from config.json'
+  - - '22:35:07       5 INFO    CatalogManagerExt: [CatalogManager] Loaded catalog for build 099.2025.33070'
+  - - '22:35:08      17 INFO    envoy_setup:861: Found git repo at C:\Users\admin\Documents\Git\Embody'
+  - - '22:35:08      17 INFO    EnvoyExt: Warming the MCP Python stack on a background thread -- first open after install/upgrade can take a few seconds; TD stays responsive.'
+  - - '22:35:08      64 INFO    EmbodyExt: TDN mode=export -- additive recovery only, existing COMPs kept (no full reconstruction)'
+  - - '22:35:18     481 INFO    ConvoyExt: Convoy: Registered -- Envoy port pending'
+  - - '22:35:19     562 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
+  - - '22:35:21     562 INFO    envoy_setup:1334: Registered instance "Embody-6.265" in envoy.json (port 9870)'
+  - - '22:35:21     562 INFO    envoy_setup:290: Wrote MCP config to C:\Users\admin\Documents\Git\Embody\.mcp.json (STDIO bridge -> port 9870)'
+  - - '22:55:40   73704 INFO    EnvoyExt: Processing: execute_python'
+  - - '22:55:40   73704 INFO    EnvoyExt: execute_python: import sys, ossp = [p for p in sys.path if ''site-packages'' in p.replace(''\\'', ''/'')]bp = sys.base_prefixresult = {  ''base_prefix'': bp,  ''prefix'': sys.prefix,  ''site_packages_on_path'': sp,  ''unde...'
+  - - '22:55:40   73704 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '22:57:18   79591 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
+  - - '23:11:34  130927 INFO    EnvoyExt: Processing: run_tests'
+  - - '23:11:34  130927 INFO    TestRunnerExt: Discovered 5 test suite(s) [deferred-per-test]'
+  - - '23:11:36  131005 ERROR   EmbodyExt: Dependencies installed but mcp.server.mcpserver failed to import: sentinel import failure. Inspect /dummy for partial installs and try deleting .venv/ to force a clean rebuild.'
+  - - '23:11:36  131021 SUCCESS TestRunnerExt: Tests complete: 47/47 passed'
+  - - '23:11:38  131157 INFO    EnvoyExt: Processing: run_tests'
+  - - '23:11:38  131157 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
+  - - '23:11:38  131157 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_zt2yi0x7\TDPyEnvManagerContext.yaml'
+  - - '23:11:38  131163 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_l39a4sj6\TDPyEnvManagerContext.yaml'
+  - - '23:11:38  131163 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_l39a4sj6\TDPyEnvManagerContext.yaml'
+  - - '23:11:38  131166 INFO    EmbodyExt: A TD env context Embody does not own sits at C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_7k66aokf -- left untouched. Remove or repair it to hand the pre-cook link to Embody.'
+  - - '23:11:38  131167 INFO    embody_git:549: .gitignore: added /TDPyEnvManagerContext.yaml'
+  - - '23:11:38  131167 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_twimhwpn\TDPyEnvManagerContext.yaml'
+  - - '23:11:38  131168 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_u46dg0yp\TDPyEnvManagerContext.yaml'
+  - - '23:11:38  131177 WARNING EmbodyExt: TD pre-cook venv context upkeep failed: venv spec unavailable'
+  - - '23:11:38  131178 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_0sgkeuy5\TDPyEnvManagerContext.yaml'
+  - - '23:11:38  131178 WARNING EmbodyExt: Removed the TD pre-cook venv context -- the venv needs (re)install. It returns after the next successful install.'
+  - - '23:11:38  131179 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_0tlvnp2i\TDPyEnvManagerContext.yaml'
+  - - '23:11:39  131181 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_3b7s1lzk\TDPyEnvManagerContext.yaml'
+  - - '23:11:39  131182 SUCCESS TestRunnerExt: Tests complete: 9/9 passed'
+  - - '23:11:41  131341 INFO    EnvoyExt: Processing: run_tests'
+  - - '23:11:41  131341 INFO    TestRunnerExt: Discovered 2 test suite(s) [deferred-per-test]'
+  - - '23:11:42  131389 SUCCESS TestRunnerExt: Tests complete: 24/24 passed'
+  - - '23:12:33  134437 INFO    EnvoyExt: Processing: save_project'
+  - - '23:12:33  134437 INFO    envoy_setup:1334: Registered instance "Embody-6.266" in envoy.json (port 9870)'
+  - - '23:12:42  134437 INFO    EmbodyExt: Exporting portable .tox: stripping 577 file reference(s) and 157 tagged operator(s) from /embody/Embody'
   dat_content_format: table
 - name: null2
   type: nullCHOP
@@ -1307,8 +1301,8 @@ operators:
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
-  - TDExtension
   - py
+  - TDExtension
 - name: mousein1
   type: mouseinCHOP
   parameters:
@@ -1691,7 +1685,7 @@ operators:
       - '0.4500'
       - '1'
     - - r0c1
-      - v6.0.265
+      - v6.0.266
       - '0.4000'
       - '0.4400'
       - '0.5000'
@@ -1709,7 +1703,7 @@ operators:
       - ''
       - '1'
     - - r1c0
-      - ✓ Saved 5m ago
+      - ✓ Saved 1s ago
       - '0.3500'
       - '0.7800'
       - '0.4500'

@@ -51,7 +51,11 @@ If you are unsure which zone a file is in: if it sits under `dev/embody/` or
 
 ## Running the tests
 
-The test suite runs **inside TouchDesigner** -- there is no headless runner.
+Most of the test suite runs **inside TouchDesigner**. The TD-import-free
+suites listed in `pytest.ini` (the Convoy host app and the pure-Python
+Embody suites) also run headless under pytest -- see
+[docs/testing.md](docs/testing.md) for the dedicated test venv, which is
+built from TD's interpreter and is NOT `dev/.venv`.
 
 1. Open `dev/Embody-6.toe` in TouchDesigner.
 2. **Enable Envoy** (the toolbar toggle turns green, status reads

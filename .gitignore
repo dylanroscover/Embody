@@ -4,6 +4,7 @@ External-Tox-Saver_V2.*.toe
 .DS_Store
 **/.DS_Store
 .venv/
+.venv-tests/
 dev_vEnv/
 .mcp.json
 .claude/settings.local.json

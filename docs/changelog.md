@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.0.266
+
+Embody could tell you a package "ships inside TouchDesigner itself" when TouchDesigner had never heard of it.
+
+- **"Bundled" now means shipped with the interpreter**: `td_bundled_dist_names` credited TouchDesigner with every `site-packages` on `sys.path` -- a `--user` install, the "Python 64-bit Module Path" preference dir, or a PREVIOUSLY-OPENED project's venv (`sys.path` only ever grows, so opening a second project in one TD session leaves the first one's venv on it). Declaring such a package was refused as *"X ships inside TouchDesigner itself; a different version loaded from the project venv can crash TD ops"* -- a claim TD's own site-packages listing disproves, and clearable only by `allow_shadow=True`, which is COMMITTED to `project.json` and ships the false opt-in to the whole team. The scan is now restricted to `sys.base_prefix`, which is what "TouchDesigner ships it" actually means.
+- **`extras_applied` is verified, not believed**: `extras_status` read the stamp and never looked at the venv. Running the `uv pip uninstall` line Embody's OWN log prints left the extra declared, stamped, uninstalled and never reinstalled -- `ModuleNotFoundError` at runtime on the machine that ran it, while a fresh clone worked fine. It now checks the installed dist-info and lets a missing extra fall back into `to_install`. Fails safe: an absent or unreadable site-packages still trusts the stamp rather than mass-reinstalling against a half-built venv.
+- **The local pytest tier is a contract, not tribal knowledge**: `dev/embody/unit_tests/requirements-test.txt` pins the set (pytest, `cryptography`, PyYAML) and CI installs FROM it, so prose can no longer be the thing that drifts -- `pytest.ini` still claimed ONE third-party dependency after PyYAML became the second, and a venv built from that prose aborts COLLECTION on `import yaml`, running zero tests while looking like a broken suite. `conftest`'s remediation line no longer sends developers to `dev/.venv` (Embody's live Envoy runtime venv, which carries no pytest and whose mutation hits the running MCP server); `docs/testing.md` and `CONTRIBUTING.md` now document the headless tier CONTRIBUTING said did not exist.
+
+4 new tests. One existing test was rewritten: it had pinned the old contract, asserting that another project's venv counts as TouchDesigner's.
+
 ## v6.0.265
 
 An operator could sit red in the network while every Envoy error tool called it clean.

@@ -1255,8 +1255,8 @@ def acknowledge_extras(project_root, specs, log) -> bool:
 
 def td_bundled_dist_names(venv_dir) -> set:
     """Canonical dist names TD's OWN site-packages carries (runtime
-    enumeration of every non-venv site-packages already on sys.path,
-    plus the known load-bearing seed). A venv extra shadowing one of
+    enumeration of the site-packages dirs UNDER sys.base_prefix -- i.e.
+    shipped with the interpreter -- plus the known load-bearing seed). A venv extra shadowing one of
     these at sys.path[0] is a process-abort class: TD's C++ ops link
     against specific builds (numpy in Script TOP/CHOP/DAT interop --
     Derivative-confirmed crash class, fixed on their side only for
@@ -1268,6 +1268,16 @@ def td_bundled_dist_names(venv_dir) -> set:
     # bundled set only changes on a TD upgrade, i.e. never mid-session.
     venv_norm = (os.path.normcase(os.path.normpath(venv_dir))
                  if venv_dir else None)
+    # "Bundled" means SHIPPED WITH THE INTERPRETER. Enumerating every
+    # site-packages on sys.path instead credited TouchDesigner with a
+    # user's --user install, the "Python 64-bit Module Path" preference
+    # dir, or a PREVIOUSLY-OPENED project's venv (sys.path only ever
+    # grows -- see add_site_packages), and then refused the package as
+    # "ships inside TouchDesigner itself". False, and clearable only via
+    # allow_shadow=True, which gets COMMITTED to project.json and travels
+    # to the whole team (field 2026-08-23).
+    base_norm = (os.path.normcase(os.path.normpath(sys.base_prefix))
+                 if getattr(sys, 'base_prefix', None) else None)
     cache = getattr(sys, '_embody_pyenv_bundled_cache', None)
     if isinstance(cache, dict) and cache.get('key') == venv_norm:
         return set(cache['names'])
@@ -1283,6 +1293,9 @@ def td_bundled_dist_names(venv_dir) -> set:
             if venv_norm and (entry_norm == venv_norm
                               or entry_norm.startswith(venv_norm + os.sep)):
                 continue  # our own venv is not "bundled"
+            if base_norm and not (entry_norm == base_norm
+                                  or entry_norm.startswith(base_norm + os.sep)):
+                continue  # outside the interpreter's install: not TD's
             if not os.path.isdir(entry):
                 continue
             for p in os.listdir(entry):
@@ -1411,6 +1424,22 @@ def extras_status(spec: dict, declared, acknowledged=None,
     now = time.time()
     cooling = {s for s, rec in transient.items()
                if now - float(rec.get('t') or 0) < 600}
+    # 'applied' is a stamp CLAIM, never evidence. A targeted uninstall --
+    # including the `uv pip uninstall` line Embody's OWN log prints -- left
+    # the claim behind, so a declared extra read as satisfied forever while
+    # the venv lacked it: no reinstall, ModuleNotFoundError at runtime, and
+    # a fresh clone silently diverging from the box that ran the uninstall
+    # (field 2026-08-23). Verify against site-packages; anything missing
+    # falls back into to_install. Fails SAFE -- an absent or unreadable
+    # site-packages keeps the stamp's word rather than mass-reinstalling.
+    verify_dir = spec.get('site_packages')
+    if applied and verify_dir and os.path.isdir(verify_dir):
+        present = dist_info_snapshot(verify_dir)
+        if present:
+            applied = [a for a in applied
+                       if not spec_dist_name(a)
+                       or spec_dist_name(a) in present]
+
     to_install = [s for s in declared
                   if s not in applied and s not in failed
                   and s not in refused and s not in unacknowledged
