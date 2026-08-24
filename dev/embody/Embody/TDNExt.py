@@ -364,6 +364,9 @@ class TDNExt:
 		self._defaults_cache: dict[str, dict[str, Any]] = {}
 		self._exportable_cache: dict[str, set[str]] = {}
 		self._seq_default_blocks_cache: dict[tuple[str, str], int] = {}
+		# (op_path, par_name) pairs already warned about bad tdn_omit
+		# tags; cleared per export so a standing typo warns once per run.
+		self._omit_warned: set = set()
 		# Divergent defaults: params where TD's p.default lies (differs
 		# from the actual creation value). Loaded lazily from the
 		# divergent_defaults tableDAT inside the Embody COMP.
@@ -1113,9 +1116,13 @@ class TDNExt:
 		}
 
 		try:
+			# Live-op caches only: _seq_default_blocks_cache deliberately
+			# survives exports -- its entries are creation constants from
+			# a throwaway-instance probe, and a per-export clear would
+			# re-pay one create/destroy per OPType on every save.
 			self._defaults_cache.clear()
 			self._exportable_cache.clear()
-			self._seq_default_blocks_cache.clear()
+			self._omit_warned.clear()
 			operators = self._exportChildren(root_op, options, depth=0)
 
 			# Post-processing optimizations
@@ -2180,6 +2187,10 @@ class TDNExt:
 			# Phase 5: Wire connections
 			self._wireConnections(dest, op_defs)
 
+			# Phase 5.5: All-empty sequence blocks -- pure numBlocks
+			# instructions -- apply after wiring; see _expandSequences.
+			self._expandSequences(dest, op_defs, empty_only=True)
+
 			# Phase 6: Set DAT content
 			self._setDATContent(dest, op_defs)
 
@@ -2916,6 +2927,55 @@ class TDNExt:
 			return divergent[par_name]
 		return par.default
 
+	def _tagOmittedParNames(self, target):
+		"""Par names excluded from value export by the operator's own
+		tdn_exclude:<name> tags -- the project-side opt-out for runtime
+		state (negotiated ports, session file paths; field 2026-08-24).
+		Same prefix par as the whole-COMP exclude tag; the bare tag
+		(no colon) never matches here. Top-level pars only;
+		constant-mode values are what get omitted (an expression/bind
+		is a reference, not leaked state -- same doctrine as
+		_scrubTransientPars). Unknown or sequence-block names WARN
+		once per export so a typo cannot silently no-op.
+		"""
+		try:
+			tags = target.tags
+			if not tags:
+				return set()
+			prefix = str(self.ownerComp.par.Tdnexcludetag.eval()).strip()
+			if not prefix:
+				return set()
+			marker = prefix + ':'
+			names = set()
+			for t in tags:
+				if not t.startswith(marker):
+					continue
+				name = t[len(marker):].strip()
+				if not name:
+					continue
+				warn_key = (target.path, name)
+				par = getattr(target.par, name, None)
+				if par is None:
+					if warn_key not in self._omit_warned:
+						self._omit_warned.add(warn_key)
+						self._log(
+							f'par-exclusion tag "{t}" names unknown '
+							f'parameter on {target.path} -- nothing '
+							f'omitted', 'WARNING')
+					continue
+				if par.sequence is not None:
+					if warn_key not in self._omit_warned:
+						self._omit_warned.add(warn_key)
+						self._log(
+							f'par-exclusion tag "{t}": "{name}" on '
+							f'{target.path} is a sequence parameter '
+							f'-- not omittable', 'WARNING')
+					continue
+				names.add(name)
+			return names
+		except Exception:
+			return set()
+
 	def _buildParCache(self, target):
 		"""Build per-OPType cache of exportable parameter names and defaults.
 
@@ -2964,6 +3024,7 @@ class TDNExt:
 		exportable = self._exportable_cache[op_type]
 		defaults = self._defaults_cache[op_type]
 		params = {}
+		omit = self._tagOmittedParNames(target)
 
 		for p in target.pars():
 			name = p.name
@@ -2977,6 +3038,8 @@ class TDNExt:
 				elif mode == ParMode.BIND:
 					params[name] = '~' + p.bindExpr
 				elif mode == ParMode.CONSTANT:
+					if name in omit:
+						continue
 					current = p.val
 					default = defaults.get(name)
 					if self._valuesDiffer(current, default):
@@ -3123,14 +3186,49 @@ class TDNExt:
 	def _getDefaultSequenceBlockCount(self, target, seq):
 		"""Get default numBlocks for a sequence on this op type.
 
-		Cached per (OPType, seq_name). Defaults to 1 -- most built-in
-		sequences start with 1 block. The worst case of a wrong default
-		is a redundant [{}] in the TDN output (harmless).
+		Probed from a throwaway instance (the _defaultComputeShaderText
+		pattern), cached per (OPType, seq_name) for the session; 1 when
+		the probe cannot run. The old hardcoded 1 exported [{}]*N for
+		any all-default sequence above 1 block (field 2026-08-24).
 		"""
 		cache_key = (target.OPType, seq.name)
 		if cache_key not in self._seq_default_blocks_cache:
-			self._seq_default_blocks_cache[cache_key] = 1
-		return self._seq_default_blocks_cache[cache_key]
+			self._probeSequenceDefaults(target)
+		return self._seq_default_blocks_cache.get(cache_key, 1)
+
+	def _probeSequenceDefaults(self, target):
+		"""Record creation-default numBlocks for every sequence on
+		target's op type from a throwaway instance -- created and
+		destroyed inside ownerComp, invisible to exports because the
+		walk snapshots child lists first (_exportChildren). One create
+		per OPType per session; on failure (engine/license-gated
+		types) each live sequence falls back to 1.
+		"""
+		op_type = target.OPType
+		throwaway = None
+		try:
+			throwaway = self.ownerComp.create(op_type)
+			for s in throwaway.seq:
+				if s is not None:
+					self._seq_default_blocks_cache[(op_type, s.name)] = (
+						s.numBlocks)
+		except Exception as e:
+			self._log(
+				f'Sequence-default probe failed for {op_type}: {e}',
+				'DEBUG')
+		finally:
+			if throwaway is not None:
+				try:
+					throwaway.destroy()
+				except Exception:
+					pass
+		try:
+			for s in target.seq:
+				if s is not None:
+					self._seq_default_blocks_cache.setdefault(
+						(op_type, s.name), 1)
+		except Exception:
+			pass
 
 	def _exportCustomPars(self, target):
 		"""Export ALL custom parameters grouped by page.
@@ -3161,6 +3259,9 @@ class TDNExt:
 		except Exception:
 			transient = {}
 			omit_names = frozenset()
+		# Project-side per-par opt-out (tdn_omit tags) joins the
+		# registry omit set: definition ships, constant value does not.
+		omit_names = frozenset(omit_names) | self._tagOmittedParNames(target)
 
 		pages_dict = {}
 		seen_names = set()
@@ -4318,12 +4419,19 @@ class TDNExt:
 					f'Failed to set blockSize={count} on sequence '
 					f'{seq_name} of {target.path}: {e}', 'WARNING')
 
-	def _expandSequences(self, parent, op_defs):
-		"""Phase 2.5: Expand built-in and custom parameter sequences.
+	def _expandSequences(self, parent, op_defs, empty_only=False):
+		"""Phases 2.5 + 5.5: Expand built-in and custom parameter sequences.
 
 		Sets numBlocks for each sequence (creating parameter slots),
-		then sets non-default block parameter values. Must run before
-		Phase 3 (_setParameters) so the sequence parameters exist.
+		then sets non-default block parameter values. Runs TWICE per
+		import: pre-Phase-3 for sequences carrying values (their par
+		slots must exist before _setParameters), and post-Phase-5
+		(empty_only=True) for all-empty-block sequences -- those are
+		pure numBlocks instructions, and applying one before wiring
+		declared N inputs on an unwired input-tracking sequence
+		(mergePOP 'input'): one phantom 'No input POP' reconstruction
+		error per merge per open (field 2026-08-24). Post-wiring the
+		count already matches and the set is a no-op.
 
 		Custom sequences (defined via page.appendSequence) require
 		blockSize to be set before numBlocks. This is done in
@@ -4336,6 +4444,13 @@ class TDNExt:
 
 			if sequences and target:
 				for seq_name, blocks in sequences.items():
+					# Route to the correct pass (see docstring). An
+					# empty/absent list is never a pure count -- the
+					# pre pass owns its warning.
+					is_pure_count = bool(blocks) and all(
+						not b for b in blocks)
+					if is_pure_count != empty_only:
+						continue
 					# _getSequenceByName RETURNS None, it never raises, so
 					# the old try/except here could not fire -- a missing
 					# sequence fell through and misreported as "Failed to
@@ -4388,7 +4503,7 @@ class TDNExt:
 			if children:
 				resolved = target or self._resolveOp(parent, op_def)
 				if resolved and resolved.isCOMP:
-					self._expandSequences(resolved, children)
+					self._expandSequences(resolved, children, empty_only)
 
 	@staticmethod
 	def _getSequenceByName(target, seq_name):

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 12
-generator: Embody/6.0.138
+build: 13
+generator: Embody/6.0.278
 td_build: 099.2025.33070
-source_file: Embody-6.138.toe
-exported_at: '2026-07-20T11:16:08Z'
+source_file: Embody-6.278.toe
+exported_at: '2026-08-24T20:43:55Z'
 network_path: /embody/Embody/tagger/header
 options:
   include_dat_content: false
@@ -147,6 +147,8 @@ operators:
     - viewer
     position: [66, -83]
     size: [128, 66]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select :\n\t\tparent().panel.state = par.eval()\n\t\t\n\tif par:\n\t\tparent.Embody.TagExiter()\n\t\t\n\treturn"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     parameters:
@@ -160,6 +162,8 @@ operators:
     - viewer
     position: [247, -81]
     size: [126, 62]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\t\t\n\treturn"
+    dat_content_format: text
 - name: text1_callbacks
   type: textDAT
   parameters:

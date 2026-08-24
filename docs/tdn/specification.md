@@ -228,6 +228,25 @@ The following built-in parameters are never exported, as they are internal actio
 - Read-only parameters
 - Custom parameters (handled separately in `custom_pars`)
 
+### Per-Parameter Omission (`tdn_exclude:<par>` tags)
+
+A project can exclude an individual parameter's **value** from export by tagging the operator itself with the suffixed form of the exclude tag:
+
+```
+tdn_exclude:<parname>
+```
+
+One tag per parameter (`tdn_exclude:file`, `tdn_exclude:Port`). The operator, its wiring, and its other parameters export normally; the named parameter's **constant value** is left out of the document. This is the opt-out for runtime state that must not be committed — a negotiated port, a session-specific file path, a live readout. (The **bare** tag on a COMP is the whole-COMP exclusion described elsewhere; the colon-suffixed form never affects COMP visibility.)
+
+- **Constant values only.** An expression or bind on the tagged parameter still exports — a reference is authored configuration, not leaked session state.
+- **Custom parameters**: the definition still ships (style, range, default, help); only its `value` key is dropped.
+- **Visible by design**: the tag round-trips in the operator's `tags:` list, so the exported document records *why* the parameter is absent — and because the marker survives reconstruction, the next export omits it again.
+- **Top-level parameters only**: sequence block parameters are not omittable.
+- **Validation**: a tag naming a parameter the operator does not have logs a `WARNING` at export ("nothing omitted"), so a typo cannot silently no-op.
+- The prefix is the same `Tdnexcludetag` parameter that governs whole-COMP exclusion (default `tdn_exclude`); clearing it disables the whole family.
+
+The Embody UI exposes this through the tagger's **Exclude from tdn** action on TDN COMPs — a drop-zone panel that toggles `tdn_exclude:<par>` for dragged parameters (and the bare whole-COMP `tdn_exclude` for dragged COMPs), listing every exclusion in the COMP's subtree, each removable via its **×**.
+
 ### Non-Default Comparison
 
 A constant parameter is included only if its current value differs from its default:
@@ -325,11 +344,15 @@ The `sequences` object stores per-operator sequence data. It is keyed by sequenc
 - **Base names**: `"oper"` rather than `"comb0oper"`. The full parameter name is `{seqName}{blockIndex}{baseName}` (e.g., `comb2oper`), but only the base name is stored. This makes the format portable and readable.
 - **Empty objects `{}`**: Represent blocks where all parameters are at their default values. Included to preserve correct block count and ordering.
 - **Omission**: The `sequences` key is omitted entirely when all sequences on the operator have their default block count and all block values are defaults.
+- **Default block count**: probed from a throwaway instance of the operator type (once per type per session), never assumed to be `1`. A sequence sitting *below* its type-default count therefore still exports its all-default block list, so the shrink survives reimport.
 - **Value shorthand**: Same as built-in parameters — `=` prefix for expressions, `~` prefix for binds, literal values for constants.
 
 ### Import Phase
 
-Sequences are expanded in **Phase 2.5** (between custom parameter creation and parameter value setting). This ensures the dynamically-created sequence parameters exist before Phase 3 attempts to set values on them.
+Sequences are expanded in two passes:
+
+- **Phase 2.5** (before Phase 3 parameter setting): sequences whose blocks carry values. This ensures the dynamically-created sequence parameters exist before Phase 3 attempts to set values on them.
+- **Phase 5.5** (after Phase 5 wiring): sequences whose blocks are **all empty** (`[{}, {}, ...]`). An all-empty list is purely a `numBlocks` instruction, and some sequences track the operator's wired inputs (a `mergePOP`'s `input` sequence grows one block per connection). Applying such a count before wiring declares inputs on an unwired operator and latches a `No input POP`-class error that surfaces as a reconstruction error on project open. Applied after wiring, the count already matches and the set is a no-op — while independent sequences still receive their count correctly.
 
 ### Exclusion from type_defaults
 

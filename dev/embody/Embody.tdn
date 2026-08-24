@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1179
-generator: Embody/6.0.266
+build: 1185
+generator: Embody/6.0.278
 td_build: 099.2025.33070
-source_file: Embody-6.266.toe
-exported_at: '2026-08-23T06:12:46Z'
+source_file: Embody-6.278.toe
+exported_at: '2026-08-24T20:45:46Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -14,9 +14,6 @@ type_defaults:
     parameters:
       resizecomp: =me
       repocomp: =me
-  textDAT:
-    parameters:
-      language: python
   baseCOMP:
     size: [160, 130]
   parameterexecuteDAT:
@@ -207,7 +204,7 @@ custom_pars:
     label: .tdn Exclude Tag
     startSection: true
     default: tdn_exclude
-    help: 'Tag name (default ''tdn_exclude'') that opts a COMP out of the entire TDN system. Primary use: opt a single child out of cascade autotag (when Tdncascade is on, the tdn tag normally propagates from a tdn-tagged parent to all its children -- apply this tag to a child to keep it excluded). Also useful for app-managed COMPs (e.g. spawned via .copy() at runtime) that the application is responsible for. Excluded COMPs are invisible to TDN: never exported, never inlined in parent .tdn files, never stripped on save, never destroyed by reconstruction.'
+    help: 'Tag family for excluding things from the TDN system (default ''tdn_exclude''). BARE tag on a COMP: the COMP is invisible to TDN -- never exported, never inlined in parent .tdn files, never stripped on save, never destroyed by reconstruction. Primary use: opt a single child out of cascade autotag, or app-managed COMPs (e.g. spawned via .copy() at runtime). SUFFIXED ''tdn_exclude:<parname>'' on ANY operator: that parameter''s constant value is omitted from TDN export while the operator, its other parameters, and its wiring export normally -- for runtime state a project must not commit (a negotiated port, a session file path). Expressions/binds still export; unknown parameter names log a WARNING. Manage both visually via the tagger''s Exclude from tdn panel. Clear this parameter to disable the whole family.'
   TDN:
   - name: Tdnmode
     style: Menu
@@ -754,7 +751,7 @@ custom_pars:
     - Always Keep Files
     - Always Delete Files
     help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-    value: keep
+    value: delete
   - name: Toxdropexpr
     style: Menu
     label: Dropped .tox Expression
@@ -769,6 +766,7 @@ custom_pars:
     - Always Clean
     - Always Ignore
     help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
+    value: ignore
   - name: Tdndatsafety
     style: Menu
     label: Content Safety
@@ -817,7 +815,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.266
+    value: 6.0.278
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -979,106 +977,106 @@ operators:
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   dat_content:
-  - - '17:22:09 4086695 INFO    EnvoyExt: Processing: run_tests'
-  - - '17:22:09 4086695 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
-  - - '17:22:10 4086708 ERROR   TestMCPDiagnostics: an error for the filter test'
-  - - '17:22:10 4086709 INFO    TestMCPDiagnostics: test_get_logs marker'
-  - - '17:22:10 4086711 INFO    TestMCPDiagnostics: before the cursor'
-  - - '17:22:10 4086711 INFO    TestMCPDiagnostics: after the cursor'
-  - - '17:22:10 4086737 SUCCESS TestRunnerExt: Tests complete: 21/21 passed'
-  - - '17:22:45 4088831 INFO    EnvoyExt: Processing: execute_python'
-  - - '17:22:45 4088831 INFO    EnvoyExt: execute_python: import timeread = op(''/embody/Embody/envoy_read'').moduleenv = op.Embody.ext.Envoy# --- isolated cost of the new call, project-wide ---t0 = time.time(); s = root.scriptErrors(recurse=True); t_scri...'
-  - - '17:22:45 4088831 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '17:22:47 4088902 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '17:22:47 4088903 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '17:22:50 4089090 INFO    EnvoyExt: Processing: get_op_errors'
-  - - '17:23:08 4090167 INFO    EnvoyExt: Processing: execute_python'
-  - - '17:23:08 4090167 INFO    EnvoyExt: execute_python: env = op.Embody.ext.Envoyt = op(''/embody/unit_tests/test_sandbox'')t.clearScriptErrors(recurse=True, error=''*'')env._effects_error_scan_ok = True          # re-arm the footer scanresult = {''probe_cl...'
-  - - '17:23:08 4090167 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '17:23:11 4090339 INFO    EnvoyExt: Processing: execute_python'
-  - - '17:23:11 4090339 INFO    EnvoyExt: execute_python: op(''/embody/unit_tests/test_sandbox'').addScriptError(''FOOTER_PROBE: does this ride back?'')result = ''injected'''
-  - - '17:23:11 4090339 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '17:23:21 4090963 INFO    EnvoyExt: Processing: execute_python'
-  - - '17:23:21 4090963 INFO    EnvoyExt: execute_python: t = op(''/embody/unit_tests/test_sandbox'')t.clearScriptErrors(recurse=True, error=''*'')result = {''clean'': not bool(t.scriptErrors(recurse=False)),          ''project_script_errors'': (root.scriptErrors...'
-  - - '17:23:21 4090963 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '17:23:23 4091034 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '17:23:23 4091035 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '17:25:25 4098381 INFO    EnvoyExt: Processing: execute_python'
-  - - '17:25:25 4098381 INFO    EnvoyExt: execute_python: cb = op(''/embody/Embody/list/inject_parents_callbacks'')owner = op(''/embody/Embody/list/inject_parents'')owner.cook(force=True)result = {  ''list_rows'': owner.numRows,  ''cb_script_errors'': (cb.scrip...'
-  - - '17:25:25 4098381 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '17:25:27 4098452 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '17:25:27 4098453 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '17:25:38 4099165 INFO    EnvoyExt: Processing: run_tests'
-  - - '17:25:38 4099165 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
-  - - '17:25:39 4099196 SUCCESS TestRunnerExt: Tests complete: 10/10 passed'
-  - - '17:25:41 4099310 INFO    EnvoyExt: Processing: run_tests'
-  - - '17:25:41 4099310 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
-  - - '17:25:41 4099320 ERROR   TestMCPDiagnostics: an error for the filter test'
-  - - '17:25:41 4099321 INFO    TestMCPDiagnostics: test_get_logs marker'
-  - - '17:25:41 4099323 INFO    TestMCPDiagnostics: before the cursor'
-  - - '17:25:41 4099323 INFO    TestMCPDiagnostics: after the cursor'
-  - - '17:25:41 4099347 SUCCESS TestRunnerExt: Tests complete: 21/21 passed'
-  - - '17:25:43 4099474 INFO    EnvoyExt: Processing: run_tests'
-  - - '17:25:43 4099474 INFO    TestRunnerExt: Discovered 0 test suite(s) [deferred-per-test]'
-  - - '17:25:43 4099474 SUCCESS TestRunnerExt: Tests complete: 0/0 passed'
-  - - '17:26:23 4101830 INFO    EnvoyExt: Processing: get_op_errors'
-  - - '19:20:21 4512150 INFO    EnvoyExt: Port 9870 in use, attempting to free it...'
-  - - '19:20:21 4512150 INFO    EnvoyExt: Port 9870 held by another process, scanning range...'
-  - - '19:20:21 4512150 INFO    EnvoyExt: Port 9870 in use by another instance, using 9873'
-  - - '19:20:22 4512150 INFO    EnvoyExt: Starting Envoy MCP server on port 9873'
-  - - '19:20:23 4512252 INFO    EnvoyExt: Processing: run_tests'
-  - - '19:20:24 4512252 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
-  - - '19:20:24 4512252 ERROR   EmbodyExt: Reconstruction error: /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/verify_host/boom: Error: VERIFY_PROBE: synthetic traceback (/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/verify_host/boom)'
-  - - '19:20:24 4512259 SUCCESS TestRunnerExt: Tests complete: 1/1 passed'
-  - - '20:21:05 4721906 INFO    ConvoyExt: Convoy: Connected'
-  - - '20:22:09 4723704 INFO    EnvoyExt: Processing: save_project'
-  - - '20:22:10 4723704 WARNING EnvoyExt: Write-effect error scan took 0.44s (budget 0.25s) -- disabling it for this session so it cannot tax every write. Use get_op_errors on demand instead.'
-  - - '20:22:10 4723704 INFO    envoy_setup:1334: Registered instance "Embody-6.265" in envoy.json (port 9873)'
-  - - '20:22:12 4723704 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '20:22:12 4723704 SUCCESS EmbodyExt: Exported TDN for /embody/Embody'
-  - - '20:22:12 4723704 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '20:22:13 4723704 SUCCESS EmbodyExt: Exported TDN for /embody'
-  - - '20:22:13 4723704 SUCCESS EmbodyExt: Saved 2 externalizations'
-  - - '20:22:15 4723704 INFO    EmbodyExt: Exporting portable .tox: stripping 577 file reference(s) and 157 tagged operator(s) from /embody/Embody'
-  - - '22:35:07       5 INFO    execute:10: Embody v6.0.265 | TouchDesigner 099.2025.33070 | Windows 11'
-  - - '22:35:07       5 INFO    embody_admin:1292: Restored 69 settings from config.json'
-  - - '22:35:07       5 INFO    CatalogManagerExt: [CatalogManager] Loaded catalog for build 099.2025.33070'
-  - - '22:35:08      17 INFO    envoy_setup:861: Found git repo at C:\Users\admin\Documents\Git\Embody'
-  - - '22:35:08      17 INFO    EnvoyExt: Warming the MCP Python stack on a background thread -- first open after install/upgrade can take a few seconds; TD stays responsive.'
-  - - '22:35:08      64 INFO    EmbodyExt: TDN mode=export -- additive recovery only, existing COMPs kept (no full reconstruction)'
-  - - '22:35:18     481 INFO    ConvoyExt: Convoy: Registered -- Envoy port pending'
-  - - '22:35:19     562 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
-  - - '22:35:21     562 INFO    envoy_setup:1334: Registered instance "Embody-6.265" in envoy.json (port 9870)'
-  - - '22:35:21     562 INFO    envoy_setup:290: Wrote MCP config to C:\Users\admin\Documents\Git\Embody\.mcp.json (STDIO bridge -> port 9870)'
-  - - '22:55:40   73704 INFO    EnvoyExt: Processing: execute_python'
-  - - '22:55:40   73704 INFO    EnvoyExt: execute_python: import sys, ossp = [p for p in sys.path if ''site-packages'' in p.replace(''\\'', ''/'')]bp = sys.base_prefixresult = {  ''base_prefix'': bp,  ''prefix'': sys.prefix,  ''site_packages_on_path'': sp,  ''unde...'
-  - - '22:55:40   73704 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '22:57:18   79591 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
-  - - '23:11:34  130927 INFO    EnvoyExt: Processing: run_tests'
-  - - '23:11:34  130927 INFO    TestRunnerExt: Discovered 5 test suite(s) [deferred-per-test]'
-  - - '23:11:36  131005 ERROR   EmbodyExt: Dependencies installed but mcp.server.mcpserver failed to import: sentinel import failure. Inspect /dummy for partial installs and try deleting .venv/ to force a clean rebuild.'
-  - - '23:11:36  131021 SUCCESS TestRunnerExt: Tests complete: 47/47 passed'
-  - - '23:11:38  131157 INFO    EnvoyExt: Processing: run_tests'
-  - - '23:11:38  131157 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
-  - - '23:11:38  131157 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_zt2yi0x7\TDPyEnvManagerContext.yaml'
-  - - '23:11:38  131163 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_l39a4sj6\TDPyEnvManagerContext.yaml'
-  - - '23:11:38  131163 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_l39a4sj6\TDPyEnvManagerContext.yaml'
-  - - '23:11:38  131166 INFO    EmbodyExt: A TD env context Embody does not own sits at C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_7k66aokf -- left untouched. Remove or repair it to hand the pre-cook link to Embody.'
-  - - '23:11:38  131167 INFO    embody_git:549: .gitignore: added /TDPyEnvManagerContext.yaml'
-  - - '23:11:38  131167 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_twimhwpn\TDPyEnvManagerContext.yaml'
-  - - '23:11:38  131168 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_u46dg0yp\TDPyEnvManagerContext.yaml'
-  - - '23:11:38  131177 WARNING EmbodyExt: TD pre-cook venv context upkeep failed: venv spec unavailable'
-  - - '23:11:38  131178 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_0sgkeuy5\TDPyEnvManagerContext.yaml'
-  - - '23:11:38  131178 WARNING EmbodyExt: Removed the TD pre-cook venv context -- the venv needs (re)install. It returns after the next successful install.'
-  - - '23:11:38  131179 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_0tlvnp2i\TDPyEnvManagerContext.yaml'
-  - - '23:11:39  131181 INFO    EmbodyExt: TD pre-cook venv context written: C:\Users\admin\AppData\Local\Temp\embody_pyenv_ctx_live_3b7s1lzk\TDPyEnvManagerContext.yaml'
-  - - '23:11:39  131182 SUCCESS TestRunnerExt: Tests complete: 9/9 passed'
-  - - '23:11:41  131341 INFO    EnvoyExt: Processing: run_tests'
-  - - '23:11:41  131341 INFO    TestRunnerExt: Discovered 2 test suite(s) [deferred-per-test]'
-  - - '23:11:42  131389 SUCCESS TestRunnerExt: Tests complete: 24/24 passed'
-  - - '23:12:33  134437 INFO    EnvoyExt: Processing: save_project'
-  - - '23:12:33  134437 INFO    envoy_setup:1334: Registered instance "Embody-6.266" in envoy.json (port 9870)'
-  - - '23:12:42  134437 INFO    EmbodyExt: Exporting portable .tox: stripping 577 file reference(s) and 157 tagged operator(s) from /embody/Embody'
+  - - '13:45:30 8361830 SUCCESS EmbodyExt: Added TDN ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/rl_parent'''
+  - - '13:45:30 8361830 SUCCESS EmbodyExt: Tag ''tdn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/rl_parent/rl_child'''
+  - - '13:45:30 8361830 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_reconstruction\rl_parent\rl_child.tdn'
+  - - '13:45:30 8361830 SUCCESS EmbodyExt: Added TDN ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/rl_parent/rl_child'''
+  - - '13:45:30 8361830 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_reconstruction\rl_parent.tdn'
+  - - '13:45:30 8361830 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/rl_parent'
+  - - '13:45:30 8361830 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_reconstruction\rl_parent\rl_child.tdn'
+  - - '13:45:30 8361830 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/rl_parent/rl_child'
+  - - '13:45:30 8361830 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/rl_parent/rl_child'
+  - - '13:45:30 8361830 INFO    TDNExt: Restored 1 TDN shell(s) under /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/rl_parent from their own .tdn files: /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/rl_parent/rl_child'
+  - - '13:45:30 8361830 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/rl_parent'
+  - - '13:45:30 8361830 SUCCESS EmbodyExt: Reloaded /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/rl_parent from disk (1 ops)'
+  - - '13:45:30 8361830 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/rl_parent/rl_child'''
+  - - '13:45:30 8361830 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/rl_parent'''
+  - - '13:45:30 8361836 SUCCESS EmbodyExt: Tag ''tdn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/guard_victim'''
+  - - '13:45:30 8361836 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_reconstruction\guard_victim.tdn'
+  - - '13:45:30 8361836 SUCCESS EmbodyExt: Added TDN ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/guard_victim'''
+  - - '13:45:30 8361836 WARNING EmbodyExt: REFUSED auto-export of /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/guard_victim: the COMP is empty but its .tdn on disk holds a non-empty network -- overwriting would destroy the only good copy. If the empty state is intentional, use the manager Save button.'
+  - - '13:45:31 8361836 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_reconstruction\guard_victim.tdn'
+  - - '13:45:31 8361836 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/guard_victim'
+  - - '13:45:31 8361836 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/guard_victim'''
+  - - '13:45:31 8361860 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:31 8361868 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:31 8361870 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:31 8361873 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:31 8361876 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:31 8361878 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:31 8361881 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:31 8361883 WARNING TDNExt: Restored lock flag on 2 non-DAT operator(s) in /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction: /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/c (CHOP), /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/t (TOP) -- these operators have no frozen data and should be unlocked to re-cook'
+  - - '13:45:31 8361883 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:31 8361889 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:31 8361894 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:31 8361896 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:31 8361899 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:32 8361901 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:32 8361904 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:32 8361912 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:32 8361914 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:32 8361917 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:32 8361920 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:32 8361923 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:32 8361932 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:32 8361934 SUCCESS TDNExt: Imported 4 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:32 8361938 SUCCESS TDNExt: Imported 15 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:32 8361942 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:32 8361953 SUCCESS TDNExt: Imported 6 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:33 8361965 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:33 8361975 SUCCESS TDNExt: Imported 4 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:33 8361978 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:33 8362000 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:34 8362022 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:34 8362034 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:34 8362037 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:34 8362047 SUCCESS TDNExt: Imported 23 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:34 8362051 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:35 8362063 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:35 8362068 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:35 8362073 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:35 8362078 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:35 8362083 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:35 8362087 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:35 8362092 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:35 8362097 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:35 8362101 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:35 8362106 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:35 8362119 SUCCESS TDNExt: Imported 0 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:36 8362122 SUCCESS TDNExt: Imported 0 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:36 8362128 SUCCESS TDNExt: Imported 0 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:36 8362131 WARNING TDNExt: Type mismatch: TDN expects containerCOMP but destination is baseCOMP'
+  - - '13:45:36 8362131 SUCCESS TDNExt: Imported 0 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:36 8362143 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:36 8362154 WARNING TDNExt: Failed to create totallyFakeOP "bad": Unknown operator type. Value:''totallyFakeOP'' Type:<class ''str''>.'
+  - - '13:45:36 8362154 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:36 8362157 WARNING TDNExt: Connection source not found: nonexistent_source -> dst[0]'
+  - - '13:45:36 8362157 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:36 8362160 WARNING TDNExt: Unknown par style "TotallyFakeStyle" for X'
+  - - '13:45:36 8362160 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:36 8362163 SUCCESS TDNExt: Imported 0 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:36 8362167 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:36 8362169 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:36 8362172 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:38 8362175 SUCCESS TDNExt: Imported 100 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:39 8362178 SUCCESS TDNExt: Imported 50 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:39 8362190 SUCCESS TDNExt: Imported 11 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:42 8362202 SUCCESS TDNExt: Imported 372 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:43 8362211 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:44 8362223 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction'
+  - - '13:45:44 8362247 WARNING EmbodyExt: Operator ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/tdn_with_py_child/my_script'' no longer exists!'
+  - - '13:45:44 8362247 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/tdn_with_py_child/my_script'''
+  - - '13:45:44 8362257 WARNING EmbodyExt: No file found: embody/tdn_with_py_child/my_script.py'
+  - - '13:45:44 8362257 WARNING EmbodyExt: Operator ''/__test_orphan_dat_continuity_p05'' no longer exists!'
+  - - '13:45:44 8362257 SUCCESS EmbodyExt: Removed ''/__test_orphan_dat_continuity_p05'''
+  - - '13:45:45 8362269 WARNING EmbodyExt: No file found: embody/orphan_dat.txt'
+  - - '13:45:45 8362281 INFO    EmbodyExt: Stripped 3 operators from /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/save_cycle_comp (3 children, 0 annotations)'
+  - - '13:45:45 8362281 SUCCESS TDNExt: Imported 4 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/save_cycle_comp'
+  - - '13:45:45 8362293 INFO    EmbodyExt: Stripped 1 operators from /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/full_cycle (1 children, 0 annotations)'
+  - - '13:45:45 8362293 INFO    TDNExt: Restored file links on 1 DAT(s) in /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/full_cycle'
+  - - '13:45:45 8362293 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/full_cycle'
+  - - '13:45:45 8362303 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox.tdn'
+  - - '13:45:45 8362303 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox'
   dat_content_format: table
 - name: null2
   type: nullCHOP
@@ -1094,6 +1092,7 @@ operators:
   parameters:
     file: embody/Embody/TDNExt.py
     syncfile: true
+    language: python
   position: [-700, 600]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1297,6 +1296,7 @@ operators:
   parameters:
     file: embody/Embody/EnvoyExt.py
     syncfile: true
+    language: python
   position: [-700, 700]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1318,6 +1318,7 @@ operators:
     file: embody/Embody/EmbodyExt.py
     defaultreadencoding: cp1252
     syncfile: true
+    language: python
     extension: py
   position: [-700, 800]
   size: [130, 90]
@@ -1329,6 +1330,7 @@ operators:
   parameters:
     file: embody/Embody/envoy_ops.py
     syncfile: true
+    language: python
   position: [-500, 400]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1339,6 +1341,7 @@ operators:
   parameters:
     file: embody/Embody/envoy_viz.py
     syncfile: true
+    language: python
   position: [-500, 600]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1349,6 +1352,7 @@ operators:
   parameters:
     file: embody/Embody/shortcuts.py
     syncfile: true
+    language: python
   position: [-500, -375]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1378,6 +1382,7 @@ operators:
   parameters:
     file: embody/Embody/embody_git.py
     syncfile: true
+    language: python
   position: [-700, 100]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1388,11 +1393,265 @@ operators:
   parameters:
     file: embody/Embody/envoy_read.py
     syncfile: true
+    language: python
   position: [-500, 800]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
   - py
+- name: omit_panel
+  type: containerCOMP
+  parameters:
+    w: 420
+    h: 400
+    bgcolorr: 0.11
+    bgcolorg: 0.12
+    bgcolorb: 0.115
+    bgalpha: 1
+  position: [700, 475]
+  size: [160, 130]
+  color: [0.67, 0.67, 0.67]
+  storage:
+    omit_target: /embody/base1
+    dd_trace:
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Date'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Touchbuild'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Build'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Date'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Date'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Touchbuild'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Build'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Touchbuild'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Date'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Touchbuild'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Touchbuild'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Date'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Date'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Date'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Build'']'
+    - 'hover on dropzone: [''ParGroup''] -> True'
+    - 'drop on dropzone: [''Build'']'
+    - 'hover on dropzone: [''baseCOMP''] -> False'
+    - 'hover on dropzone: [''baseCOMP''] -> True'
+    - 'drop on dropzone: [''base1'']'
+    - 'hover on dropzone: [''baseCOMP''] -> True'
+    - 'drop on dropzone: [''base1'']'
+    omit_rows:
+    - - /embody/base1
+      - '/embody/base1 : Date'
+      - Date
+      - par
+    - - /embody/base1
+      - '/embody/base1 : Touchbuild'
+      - Touchbuild
+      - par
+    - - /embody/base1/base1
+      - '/embody/base1/base1 : (entire COMP)'
+      - ''
+      - comp
+    - - /embody/base1/base1
+      - '/embody/base1/base1 : Build'
+      - Build
+      - par
+    - - /embody/base1/base1
+      - '/embody/base1/base1 : Date'
+      - Date
+      - par
+    - - /embody/base1/base1
+      - '/embody/base1/base1 : Touchbuild'
+      - Touchbuild
+      - par
+  children:
+  - name: title
+    type: textCOMP
+    parameters:
+      text: Exclude from tdn
+      callbacks: title_callbacks
+      fontcolorr: 0.92
+      fontcolorg: 0.92
+      fontcolorb: 0.92
+      alignx: left
+      x: 24
+      y: 348
+      w: 372
+      h: 28
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  - name: dropzone
+    type: containerCOMP
+    parameters:
+      x: 24
+      y: 254
+      w: 372
+      h: 56
+      bgcolorr: 0.16
+      bgcolorg: 0.17
+      bgcolorb: 0.165
+      bgalpha: 1
+      drop: usecallbacks
+      dragdropcallbacks: dragdrop_callbacks
+    position: [540, 0]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    children:
+    - name: drop_hint
+      type: textCOMP
+      parameters:
+        text: Drag a parameter or COMP here to exclude it from .tdn
+        type: multiline
+        wordwrap: true
+        dragdropmode: panel
+        callbacks: drop_hint_callbacks
+        fontsize: 12
+        fontcolorr: 0.6
+        fontcolorg: 0.61
+        fontcolorb: 0.6
+        x: 8
+        y: 8
+        w: 356
+        h: 40
+        clickthrough: true
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: drop_hint_callbacks
+      type: textDAT
+      parameters:
+        language: python
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: drop_hint
+      dat_content: "# Text Component callbacks\n\nfrom typing import Any, Dict\n\ndef onValueChange(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason\n\tincluding typing in the text window or changing the parameter directly. The\n\tcallback is equivalent to the onValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp: textCOMP):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp: textCOMP, info: Dict[str, str]):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In\n\tregular editing mode this is right after the contents are saved back to the\n\tvalue parameter. This function is called everytime the viewer loses focus,\n\teven if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus\n\t\t\t\te.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp: textCOMP):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when\n\ttyping a character, deleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not\n\tcalled in 'Continuous Edit' mode. Use onTextEdit and onFocusEnd when using\n\tcontinuous editing.\n\n\tNote: Any Python undo blocks created by this callback will be included in\n\tthe undo step for the change to the text field.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n"
+      dat_content_format: text
+  - name: subtitle
+    type: textCOMP
+    parameters:
+      text: /embody/base1
+      callbacks: subtitle_callbacks
+      fontsize: 11
+      fontcolorr: 0.6
+      fontcolorg: 0.61
+      fontcolorb: 0.6
+      alignx: left
+      x: 24
+      y: 326
+      w: 372
+      h: 18
+    position: [200, 0]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  - name: list_omits
+    type: listCOMP
+    parameters:
+      callbacks: list_omits_callbacks
+      rows: 6
+      cols: 2
+      hscrollbar: false
+      x: 24
+      y: 24
+      w: 372
+      h: 192
+      resizecomp: =me
+      repocomp: =me
+      bgcolorr: 0.11
+      bgcolorg: 0.12
+      bgcolorb: 0.115
+      bgalpha: 1
+    position: [1000, 0]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  - name: list_header
+    type: textCOMP
+    parameters:
+      text: Exclusions (entire subtree)
+      callbacks: list_header_callbacks
+      fontsize: 12
+      fontcolorr: 0.92
+      fontcolorg: 0.92
+      fontcolorb: 0.92
+      alignx: left
+      x: 24
+      y: 224
+      w: 372
+      h: 18
+    position: [800, 0]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  - name: title_callbacks
+    type: textDAT
+    parameters:
+      language: python
+    flags:
+    - viewer
+    position: [0, -160]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    dock: title
+    dat_content: "# Text Component callbacks\n\nfrom typing import Any, Dict\n\ndef onValueChange(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason\n\tincluding typing in the text window or changing the parameter directly. The\n\tcallback is equivalent to the onValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp: textCOMP):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp: textCOMP, info: Dict[str, str]):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In\n\tregular editing mode this is right after the contents are saved back to the\n\tvalue parameter. This function is called everytime the viewer loses focus,\n\teven if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus\n\t\t\t\te.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp: textCOMP):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when\n\ttyping a character, deleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not\n\tcalled in 'Continuous Edit' mode. Use onTextEdit and onFocusEnd when using\n\tcontinuous editing.\n\n\tNote: Any Python undo blocks created by this callback will be included in\n\tthe undo step for the change to the text field.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n"
+    dat_content_format: text
+  - name: dragdrop_callbacks
+    type: textDAT
+    position: [1200, 0]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+    dat_content: "# TDN Exclusions drop zone. A native par-dialog drag delivers\n# ParGroup items (field-verified 2026-08-24), a network-editor drag\n# delivers OPs, a scripted drag can deliver bare Pars -- accept Pars\n# (unwrapped from groups) and COMPs; EmbodyExt.OmitPanelDrop toggles\n# tdn_omit:<par> / tdn_exclude accordingly.\n\ndef _trace(msg):\n\t# Diagnostic ring on the panel (read via fetch('dd_trace')).\n\ttry:\n\t\tlog = parent().fetch('dd_trace', [], search=False)\n\t\tlog.append(msg)\n\t\tparent().store('dd_trace', log[-40:])\n\texcept Exception:\n\t\tpass\n\ndef _itemsFromDrag(items):\n\tout = []\n\tfor i in items:\n\t\tif isinstance(i, Par):\n\t\t\tout.append(i)\n\t\telif isinstance(i, ParGroup):\n\t\t\tout.extend(p for p in i if p is not None)\n\t\telif isinstance(i, COMP):\n\t\t\tout.append(i)\n\treturn out\n\ndef onHoverStartGetAccept(comp, info):\n\titems = info.get('dragItems', [])\n\tusable = _itemsFromDrag(items)\n\t_trace(f'hover on {comp.name}: {[type(i).__name__ for i in items]} -> {bool(usable)}')\n\treturn bool(usable)\n\ndef onDropGetResults(comp, info):\n\titems = info.get('dragItems', [])\n\tusable = _itemsFromDrag(items)\n\t_trace(f'drop on {comp.name}: {[getattr(i, \"name\", \"?\") for i in usable]}')\n\tif usable:\n\t\tparent.Embody.OmitPanelDrop(usable)\n\treturn {'droppedOn': comp}\n"
+    dat_content_format: text
+  - name: subtitle_callbacks
+    type: textDAT
+    parameters:
+      language: python
+    flags:
+    - viewer
+    position: [200, -160]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    dock: subtitle
+    dat_content: "# Text Component callbacks\n\nfrom typing import Any, Dict\n\ndef onValueChange(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason\n\tincluding typing in the text window or changing the parameter directly. The\n\tcallback is equivalent to the onValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp: textCOMP):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp: textCOMP, info: Dict[str, str]):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In\n\tregular editing mode this is right after the contents are saved back to the\n\tvalue parameter. This function is called everytime the viewer loses focus,\n\teven if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus\n\t\t\t\te.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp: textCOMP):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when\n\ttyping a character, deleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not\n\tcalled in 'Continuous Edit' mode. Use onTextEdit and onFocusEnd when using\n\tcontinuous editing.\n\n\tNote: Any Python undo blocks created by this callback will be included in\n\tthe undo step for the change to the text field.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n"
+    dat_content_format: text
+  - name: list_omits_callbacks
+    type: textDAT
+    parameters:
+      language: python
+    flags:
+    - viewer
+    position: [1400, 0]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    dock: list_omits
+    dat_content: "# Omit-panel exclusions list. Rows come from the panel's storage\n# ('omit_rows': [[op_path, label, par_name], ...] written by\n# EmbodyExt.RefreshOmitPanel); col 0 = label, col 1 = remove (×).\n# Clicking × removes that tdn_omit tag via OmitPanelRemove.\n\nTEXT = (0.92, 0.92, 0.92, 1)\nMUTED = (0.60, 0.61, 0.60, 1)\nBG = (0.11, 0.12, 0.115, 1)\n\ndef _rows():\n\treturn parent().fetch('omit_rows', [], search=False)\n\ndef onInitTable(comp, attribs):\n\tattribs.bgColor = BG\n\tattribs.textColor = TEXT\n\tattribs.fontSizeX = 12\n\tattribs.rowHeight = 24\n\tattribs.textOffsetX = 4\n\tattribs.textJustify = JustifyType.CENTERLEFT\n\treturn\n\ndef onInitCol(comp, col, attribs):\n\tif col == 1:\n\t\tattribs.colWidth = 28\n\t\tattribs.textJustify = JustifyType.CENTER\n\telse:\n\t\tattribs.colWidth = 100\n\t\tattribs.colStretch = True\n\treturn\n\ndef onInitCell(comp, row, col, attribs):\n\trows = _rows()\n\tif not rows:\n\t\tif row == 0 and col == 0:\n\t\t\tattribs.text = '(none yet)'\n\t\t\tattribs.textColor = MUTED\n\t\treturn\n\tif row >= len(rows):\n\t\treturn\n\tif col == 0:\n\t\tattribs.text = rows[row][1]\n\telse:\n\t\tattribs.text = '×'\n\t\tattribs.textColor = MUTED\n\treturn\n\ndef onSelect(comp, startRow, startCol, startCoords, endRow, endCol, endCoords, start, end):\n\tif not end:\n\t\treturn\n\trows = _rows()\n\tif endRow is None or endRow < 0 or endRow >= len(rows):\n\t\treturn\n\tif endCol == 1:\n\t\tr = rows[endRow]\n\t\tkind = r[3] if len(r) > 3 else 'par'\n\t\tparent.Embody.OmitPanelRemove(r[0], r[2], kind)\n\treturn\n"
+    dat_content_format: text
+  - name: list_header_callbacks
+    type: textDAT
+    parameters:
+      language: python
+    flags:
+    - viewer
+    position: [800, -160]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    dock: list_header
+    dat_content: "# Text Component callbacks\n\nfrom typing import Any, Dict\n\ndef onValueChange(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason\n\tincluding typing in the text window or changing the parameter directly. The\n\tcallback is equivalent to the onValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp: textCOMP):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp: textCOMP, info: Dict[str, str]):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In\n\tregular editing mode this is right after the contents are saved back to the\n\tvalue parameter. This function is called everytime the viewer loses focus,\n\teven if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus\n\t\t\t\te.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp: textCOMP):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when\n\ttyping a character, deleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp: textCOMP, value: str, prevValue: str):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not\n\tcalled in 'Continuous Edit' mode. Use onTextEdit and onFocusEnd when using\n\tcontinuous editing.\n\n\tNote: Any Python undo blocks created by this callback will be included in\n\tthe undo step for the change to the text field.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value,\n\t#\t  ', prev value: ', prevValue )\n\treturn\n"
+    dat_content_format: text
 - name: viz_status
   type: containerCOMP
   parameters:
@@ -1679,13 +1938,13 @@ operators:
       - ''
       - '1'
     - - r0c0
-      - ✓ Embody
-      - '0.3500'
-      - '0.7800'
-      - '0.4500'
+      - / Embody
+      - '0.3000'
+      - '0.6800'
+      - '0.9500'
       - '1'
     - - r0c1
-      - v6.0.266
+      - v6.0.278
       - '0.4000'
       - '0.4400'
       - '0.5000'
@@ -1703,7 +1962,7 @@ operators:
       - ''
       - '1'
     - - r1c0
-      - ✓ Saved 1s ago
+      - ✓ Saved 1m ago
       - '0.3500'
       - '0.7800'
       - '0.4500'
@@ -1802,6 +2061,7 @@ operators:
     parameters:
       file: embody/Embody/viz_status/status_publish.py
       syncfile: true
+      language: python
     position: [450, 0]
     size: [130, 90]
     color: [0.9, 0.3, 0.4]
@@ -1812,6 +2072,7 @@ operators:
   parameters:
     file: embody/Embody/envoy_setup.py
     syncfile: true
+    language: python
   position: [-500, 700]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1826,11 +2087,25 @@ operators:
   position: [-300, -275]
   size: [130, 90]
   dat_read_only: true
+- name: window_omit
+  type: windowCOMP
+  parameters:
+    winop: omit_panel
+    title: Exclude from tdn
+    justifyh: mouse
+    justifyv: mouse
+    winoffsetx: 110
+    winw: 420
+    winh: 400
+  position: [700, 675]
+  size: [160, 130]
+  color: [0.67, 0.67, 0.67]
 - name: embody_admin
   type: textDAT
   parameters:
     file: embody/Embody/embody_admin.py
     syncfile: true
+    language: python
   position: [-700, 300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1841,6 +2116,7 @@ operators:
   parameters:
     file: embody/Embody/embody_pyenv.py
     syncfile: true
+    language: python
     extension: py
   position: [-500, 300]
   size: [130, 90]
@@ -1852,6 +2128,7 @@ operators:
   parameters:
     file: embody/Embody/envoy_layout.py
     syncfile: true
+    language: python
   position: [-500, 500]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -1899,6 +2176,7 @@ operators:
   parameters:
     file: embody/Embody/embody_launch.py
     syncfile: true
+    language: python
   position: [-700, 200]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -2008,6 +2286,7 @@ operators:
   parameters:
     file: embody/Embody/fifo1_callbacks.py
     syncfile: true
+    language: python
   position: [-275, 100]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -2029,6 +2308,7 @@ operators:
   parameters:
     file: embody/Embody/timer_callbacks.py
     syncfile: true
+    language: python
   position: [-700, -375]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -2040,6 +2320,7 @@ operators:
   parameters:
     file: embody/Embody/startup_progress.py
     syncfile: true
+    language: python
   position: [-700, 400]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -2050,6 +2331,7 @@ operators:
   parameters:
     file: embody/Embody/CatalogManagerExt.py
     syncfile: true
+    language: python
   position: [-700, 500]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -2268,6 +2550,8 @@ operators:
         dat_content_format: text
     - name: title_callbacks
       type: textDAT
+      parameters:
+        language: python
       flags:
       - viewer
       position: [200, -160]
@@ -2278,6 +2562,8 @@ operators:
       dat_content_format: text
     - name: status_callbacks
       type: textDAT
+      parameters:
+        language: python
       flags:
       - viewer
       position: [200, -360]
@@ -2333,6 +2619,7 @@ operators:
   parameters:
     file: embody/Embody/keyboardin_callbacks.py
     syncfile: true
+    language: python
   position: [-300, -375]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]

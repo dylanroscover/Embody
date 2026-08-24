@@ -3575,7 +3575,11 @@ class EmbodyExt:
         # parameters based on Off / Export / Full).
         self._applyTdnModeGating()
 
-        run(f"op('{self.my}').Update(save_dirty={save_dirty})", delayFrames=1)
+        # Interactive path: frame-chunked so the pulse never stalls the
+        # session (synchronous Update() measured 0.5-1s = 30-60 dropped
+        # frames). Programmatic callers still use Update() directly.
+        run(f"op('{self.my}').UpdateDeferred(save_dirty={save_dirty})",
+            delayFrames=1)
 
     def normalizeAllPaths(self) -> None:
         """Normalize all paths in table and on operators for cross-platform support."""
@@ -3633,93 +3637,8 @@ class EmbodyExt:
         if self._performMode:
             return
 
-        # Detect a .toe basename change since the last Update and
-        # propagate to the envoy.json registry. This is a defensive
-        # backstop for execute.py's onProjectPostSave RefreshRegistry
-        # call -- if execute.py wasn't reloaded after a source edit,
-        # or the save took an Off/Export path that skipped Envoy
-        # restart, this catches the rename on the next Update tick.
-        # Idempotent: _writeEnvoyConfig short-circuits when the
-        # registry is already current.
-        try:
-            current_name = project.name
-            if getattr(self, '_last_toe_name', None) != current_name:
-                self._last_toe_name = current_name
-                if self.my.par.Envoyenable.eval():
-                    self.my.ext.Envoy.RefreshRegistry()
-        except Exception as e:
-            self.Log(f'registry rename-detect failed: {e}', 'WARNING')
-
-        # Detect renames/moves BEFORE scanning for additions.
-        # Without this, a renamed op gets added as "new" by the additions
-        # scan, and the subsequent continuity check in Refresh() can't
-        # match the stale entry because the new op is already tracked.
-        self.checkOpsForContinuity(self.ExternalizationsFolder)
-
-        # Check for parameter changes on TOX-strategy COMPs
-        for comp in self.getExternalizedOps(COMP, strategy='tox'):
-            if self.param_tracker.compareParameters(comp):
-                self._setDirtyState(comp.path, 'Par')
-                if save_dirty:
-                    self.Save(comp.path)
-
-        # TDN-strategy COMP dirty detection + export is handled once, below,
-        # by dirtyHandler(True) -- a single fingerprint sweep per Refresh that
-        # covers both structural and authored-parameter changes. (It was
-        # previously done here AND in dirtyHandler, fingerprinting every TDN
-        # COMP twice per Refresh and dropping frames on large networks.)
-        # tdn_paths is still gathered here so the "subtractions" filter below
-        # continues to exclude tracked TDN COMPs.
-        tdn_comps = self.getExternalizedOps(COMP, strategy='tdn')
-        tdn_paths = {comp.path for comp in tdn_comps}
-        if not self._tdnEnabled() and tdn_comps:
-            self.Log(
-                f'TDN disabled -- skipping export for {len(tdn_comps)} '
-                f'tracked TDN COMP(s)', 'INFO')
-
-        # Check for duplicates
-        if self.my.par.Detectduplicatepaths:
-            self.checkForDuplicates()
-
-        # Get operator lists
-        all_tags = self.getTags()
-        ops_to_externalize = self.getOpsToExternalize(COMP) + self.getOpsToExternalize(DAT)
-        externalized_ops = self.getExternalizedOps(COMP) + self.getExternalizedOps(DAT)
-        externalized_paths = [ext.path for ext in externalized_ops]
-
-        # Find additions and subtractions
-        additions = [
-            oper for oper in ops_to_externalize
-            if oper.path not in externalized_paths
-            and set(all_tags).intersection(oper.tags)
-            and self.isOpProcessable(oper)
-        ]
-
-        # TDN-strategy COMPs are excluded -- their lifecycle is managed by
-        # ToggleTag() -> _removeTDNStrategy(), not by tag-presence detection.
-        # Without this, Full Project TDN exports (which track "/" in the table
-        # without tagging the root) get incorrectly removed as "subtractions".
-        subtractions = [
-            oper for oper in externalized_ops
-            if oper.path not in tdn_paths
-            and not set(all_tags).intersection(oper.tags)
-            and not oper.warnings()
-            and not oper.scriptErrors()
-            and self.isOpProcessable(oper)
-        ]
-
-        # Process changes
-        additions.sort(key=lambda x: (self.Externalizations.path in x.path, x.path), reverse=True)
-
-        # On a never-saved project every addition would be deferred by
-        # handleAddition's save gate anyway; empty the list HERE so the
-        # sweep report counts what actually landed, and say so once per
-        # sweep instead of once per op.
-        if additions and not self._projectSavedOnDisk():
-            self.Log(f"Deferring {len(additions)} externalization"
-                     f"{'s' if len(additions) > 1 else ''} until the "
-                     "project is saved", "INFO")
-            additions = []
+        self._updateHead(save_dirty)
+        tdn_paths, additions, subtractions = self._updateScan()
 
         # Batch locked-content warnings across the whole sweep into ONE
         # combined dialog. A full-project externalization triggers one TDN
@@ -3753,8 +3672,269 @@ class EmbodyExt:
             self._pending_envoy_prompt = False
             run(f"op('{self.my}').ext.Embody._openSetupWizard()", delayFrames=5)
 
+    def _updateHead(self, save_dirty: bool = True) -> None:
+        """Update phase 1 (shared by Update() and the deferred chunks):
+        registry rename backstop, rename/move continuity, TOX-strategy
+        parameter-change detection (saving when save_dirty).
+
+        The registry check is a defensive backstop for execute.py's
+        onProjectPostSave RefreshRegistry call -- if execute.py wasn't
+        reloaded after a source edit, or the save took an Off/Export
+        path that skipped Envoy restart, this catches the rename on the
+        next Update tick. Idempotent: _writeEnvoyConfig short-circuits
+        when the registry is already current. Continuity runs BEFORE
+        the additions scan: without it a renamed op gets added as
+        "new", and Refresh()'s continuity check can't match the stale
+        entry because the new op is already tracked.
+        """
+        try:
+            current_name = project.name
+            if getattr(self, '_last_toe_name', None) != current_name:
+                self._last_toe_name = current_name
+                if self.my.par.Envoyenable.eval():
+                    self.my.ext.Envoy.RefreshRegistry()
+        except Exception as e:
+            self.Log(f'registry rename-detect failed: {e}', 'WARNING')
+
+        self.checkOpsForContinuity(self.ExternalizationsFolder)
+
+        # Parameter changes on TOX-strategy COMPs. (TDN dirty detection
+        # is NOT here -- the fingerprint sweep in dirtyHandler / the
+        # deferred fingerprint phase covers structural AND authored-
+        # parameter changes in one pass.)
+        for comp in self.getExternalizedOps(COMP, strategy='tox'):
+            if self.param_tracker.compareParameters(comp):
+                self._setDirtyState(comp.path, 'Par')
+                if save_dirty:
+                    self.Save(comp.path)
+
+    def _updateScan(self) -> tuple:
+        """Update phase 2 (shared): duplicates check + additions/
+        subtractions discovery. Returns (tdn_paths, additions,
+        subtractions); tdn_paths keeps tracked TDN COMPs out of the
+        subtractions filter. Additions are emptied (with one log) on a
+        never-saved project -- handleAddition's save gate would defer
+        each one anyway, and the sweep report should count what landed.
+        """
+        tdn_comps = self.getExternalizedOps(COMP, strategy='tdn')
+        tdn_paths = {comp.path for comp in tdn_comps}
+        if not self._tdnEnabled() and tdn_comps:
+            self.Log(
+                f'TDN disabled -- skipping export for {len(tdn_comps)} '
+                f'tracked TDN COMP(s)', 'INFO')
+
+        if self.my.par.Detectduplicatepaths:
+            self.checkForDuplicates()
+
+        all_tags = self.getTags()
+        ops_to_externalize = self.getOpsToExternalize(COMP) + self.getOpsToExternalize(DAT)
+        externalized_ops = self.getExternalizedOps(COMP) + self.getExternalizedOps(DAT)
+        externalized_paths = [ext.path for ext in externalized_ops]
+
+        additions = [
+            oper for oper in ops_to_externalize
+            if oper.path not in externalized_paths
+            and set(all_tags).intersection(oper.tags)
+            and self.isOpProcessable(oper)
+        ]
+
+        # TDN-strategy COMPs are excluded -- their lifecycle is managed by
+        # ToggleTag() -> _removeTDNStrategy(), not by tag-presence detection.
+        # Without this, Full Project TDN exports (which track "/" in the table
+        # without tagging the root) get incorrectly removed as "subtractions".
+        subtractions = [
+            oper for oper in externalized_ops
+            if oper.path not in tdn_paths
+            and not set(all_tags).intersection(oper.tags)
+            and not oper.warnings()
+            and not oper.scriptErrors()
+            and self.isOpProcessable(oper)
+        ]
+
+        additions.sort(key=lambda x: (self.Externalizations.path in x.path, x.path), reverse=True)
+
+        if additions and not self._projectSavedOnDisk():
+            self.Log(f"Deferring {len(additions)} externalization"
+                     f"{'s' if len(additions) > 1 else ''} until the "
+                     "project is saved", "INFO")
+            additions = []
+        return tdn_paths, additions, subtractions
+
+    # -- Deferred (frame-chunked) Update: the interactive pulse path ----
+
+    def UpdateDeferred(self, save_dirty: bool = True) -> None:
+        """Frame-chunked Update for the interactive pulse: identical
+        work and reporting to Update(), spread across frames so no
+        single frame pays the whole sweep (a synchronous Update
+        measured 0.47s warm / ~1s dirty -- 28-60 dropped frames at
+        60fps; field 2026-08-24). Phases: head -> scan -> tox ->
+        fingerprint (budgeted like _sweepTDNDirtyChunk) -> export (one
+        COMP per frame, re-verified dirty) -> report. Generation-
+        guarded like the passive sweep: a newer run, an extension
+        reinit, or perform mode kills an in-flight chain. Synchronous
+        callers (the save cycle, tests, MCP, startup) keep Update() --
+        they need completion on return.
+        """
+        if self.my.par.Status == 'Disabled' or self._performMode:
+            return
+        gen = getattr(self, '_updd_gen', 0) + 1
+        self._updd_gen = gen
+        self._updd_state = {
+            'phase': 'head', 'save_dirty': save_dirty,
+            'additions': [], 'subtractions': [],
+            'queue': [], 'idx': 0, 'tdn_paths': None, 'exclude_tag': '',
+            'exports': [], 'saved': [], 'batch_open': False,
+        }
+        # Defer even the first chunk so the pulse frame does no work.
+        run(f"op('{self.my}').ext.Embody._updateChunk({gen})",
+            delayFrames=1, fromOP=self.my)
+
+    def _updateChunk(self, gen: int) -> None:
+        """One frame of the deferred Update; re-arms until done. Every
+        phase is wrapped so a detached callback can never fail silently
+        (the _sweepTDNDirtyChunk lesson), and the locked-warn batch is
+        flushed on the way out of any failure."""
+        if gen != getattr(self, '_updd_gen', None) or self._performMode:
+            return
+        st = getattr(self, '_updd_state', None)
+        if st is None:
+            return
+        try:
+            phase = st['phase']
+            if phase == 'head':
+                self._updateHead(st['save_dirty'])
+                st['phase'] = 'scan'
+            elif phase == 'scan':
+                tdn_paths, adds, subs = self._updateScan()
+                st['tdn_paths'] = tdn_paths
+                st['additions'] = adds
+                st['subtractions'] = subs
+                if adds or subs:
+                    self.my.ext.TDN.BeginLockedWarnBatch()
+                    try:
+                        for oper in adds:
+                            self.handleAddition(oper)
+                        for oper in subs:
+                            self.handleSubtraction(oper)
+                    finally:
+                        self.my.ext.TDN.FlushLockedWarnBatch()
+                st['phase'] = 'tox'
+            elif phase == 'tox':
+                self._updTOXPhase(st)
+            elif phase == 'fingerprint':
+                self._updFingerprintPhase(st)
+            elif phase == 'export':
+                self._updExportPhase(st)
+            else:
+                self._updReportPhase(st)
+                self._updd_state = None
+                return
+        except Exception as e:
+            if st.get('batch_open'):
+                try:
+                    self.my.ext.TDN.FlushLockedWarnBatch()
+                except Exception:
+                    pass
+            self._updd_state = None
+            self.Log(f'Deferred update failed in phase '
+                     f'{st.get("phase")}: {e}', 'ERROR')
+            return
+        run(f"op('{self.my}').ext.Embody._updateChunk({gen})",
+            delayFrames=1)
+
+    def _updTOXPhase(self, st: dict) -> None:
+        """Deferred phase: TOX dirty flags (cheap reads, collected for
+        export) + the TDN fingerprint queue, mirroring dirtyHandler's
+        skip rules (never root "/", never excluded COMPs)."""
+        for oper in self.getExternalizedOps(COMP, strategy='tox'):
+            dirty = oper.dirty
+            try:
+                if dirty or self.DirtyState(oper.path) != 'Par':
+                    self._setDirtyState(oper.path, dirty)
+            except Exception as e:
+                self.Log(f'Failed to update dirty state for '
+                         f'{oper.path}: {e}', 'DEBUG')
+            if dirty and st['save_dirty']:
+                st['exports'].append(('tox', oper.path))
+        if self._tdnEnabled():
+            exclude_tag = self.my.par.Tdnexcludetag.eval()
+            st['exclude_tag'] = exclude_tag
+            st['tdn_paths'] = self._getTDNPaths()
+            st['queue'] = [
+                oper.path
+                for oper in self.getExternalizedOps(COMP, strategy='tdn')
+                if oper.path != '/' and exclude_tag not in oper.tags]
+        st['idx'] = 0
+        st['phase'] = 'fingerprint'
+
+    def _updFingerprintPhase(self, st: dict) -> None:
+        """Deferred phase: budgeted TDN fingerprints (the passive
+        sweep's budget), collecting dirty COMPs for the export phase."""
+        import time
+        deadline = time.perf_counter() + self._DIRTY_SWEEP_BUDGET_MS / 1000.0
+        queue = st['queue']
+        i = st['idx']
+        while i < len(queue):
+            oper = op(queue[i])
+            i += 1
+            if oper is None:
+                continue
+            try:
+                dirty = self._isTDNDirty(oper, st['tdn_paths'],
+                                         st['exclude_tag'])
+                self._setDirtyState(oper.path, 'True' if dirty else '')
+                if dirty and st['save_dirty']:
+                    st['exports'].append(('tdn', oper.path))
+            except Exception as e:
+                self.Log(f'Dirty scan failed for {oper.path}: {e}',
+                         'WARNING')
+            # Finish the COMP in hand -- a fingerprint is not divisible.
+            if time.perf_counter() >= deadline:
+                break
+        st['idx'] = i
+        if i >= len(queue):
+            st['phase'] = 'export' if st['save_dirty'] else 'report'
+
+    def _updExportPhase(self, st: dict) -> None:
+        """Deferred phase: ONE export per frame. TDN COMPs re-verify
+        dirty first -- a synchronous Update or save may have exported
+        them while this chain was in flight."""
+        if not st['exports']:
+            if st['batch_open']:
+                self.my.ext.TDN.FlushLockedWarnBatch()
+                st['batch_open'] = False
+            st['phase'] = 'report'
+            return
+        if not st['batch_open']:
+            self.my.ext.TDN.BeginLockedWarnBatch()
+            st['batch_open'] = True
+        kind, path = st['exports'].pop(0)
+        oper = op(path)
+        if oper is None:
+            return
+        if kind == 'tox':
+            if self.Save(path):
+                st['saved'].append(path)
+        elif (self._isTDNDirty(oper, st['tdn_paths'], st['exclude_tag'])
+                and self.SaveTDN(path)):
+            st['saved'].append(path)
+
+    def _updReportPhase(self, st: dict) -> None:
+        """Deferred phase: identical tail to Update() -- results
+        report, Refresh pulse, deferred setup-wizard chain."""
+        self._reportResults(st['saved'], st['additions'],
+                            st['subtractions'])
+        run(f"op('{self.my}').par.Refresh.pulse()", delayFrames=1)
+        if getattr(self, '_pending_envoy_prompt', False):
+            self._pending_envoy_prompt = False
+            run(f"op('{self.my}').ext.Embody._openSetupWizard()",
+                delayFrames=5)
+
     def _reportResults(self, dirties, additions, subtractions):
-        """Report update results to log."""
+        """Report update results to log. Always says SOMETHING: a
+        silent no-change sweep is indistinguishable from one that never
+        ran (field 2026-08-24 -- the frame-chunked pulse removed the
+        tell-tale UI hitch, so completion needs an explicit line)."""
         plural = any(len(lst) > 1 for lst in [dirties, additions, subtractions])
         if dirties:
             self.Log(f"Saved {len(dirties)} externalization{'s' if plural else ''}", "SUCCESS")
@@ -3762,6 +3942,8 @@ class EmbodyExt:
             self.Log(f"Added {len(additions)} operator{'s' if plural else ''} in total", "SUCCESS")
         if subtractions:
             self.Log(f"Removed {len(subtractions)} operator{'s' if plural else ''} in total", "SUCCESS")
+        if not (dirties or additions or subtractions):
+            self.Log("Update complete -- everything up to date", "INFO")
 
     def Refresh(self) -> None:
         """Refresh Embody state and UI."""
@@ -8243,6 +8425,17 @@ class EmbodyExt:
             tdn_btn.par.display = True
             tdn_btn.par.label = '\u00d7  Remove tdn' if not is_tox else '\u21c4  Convert to tdn'
 
+        # Order the pair per ROLE, not per button: the remove-role
+        # button anchors the BOTTOM (destructive, farthest from the
+        # cursor landing zone), the convert-role sits above the omit
+        # panel opener. Static alignorder cannot express this -- the
+        # roles swap with the active strategy. Tag/DAT modes normalize
+        # replicants back to 1.0.
+        if tox_btn:
+            tox_btn.par.alignorder = 3.0 if is_tox else 1.1
+        if tdn_btn:
+            tdn_btn.par.alignorder = 1.1 if is_tox else 3.0
+
         # Hide any extra DAT-tag buttons (safety net for replicator timing)
         for i in range(3, 16):
             btn = self.tagger.op(f'button{i}')
@@ -8292,6 +8485,16 @@ class EmbodyExt:
                 btn_embed_storage.par.colorg = self.my.par.Taggingmenucolorg.eval()
                 btn_embed_storage.par.colorb = self.my.par.Taggingmenucolorb.eval()
 
+        # Show Exclude-from-tdn panel opener (TDN COMPs only)
+        btn_omit = self.tagger.op('btn_omit')
+        if btn_omit:
+            btn_omit.par.display = embed_visible
+            if embed_visible:
+                btn_omit.par.label = '\u25c7  Exclude from tdn'
+                btn_omit.par.colorr = self.my.par.Taggingmenucolorr.eval()
+                btn_omit.par.colorg = self.my.par.Taggingmenucolorg.eval()
+                btn_omit.par.colorb = self.my.par.Taggingmenucolorb.eval()
+
         # Show Export portable tox button
         btn_portable = self.tagger.op('btn_portable')
         if btn_portable:
@@ -8322,8 +8525,9 @@ class EmbodyExt:
             title.par.text = 'Actions'
 
         # Update height: header + 2 tag buttons + Save + Reload + Export Portable
-        # (+ Embed DATs for TDN) (+ Embed Storage for TDN) (+ Open file if applicable)
-        visible_count = 6 + (2 if embed_visible else 0) + (1 if rel_fp else 0)
+        # (+ Embed DATs / Embed Storage / Par exclusions for TDN)
+        # (+ Open file if applicable)
+        visible_count = 6 + (3 if embed_visible else 0) + (1 if rel_fp else 0)
         self.tagger.store('visible_count', visible_count)
 
     def SetupTaggerDATManageMode(self, oper: OP, active_tag: str) -> None:
@@ -8350,6 +8554,7 @@ class EmbodyExt:
         for i in range(1, tags.numRows):
             btn = self.tagger.op(f'button{i}')
             if btn:
+                btn.par.alignorder = 1.0  # undo manage-mode role order
                 tag_val = tags[i, 'value'].val
                 if tag_val == active_tag or tag_val in comp_tags:
                     btn.par.display = False
@@ -8385,6 +8590,9 @@ class EmbodyExt:
         btn_embed_storage = self.tagger.op('btn_embed_storage')
         if btn_embed_storage:
             btn_embed_storage.par.display = False
+        btn_omit = self.tagger.op('btn_omit')
+        if btn_omit:
+            btn_omit.par.display = False
 
         # Show Reveal in Finder/Explorer
         btn_openfile = self.tagger.op('btn_openfile')
@@ -8404,6 +8612,161 @@ class EmbodyExt:
         visible_count = 1 + convert_count + 1 + (1 if rel_fp else 0)
         self.tagger.store('visible_count', visible_count)
 
+    # -- Exclude-from-tdn panel (tdn_exclude / tdn_exclude:<par>) -------
+
+    def OpenOmitPanel(self, oper: OP) -> None:
+        """Open the TDN par-exclusion panel scoped to `oper` (a TDN
+        COMP). Lists every exclusion in the subtree;
+        pars dragged onto the drop zone toggle their omit tag.
+        """
+        panel = self.my.op('omit_panel')
+        if panel is None or oper is None:
+            return
+        panel.store('omit_target', oper.path)
+        self.RefreshOmitPanel()
+        win = self.my.op('window_omit')
+        if win:
+            win.par.winopen.pulse()
+
+    def RefreshOmitPanel(self) -> None:
+        """Rebuild the omit panel's subtree listing from live tags.
+
+        Rows land in panel storage as [op_path, label, par_name]; the
+        list_omits callbacks render them and route x-clicks to
+        OmitPanelRemove.
+        """
+        panel = self.my.op('omit_panel')
+        if panel is None:
+            return
+        target = op(panel.fetch('omit_target', '', search=False) or '')
+        subtitle = panel.op('subtitle')
+        listing = panel.op('list_omits')
+        rows = []
+        if target is None:
+            if subtitle:
+                subtitle.par.text = '(target missing)'
+        else:
+            if subtitle:
+                subtitle.par.text = target.path
+            exclude_tag = str(self.my.par.Tdnexcludetag.eval()).strip()
+            prefix = exclude_tag
+            # Full paths, not target-relative: two ops with the same
+            # name (root + a child) must stay distinguishable (field
+            # 2026-08-24). Row shape: [op_path, label, par_name, kind]
+            # -- kind 'par' (tdn_exclude:<par>, value omitted) or
+            # 'comp' (bare tdn_exclude, whole COMP invisible).
+            for o in [target] + target.findChildren():
+                if prefix:
+                    marker = prefix + ':'
+                    for tag in sorted(o.tags):
+                        if tag.startswith(marker):
+                            name = tag[len(marker):]
+                            rows.append(
+                                [o.path, f'{o.path} : {name}',
+                                 name, 'par'])
+                if (exclude_tag and o is not target and o.isCOMP
+                        and exclude_tag in o.tags):
+                    rows.append(
+                        [o.path, f'{o.path} : (entire COMP)',
+                         '', 'comp'])
+            rows.sort(key=lambda r: r[1])
+        panel.store('omit_rows', rows)
+        if listing:
+            listing.par.rows = max(len(rows), 1)
+            listing.reset()
+
+    def OmitPanelRemove(self, op_path: str, par_name: str,
+                        kind: str = 'par') -> None:
+        """Remove one exclusion (the list's x button): kind 'par'
+        drops a tdn_exclude:<par> tag, kind 'comp' drops the bare
+        tdn_exclude."""
+        o = op(op_path)
+        if o is None:
+            return
+        base = str(self.my.par.Tdnexcludetag.eval()).strip()
+        if kind == 'comp':
+            tag = base
+        else:
+            tag = f'{base}:{par_name}' if base else ''
+        if tag and tag in o.tags:
+            o.tags.remove(tag)
+            self.Log(f'{o.path}: removed {tag}', 'INFO')
+        self.RefreshOmitPanel()
+
+    def OmitPanelDrop(self, items) -> None:
+        """Toggle exclusion tags for items dropped on the panel's drop
+        zone: a Par toggles tdn_exclude:<name> on its owner, a COMP
+        toggles the whole-COMP tdn_exclude tag. Items outside the
+        panel's target subtree are refused (they would never show in
+        this panel's listing).
+        """
+        panel = self.my.op('omit_panel')
+        if panel is None:
+            return
+        target = op(panel.fetch('omit_target', '', search=False) or '')
+        exclude_tag = str(self.my.par.Tdnexcludetag.eval()).strip()
+        prefix = exclude_tag
+
+        def in_scope(o):
+            return (target is None or o is target
+                    or o.path.startswith(target.path + '/'))
+
+        for item in items:
+            if isinstance(item, Par):
+                if not prefix:
+                    self.Log('Tdnexcludetag is empty -- exclusions '
+                             'are disabled', 'WARNING')
+                    continue
+                owner = item.owner
+                if not in_scope(owner):
+                    self.Log(f'{owner.path} is outside {target.path} '
+                             f'-- not tagged', 'WARNING')
+                    continue
+                tag = f'{prefix}:{item.name}'
+                if tag in owner.tags:
+                    owner.tags.remove(tag)
+                    self.Log(f'{owner.path}: removed {tag}', 'INFO')
+                else:
+                    owner.tags.add(tag)
+                    self.Log(f'{owner.path}: tagged {tag} -- value '
+                             f'will not export', 'SUCCESS')
+            elif isinstance(item, COMP):
+                if not exclude_tag:
+                    self.Log('Tdnexcludetag is empty -- COMP exclusion '
+                             'is disabled', 'WARNING')
+                    continue
+                if item is target:
+                    self.Log(f'{item.path} is this panel\'s own scope '
+                             f'-- open Exclusions on its parent to '
+                             f'exclude it', 'WARNING')
+                    continue
+                if not in_scope(item):
+                    self.Log(f'{item.path} is outside {target.path} '
+                             f'-- not tagged', 'WARNING')
+                    continue
+                if item.type == 'annotate':
+                    self.Log(f'{item.path}: annotations cannot be '
+                             f'excluded', 'WARNING')
+                    continue
+                if exclude_tag in item.tags:
+                    item.tags.remove(exclude_tag)
+                    self.Log(f'{item.path}: removed {exclude_tag}',
+                             'INFO')
+                else:
+                    item.tags.add(exclude_tag)
+                    self.Log(f'{item.path}: tagged {exclude_tag} -- '
+                             f'invisible to TDN', 'SUCCESS')
+                    if item.parent() is not target:
+                        # Mirror the exporter's tolerance + warning:
+                        # exclusion is honored only for DIRECT children
+                        # of a TDN boundary; deeper tags serialize as
+                        # normal content with a warning.
+                        self.Log(
+                            f'{item.path} is not a direct child of '
+                            f'{target.path} -- the exclusion is only '
+                            f'honored at a TDN boundary', 'WARNING')
+        self.RefreshOmitPanel()
+
     def SetupTaggerTagMode(self, oper: OP) -> None:
         """Restore tagger to tag selection mode, then set up colors."""
         self._tagger_mode = 'tag'
@@ -8416,6 +8779,7 @@ class EmbodyExt:
         btn_portable = self.tagger.op('btn_portable')
         btn_embed = self.tagger.op('btn_embed')
         btn_embed_storage = self.tagger.op('btn_embed_storage')
+        btn_omit = self.tagger.op('btn_omit')
         if btn_save:
             btn_save.par.display = False
         if btn_reload:
@@ -8424,6 +8788,8 @@ class EmbodyExt:
             btn_embed.par.display = False
         if btn_embed_storage:
             btn_embed_storage.par.display = False
+        if btn_omit:
+            btn_omit.par.display = False
         if btn_remove:
             btn_remove.par.display = False
         if btn_openfile:
@@ -8448,6 +8814,7 @@ class EmbodyExt:
         for i in range(1, tags.numRows):
             btn = self.tagger.op(f'button{i}')
             if btn:
+                btn.par.alignorder = 1.0  # undo manage-mode role order
                 tag_val = tags[i, 'value'].val
                 if existing_tag is not None:
                     if i == existing_tag_index:

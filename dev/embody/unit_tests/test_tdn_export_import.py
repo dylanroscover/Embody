@@ -733,3 +733,90 @@ class TestTDNExportImport(EmbodyTestCase):
             'XY group must not grow z/w components')
         self.assertAlmostEqual(
             float(rebuilt.par.Anchorx.eval()), 0.25, places=4)
+
+    # --- tdn_exclude:<par> per-parameter export exclusion (2026-08-24) ---
+
+    def _omit_tag(self, name):
+        prefix = str(self.embody.par.Tdnexcludetag.eval()).strip()
+        return f'{prefix}:{name}'
+
+    def test_tdn_omit_drops_constant_value(self):
+        t = self.sandbox.create(transformTOP, 'omit_xform')
+        t.par.tx = 5.0
+        t.par.ty = 7.0
+        t.tags.add(self._omit_tag('tx'))
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        t_def = [o for o in export['tdn']['operators']
+                 if o['name'] == 'omit_xform'][0]
+        params = t_def.get('parameters', {})
+        self.assertNotIn('tx', params)
+        self.assertEqual(params.get('ty'), 7.0)
+        # Visibility contract: the tag itself is the record of the
+        # omission and must appear in the exported document.
+        self.assertIn(self._omit_tag('tx'), t_def.get('tags', []))
+
+    def test_tdn_omit_preserves_expression(self):
+        # An expression is a reference, not leaked session state --
+        # same doctrine as the A-50 scrub.
+        t = self.sandbox.create(transformTOP, 'omit_expr')
+        t.par.tx.expr = 'absTime.seconds'
+        t.tags.add(self._omit_tag('tx'))
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        t_def = [o for o in export['tdn']['operators']
+                 if o['name'] == 'omit_expr'][0]
+        self.assertEqual(
+            t_def.get('parameters', {}).get('tx'), '=absTime.seconds')
+
+    def test_tdn_omit_unknown_name_omits_nothing(self):
+        t = self.sandbox.create(transformTOP, 'omit_bogus')
+        t.par.tx = 3.0
+        t.tags.add(self._omit_tag('notapar'))
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        t_def = [o for o in export['tdn']['operators']
+                 if o['name'] == 'omit_bogus'][0]
+        # Bad name -> WARNING (manually verified) and no effect.
+        self.assertEqual(t_def.get('parameters', {}).get('tx'), 3.0)
+
+    def test_tdn_omit_custom_par_ships_definition_without_value(self):
+        src = self.sandbox.create(containerCOMP, 'omit_custom')
+        page = src.appendCustomPage('Look')
+        p = page.appendFloat('Speed')[0]
+        p.default = 1.0
+        src.par.Speed = 4.5
+        src.tags.add(self._omit_tag('Speed'))
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        src_def = [o for o in export['tdn']['operators']
+                   if o['name'] == 'omit_custom'][0]
+        pages = src_def.get('custom_pars', {})
+        look = pages.get('Look', [])
+        speed_defs = [d for d in look if d.get('name') == 'Speed']
+        self.assertEqual(len(speed_defs), 1)
+        self.assertNotIn('value', speed_defs[0])
+
+    def test_tdn_omit_roundtrip_keeps_tag_and_default(self):
+        t = self.sandbox.create(transformTOP, 'omit_rt')
+        t.par.tx = 9.0
+        t.tags.add(self._omit_tag('tx'))
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        target = self.sandbox.create(baseCOMP, 'omit_rt_dst')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        rebuilt = target.op('omit_rt')
+        # Value stayed home; the tag survives so the NEXT export omits
+        # again -- the marker can never be lost in a rebuild.
+        self.assertEqual(rebuilt.par.tx.eval(), 0.0)
+        self.assertIn(self._omit_tag('tx'), rebuilt.tags)
+
+    def test_tdn_omit_empty_prefix_disables(self):
+        par = self.embody.par.Tdnexcludetag
+        old = par.eval()
+        par.val = ''
+        try:
+            t = self.sandbox.create(transformTOP, 'omit_off')
+            t.par.tx = 2.5
+            t.tags.add('tdn_exclude:tx')
+            export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+            t_def = [o for o in export['tdn']['operators']
+                     if o['name'] == 'omit_off'][0]
+            self.assertEqual(t_def.get('parameters', {}).get('tx'), 2.5)
+        finally:
+            par.val = old
