@@ -1,15 +1,15 @@
-# TDN exporter fidelity: three findings from the Moonshine upgrade
+# TDN exporter fidelity: four findings from the Moonshine upgrade
 
-**Filed** 2026-08-24 from the Moonshine repo (TouchDesigner 2025.33070, Windows 11,
+**Filed** 2026-08-24 (finding 4 added same day) from the Moonshine repo (TouchDesigner 2025.33070, Windows 11,
 Embody 6.0.266, upgraded from 6.0.145/6.0.157). Found while auditing the re-export
 that the upgrade produced. Every claim below carries file:line or an observed log
 line; the one behavioural fix was verified by import, not by reading.
 
-**One-line summary:** a stubbed default-block-count lookup makes the exporter emit
-placeholder sequence blocks for input sequences, which the importer then treats as
-declared-but-unconnected inputs — four reconstruction errors on every project open —
-and there is no mechanism by which a project can tell the exporter that a given
-operator's parameter is runtime state rather than configuration.
+**One-line summary:** four defects in TDN export fidelity — a stubbed
+default-block-count lookup that makes the importer see declared-but-unconnected
+inputs, no mechanism for a project to mark a parameter as runtime state, untouched
+TouchDesigner boilerplate classified as authored content, and a relative
+`output_file` that writes outside the project and then fails to track.
 
 ---
 
@@ -243,6 +243,74 @@ it at-risk. Byte-identical to the template means nothing was authored, so there 
 nothing to protect. This is strictly safer than the type-based skip that was
 deliberately avoided: it protects any callback DAT the moment a single character is
 edited, while keeping untouched boilerplate out of committed files.
+
+---
+
+## 4. A relative `output_file` writes outside the project and then fails to track
+
+**Severity:** silently produces a file in the wrong place that is also outside the
+lifecycle. Still present in 6.0.266.
+
+### What breaks
+
+An export given a relative `output_file` lands relative to **TouchDesigner's cwd**
+(the `.toe`'s own directory), not the project root, and is then never enrolled in the
+save/reconstruct lifecycle. The only symptom is one confusing warning:
+
+```
+WARNING TDNExt: Failed to track TDN export: 'touch\moonshine.tdn' is not in the
+                subpath of 'C:\Users\admin\Documents\Git\moonshine'
+```
+
+In the Moonshine repo this produced `touch/touch/moonshine.tdn` — a 903 KB
+whole-project dump one directory deeper than intended, which was then committed and
+sat unreferenced for three days. It also happened to be the last committed `.tdn`
+carrying absolute paths, since a whole-project export embeds Envoy textport logs.
+
+### Root cause
+
+Two defects that compound, and the second hides the first.
+
+**`_resolveOutputPath` returns a caller-supplied path verbatim**
+(`dev/embody/Embody/TDNExt.py:6531`). The `'auto'` branch carefully builds an
+absolute path from `project.folder`; every other value falls through to
+`TDNExt.py:6558`:
+
+```python
+return str(output_file)
+```
+
+No `.resolve()`, no `is_absolute()` check, no anchoring to the project root. A
+relative string stays relative, and `open()` resolves it against the process cwd.
+
+**`_trackTDNExport` assumes the path is absolute** (`TDNExt.py:6574`):
+
+```python
+rel_path = self.ownerComp.ext.Embody.normalizePath(
+    str(Path(file_path).relative_to(project.folder)))
+```
+
+`Path('touch/moonshine.tdn').relative_to('C:/Users/.../moonshine')` raises
+`ValueError` — a relative path can never be relative to an absolute one. The raise is
+caught by the broad `except Exception` at `TDNExt.py:6648` and logged as a WARNING, so
+the export completes, the file exists, and nothing is tracked.
+
+### Suggested direction
+
+Anchor the path before using it:
+
+```python
+p = Path(output_file)
+if not p.is_absolute():
+    p = Path(project.folder) / p
+return str(p)
+```
+
+That fixes both symptoms at once — the file lands where the caller meant, and
+`relative_to` stops throwing. Worth pairing with a narrower `except` around the
+tracking step: `relative_to` failing means "this file is outside the project", which
+deserves a specific message rather than a generic one, and is a different situation
+from the table write failing.
 
 ---
 
