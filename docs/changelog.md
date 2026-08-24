@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.0.278
+
+Four phantom errors on every project open, session values in committed files, and an Update that ate half a second of frames -- all three from one field report.
+
+- **Phantom reconstruction errors are gone**: an all-default input sequence (a mergePOP with N wired inputs) exported `[{}]*N`, and the importer applied that block count BEFORE wiring -- declaring N inputs on an unwired operator and latching a `No input POP` error that surfaced on every project open. All-empty block lists are a pure numBlocks instruction now, applied after wiring (new import Phase 5.5), and default block counts are probed from a throwaway instance instead of assumed to be 1 -- so a sequence shrunk below its type default also survives reimport for the first time.
+- **Runtime state stays out of committed `.tdn` files**: tag any operator `tdn_exclude:<parname>` and its constant value is omitted from export while the operator, wiring, and other parameters ship normally -- for negotiated ports, session file paths, live readouts (expressions/binds still export; custom pars keep their definition; a typo'd name WARNs). The tag rides in the file as the visible record and survives reconstruction. Managed visually via the tagger's new **Exclude from tdn** panel: drag a parameter (or a whole COMP, for the bare `tdn_exclude`) onto the drop zone, see every exclusion in the subtree with full paths, remove with the per-row **x**.
+- **Update stops eating frames**: the interactive Update pulse fingerprinted every parameter of every operator in every TDN COMP in a single frame -- 0.5-1s of blocked main thread, 28-60 dropped frames per press. It now runs the same work frame-chunked under the passive sweep's 8ms budget (measured: zero dropped frames, including a real export), and always confirms completion in the textport. Programmatic `Update()` stays synchronous for callers that need completion on return.
+
+10 new tests. Fresh-install smoke green on all 7 feature legs + 9 MCP probes, plus a virgin-install probe of the new exclusion tag.
+
 ## v6.0.266
 
 Embody could tell you a package "ships inside TouchDesigner itself" when TouchDesigner had never heard of it.

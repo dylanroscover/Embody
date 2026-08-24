@@ -137,6 +137,29 @@ For app-spawned copies of an externalized master, use a relationship Embody's du
 - Whole-subtree exclusion only applies to a **direct child** of a TDN boundary. If you nest an excluded COMP *deeper* (under a non-excluded TDN COMP), the exclusion tag has no effect at that depth — so instead of dropping it, Embody serializes the excluded child as **ordinary content** (it round-trips and survives strip/reconstruction) and warns at export time that the tag was ignored there. The warning names the intervening COMP(s) to tag, or suggests making it a direct child, if you want the exclusion honored.
 - Exclusion governs the automatic/cascade pipeline. An explicit user export call (`SaveTDN()` directly on an excluded COMP) currently still writes the `.tdn` — the opt-out applies to cascade, parent inlining, strip, and reconstruction, not to deliberate direct invocation.
 
+### Excluding a parameter's value (the `tdn_exclude:<par>` tag)
+
+Where the bare `tdn_exclude` removes a whole COMP from the TDN system, the **colon-suffixed** form removes a **single parameter's value** from an operator that otherwise exports normally. Tag the operator itself — any operator, any family — with one tag per parameter:
+
+```
+tdn_exclude:file
+tdn_exclude:Port
+```
+
+This is the opt-out for **runtime state that must not be committed**: a movie player whose `file` par is set per-session by a playback engine, a negotiated network port, live UI readouts. Without it, every export bakes the current session's value into the `.tdn` and dirties git.
+
+What it does and does not do:
+
+- The operator, its wiring, and its other parameters export normally — only the named parameter's **constant value** stays out of the file.
+- An **expression or bind** on the tagged parameter still exports (a reference is configuration, not session state).
+- For **custom parameters**, the definition still ships — style, range, default, help — without the `value` key.
+- The tag itself appears in the operator's `tags:` list in the `.tdn`, so the file records why the value is absent, and the marker survives reconstruction.
+- A tag naming a parameter the operator does not have logs a **WARNING** at export — a typo cannot silently no-op.
+- The prefix is the same **`.tdn` Exclude Tag** parameter that governs whole-COMP exclusion (Tags page, default `tdn_exclude`); clearing it disables the whole family.
+- Exclusions take effect at the COMP's **next export** — its **Save tdn** action, an **Update** sweep, or a project save — and the tags themselves persist in the `.toe`/`.tdn` like any other operator state.
+
+**UI: the Exclude from tdn panel.** On any TDN-tagged COMP, the tagger's Actions menu (double-tap the tagger shortcut on the COMP) gains a **◇ Exclude from tdn** entry. It opens a panel scoped to that COMP: drag any parameter from a parameter dialog onto the drop zone to exclude its value (`tdn_exclude:<par>`), or drag a COMP from the network editor to exclude it entirely (bare `tdn_exclude`). The panel lists every exclusion of both kinds in the COMP's subtree with full paths; remove one with the **×** on its row, or by dropping the same item again. Items outside the subtree are refused with a warning, and a COMP excluded deeper than the TDN boundary gets the same "only honored at a boundary" warning the exporter gives.
+
 ### Content Safety (save-time check)
 
 When you save a project (++ctrl+s++), Embody checks for **unprotected content** inside TDN-managed COMPs:

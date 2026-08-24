@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 30
-generator: Embody/6.0.138
+generator: Embody/6.0.276
 td_build: 099.2025.33070
-source_file: Embody-6.138.toe
-exported_at: '2026-07-20T11:16:08Z'
+source_file: Embody-6.276.toe
+exported_at: '2026-08-24T18:11:10Z'
 network_path: /embody/Embody/tagger
 options:
   include_dat_content: false
@@ -120,6 +120,7 @@ operators:
   size: [130, 90]
   inputs:
   - switch_family
+  dat_read_only: true
 - name: header
   type: containerCOMP
   parameters:
@@ -185,9 +186,13 @@ operators:
     parameters:
       op: ..
     position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\ttag = op('../tags')[parent().digits, 'value'].val\n\n\t\tif parent.Embody.ext.Embody._tagger_mode == 'manage':\n\t\t\tlabel = parent().par.label.eval()\n\t\t\tif 'Remove' in label:\n\t\t\t\t# Close window first, then show confirmation dialog\n\t\t\t\tparent.Embody.TagExiter()\n\t\t\t\trun(lambda o=oper, t=tag, l=label: parent.Embody.ext.Embody._dispatchTaggerButton(o, t, l),\n\t\t\t\t\tdelayFrames=2)\n\t\t\telse:\n\t\t\t\tparent.Embody.ext.Embody._dispatchTaggerButton(oper, tag, label)\n\t\t\t\tparent.Embody.TagExiter()\n\t\telse:\n\t\t\t# Tag mode: toggle + immediate externalize if added\n\t\t\tparent.Embody.TagSetter(oper, tag)\n\t\t\tif tag in oper.tags:\n\t\t\t\tparent.Embody.ext.Embody.ExternalizeImmediate(oper)\n\t\t\tparent.Embody.Refresh()\n\t\t\tparent.Embody.TagExiter()\n\n\treturn\n"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
 - name: button1
   type: buttonCOMP
   parameters:
@@ -195,7 +200,7 @@ operators:
     colorr: 0.2
     colorg: =parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05
     colorb: 0.2
-    alignorder: 1
+    alignorder: 1.1
     topsmoothness: mipmap
     reloadbuiltin: false
     relpath: inherit
@@ -231,9 +236,13 @@ operators:
     parameters:
       op: ..
     position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\ttag = op('../tags')[parent().digits, 'value'].val\n\n\t\tif parent.Embody.ext.Embody._tagger_mode == 'manage':\n\t\t\tlabel = parent().par.label.eval()\n\t\t\tif 'Remove' in label:\n\t\t\t\t# Close window first, then show confirmation dialog\n\t\t\t\tparent.Embody.TagExiter()\n\t\t\t\trun(lambda o=oper, t=tag, l=label: parent.Embody.ext.Embody._dispatchTaggerButton(o, t, l),\n\t\t\t\t\tdelayFrames=2)\n\t\t\telse:\n\t\t\t\tparent.Embody.ext.Embody._dispatchTaggerButton(oper, tag, label)\n\t\t\t\tparent.Embody.TagExiter()\n\t\telse:\n\t\t\t# Tag mode: toggle + immediate externalize if added\n\t\t\tparent.Embody.TagSetter(oper, tag)\n\t\t\tif tag in oper.tags:\n\t\t\t\tparent.Embody.ext.Embody.ExternalizeImmediate(oper)\n\t\t\tparent.Embody.Refresh()\n\t\t\tparent.Embody.TagExiter()\n\n\treturn\n"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
 - name: button2
   type: buttonCOMP
   parameters:
@@ -241,7 +250,7 @@ operators:
     colorr: 0.2
     colorg: =parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05
     colorb: 0.2
-    alignorder: 1
+    alignorder: 3
     topsmoothness: mipmap
     reloadbuiltin: false
     relpath: inherit
@@ -277,9 +286,60 @@ operators:
     parameters:
       op: ..
     position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\ttag = op('../tags')[parent().digits, 'value'].val\n\n\t\tif parent.Embody.ext.Embody._tagger_mode == 'manage':\n\t\t\tlabel = parent().par.label.eval()\n\t\t\tif 'Remove' in label:\n\t\t\t\t# Close window first, then show confirmation dialog\n\t\t\t\tparent.Embody.TagExiter()\n\t\t\t\trun(lambda o=oper, t=tag, l=label: parent.Embody.ext.Embody._dispatchTaggerButton(o, t, l),\n\t\t\t\t\tdelayFrames=2)\n\t\t\telse:\n\t\t\t\tparent.Embody.ext.Embody._dispatchTaggerButton(oper, tag, label)\n\t\t\t\tparent.Embody.TagExiter()\n\t\telse:\n\t\t\t# Tag mode: toggle + immediate externalize if added\n\t\t\tparent.Embody.TagSetter(oper, tag)\n\t\t\tif tag in oper.tags:\n\t\t\t\tparent.Embody.ext.Embody.ExternalizeImmediate(oper)\n\t\t\tparent.Embody.Refresh()\n\t\t\tparent.Embody.TagExiter()\n\n\treturn\n"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
+- name: btn_omit
+  type: buttonCOMP
+  parameters:
+    label: ◇  Exclude from tdn
+    colorr: 0.2
+    colorg: 0.2
+    colorb: 0.2
+    alignorder: 1.5
+  position: [980, 275]
+  size: [160, 134]
+  children:
+  - name: out1
+    type: outCHOP
+    position: [275, 175]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    position: [65, 175]
+  - name: text
+    type: textCOMP
+    parameters:
+      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+      linespacing: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+    position: [74, 26]
+    size: [113, 96]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      op: ..
+      loadonstart: true
+    position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.OpenOmitPanel(oper)\n\treturn"
+    dat_content_format: text
+  - name: panelexec1
+    type: panelexecuteDAT
+    parameters:
+      loadonstart: true
+    position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
 - name: btn_save
   type: buttonCOMP
   parameters:
@@ -320,11 +380,15 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.HandleStrategySave(oper)\n\treturn"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     parameters:
       loadonstart: true
     position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
 - name: btn_embed
   type: buttonCOMP
   parameters:
@@ -332,7 +396,7 @@ operators:
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
-    alignorder: 0.65
+    alignorder: 0.2
   position: [260, 275]
   size: [160, 134]
   storage:
@@ -365,11 +429,15 @@ operators:
       op: /embody/Embody/tagger/btn_embed
       loadonstart: true
     position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.HandleEmbed(oper)\n\treturn"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     parameters:
       loadonstart: true
     position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
 - name: btn_reload
   type: buttonCOMP
   parameters:
@@ -408,11 +476,15 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.HandleReload(oper)\n\treturn"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     parameters:
       loadonstart: true
     position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
 - name: btn_remove
   type: buttonCOMP
   parameters:
@@ -452,11 +524,15 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\t# Defer to allow window to close before showing confirmation dialog\n\t\t\trun(lambda o=oper: parent.Embody.ext.Embody.HandleStrategyRemove(o),\n\t\t\t\tdelayFrames=2)\n\treturn"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     parameters:
       loadonstart: true
     position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
 - name: parameter1
   type: parameterDAT
   parameters:
@@ -467,6 +543,7 @@ operators:
   - viewer
   position: [-1000, 0]
   size: [130, 90]
+  dat_read_only: true
 - name: btn_restore
   type: buttonCOMP
   parameters:
@@ -508,11 +585,15 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.HandleStrategyRestore(oper)\n\treturn"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     parameters:
       loadonstart: true
     position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
 - name: replicator1
   type: replicatorCOMP
   parameters:
@@ -539,6 +620,7 @@ operators:
   position: [-800, -75]
   inputs:
   - parameter1
+  dat_read_only: true
 - name: btn_copy_tdn
   type: buttonCOMP
   parameters:
@@ -546,7 +628,7 @@ operators:
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
-    alignorder: 2
+    alignorder: 0.3
     display: =op('btn_portable').par.display.eval()
   position: [620, 275]
   size: [160, 134]
@@ -578,11 +660,15 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDN.CopyNetworkToClipboard(oper)\n\treturn\n"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     parameters:
       loadonstart: true
     position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
 - name: btn_openfile
   type: buttonCOMP
   parameters:
@@ -590,7 +676,7 @@ operators:
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
-    alignorder: 10
+    alignorder: 0.1
   position: [-820, 275]
   size: [160, 134]
   children:
@@ -621,11 +707,15 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\trel_fp = parent.Embody.op('tagger').fetch('manage_file_path', '')\n\t\t\tif rel_fp:\n\t\t\t\tparent.Embody.OpenSaveFile(rel_fp)\n\treturn"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     parameters:
       loadonstart: true
     position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
 - name: btn_portable
   type: buttonCOMP
   parameters:
@@ -633,7 +723,7 @@ operators:
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
-    alignorder: 1
+    alignorder: 0.8
   position: [-460, 275]
   size: [160, 134]
   children:
@@ -664,11 +754,15 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.HandlePortableExport(oper)\n\treturn"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     parameters:
       loadonstart: true
     position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
 - name: select_comps
   type: selectDAT
   parameters:
@@ -676,6 +770,7 @@ operators:
   position: [-800, -175]
   inputs:
   - parameter1
+  dat_read_only: true
 - name: btn_paste_tdn
   type: buttonCOMP
   parameters:
@@ -683,7 +778,7 @@ operators:
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
-    alignorder: 2.1
+    alignorder: 0.4
     display: =op('btn_portable').par.display.eval()
   position: [800, 275]
   size: [160, 134]
@@ -715,11 +810,15 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDN.PasteNetworkFromClipboard(oper)\n\treturn\n"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     parameters:
       loadonstart: true
     position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
 - name: switch_family
   type: switchDAT
   parameters:
@@ -732,6 +831,7 @@ operators:
   - parameter1
   - select_dats
   - select_comps
+  dat_read_only: true
 - name: btn_embed_storage
   type: buttonCOMP
   parameters:
@@ -739,7 +839,7 @@ operators:
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
-    alignorder: 0.66
+    alignorder: 0.25
   position: [440, 275]
   size: [160, 134]
   children:
@@ -770,11 +870,15 @@ operators:
       op: /embody/Embody/tagger/btn_embed
       loadonstart: true
     position: [66, -83]
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.HandleEmbedStorage(oper)\n\treturn"
+    dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
     parameters:
       loadonstart: true
     position: [247, -81]
+    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
+    dat_content_format: text
 - name: replicator1_callbacks
   type: textDAT
   parameters:

@@ -586,3 +586,69 @@ class TestTDNSequences(EmbodyTestCase):
         self.assertEqual(imp_seq[0].par.value.eval(), 1.0)
         self.assertEqual(imp_seq[1].par.inattr.eval(), 'age')
         self.assertEqual(imp_seq[1].par.value.eval(), 100.0)
+
+    # --- Input-tracking sequences + default-count probe (field 2026-08-24) ---
+
+    def test_mergepop_all_default_input_sequence_imports_clean(self):
+        # A mergePOP's input sequence tracks its wired inputs, so an
+        # all-default export carries [{}]*N. Applied before wiring that
+        # declared N inputs on an unwired op -- one 'No input POP'
+        # reconstruction error per merge on every project open.
+        r1 = self.sandbox.create(rectanglePOP, 'src_a')
+        r2 = self.sandbox.create(tubePOP, 'src_b')
+        merge = self.sandbox.create(mergePOP, 'merge_rt')
+        merge.inputConnectors[0].connect(r1)
+        merge.inputConnectors[1].connect(r2)
+
+        target = self._roundtrip()
+        imp = target.op('merge_rt')
+        self.assertIsNotNone(imp)
+        self.assertEqual(len(imp.inputs), 2)
+        imp_seq = next(s for s in imp.seq if s.name == 'input')
+        self.assertEqual(imp_seq.numBlocks, 2)
+        # Canary, not a deterministic tripwire: the pre-fix latch
+        # ('No input POP' from numBlocks-before-wiring) clears on the
+        # POP's next re-eval, so whether it is still visible here is
+        # timing-dependent (stale on busy startups -- the field case --
+        # self-healed in an idle sandbox). The latch WINDOW itself is
+        # what Phase 5.5 removes.
+        self.assertEqual(imp.errors(), '')
+
+    def test_sequence_probe_omits_true_default_count(self):
+        # Probe-backed default: a fresh mergePOP sits at its creation
+        # default (1 input block, all values default) -> no sequences key.
+        self.sandbox.create(mergePOP, 'merge_fresh')
+        result = self._export()
+        merge_def = [o for o in result['tdn']['operators']
+                     if o['name'] == 'merge_fresh'][0]
+        self.assertNotIn('sequences', merge_def)
+
+    def test_sequence_default_probe_uses_creation_default(self):
+        merge = self.sandbox.create(mergePOP, 'probe_merge')
+        seq = next(s for s in merge.seq if s.name == 'input')
+        count = self.tdn._getDefaultSequenceBlockCount(merge, seq)
+        self.assertEqual(count, 1)
+        self.assertEqual(
+            self.tdn._seq_default_blocks_cache.get(('mergePOP', 'input')),
+            1)
+
+    def test_sequence_shrink_below_probed_default_exports(self):
+        # A sequence sitting BELOW its type-default count must export
+        # [{}] or the shrink is lost on reimport. No builtin reliably
+        # ships >1 default blocks across builds, so seed the probe cache.
+        cache = self.tdn._seq_default_blocks_cache
+        key = ('constantCHOP', 'const')
+        old = cache.get(key)
+        cache[key] = 2
+        try:
+            self.sandbox.create(constantCHOP, 'shrunk_chop')
+            result = self._export()
+            chop_def = [o for o in result['tdn']['operators']
+                        if o['name'] == 'shrunk_chop'][0]
+            self.assertEqual(
+                chop_def.get('sequences', {}).get('const'), [{}])
+        finally:
+            if old is None:
+                cache.pop(key, None)
+            else:
+                cache[key] = old

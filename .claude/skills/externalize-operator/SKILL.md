@@ -18,6 +18,16 @@ description: "MUST READ before calling externalize_op or save_externalization. R
 
 `save_externalization` force re-exports an already-externalized operator. Use it after modifying an operator in TD when you need to update its file on disk.
 
+## Excluding Runtime State from TDN Exports (`tdn_exclude:<par>` tags)
+
+When a parameter holds **runtime state** (a session file path, a negotiated port, a live readout) rather than configuration, keep its value out of committed `.tdn` files by tagging the operator itself — one tag per parameter, using the colon-suffixed form of the exclude tag:
+
+```python
+op('deck_a').tags.add('tdn_exclude:file')
+```
+
+The operator and its other parameters export normally; the named parameter's constant value is omitted (expressions/binds still export — references are configuration). The bare `tdn_exclude` tag on a COMP is different: it makes the whole COMP invisible to TDN. The suffixed tag round-trips in the `.tdn`, so the omission is visible and survives reconstruction; it takes effect at the COMP's next export (Save tdn, Update, or project save). A tag naming a nonexistent parameter logs a WARNING at export. Users can manage these visually: the tagger's Actions menu on a TDN COMP has **Exclude from tdn**, a drop-zone panel that toggles `tdn_exclude:<par>` for dragged parameters and whole-COMP `tdn_exclude` for dragged COMPs, listing every exclusion in the subtree with a per-row **×** to remove it.
+
 ## Creating Python Files for TouchDesigner
 
 When creating Python files (scripts, extensions, test files, callbacks):

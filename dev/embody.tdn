@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 1090
-generator: Embody/6.0.266
+build: 1099
+generator: Embody/6.0.278
 td_build: 099.2025.33070
-source_file: Embody-6.266.toe
-exported_at: '2026-08-23T06:12:46Z'
+source_file: Embody-6.278.toe
+exported_at: '2026-08-24T20:45:46Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -249,7 +249,7 @@ operators:
       label: .tdn Exclude Tag
       startSection: true
       default: tdn_exclude
-      help: 'Tag name (default ''tdn_exclude'') that opts a COMP out of the entire TDN system. Primary use: opt a single child out of cascade autotag (when Tdncascade is on, the tdn tag normally propagates from a tdn-tagged parent to all its children -- apply this tag to a child to keep it excluded). Also useful for app-managed COMPs (e.g. spawned via .copy() at runtime) that the application is responsible for. Excluded COMPs are invisible to TDN: never exported, never inlined in parent .tdn files, never stripped on save, never destroyed by reconstruction.'
+      help: 'Tag family for excluding things from the TDN system (default ''tdn_exclude''). BARE tag on a COMP: the COMP is invisible to TDN -- never exported, never inlined in parent .tdn files, never stripped on save, never destroyed by reconstruction. Primary use: opt a single child out of cascade autotag, or app-managed COMPs (e.g. spawned via .copy() at runtime). SUFFIXED ''tdn_exclude:<parname>'' on ANY operator: that parameter''s constant value is omitted from TDN export while the operator, its other parameters, and its wiring export normally -- for runtime state a project must not commit (a negotiated port, a session file path). Expressions/binds still export; unknown parameter names log a WARNING. Manage both visually via the tagger''s Exclude from tdn panel. Clear this parameter to disable the whole family.'
     TDN:
     - name: Tdnmode
       style: Menu
@@ -796,7 +796,7 @@ operators:
       - Always Keep Files
       - Always Delete Files
       help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-      value: keep
+      value: delete
     - name: Toxdropexpr
       style: Menu
       label: Dropped .tox Expression
@@ -811,6 +811,7 @@ operators:
       - Always Clean
       - Always Ignore
       help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
+      value: ignore
     - name: Tdndatsafety
       style: Menu
       label: Content Safety
@@ -859,7 +860,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.266
+      value: 6.0.278
     - name: Touchbuild
       style: Str
       label: Touch Build
