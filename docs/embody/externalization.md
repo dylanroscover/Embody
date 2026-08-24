@@ -160,6 +160,8 @@ What it does and does not do:
 
 **UI: the Exclude from tdn panel.** On any TDN-tagged COMP, the tagger's Actions menu (double-tap the tagger shortcut on the COMP) gains a **◇ Exclude from tdn** entry. It opens a panel scoped to that COMP: drag any parameter from a parameter dialog onto the drop zone to exclude its value (`tdn_exclude:<par>`), or drag a COMP from the network editor to exclude it entirely (bare `tdn_exclude`). The panel lists every exclusion of both kinds in the COMP's subtree with full paths; remove one with the **×** on its row, or by dropping the same item again. Items outside the subtree are refused with a warning, and a COMP excluded deeper than the TDN boundary gets the same "only honored at a boundary" warning the exporter gives.
 
+### Content Safety (save-time check)
+
 When you save a project (++ctrl+s++), Embody checks for **unprotected content** inside TDN-managed COMPs:
 
 - **At-risk DATs** — DATs that contain content but are neither externalized (no Embody tag) nor embedded (the **Embed DATs in TDNs** parameter is OFF).
