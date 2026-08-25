@@ -1053,7 +1053,9 @@ def ensure_convoy_id(ext, convoy_id=None,
                 merged[CONVOY_KEY] = entry
                 _write_json_atomic(path, merged)
     except Exception as e:
-        ext.Log(f'Failed to record the convoy id in project.json: {e}',
+        # Name the full target: a WinError 3 alone reports only the deepest
+        # missing ancestor ('D:\'), which hid the real path in the field.
+        ext.Log(f'Failed to record the convoy id in {path}: {e}',
                 'WARNING')
         return ''
     ext.Log(
@@ -1189,6 +1191,7 @@ def save_settings(ext) -> None:
                 entry['bindExpr'] = par.bindExpr
         params[name] = entry
     data = {'version': 1, 'params': params}
+    path = None
     try:
         import json, os
         path = settings_path(ext)
@@ -1212,7 +1215,8 @@ def save_settings(ext) -> None:
                 else:
                     raise
     except Exception as e:
-        ext.Log(f'Failed to save settings: {e}', 'WARNING')
+        ext.Log(f'Failed to save settings to {path or "config.json"}: {e}',
+                'WARNING')
 
 
 def defer_save_settings(ext) -> None:

@@ -2309,13 +2309,33 @@ class EmbodyExt:
                 p = (project_dir / p).resolve()
             else:
                 p = p.resolve()
+            # Custom paths travel (config.json copied between machines, par
+            # value baked in the .toe). A path on a missing drive would make
+            # every .embody write fail with WinError 3 -- heal to the
+            # project folder instead (field 2026-08-25, D:\ from a cloned
+            # .toe). A merely-nonexistent folder on a live drive is fine:
+            # writers mkdir it.
+            if p.anchor and not Path(p.anchor).exists():
+                self.Log(f'Custom AI project root {p} is on a missing '
+                         f'drive -- using the project folder instead',
+                         'WARNING')
+                return project_dir
             return p
 
         # gitroot: prefer the stored git root from Start/InitGit, else
         # walk up from project.folder looking for .git.
         git_root = self.my.fetch('_git_root', None, search=False)
         if git_root and git_root != 'no-git':
-            return Path(git_root) if not isinstance(git_root, Path) else git_root
+            root = Path(git_root) if not isinstance(git_root, Path) else git_root
+            if root.exists():
+                return root
+            # A stored root travels inside a saved .toe (the pre-save scrub
+            # only runs when Embody's callbacks fire) or goes stale when a
+            # mapped drive drops -- trusting it broke Convoy enable with
+            # WinError 3 on 'D:\' (field 2026-08-25). Drop it and re-walk.
+            self.Log(f'Stored git root {root} does not exist -- '
+                     f'recomputing from the project folder', 'WARNING')
+            self.my.unstore('_git_root')
 
         # Walk up looking for .git. The home_dir guard prevents picking up
         # an unrelated repo (e.g. ~/.dotfiles) when project.folder is inside

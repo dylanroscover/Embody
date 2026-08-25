@@ -709,6 +709,51 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertTrue((result / '.git').exists(),
 			f'No .git found at {result}')
 
+	def _deadDrive(self):
+		"""A drive letter that does not exist on this machine, or skip."""
+		for letter in 'QWXYZKJVUT':
+			if not Path(f'{letter}:/').exists():
+				return f'{letter}:/'
+		self.skipTest('every probe drive letter exists on this machine')
+
+	def test_F04_stale_stored_git_root_heals(self):
+		"""A stored _git_root on a missing drive is dropped and recomputed.
+
+		The stored value travels inside a saved .toe (pre-save scrub only
+		runs when Embody's callbacks fire), so a cloned project can carry
+		another machine's D:\\ root -- which made every .embody write fail
+		with WinError 3 and kept Convoy off (field 2026-08-25).
+		"""
+		dead = self._deadDrive()
+		comp = self.embody_ext.my
+		orig = comp.fetch('_git_root', None, search=False)
+		try:
+			comp.store('_git_root', dead + 'ghost/repo')
+			result = self.embody_ext._rootForMode('gitroot')
+			self.assertTrue(result.exists(),
+				f'healed root {result} should exist')
+			self.assertIsNone(comp.fetch('_git_root', None, search=False),
+				'stale stored _git_root should be unstored by the heal')
+		finally:
+			comp.unstore('_git_root')
+			if orig is not None:
+				comp.store('_git_root', str(orig))
+
+	def test_F05_custom_root_on_missing_drive_falls_back(self):
+		"""A custom root on a missing drive falls back to the project folder."""
+		dead = self._deadDrive()
+		result = self.embody_ext._rootForMode(
+			'custom', custom_path=dead + 'nowhere')
+		self.assertEqual(result, Path(project.folder).resolve())
+
+	def test_F06_custom_root_nonexistent_folder_on_live_drive_kept(self):
+		"""A not-yet-created custom folder on a live drive is honored --
+		writers mkdir it; only a missing DRIVE triggers the fallback."""
+		target = self._temp_dir / 'not_created_yet'
+		result = self.embody_ext._rootForMode(
+			'custom', custom_path=str(target))
+		self.assertEqual(result, target.resolve())
+
 	# ------------------------------------------------------------------
 	# Group G: Template drift detection (Claude Code files vs repo)
 	# ------------------------------------------------------------------

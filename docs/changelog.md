@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.0.279
+
+A `.toe` cloned from GitHub carried its author's `D:\` git root inside it -- and every `.embody` write on the new machine died on the missing drive, keeping Convoy off.
+
+- **The stored git root is verified before it is trusted**: `_git_root` lives in COMP storage and bakes into a saved `.toe` whenever the pre-save scrub doesn't fire (older builds, crash autosaves), so a cloned project could resolve its config root to a drive the new machine doesn't have -- Convoy consent, settings saves, and every other `.embody` write then failed with `[WinError 3]`. A stored root whose path no longer exists is now dropped with a warning and recomputed by the normal walk-up. A `custom` AI project root on a missing drive likewise falls back to the project folder (a merely not-yet-created folder on a live drive is still honored -- writers create it).
+- **Failure logs name the full target path**: Windows reports only the deepest missing ancestor (`'D:\'`) in the exception, which hid where Embody was actually trying to write; the Convoy-consent and settings-save warnings now log the resolved path.
+
+3 new tests. Field-reported on a v6.0.278 install.
+
 ## v6.0.278
 
 Four phantom errors on every project open, session values in committed files, and an Update that ate half a second of frames -- all three from one field report.

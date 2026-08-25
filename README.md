@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.278-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.279-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-65-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -207,6 +207,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.279**: **A cloned `.toe` carried its author's `D:\` git root, and Convoy could never turn on** -- the stored `_git_root` bakes into a saved `.toe` when the pre-save scrub doesn't fire, and it was trusted without an existence check, so every `.embody` write on the receiving machine failed with `WinError 3` on a drive it didn't have. A stored root that no longer exists is now dropped and recomputed by the normal walk-up, a custom root on a missing drive heals to the project folder, and the failure warnings name the full target path instead of the bare drive letter.
 - **6.0.278**: **The `.tdn` stops carrying the session inside it** -- an all-default merge input sequence imported as N declared-but-unwired inputs, latching a phantom `No input POP` error on every project open (block counts now apply after wiring, and defaults are probed, not assumed); `tdn_exclude:<parname>` keeps runtime values -- ports, session paths, live readouts -- out of committed files, managed by dragging pars or COMPs onto the tagger's new Exclude from tdn panel; and the Update pulse runs frame-chunked instead of blocking 0.5-1s (zero dropped frames, with an explicit completion line).
 - **6.0.266**: **A package TouchDesigner never shipped, refused as TouchDesigner's own** -- "bundled" meant any `site-packages` on `sys.path`, so a `--user` install or a second project's venv got credited to TD and refused with a false reason. Also: `extras_applied` is now verified against the venv instead of believed, and the local pytest tier has a pinned requirements file.
 - **6.0.265**: **A red operator that every error tool called clean** -- `get_op_errors` never read `OP.scriptErrors()`, so a Python traceback on a DAT was invisible to agents while the network showed it red. Script errors now count toward `errorCount` and ride the write-effect footer; the TDN rebuild report reads the same surface.
