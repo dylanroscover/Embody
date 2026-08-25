@@ -1189,8 +1189,15 @@ def test_save_overrunning_deadline_reports_may_have_run_and_never_quits(
 
 
 def test_cancellation_after_quit_commit_is_deferred_until_replacement(tmp_path):
+    # Fake clock, like its deadline siblings: the .1s budget is real time
+    # this test never cared about (it asserts CANCELLATION deferral), and a
+    # runner stall landing before the quit commit expired it -- aborting
+    # instead of deferring (windows-latest, 2026-08-25; dev passed the same
+    # sha). A frozen clock cannot expire, so only the commit ordering
+    # decides the outcome.
     event = threading.Event()
     manager, _, runtime, _, launcher, _, _, _ = make_system(tmp_path)
+    manager._monotonic = ManualMonotonic()
     runtime.quit_event = event
     launcher.callback = auto_confirm(manager)
     result = manager.restart_node(NODE, CONVOY, "restart-cancel-after",
