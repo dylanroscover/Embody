@@ -1,5 +1,16 @@
 # Commit and Push Checklist
 
+Embody dev only -- not in `_TEMPLATE_MAP_RULES`, so it has no shipped
+template counterpart and is never copied into user projects.
+
+**Do not hand-copy this file into another repo.** It is written against
+Embody's own layout (`dev/embody/Embody/`, `externalizations.tsv`, the
+`Embody vX.Y.Z:` release format, this repo's CLAUDE.md numbering). A copy
+taken into the moonshine repo carried all of that plus three pointers to
+`release-commits.md`, and went stale the moment this file moved to the
+`/release` skill -- nothing syncs a copy, and nothing syncs the orphan
+template twin either. A project that wants a commit checklist should
+write its own against its own gates.
 This rule applies to EVERY commit, not just releases. For version-specific release steps (changelog, README badge, template sync), load the `/release` skill.
 
 ## Before Every Commit

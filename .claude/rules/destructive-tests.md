@@ -1,5 +1,6 @@
 # Destructive Whole-Project Tests
 
+Embody dev only -- not in `_TEMPLATE_MAP_RULES`, so it has no shipped template counterpart and is never copied into user projects.
 Some test suites exercise Embody operations that mutate the **entire live
 project**, not an isolated sandbox: `Disable()`, `ExternalizeProject()` /
 `_externalize_project_silent()`, and `Reset()` all iterate `ext.root` and touch

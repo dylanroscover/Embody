@@ -1,5 +1,6 @@
 # Refresh Embody After Committing
 
+Embody dev only -- not in `_TEMPLATE_MAP_RULES`, so it has no shipped template counterpart and is never copied into user projects.
 Embody's manager list shows an **orange "uncommitted"** badge for any externalized
 file (`.tox`, `.tdn`, `.py`, `.glsl`, `.json`, ...) that is saved to disk but not
 yet committed to git. That status is recomputed on Embody's refresh sweep, so a

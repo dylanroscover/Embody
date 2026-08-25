@@ -4,6 +4,7 @@ description: "Skill loading requirements before MCP tool calls -- must load the 
 
 # Skill Prerequisites
 
+Embody dev only -- not in `_TEMPLATE_MAP_RULES`, so it has no shipped template counterpart and is never copied into user projects.
 Skills are prerequisites, not optional reference. **Load the relevant skill BEFORE acting:**
 
 | Before calling | Load skill |

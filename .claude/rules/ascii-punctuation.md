@@ -1,5 +1,6 @@
 # Text Encoding and ASCII Punctuation
 
+Embody dev only -- not in `_TEMPLATE_MAP_RULES`, so it has no shipped template counterpart and is never copied into user projects.
 Every file in this repo must be valid UTF-8, and must never be round-tripped
 through a legacy codepage (Windows-1252 / Latin-1). That round-trip is exactly
 what turns a clean em-dash into mojibake -- a UTF-8 byte sequence decoded as

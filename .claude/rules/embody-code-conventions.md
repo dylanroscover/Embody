@@ -6,6 +6,7 @@ paths:
 ---
 # Embody Code Conventions
 
+Embody dev only -- not in `_TEMPLATE_MAP_RULES`, so it has no shipped template counterpart and is never copied into user projects.
 ## Extension Naming
 Extension classes and source DATs must follow the `NameExt` convention (e.g., `EmbodyExt`, `EnvoyExt`, `TDNExt`, `TestRunnerExt`). Class name must match DAT name.
 
