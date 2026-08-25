@@ -46,6 +46,42 @@ If you've already mis-saved: rename the off-by-one `.toe` on disk to match `par.
 - Read diffs for new test files to understand coverage additions.
 - Read diffs for docs, schema, and rule/skill files.
 
+## 1b. Docs Audit: every change in this release is documented
+
+The changelog says a release HAPPENED; `docs/` is what users read to USE the
+thing. A feature or a behavior change that ships with only a changelog bullet
+is undocumented -- and the drift is invisible, because nothing fails.
+
+Walk the release diff (step 1) and, for EVERY user-visible change, name the
+`docs/` page that now describes it. Not "does a page exist" -- does the page
+say the new truth.
+
+| Change in the diff | Docs obligation |
+|---|---|
+| New feature, parameter, MCP tool, or Convoy operation | A section on its owning page, reachable from `mkdocs.yml` nav. A genuinely new subsystem gets its own page. |
+| Changed behavior (defaults, gating, retries, timeouts, statuses) | Update the page that states the OLD behavior. Grep the old wording -- it is usually in more than one place (a parameter row, a concept page, a troubleshooting row). |
+| New user-visible string (status text, dialog, error) | Add or fix its Troubleshooting row so a user who searches the literal text lands on the fix. |
+| Removed / retired feature, par, or tool | Delete or amend every page that still promises it. A stale promise is worse than a missing page. |
+| Parameter help text edited in TD | `docs/embody/parameters.md` mirrors par help -- keep them identical. |
+| Internal refactor with no user-visible effect | Nothing. Say so explicitly in the audit rather than skipping the question. |
+
+Mechanics:
+
+- `git diff HEAD --name-status` -> for each source file, ask what a USER
+  could observe. If the answer is "nothing", write that down; if it is
+  anything else, the docs edit is part of THIS release, not the next one.
+- Grep before you write: `grep -rn "<old behavior phrase>" docs/` finds the
+  copies that would otherwise go stale. Fix all of them.
+- New page -> add it to `mkdocs.yml` nav, or it ships invisible.
+- `mkdocs build --strict` must pass (broken internal links are errors).
+  It proves the page BUILDS; step 7 is what makes it PUBLISHED.
+- Docs written in this pass are part of the release commit, so the changelog
+  bullet and the page land together.
+
+Report the audit as a short list -- "changed X -> documented at `docs/...`",
+"changed Y -> internal only" -- so a skipped obligation is visible rather
+than implied.
+
 ## 2. Update Changelog
 
 Add a new entry at the top of `docs/changelog.md`:

@@ -57,6 +57,11 @@ or in Perform Mode -- never update a machine mid-show.
   checkout); the refusal lands in the job record instead of a swap.
 - A second `update_embody` while one is **already in flight** reconciles
   to the existing job handle -- poll that job, don't expect a new one.
+- A **stalled network** no longer wedges a node. The updater gives each
+  phase a wall-clock deadline, retries a failed check or download three
+  times, then gives up and resets; the job record closes with that error
+  instead of hanging, and the next `update_embody` starts clean. The job
+  ceiling (30 min) deliberately outlasts that retry ladder.
 - A **disabled local node** never appears in `convoy_list_nodes` (the host
   filters it before the bridge sees it), so it reads as missing from the
   list, not as `skipped`.

@@ -512,7 +512,7 @@ def version_step(version, update_status, autoupdate=None):
         return _labelled(_entry(STALLED, detail=text), label)
     if "failed" in low or low.startswith("error"):
         return _labelled(_entry(FAILED, detail=text), label)
-    if low.startswith(("checking", "download", "installing")):
+    if low.startswith(("checking", "download", "installing", "retrying")):
         return _labelled(_entry(RUNNING, detail=text), label)
     if "up to date" in low:
         return _labelled(_entry(DONE, detail="up to date"), label)

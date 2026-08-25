@@ -1021,3 +1021,389 @@ class TestManifestKeysThatDriveDestruction(EmbodyTestCase):
     def test_both_keys_stay_optional(self):
         """Pre-6.0.245 manifests carry neither and must still install."""
         self.assertIsNone(_updater_cls().validateManifest(_valid_manifest()))
+
+
+# ======================================================================
+# Stall control: a stuck download must never own the updater forever
+# ======================================================================
+
+def _stall_harness(now=1000.0):
+    """Instance wired to a FAKE clock, no network, no TD, no real run().
+
+    Every deferred callback and every network phase is recorded instead of
+    executed, so the retry ladder and the deadlines are exercised
+    deterministically (CI runners stall; real-clock deadlines flake).
+    """
+    U = _updater_cls()
+
+    class Harness(U):
+        def __init__(self):
+            self.now = now
+            self.scheduled = []
+            self.logs = []
+            self.status = []
+            self.dialogs = []
+            self.answers = []
+            self.began = []
+            self.rollbacks = []
+            self.sentinel = None
+            self.inflight = False
+            self.backup = (None, 'backup file is missing')
+            self._check_result = None
+            self._download_result = None
+            self._check_gen = 0
+            self._download_gen = 0
+            self._busy = False
+            self._busy_phase = ''
+            self._busy_deadline = 0.0
+            self._net_attempt = 0
+            self._retry_spec = None
+            self._pending = None
+            self._rearmed = False
+
+        # -- injected seams ------------------------------------------
+        def _clock(self):
+            return self.now
+
+        def _schedule(self, script, *args, **kwargs):
+            self.scheduled.append((script, args, kwargs))
+
+        def _log(self, msg, level='INFO'):
+            self.logs.append((level, msg))
+
+        def _status(self, text):
+            self.status.append(str(text))
+
+        def _dialog(self, title, message, buttons):
+            self.dialogs.append(message)
+            return self.answers.pop(0) if self.answers else -1
+
+        def _staleInstance(self):
+            return False
+
+        def _readSentinel(self):
+            return self.sentinel
+
+        def _clearSentinel(self):
+            self.sentinel = None
+
+        def _updateInFlight(self, sentinel):
+            return self.inflight
+
+        def _validBackup(self, sentinel):
+            return self.backup
+
+        def _rollback(self, sentinel, why):
+            self.rollbacks.append(why)
+
+        # -- network phases: recorded, never run ---------------------
+        def _beginCheck(self, interactive, auto_install):
+            self.began.append(('check', interactive, auto_install))
+            return {'status': 'checking'}
+
+        def _beginDownload(self, interactive, apply_after):
+            self.began.append(('download', interactive, apply_after))
+            return {'status': 'downloading'}
+
+    return Harness()
+
+
+class TestUpdaterBusyLatch(EmbodyTestCase):
+    """The latch used to be cleared ONLY by the poll chain that set it, so a
+    chain that died (a raise, a swapped instance, a stopped frame clock)
+    answered 'an update is already running' for the rest of the session --
+    the field report this tier exists for."""
+
+    def test_a_live_phase_still_refuses(self):
+        h = _stall_harness()
+        h._setBusy('download')
+        h.now += 5
+        blocked = h._busyBlocks(interactive=True)
+        self.assertIsNotNone(blocked)
+        self.assertIn('error', blocked)
+        self.assertTrue(h._busy, 'a running phase must NOT be cleared')
+
+    def test_the_refusal_says_it_recovers_by_itself(self):
+        h = _stall_harness()
+        h._setBusy('download')
+        h._busyBlocks(interactive=True)
+        self.assertTrue(h.dialogs)
+        self.assertIn('retries by itself', h.dialogs[-1])
+
+    def test_a_stalled_latch_is_cleared_by_the_next_attempt(self):
+        h = _stall_harness()
+        h._setBusy('download')
+        h.now += h.BUSY_CEILING_S['download'] + 1
+        self.assertIsNone(h._busyBlocks(interactive=True),
+                          'past its ceiling the phase cannot be running')
+        self.assertFalse(h._busy)
+        self.assertEqual([], h.dialogs, 'a dead latch is not a user error')
+
+    def test_clearing_a_stalled_latch_retires_its_generations(self):
+        """An orphaned worker or poll must not land on the fresh attempt."""
+        h = _stall_harness()
+        h._setBusy('check')
+        h._check_result = {'_gen': 0}
+        gen_before = h._check_gen
+        h.now += h.BUSY_CEILING_S['check'] + 1
+        h._busyBlocks(interactive=False)
+        self.assertGreater(h._check_gen, gen_before)
+        self.assertIsNone(h._check_result)
+
+    def test_an_unstamped_latch_reads_as_stalled(self):
+        """A latch left by an older build carries no deadline; it must not
+        read as an eternally running phase."""
+        h = _stall_harness()
+        h._busy = True
+        h._busy_deadline = 0.0
+        self.assertIsNone(h._busyBlocks(interactive=False))
+        self.assertFalse(h._busy)
+
+    def test_ceilings_outlast_the_phases_they_guard(self):
+        """The backstop must never fire on a healthy phase."""
+        h = _stall_harness()
+        self.assertGreater(h.BUSY_CEILING_S['check'], h.CHECK_DEADLINE_S)
+        self.assertGreater(h.BUSY_CEILING_S['download'],
+                           h.DOWNLOAD_DEADLINE_S)
+
+
+class TestUpdaterRetryLadder(EmbodyTestCase):
+    """A failed network phase retries itself, then gives up loudly and
+    leaves NOTHING behind that could refuse the next attempt."""
+
+    CHECK = {'phase': 'check', 'interactive': True, 'auto_install': False}
+    DL = {'phase': 'download', 'interactive': True, 'apply_after': True}
+
+    def test_first_failure_retries_the_same_phase(self):
+        h = _stall_harness()
+        h._setBusy('check')
+        out = h._networkFailed('update check', 'boom', True, self.CHECK)
+        self.assertEqual('retrying', out.get('status'))
+        self.assertFalse(h._busy, 'the latch is released between tries')
+        self.assertEqual([], h.dialogs, 'a retry is not an alert')
+        self.assertTrue(h.scheduled, 'the retry must be armed')
+        h._retryNetworkPhase()
+        self.assertEqual([('check', True, False)], h.began)
+
+    def test_retry_status_is_visible_and_reads_as_running(self):
+        h = _stall_harness()
+        h._networkFailed('download', 'boom', True, self.DL)
+        self.assertTrue(h.status[-1].lower().startswith('retrying'),
+                        'startup_progress classifies this prefix as RUNNING')
+        self.assertIn('2/3', h.status[-1])
+
+    def test_third_failure_alerts_and_cancels(self):
+        h = _stall_harness()
+        h._pending = {'tag': 'v9.9.9'}
+        for _ in range(2):
+            h._setBusy('download')
+            h._networkFailed('download', 'boom', True, self.DL)
+            h._retryNetworkPhase()
+        h._setBusy('download')
+        out = h._networkFailed('download', 'boom', True, self.DL)
+        self.assertIn('error', out)
+        self.assertEqual(2, len(h.began), 'three tries total, not more')
+        self.assertTrue(h.dialogs, 'the user is told, once, at the end')
+        self.assertIn('internet connection', h.dialogs[-1])
+        self.assertIn('check your internet', h.status[-1].lower())
+        self.assertIn('failed', h.status[-1].lower(),
+                      'the status readout grades this as FAILED')
+
+    def test_giving_up_blocks_nothing_afterwards(self):
+        """The whole point: the user can try again immediately."""
+        h = _stall_harness()
+        h._pending = {'tag': 'v9.9.9'}
+        for _ in range(3):
+            h._setBusy('download')
+            h._networkFailed('download', 'boom', True, self.DL)
+        self.assertFalse(h._busy)
+        self.assertIsNone(h._pending)
+        self.assertIsNone(h._retry_spec)
+        self.assertEqual(0, h._net_attempt)
+        self.assertIsNone(h._busyBlocks(interactive=True))
+        h._retryNetworkPhase()
+        self.assertEqual([], h.began, 'no fourth try was armed')
+
+    def test_an_armed_retry_stands_down_for_a_newer_attempt(self):
+        """A user who clicks again owns the phase; two chains would race."""
+        h = _stall_harness()
+        h._setBusy('check')
+        h._networkFailed('update check', 'boom', True, self.CHECK)
+        h._setBusy('check')  # a fresh attempt started meanwhile
+        h._retryNetworkPhase()
+        self.assertEqual([], h.began)
+        self.assertIsNone(h._retry_spec)
+
+    def test_the_unattended_path_gives_up_quietly(self):
+        """Nobody wants a modal every launch because GitHub was down."""
+        h = _stall_harness()
+        spec = dict(self.CHECK, interactive=False)
+        for _ in range(3):
+            h._networkFailed('update check', 'boom', False, spec)
+        self.assertEqual([], h.dialogs)
+        self.assertIn('check your internet', h.status[-1].lower())
+        self.assertTrue(any(level == 'ERROR' for level, _ in h.logs))
+
+
+class TestUpdaterPollDeadlines(EmbodyTestCase):
+    """Poll chains are bounded by wall clock and stand down when superseded."""
+
+    def test_poll_rearms_while_inside_its_deadline(self):
+        h = _stall_harness()
+        h._check_gen = 1
+        h._setBusy('check')
+        h._pollCheck(True, False, 1, h.now + 10)
+        self.assertEqual(1, len(h.scheduled))
+        self.assertIn('delayMilliSeconds', h.scheduled[0][2],
+                      'real time, not frames -- a stalled frame clock must '
+                      'not extend a network deadline')
+
+    def test_poll_past_its_deadline_enters_the_retry_ladder(self):
+        h = _stall_harness()
+        h._check_gen = 1
+        h._setBusy('check')
+        h._pollCheck(True, False, 1, h.now - 1)
+        self.assertEqual(1, h._net_attempt)
+        self.assertFalse(h._busy)
+        h._retryNetworkPhase()
+        self.assertEqual([('check', True, False)], h.began)
+
+    def test_a_superseded_poll_stands_down(self):
+        h = _stall_harness()
+        h._check_gen = 5
+        h._setBusy('check')
+        h._pollCheck(True, False, 4, h.now - 1)
+        self.assertEqual([], h.scheduled)
+        self.assertEqual(0, h._net_attempt,
+                         'an old chain must not fail the phase that '
+                         'replaced it')
+        self.assertTrue(h._busy)
+
+    def test_download_poll_outlasts_the_workers_own_budget(self):
+        """The worker names its stall; the poll must not time out first."""
+        h = _stall_harness()
+        h._download_gen = 1
+        h._setBusy('download')
+        h._pollDownload(True, True, 1, h.now + h.DOWNLOAD_DEADLINE_S)
+        self.assertEqual(1, len(h.scheduled))
+
+    def test_download_error_enters_the_retry_ladder(self):
+        h = _stall_harness()
+        h._download_gen = 1
+        h._setBusy('download')
+        h._download_result = {'_gen': 1, 'error': 'TimeoutError: stalled'}
+        h._pollDownload(True, True, 1, h.now + 10)
+        self.assertEqual(1, h._net_attempt)
+        self.assertTrue(h._retry_spec)
+
+
+class TestUpdaterLeftoverSentinel(EmbodyTestCase):
+    """A sentinel refuses only while the swap is REALLY in flight. A
+    leftover (a failed rollback writes one that nothing ever removes) used
+    to refuse every later check with 'restart TouchDesigner' -- advice that
+    cannot work, since the file outlives the process."""
+
+    def _left(self, h):
+        h.sentinel = {'tag': 'v9.9.9', 'phase': 'rollback_failed',
+                      'backup_path': '/nope/backup.tox'}
+        h.inflight = False
+
+    def test_an_in_flight_swap_still_refuses(self):
+        h = _stall_harness()
+        self._left(h)
+        h.inflight = True
+        blocked = h._sentinelBlocks(interactive=True)
+        self.assertIn('error', blocked)
+        self.assertIsNotNone(h.sentinel, 'a live swap keeps its sentinel')
+
+    def test_a_leftover_without_a_backup_is_discarded_and_work_continues(self):
+        h = _stall_harness()
+        self._left(h)
+        self.assertIsNone(h._sentinelBlocks(interactive=True))
+        self.assertIsNone(h.sentinel)
+
+    def test_a_leftover_with_a_backup_offers_recovery_first(self):
+        h = _stall_harness()
+        self._left(h)
+        h.backup = ('/updates/backup.tox', None)
+        h.answers = [0]  # Restore Backup
+        out = h._sentinelBlocks(interactive=True)
+        self.assertEqual('rolled_back', out.get('status'))
+        self.assertEqual(1, len(h.rollbacks))
+
+    def test_discarding_the_offer_continues_instead_of_blocking(self):
+        h = _stall_harness()
+        self._left(h)
+        h.backup = ('/updates/backup.tox', None)
+        h.answers = [1]  # Discard and Continue
+        self.assertIsNone(h._sentinelBlocks(interactive=True))
+        self.assertIsNone(h.sentinel)
+
+    def test_a_suppressed_dialog_does_not_re_arm_the_dead_end(self):
+        """-1 (suppressed) on an explicit user action must still unblock."""
+        h = _stall_harness()
+        self._left(h)
+        h.backup = ('/updates/backup.tox', None)
+        h.answers = []  # -> -1
+        self.assertIsNone(h._sentinelBlocks(interactive=True))
+        self.assertIsNone(h.sentinel)
+
+    def test_the_unattended_path_leaves_the_evidence_alone(self):
+        """StartupCheck owns unattended recovery -- it can offer the backup."""
+        h = _stall_harness()
+        self._left(h)
+        blocked = h._sentinelBlocks(interactive=False)
+        self.assertIn('error', blocked)
+        self.assertIsNotNone(h.sentinel)
+
+
+class TestUpdaterCappedRead(EmbodyTestCase):
+    """The transfer owns a deadline of its own. urlopen's timeout bounds one
+    recv, so a trickling connection never times out and never finishes --
+    the shape of the download that hung with no way back (field 2026-08-25).
+    """
+
+    class _Feed:
+        """A response that hands out fixed chunks; `stall` advances the
+        fake clock per read, so a slow line needs no real time."""
+
+        def __init__(self, chunks, clock, stall=0.0):
+            self.chunks = list(chunks)
+            self.clock = clock
+            self.stall = stall
+            self.reads = 0
+
+        def read(self, n):
+            self.reads += 1
+            self.clock[0] += self.stall
+            if not self.chunks:
+                return b''
+            chunk = self.chunks.pop(0)
+            if len(chunk) > n:  # a real reader honors the requested size
+                self.chunks.insert(0, chunk[n:])
+                chunk = chunk[:n]
+            return chunk
+
+    def _clock(self):
+        now = [0.0]
+        return now, (lambda: now[0])
+
+    def test_a_normal_transfer_returns_every_byte(self):
+        now, clock = self._clock()
+        feed = self._Feed([b'ab', b'cd', b'ef'], now)
+        got = _updater_cls()._readCapped(feed, 10, 300, clock=clock)
+        self.assertEqual(b'abcdef', got)
+
+    def test_a_stalled_transfer_raises_instead_of_hanging(self):
+        now, clock = self._clock()
+        feed = self._Feed([b'a'] * 1000, now, stall=40.0)
+        with self.assertRaises(TimeoutError):
+            _updater_cls()._readCapped(feed, 1000, 300, clock=clock)
+        self.assertLess(feed.reads, 20, 'it must give up early, not read on')
+
+    def test_the_cap_still_holds(self):
+        """An overrun is detected, never buffered without bound."""
+        now, clock = self._clock()
+        feed = self._Feed([b'x' * 64] * 100, now)
+        got = _updater_cls()._readCapped(feed, 100, 300, clock=clock)
+        self.assertEqual(100, len(got))

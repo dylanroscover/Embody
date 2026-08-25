@@ -7496,11 +7496,14 @@ class EnvoyExt:
                         'connection error -- just retry it; the bridge '
                         'reconnects between calls.'}
 
-    _UPDATE_JOB_TIMEOUT_S = 900   # download + install ceiling
+    # Download + install ceiling. Must outlast the updater's OWN retry
+    # ladder (MAX_NET_ATTEMPTS x the check + download deadlines), or the job
+    # reports a failure while the updater is still legitimately retrying.
+    _UPDATE_JOB_TIMEOUT_S = 1800
     # Updatestatus texts that mean the update machinery is still working;
     # anything else while a job runs is terminal (success or refusal).
     _UPDATE_ACTIVE_PREFIXES = ('Checking for updates', 'Downloading',
-                               'Installing')
+                               'Installing', 'Retrying')
 
     def _activeUpdateJob(self):
         """The in-flight update_embody record, or None. Two-hour scan cap."""

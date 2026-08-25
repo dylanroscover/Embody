@@ -28,7 +28,7 @@ An update never writes your content: the post-update validation reconciles Embod
 |---|---|---|
 | Auto-Update | `Autoupdate` | **A fresh install ships set to `Check and Notify`** (the parameter's own default is `Off`, but the released `.tox` carries `Check and Notify`, so a new install does check once at startup until you change it). `Off`: never checks. `Check and Notify`: checks once at startup and shows availability in Update Status — nothing is installed. `Check and Install`: checks at startup and installs a verified update automatically. A check that can't complete (no network, no manifest, TD too old) is logged quietly; a failure *during* an install (backup, reload, verify, rollback) always shows a dialog. |
 | Check for Update | `Checkforupdate` | Checks GitHub now and prompts if an update is available (`up to date` and network errors are reported in a dialog). |
-| Update Status | `Updatestatus` | Read-only status line: `Disabled` (Auto-Update is Off -- the fresh-install resting state), `Up to date (v6.0.150)`, `v6.0.151 available`, `Downloading...`, `Updated to v6.0.151`, or an error summary. |
+| Update Status | `Updatestatus` | Read-only status line: `Disabled` (Auto-Update is Off -- the fresh-install resting state), `Up to date (v6.0.150)`, `v6.0.151 available`, `Downloading...`, `Retrying download (2/3)...`, `Updated to v6.0.151`, or an error summary. |
 
 The `Autoupdate` choice is a persisted setting (`.embody/config.json`), so it
 survives updates, project moves, and re-installs like every other Embody
@@ -125,6 +125,24 @@ replacement, and the new version revalidates every tracked operator on boot
 - **Undo**: the swap is excluded from the undo stack. A stray Ctrl+Z cannot
   half-resurrect the old version.
 
+## When the network stalls
+
+Nothing about an update can leave the updater stuck:
+
+- **Every phase has a wall-clock deadline.** The download owns its own budget,
+  so a connection that trickles bytes forever (a proxy or captive portal that
+  half-opens the socket) is abandoned instead of hanging -- a socket timeout
+  alone would never fire on one.
+- **A failed check or download retries itself**, up to three attempts. The
+  Update Status line shows `Retrying download (2/3)...` while it does.
+- **After three failures it stops and tells you**, in a dialog on the manual
+  path (quietly in the log and Update Status on the automatic startup path),
+  and cancels the attempt: no leftover state, no "already in progress"
+  refusal. Press Check for Update again whenever you want.
+- **A stalled attempt never owns the updater.** If an update phase somehow
+  stops reporting, the next attempt clears it and proceeds rather than
+  refusing.
+
 ## The dev checkout refuses self-update
 
 If Embody's own source DATs are file-synced (you are working in the git
@@ -175,7 +193,9 @@ invisible to the updater** — users on auto-update simply won't receive it.
 |---|---|
 | "cannot be verified: release has no embody-release.json" | The release predates the manifest system. Update manually from GitHub. |
 | "requires TouchDesigner build X+" | Your TD build is older than the release's floor. Update TouchDesigner, or stay on the current Embody. |
-| "Update check failed (network error)" | No internet, GitHub down, or the 60/hour anonymous rate limit (shared per IP). Try again later. |
+| "Update failed after 3 tries -- check your internet connection" | The check or download failed three times in a row (no internet, a proxy that stalls the transfer, GitHub down, or the 60/hour anonymous rate limit shared per IP). The attempt is cancelled and nothing is left half-done -- press Check for Update again whenever you like. |
+| "An update is already running (download)" | A check or download really is in flight. It retries by itself and stops on its own; you never have to restart TouchDesigner to get out of it. |
+| "A previous update to vX did not complete" on a manual check | An earlier update stopped before it could be verified. Choose `Restore Backup` to go back to the pre-update version, or `Discard and Continue` to drop the leftover and check again. |
 | "Update Recovery" dialog at startup | A previous update was interrupted. `Restore Backup` returns to the pre-update version; `Keep Current State` leaves things as they are. It never appears for an update that is merely still finishing — if you see it, the update really did stop. |
 | "N settings no longer exist in this version and were removed" | The new version retired those parameters; their values are gone with them. It arrives inside the update's own success dialog, never as a separate alarm, and it never names Convoy node rows or any other runtime-populated sequence — those are a live readout, not settings, and an update leaves them alone. |
 | Status shows an old version after update | The verify step stamps version metadata a few seconds after the reload; if it still shows stale info, check the Embody log for a rollback report. |

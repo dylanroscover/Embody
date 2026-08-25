@@ -1,5 +1,16 @@
 # Changelog
 
+## v6.0.280
+
+A download that hung owned the self-updater for the rest of the session -- every later attempt answered "an update is already in progress."
+
+- **A stalled transfer ends itself**: `urlopen(timeout=...)` bounds one socket read, not the transfer, so a connection that trickles bytes (a proxy, a captive portal, a throttled link) never timed out and never finished. The download now owns a wall-clock budget, and the poll chains draining it re-arm in real milliseconds against a deadline instead of counting frames.
+- **A failed check or download retries itself, three times** -- Update Status reads `Retrying download (2/3)...` while it does. The third failure alerts (dialog on the manual path, log + status on the automatic startup path), says to check the connection and try later, and **cancels**: every piece of state is reset, so the next attempt runs normally instead of being refused.
+- **Nothing latches the updater any more**: the busy flag was released only by the poll chain that set it, and a leftover crash sentinel (a failed rollback writes one nothing removed) refused every later check with "restart TouchDesigner" -- advice that cannot work, since the file outlives the process. Every phase now carries a wall-clock ceiling a later attempt uses to clear a dead latch, and a leftover sentinel is resolvable in place: restore the backup, or discard it and continue. Same failure class the Convoy drain chains hit in v6.0.202.
+- **`/release` gained a permanent docs audit**: every user-visible change in a release diff must name the `docs/` page that now describes it, or be declared internal.
+
+26 new tests, all on an injected fake clock -- no real-clock deadlines to flake on a CI runner. Field-reported: one user hit it on every attempt.
+
 ## v6.0.279
 
 A `.toe` cloned from GitHub carried its author's `D:\` git root inside it -- and every `.embody` write on the new machine died on the missing drive, keeping Convoy off.

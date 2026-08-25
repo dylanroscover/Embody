@@ -46,6 +46,23 @@ Failure surfacing:
       silent failure would leave the user unknowingly on a half-broken or
       wrong-version install. Silent success, loud failure.
 
+Stalls never latch (field 2026-08-25: a download hung, and every later attempt
+answered 'an update is already in progress'):
+    - Network phases retry themselves up to MAX_NET_ATTEMPTS, then give up
+      LOUDLY (check your connection) and reset -- a give-up leaves NOTHING a
+      later attempt can trip over.
+    - Every phase is bounded by wall clock, not by frames: the worker's own
+      read budget, the poll chain's deadline (re-armed in real ms, so a stalled
+      frame clock cannot extend it), and BUSY_CEILING_S -- the independent
+      backstop a LATER attempt uses to clear a latch whose poll chain died
+      (a raise, a swapped instance, a stopped frame loop). A superseded
+      generation makes a stale poll stand down instead of fighting the new one.
+    - The sentinel refuses only while the swap is genuinely in flight. A
+      LEFTOVER sentinel (a failed rollback stamps one that nothing removes)
+      is resolved on the manual path -- restore or discard -- instead of
+      refusing forever with 'restart TouchDesigner', which never helped: the
+      file outlives the process.
+
 Network layer follows the house pattern (EmbodyExt._checkMCPUpdate /
 EnvoyExt._beginAsyncBootstrap): a daemon worker thread doing pure-Python
 urllib with ZERO TD access publishes a generation-tagged result to a plain
@@ -107,6 +124,16 @@ class UpdaterExt:
     MIN_BACKUP_BYTES = 100_000
     ASSET_RE = re.compile(r'^[A-Za-z0-9._-]+\.tox$')
 
+    # Stall budgets, all wall clock (see the module docstring). The poll
+    # deadlines are what a phase is allowed to take; BUSY_CEILING_S is the
+    # slack-added backstop a LATER attempt uses to declare a latch dead.
+    CHECK_DEADLINE_S = 60        # two sequential 10s requests + DNS + slack
+    DOWNLOAD_DEADLINE_S = 300    # a ~1MB asset on a bad line, then give up
+    BUSY_CEILING_S = {'check': 120, 'download': 420, 'install': 1800}
+    MAX_NET_ATTEMPTS = 3         # tries per user-visible operation
+    RETRY_DELAY_MS = 3000
+    POLL_INTERVAL_MS = 250
+
     def __init__(self, ownerComp):
         self.ownerComp = ownerComp
         # Worker handoff slots (plain attributes -- never TD objects).
@@ -116,6 +143,10 @@ class UpdaterExt:
         self._check_gen = 0
         self._download_gen = 0
         self._busy = False
+        self._busy_phase = ''
+        self._busy_deadline = 0.0
+        self._net_attempt = 0   # consecutive failed network tries
+        self._retry_spec = None  # phase to re-run after a failure
         self._pending = None  # release info between check -> apply
         self._rearmed = False  # one-shot: StartupCheck's verifier re-arm
 
@@ -347,6 +378,26 @@ class UpdaterExt:
         return self._sameSession(sentinel) or self._swapStillPointed(sentinel)
 
     @staticmethod
+    def _readCapped(resp, limit, budget, clock=time.time):
+        """Read at most `limit` bytes, giving up after `budget` seconds.
+
+        A socket timeout bounds ONE recv, not the transfer: a connection
+        that trickles never times out and never finishes, which is how a
+        download could hang forever. Pure and WORKER-SAFE.
+        """
+        started = clock()
+        buf = bytearray()
+        while len(buf) < limit:
+            chunk = resp.read(min(1 << 18, limit - len(buf)))
+            if not chunk:
+                break
+            buf.extend(chunk)
+            if clock() - started > budget:
+                raise TimeoutError(f'download stalled: {len(buf)} bytes '
+                                   f'after {budget}s')
+        return bytes(buf)
+
+    @staticmethod
     def _sha256File(path):
         h = hashlib.sha256()
         with open(path, 'rb') as f:
@@ -389,18 +440,169 @@ class UpdaterExt:
         return {'error': why}
 
     # ==================================================================
+    # Stall control: busy latch, retries, leftover sentinels
+    # ==================================================================
+
+    def _clock(self):
+        """Wall clock. Overridable so deadline tests need no real time."""
+        return time.time()
+
+    def _schedule(self, script, *args, **kwargs):
+        """One seam for every deferred callback (tests record instead)."""
+        run(script, *args, **kwargs)
+
+    def _setBusy(self, phase):
+        self._busy = True
+        self._busy_phase = phase
+        self._busy_deadline = self._clock() + self.BUSY_CEILING_S.get(
+            phase, 300)
+
+    def _clearBusy(self):
+        self._busy = False
+        self._busy_phase = ''
+        self._busy_deadline = 0.0
+
+    def _abandonInFlight(self):
+        """Drop a phase whose callbacks are gone: nothing may land after."""
+        self._check_gen += 1
+        self._download_gen += 1
+        self._check_result = None
+        self._download_result = None
+        self._retry_spec = None
+        self._net_attempt = 0
+        self._clearBusy()
+
+    def _busyBlocks(self, interactive):
+        """Refusal dict while a phase is REALLY running, else None.
+
+        A latch past its ceiling cannot belong to a live phase (every one
+        is deadline-bounded), so it is cleared here rather than refusing:
+        the poll chain that owns it is the only thing that ever cleared it,
+        and a chain can die -- which is what answered 'already running' for
+        the rest of the session.
+        """
+        if not getattr(self, '_busy', False):
+            return None
+        deadline = getattr(self, '_busy_deadline', 0.0)
+        if deadline and self._clock() < deadline:
+            phase = getattr(self, '_busy_phase', '') or 'working'
+            return self._refuse(
+                f'An update is already running ({phase}). It retries by '
+                f'itself and stops on its own if it cannot finish.',
+                interactive)
+        self._log(
+            f'clearing a stalled {getattr(self, "_busy_phase", "") or "update"}'
+            f' latch -- the previous attempt never reported back', 'WARNING')
+        self._abandonInFlight()
+        return None
+
+    def _networkFailed(self, phase, why, interactive, retry_spec):
+        """Every check/download failure lands here: retry, then give up.
+
+        Transient DNS, a proxy that half-opens the socket and a GitHub 5xx
+        all look identical from here and all clear on a retry, so the phase
+        re-runs itself. The give-up is the important half: it resets ALL
+        state (latch, generations, pending) so the next manual attempt is
+        never refused by the leftovers of this one.
+        """
+        self._clearBusy()
+        self._net_attempt = getattr(self, '_net_attempt', 0) + 1
+        if self._net_attempt < self.MAX_NET_ATTEMPTS:
+            nth = self._net_attempt + 1
+            self._log(f'{phase} failed ({why}) -- retrying '
+                      f'({nth}/{self.MAX_NET_ATTEMPTS})', 'WARNING')
+            self._status(f'Retrying {phase} '
+                         f'({nth}/{self.MAX_NET_ATTEMPTS})...')
+            self._retry_spec = dict(retry_spec)
+            self._schedule('args[0]._retryNetworkPhase()', self,
+                           delayMilliSeconds=self.RETRY_DELAY_MS)
+            return {'status': 'retrying', 'attempt': nth}
+        tries = self._net_attempt
+        self._abandonInFlight()
+        self._pending = None  # nothing verified survived; start clean
+        self._log(f'{phase} failed {tries}x -- giving up ({why})', 'ERROR')
+        self._status(f'Update failed after {tries} tries -- check your '
+                     f'internet connection')
+        if interactive:
+            self._dialog(
+                'Embody Update',
+                f'Embody could not complete the {phase} after {tries} '
+                f'attempts.\n\nLast error: {why}\n\nCheck your internet '
+                'connection and try again later. The update was cancelled, '
+                'so Check for Update will run normally whenever you are '
+                'ready.', ['OK'])
+        return {'error': f'{phase} failed after {tries} attempts: {why}'}
+
+    def _retryNetworkPhase(self):
+        if self._staleInstance():
+            return
+        spec = getattr(self, '_retry_spec', None)
+        if not spec:
+            return
+        if getattr(self, '_busy', False):
+            # A fresh attempt started while this retry was armed -- it owns
+            # the phase now; a second chain would only race it.
+            self._retry_spec = None
+            return
+        self._retry_spec = None
+        if spec['phase'] == 'check':
+            self._beginCheck(spec['interactive'], spec['auto_install'])
+        else:
+            self._beginDownload(spec['interactive'], spec['apply_after'])
+
+    def _sentinelBlocks(self, interactive):
+        """Guard an attempt against a sentinel; resolve leftovers.
+
+        In flight = a swap is genuinely running -> refuse. Anything else is
+        an artifact of an update that died before VerifyUpdate cleared it
+        (a failed rollback stamps 'rollback_failed' and nothing removes it),
+        which used to refuse every later check with 'restart TouchDesigner'
+        -- advice that cannot work, because the file outlives the process.
+        The manual path resolves it (restore, or discard and continue); the
+        unattended path leaves the evidence for StartupCheck's recovery.
+        """
+        sentinel = self._readSentinel()
+        if not sentinel:
+            return None
+        tag = sentinel.get('tag') or 'a new version'
+        if self._updateInFlight(sentinel):
+            return self._refuse(
+                f'An update to {tag} is still installing. Wait for it to '
+                f'finish.', interactive)
+        self._log(f'leftover update sentinel found ({tag}, phase '
+                  f'{sentinel.get("phase")!r}) -- that update is not '
+                  f'running', 'WARNING')
+        if not interactive:
+            return self._refuse(
+                f'A previous update to {tag} did not complete -- reopen the '
+                f'project to recover it.', False)
+        backup, _berr = self._validBackup(sentinel)
+        if backup is not None:
+            choice = self._dialog(
+                'Embody Update',
+                f'A previous update to {tag} did not complete, and it is '
+                'not running now.\n\nRestore the pre-update backup, or '
+                'discard it and continue?',
+                ['Restore Backup', 'Discard and Continue'])
+            if choice == 0:
+                self._rollback(sentinel, 'recovering an interrupted update')
+                return {'status': 'rolled_back'}
+        self._clearSentinel()
+        self._log('leftover sentinel discarded -- continuing', 'INFO')
+        return None
+
+    # ==================================================================
     # CHECK (promoted): worker thread + bounded main-thread poll
     # ==================================================================
 
     def CheckForUpdate(self, interactive=True, auto_install=False):
         """Query GitHub for a newer release. Prompts when interactive."""
-        if self._readSentinel():
-            return self._refuse(
-                'An update is already in progress. Restart TouchDesigner if '
-                'this persists.', interactive)
-        if self._busy:
-            return self._refuse('An update operation is already running.',
-                                interactive)
+        blocked = self._sentinelBlocks(interactive)
+        if blocked is not None:
+            return blocked
+        blocked = self._busyBlocks(interactive)
+        if blocked is not None:
+            return blocked
         if self.isDevCheckout():
             return self._refuse(
                 'This is the Embody dev checkout -- update via git, '
@@ -409,14 +611,19 @@ class UpdaterExt:
         if local is None:
             return self._refuse('Local Version parameter is not X.Y.Z.',
                                 interactive)
+        self._net_attempt = 0  # a fresh operation, not a retry
+        return self._beginCheck(interactive, auto_install)
 
-        self._busy = True
+    def _beginCheck(self, interactive, auto_install):
+        """The check itself (guards already passed; retries re-enter here)."""
+        local = self.parseVersion(self._embody.par.Version.eval())
+        self._setBusy('check')
         self._check_result = None
         self._check_gen += 1
         gen = self._check_gen
         self._status('Checking for updates...')
         self._log(f'checking {self.GITHUB_OWNER}/{self.GITHUB_REPO} '
-                  f'(local v{".".join(map(str, local))})')
+                  f'(local v{".".join(map(str, local)) if local else "?"})')
 
         # Resolve EVERYTHING the worker needs on the main thread first.
         url = self.apiLatestUrl(self.GITHUB_OWNER, self.GITHUB_REPO)
@@ -454,14 +661,19 @@ class UpdaterExt:
                         out['manifest'] = json.loads(resp2.read())
             except Exception as e:  # network errors are expected, not fatal
                 out['error'] = f'{type(e).__name__}: {e}'
-            self._check_result = out
+            # A superseded worker publishes NOTHING: an orphan from an
+            # abandoned attempt landing here would clobber the live result.
+            if gen == self._check_gen:
+                self._check_result = out
 
         import threading
         threading.Thread(target=_worker, daemon=True).start()
-        # Budget >= 3x the worker's worst case (two sequential 10s requests
-        # plus unbounded DNS): 100 x 15 frames ~= 25s at 60fps.
-        run('args[0]._pollCheck(args[1], args[2], args[3], args[4])',
-            self, interactive, auto_install, gen, 0, delayFrames=15)
+        # Real-time deadline, re-armed in ms: a frame-counted budget stretches
+        # (or stops) with the frame clock, and the phase it bounds does not.
+        self._schedule('args[0]._pollCheck(args[1], args[2], args[3], args[4])',
+                       self, interactive, auto_install, gen,
+                       self._clock() + self.CHECK_DEADLINE_S,
+                       delayMilliSeconds=self.POLL_INTERVAL_MS)
         return {'status': 'checking'}
 
     def _staleInstance(self):
@@ -470,34 +682,37 @@ class UpdaterExt:
         except Exception:
             return True
 
-    def _pollCheck(self, interactive, auto_install, gen, attempts):
-        if self._staleInstance():
+    def _pollCheck(self, interactive, auto_install, gen, deadline):
+        # A superseded generation stands down: its phase was abandoned, and
+        # a second live chain would fight the one that replaced it.
+        if self._staleInstance() or gen != self._check_gen:
             return
+        spec = {'phase': 'check', 'interactive': interactive,
+                'auto_install': auto_install}
         result = self._check_result
         # Only accept the result from THIS check's worker generation.
         if result is None or result.get('_gen') != gen:
-            if attempts < 100:
-                run('args[0]._pollCheck(args[1], args[2], args[3], args[4])',
-                    self, interactive, auto_install, gen, attempts + 1,
-                    delayFrames=15)
+            if self._clock() < deadline:
+                self._schedule(
+                    'args[0]._pollCheck(args[1], args[2], args[3], args[4])',
+                    self, interactive, auto_install, gen, deadline,
+                    delayMilliSeconds=self.POLL_INTERVAL_MS)
             else:
-                self._busy = False
-                self._refuse('Update check timed out.', interactive)
+                self._networkFailed('update check', 'GitHub did not answer '
+                                    'in time', interactive, spec)
             return
         self._check_result = None
-        self._busy = False
+        self._clearBusy()
+        if 'error' in result:
+            self._networkFailed('update check', result['error'], interactive,
+                                spec)
+            return
+        self._net_attempt = 0
         self._finishCheck(result, interactive, auto_install)
 
     def _finishCheck(self, result, interactive, auto_install):
-        if 'error' in result:
-            msg = (f'Update check failed (no internet or GitHub '
-                   f'unreachable): {result["error"]}')
-            self._log(msg, 'WARNING')
-            self._status('Update check failed (network error)')
-            if interactive:
-                self._dialog('Embody Update', msg, ['OK'])
-            return
-
+        """Decide on a check that came back clean (network errors never
+        reach here -- _pollCheck routes those through the retry ladder)."""
         local = self.parseVersion(self._embody.par.Version.eval())
         remote = self.parseVersion(result.get('tag', ''))
         if remote is None:
@@ -574,14 +789,21 @@ class UpdaterExt:
     # ==================================================================
 
     def _startDownload(self, interactive, apply_after):
-        if self._busy:
-            return self._refuse('An update operation is already running.',
-                                interactive)
+        blocked = self._busyBlocks(interactive)
+        if blocked is not None:
+            return blocked
+        if not self._pending:
+            return self._refuse('No pending update to download.', interactive)
+        self._net_attempt = 0  # a fresh operation, not a retry
+        return self._beginDownload(interactive, apply_after)
+
+    def _beginDownload(self, interactive, apply_after):
+        """The download itself (guards passed; retries re-enter here)."""
         pending = self._pending
         if not pending:
             return self._refuse('No pending update to download.', interactive)
 
-        self._busy = True
+        self._setBusy('download')
         self._download_result = None
         self._download_gen += 1
         gen = self._download_gen
@@ -594,6 +816,9 @@ class UpdaterExt:
         # asset is validated as a bare .tox filename -> safe to join.
         dest = self._posix(self._updatesDir(create=True)
                            / pending['manifest']['asset'])
+        budget = self.DOWNLOAD_DEADLINE_S
+
+        read_capped = self._readCapped  # bound on the main thread
 
         def _worker():
             # ZERO TD access. urllib follows the 302 to
@@ -606,10 +831,8 @@ class UpdaterExt:
                 with urllib.request.urlopen(req, timeout=60,
                                             context=_verified_tls_context()
                                             ) as resp:
-                    # Cap the read at the manifest size (+1 to detect
-                    # overrun) so a hostile server can't stream unbounded
-                    # bytes into memory.
-                    payload = resp.read(expect_size + 1)
+                    # +1 on the cap detects an overrun without buffering it.
+                    payload = read_capped(resp, expect_size + 1, budget)
                 if len(payload) != expect_size:
                     raise ValueError(
                         f'size mismatch: got {len(payload)}, '
@@ -625,32 +848,43 @@ class UpdaterExt:
                 out['path'] = dest
             except Exception as e:
                 out['error'] = f'{type(e).__name__}: {e}'
-            self._download_result = out
+            if gen == self._download_gen:  # see the check worker
+                self._download_result = out
 
         import threading
         threading.Thread(target=_worker, daemon=True).start()
-        run('args[0]._pollDownload(args[1], args[2], args[3], args[4])',
-            self, interactive, apply_after, gen, 0, delayFrames=15)
+        self._schedule(
+            'args[0]._pollDownload(args[1], args[2], args[3], args[4])',
+            self, interactive, apply_after, gen,
+            self._clock() + self.DOWNLOAD_DEADLINE_S + 15,
+            delayMilliSeconds=self.POLL_INTERVAL_MS)
         return {'status': 'downloading'}
 
-    def _pollDownload(self, interactive, apply_after, gen, attempts):
-        if self._staleInstance():
+    def _pollDownload(self, interactive, apply_after, gen, deadline):
+        if self._staleInstance() or gen != self._download_gen:
             return
+        spec = {'phase': 'download', 'interactive': interactive,
+                'apply_after': apply_after}
         result = self._download_result
         if result is None or result.get('_gen') != gen:
-            if attempts < 800:  # ~200s at 60fps; covers a slow trickle
-                run('args[0]._pollDownload(args[1], args[2], args[3], args[4])',
-                    self, interactive, apply_after, gen, attempts + 1,
-                    delayFrames=15)
+            # Slack past the worker's own budget, so a worker that reports
+            # its stall gets to name it before the poll times out blind.
+            if self._clock() < deadline:
+                self._schedule(
+                    'args[0]._pollDownload(args[1], args[2], args[3], args[4])',
+                    self, interactive, apply_after, gen, deadline,
+                    delayMilliSeconds=self.POLL_INTERVAL_MS)
             else:
-                self._busy = False
-                self._refuse('Download timed out.', interactive)
+                self._networkFailed('download', 'the transfer stalled',
+                                    interactive, spec)
             return
         self._download_result = None
-        self._busy = False
+        self._clearBusy()
         if 'error' in result:
-            self._refuse(f'Download failed: {result["error"]}', interactive)
+            self._networkFailed('download', result['error'], interactive,
+                                spec)
             return
+        self._net_attempt = 0
         self._pending['tox_path'] = result['path']
         self._log(f'downloaded and verified {result["path"]}')
         if apply_after:
@@ -665,12 +899,12 @@ class UpdaterExt:
         if not pending or not pending.get('tox_path'):
             return self._refuse('No verified download to apply. Run '
                                 'CheckForUpdate first.', interactive)
-        if self._readSentinel():
-            return self._refuse('An update is already in progress.',
-                                interactive)
-        if self._busy:
-            return self._refuse('An update operation is already running.',
-                                interactive)
+        blocked = self._sentinelBlocks(interactive)
+        if blocked is not None:
+            return blocked
+        blocked = self._busyBlocks(interactive)
+        if blocked is not None:
+            return blocked
         if self.isDevCheckout():
             return self._refuse('Dev checkout -- refusing self-update.',
                                 interactive)
@@ -702,7 +936,7 @@ class UpdaterExt:
             if choice == 0:
                 project.save()
 
-        self._busy = True
+        self._setBusy('install')
         self._status(f'Installing {pending["tag"]}...')
         # Delay past the post-save dialog-suppression window (~120 frames)
         # AND the Envoy socket-release window, so backup-failure dialogs in
@@ -743,7 +977,7 @@ class UpdaterExt:
                                                      save_path=backup,
                                                      run_hooks=False)
         except Exception as e:
-            self._busy = False
+            self._clearBusy()
             self._fail(f'Backup export failed -- update aborted: {e!r}')
             return
         if not ok:
@@ -751,12 +985,12 @@ class UpdaterExt:
             # (export errors are exception-contained) -- without this
             # gate a STALE backup from a prior attempt could pass the
             # isfile/size checks below and become the rollback artifact.
-            self._busy = False
+            self._clearBusy()
             self._fail('Backup export reported failure -- update aborted.')
             return
         if (not os.path.isfile(backup)
                 or os.path.getsize(backup) < self.MIN_BACKUP_BYTES):
-            self._busy = False
+            self._clearBusy()
             self._fail('Backup tox missing or implausibly small -- '
                        'update aborted.')
             return
@@ -813,7 +1047,7 @@ class UpdaterExt:
                       f"if op('{ep}') and op('{ep}').op('updater') else None")
             run(verify, delayFrames=300)
         except Exception as e:
-            self._busy = False
+            self._clearBusy()
             self._clearSentinel()
             self._fail(f'Update could not be started -- nothing was '
                        f'changed: {e!r}')

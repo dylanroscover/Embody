@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.279-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.280-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-65-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -176,7 +176,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **134 test suites** (4,173 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **134 test suites** (4,207 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -207,6 +207,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.280**: **A stuck download owned the self-updater until you restarted TouchDesigner** -- a socket timeout bounds one read, not the transfer, so a trickling connection hung forever, and the busy latch and crash sentinel that guard an update each had exactly one thing that could ever clear them. The download owns a wall-clock budget now, a failed check or download retries itself three times before giving up loudly and cancelling, every phase carries a ceiling a later attempt uses to clear a dead latch, and a leftover sentinel is resolvable in place instead of refusing every check with advice that could not work.
 - **6.0.279**: **A cloned `.toe` carried its author's `D:\` git root, and Convoy could never turn on** -- the stored `_git_root` bakes into a saved `.toe` when the pre-save scrub doesn't fire, and it was trusted without an existence check, so every `.embody` write on the receiving machine failed with `WinError 3` on a drive it didn't have. A stored root that no longer exists is now dropped and recomputed by the normal walk-up, a custom root on a missing drive heals to the project folder, and the failure warnings name the full target path instead of the bare drive letter.
 - **6.0.278**: **The `.tdn` stops carrying the session inside it** -- an all-default merge input sequence imported as N declared-but-unwired inputs, latching a phantom `No input POP` error on every project open (block counts now apply after wiring, and defaults are probed, not assumed); `tdn_exclude:<parname>` keeps runtime values -- ports, session paths, live readouts -- out of committed files, managed by dragging pars or COMPs onto the tagger's new Exclude from tdn panel; and the Update pulse runs frame-chunked instead of blocking 0.5-1s (zero dropped frames, with an explicit completion line).
 - **6.0.266**: **A package TouchDesigner never shipped, refused as TouchDesigner's own** -- "bundled" meant any `site-packages` on `sys.path`, so a `--user` install or a second project's venv got credited to TD and refused with a false reason. Also: `extras_applied` is now verified against the venv instead of believed, and the local pytest tier has a pinned requirements file.
