@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.280-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.1.2-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-65-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -29,15 +29,15 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 **Convoy** — *outward velocity.* Convoy-enabled Embody nodes on a trusted LAN discover, inspect, and control each other — one AI session relaying builds, test runs, saves, screenshots, and restarts to every machine in the room. A small per-user background app keeps each node reachable even while TouchDesigner is closed. [Convoy guide](https://dylanroscover.github.io/Embody/convoy/)
 
-**[TDN](https://dylanroscover.github.io/Embody/tdn/)** — *the substrate that makes it all possible.* TouchDesigner networks exported as human-readable YAML. The format is what lets your AI agent understand what's on the screen, what lets you diff one attempt against another, and what lets a network reconstruct itself from text on the next project open. TDN is what makes the rest of this possible.
+**[TDXN](https://dylanroscover.github.io/Embody/tdn/)** — *the substrate that makes it all possible.* TouchDesigner networks exported as human-readable YAML. The format is what lets your AI agent understand what's on the screen, what lets you diff one attempt against another, and what lets a network reconstruct itself from text on the next project open. TDXN is what makes the rest of this possible.
 
 ![Embody Manager UI](docs/assets/embody-screenshot.png)
 
 | | What | Why it matters |
 |---|---|---|
 | 🤖 | **Envoy MCP Server** | 65 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
-| 📄 | **TDN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdn` file. |
-| 📦 | **Automatic Restoration** | Externalized files are written on save, so any COMP can be recovered from disk. By default (Export-on-Save) the `.toe` stays authoritative on open; switch to Roundtrip mode to rebuild TDN-strategy COMPs from `.tdn` on every open. |
+| 📄 | **TDXN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdxn` file. |
+| 📦 | **Automatic Restoration** | Externalized files are written on save, so any COMP can be recovered from disk. By default (Export-on-Save) the `.toe` stays authoritative on open; switch to Roundtrip mode to rebuild TDXN-strategy COMPs from `.tdxn` on every open. |
 | 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
 | 🐍 | **Project Python Environment** | One `.venv` per project, built against TouchDesigner's own interpreter — Envoy runs from it, your packages import inside TD from it, and AI agents manage it hands-free. [Python Environment](https://dylanroscover.github.io/Embody/embody/python-environment/) |
 | 🛰️ | **Convoy LAN Relay** | Convoy-enabled Embody nodes on a trusted LAN discover, inspect, and control each other through Envoy — relay test runs, saves, screenshots, and restarts to other machines from one AI session. [Convoy guide](https://dylanroscover.github.io/Embody/convoy/) |
@@ -57,7 +57,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 ### 2. Tag and Work
 
 1. **Tag operators** — hover any COMP or DAT and press `lctrl` twice to open the tagger (pick a strategy for a COMP, a file format for a DAT)
-2. **Work normally** — press `ctrl + shift + u` to update all externalizations, or `ctrl + alt + u` to update only the current COMP. Externalized files are written on save; on open, the `.toe` stays authoritative by default (Export-on-Save), while Roundtrip mode also reconstructs TDN-strategy COMPs from disk
+2. **Work normally** — press `ctrl + shift + u` to update all externalizations, or `ctrl + alt + u` to update only the current COMP. Externalized files are written on save; on open, the `.toe` stays authoritative by default (Export-on-Save), while Roundtrip mode also reconstructs TDXN-strategy COMPs from disk
 
 > **Tip:** Externalization is opt-in — nothing is written to disk until you tag it. To capture your AI assistant's work automatically, set **Auto-Externalize New Ops** (Envoy parameter page) and everything it creates through Envoy is tagged and externalized as it's built.
 
@@ -97,7 +97,7 @@ The generated config runs Envoy's bridged STDIO transport (recommended — it ca
 | `set_parameter` | Set values, expressions, or bind modes on any parameter |
 | `connect_ops` | Wire operators together |
 | `execute_python` | Run arbitrary Python in TD's main thread |
-| `export_network` | Export networks to diffable `.tdn` YAML |
+| `export_network` | Export networks to diffable `.tdxn` YAML |
 | `create_extension` | Scaffold a full extension (COMP + DAT + wiring) |
 | `get_op_errors` | Inspect errors on any operator and its children |
 
@@ -107,9 +107,9 @@ When Envoy starts, it always generates an `AGENTS.md` file in your project root 
 
 ---
 
-## TDN Network Format
+## TDXN Network Format
 
-TDN (TouchDesigner Network) is the file format that makes the rest of Embody possible. It exports an entire operator network — operators, connections, parameters, layout, annotations, DAT content — as a single human-readable YAML file. Your AI agent can read it. You can read it. Any text tool can diff it. The network can rebuild itself from it.
+TDXN (TouchDesigner eXternal Network) is the file format that makes the rest of Embody possible. It exports an entire operator network — operators, connections, parameters, layout, annotations, DAT content — as a single human-readable YAML file. Your AI agent can read it. You can read it. Any text tool can diff it. The network can rebuild itself from it.
 
 This is the substrate. Every other capability — AI-driven building, version control, automatic restoration — builds on top of it.
 
@@ -117,7 +117,7 @@ This is the substrate. Every other capability — AI-driven building, version co
 - **Current COMP**: `ctrl + alt + e`
 - **Via Envoy**: `export_network` / `import_network` MCP tools
 
-See the [full TDN specification](https://dylanroscover.github.io/Embody/tdn/specification/) for format details, import process, and round-trip guarantees.
+See the [full TDXN specification](https://dylanroscover.github.io/Embody/tdn/specification/) for format details, import process, and round-trip guarantees.
 
 ---
 
@@ -130,9 +130,9 @@ See the [full TDN specification](https://dylanroscover.github.io/Embody/tdn/spec
 | `ctrl + alt + u` | Update only the current COMP |
 | `ctrl + shift + r` | Refresh tracking state |
 | `ctrl + shift + o` | Open the Manager UI |
-| `ctrl + shift + c` | Copy the selected COMP to the clipboard as a portable TDN envelope |
-| `ctrl + shift + e` | Export entire project to `.tdn` file |
-| `ctrl + alt + e` | Export current COMP to `.tdn` file |
+| `ctrl + shift + c` | Copy the selected COMP to the clipboard as a portable TDXN envelope |
+| `ctrl + shift + e` | Export entire project to `.tdxn` file |
+| `ctrl + alt + e` | Export current COMP to `.tdxn` file |
 
 These are the defaults — every shortcut is editable on the Embody COMP's **Shortcuts** parameter page (type a combo, or pulse **Record** and press the keys; empty disables it). See [Keyboard Shortcuts](https://dylanroscover.github.io/Embody/embody/keyboard-shortcuts/).
 
@@ -148,7 +148,7 @@ my-project/              ← project folder (optionally a git repo)
 ├── my-project.toe       ← your TouchDesigner project
 ├── base1/               ← externalized operators
 │   ├── base2.tox        ← COMP (TOX strategy)
-│   ├── base3.tdn        ← COMP (TDN strategy — diffable YAML)
+│   ├── base3.tdxn        ← COMP (TDXN strategy — diffable YAML)
 │   └── text1.py         ← DAT
 └── ...
 ```
@@ -176,7 +176,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **134 test suites** (4,207 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **135 test suites** (4,225 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -207,6 +207,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.1.2**: **The network format is TDXN now, and new networks export as `.tdxn`** -- Derivative asked community tools starting with "TD" to move to "TDX", and the strongest claim Embody was making was not the three letters but the expansion: "TouchDesigner Network" describes Derivative's product, not this one. TDXN is **TouchDesigner eXternal Network**, which is literally what the file is. Every existing `.tdn` opens, exports and round-trips unchanged, and none of them move -- Embody keeps writing whichever extension a COMP already uses, so only a *new* externalization mints `.tdxn`; a rename, a project-name change and an `auto` re-export all preserve the existing suffix rather than migrating it. Convert on your own schedule with the new **Migrate .tdn to .tdxn** pulse (idempotent, re-runnable, and it repoints the `tdn_ref` pointers inside parent files). Nothing machine-facing changed: the `strategy` token is still `tdn`, so are the operator tag and all 25 `Tdn*` parameters, and `read_tdn` / `diff_tdn` / `import_network` keep their signatures. Embody also now states plainly that it is not affiliated with Derivative.
 - **6.0.280**: **A stuck download owned the self-updater until you restarted TouchDesigner** -- a socket timeout bounds one read, not the transfer, so a trickling connection hung forever, and the busy latch and crash sentinel that guard an update each had exactly one thing that could ever clear them. The download owns a wall-clock budget now, a failed check or download retries itself three times before giving up loudly and cancelling, every phase carries a ceiling a later attempt uses to clear a dead latch, and a leftover sentinel is resolvable in place instead of refusing every check with advice that could not work.
 - **6.0.279**: **A cloned `.toe` carried its author's `D:\` git root, and Convoy could never turn on** -- the stored `_git_root` bakes into a saved `.toe` when the pre-save scrub doesn't fire, and it was trusted without an existence check, so every `.embody` write on the receiving machine failed with `WinError 3` on a drive it didn't have. A stored root that no longer exists is now dropped and recomputed by the normal walk-up, a custom root on a missing drive heals to the project folder, and the failure warnings name the full target path instead of the bare drive letter.
 - **6.0.278**: **The `.tdn` stops carrying the session inside it** -- an all-default merge input sequence imported as N declared-but-unwired inputs, latching a phantom `No input POP` error on every project open (block counts now apply after wiring, and defaults are probed, not assumed); `tdn_exclude:<parname>` keeps runtime values -- ports, session paths, live readouts -- out of committed files, managed by dragging pars or COMPs onto the tagger's new Exclude from tdn panel; and the Update pulse runs frame-chunked instead of blocking 0.5-1s (zero dropped frames, with an explicit completion line).
@@ -285,6 +286,10 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 Originally derived from [External Tox Saver](https://github.com/franklin113/External-Tox-Saver) by [Tim Franklin](https://github.com/franklin113/). Refactored entirely by Dylan Roscover, with inspiration and guidance from Elburz Sorkhabi, Matthew Ragan and Wieland Hilker.
 
 Want to help? Start with [CONTRIBUTING.md](CONTRIBUTING.md) — this repo works differently from a typical Python project (TouchDesigner writes many of the files), and that page explains what is safe to change and how to run the tests.
+
+## Trademarks and Affiliation
+
+Embody is an independent open-source project. It is not affiliated with, endorsed by, or sponsored by Derivative. TouchDesigner is a trademark of Derivative.
 
 ## License
 

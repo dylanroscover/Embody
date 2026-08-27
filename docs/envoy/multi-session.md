@@ -16,7 +16,7 @@ Each AI client session runs its own bridge process, and every bridge stamps its 
 
 ## Advisories: the `_peers` field
 
-Every write operation records the territory it touched — the op paths involved, plus the files they map to through Embody's externalization tracking (an operator inside a TDN-tracked COMP maps to its `.tdn`; an externalized DAT maps to its `.py`). When any later request overlaps territory another session touched in the last ~10 minutes, the response carries a `_peers` advisory:
+Every write operation records the territory it touched — the op paths involved, plus the files they map to through Embody's externalization tracking (an operator inside a TDXN-tracked COMP maps to its `.tdxn`; an externalized DAT maps to its `.py`). When any later request overlaps territory another session touched in the last ~10 minutes, the response carries a `_peers` advisory:
 
 ```json
 "_peers": [
@@ -64,7 +64,7 @@ Presence and claims answer "who is here and what are they touching right now" --
 
 ## Worktree tasks
 
-Work done in a sibling git worktree is invisible to Envoy twice over — raw file edits, outside the watched repo. Durable `project:worktree-*` claims close that gap: they persist across session death and Envoy restarts, appear in `get_sessions` under `worktrees`, and the `preflight_landing` tool checks a worktree diff against main-tree dirt, peer territory, and unsaved TDN state before it lands. See [Git Worktrees](worktrees.md) for the full workflow.
+Work done in a sibling git worktree is invisible to Envoy twice over — raw file edits, outside the watched repo. Durable `project:worktree-*` claims close that gap: they persist across session death and Envoy restarts, appear in `get_sessions` under `worktrees`, and the `preflight_landing` tool checks a worktree diff against main-tree dirt, peer territory, and unsaved TDXN state before it lands. See [Git Worktrees](worktrees.md) for the full workflow.
 
 ## For agent authors
 

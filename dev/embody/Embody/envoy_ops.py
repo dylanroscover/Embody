@@ -67,9 +67,9 @@ def delete_op(ext, op_path: str) -> dict:
     try:
         name = target.name
         # Purge externalization tracking (ANY strategy) for this op + any
-        # tracked descendant BEFORE destroying: an unsaved TDN delete + crash
+        # tracked descendant BEFORE destroying: an unsaved TDXN delete + crash
         # can't leave an orphan row that export-mode autosave recovery would
-        # resurrect on next open, and non-TDN rows/files no longer outlive
+        # resurrect on next open, and non-TDXN rows/files no longer outlive
         # their deleted op (issue #57 follow-up).
         try:
             op.Embody.ext.Embody._purgeExternalizationTracking(op_path)
@@ -586,11 +586,11 @@ def create_annotation(ext, parent_path: str, mode: str = "annotate",
         ann = parent.create('annotateCOMP')
 
         # Match TD UI behavior: UI-drawn annotations are utility=True, and
-        # Embody's TDN import applies the same convention on every annotation
+        # Embody's TDXN import applies the same convention on every annotation
         # it (re)creates. A NON-utility annotation is an ordinary COMP
         # subtree -- visible to .children and every default findChildren --
         # which is exactly what let externalization sweeps tag its internal
-        # widget ops as bogus per-op boundaries (TDN annotation
+        # widget ops as bogus per-op boundaries (TDXN annotation
         # double-serialization bug). All Envoy op-path tools resolve utility
         # ops via resolve_op, so nothing is lost by hiding it.
         ann.utility = True
@@ -744,12 +744,12 @@ def externalize_op(ext, op_path: str, tag_type: str = None) -> dict:
         return {'error': f'Operator not found: {op_path}'}
 
     # Annotations are never externalized per-op: the annotateCOMP round-trips
-    # through the parent TDN COMP's semantic annotations: section, and its
+    # through the parent TDXN COMP's semantic annotations: section, and its
     # internal widget ops are TD-managed stock content. Tagging either one
     # creates bogus boundaries whose reconstruction guts the widget.
     if target.family == 'COMP' and target.type == 'annotate':
         return {'error': f'{op_path} is an annotation. Annotations are '
-                         f'captured semantically in the parent TDN COMP\'s '
+                         f'captured semantically in the parent TDXN COMP\'s '
                          f'annotations: section -- edit via set_annotation; '
                          f'they are not externalizable per-op.'}
     if op.Embody.ext.Embody._isInsideAnnotate(target):
@@ -771,9 +771,9 @@ def externalize_op(ext, op_path: str, tag_type: str = None) -> dict:
         op.Embody.ext.Embody.applyTagToOperator(target, tag_type)
         op.Embody.Update()
 
-        # Report the file actually written for the strategy: TDN comps track
+        # Report the file actually written for the strategy: TDXN comps track
         # their .tdn in the externalizations table (externaltox would report
-        # a stale/wrong .tox -- the tox par plays no role in TDN strategy).
+        # a stale/wrong .tox -- the tox par plays no role in TDXN strategy).
         if target.family == 'DAT':
             file_path = target.par.file.eval()
         elif tag_type == op.Embody.par.Tdntag.eval():
@@ -806,7 +806,7 @@ def remove_externalization_tag(ext, op_path: str,
     """Remove Embody externalization tracking and clean up.
 
     Routes through Embody's own removal handlers rather than stripping
-    tags raw: the Update sweep deliberately EXCLUDES TDN comps from
+    tags raw: the Update sweep deliberately EXCLUDES TDXN comps from
     subtraction detection (their lifecycle belongs to RemoveTDNEntry),
     so a raw tag-strip + Update left the table row and the
     _tdn_rel_path breadcrumb behind -- a ghost row that Refresh kept
@@ -859,7 +859,7 @@ def remove_externalization_tag(ext, op_path: str,
             rel_fp = embody.getExternalPath(target)
             embody.RemoveListerRow(target.path, rel_fp,
                                    delete_file=delete_file)
-        # No tags and no TDN row: nothing tracked -- report success with
+        # No tags and no TDXN row: nothing tracked -- report success with
         # an empty removal list (previous behavior, kept for callers that
         # untag defensively).
 
@@ -1056,10 +1056,10 @@ def create_extension(ext, parent_path: str, class_name: str,
     comp.viewer = False
 
     # Auto-externalize per the Autoexternalize preference. Externalize the
-    # host COMP only if WE created it (COMP -> TDN; the code DAT is then
+    # host COMP only if WE created it (COMP -> TDXN; the code DAT is then
     # captured inside it). The code DAT is always a fresh op: under 'dats'
     # (COMP not externalized) it becomes its own .py; under 'comps'/'both'
-    # the COMP's TDN already captures it, so its own call boundary-skips.
+    # the COMP's TDXN already captures it, so its own call boundary-skips.
     auto_ext = {}
     try:
         emb = op.Embody.ext.Embody
@@ -1095,9 +1095,9 @@ def create_extension(ext, parent_path: str, class_name: str,
 
 def import_network(ext, target_path, tdn, clear_first=False,
                    restore_tdn_shells=True):
-    """Delegate to TDN extension for network import.
+    """Delegate to TDXN extension for network import.
 
-    restore_tdn_shells=True (default) fills nested externalized-TDN
+    restore_tdn_shells=True (default) fills nested externalized-TDXN
     children from their own .tdn files in the same import, recursively
     -- one import of a deeply nested boundary therefore fans out into
     one ImportNetwork per nested tracked COMP (correctness over speed:
@@ -1107,9 +1107,9 @@ def import_network(ext, target_path, tdn, clear_first=False,
     rebuilt from disk -- unsaved live edits inside those children were
     replaced by the disk copies.
     """
-    if not getattr(ext.ownerComp.ext, 'TDN', None):
-        return {'error': 'TDN extension not loaded on Embody COMP'}
-    return ext.ownerComp.ext.TDN.ImportNetwork(
+    if not getattr(ext.ownerComp.ext, 'TDXN', None):
+        return {'error': 'TDXN extension not loaded on Embody COMP'}
+    return ext.ownerComp.ext.TDXN.ImportNetwork(
         target_path=target_path,
         tdn=tdn,
         clear_first=clear_first,

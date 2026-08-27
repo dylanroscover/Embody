@@ -240,7 +240,7 @@ class TestCatalogScanResume(EmbodyTestCase):
 		super().setUp()
 		import os, tempfile
 		self.cat = self.embody.ext.CatalogManager
-		self.tdn = self.embody.ext.TDN
+		self.tdn = self.embody.ext.TDXN
 		self._tmpdir = tempfile.mkdtemp(prefix='embody_catalog_test_')
 		self._catalog_path = os.path.join(self._tmpdir, 'catalog_test.json')
 		self._orig_status = str(self.embody.par.Status)
@@ -302,7 +302,7 @@ class TestCatalogScanResume(EmbodyTestCase):
 		self.cat._ensurePalette = (
 			lambda op_catalog, resume_results=None:
 				self._ensure_calls.append((op_catalog, resume_results)))
-		# Make the TDNExt idempotency guard falsy so EnsureCatalogs
+		# Make the TDXNExt idempotency guard falsy so EnsureCatalogs
 		# actually enters its body.
 		self.tdn._palette_catalog = {}
 		self.cat._scan_in_flight = False
@@ -481,7 +481,7 @@ class TestCatalogPaletteSentinel(EmbodyTestCase):
 		super().setUp()
 		import os, tempfile
 		self.cat = self.embody.ext.CatalogManager
-		self.tdn = self.embody.ext.TDN
+		self.tdn = self.embody.ext.TDXN
 		self._tmpdir = tempfile.mkdtemp(prefix='embody_sentinel_test_')
 		self._sentinel_path = os.path.join(
 			self._tmpdir, 'palette_scan_inflight.json')
@@ -677,7 +677,7 @@ class TestCatalogToeexpandScan(EmbodyTestCase):
 		super().setUp()
 		import os, tempfile
 		self.cat = self.embody.ext.CatalogManager
-		self.tdn = self.embody.ext.TDN
+		self.tdn = self.embody.ext.TDXN
 		self._tmpdir = tempfile.mkdtemp(prefix='embody_toex_test_')
 		self._orig_status = str(self.embody.par.Status)
 		self._cat_saved = {

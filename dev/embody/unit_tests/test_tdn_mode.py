@@ -31,7 +31,7 @@ class TestTdnMode(EmbodyTestCase):
         super().setUp()
         # Suppress the 'Off' confirmation dialog when flipping to off.
         self.embody.store('_smoke_test_responses', {
-            'Embody - Disable TDN': 1,  # 1 = 'Keep .tdn files (disable only)'
+            'Embody - Disable TDXN': 1,  # 1 = 'Keep network files (disable only)'
         })
         self._mode_was = self.embody.par.Tdnmode.eval()
 
@@ -94,7 +94,7 @@ class TestTdnMode(EmbodyTestCase):
                     break
             if found_page:
                 break
-        self.assertEqual(found_page, 'TDN')
+        self.assertIn(found_page, ('TDXN', 'TDN'))
 
     # ------------------------------------------------------------------
     # 2. Helper short-circuits
@@ -146,7 +146,7 @@ class TestTdnMode(EmbodyTestCase):
         new_logs = [e for e in self.embody_ext._log_buffer
                     if e['id'] > log_before]
         messages = ' | '.join(e.get('message', '') for e in new_logs)
-        self.assertIn('TDN disabled', messages)
+        self.assertIn('TDXN disabled', messages)
         self.assertNotIn('Operator not found', messages)
 
     # ------------------------------------------------------------------
@@ -210,7 +210,7 @@ class TestTdnMode(EmbodyTestCase):
             if os.path.isdir(ext_folder):
                 for root, _, filenames in os.walk(ext_folder):
                     for fn in filenames:
-                        if fn.endswith('.tdn'):
+                        if fn.endswith(('.tdxn', '.tdn')):
                             files.add(os.path.relpath(
                                 os.path.join(root, fn), ext_folder))
             return sorted(rows), files
@@ -230,8 +230,11 @@ class TestTdnMode(EmbodyTestCase):
     # ------------------------------------------------------------------
 
     def _getTdnPage(self):
+        # v6.1.0 renamed the page to TDXN; an install that self-updated
+        # keeps its existing 'TDN' page, so both must resolve -- this
+        # mirrors the same dual match in _applyTdnModeGating.
         for page in self.embody.customPages:
-            if page.name == 'TDN':
+            if page.name in ('TDXN', 'TDN'):
                 return page
         return None
 

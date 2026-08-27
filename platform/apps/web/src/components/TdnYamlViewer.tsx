@@ -1,8 +1,8 @@
 import { useMemo, useState, useRef, useEffect, type CSSProperties, type ReactNode } from "react";
 import { tokenize, leadingSpaces, type Seg } from "../lib/tdnTokenize";
 
-// Read-only, TDN-aware YAML viewer for the specimen "raw TDN" block:
-// syntax highlighting (with the TDN =expression shorthand in the brand accent),
+// Read-only, TDXN-aware YAML viewer for the specimen "raw TDXN" block:
+// syntax highlighting (with the TDXN =expression shorthand in the brand accent),
 // indentation-based collapsible sections, in-place search, line numbers, a
 // word-wrap toggle, expand/collapse-all, and jump-to-section chips. SSR renders
 // the highlighted lines so the colored YAML shows before hydration; the controls
@@ -28,10 +28,10 @@ type Line = {
 
 // ---- parsing ---------------------------------------------------------------
 
-// Cap how many lines we tokenize and render. The TDN blob can be multi-MB; a
+// Cap how many lines we tokenize and render. The TDXN blob can be multi-MB; a
 // pathological specimen would otherwise build tens of thousands of DOM nodes and
 // tokenize every line, hanging SSR and the client. Past the cap we render the
-// first MAX_RENDER_LINES and show a truncation notice -- the full TDN is always
+// first MAX_RENDER_LINES and show a truncation notice -- the full TDXN is always
 // available via the copy button / .tdn download.
 const MAX_RENDER_LINES = 5000;
 
@@ -306,7 +306,7 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
             type="search"
             className="tdn-yaml__search-input"
             placeholder="search..."
-            aria-label="Search the TDN YAML"
+            aria-label="Search the TDXN YAML"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />

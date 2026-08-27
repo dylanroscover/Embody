@@ -16,7 +16,7 @@ reintroduce it.
   produces churn: the BOM appears, a save strips it, and it shows up as a
   spurious one-line diff. These files are plain UTF-8, no BOM. (This reverses
   earlier guidance that said to preserve the BOM on `EmbodyExt.py` /
-  `EnvoyExt.py` / `TDNExt.py` / `CatalogManagerExt.py` -- verified 2026-06-12
+  `EnvoyExt.py` / `TDXNExt.py` / `CatalogManagerExt.py` -- verified 2026-06-12
   that TD never keeps it, so the BOMs were stripped for good.)
 
 ## Use ASCII punctuation in code, data, and generated text

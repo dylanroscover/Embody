@@ -26,7 +26,7 @@ python); on any `import yaml` failure OR read/parse error it emits the raw
 file unchanged, so a malformed .tdn still diffs (unfiltered) rather than
 breaking git.
 
-The stripped key set is a deliberate SUPERSET of TDNExt._TDN_VOLATILE_KEYS:
+The stripped key set is a deliberate SUPERSET of TDXNExt._TDN_VOLATILE_KEYS:
 it also drops 'version' and 'source_file' so a v1.5-JSON-history blob and a
 v2.0-YAML-working-tree blob of the same network normalize identically. The
 driver list is local; it does NOT touch the on-disk version field.
@@ -42,13 +42,17 @@ except Exception:
     _HAVE_YAML = False
 
 # Header keys written into every .tdn on export that change without the
-# network changing. Deliberate SUPERSET of TDNExt._TDN_VOLATILE_KEYS
+# network changing. Deliberate SUPERSET of TDXNExt._TDN_VOLATILE_KEYS
 # ({'build','generator','td_build','exported_at'}): 'version' is added so the
 # v1.5->v2.0 format bump does not churn the diff, and 'source_file' is dropped
-# across the migration boundary. Do NOT 'sync' this to equality with
-# _TDN_VOLATILE_KEYS -- the broader set is correct by intent.
+# across the migration boundary. 'format' is added for the same reason: the
+# v6.1.0 tdn->tdxn identity bump would otherwise show as a one-line diff in
+# every tracked file. Do NOT 'sync' this to equality with
+# _TDN_VOLATILE_KEYS -- the broader set is correct by intent, and adding
+# 'format' THERE would make _tdn_content_equal treat the bump as "no change",
+# so existing files would never converge to the new key.
 VOLATILE_KEYS = ('build', 'generator', 'td_build', 'exported_at',
-                 'source_file', 'version')
+                 'source_file', 'version', 'format')
 
 
 if _HAVE_YAML:
@@ -85,7 +89,7 @@ if _HAVE_YAML:
 def _parse(raw):
     """Parse a .tdn document. JSON-first (legacy tab-indented JSON), else YAML.
 
-    Mirrors TDNExt.tdn_load: feeds json.loads the BOM/whitespace-stripped text
+    Mirrors TDXNExt.tdn_load: feeds json.loads the BOM/whitespace-stripped text
     so a BOM-prefixed legacy JSON blob does not fall through to a YAML parse
     that would ScannerError on the tab indentation.
     """
@@ -134,7 +138,7 @@ def normalize(raw):
         for key in VOLATILE_KEYS:
             doc.pop(key, None)
         _normalize_dat_content(doc)
-    # Deterministic, order-preserving dump with the SAME config as TDNExt's
+    # Deterministic, order-preserving dump with the SAME config as TDXNExt's
     # _TDNYamlDumper (block scalars, short-numeric list flow, sort_keys=False).
     # Both sides of a diff pass through this identical normalization.
     try:

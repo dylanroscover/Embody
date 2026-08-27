@@ -4,6 +4,14 @@ site_url: https://dylanroscover.github.io/Embody/
 repo_url: https://github.com/dylanroscover/Embody
 repo_name: Embody
 
+# Rendered in the footer of every page by mkdocs-material. Provenance is the
+# concern behind Derivative's TDX naming request, and stating it plainly
+# addresses that more directly than any prefix does.
+copyright: >
+  Embody is an independent open-source project. It is not affiliated with,
+  endorsed by, or sponsored by Derivative. TouchDesigner is a trademark of
+  Derivative.
+
 theme:
   name: material
   logo: assets/embody-logo.svg
@@ -103,7 +111,7 @@ nav:
     - convoy/index.md
     - Setup & Troubleshooting: convoy/host-app.md
     - Fleet Updates: convoy/fleet-updates.md
-  - TDN:
+  - TDXN:
     - tdn/index.md
     - Specification: tdn/specification.md
     - YAML Schema: tdn/schema.md

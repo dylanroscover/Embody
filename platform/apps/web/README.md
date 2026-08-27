@@ -24,7 +24,7 @@ The fixture pages remain standalone for design review. API routes require local 
 ## Local API data
 
 The Collection is the six first-party Specimens under the repo's top-level
-`specimens/` (real `.tdn` networks + `manifest.json`). `seed.sql`,
+`specimens/` (real `.tdxn` networks + `manifest.json`). `seed.sql`,
 `src/fixtures/specimens.json`, `specimen-graphs.ts`, and the blob manifest are
 all GENERATED from those by `scripts/build-specimen-data.py` -- never hand-edit
 them. From `platform/apps/web/`:
@@ -33,10 +33,10 @@ them. From `platform/apps/web/`:
 python3 scripts/build-specimen-data.py          # regenerate seed.sql + fixtures + blob manifest
 wrangler d1 migrations apply embody --local
 wrangler d1 execute embody --local --file ./src/server/seed.sql
-bash scripts/upload-seed-blobs.sh               # real .tdn blobs -> local R2, keyed by sha256
+bash scripts/upload-seed-blobs.sh               # real .tdxn blobs -> local R2, keyed by sha256
 ```
 
-The blobs are content-addressed: the R2 key IS the sha256 of the `.tdn` bytes
+The blobs are content-addressed: the R2 key IS the sha256 of the `.tdxn` bytes
 (it equals `tdn_r2_key` in `seed.sql`), so `/api/specimens/:slug/tdn` resolves.
 
 To seed **production** (deployed D1 + R2), run the generator, then target the

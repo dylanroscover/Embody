@@ -1,4 +1,4 @@
-"""Tests for the TDN clipboard auto-paste watcher (TDNExt._clipboardWatchPoll).
+"""Tests for the TDN clipboard auto-paste watcher (TDXNExt._clipboardWatchPoll).
 
 The watcher polls ui.clipboard; when a NEW _embody_tdn envelope appears it offers
 (via the Embody message box) to "embody it" into the current network as a new
@@ -37,31 +37,31 @@ class TestClipboardWatch(EmbodyTestCase):
         op.Embody.store('_clip_watch_gen', self._saved_gen + 1)
         # The watcher only prompts while TD is the active window; headless tests have
         # no rollover, so force the gate open. The gate test overrides this.
-        op.Embody.ext.TDN._tdWindowActive = lambda: True
+        op.Embody.ext.TDXN._tdWindowActive = lambda: True
 
     def tearDown(self):
         ui.clipboard = self._orig_clip
         op.Embody.par.Clipboardautopaste = self._orig_param
-        op.Embody.ext.TDN._clip_last_sig = (len(self._orig_clip or ''),
+        op.Embody.ext.TDXN._clip_last_sig = (len(self._orig_clip or ''),
                                             hash(self._orig_clip or ''))
         try:
             del op.Embody.ext.Embody._messageBox
         except Exception:
             pass
         try:
-            del op.Embody.ext.TDN._tdWindowActive
+            del op.Embody.ext.TDXN._tdWindowActive
         except Exception:
             pass
         if self.sandbox.op('cw_probe'):
             self.sandbox.op('cw_probe').destroy()
         # Restart the live watcher the suite orphaned in setUp, mirroring the
-        # product's own kick in TDNExt.onInitTD. Without this the clipboard
+        # product's own kick in TDXNExt.onInitTD. Without this the clipboard
         # auto-paste feature would stay dead in the running session until the
         # next extension reinit.
         try:
             gen = op.Embody.fetch('_clip_watch_gen', 0) + 1
             op.Embody.store('_clip_watch_gen', gen)
-            run("o = op(%r)\nif o and o.valid: o.ext.TDN._clipboardWatchTick(%d)"
+            run("o = op(%r)\nif o and o.valid: o.ext.TDXN._clipboardWatchTick(%d)"
                 % (op.Embody.path, gen),
                 fromOP=op.Embody, delayMilliSeconds=1500)
         except Exception:
@@ -93,12 +93,12 @@ class TestClipboardWatch(EmbodyTestCase):
         if not probe:
             probe = self.sandbox.create(baseCOMP, 'cw_probe')
             probe.create(constantCHOP, 'c1')
-        marker = op.Embody.op('TDNExt').module.EMBODY_TDN_MARKER
-        op.Embody.ext.TDN.CopyNetworkToClipboard(probe)
+        marker = op.Embody.op('TDXNExt').module.EMBODY_TDN_MARKER
+        op.Embody.ext.TDXN.CopyNetworkToClipboard(probe)
         self.requireClipboardHolds(
             lambda raw: marker in raw,
             what='a TDN envelope',
-            reseed=lambda: op.Embody.ext.TDN.CopyNetworkToClipboard(probe))
+            reseed=lambda: op.Embody.ext.TDXN.CopyNetworkToClipboard(probe))
 
     def _set_clipboard(self, text):
         """Write the system clipboard and VERIFY the write stuck.
@@ -149,15 +149,15 @@ class TestClipboardWatch(EmbodyTestCase):
 
     def test_detects_envelope(self):
         self._put_envelope()
-        self.assertTrue(op.Embody.ext.TDN.ClipboardHasNetwork())
+        self.assertTrue(op.Embody.ext.TDXN.ClipboardHasNetwork())
 
     def test_offswitch_no_prompt(self):
         self._put_envelope()
         calls = []
         op.Embody.ext.Embody._messageBox = lambda *a, **k: (calls.append(1), 1)[1]
         op.Embody.par.Clipboardautopaste = 0
-        op.Embody.ext.TDN._clip_last_sig = None
-        op.Embody.ext.TDN._clipboardWatchPoll()
+        op.Embody.ext.TDXN._clip_last_sig = None
+        op.Embody.ext.TDXN._clipboardWatchPoll()
         self.assertEqual(len(calls), 0, 'param off -> no prompt')
 
     def test_prompts_then_debounces(self):
@@ -165,11 +165,11 @@ class TestClipboardWatch(EmbodyTestCase):
         calls = []
         op.Embody.ext.Embody._messageBox = lambda *a, **k: (calls.append(a[0]), 1)[1]
         op.Embody.par.Clipboardautopaste = 1
-        op.Embody.ext.TDN._clip_last_sig = None
-        op.Embody.ext.TDN._clipboardWatchPoll()
+        op.Embody.ext.TDXN._clip_last_sig = None
+        op.Embody.ext.TDXN._clipboardWatchPoll()
         self.assertEqual(len(calls), 1, 'new envelope -> one prompt')
-        self.assertIn('TDN', calls[0])
-        op.Embody.ext.TDN._clipboardWatchPoll()          # same clipboard
+        self.assertIn('TDXN', calls[0])
+        op.Embody.ext.TDXN._clipboardWatchPoll()          # same clipboard
         self.assertEqual(len(calls), 1, 'dismiss debounce -> no re-prompt')
 
     def test_non_envelope_no_prompt(self):
@@ -177,8 +177,8 @@ class TestClipboardWatch(EmbodyTestCase):
         calls = []
         op.Embody.ext.Embody._messageBox = lambda *a, **k: (calls.append(1), 1)[1]
         op.Embody.par.Clipboardautopaste = 1
-        op.Embody.ext.TDN._clip_last_sig = None
-        op.Embody.ext.TDN._clipboardWatchPoll()
+        op.Embody.ext.TDXN._clip_last_sig = None
+        op.Embody.ext.TDXN._clipboardWatchPoll()
         self.assertEqual(len(calls), 0, 'non-envelope clipboard -> no prompt')
 
     def test_inactive_window_suppresses_then_prompts_on_return(self):
@@ -189,18 +189,18 @@ class TestClipboardWatch(EmbodyTestCase):
         calls = []
         op.Embody.ext.Embody._messageBox = lambda *a, **k: (calls.append(1), 1)[1]
         op.Embody.par.Clipboardautopaste = 1
-        op.Embody.ext.TDN._clip_last_sig = None
-        op.Embody.ext.TDN._tdWindowActive = lambda: False      # TD in the background
-        op.Embody.ext.TDN._clipboardWatchPoll()
+        op.Embody.ext.TDXN._clip_last_sig = None
+        op.Embody.ext.TDXN._tdWindowActive = lambda: False      # TD in the background
+        op.Embody.ext.TDXN._clipboardWatchPoll()
         self.assertEqual(len(calls), 0, 'inactive window -> no prompt')
-        self.assertIsNone(op.Embody.ext.TDN._clip_last_sig, 'inactive -> sig left unrecorded')
-        op.Embody.ext.TDN._tdWindowActive = lambda: True       # user returns to TD
-        op.Embody.ext.TDN._clipboardWatchPoll()
+        self.assertIsNone(op.Embody.ext.TDXN._clip_last_sig, 'inactive -> sig left unrecorded')
+        op.Embody.ext.TDXN._tdWindowActive = lambda: True       # user returns to TD
+        op.Embody.ext.TDXN._clipboardWatchPoll()
         # Report every gate _clipboardWatchPoll checks. A bare "0 != 1" here
         # says nothing about WHICH gate closed, and cost two wrong hypotheses
         # (a clipboard-seed race, then the pane gate) before the real cause --
         # the live watcher tick eating the signature -- was found.
-        marker = op.Embody.op('TDNExt').module.EMBODY_TDN_MARKER
+        marker = op.Embody.op('TDXNExt').module.EMBODY_TDN_MARKER
         pane = ui.panes.current
         owner = pane.owner if pane else None
         self.assertEqual(
@@ -211,8 +211,8 @@ class TestClipboardWatch(EmbodyTestCase):
             % (op.Embody.par.Clipboardautopaste.eval(),
                op.Embody.par.Performmode.eval(),
                marker in (ui.clipboard or ''), len(ui.clipboard or ''),
-               op.Embody.ext.TDN._clip_last_sig,
-               op.Embody.ext.TDN._tdWindowActive(),
+               op.Embody.ext.TDXN._clip_last_sig,
+               op.Embody.ext.TDXN._tdWindowActive(),
                owner.path if owner else None,
                bool(owner and owner.isCOMP)))
 
@@ -222,14 +222,14 @@ class TestClipboardWatch(EmbodyTestCase):
         # own export back in: CopyNetworkToClipboard seeds _clip_last_sig with what it
         # just wrote, so the next poll sees no NEW (inbound) content. This is the
         # outbound-vs-inbound fix -- note the sig is left exactly as the copy set it.
-        op.Embody.ext.TDN._clip_last_sig = None
+        op.Embody.ext.TDXN._clip_last_sig = None
         self._put_envelope()                                   # outbound copy
-        self.assertIsNotNone(op.Embody.ext.TDN._clip_last_sig,
+        self.assertIsNotNone(op.Embody.ext.TDXN._clip_last_sig,
                              'outbound copy must seed the watcher signature')
         calls = []
         op.Embody.ext.Embody._messageBox = lambda *a, **k: (calls.append(1), 1)[1]
         op.Embody.par.Clipboardautopaste = 1
-        op.Embody.ext.TDN._clipboardWatchPoll()                # sig NOT cleared
+        op.Embody.ext.TDXN._clipboardWatchPoll()                # sig NOT cleared
         self.assertEqual(len(calls), 0,
                          'outbound copy -> watcher must not prompt to re-import')
 
@@ -239,7 +239,7 @@ class TestClipboardWatch(EmbodyTestCase):
         # "embody it" button, a foreign envelope) is genuinely inbound -- a different
         # string -> a different sig -> it still prompts.
         self._put_envelope()                                   # outbound copy of cw_probe
-        m = op.Embody.op('TDNExt').module
+        m = op.Embody.op('TDXNExt').module
         foreign = m.wrap_tdn(
             {'format': 'tdn', 'version': '2.0', 'network_path': '/x/foreign',
              'operators': [{'name': 'n', 'type': 'noiseTOP'}]},
@@ -248,6 +248,6 @@ class TestClipboardWatch(EmbodyTestCase):
         calls = []
         op.Embody.ext.Embody._messageBox = lambda *a, **k: (calls.append(a[0]), 1)[1]
         op.Embody.par.Clipboardautopaste = 1
-        op.Embody.ext.TDN._clipboardWatchPoll()
+        op.Embody.ext.TDXN._clipboardWatchPoll()
         self.assertEqual(len(calls), 1,
                          'a different (inbound) TDN after an outbound copy still prompts')

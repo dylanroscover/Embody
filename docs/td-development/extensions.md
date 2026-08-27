@@ -47,29 +47,29 @@ def onInitTD(self):
     pass
 ```
 
-## Initialization and TDN Import Timing
+## Initialization and TDXN Import Timing
 
-!!! danger "Critical: `onInitTD` runs BEFORE TDN import"
-    If your extension lives inside a TDN-strategy COMP (or the extension's ownerComp is one), `onInitTD` fires **before** TDN reconstruction completes. Any state your extension sets up — created operators, parameter values, stored data, internal network structure — is **overwritten** when the TDN import runs.
+!!! danger "Critical: `onInitTD` runs BEFORE TDXN import"
+    If your extension lives inside a TDXN-strategy COMP (or the extension's ownerComp is one), `onInitTD` fires **before** TDXN reconstruction completes. Any state your extension sets up — created operators, parameter values, stored data, internal network structure — is **overwritten** when the TDXN import runs.
 
 ### Why this happens
 
-Embody uses TDN (TouchDesigner Network) files to externalize COMP contents as diffable YAML. When Embody reconstructs a TDN COMP it calls `ImportNetwork` with `clear_first=True` — this deletes all children inside the COMP and recreates them from the `.tdn` file.
+Embody uses TDXN (TouchDesigner eXternal Network) files to externalize COMP contents as diffable YAML. When Embody reconstructs a TDXN COMP it calls `ImportNetwork` with `clear_first=True` — this deletes all children inside the COMP and recreates them from the `.tdxn` file.
 
-**When reconstruction runs depends on `Tdnmode`.** In the experimental **Roundtrip** mode, every TDN COMP is reconstructed on project open (and stripped/restored on every save), so the timing below applies in full. In the default **Export-on-Save** mode the `.toe` stays authoritative on open — existing COMPs are **not** rebuilt, only a COMP *absent* from the `.toe` is reconstructed from its `.tdn`, and save does not strip. Even so, treat the deferral pattern below as the safe default: it also covers manual `import_network` reloads, which use `clear_first=True` in any mode.
+**When reconstruction runs depends on `Tdnmode`.** In the experimental **Roundtrip** mode, every TDXN COMP is reconstructed on project open (and stripped/restored on every save), so the timing below applies in full. In the default **Export-on-Save** mode the `.toe` stays authoritative on open — existing COMPs are **not** rebuilt, only a COMP *absent* from the `.toe` is reconstructed from its `.tdxn`, and save does not strip. Even so, treat the deferral pattern below as the safe default: it also covers manual `import_network` reloads, which use `clear_first=True` in any mode.
 
 The timing sequence on project open (Roundtrip mode, or an absent-COMP recovery):
 
 1. **COMP shell is created** — the COMP exists but its children haven't been imported yet
 2. **Extension initializes** — `__init__` runs, then `onInitTD` fires at end of frame
-3. **TDN import runs** (frame 60) — deletes all children, recreates network from `.tdn` file
+3. **TDXN import runs** (frame 60) — deletes all children, recreates network from `.tdxn` file
 4. **Extension state is lost** — anything `onInitTD` set up inside the COMP is gone
 
 In **Roundtrip** mode a similar sequence occurs on every **Ctrl+S** due to the strip/restore cycle: children are stripped before save, then re-imported afterward. Extensions may reinitialize during this process. (Export-on-Save does not strip, so this save-time cycle does not apply there.)
 
 ### The fix: defer initialization
 
-Use `run()` with `delayFrames` to push your setup code past the TDN import:
+Use `run()` with `delayFrames` to push your setup code past the TDXN import:
 
 ```python
 class MyFeatureExt:
@@ -77,12 +77,12 @@ class MyFeatureExt:
         self.ownerComp = ownerComp
 
     def onInitTD(self):
-        # DON'T set up state here — it will be overwritten by TDN import.
+        # DON'T set up state here — it will be overwritten by TDXN import.
         # Instead, defer to after the import completes:
         run('args[0].postInit()', self, delayFrames=5)
 
     def postInit(self):
-        """Runs after TDN import is complete. Safe to set up state here."""
+        """Runs after TDXN import is complete. Safe to set up state here."""
         # Create operators, set parameters, build internal state
         child = self.ownerComp.op('my_child')
         if child:
@@ -93,17 +93,17 @@ class MyFeatureExt:
 
 | Rule | Reason |
 |------|--------|
-| **Always defer initialization inside TDN COMPs** | `onInitTD` fires before import — any setup is overwritten |
+| **Always defer initialization inside TDXN COMPs** | `onInitTD` fires before import — any setup is overwritten |
 | **Make deferred init idempotent** | It may run multiple times: project open, every save, manual reimport |
 | **Null-check operators in deferred init** | During strip phase, children are temporarily gone |
-| **Use `store()` on the COMP for persistent state** | Storage on the COMP itself survives TDN import (it's preserved in phase 6a) |
+| **Use `store()` on the COMP for persistent state** | Storage on the COMP itself survives TDXN import (it's preserved in phase 6a) |
 | **Use a delay of at least 5 frames** | The import runs across multiple phases; 5 frames provides sufficient margin |
 
-!!! tip "How to tell if you're inside a TDN COMP"
-    Check whether your COMP (or an ancestor) has a TDN entry in the externalizations table. In Claude Code, call `get_externalizations` and look for a `tdn` strategy on the COMP path. If your extension is a child of a TDN-strategy COMP, this timing issue applies to you.
+!!! tip "How to tell if you're inside a TDXN COMP"
+    Check whether your COMP (or an ancestor) has a TDXN entry in the externalizations table. In Claude Code, call `get_externalizations` and look for a `tdn` strategy on the COMP path. If your extension is a child of a TDXN-strategy COMP, this timing issue applies to you.
 
-!!! note "Extensions outside TDN COMPs are unaffected"
-    If your extension's ownerComp is **not** managed by TDN (e.g., it's a TOX-strategy COMP or not externalized at all), `onInitTD` behaves normally — no deferral needed.
+!!! note "Extensions outside TDXN COMPs are unaffected"
+    If your extension's ownerComp is **not** managed by TDXN (e.g., it's a TOX-strategy COMP or not externalized at all), `onInitTD` behaves normally — no deferral needed.
 
 ## Extension Referencing
 

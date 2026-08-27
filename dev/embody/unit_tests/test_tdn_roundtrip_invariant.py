@@ -40,10 +40,10 @@ class TestTDNRoundtripInvariant(EmbodyTestCase):
 
     @property
     def tdn(self):
-        """Resolved inline every access -- never cached. TDNExt reinits on
+        """Resolved inline every access -- never cached. TDXNExt reinits on
         any source edit (syncfile), and a cached ref taken in setUp would
         go stale mid-run against the very extension this suite tests."""
-        return self.embody.ext.TDN
+        return self.embody.ext.TDXN
 
     # --- helpers ---------------------------------------------------------
 
@@ -199,8 +199,8 @@ class TestTDNRoundtripInvariant(EmbodyTestCase):
         """THE DEFECT (reproduces the Moonshine v6.0.157 sequence bug).
 
         The exporter discovers sequences via `target.pars()` + `p.isSequence`
-        (TDNExt.py:2872-2878). The importer resolves them by iterating
-        `target.seq` (`_getSequenceByName`, TDNExt.py:4105-4106).
+        (TDXNExt.py:2872-2878). The importer resolves them by iterating
+        `target.seq` (`_getSequenceByName`, TDXNExt.py:4105-4106).
 
         MEASURED 2026-07-25, TD 099.2025.33070, fresh linePOP:
             pars-based discovery : ['attr']
@@ -213,9 +213,9 @@ class TestTDNRoundtripInvariant(EmbodyTestCase):
         target.seq.
 
         So on a never-cooked POP the exporter silently DROPS a populated
-        sequence from the .tdn. TDNExt already documents this accessor as
+        sequence from the .tdn. TDXNExt already documents this accessor as
         unreliable on POPs and hardened the LOOKUP path for it
-        (_getSequenceByName docstring, TDNExt.py:4099-4103) -- the
+        (_getSequenceByName docstring, TDXNExt.py:4099-4103) -- the
         DISCOVERY path was never given the same treatment.
 
         FIX: discover sequences by iterating `target.seq`, the path the

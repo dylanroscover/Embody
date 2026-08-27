@@ -32,12 +32,12 @@ export const GET: APIRoute = async ({ params, url }) => {
 
     const blob = await getCurrentTdnBlobForSlug(env.DB, slug);
     if (!blob) {
-      return errorResponse(404, "tdn_not_found", "No TDN blob exists for that slug.");
+      return errorResponse(404, "tdn_not_found", "No TDXN blob exists for that slug.");
     }
 
     const tdn = await getTdn(env.BLOBS, blob.key);
     if (!tdn) {
-      return errorResponse(404, "tdn_not_found", "The TDN blob is missing from R2.");
+      return errorResponse(404, "tdn_not_found", "The TDXN blob is missing from R2.");
     }
 
     return new Response(tdn, {
@@ -53,11 +53,11 @@ export const GET: APIRoute = async ({ params, url }) => {
   }
 };
 
-// Resolve, parse, and trim the current-version TDN into a light cover graph.
+// Resolve, parse, and trim the current-version TDXN into a light cover graph.
 async function graphResponse(slug: string): Promise<Response> {
   const parsed = await getParsedTdnForSlug(env.DB, env.BLOBS, slug);
   if (!parsed) {
-    return errorResponse(404, "tdn_not_found", "No TDN graph exists for that slug.");
+    return errorResponse(404, "tdn_not_found", "No TDXN graph exists for that slug.");
   }
 
   return jsonResponse(trimTdnForCover(parsed.tdn), {

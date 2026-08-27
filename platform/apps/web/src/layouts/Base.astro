@@ -144,7 +144,7 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
             aria-current={isActive("/collection") ? "page" : undefined}
           >
             <span class="navbar__label">collection</span>
-            <span class="nav-item__desc">transparent TDN networks to inspect, copy, and remix.</span>
+            <span class="nav-item__desc">transparent TDXN networks to inspect, copy, and remix.</span>
           </a>
           <a
             class:list={["navbar__item", { "is-active": isActive("/manifesto") }]}
@@ -241,7 +241,7 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
           <h4 class="footer__h">Reference</h4>
           <ul>
             <li><a href="https://dylanroscover.github.io/Embody/">documentation</a></li>
-            <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDN spec</a></li>
+            <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDXN spec</a></li>
             <li><a href="/manifesto">manifesto</a></li>
             <li><a href="https://dylanroscover.github.io/Embody/changelog/">changelog</a></li>
             <li><a href="/privacy">privacy</a></li>
@@ -432,7 +432,7 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
       // menu. The account chip and sign in (plus the wordmark) are never
       // overflowed; the rightmost low-priority items go first (github, then
       // docs, then manifesto, then collection). The contribute nav item was
-      // replaced by the "post a TDN" button on /collection.
+      // replaced by the "post a TDXN" button on /collection.
       const moreNav = document.querySelector("[data-nav-more]");
       const moreBtn = document.querySelector("[data-nav-more-toggle]");
       const moreMenu = document.querySelector("[data-nav-more-menu]");
@@ -767,7 +767,7 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
                 el === canvas || (el.hasAttribute && el.hasAttribute("data-site-header")) ||
                 (el.classList && (el.classList.contains("site-header") || el.classList.contains("skip-link") ||
                   // Skip the heavy specimen-page islands from the snapshot: the
-                  // raw-TDN YAML viewer (.tdn-yaml) renders ~3600 tokenized spans
+                  // raw-TDXN YAML viewer (.tdn-yaml) renders ~3600 tokenized spans
                   // even while collapsed, and the React Flow graph (.tdn-viewer)
                   // is hundreds of SVG nodes. Together they were ~4800 of ~5000
                   // page elements and cost html2canvas ~2.3s -- a main-thread

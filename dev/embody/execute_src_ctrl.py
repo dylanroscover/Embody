@@ -17,7 +17,57 @@ root = Path(project.folder).parents[0]
 BUILD_RE = re.compile(r'\b\d{4}\.\d{3,6}\b')
 
 
+# One-shot target for a MINOR or MAJOR bump. version() below can only add 1
+# to the LAST dotted component, so 6.0.280 -> 6.1.0 is unreachable by
+# incrementing. Set this to the exact version the NEXT save should stamp.
+#
+# It fires only while the current version is STRICTLY BELOW the target, so it
+# disarms permanently once reached. Comparing for INEQUALITY instead
+# oscillates -- 6.0.280 -> 6.1.0 -> 6.1.1 -> back to 6.1.0 forever, because
+# 6.1.1 != 6.1.0 re-arms it (caught in test, 2026-08-26).
+#
+# Safe to leave set after the release lands; test_version_sync asserts it is
+# empty or already reached, so a stale target cannot silently jump a later save.
+#
+# ARMING THIS IS THE RELEASE STEP. Set it to '6.1.0' immediately before the
+# release save and leave it empty the rest of the time -- while armed, ANY
+# project.save() stamps the target, exports release/Embody-v<target>.tox and
+# unlinks the previous release tox.
+VERSION_TARGET = '6.1.0'
+
+
+def _versionTuple(value):
+    """(major, minor, patch) from 'X.Y.Z' / 'vX.Y.Z'; None if malformed.
+
+    Mirrors UpdaterExt.parseVersion so an armed target is guaranteed to be a
+    version the updater can also order -- an unparseable one (e.g. '6.1.-1')
+    would make every client's update check refuse.
+    """
+    try:
+        parts = str(value).strip().lstrip('v').split('.')
+        # isdigit(), not int(): int() accepts '-1', so '6.1.-1' would parse
+        # as (6, 1, -1) and compare BELOW the target -- arming a save that
+        # stamps a version the updater's ^v?(\d+)\.(\d+)\.(\d+)$ then
+        # rejects, wedging every client's update check (caught in test).
+        if len(parts) != 3 or not all(p.isdigit() for p in parts):
+            return None
+        return tuple(int(p) for p in parts)
+    except Exception:
+        return None
+
+
 def version(version):
+    # Guarded: this runs inside onProjectPreSave, which has no fail-safe
+    # boundary -- an exception here truncates the .toe (issue #21).
+    try:
+        target = (VERSION_TARGET or '').strip()
+    except Exception:
+        target = ''
+    if target:
+        current_t, target_t = _versionTuple(version), _versionTuple(target)
+        if current_t and target_t and current_t < target_t:
+            comp.par.Version.val = target
+            return target
     # get current versions
     increment = int(version.rsplit('.', 1)[1])
     major_minor = version.rsplit('.', 1)[0]

@@ -180,18 +180,18 @@ def onValueChange(par, prev):
 		parent.Embody.ext.Embody._onTdnModeChanged(str(par.eval()))
 
 	elif par.name == 'Embeddatsintdns':
-		# No-op when the TDN subsystem is disabled -- nothing to re-export.
+		# No-op when the TDXN subsystem is disabled -- nothing to re-export.
 		if parent.Embody.ext.Embody._tdnEnabled():
-			parent.Embody.ext.TDN.ReexportAllTDNs()
+			parent.Embody.ext.TDXN.ReexportAllTDNs()
 
 	elif par.name == 'Embedstorageintdns':
-		# No-op when the TDN subsystem is disabled -- nothing to re-export.
+		# No-op when the TDXN subsystem is disabled -- nothing to re-export.
 		if parent.Embody.ext.Embody._tdnEnabled():
-			parent.Embody.ext.TDN.ReexportAllTDNs()
+			parent.Embody.ext.TDXN.ReexportAllTDNs()
 
 	elif par.name == 'Tdncascade':
 		state = 'enabled' if par.eval() else 'disabled'
-		parent.Embody.ext.Embody.Log(f'TDN cascade {state}', 'INFO')
+		parent.Embody.ext.Embody.Log(f'TDXN cascade {state}', 'INFO')
 
 	elif par.name in mod.shortcuts.SHORTCUT_PARS:
 		# Normalize hand-typed combos to the canonical form; revert invalid
@@ -388,8 +388,11 @@ def onPulse(par):
 		target = parent.Embody.par.Networkpath.eval()
 		target_path = str(target) if target else '/'
 		clear_first = getattr(parent.Embody.ext.Embody, '_import_clear_first', False)
-		parent.Embody.ext.TDN.ImportNetworkFromFile(file_path, target_path, clear_first=clear_first)
+		parent.Embody.ext.TDXN.ImportNetworkFromFile(file_path, target_path, clear_first=clear_first)
 		parent.Embody.ext.Embody._import_clear_first = False
+
+	elif par.name == 'Migratetotdxn':
+		parent.Embody.ext.Embody.MigrateToTDXN()
 
 	return
 

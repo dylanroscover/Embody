@@ -55,7 +55,7 @@ class TestDiffTdnHandler(EmbodyTestCase):
         comp = self.sandbox.create(baseCOMP, 'not_tdn')
         res = op.Embody.ext.Envoy._diff_tdn(comp.path)
         self.assertIn('error', res)
-        self.assertIn('not TDN-externalized', res['error'])
+        self.assertIn('not TDXN-externalized', res['error'])
 
     def test_error_when_op_missing(self):
         res = op.Embody.ext.Envoy._diff_tdn('/no/such/op')
@@ -157,7 +157,7 @@ class TestDiffTdnHandler(EmbodyTestCase):
         try:
             self.assertIsNotNone(rel)
             child.par.value0 = 9.0  # make it unsaved-dirty vs disk
-            res = op.Embody.ext.TDN.DiffAllLiveVsDisk(max_comps=100000)
+            res = op.Embody.ext.TDXN.DiffAllLiveVsDisk(max_comps=100000)
             self.assertEqual(res.get('scope'), 'project')
             for key in ('changed_count', 'clean_count', 'skipped_count',
                         'changed', 'skipped', 'truncated'):

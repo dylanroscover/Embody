@@ -42,7 +42,7 @@ If you've already mis-saved: rename the off-by-one `.toe` on disk to match `par.
 ## 1. Audit All Changes
 
 - Run `git diff --stat` and `git diff HEAD --name-status` to identify every changed, added, and deleted file.
-- Read the diffs for all core source files (EmbodyExt.py, TDNExt.py, EnvoyExt.py, etc.) to understand what was fixed/added.
+- Read the diffs for all core source files (EmbodyExt.py, TDXNExt.py, EnvoyExt.py, etc.) to understand what was fixed/added.
 - Read diffs for new test files to understand coverage additions.
 - Read diffs for docs, schema, and rule/skill files.
 

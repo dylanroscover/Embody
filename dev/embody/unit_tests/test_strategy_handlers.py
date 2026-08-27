@@ -309,10 +309,10 @@ class TestDispatchTaggerButton(EmbodyTestCase):
         self.assertEqual(self._called, 'remove')
 
     def test_dispatch_remove_tdn_label(self):
-        """Label 'x  Remove tdn' should route to HandleStrategyRemove."""
+        """Label 'x  Remove tdxn' should route to HandleStrategyRemove."""
         self._mock_handlers()
         comp = self.workspace.create(baseCOMP, 'disp_rem_tdn')
-        self.embody_ext._dispatchTaggerButton(comp, 'tdn', '\u00d7  Remove tdn')
+        self.embody_ext._dispatchTaggerButton(comp, 'tdn', '\u00d7  Remove tdxn')
         self.assertEqual(self._called, 'remove')
 
     def test_dispatch_convert_label(self):

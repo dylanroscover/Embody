@@ -16,11 +16,11 @@ the Embody test harness -- it has no shipped template counterpart.
 
 A full `RunTests()` run included `test_custom_parameters`, whose
 `Disable(removeTags=True)` + `_externalize_project_silent(use_tdn=False)` ran
-against the live project. It deleted **18 crown-jewel specimen `.tdn` files**
+against the live project. It deleted **18 crown-jewel specimen `.tdxn` files**
 project-wide and re-tagged every COMP to TOX. The root cause was NOT the
 continuity sweep -- it was a destructive suite running against `ext.root` during
 a normal run, amplified by `Filecleanup` being stuck at `delete` (silent
-unlinks). Recovery required rebuilding the specimen `.tdn` from the live COMPs.
+unlinks). Recovery required rebuilding the specimen `.tdxn` from the live COMPs.
 
 ## The rules
 
@@ -49,7 +49,7 @@ unlinks). Recovery required rebuilding the specimen `.tdn` from the live COMPs.
    Both have failed, in opposite directions: `project.dirty` does not exist
    on TD 2025, so `getattr(project, 'dirty', None)` returned None and the
    gate was silently OFF; `project.modified` is the opposite -- Embody's own
-   post-save housekeeping (Refresh sweep, TDN re-export, externalizations
+   post-save housekeeping (Refresh sweep, TDXN re-export, externalizations
    table writes) re-dirties the project within SECONDS, so the gate refused
    even immediately after `project.save()` (measured 2026-07-26: True in 6/6
    samples ~2 min after a successful save). That made the destructive tier
@@ -71,7 +71,7 @@ unlinks). Recovery required rebuilding the specimen `.tdn` from the live COMPs.
 ## For the AI agent
 
 - Do NOT run the full test suite against a live project that holds unsaved,
-  uncommitted work (especially specimen `.tdn`). Save first.
+  uncommitted work (especially specimen `.tdxn`). Save first.
 - A normal `RunTests()` is now safe (destructive suites are excluded). To test
   the Disable/externalize lifecycle, save, then call
   `RunDestructiveTests(confirm_saved=True)`, then reopen the saved `.toe`.

@@ -14,13 +14,13 @@ Every custom parameter MUST have `help` text set via `par.help = "..."`. Help te
 - Bad: `"Max rows"` (just restates the label)
 - Unacceptable: no help text at all
 
-In TDN files, include `"help": "..."` in the parameter definition. Embody exports and imports help text automatically.
+In TDXN files, include `"help": "..."` in the parameter definition. Embody exports and imports help text automatically.
 
 ## Section Breaks
 
 Use `par.startSection = True` on the first parameter of each logical group. This draws a horizontal separator line above the parameter, visually grouping related controls.
 
-In TDN: `"startSection": true` in the parameter definition.
+In TDXN: `"startSection": true` in the parameter definition.
 
 ## Parameter Ordering
 
@@ -94,7 +94,7 @@ Use `par.readOnly = True` for status and informational parameters that users sho
 
 ## Defaults
 
-Always set `par.default = value`. This enables "Revert to Default" in the TD parameter dialog and ensures TDN round-trips produce consistent results.
+Always set `par.default = value`. This enables "Revert to Default" in the TD parameter dialog and ensures TDXN round-trips produce consistent results.
 
 ## Creating Custom Parameters
 

@@ -11,7 +11,7 @@ A `.toe` file is a black box. You can open it in TD and change things. You can s
 - **Let an AI read it** — without Embody, your AI assistant has no way to inspect what's inside your network. It can describe what *might* be there, but it cannot see what *is*
 - **Review it in a pull request** — a changed `.toe` shows up as a binary blob. There's nothing to review.
 
-Embody solves this by externalizing the operators you tag to files — `.py`, `.tox`, `.tdn`, `.json` — that live in a folder structure mirroring your network hierarchy. Edit those files with your editor or an AI agent instead of wrestling a binary blob. Put them under version control and you have branching, diffing, and history for your TouchDesigner network.
+Embody solves this by externalizing the operators you tag to files — `.py`, `.tox`, `.tdxn`, `.json` — that live in a folder structure mirroring your network hierarchy. Edit those files with your editor or an AI agent instead of wrestling a binary blob. Put them under version control and you have branching, diffing, and history for your TouchDesigner network.
 
 ## Key Design Principles
 
@@ -24,7 +24,7 @@ Embody maintains a two-way relationship between your `.toe` and the files on dis
 | **TD → disk** | ++ctrl+shift+u++ (Update) | Dirty COMPs and DATs write their current state to external files |
 | **Disk → TD** | Project open | Externalized operators are restored from disk when the `.toe` doesn't already have them |
 
-The files are the persistent record; the `.toe` carries a working copy. On project open, Embody restores what the recovered `.toe` is missing — TOX-strategy COMPs from `.tox` files, and (in the default **Export-on-Save** TDN mode) any TDN COMP absent from the `.toe`, such as one lost to a crash. DATs sync from disk via TouchDesigner's native file parameter. In the opt-in **Roundtrip** TDN mode, TDN COMP children are stripped on save and fully rebuilt from `.tdn` on open, so disk is the sole source of truth for those COMPs.
+The files are the persistent record; the `.toe` carries a working copy. On project open, Embody restores what the recovered `.toe` is missing — TOX-strategy COMPs from `.tox` files, and (in the default **Export-on-Save** TDXN mode) any TDXN COMP absent from the `.toe`, such as one lost to a crash. DATs sync from disk via TouchDesigner's native file parameter. In the opt-in **Roundtrip** TDXN mode, TDXN COMP children are stripped on save and fully rebuilt from `.tdxn` on open, so disk is the sole source of truth for those COMPs.
 
 ### Dirty Tracking
 
@@ -53,7 +53,7 @@ Each operator you tag gets an externalization strategy that determines the file 
 | Strategy | File | Best for |
 |---|---|---|
 | **TOX** | `.tox` | COMPs where you prioritize restore speed and don't need to diff the contents — complex UI components, third-party COMPs, anything with heavy internal state |
-| **TDN** | `.tdn` | COMPs you want to read, diff, and review in git — signal processing chains, custom logic, anything you actively edit |
+| **TDXN** | `.tdxn` | COMPs you want to read, diff, and review in git — signal processing chains, custom logic, anything you actively edit |
 | **DAT** (auto-detected) | `.py`, `.json`, `.xml`, `.csv`, etc. | Scripts and data — extension code, configuration files, lookup tables |
 
 For DATs, the format is determined by the DAT's content type — a Python DAT externalizes to `.py`, a JSON DAT to `.json`, and so on. Embody detects this automatically.
@@ -65,7 +65,7 @@ For DATs, the format is determined by the DAT's content type — a Python DAT ex
     - ++lctrl++ ++lctrl++ — Tag/untag an operator for externalization
     - ++ctrl+shift+u++ — Update (write all dirty operators to disk)
     - ++ctrl+shift+o++ — Open the Embody manager window
-    - ++ctrl+shift+e++ — Export the entire project network to a `.tdn` file
+    - ++ctrl+shift+e++ — Export the entire project network to a `.tdxn` file
 
     These are the defaults — every binding is editable (or disableable) on the
     Embody COMP's **Shortcuts** parameter page. See [Keyboard Shortcuts](keyboard-shortcuts.md).

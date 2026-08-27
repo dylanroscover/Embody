@@ -9,7 +9,7 @@
 -- Handle is 'envoy' so the public user page resolves at /u/envoy and
 -- matches the fallback author_handle in src/lib/specimenFallback.ts.
 INSERT OR REPLACE INTO users_profile (id, handle, avatar_url, bio, trust_level)
-VALUES ('dev-user', 'envoy', '/embody-mark.svg', 'First-party Embody specimen author. Curating the transparent TDN Collection.', 'curator');
+VALUES ('dev-user', 'envoy', '/embody-mark.svg', 'First-party Embody specimen author. Curating the transparent TDXN Collection.', 'curator');
 
 -- Rebuild the FTS5 mirror from scratch. Must match migration 0005's
 -- contentless_delete=1 form -- a plain content='' table breaks the

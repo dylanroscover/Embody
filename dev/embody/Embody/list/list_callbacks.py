@@ -110,7 +110,7 @@ def _load_theme():
 	tdn_saved_raw = _par4('Tdnsavedcolor')
 	tdn_saved = _composite(tdn_saved_raw, row) if tdn_saved_raw[3] < 1.0 else tdn_saved_raw
 
-	# TDN exporting -- warm shift from TDN saved blue
+	# TDXN exporting -- warm shift from TDXN saved blue
 	tdn_amber = (tdn_saved[0] + 0.12, max(0, tdn_saved[1] - 0.02),
 	             max(0, tdn_saved[2] - 0.04), 1.0)
 
@@ -174,11 +174,11 @@ def _strategy_style(state):
 	elif state == 'TOX_ParChange':
 		return ('TOX Par', _t['par_change'], None)
 	elif state == 'TDN_Saved':
-		return ('TDN', _t['tdn_saved'], None)
+		return ('TDXN', _t['tdn_saved'], None)
 	elif state == 'TDN_Dirty':
-		return ('TDN', _t['dirty'], None)
+		return ('TDXN', _t['dirty'], None)
 	elif state == 'TDN_ParChange':
-		return ('TDN Par', _t['par_change'], None)
+		return ('TDXN Par', _t['par_change'], None)
 	elif state == 'TDN_Exporting':
 		return ('...', _t['tdn_amber'], None)
 	elif state == 'Comp':
@@ -254,7 +254,7 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 			attribs.bgColor = _t['uncommitted'] if git_changed else bg
 		elif st_bg:
 			attribs.text = text
-			# Saved TOX/TDN that's uncommitted reads orange; unsaved (red) and
+			# Saved TOX/TDXN that's uncommitted reads orange; unsaved (red) and
 			# par-change (amber) keep their color.
 			if git_changed and st in ('TOX_Saved', 'TDN_Saved'):
 				attribs.bgColor = _t['uncommitted']

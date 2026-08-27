@@ -73,7 +73,7 @@ Three to evaluate:
 
 **Framing:** *"Show HN: Embody — turn TouchDesigner into a network you can describe in plain English."* The post body should be the manifesto, lightly edited, with the video embedded near the top. Disclose openly that you're the author.
 
-**Risk:** HN can be brutal to anything that looks like marketing. Lead with technical substance — TDN format, the externalization mechanism, the dual-thread MCP architecture. Make the post worth reading even if the reader will never install it.
+**Risk:** HN can be brutal to anything that looks like marketing. Lead with technical substance — TDXN format, the externalization mechanism, the dual-thread MCP architecture. Make the post worth reading even if the reader will never install it.
 
 **Effort:** Medium. Worth doing only after the forum and registries are live, so the comments can point people somewhere real.
 

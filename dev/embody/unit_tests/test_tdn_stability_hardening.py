@@ -31,7 +31,7 @@ class TestTDNStabilityHardening(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.tdn = self.embody.ext.TDN
+        self.tdn = self.embody.ext.TDXN
         self._temp_files = []
         self._temp_rows = []
 

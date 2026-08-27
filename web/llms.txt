@@ -1,10 +1,10 @@
 # Embody
 
-> Embody is an open-source TouchDesigner toolkit - "create at the speed of thought." Envoy is an embedded MCP server that connects AI coding tools to a live TouchDesigner session; Embody externalizes the network to version-control-friendly text; TDN is the diffable YAML network format that makes both possible.
+> Embody is an open-source TouchDesigner toolkit - "create at the speed of thought." Envoy is an embedded MCP server that connects AI coding tools to a live TouchDesigner session; Embody externalizes the network to version-control-friendly text; TDXN is the diffable YAML network format that makes both possible.
 
-Three tools, one idea: **Envoy** (an MCP server giving AI agents eyes and hands inside a live session), **Embody** (externalizes operators to text files on disk), and **TDN** (a TouchDesigner network as human-readable YAML). MIT-licensed, runs entirely on the user's own machine, no account required.
+Three tools, one idea: **Envoy** (an MCP server giving AI agents eyes and hands inside a live session), **Embody** (externalizes operators to text files on disk), and **TDXN** (a TouchDesigner network as human-readable YAML). MIT-licensed, runs entirely on the user's own machine, no account required.
 
-**Full text bundle:** the essential docs (Quickstart, Envoy setup + tools reference, TDN specification, agent rules) inlined as one file - [https://embody.tools/llms-full.txt](https://embody.tools/llms-full.txt). Start there if you want the core reference in a single fetch.
+**Full text bundle:** the essential docs (Quickstart, Envoy setup + tools reference, TDXN specification, agent rules) inlined as one file - [https://embody.tools/llms-full.txt](https://embody.tools/llms-full.txt). Start there if you want the core reference in a single fetch.
 
 ## Start here
 
@@ -59,22 +59,22 @@ OpenCode (opencode.ai) never reads `.mcp.json` - it uses `opencode.json`, auto-g
 
 The server is local-only - it binds to `127.0.0.1` (never the network), default port 9870, MCP endpoint at `http://127.0.0.1:9870/mcp`.
 
-## TDN format
+## TDXN format
 
-- [TDN index](https://dylanroscover.github.io/Embody/tdn/): overview of the TouchDesigner Network YAML format.
+- [TDXN index](https://dylanroscover.github.io/Embody/tdn/): overview of the TouchDesigner eXternal Network YAML format.
 - [Specification](https://dylanroscover.github.io/Embody/tdn/specification/): the full format spec - operators, parameters, connections, positions, flags, DAT content, annotations.
-- [Schema (page)](https://dylanroscover.github.io/Embody/tdn/schema/): JSON Schema reference for validating `.tdn` files.
+- [Schema (page)](https://dylanroscover.github.io/Embody/tdn/schema/): JSON Schema reference for validating `.tdxn` files.
 - [Import & export](https://dylanroscover.github.io/Embody/tdn/import-export/): round-trip safe - export, edit, import yields the same network.
-- [Examples](https://dylanroscover.github.io/Embody/tdn/examples/): worked TDN examples.
+- [Examples](https://dylanroscover.github.io/Embody/tdn/examples/): worked TDXN examples.
 
-`read_tdn` returns a whole live network as TDN YAML in one call - ~20-90x fewer tokens than walking it operator-by-operator with `get_op`.
+`read_tdn` returns a whole live network as TDXN YAML in one call - ~20-90x fewer tokens than walking it operator-by-operator with `get_op`.
 
 ## Embody (externalization)
 
 - [Getting started](https://dylanroscover.github.io/Embody/embody/getting-started/): tag operators for externalization and save your work to disk.
 - [Keyboard shortcuts](https://dylanroscover.github.io/Embody/embody/keyboard-shortcuts/): factory defaults per platform (Cmd on macOS, Ctrl on Windows/Linux); every binding remappable (type or record) on the Shortcuts parameter page.
 - [Externalization](https://dylanroscover.github.io/Embody/embody/externalization/): how externalized files become the source of truth and auto-restore on project open.
-- [Supported formats](https://dylanroscover.github.io/Embody/embody/supported-formats/): `.py`, `.tox`, `.tdn`, `.json`, `.xml`, and more.
+- [Supported formats](https://dylanroscover.github.io/Embody/embody/supported-formats/): `.py`, `.tox`, `.tdxn`, `.json`, `.xml`, and more.
 
 ## Optional
 

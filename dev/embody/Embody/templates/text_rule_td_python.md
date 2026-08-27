@@ -56,11 +56,11 @@ Prefer `parent.CompName` over `op.CompName` when both would work -- global short
 - **`extensionsReady` guard**: Parameter expressions referencing extension-promoted attributes must use: `parent().MyProp if parent().extensionsReady else 0`
 - **Auto-reinitializes on source change**: Implement `onDestroyTD(self)` for clean teardown. Use `onInitTD(self)` for post-init setup.
 
-### `onInitTD` and TDN Import Timing
+### `onInitTD` and TDXN Import Timing
 
-- TDN import can delete and recreate children after extension init, so setup that depends on internal network state must be deferred.
-- Use `run(..., delayFrames=5)`, keep `onInitTD` idempotent, guard missing children, and store persistent state outside the TDN boundary.
-- TDN-strategy COMP initialization or save/reimport timing concerns -> MUST load /td-api-reference (onInitTD and TDN Import Timing) FIRST.
+- TDXN import can delete and recreate children after extension init, so setup that depends on internal network state must be deferred.
+- Use `run(..., delayFrames=5)`, keep `onInitTD` idempotent, guard missing children, and store persistent state outside the TDXN boundary.
+- TDXN-strategy COMP initialization or save/reimport timing concerns -> MUST load /td-api-reference (onInitTD and TDXN Import Timing) FIRST.
 
 ## Threading and Background Work
 

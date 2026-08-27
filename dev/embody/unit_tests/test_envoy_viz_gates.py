@@ -49,7 +49,7 @@ waste:
     staging trick was leaking a coordinate into the SHIPPED template, and
     from there into Embody.tdn (all nine parts were committed at
     [1860, 251]).
-  - purgeVizArtifacts / vizRetireForWrite / TDNExt's annotation filter --
+  - purgeVizArtifacts / vizRetireForWrite / TDXNExt's annotation filter --
     on BOTH export walks, the sync one and the async one behind
     ExportNetworkAsync: longer residency in one network must not widen any
     path by which a bot part could bake into a saved .toe, .tox or .tdn.
@@ -877,14 +877,14 @@ class TestEnvoyVizGates(EmbodyTestCase):
         self.assertEqual(removed, 2, 'exactly the two annotations')
 
     def test_viz_bot_constants_match_the_tdn_exporter(self):
-        """TDNExt mirrors these two literals rather than importing the viz
+        """TDXNExt mirrors these two literals rather than importing the viz
         module DAT (Envoy is optional; .tdn export must work without it). Drift
         is SILENT -- the export filter simply stops matching and live bot parts
         reach .tdn again with no error and no other failing test."""
         # Read the LIVE extension's own module namespace (via the function
         # object actually doing the filtering) rather than re-compiling the DAT
         # with .module -- this asserts against the code that is running.
-        tdn_globals = type(op.Embody.ext.TDN)._exportAnnotations.__globals__
+        tdn_globals = type(op.Embody.ext.TDXN)._exportAnnotations.__globals__
         self.assertEqual(tdn_globals['VIZ_BOT_ANNOTATION_PREFIX'],
                          viz._VIZ_BOT_PREFIX)
         self.assertEqual(tdn_globals['VIZ_BOT_TEMPLATE_COMP'],
@@ -894,7 +894,7 @@ class TestEnvoyVizGates(EmbodyTestCase):
         """The filter must NOT strip the shipped template -- Embody.tdn carries
         its nine parts as a legitimate annotations block, and stripping them
         would force a ~1s nine-annotateCOMP rebuild on every fresh open."""
-        tdn = op.Embody.ext.TDN
+        tdn = op.Embody.ext.TDXN
         loose = self.sandbox.create(baseCOMP, 'viz_export_loose')
         _annotate(loose, 'envoy_bot_body')
         _annotate(loose, 'ordinary_note')
@@ -919,7 +919,7 @@ class TestEnvoyVizGates(EmbodyTestCase):
         Both directions: a live part must not be collected, and the shipped
         template's COMP must still be, or _onExportRefresh never calls
         _exportAnnotations on it and the asset silently leaves the file."""
-        tdn = op.Embody.ext.TDN
+        tdn = op.Embody.ext.TDXN
         host = self.sandbox.create(baseCOMP, 'viz_async_host')
         _annotate(host, 'envoy_bot_body')       # a LIVE bot part
         _annotate(host, 'ordinary_note')        # an ordinary annotation
@@ -948,7 +948,7 @@ class TestEnvoyVizGates(EmbodyTestCase):
         purge warning -- a filter that drops user content silently is
         indistinguishable from a bug. One aggregated line per COMP: a live bot
         is nine parts, and nine warnings would be noise."""
-        tdn = op.Embody.ext.TDN
+        tdn = op.Embody.ext.TDXN
         host = self.sandbox.create(baseCOMP, 'viz_export_logged')
         _annotate(host, 'envoy_bot_body')
         _annotate(host, 'envoy_bot_head')

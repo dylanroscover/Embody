@@ -15,7 +15,7 @@ const COPY_RATE_LIMIT = { limit: 40, windowSec: 60 };
 
 // POST /api/specimens/:slug/copy
 // Builds the `_embody_tdn` clipboard envelope for a specimen from its real R2
-// TDN blob, increments the copies_count counter, and returns both. The envelope
+// TDXN blob, increments the copies_count counter, and returns both. The envelope
 // source is "embody.tools" (community provenance) so the Embody TD side imports
 // it default-inert (sandboxed paste). Returns { copies_count, envelope }.
 // Short TTL for the idempotency marker: long enough to absorb client retries of
@@ -50,7 +50,7 @@ export const POST: APIRoute = async ({ params, request }) => {
 
     const parsed = await getParsedTdnForSlug(env.DB, env.BLOBS, slug);
     if (!parsed) {
-      return errorResponse(404, "tdn_not_found", "The TDN blob is missing or unparseable.");
+      return errorResponse(404, "tdn_not_found", "The TDXN blob is missing or unparseable.");
     }
 
     const envelope = await buildEmbodyEnvelope(parsed.tdn, {

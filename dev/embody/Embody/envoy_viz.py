@@ -82,12 +82,12 @@ _VIZ_ENTRANCE_DUR = 0.95    # seconds for the swoop-in from staging (vs _VIZ_JUM
 # template lives inside the Embody COMP -- a TDN-strategy COMP -- so a staging
 # coordinate left on the source is written straight into Embody.tdn on the next
 # export (verified: all nine template parts were committed at [1860, 251], a
-# leaked staging point). (0, 0) is deliberate: TDNExt._exportAnnotations omits
+# leaked staging point). (0, 0) is deliberate: TDXNExt._exportAnnotations omits
 # `position` entirely when both nodeX and nodeY are 0, so the parked coordinate
 # cannot drift back into the file at all.
 _VIZ_TEMPLATE_PARK = (0.0, 0.0)
 # Name of the shipped template COMP (a child of the Embody COMP). This module is
-# the SOURCE OF TRUTH for both bot-artifact literals: TDNExt mirrors
+# the SOURCE OF TRUTH for both bot-artifact literals: TDXNExt mirrors
 # _VIZ_BOT_PREFIX / _VIZ_TEMPLATE_COMP as VIZ_BOT_ANNOTATION_PREFIX /
 # VIZ_BOT_TEMPLATE_COMP so its export filter takes no dependency on this module
 # DAT. Drift between the two is silent (the filter simply stops matching and
@@ -1657,7 +1657,7 @@ def purgeVizArtifacts(ext, root=None) -> int:
 
     Two deliberate costs, stated rather than hidden:
       - a USER annotation literally named envoy_bot_* outside the template is
-        DESTROYED, not merely skipped (TDNExt's export filter only omits it).
+        DESTROYED, not merely skipped (TDXNExt's export filter only omits it).
         The caller logs any non-zero count, so a deletion is never silent.
       - the project-wide sweep walks the tree. It skips _VIZ_PURGE_SKIP_ROOTS
         (TD's own /sys and /ui) precisely because it runs inside the pre-save

@@ -17,7 +17,7 @@ import {
 import { tags as t } from "@lezer/highlight";
 import { EMBODY_TDN_MARKER, EMBODY_TDN_VERSION } from "@embody/contracts";
 
-// Editable TDN/YAML editor for the contribute + edit forms, built on CodeMirror 6:
+// Editable TDXN/YAML editor for the contribute + edit forms, built on CodeMirror 6:
 // native virtualization (smooth at 10k+ lines), indentation folding (the +/- toolbar
 // buttons collapse/expand all sections), search, a wrap toggle, line numbers, and the
 // same token palette as the read-only TdnYamlViewer. The CM doc is mirrored to a
@@ -160,7 +160,7 @@ const tdnTheme = EditorView.theme({
   },
 }, { dark: true });
 
-// If `text` is a full _embody_tdn JSON/YAML envelope, return its bare TDN body
+// If `text` is a full _embody_tdn JSON/YAML envelope, return its bare TDXN body
 // as YAML; otherwise null. Shared by the editor's paste DOM handler and the
 // toolbar "paste" button so both unwrap envelopes identically.
 function unwrapTdnEnvelope(text: string): string | null {
@@ -382,7 +382,7 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
             className="tdn-editor__search"
             type="text"
             placeholder=""
-            aria-label="Search the TDN"
+            aria-label="Search the TDXN"
             value={query}
             onChange={(e) => { setQuery(e.target.value); runSearch(e.target.value); }}
             onKeyDown={(e) => {
@@ -406,7 +406,7 @@ export default function TdnYamlEditor({ name, initialValue = "", placeholder = "
           )}
         </div>
         <div className="tdn-editor__tools">
-          <button type="button" className="tdn-editor__btn" title="Paste TDN from clipboard" aria-label="Paste TDN from clipboard" onClick={doPasteFromClipboard}>
+          <button type="button" className="tdn-editor__btn" title="Paste TDXN from clipboard" aria-label="Paste TDXN from clipboard" onClick={doPasteFromClipboard}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
               <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />

@@ -115,9 +115,9 @@ def onCook(scriptOp):
 		if not all_paths:
 			return
 
-	# Detect active TDN export
+	# Detect active TDXN export
 	exporting_path = None
-	tdn_ext = getattr(parent.Embody.ext, 'TDN', None)
+	tdn_ext = getattr(parent.Embody.ext, 'TDXN', None)
 	export_state = getattr(tdn_ext, '_export_state', None) if tdn_ext else None
 	if export_state and not export_state.get('done'):
 		exporting_path = export_state.get('root_path')

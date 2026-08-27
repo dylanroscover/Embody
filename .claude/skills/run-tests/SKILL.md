@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Test Suite
 
-Embody has 110+ test suites (2,500+ tests) under `dev/embody/unit_tests/` covering externalization, MCP tools, TDN format, the Envoy server/bridge/jobs, install/upgrade paths, and infrastructure. Destructive and agent tiers are segregated behind their own entry points.
+Embody has 110+ test suites (2,500+ tests) under `dev/embody/unit_tests/` covering externalization, MCP tools, TDXN format, the Envoy server/bridge/jobs, install/upgrade paths, and infrastructure. Destructive and agent tiers are segregated behind their own entry points.
 
 ## Running Tests
 

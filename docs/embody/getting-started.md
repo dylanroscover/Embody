@@ -26,7 +26,7 @@ If your project is inside a git repository, Envoy automatically adds the followi
 | `CrashAutoSave*` | TouchDesigner crash auto-save files |
 | `.venv/` | The project's shared [Python environment](python-environment.md) (auto-built; machine-local) |
 | `.mcp.json` | MCP client config (auto-generated per machine) |
-| `.tdn_backup/` | Rotated `.tdn` crash-recovery copies (`.bak`/`.bak2`) — see [Read, Import & Export](../tdn/import-export.md#crash-safety-and-tdn_backup) |
+| `.tdn_backup/` | Rotated `.tdxn` crash-recovery copies (`.bak`/`.bak2`) — see [Read, Import & Export](../tdn/import-export.md#crash-safety-and-tdn_backup) |
 | `opencode.json` | OpenCode client config (embeds absolute venv/bridge paths, so it's machine-specific) |
 | `.embody/*` | Envoy runtime files (instance registry, bridge, cache) |
 | `!.embody/project.json` | Un-ignores the committed project metadata file (the `td_build` pin is machine-local in `.embody/local.json` now) |
@@ -75,11 +75,11 @@ Embody is a self-contained component — no external dependencies are needed for
 
 ## First Externalization
 
-1. **Externalize operators**: Hover any COMP or DAT and press ++lctrl++ twice in a row. Embody opens the tagger UI for the operator under your cursor. For an untagged operator it lets you pick how to externalize it — a strategy (TOX or TDN) for a COMP, or a file format for a DAT; for an already-tagged operator it lets you switch strategy, remove the tag, or save the externalization.
+1. **Externalize operators**: Hover any COMP or DAT and press ++lctrl++ twice in a row. Embody opens the tagger UI for the operator under your cursor. For an untagged operator it lets you pick how to externalize it — a strategy (TOX or TDXN) for a COMP, or a file format for a DAT; for an already-tagged operator it lets you switch strategy, remove the tag, or save the externalization.
 
 2. **Update as you work**: Press ++ctrl+shift+u++ to update all dirty externalizations, or ++ctrl+alt+u++ to update just the COMP you're currently inside.
 
-3. **Work with confidence**: Your externalizations are written to disk for diffs and AI context. On project open, TOX-strategy COMPs are always restored from `.tox` files and DATs sync from their externalized source files (`.py`, `.txt`, `.json`, ...). TDN-strategy COMPs are reconstructed from `.tdn` files **only in Roundtrip mode** — in the default Export-on-Save mode the `.toe` remains authoritative and is not rebuilt from `.tdn` on open. See [TDN Mode](externalization.md#tdn-mode-master-switch) for the tradeoffs.
+3. **Work with confidence**: Your externalizations are written to disk for diffs and AI context. On project open, TOX-strategy COMPs are always restored from `.tox` files and DATs sync from their externalized source files (`.py`, `.txt`, `.json`, ...). TDXN-strategy COMPs are reconstructed from `.tdxn` files **only in Roundtrip mode** — in the default Export-on-Save mode the `.toe` remains authoritative and is not rebuilt from `.tdxn` on open. See [TDXN Mode](externalization.md#tdxn-mode-master-switch) for the tradeoffs.
 
 !!! tip
     To externalize an entire project at once, pulse **Externalize Full Project** on the Embody COMP. Otherwise, externalize operators selectively with ++lctrl+lctrl++.
@@ -89,7 +89,7 @@ Embody is a self-contained component — no external dependencies are needed for
 Once set up, Embody works in the background:
 
 - **Update externalizations**: Use ++ctrl+shift+u++ to update all dirty COMPs and DATs, or ++ctrl+alt+u++ to update just the COMP you're currently inside.
-- **Automatic restoration**: On project open, Embody restores externalized operators from the files on disk. TOX-strategy COMPs are always restored from `.tox` files, and DATs always sync via TouchDesigner's native file parameter. TDN-strategy COMPs are reconstructed from `.tdn` files **only in Roundtrip mode** — the recommended Export-on-Save mode keeps the `.toe` as the source of truth and skips reconstruction on open. See [TDN Mode](externalization.md#tdn-mode-master-switch) for the tradeoffs.
+- **Automatic restoration**: On project open, Embody restores externalized operators from the files on disk. TOX-strategy COMPs are always restored from `.tox` files, and DATs always sync via TouchDesigner's native file parameter. TDXN-strategy COMPs are reconstructed from `.tdxn` files **only in Roundtrip mode** — the recommended Export-on-Save mode keeps the `.toe` as the source of truth and skips reconstruction on open. See [TDXN Mode](externalization.md#tdxn-mode-master-switch) for the tradeoffs.
 - **Parameter tracking**: Embody tracks all parameter values on externalized COMPs. When any parameter changes (not just network edits), that COMP is automatically marked dirty with a "Par" indicator.
 - **Cross-platform**: All file paths are normalized to forward slashes (`/`), so teams on mixed Windows/macOS platforms can collaborate without path-related merge conflicts.
 
@@ -106,12 +106,12 @@ Pulsing **Uninstall** first shows a confirmation dialog that spells out exactly 
 
 - **Removed** — Embody-generated AI-assistant config (`CLAUDE.md` / `AGENTS.md` / `.claude/` / `.cursor/` / …), the Embody `.venv`, and the `.embody/` state folder.
 - **Modified** — shared files where Embody only *strips its own block or key*, leaving your content intact: `.gitignore`, `.gitattributes`, and the `envoy` server entry in `.mcp.json` (your other MCP servers are kept).
-- **Un-set** — the git config keys for the `.tdn` diff driver.
+- **Un-set** — the git config keys for the `.tdxn` diff driver.
 - **Kept** — anything Embody can't prove it owns: a generated file you edited, `settings.local.json`, an unrecorded-looking venv. These are flagged and left untouched.
 
 It only proceeds when you confirm. Cancelling — or triggering it during a save or a test run — does nothing.
 
-**What Uninstall never touches:** your externalized `.tox` / `.tdn` / `.py` files, and the Embody COMP itself. To finish removing Embody from a `.toe`, delete the Embody COMP after uninstalling (run **Disable** first if you also want the externalized files reabsorbed into the `.toe`).
+**What Uninstall never touches:** your externalized `.tox` / `.tdxn` / `.py` files, and the Embody COMP itself. To finish removing Embody from a `.toe`, delete the Embody COMP after uninstalling (run **Disable** first if you also want the externalized files reabsorbed into the `.toe`).
 
 ### Previewing without removing anything
 

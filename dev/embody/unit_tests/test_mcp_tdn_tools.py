@@ -43,7 +43,9 @@ class TestMCPTDNTools(EmbodyTestCase):
             f'read_tdn failed: {result.get("error")}')
         tdn = result.get('tdn')
         self.assertIsNotNone(tdn, 'read_tdn must return a tdn payload')
-        self.assertEqual(tdn.get('format'), 'tdn')
+        # A FRESH export stamps the current identity, so pin the literal --
+        # not the accepted set, which also admits legacy 'tdn'.
+        self.assertEqual(tdn.get('format'), 'tdxn')
         self.assertIn('operators', tdn)
         self.assertIn('version', tdn)
 
@@ -172,7 +174,7 @@ class TestMCPTDNTools(EmbodyTestCase):
             root_path=self.fixture.path, output_file=None)
         self.assertTrue(result.get('success'),
             f'export_network failed: {result.get("error")}')
-        self.assertEqual(result['tdn'].get('format'), 'tdn')
+        self.assertEqual(result['tdn'].get('format'), 'tdxn')
 
     def test_export_network_nonexistent(self):
         result = self.envoy._export_network(

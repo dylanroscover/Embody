@@ -46,7 +46,7 @@ export interface SpecimenSummary {
    */
   reactions?: Record<string, number>;
   views_count: number;
-  /** How many times this specimen's TDN envelope has been copied from the website. */
+  /** How many times this specimen's TDXN envelope has been copied from the website. */
   copies_count: number;
   /**
    * Visibility of the specimen. Present on owner/admin-scoped reads (e.g. a user's
@@ -225,7 +225,7 @@ export interface SubmitRequest {
   category?: string;
   /** Zero or more values from SUBMIT_REQUIRES; empty = stock TouchDesigner. */
   requires: string[];
-  /** YAML (or legacy JSON) string of the TDN dict (the raw network). */
+  /** YAML (or legacy JSON) string of the TDXN dict (the raw network). */
   tdn: string;
   /** Optional data-URL thumbnail; otherwise generated server-side. */
   thumbnail?: string;

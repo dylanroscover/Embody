@@ -114,7 +114,7 @@ return the shape and range instead.
 | `announce_task` | `title`, `scopes?`, `note?` | Announce a unit of work to the shared task ledger (`.embody/tasks.json`) so parallel sessions see what is being worked on and what is FINISHED but uncommitted. Announce at the start of substantive work (a feature, fix, refactor); keep it honest with `update_task`. Active entries ride on `get_sessions` for every session |
 | `update_task` | `task_id`, `status?`, `note?`, `commit?` | Transition a ledger task: `done_uncommitted` when the work is finished but sitting uncommitted in the tree (the state peers MUST see), `committed` with the sha once it lands (a sha alone implies the transition), `abandoned` when dropped. Any session may update any task -- non-owner writes record `updated_by` |
 ${ROWS}
-| `preflight_landing` | `worktree_path` | Landing safety check for a worktree diff -- intersects the files it would land with main-tree dirt, peer `file:` claims/touches, and unsaved live TDN state (runtime dirty state; legacy tsv `dirty` columns still honored). Run BEFORE porting any worktree diff; verdict `conflicts` means reconcile first |
+| `preflight_landing` | `worktree_path` | Landing safety check for a worktree diff -- intersects the files it would land with main-tree dirt, peer `file:` claims/touches, and unsaved live TDXN state (runtime dirty state; legacy tsv `dirty` columns still honored). Run BEFORE porting any worktree diff; verdict `conflicts` means reconcile first |
 
 ## MCP Prompts
 
@@ -130,25 +130,25 @@ ${ROWS}
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (one step) |
-| `remove_externalization_tag` | `op_path`, `delete_file?` | Remove externalization tracking (tag + row + TDN breadcrumb); `delete_file=True` also deletes the file (best-effort). Returns `removed_tags`, `removed_rows`, `removed_anything`, `summary` -- an operator can have a tracked row but NO tag, so check `removed_anything`, not `removed_tags`, to confirm cleanup |
+| `remove_externalization_tag` | `op_path`, `delete_file?` | Remove externalization tracking (tag + row + TDXN breadcrumb); `delete_file=True` also deletes the file (best-effort). Returns `removed_tags`, `removed_rows`, `removed_anything`, `summary` -- an operator can have a tracked row but NO tag, so check `removed_anything`, not `removed_tags`, to confirm cleanup |
 | `get_externalizations` | _(none)_ | List all externalized operators |
 | `save_externalization` | `op_path` | Force re-export an already-externalized operator |
 | `get_externalization_status` | `op_path` | Get dirty state, build, timestamp, path |
 
-## TDN Network Format
+## TDXN Network Format
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Returns live network as a TDN dict. ~20-90x fewer tokens than `get_op`+`query_network` walks thanks to default-omission, type_defaults, and par_templates. |
-| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write `.tdn` to disk. **With `output_file` set, returns a compact summary (op/annotation counts + file path), NOT the full document** -- Read the file for details. Without `output_file`, returns the full dict like `read_tdn`. |
-| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate network from a parsed TDN document (on-disk `.tdn` is YAML in v2.0; reads legacy JSON) |
-| `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What's UNSAVED in TDN networks** (live vs on-disk `.tdn`) -- the view git can't give. Omit `target` -> whole project (every live TDN COMP, summarized); `target` = a COMP path OR a `.tdn` file path/bare filename -> that one COMP in full detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` (Embody's `.tdn` diff driver keeps those clean). Read-only. |
+| `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Returns live network as a TDXN dict. ~20-90x fewer tokens than `get_op`+`query_network` walks thanks to default-omission, type_defaults, and par_templates. |
+| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write `.tdxn` to disk. **With `output_file` set, returns a compact summary (op/annotation counts + file path), NOT the full document** -- Read the file for details. Without `output_file`, returns the full dict like `read_tdn`. |
+| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate network from a parsed TDXN document (on-disk `.tdxn` is YAML in v2.0; reads legacy JSON) |
+| `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What's UNSAVED in TDXN networks** (live vs on-disk `.tdxn`) -- the view git can't give. Omit `target` -> whole project (every live TDXN COMP, summarized); `target` = a COMP path OR a `.tdxn` file path/bare filename -> that one COMP in full detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` (Embody's `.tdxn` diff driver keeps those clean). Read-only. |
 
 **When to prefer `read_tdn`:** exploring or auditing ≥3 operators, checking structure and parameters-as-authored, mapping connections, reading annotations. Scope cost with `comp_path`; cap with `max_depth` on large roots.
 
 **When NOT to use `read_tdn`:** evaluated-expression runtime values (`get_parameter`), cook errors (`get_op_errors`), DAT/CHOP/TOP output data (`get_dat_content`, `capture_top`), cook timing (`get_op_performance`), flag state after runtime mutation (`get_op_flags`). `read_tdn` is an authored-state snapshot, not a runtime probe.
 
-**When to use `diff_tdn`:** whenever the user asks "what's changed / unsaved?" for TDN networks. It shows what is UNSAVED -- the live in-memory network vs the on-disk `.tdn` -- which **git cannot see** (git only reads disk, never TD's live state). Omit `target` (or pass `""`/`"project"`) for a **whole-project** summary (every live TDN COMP: which changed + counts); pass a `target` (a COMP path OR a `.tdn` file path/bare filename, resolved to its COMP) for **one COMP in full detail** (`old`=disk, `new`=live). For **committed/history** diffs use plain `git diff` -- Embody installs a `.tdn` git diff driver so those are clean (the volatile export header is stripped). Read-only, non-interactive. Requires TD running.
+**When to use `diff_tdn`:** whenever the user asks "what's changed / unsaved?" for TDXN networks. It shows what is UNSAVED -- the live in-memory network vs the on-disk `.tdxn` -- which **git cannot see** (git only reads disk, never TD's live state). Omit `target` (or pass `""`/`"project"`) for a **whole-project** summary (every live TDXN COMP: which changed + counts); pass a `target` (a COMP path OR a `.tdxn` file path/bare filename, resolved to its COMP) for **one COMP in full detail** (`old`=disk, `new`=live). For **committed/history** diffs use plain `git diff` -- Embody installs a `.tdxn` git diff driver so those are clean (the volatile export header is stripped). Read-only, non-interactive. Requires TD running.
 
 ## TOP Capture
 

@@ -176,16 +176,16 @@ Tag operators for externalization, query status, and force-save to disk — the 
 | `save_externalization` | Force-save an externalized operator to disk |
 | `get_externalization_status` | Dirty state, build number, timestamp, file path |
 
-### TDN Format
+### TDXN Format
 
-Read any COMP's live network as `.tdn` (no disk I/O), export it to disk, or import a TDN document back as a live network. Used for Embody's TDN externalization strategy and for LLM-efficient snapshots of network state — `read_tdn` is typically **20-90× fewer tokens** than walking the same subtree via `get_op` + `query_network`.
+Read any COMP's live network as `.tdxn` (no disk I/O), export it to disk, or import a TDXN document back as a live network. Used for Embody's TDXN externalization strategy and for LLM-efficient snapshots of network state — `read_tdn` is typically **20-90× fewer tokens** than walking the same subtree via `get_op` + `query_network`.
 
 | Tool | Description |
 |---|---|
-| `read_tdn` | Read a live network as a TDN dict (in-memory, no disk write). Preferred for AI exploration of networks ≥3 operators |
-| `export_network` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus stale-file cleanup |
-| `import_network` | Recreate a network from `.tdn` |
-| `diff_tdn` | Diff a live network against its on-disk `.tdn` — the *unsaved* changes git cannot see. One COMP, or a whole-project summary |
+| `read_tdn` | Read a live network as a TDXN dict (in-memory, no disk write). Preferred for AI exploration of networks ≥3 operators |
+| `export_network` | Write a `.tdxn` file to disk. Same payload as `read_tdn` plus stale-file cleanup |
+| `import_network` | Recreate a network from `.tdxn` |
+| `diff_tdn` | Diff a live network against its on-disk `.tdxn` — the *unsaved* changes git cannot see. One COMP, or a whole-project summary |
 
 ### TOP Capture
 
@@ -208,7 +208,7 @@ Several AI sessions can work on the same project at once without clobbering each
 | `release_scope` | Release a held lease (expiry also handles it) |
 
 | `announce_task` / `update_task` | The shared task ledger: what each session is working on, and what is finished-but-uncommitted |
-| `preflight_landing` | Check a worktree diff against main-tree dirt, peer territory, unsaved TDN state, and overlapping ledger tasks before landing |
+| `preflight_landing` | Check a worktree diff against main-tree dirt, peer territory, unsaved TDXN state, and overlapping ledger tasks before landing |
 
 ### Logging
 

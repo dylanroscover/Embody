@@ -209,6 +209,45 @@ class TestVersionSync(EmbodyTestCase):
                 except OSError:
                     pass
 
+    def test_version_target_is_reached_or_empty(self):
+        """A VERSION_TARGET left armed BELOW the current version would jump
+        the version on some later, unrelated save. Once reached it is inert,
+        so 'already reached' is the safe resting state -- not 'must be
+        cleared'."""
+        target = getattr(self._src_ctrl(), 'VERSION_TARGET', '') or ''
+        target = str(target).strip()
+        if not target:
+            return
+        to_tuple = self._src_ctrl()._versionTuple
+        target_t = to_tuple(target)
+        self.assertIsNotNone(
+            target_t,
+            f'VERSION_TARGET {target!r} is not X.Y.Z -- it would be silently '
+            'ignored, and if ever stamped the updater could not order it')
+        current_t = to_tuple(op.Embody.par.Version.eval())
+        self.assertIsNotNone(current_t, 'par.Version is not X.Y.Z')
+        self.assertGreaterEqual(
+            current_t, target_t,
+            f'VERSION_TARGET {target!r} is still ARMED above the current '
+            f'version {op.Embody.par.Version.eval()!r} -- the next save will '
+            'jump straight to it. Clear it, or intend that jump.')
+
+    def test_version_target_never_oscillates(self):
+        """Pure-logic guard on the bump rule itself: the target must fire
+        only while STRICTLY below it. Comparing for inequality instead sent
+        6.1.0 -> 6.1.1 -> back to 6.1.0 forever (caught 2026-08-26)."""
+        to_tuple = self._src_ctrl()._versionTuple
+        self.assertIsNone(to_tuple('6.1.-1'),
+                          "'6.1.-1' must not parse -- int() accepts it but "
+                          "the updater's \\d+ regex does not")
+        self.assertIsNone(to_tuple('6.1'))
+        self.assertIsNone(to_tuple('garbage'))
+        self.assertEqual(to_tuple('v6.1.0'), (6, 1, 0))
+        self.assertLess(to_tuple('6.0.280'), to_tuple('6.1.0'))
+        # Once at or past the target the rule must be inert.
+        self.assertFalse(to_tuple('6.1.1') < to_tuple('6.1.0'))
+        self.assertFalse(to_tuple('6.1.0') < to_tuple('6.1.0'))
+
     def test_readme_badge_matches_par_version(self):
         text = self._read('README.md')
         match = re.search(r'badge/version-([0-9][0-9.]*)-', text)

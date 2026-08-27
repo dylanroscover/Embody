@@ -128,19 +128,19 @@ The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view`
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (auto-detects type if omitted) |
-| `remove_externalization_tag` | `op_path`, `delete_file?` | Remove externalization tracking (tag + row + TDN breadcrumb); `delete_file=True` also deletes the file (best-effort). Returns `removed_tags`, `removed_rows`, `removed_anything`, `summary` -- an operator can have a tracked row but NO tag, so check `removed_anything`, not `removed_tags`, to confirm cleanup |
+| `remove_externalization_tag` | `op_path`, `delete_file?` | Remove externalization tracking (tag + row + TDXN breadcrumb); `delete_file=True` also deletes the file (best-effort). Returns `removed_tags`, `removed_rows`, `removed_anything`, `summary` -- an operator can have a tracked row but NO tag, so check `removed_anything`, not `removed_tags`, to confirm cleanup |
 | `get_externalizations` | _(none)_ | List all externalized operators with status |
 | `save_externalization` | `op_path` | Force save an externalized operator to disk. Refuses to overwrite a non-empty file with an operator-empty COMP and returns an error instead — untrack the operator or delete the file if the empty state is intended |
 | `get_externalization_status` | `op_path` | Get dirty state, build number, timestamp, file path |
 
-## TDN Format
+## TDXN Format
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Return the live network as a TDN dict (in-memory, never written to disk). ~20-90× fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
-| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?`, `embed_all?` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup. Set `embed_all=True` to recurse into TDN-tagged COMPs instead of skipping their children (self-contained export) |
-| `import_network` | `target_path`, `tdn`, `clear_first?`, `override?` | Recreate a network from a `.tdn` file. Nested externalized-TDN children are rebuilt from their own `.tdn` files in the same import, recursively, so no nested COMP is left an empty shell; the result's `restored_tdn_shells` lists what was restored. With `clear_first=True`, gated against live peer sessions like `delete_op` |
-| `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What is UNSAVED in TDN networks** -- the live in-memory network vs the on-disk `.tdn`, the view git cannot give. Omit `target` for a whole-project summary (every live TDN COMP, which changed + counts); pass a COMP path OR a `.tdn` file path/bare filename for one COMP in full per-field detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` -- Embody installs a `.tdn` diff driver that keeps those clean. Read-only, non-interactive |
+| `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Return the live network as a TDXN dict (in-memory, never written to disk). ~20-90× fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
+| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?`, `embed_all?` | Write a `.tdxn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup. Set `embed_all=True` to recurse into TDXN-tagged COMPs instead of skipping their children (self-contained export) |
+| `import_network` | `target_path`, `tdn`, `clear_first?`, `override?` | Recreate a network from a `.tdxn` file. Nested externalized-TDXN children are rebuilt from their own `.tdxn` files in the same import, recursively, so no nested COMP is left an empty shell; the result's `restored_tdn_shells` lists what was restored. With `clear_first=True`, gated against live peer sessions like `delete_op` |
+| `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What is UNSAVED in TDXN networks** -- the live in-memory network vs the on-disk `.tdxn`, the view git cannot give. Omit `target` for a whole-project summary (every live TDXN COMP, which changed + counts); pass a COMP path OR a `.tdxn` file path/bare filename for one COMP in full per-field detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` -- Embody installs a `.tdxn` diff driver that keeps those clean. Read-only, non-interactive |
 
 ## TOP Capture
 
@@ -159,7 +159,7 @@ Concurrent AI sessions (multiple Claude Code windows, other MCP clients) working
 | `release_scope` | `scope` | Release a lease you hold. Polite — expiry also handles it |
 | `announce_task` | `title`, `scopes?`, `note?` | Announce a unit of work to the shared task ledger so parallel sessions see what is in progress and what is finished-but-uncommitted; active entries ride on `get_sessions` |
 | `update_task` | `task_id`, `status?`, `note?`, `commit?` | Transition a ledger task (`done_uncommitted` / `committed` with sha / `abandoned`); any session may update any task, non-owner writes record `updated_by` |
-| `preflight_landing` | `worktree_path` | Landing safety check for a git-worktree diff: intersects the files it would land with main-tree dirt, peer `file:` claims/touches, and unsaved live TDN state. Run before porting any worktree diff; a `conflicts` verdict means reconcile first |
+| `preflight_landing` | `worktree_path` | Landing safety check for a git-worktree diff: intersects the files it would land with main-tree dirt, peer `file:` claims/touches, and unsaved live TDXN state. Run before porting any worktree diff; a `conflicts` verdict means reconcile first |
 
 !!! info "Auto-piggybacked peer advisories"
     A `_peers` field rides on any response whose request touches territory another session modified in the last ~10 minutes — one entry per peer: `{label, scope, tool, age_s, conflict}`. `conflict: true` means a peer *wrote* an overlapping scope within the last minute and your operation is also a write — stop and coordinate.

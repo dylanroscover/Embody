@@ -81,12 +81,12 @@ test("category picker caps the selection at three", async ({ page }) => {
   await expect(page.locator('input[name="categories"][value="video"]')).toBeEnabled();
 });
 
-test("invalid TDN is rejected", async ({ page }) => {
+test("invalid TDXN is rejected", async ({ page }) => {
   await register(page);
   await page.goto("/contribute");
-  await page.locator('input[name="title"]').fill(`Bad TDN ${Date.now()}`);
+  await page.locator('input[name="title"]').fill(`Bad TDXN ${Date.now()}`);
   await fillTdn(page, "{ not valid json");
-  // Invalid TDN keeps the submit button in the not-ready (aria-disabled) state.
+  // Invalid TDXN keeps the submit button in the not-ready (aria-disabled) state.
   await expect(page.locator("[data-submit-go]")).toHaveAttribute("aria-disabled", "true");
   // It is aria-disabled (not the `disabled` attribute), so a real click still
   // fires and surfaces a status; force past Playwright's actionability gate.

@@ -107,7 +107,7 @@ _RECOVERY_HINT_RULES = [
 
     (re.compile(r'parameter not found|no parameter', re.IGNORECASE),
      'no parameter by that name on the operator',
-     "List the operator's real parameters with get_op (or read_tdn for a TDN "
+     "List the operator's real parameters with get_op (or read_tdn for a TDXN "
      "COMP) before setting. Custom-parameter names are Capitalized; built-in "
      "names are lowercase.",
      ['get_op', 'get_parameter']),
@@ -450,7 +450,7 @@ def _task_public(task: dict, now: float) -> dict:
 # results on disk (.embody/jobs/<id>.json), so they survive restarts and
 # reinits; get_job_status polls. Records are os/json-only plain data --
 # writable from the main thread (tiny file) and readable from the worker.
-# This registry is the intended shape for future kinds (TDN export, movie
+# This registry is the intended shape for future kinds (TDXN export, movie
 # export) -- see docs/roadmap.md.
 
 _JOB_RETENTION_S = 24 * 3600.0    # finished records kept this long
@@ -828,7 +828,7 @@ def compute_landing_conflicts(landing_files, main_dirty, peer_files,
 
 
 def read_tsv_dirty_paths(repo_root: str) -> set:
-    """Repo-relative paths of externalized files whose live TDN/DAT state
+    """Repo-relative paths of externalized files whose live TDXN/DAT state
     is UNSAVED (dirty column truthy in externalizations.tsv). LEGACY
     tsvs only since 2026-08-20 -- the live project's dirty state is
     runtime-only and merged from the sys mirror at the call site. Pure
@@ -3072,7 +3072,7 @@ class EnvoyMCPServer:
                 tag_type: Tag type - "tox" for COMPs, "py"/"txt"/"tsv"/"json" etc for DATs
                          If None, will auto-detect based on operator type
 
-            Unattended sessions: a TDN operation that meets a TD palette
+            Unattended sessions: a TDXN operation that meets a TD palette
             component can raise the Black-Box-vs-Full-Export dialog.
             Decide programmatically BEFORE the call: set the
             Tdnpalettehandling parameter on the Embody COMP ('blackbox' |
@@ -3096,7 +3096,7 @@ class EnvoyMCPServer:
                                        delete_file: bool = False) -> dict:
             """
             Remove Embody externalization tracking from an operator
-            (tag, table row, and TDN breadcrumb).
+            (tag, table row, and TDXN breadcrumb).
 
             Args:
                 op_path: Path to the operator
@@ -3194,7 +3194,7 @@ class EnvoyMCPServer:
                 'existing_comp': existing_comp,
             })
 
-        # === TDN Network Format Tools ===
+        # === TDXN Network Format Tools ===
 
         @self.mcp.tool()
         def export_network(root_path: str = "/",
@@ -3211,10 +3211,10 @@ class EnvoyMCPServer:
                 include_dat_content: Include DAT text/table content (default None = use Embeddatsintdns toggle)
                 output_file: File path to write JSON. Use "auto" to generate name. None returns dict only.
                 max_depth: Maximum recursion depth (None = unlimited)
-                embed_all: If True, recurse into TDN-tagged COMPs instead of
+                embed_all: If True, recurse into TDXN-tagged COMPs instead of
                     skipping their children. Produces a self-contained export.
 
-            Unattended sessions: a TDN operation that meets a TD palette
+            Unattended sessions: a TDXN operation that meets a TD palette
             component can raise the Black-Box-vs-Full-Export dialog.
             Decide programmatically BEFORE the call: set the
             Tdnpalettehandling parameter on the Embody COMP ('blackbox' |
@@ -3247,7 +3247,7 @@ class EnvoyMCPServer:
                     session claimed this COMP or wrote it very recently
                     (applies only with clear_first=True)
 
-            Unattended sessions: a TDN operation that meets a TD palette
+            Unattended sessions: a TDXN operation that meets a TD palette
             component can raise the Black-Box-vs-Full-Export dialog.
             Decide programmatically BEFORE the call: set the
             Tdnpalettehandling parameter on the Embody COMP ('blackbox' |
@@ -3270,7 +3270,7 @@ class EnvoyMCPServer:
                      max_depth: int = None,
                      embed_all: bool = False) -> dict:
             """
-            Read live authored state under comp_path as a compact TDN dict.
+            Read live authored state under comp_path as a compact TDXN dict.
 
             This is authored-state, not runtime: use runtime probes for
             evaluated values, cook errors, output pixels/data, timing, or flags.
@@ -3279,10 +3279,10 @@ class EnvoyMCPServer:
                 comp_path: Root COMP to read (default "/" for entire project)
                 include_dat_content: Include DAT text/table content
                 max_depth: Maximum recursion depth (None = unlimited)
-                embed_all: Recurse into TDN-tagged COMPs instead of skipping
+                embed_all: Recurse into TDXN-tagged COMPs instead of skipping
 
             Returns:
-                Dict with the TDN document under 'tdn', or {'error': ...}
+                Dict with the TDXN document under 'tdn', or {'error': ...}
             """
             return self._execute_in_td('read_tdn', {
                 'comp_path': comp_path,
@@ -3294,7 +3294,7 @@ class EnvoyMCPServer:
         def diff_tdn(target: str = "",
                      max_changed_ops: int = 200,
                      max_bytes: int = 60000) -> dict:
-            """Diff live in-memory TDN state against on-disk .tdn files.
+            """Diff live in-memory TDXN state against on-disk .tdn files.
 
             Empty target (or "/" / "project") returns a project summary; a
             COMP path or .tdn filename returns that COMP in detail. Read-only.
@@ -3596,7 +3596,7 @@ class EnvoyMCPServer:
             also dirty in the MAIN tree (a running TD re-exports
             externalized files -- blind overwrite is the classic landing
             failure), landing files claimed or recently written by PEER
-            sessions, and landing files whose live TDN/DAT state is
+            sessions, and landing files whose live TDXN/DAT state is
             UNSAVED (dirty in externalizations.tsv). Run it before porting
             any worktree diff; a 'conflicts' verdict means reconcile first.
 
@@ -3754,7 +3754,7 @@ class EnvoyMCPServer:
             Save the TouchDesigner project as a tracked background job.
 
             project.save() blocks TD's main thread for many seconds (the
-            TDN strip/restore cycle plus the release-tox export) and
+            TDXN strip/restore cycle plus the release-tox export) and
             reinitializes extensions, so a synchronous MCP call is severed
             even though the save succeeds. This tool returns a job id
             immediately; the save runs a few frames later. Poll
@@ -3978,7 +3978,7 @@ class EnvoyMCPServer:
     def _docsDefaultsIndex(self) -> dict:
         """{op_type_lower: {par_name: default}} of creation defaults.
 
-        Source priority mirrors TDNExt._loadDivergentDefaults so the two
+        Source priority mirrors TDXNExt._loadDivergentDefaults so the two
         cannot disagree about what a default IS:
           1. .embody/catalog_<build>.json -- probed from real instances on
              THIS build by CatalogManager (~650 op types, complete).
@@ -6148,7 +6148,7 @@ class EnvoyExt:
     def _expandFileScopes(self, scopes):
         """Append file: scopes for op-path scopes covered by the
         externalizations table (the op's own row, or a tracked ancestor
-        such as a TDN COMP). Main thread only -- reads the live table."""
+        such as a TDXN COMP). Main thread only -- reads the live table."""
         out = list(scopes)
         try:
             table = op.Embody.ext.Embody.Externalizations
@@ -6790,7 +6790,7 @@ class EnvoyExt:
             'get_externalization_status': self._get_externalization_status,
             # Extension creation
             'create_extension': self._create_extension,
-            # TDN network format
+            # TDXN network format
             'export_network': self._export_network,
             'import_network': self._import_network,
             'read_tdn': self._read_tdn,
@@ -6818,11 +6818,11 @@ class EnvoyExt:
         handler = handlers.get(operation)
         if handler:
             try:
-                # Pre-risky: durably checkpoint the touched TDN root BEFORE a
+                # Pre-risky: durably checkpoint the touched TDXN root BEFORE a
                 # destructive delete so an agent-induced crash during it loses
                 # nothing since it. Best-effort, ~6ms. NOT for import_network: its
                 # .tdn is the user's source-of-truth being reloaded (the canonical
-                # TDN edit->import workflow), so writing the live state over it
+                # TDXN edit->import workflow), so writing the live state over it
                 # would corrupt the edit.
                 if operation == 'delete_op':
                     try:
@@ -7173,7 +7173,7 @@ class EnvoyExt:
             return None
         try:
             # Suppress Embody's Update/Refresh cycle during tests to
-            # prevent extension reinit from TDN re-exports triggered by
+            # prevent extension reinit from TDXN re-exports triggered by
             # test-created operators making COMPs structurally dirty.
             # The prior Status is kept in COMP storage, not an instance
             # attribute: an extension reinit mid-run wipes the attribute and
@@ -7430,7 +7430,7 @@ class EnvoyExt:
         """Start a project save as a tracked job (main thread).
 
         The save itself runs a few frames later so this response reaches
-        the client BEFORE the main thread blocks on the TDN strip/restore
+        the client BEFORE the main thread blocks on the TDXN strip/restore
         and the extension reinit that project.save() triggers. Refuses
         while a test run is active (a mid-run save bakes the runner's
         forced Filecleanup='delete' / Status='Testing' into the exported
@@ -7490,7 +7490,7 @@ class EnvoyExt:
             fromOP=self.ownerComp, delayFrames=3)
         return {'job_id': job['id'], 'status': 'running',
                 'hint': 'project.save() runs in ~3 frames and blocks TD '
-                        'briefly (TDN strip/restore + release export); poll '
+                        'briefly (TDXN strip/restore + release export); poll '
                         'get_job_status(job_id=...). The save restarts the '
                         'server, so the NEXT call may fail once with a '
                         'connection error -- just retry it; the bridge '
@@ -8551,24 +8551,24 @@ class EnvoyExt:
         """Create a TD extension: COMP + text DAT + extension wiring -- see envoy_ops."""
         return mod.envoy_ops.create_extension(self, parent_path, class_name, name, code, promote, ext_name, ext_index, existing_comp)
 
-    # === TDN Network Format (Main Thread Only) ===
+    # === TDXN Network Format (Main Thread Only) ===
 
     def _export_network(self, root_path='/', include_dat_content=True,
                        output_file=None, max_depth=None, embed_all=False):
-        """Delegate to TDN extension for network export -- see envoy_read."""
+        """Delegate to TDXN extension for network export -- see envoy_read."""
         return mod.envoy_read.export_network(self, root_path, include_dat_content, output_file, max_depth, embed_all)
 
     def _import_network(self, target_path, tdn, clear_first=False):
-        """Delegate to TDN extension for network import -- see envoy_ops."""
+        """Delegate to TDXN extension for network import -- see envoy_ops."""
         return mod.envoy_ops.import_network(self, target_path, tdn, clear_first)
 
     def _read_tdn(self, comp_path='/', include_dat_content=None,
                   max_depth=None, embed_all=False):
-        """Read a network subtree as a TDN dict (in-memory, no disk write) -- see envoy_read."""
+        """Read a network subtree as a TDXN dict (in-memory, no disk write) -- see envoy_read."""
         return mod.envoy_read.read_tdn(self, comp_path, include_dat_content, max_depth, embed_all)
 
     def _diff_tdn(self, target='', max_changed_ops=200, max_bytes=60000):
-        """Show what is UNSAVED in TDN-externalized COMPs vs on-disk .tdn -- see envoy_read."""
+        """Show what is UNSAVED in TDXN-externalized COMPs vs on-disk .tdn -- see envoy_read."""
         return mod.envoy_read.diff_tdn(self, target, max_changed_ops, max_bytes)
 
 

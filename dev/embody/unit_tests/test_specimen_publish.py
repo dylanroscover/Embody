@@ -51,7 +51,7 @@ _MISSING = object()
 # _publish() reads module-level names: op, project, json, Path. We patch op
 # and project in the loaded module's __dict__, then restore in tearDown. The
 # fake op is callable (op('/specimen_lab/x') -> comp or None) AND exposes
-# .Embody (op.Embody.ext.TDN / op.Embody.Log). json and Path stay the real
+# .Embody (op.Embody.ext.TDXN / op.Embody.Log). json and Path stay the real
 # stdlib objects already bound in the module.
 # =============================================================================
 
@@ -91,7 +91,7 @@ class _FakeTDN:
 
 class _FakeExt:
 	def __init__(self, tdn):
-		self.TDN = tdn
+		self.TDXN = tdn
 
 
 class _FakeEmbody:
@@ -167,7 +167,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 
 	def _install(self, present=None, export_result=None, export_fn=None):
 		"""Patch op/project in the module and return the fake TDN for asserts."""
-		real_tdn = self.embody.ext.TDN
+		real_tdn = self.embody.ext.TDXN
 		fake_tdn = _FakeTDN(real_tdn, export_result=export_result,
 							export_fn=export_fn)
 		fake_emb = _FakeEmbody(fake_tdn)
@@ -311,9 +311,9 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		self.mod._publish()
 		out = Path(self._spec_dir, 'compositing', 'kaleidoscope.tdn')
 		self.assertTrue(out.exists())
-		reread = self.embody.ext.TDN._read_existing_tdn(str(out))
+		reread = self.embody.ext.TDXN._read_existing_tdn(str(out))
 		self.assertIsNotNone(reread)
-		self.assertTrue(self.embody.ext.TDN._tdn_content_equal(tdn, reread))
+		self.assertTrue(self.embody.ext.TDXN._tdn_content_equal(tdn, reread))
 
 
 # =============================================================================
@@ -352,7 +352,7 @@ class TestSpecimenPublishLive(EmbodyTestCase):
 	def test_live_first_writes_second_skips(self):
 		"""First export to a fresh path writes a file; identical export to the
 		same path is content-equal and would skip."""
-		TDN = self.embody.ext.TDN
+		TDN = self.embody.ext.TDXN
 		out = Path(self._tmp_out, 'live.tdn')
 		res = TDN.ExportNetwork(root_path=self._live.path,
 								include_dat_content=True, embed_all=True)

@@ -1,10 +1,10 @@
-format: tdn
+format: tdxn
 version: '2.0'
-build: 1103
-generator: Embody/6.0.280
+build: 1127
+generator: Embody/6.1.2
 td_build: 099.2025.33070
-source_file: Embody-6.280.toe
-exported_at: '2026-08-25T20:51:21Z'
+source_file: Embody-6.284.toe
+exported_at: '2026-08-27T17:51:57Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -54,8 +54,8 @@ operators:
     - object: op('./EnvoyExt').module.EnvoyExt(me)
       name: Envoy
       promote: true
-    - object: op('./TDNExt').module.TDNExt(me)
-      name: TDN
+    - object: op('./TDXNExt').module.TDXNExt(me)
+      name: TDXN
       promote: true
     - object: op('./CatalogManagerExt').module.CatalogManagerExt(me)
       name: CatalogManager
@@ -231,29 +231,29 @@ operators:
       value: dat
     - name: Tdntags
       style: Header
-      label: TDN Tags
+      label: TDXN Tags
       startSection: true
-      help: Tag strings and operator colors for TDN externalization. COMPs tagged with the TDN tag have their children exported as human-readable .tdn JSON network files.
+      help: Tag strings and operator colors for TDXN externalization. COMPs tagged with the TDXN tag have their children exported as human-readable .tdxn JSON network files.
     - name: Tdntagcolor
       style: RGBA
-      label: TDN Tag Color
+      label: TDXN Tag Color
       default: 0.3
-      help: Color applied to TDN-tagged COMP operators in the network editor. Makes TDN-strategy COMPs visually identifiable.
+      help: Color applied to TDXN-tagged COMP operators in the network editor. Makes TDXN-strategy COMPs visually identifiable.
     - name: Tdntag
       style: Str
-      label: .tdn Tag
-      help: Tag string for .tdn externalization. Applied to COMPs whose children are exported as human-readable JSON network files.
+      label: TDXN Tag
+      help: 'Tag string applied to COMPs externalized with the TDXN strategy (their children are exported as human-readable YAML network files). The value stays ''tdn'': it is written into every tagged COMP in every existing project, so changing it would orphan them.'
       value: tdn
     - name: Tdnexcludetag
       style: Str
-      label: .tdn Exclude Tag
+      label: TDXN Exclude Tag
       startSection: true
       default: tdn_exclude
-      help: 'Tag family for excluding things from the TDN system (default ''tdn_exclude''). BARE tag on a COMP: the COMP is invisible to TDN -- never exported, never inlined in parent .tdn files, never stripped on save, never destroyed by reconstruction. Primary use: opt a single child out of cascade autotag, or app-managed COMPs (e.g. spawned via .copy() at runtime). SUFFIXED ''tdn_exclude:<parname>'' on ANY operator: that parameter''s constant value is omitted from TDN export while the operator, its other parameters, and its wiring export normally -- for runtime state a project must not commit (a negotiated port, a session file path). Expressions/binds still export; unknown parameter names log a WARNING. Manage both visually via the tagger''s Exclude from tdn panel. Clear this parameter to disable the whole family.'
-    TDN:
+      help: 'Tag family for excluding things from the TDXN system (default ''tdn_exclude''). BARE tag on a COMP: the COMP is invisible to TDXN -- never exported, never inlined in parent .tdxn files, never stripped on save, never destroyed by reconstruction. Primary use: opt a single child out of cascade autotag, or app-managed COMPs (e.g. spawned via .copy() at runtime). SUFFIXED ''tdn_exclude:<parname>'' on ANY operator: that parameter''s constant value is omitted from TDXN export while the operator, its other parameters, and its wiring export normally -- for runtime state a project must not commit (a negotiated port, a session file path). Expressions/binds still export; unknown parameter names log a WARNING. Manage both visually via the tagger''s Exclude from tdn panel. Clear this parameter to disable the whole family.'
+    TDXN:
     - name: Tdnmode
       style: Menu
-      label: TDN Mode
+      label: TDXN Mode
       startSection: true
       default: export
       menuNames:
@@ -264,7 +264,7 @@ operators:
       - 'Off'
       - Export-on-Save
       - Roundtrip (Experimental)
-      help: Three-mode master for the TDN subsystem. Off = no TDN runtime (.tdn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Roundtrip (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with extension reload timing on deeply-nested TDN COMPs.
+      help: Three-mode master for the TDXN subsystem. Off = no TDXN runtime (.tdxn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdxn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Roundtrip (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with extension reload timing on deeply-nested TDXN COMPs.
     - name: Clipboardautopaste
       style: Toggle
       label: Clipboard Auto-Paste
@@ -275,10 +275,10 @@ operators:
       style: Toggle
       label: Cascade to Children
       startSection: true
-      help: When tagging a COMP for TDN, automatically tag all child COMPs so each gets its own .tdn file.
+      help: When tagging a COMP for TDXN, automatically tag all child COMPs so each gets its own .tdxn file.
     - name: Tdncascadewarn
       style: Menu
-      label: Large TDN Warning
+      label: Large TDXN Warning
       default: ask
       menuNames:
       - ask
@@ -286,7 +286,7 @@ operators:
       menuLabels:
       - Ask
       - Quiet
-      help: Controls whether a warning dialog is shown when a TDN file exceeds 5 MB. Set automatically when dismissed.
+      help: Controls whether a warning dialog is shown when a TDXN file exceeds 5 MB. Set automatically when dismissed.
     - name: Tdnlockedwarn
       style: Menu
       label: Locked Content Warning
@@ -297,29 +297,29 @@ operators:
       menuLabels:
       - Ask
       - Quiet
-      help: Controls whether a dialog is shown when a TDN export contains locked TOPs, CHOPs, or SOPs whose frozen data will not survive the round-trip. Batch sweeps show one combined dialog. Set automatically when dismissed with Don't show again.
+      help: Controls whether a dialog is shown when a TDXN export contains locked TOPs, CHOPs, or SOPs whose frozen data will not survive the round-trip. Batch sweeps show one combined dialog. Set automatically when dismissed with Don't show again.
     - name: Embeddatsintdns
       style: Toggle
       label: Embed DATs (default)
       startSection: true
-      help: When enabled, DAT content (text and table data) is included in TDN exports by default. Can be overridden per-export. Disabling reduces file size but loses DAT content.
+      help: When enabled, DAT content (text and table data) is included in TDXN exports by default. Can be overridden per-export. Disabling reduces file size but loses DAT content.
     - name: Embedstorageintdns
       style: Toggle
       label: Embed Storage (default)
       default: true
-      help: Include Python storage entries in TDN exports. Disable for COMPs with large storage to reduce file size. Can be overridden per-COMP from the tagging menu.
+      help: Include Python storage entries in TDXN exports. Disable for COMPs with large storage to reduce file size. Can be overridden per-COMP from the tagging menu.
     - name: Autosave
       style: Toggle
       label: Auto-Save Checkpoints
       startSection: true
       default: true
-      help: When on, after the agent (or you) goes idle Embody writes changed TDN COMPs to disk as a cheap ~6ms .tdn checkpoint -- NO full project save, no strip/restore, no freeze -- so a crash loses little unsaved work. Checkpointed COMPs are rebuilt on next open. Skips during Perform Mode and project saves.
+      help: When on, after the agent (or you) goes idle Embody writes changed TDXN COMPs to disk as a cheap ~6ms .tdxn checkpoint -- NO full project save, no strip/restore, no freeze -- so a crash loses little unsaved work. Checkpointed COMPs are rebuilt on next open. Skips during Perform Mode and project saves.
     - name: Tdncreateonstart
       style: Toggle
-      label: TDN Create on Start
+      label: TDXN Create on Start
       startSection: true
       default: true
-      help: When enabled, reconstructs TDN-strategy COMP children from .tdn files on disk when the project opens. Required for TDN round-trip workflow where children are stripped on save.
+      help: When enabled, reconstructs TDXN-strategy COMP children from .tdxn files on disk when the project opens. Required for TDXN round-trip workflow where children are stripped on save.
     - name: Autosavestatus
       style: Str
       label: Auto-Save Status
@@ -330,7 +330,7 @@ operators:
       style: Toggle
       label: Strip on Save
       default: true
-      help: When enabled, strips children from TDN-strategy COMPs during project save. Children are recreated on next open via TDN Create on Start. Keeps .toe files minimal.
+      help: When enabled, strips children from TDXN-strategy COMPs during project save. Children are recreated on next open via TDXN Create on Start. Keeps .toe files minimal.
     - name: Tdnpalettehandling
       style: Menu
       label: Palette Handling
@@ -344,21 +344,26 @@ operators:
       - Ask
       - Black Box
       - Full Export
-      help: 'How to handle TD palette COMPs (e.g. abletonLink, Widget components) during TDN export. Ask: prompt on first encounter per COMP. Black Box: reference the palette and skip internal children -- the correct choice for stock palette components. Full Export: export all internals -- use when the palette COMP has been heavily customized internally.'
+      help: 'How to handle TD palette COMPs (e.g. abletonLink, Widget components) during TDXN export. Ask: prompt on first encounter per COMP. Black Box: reference the palette and skip internal children -- the correct choice for stock palette components. Full Export: export all internals -- use when the palette COMP has been heavily customized internally.'
       value: blackbox
     - name: Tdnfile
       style: File
-      label: TDN File
+      label: TDXN File
       startSection: true
-      help: Path to a .tdn file to import. Select a file, set the Network Path target, then pulse Import TDN.
+      help: Path to a .tdxn file to import. Select a file, set the Network Path target, then pulse Import TDXN.
     - name: Networkpath
       style: COMP
       label: Network Path
-      help: Target COMP where the TDN file will be imported. Operators from the .tdn are created as children of this COMP.
+      help: Target COMP where the TDXN file will be imported. Operators from the .tdxn are created as children of this COMP.
     - name: Importtdn
       style: Pulse
-      label: Import TDN
-      help: Imports the specified TDN File into the Network Path target. Creates all operators, sets parameters, connections, and positions.
+      label: Import TDXN
+      help: Imports the specified TDXN File into the Network Path target. Creates all operators, sets parameters, connections, and positions.
+    - name: Migratetotdxn
+      style: Pulse
+      label: Migrate .tdn to .tdxn
+      startSection: true
+      help: 'One-time, opt-in conversion of the network files you already have. Renames every tracked .tdn to .tdxn, repoints the externalizations table, and updates the tdn_ref pointers inside parent files so nested COMPs keep resolving. Contents are unchanged. New externalizations already use .tdxn -- this only affects existing files. Commit or stash first if the project is under version control; Embody performs the renames itself, so never git mv them. Safe to re-run: it converges.'
     Envoy:
     - name: Aiclient
       style: Menu
@@ -445,7 +450,7 @@ operators:
       - DATs
       - COMPs
       - DATs and COMPs
-      help: 'Auto-tag operators that Envoy creates via create_op for externalization to version-control-friendly files. Neither = off. DATs = externalize created DATs (source files). COMPs = externalize created COMPs (TDN). DATs and COMPs = both. Only ops at an externalization boundary are tagged -- never ops already inside an externalized COMP, palette clones, or Embody itself. Additive only: it never deletes files or removes tags.'
+      help: 'Auto-tag operators that Envoy creates via create_op for externalization to version-control-friendly files. Neither = off. DATs = externalize created DATs (source files). COMPs = externalize created COMPs (TDXN). DATs and COMPs = both. Only ops at an externalization boundary are tagged -- never ops already inside an externalized COMP, palette clones, or Embody itself. Additive only: it never deletes files or removes tags.'
     - name: Toolpermissions
       style: Menu
       label: Tool Permissions
@@ -643,8 +648,8 @@ operators:
       values: [1, 1, 1, 1]
     - name: Tdnsavedcolor
       style: RGBA
-      label: TDN Saved Color
-      help: Color indicator for TDN-strategy operators that are saved and up-to-date.
+      label: TDXN Saved Color
+      help: Color indicator for TDXN-strategy operators that are saved and up-to-date.
       values: [0.153552, 0.376081, 0.457, 1]
     Shortcuts:
     - name: Enablekeyboardshortcuts
@@ -698,37 +703,37 @@ operators:
       help: 'Arm the shortcut recorder for Refresh Tracking: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
     - name: Shortcutexportproject
       style: Str
-      label: Export Project to TDN
+      label: Export Project to TDXN
       startSection: true
       default: ctrl+shift+e
-      help: 'Keyboard shortcut for Export Project to TDN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+      help: 'Keyboard shortcut for Export Project to TDXN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
       value: cmd+shift+e
     - name: Recordexportproject
       style: Pulse
       label: Record
-      help: 'Arm the shortcut recorder for Export Project to TDN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+      help: 'Arm the shortcut recorder for Export Project to TDXN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
     - name: Shortcutexportcomp
       style: Str
-      label: Export Current COMP to TDN
+      label: Export Current COMP to TDXN
       startSection: true
       default: ctrl+alt+e
-      help: 'Keyboard shortcut for Export Current COMP to TDN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+      help: 'Keyboard shortcut for Export Current COMP to TDXN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
       value: cmd+alt+e
     - name: Recordexportcomp
       style: Pulse
       label: Record
-      help: 'Arm the shortcut recorder for Export Current COMP to TDN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+      help: 'Arm the shortcut recorder for Export Current COMP to TDXN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
     - name: Shortcutcopytdn
       style: Str
-      label: Copy Selected COMP as TDN
+      label: Copy Selected COMP as TDXN
       startSection: true
       default: ctrl+shift+c
-      help: 'Keyboard shortcut for Copy Selected COMP as TDN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+      help: 'Keyboard shortcut for Copy Selected COMP as TDXN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
       value: cmd+shift+c
     - name: Recordcopytdn
       style: Pulse
       label: Record
-      help: 'Arm the shortcut recorder for Copy Selected COMP as TDN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+      help: 'Arm the shortcut recorder for Copy Selected COMP as TDXN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
     - name: Shortcuttagger
       style: Menu
       label: Tagger Double-Tap Key
@@ -781,7 +786,7 @@ operators:
       style: Toggle
       label: Restore DATs on Start
       default: true
-      help: When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs.
+      help: When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDXN COMPs.
     - name: Filecleanup
       style: Menu
       label: File Cleanup
@@ -823,7 +828,7 @@ operators:
       - Ask Each Save
       - Always Externalize
       - Never Ask
-      help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
+      help: What to do when TDXN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
     - name: Showbuiltinpars
       style: Toggle
       label: Show Built-in Pars
@@ -852,14 +857,14 @@ operators:
     - name: Uninstall
       style: Pulse
       startSection: true
-      help: 'Removes Embody from this project: deletes Embody-generated config (CLAUDE.md / AGENTS.md / .claude / .cursor / ...), Embody''s .venv, and .embody/ state; strips only Embody''s block from shared files (.gitignore, .gitattributes, .mcp.json); un-sets the .tdn git diff driver. Your own files, externalized .tox / .tdn / .py, and the Embody COMP are NOT removed. Asks for confirmation first.'
+      help: 'Removes Embody from this project: deletes Embody-generated config (CLAUDE.md / AGENTS.md / .claude / .cursor / ...), Embody''s .venv, and .embody/ state; strips only Embody''s block from shared files (.gitignore, .gitattributes, .mcp.json); un-sets the .tdxn git diff driver. Your own files, externalized .tox / .tdxn / .py, and the Embody COMP are NOT removed. Asks for confirmation first.'
     About:
     - name: Version
       style: Str
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.280
+      value: 6.1.2
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -960,7 +965,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 308
+    rows: 309
     cols: 11
   flags:
   - viewer

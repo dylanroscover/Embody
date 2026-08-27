@@ -1,20 +1,20 @@
-# FROZEN CONTRACT C8 - TDN Capability Scanner Spec
+# FROZEN CONTRACT C8 - TDXN Capability Scanner Spec
 
-The scanner classifies the executable / side-effecting surfaces of a TDN payload and emits a
+The scanner classifies the executable / side-effecting surfaces of a TDXN payload and emits a
 `CapabilityJson` (contract C2). It is implemented TWICE - `packages/scanner-ts` (server-side,
 on submit AND download) and `dev/embody/Embody/Collection/scanner.py` (Embody-side, at import). The two MUST
 produce the SAME verdict + counts on the shared fixtures in `platform/packages/scanner-ts/fixtures/`
-(mirrored to `dev/embody/unit_tests/fixtures/`). A TDN is executable code, not a sandboxed shader -
+(mirrored to `dev/embody/unit_tests/fixtures/`). A TDXN is executable code, not a sandboxed shader -
 see plan-embody-tools-platform.md section 10. ASCII only.
 
 ## Input + bounds (DoS-safe)
-- Input: a parsed TDN dict (schema: docs/tdn/specification.md, docs/tdn.schema.json - contract C7).
+- Input: a parsed TDXN dict (schema: docs/tdn/specification.md, docs/tdn.schema.json - contract C7).
 - Hard bounds BEFORE deep scan: reject if serialized size > 5 MB; cap AST recursion depth (Python
   `ast.parse` then a bounded NodeVisitor); cap total operators scanned. Exceeding a bound -> verdict
   `blocked` with a `size`/`depth` finding (never hang or crash the worker/import).
 
 ## Surfaces -> CapabilityCounts keys
-Walk every operator (and nested COMP) in the TDN. Classify:
+Walk every operator (and nested COMP) in the TDXN. Classify:
 
 1. `execute_dats` - Execute-family DATs whose `dat_content` runs on create()/onStart() at import:
    types `executeDAT`, `datexecuteDAT`, `chopexecuteDAT`, `parameterexecuteDAT`, `panelexecuteDAT`
@@ -32,9 +32,9 @@ Walk every operator (and nested COMP) in the TDN. Classify:
 7. `traversal_paths` - `file` / `syncfile` (and similar path) params holding an ABSOLUTE path or a
    `..` traversal segment -> disk read/write + SSRF/exfiltration even with zero Python.
 8. `external_refs` - COMPs using `tdn_ref` / `tox_ref` (mutually exclusive with inlined `children`):
-   they reference EXTERNAL .tdn/.tox content NOT present in this payload, so it cannot be scanned.
+   they reference EXTERNAL .tdxn/.tox content NOT present in this payload, so it cannot be scanned.
    Legitimate inside a user's own Embody project, but a community SUBMISSION must be self-contained:
-   the submit pipeline REJECTS any TDN with `external_refs > 0` (not self-contained), and the Embody
+   the submit pipeline REJECTS any TDXN with `external_refs > 0` (not self-contained), and the Embody
    import side warns. Scored as `flagged` (not `blocked`) at the scanner level so own-network
    round-trips still import.
 

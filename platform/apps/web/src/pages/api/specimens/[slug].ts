@@ -64,7 +64,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
       return errorResponse(400, "invalid_request", body.detail);
     }
 
-    // Current parsed TDN -- the FTS mirror's dat_text source (syncSpecimensFts
+    // Current parsed TDXN -- the FTS mirror's dat_text source (syncSpecimensFts
     // replaces the whole row). Overwritten with the new network below if it changes.
     let parsedTdn: Record<string, unknown> | null = null;
     try {
@@ -73,7 +73,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
       parsedTdn = null;
     }
 
-    // ---- Network (TDN) change -----------------------------------------------
+    // ---- Network (TDXN) change -----------------------------------------------
     // Re-scan + re-version ONLY when a real change arrives. The owner is already
     // authenticated + ownership-checked above, so no turnstile here.
     let newVersion: number | undefined;
@@ -98,7 +98,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
           return jsonResponse(
             {
               error: "scan_blocked",
-              detail: "The edited TDN includes blocked capability surfaces.",
+              detail: "The edited TDXN includes blocked capability surfaces.",
               scan
             },
             { status: 422 }
@@ -110,7 +110,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
           return jsonResponse(
             {
               error: "rejected_malware",
-              detail: "The edited TDN contains an unambiguously malicious pattern and was rejected.",
+              detail: "The edited TDXN contains an unambiguously malicious pattern and was rejected.",
               reasons: malware.reasons,
               scan
             },
@@ -205,7 +205,7 @@ export const PATCH: APIRoute = async ({ params, request }) => {
   }
 };
 
-// TDN is YAML v2.0 (a strict JSON superset). Mirrors the submit endpoint's gate.
+// TDXN is YAML v2.0 (a strict JSON superset). Mirrors the submit endpoint's gate.
 function parseTdn(
   value: string
 ): { ok: true; tdn: Record<string, unknown> } | { ok: false; detail: string } {
@@ -289,7 +289,7 @@ interface EditValue {
   level: string;
   categories: string[];
   requires: string[];
-  /** New TDN body. Present only when the owner edited the network. */
+  /** New TDXN body. Present only when the owner edited the network. */
   tdn?: string;
   /** New thumbnail as a data URL. Present only when the owner picked an image. */
   thumbnail?: string;
@@ -388,7 +388,7 @@ async function readEditRequest(
     return { ok: false, detail: `requires must be values from: ${SUBMIT_REQUIRES.join(", ")}.` };
   }
 
-  // Optional new network body; only present when the owner edited the TDN. Full
+  // Optional new network body; only present when the owner edited the TDXN. Full
   // validation (parse + scan) happens in the PUT handler when it actually changed.
   const tdn = typeof raw.tdn === "string" ? raw.tdn : undefined;
 

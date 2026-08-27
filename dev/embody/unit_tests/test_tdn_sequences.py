@@ -17,7 +17,7 @@ class TestTDNSequences(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.tdn = self.embody.ext.TDN
+        self.tdn = self.embody.ext.TDXN
 
     # --- Helper ---
 

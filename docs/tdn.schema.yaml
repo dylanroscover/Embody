@@ -1,11 +1,16 @@
-# YAML Schema for TDN (TouchDesigner Network) v2.0 -- see docs/tdn/schema.md
-# Follows the JSON Schema standard (draft 2020-12); serialized as YAML, like .tdn files.
+# YAML Schema for TDXN (TouchDesigner eXternal Network) v2.0 -- see docs/tdn/schema.md
+# Follows the JSON Schema standard (draft 2020-12); serialized as YAML, like .tdxn files.
+#
+# The FILENAME and $id below are deliberately unchanged across the v6.1.0
+# TDXN -> TDXN rename: both are a published contract that editors are wired
+# to by raw URL. Renaming either silently breaks every such setup.
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://github.com/dylanroscover/Embody/blob/main/docs/tdn.schema.yaml
-title: TDN (TouchDesigner Network)
-description: Schema for TDN v2.0 - a human-readable YAML format (reads legacy JSON .tdn) for representing
-  TouchDesigner operator networks. The .tdn file is now YAML; this schema validates the parsed structure,
-  identical for YAML and JSON sources.
+title: TDXN (TouchDesigner eXternal Network)
+description: Schema for TDXN v2.0 - a human-readable YAML format for representing TouchDesigner
+  operator networks, externalized to disk. Files carry .tdxn (.tdn before Embody 6.1, still read
+  and written unchanged); this schema validates the parsed structure, identical for either
+  extension and for YAML or legacy JSON sources.
 type: object
 required:
 - format
@@ -19,8 +24,11 @@ required:
 additionalProperties: false
 properties:
   format:
-    const: tdn
-    description: File format identifier. Always "tdn".
+    enum:
+    - tdxn
+    - tdn
+    description: File format identifier. "tdxn" as of Embody 6.1; "tdn" in files written by
+      6.0 and earlier, and by any older Embody that re-exports one. Both are permanently valid.
   version:
     type: string
     description: Format version. Currently "2.0". Files <2.0 are JSON; >=2.0 are YAML.

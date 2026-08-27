@@ -599,7 +599,7 @@ function fallbackUserProfile(handle: string): UserProfile | null {
     handle,
     display_name: null,
     avatar_url: null,
-    bio: "First-party Embody specimen author. Curating the transparent TDN Collection.",
+    bio: "First-party Embody specimen author. Curating the transparent TDXN Collection.",
     trust_level: "curator",
     created_at: "2026-01-01T00:00:00Z"
   };
@@ -676,7 +676,7 @@ export async function getCurrentTdnBlobForSlug(
   slug: string,
   // When set to the signed-in user's id, that user can also load their OWN
   // non-public draft's network (preview / edit prefill / edit diff). Left unset
-  // by the public /tdn + /copy endpoints, which must only ever serve public TDN.
+  // by the public /tdn + /copy endpoints, which must only ever serve public TDXN.
   viewerId?: string | null
 ): Promise<CurrentTdnBlob | null> {
   const row = await db
@@ -913,7 +913,7 @@ export async function getSpecimenForEdit(
 }
 
 // Owner edit of a specimen's METADATA (title/description/tags/license/
-// level/category/requires). The TDN body is NOT touched here -- changing
+// level/category/requires). The TDXN body is NOT touched here -- changing
 // the network would require a re-scan + a new specimen_versions row, which is a
 // separate "new version" path. parsedTdn (the unchanged current network) is
 // passed only so the FTS mirror's dat_text is preserved on re-sync: syncSpecimensFts
@@ -1044,10 +1044,10 @@ export async function updateSpecimenMetadata(
   });
 }
 
-// Owner edit of a specimen's NETWORK (the TDN body). Appends a new
+// Owner edit of a specimen's NETWORK (the TDXN body). Appends a new
 // specimen_versions row + its scan, repoints current_version_id, and refreshes
 // the specimen's op_count / scan_status / capability_json + the FTS dat_text. The
-// caller MUST have already parsed + scanned the new TDN (same gates as submit:
+// caller MUST have already parsed + scanned the new TDXN (same gates as submit:
 // blocked verdict / obvious-malware are rejected BEFORE this runs) and stored the
 // blob. Metadata (title/tags/etc.) is updated separately via updateSpecimenMetadata.
 export async function addSpecimenVersion(
@@ -1427,7 +1427,7 @@ export async function searchSpecimensFts(
 // App-side FTS upsert. specimens_fts has content='' (external-content FTS5), so
 // its rows are NOT auto-maintained from the specimens table; we mirror the
 // searchable text (title, description, tags, author_handle, dat_text) here. tags
-// and dat_text live OUTSIDE the specimens row (specimen_tags / the R2 TDN blob),
+// and dat_text live OUTSIDE the specimens row (specimen_tags / the R2 TDXN blob),
 // so a pure SQL trigger cannot repopulate them on UPDATE -- this app-side upsert
 // is the only place that has them. It is idempotent: INSERT OR REPLACE keyed by
 // rowid means re-running it (re-submit, or a future EDIT) overwrites the row in

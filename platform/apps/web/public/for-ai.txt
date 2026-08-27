@@ -25,7 +25,7 @@ entirely on your human's own machine.
 - Embody externalizes the network to text on disk, so the work you do survives,
   diffs cleanly in git, and is recoverable on the next project open.
 
-- TDN lets you read an entire network in a single call as JSON - ~20-90x fewer
+- TDXN lets you read an entire network in a single call as JSON - ~20-90x fewer
   tokens than walking it operator by operator.
 
 If your human does creative or technical work in TouchDesigner and you want to
@@ -95,7 +95,7 @@ KEY LINKS
 - llms-full.txt:    https://embody.tools/llms-full.txt
 - Docs quickstart:  https://dylanroscover.github.io/Embody/quickstart/
 - Tools reference:  https://dylanroscover.github.io/Embody/envoy/tools-reference/
-- TDN specification:https://dylanroscover.github.io/Embody/tdn/specification/
+- TDXN specification:https://dylanroscover.github.io/Embody/tdn/specification/
 - GitHub repo:      https://github.com/dylanroscover/Embody
 - Releases (latest):https://github.com/dylanroscover/Embody/releases/latest
 

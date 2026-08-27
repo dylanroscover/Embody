@@ -45,9 +45,9 @@ The toolbar provides quick access to common operations. All buttons with keyboar
 | Update Current | Update only the current COMP | ++ctrl+alt+u++ |
 | Perform | Toggle Perform Mode (suspends Embody compute) | — |
 | Save Folder | Open the externalization folder | — |
-| Import TDN | Import a `.tdn` file | — |
-| Export COMP | Export current COMP to `.tdn` | ++ctrl+alt+e++ |
-| Export Project | Export entire project to `.tdn` | ++ctrl+shift+e++ |
+| Import TDXN | Import a `.tdxn` file | — |
+| Export COMP | Export current COMP to `.tdxn` | ++ctrl+alt+e++ |
+| Export Project | Export entire project to `.tdxn` | ++ctrl+shift+e++ |
 | Envoy | Toggle Envoy MCP server | — |
 | Pars | Open the Embody COMP's parameter dialog | — |
 | Filter | Filter box — type to narrow the list (keywords: `changed`, `dirty`); clear it to show all rows | — |
@@ -67,7 +67,7 @@ The toolbar is also visible in minimized mode with a compact subset of buttons.
 ### Row actions
 
 Clicking a row's **Strategy** cell opens that operator's **Actions** menu. On an
-untagged COMP it offers the strategy choice (TOX or TDN); on an already-tagged
+untagged COMP it offers the strategy choice (TOX or TDXN); on an already-tagged
 COMP it offers:
 
 Since v6.0.278 the menu is ordered so the most-used actions (**Save**/**Reload**) sit at the center, where the cursor lands, with destructive entries pushed to the bottom edge:
@@ -75,14 +75,14 @@ Since v6.0.278 the menu is ordered so the most-used actions (**Save**/**Reload**
 | Action | What it does |
 |--------|--------------|
 | **Reveal in Finder** / **Reveal in Explorer** | Opens the externalized file's folder. Shown only when the operator has a file on disk. |
-| **Embed DATs in tdn** | TDN only. Per-COMP toggle (a check mark means on) overriding the **Embed DATs (default)** parameter. |
-| **Embed storage in tdn** | TDN only. Per-COMP toggle for storage capture, same override behavior. |
-| **Copy tdn** / **Paste tdn** | TDN only. Copies the COMP to the clipboard as a portable TDN envelope, or pastes one over it. |
+| **Embed DATs in tdn** | TDXN only. Per-COMP toggle (a check mark means on) overriding the **Embed DATs (default)** parameter. |
+| **Embed storage in tdn** | TDXN only. Per-COMP toggle for storage capture, same override behavior. |
+| **Copy tdn** / **Paste tdn** | TDXN only. Copies the COMP to the clipboard as a portable TDXN envelope, or pastes one over it. |
 | **Save tox** / **Save tdn** | Writes the externalization now. This is the one *explicit* save gesture, so it also overrides the empty-network overwrite guard — a deliberately emptied COMP can be written over its file here, where the automatic exports refuse (see [Externalization](externalization.md)). |
-| **Reload tox** / **Reload tdn** | Re-imports the COMP from its file on disk, discarding in-TD changes. Since v6.0.241 a `.tdn` reload also rebuilds nested externalized children from their own `.tdn` files, so nothing is left as an empty shell. |
+| **Reload tox** / **Reload tdn** | Re-imports the COMP from its file on disk, discarding in-TD changes. Since v6.0.241 a `.tdxn` reload also rebuilds nested externalized children from their own `.tdxn` files, so nothing is left as an empty shell. |
 | **Export portable tox** | Writes a self-contained `.tox` with no external dependencies. |
 | **Convert to tox** / **Convert to tdn** | Switches the strategy; the button reads **Remove tox** / **Remove tdn** for the strategy that is currently active, which untags the operator instead. |
-| **Exclude from tdn** | TDN only, since v6.0.278. Opens the exclusion panel scoped to this COMP: drag a parameter onto its drop zone to keep that value out of `.tdn` exports (`tdn_exclude:<parname>`), or a COMP to exclude it entirely (bare `tdn_exclude`); every exclusion in the subtree is listed with a per-row **×**. See [Externalization](externalization.md#excluding-a-parameters-value-the-tdn_excludepar-tag). |
+| **Exclude from tdn** | TDXN only, since v6.0.278. Opens the exclusion panel scoped to this COMP: drag a parameter onto its drop zone to keep that value out of `.tdxn` exports (`tdn_exclude:<parname>`), or a COMP to exclude it entirely (bare `tdn_exclude`); every exclusion in the subtree is listed with a per-row **×**. See [Externalization](externalization.md#excluding-a-parameters-value-the-tdn_excludepar-tag). |
 
 Clicking a row's **File** cell opens the externalized file itself.
 

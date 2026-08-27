@@ -66,7 +66,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 
 	@property
 	def tdn(self):
-		return self.embody.ext.TDN
+		return self.embody.ext.TDXN
 
 	# =================================================================
 	# A. Atomic Write Tests
@@ -213,7 +213,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 		Path(self._tdn_path).write_text(full[:len(full)//2], encoding='utf-8')
 		result = self.tdn._validate_tdn_file(self._tdn_path)
 		self.assertFalse(result.get('valid'))
-		self.assertIn('Invalid TDN', result.get('error', ''))
+		self.assertIn('Invalid TDXN', result.get('error', ''))
 
 	def test_C03_validate_missing_format_key(self):
 		"""JSON without 'format' key should fail."""

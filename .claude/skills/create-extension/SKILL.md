@@ -58,21 +58,21 @@ op.MyFeature.ext.MyFeature.helperMethod()
 
 **NEVER cache extension references** in variables — always call inline. Cached refs go stale on reinit.
 
-## Extensions Inside TDN COMPs
+## Extensions Inside TDXN COMPs
 
-If the extension lives inside a TDN-strategy COMP (or the extension's ownerComp is one), `onInitTD` will fire **before** TDN import reconstructs the network. Any state set up during `onInitTD` — created operators, parameter values, stored data — is overwritten when `ImportNetwork` runs with `clear_first=True`.
+If the extension lives inside a TDXN-strategy COMP (or the extension's ownerComp is one), `onInitTD` will fire **before** TDXN import reconstructs the network. Any state set up during `onInitTD` — created operators, parameter values, stored data — is overwritten when `ImportNetwork` runs with `clear_first=True`.
 
 **Always defer initialization:**
 
 ```python
 def onInitTD(self):
-    """Defer setup so it runs after TDN import completes."""
+    """Defer setup so it runs after TDXN import completes."""
     run('args[0].postInit()', self, delayFrames=5)
 
 def postInit(self):
-    """Safe to set up state here — TDN import is complete."""
+    """Safe to set up state here — TDXN import is complete."""
     # Create operators, set parameters, initialize state
     pass
 ```
 
-This applies on project open, after every Ctrl+S (strip/restore cycle), and on manual TDN reimport. The deferred method must be idempotent — it may run multiple times.
+This applies on project open, after every Ctrl+S (strip/restore cycle), and on manual TDXN reimport. The deferred method must be idempotent — it may run multiple times.

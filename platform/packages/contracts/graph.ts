@@ -1,6 +1,6 @@
 // FROZEN CONTRACT C6 - the normalized graph the tdn-viewer renders.
 // `parseTDN(tdnDict)` (packages/tdn-viewer) produces this; the React Flow backend consumes it.
-// TDN already carries absolute positions + input-index connections, so NO layout engine is
+// TDXN already carries absolute positions + input-index connections, so NO layout engine is
 // needed - this is pure draw-from-data. Source fields: docs/tdn/specification.md (C7). ASCII only.
 
 export type RGB = [number, number, number]; // each channel 0..1
@@ -16,10 +16,10 @@ export interface GraphNode {
   family: string;
   /** Tile color (0..1), only when non-default. */
   color?: RGB;
-  /** Node tile position in TD coords (x right, y UP). Omitted-from-TDN defaults to 0. */
+  /** Node tile position in TD coords (x right, y UP). Omitted-from-TDXN defaults to 0. */
   x: number;
   y: number;
-  /** Tile size if known (TDN may omit; renderer may use a default). */
+  /** Tile size if known (TDXN may omit; renderer may use a default). */
   w?: number;
   h?: number;
   /**
@@ -43,7 +43,7 @@ export interface GraphEdge {
   from: string;
   /** Destination node id. */
   to: string;
-  /** Destination input slot index (array position in the TDN `inputs`/`comp_inputs`). */
+  /** Destination input slot index (array position in the TDXN `inputs`/`comp_inputs`). */
   inputIndex: number;
   /** True for COMP-level (top/bottom) connectors; false/undefined for standard (left/right). */
   comp?: boolean;

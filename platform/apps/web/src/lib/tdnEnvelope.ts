@@ -47,7 +47,7 @@ export async function buildEmbodyEnvelope(
 function stableJsonStringify(value: unknown): string {
   const serialized = serializeJsonValue(value, false);
   if (serialized === undefined) {
-    throw new TypeError("TDN payload must be JSON serializable.");
+    throw new TypeError("TDXN payload must be JSON serializable.");
   }
   return serialized;
 }
@@ -74,7 +74,7 @@ function serializeJsonValue(value: unknown, inArray: boolean): string | undefine
     case "symbol":
       return inArray ? "null" : undefined;
     case "bigint":
-      throw new TypeError("TDN payload cannot contain bigint values.");
+      throw new TypeError("TDXN payload cannot contain bigint values.");
     default:
       return undefined;
   }
@@ -94,12 +94,12 @@ function serializeObject(value: Record<string, unknown>): string {
 
 function serializeNumber(value: number): string {
   if (!Number.isFinite(value)) {
-    throw new TypeError("TDN payload cannot contain non-finite numbers.");
+    throw new TypeError("TDXN payload cannot contain non-finite numbers.");
   }
 
   const json = JSON.stringify(value);
   if (json === undefined) {
-    throw new TypeError("TDN payload contains an unsupported number.");
+    throw new TypeError("TDXN payload contains an unsupported number.");
   }
 
   if (!json.includes(".") && !/[eE]/.test(json)) {

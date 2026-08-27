@@ -29,7 +29,7 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 # Modules that execute INSIDE TouchDesigner. The STDIO bridge and the Convoy
 # daemon are separate processes with their own console story -- not in scope.
 _TD_SIDE_SOURCES = (
-    'EmbodyExt.py', 'EnvoyExt.py', 'TDNExt.py', 'CatalogManagerExt.py',
+    'EmbodyExt.py', 'EnvoyExt.py', 'TDXNExt.py', 'CatalogManagerExt.py',
     'embody_git.py', 'embody_admin.py', 'embody_launch.py', 'envoy_setup.py',
     'convoy/convoy_install.py',
 )
@@ -118,7 +118,7 @@ class TestScopedStaleScan(EmbodyTestCase):
     """The stale-file scan must read the SUBTREE, not the whole project."""
 
     def _cls(self):
-        return op.Embody.op('TDNExt').module.TDNExt
+        return op.Embody.op('TDXNExt').module.TDXNExt
 
     def test_scoped_scan_keeps_the_old_answer(self):
         base = Path(tempfile.mkdtemp(prefix='tdn_scope_'))
@@ -149,7 +149,7 @@ class TestResolveCache(EmbodyTestCase):
     """The shared resolve() cache must not change any answer."""
 
     def _cls(self):
-        return op.Embody.op('TDNExt').module.TDNExt
+        return op.Embody.op('TDXNExt').module.TDXNExt
 
     def test_cached_matches_uncached(self):
         probe = str(Path(project.folder))

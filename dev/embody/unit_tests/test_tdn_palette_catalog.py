@@ -21,7 +21,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.tdn = self.embody.ext.TDN
+		self.tdn = self.embody.ext.TDXN
 		# Snapshot the live catalog so tests can inject synthetic entries
 		# without polluting cross-test state.
 		self._saved_catalog = dict(self.tdn._palette_catalog)

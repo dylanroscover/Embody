@@ -309,7 +309,7 @@ class TestTDNFingerprintPersistence(EmbodyTestCase):
 
     def test_runtime_keys_excluded_from_tdn_export(self):
         # Storage-backed runtime state must never serialize into a .tdn.
-        tdn_mod = self.embody.op('TDNExt').module
+        tdn_mod = self.embody.op('TDXNExt').module
         # _suppress_dialogs: project.save() stores it True for the save
         # window and the TDN export runs INSIDE that window -- without the
         # exclusion every save bakes it into Embody.tdn and a later TDN
@@ -344,7 +344,7 @@ class TestTDNFingerprintPersistence(EmbodyTestCase):
         to Embody storage fails here until someone decides deliberately
         whether it may reach disk.
         """
-        tdn_mod = self.embody.op('TDNExt').module
+        tdn_mod = self.embody.op('TDXNExt').module
         live = set(self.embody.storage.keys())
         escaping = sorted(live - set(tdn_mod.SKIP_STORAGE_KEYS))
         self.assertEqual(

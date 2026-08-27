@@ -2,7 +2,7 @@
 
 Owns the untrusted-content layer for community TDN (source == "embody.tools"):
 the capability scanner and the default-inert safe-import. Trusted own-network
-Copy/Paste lives in TDNExt and never reaches here. The scan/inert logic lives in
+Copy/Paste lives in TDXNExt and never reaches here. The scan/inert logic lives in
 the self-contained `scanner` and `safe_import` DATs beside this extension, loaded
 independently (no cross-import chain). This class is the thin TD glue, and the
 future home of the rest of the platform client (browse / fetch / submit).
@@ -21,7 +21,7 @@ class CollectionExt:
     def PlanCommunityPaste(self, tdn):
         """Scan a community TDN dict and return the import plan (live or inert).
 
-        Reached only for source == "embody.tools" -- TDNExt unwraps the envelope
+        Reached only for source == "embody.tools" -- TDXNExt unwraps the envelope
         and hands over the inner tdn. Nothing here executes.
 
         Live-if-scanned-clean: a specimen whose only expressions are PROVABLY PURE

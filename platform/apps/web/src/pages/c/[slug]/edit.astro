@@ -27,7 +27,7 @@ if (specimen.authorId !== user.id) {
   return Astro.redirect(`/c/${slug}`);
 }
 
-// Pre-fill the editor with the current network text (raw TDN exactly as stored).
+// Pre-fill the editor with the current network text (raw TDXN exactly as stored).
 let currentTdn = "";
 try {
   // user.id (ownership verified above) so a private draft's network prefills too.
@@ -76,7 +76,7 @@ const currentLicenseLabel =
     <p class="eyebrow">edit specimen</p>
     <h1>edit {specimen.title}</h1>
     <p class="lede">
-      Update your specimen's details and network. Editing the TDN re-runs the
+      Update your specimen's details and network. Editing the TDXN re-runs the
       capability scan and saves a new version of the network.
     </p>
 
@@ -210,9 +210,9 @@ const currentLicenseLabel =
 
       <div class="submit-col submit-col--tdn">
       <div class="submit-field submit-field--editor">
-        <span>TDN (YAML)</span>
+        <span>TDXN (YAML)</span>
         <small class="submit-hint">
-          edit the network directly. saving a changed TDN re-runs the capability scan and creates a new version.
+          edit the network directly. saving a changed TDXN re-runs the capability scan and creates a new version.
         </small>
         <TdnYamlEditor client:load name="tdn" initialValue={currentTdn} />
       </div>
@@ -234,7 +234,7 @@ const currentLicenseLabel =
 
 <script>
   // Owner edit. PUTs the form to /api/specimens/:slug; on success returns to the
-  // specimen page. Includes the (editable) TDN body -- a changed network re-runs
+  // specimen page. Includes the (editable) TDXN body -- a changed network re-runs
   // the capability scan + saves a new version server-side.
   const form = document.querySelector("[data-edit-form]") as HTMLFormElement | null;
   const statusBox = document.querySelector("[data-edit-status]") as HTMLElement | null;
@@ -497,7 +497,7 @@ const currentLicenseLabel =
     return !el || !String(el.value || "").trim();
   }
 
-  // The TDN editor (React island) validates on every edit and broadcasts a
+  // The TDXN editor (React island) validates on every edit and broadcasts a
   // bubbling `tdn:change` with its validity, so "save changes" stays greyed while
   // the network is unparseable. Seed the flag from the SERVER-prefilled content
   // (data-tdn-prefilled): the stored network was already valid when saved, so a
@@ -533,7 +533,7 @@ const currentLicenseLabel =
     if (!isReady()) {
       const probs: string[] = [];
       if (titleMissing()) probs.push("a title");
-      if (!tdnValid) probs.push("a valid TDN network");
+      if (!tdnValid) probs.push("a valid TDXN network");
       setFieldError("title", titleMissing() ? "add a title." : "");
       setStatus(`fix ${probs.join(" and ")} before saving.`, "error");
       return;
@@ -991,7 +991,7 @@ const currentLicenseLabel =
   }
 
   /* Two columns, mirroring the contribute form: metadata fields left, the large
-     editable TDN editor (+ status + submit) right. The whole form sits inside one
+     editable TDXN editor (+ status + submit) right. The whole form sits inside one
      bordered panel (matching the site's .pillar cards). Collapses on narrow
      viewports. */
   .submit-cols {
@@ -1390,7 +1390,7 @@ const currentLicenseLabel =
     align-self: center;
   }
 
-  /* Greyed while the title is empty or the TDN is unparseable. Stays clickable
+  /* Greyed while the title is empty or the TDXN is unparseable. Stays clickable
      (aria-disabled, not disabled) so a click can explain what's missing. */
   .submit-go[aria-disabled="true"],
   .submit-go[aria-disabled="true"]:hover {

@@ -158,9 +158,9 @@ you can jump straight to it:
 |---|---|---|
 | Sticky mark (top-left logo) | ~38–50 | ~6: Mark (~199–234) |
 | Hero | ~54–88 | ~7: Hero (~237–315) |
-| Three pillars (Envoy / Embody / TDN) | ~91–125 | ~8: Pillars (~318–358) |
+| Three pillars (Envoy / Embody / TDXN) | ~91–125 | ~8: Pillars (~318–358) |
 | In Practice (chat-style list) | ~127–162 | ~9: Practice (~361–398) |
-| Meet TDN | ~164–225 | ~10: TDN section (~401–499) |
+| Meet TDXN | ~164–225 | ~10: TDXN section (~401–499) |
 | Get Started (3 steps) | ~227–268 | ~11: Steps (~502–573) |
 | Manifesto pull quote | ~270–287 | ~12: Pullquote (~576–599) |
 | Footer | ~292–335 | ~13: Footer (~602–685) |
@@ -210,11 +210,11 @@ If you want a different mono webfont, add it to the `<link>` at the top of
 - All interactive elements have `aria-hidden` set on decorative SVGs
 - Color contrast on body text vs. background passes WCAG AA at 17px
 
-The single accessibility gap I'd flag: the YAML code block in the TDN section
+The single accessibility gap I'd flag: the YAML code block in the TDXN section
 uses hand-rolled `<span>` colors for syntax highlighting. Screen readers will
 read the entire block as one long string of punctuation — fine for sighted
 users, suboptimal for SR users. If you want to fix that, add
-`aria-label="Sample TDN file showing operators, parameters, and annotations"`
+`aria-label="Sample TDXN file showing operators, parameters, and annotations"`
 to the `<pre>` (which it already has) and consider hiding the spans from AT
 with `aria-hidden="true"` on the inner `<code>`. Out of scope for v1.
 

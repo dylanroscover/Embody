@@ -1,12 +1,12 @@
-// FROZEN CONTRACT C2 - TDN capability scan output.
+// FROZEN CONTRACT C2 - TDXN capability scan output.
 // Produced by the scanner in BOTH languages (packages/scanner-ts AND dev/embody/Embody/Collection/scanner.py)
-// from identical inputs; they MUST agree on the same TDN fixtures.
+// from identical inputs; they MUST agree on the same TDXN fixtures.
 // Consumed by: the Embody import summary, the web capability UI, and D1 `scans.capability_json`.
 // Surface definitions: platform/SCANNER-SPEC.md (contract C8). ASCII only.
 
 export type ScanVerdict = "clean" | "flagged" | "blocked";
 
-/** Counts of executable / side-effecting surfaces found in a TDN payload. */
+/** Counts of executable / side-effecting surfaces found in a TDXN payload. */
 export interface CapabilityCounts {
   /** Execute-family DATs whose content runs on create()/onStart() at import. */
   execute_dats: number;
@@ -30,7 +30,7 @@ export interface CapabilityCounts {
 export type CapabilitySurface = keyof CapabilityCounts;
 
 export interface ScanFinding {
-  /** Operator path within the TDN (e.g. "base1/execute1"). */
+  /** Operator path within the TDXN (e.g. "base1/execute1"). */
   op_path: string;
   /** Which surface this finding belongs to. */
   surface: CapabilitySurface;

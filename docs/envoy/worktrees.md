@@ -35,7 +35,7 @@ One writer per checkout, always: two sessions never share one worktree. A second
 
 ## Landing a worktree diff
 
-Landing is the one moment worktree work touches the live tree — and the moment things historically go wrong: a running TD may have re-exported files the diff also touches, a peer may be mid-edit, or the live network may hold unsaved TDN state that the next save will write over the landed files.
+Landing is the one moment worktree work touches the live tree — and the moment things historically go wrong: a running TD may have re-exported files the diff also touches, a peer may be mid-edit, or the live network may hold unsaved TDXN state that the next save will write over the landed files.
 
 **Run `preflight_landing` first.** It is read-only, answers off the main thread, and intersects the landing's file list with three hazard sets in one call:
 
@@ -47,7 +47,7 @@ preflight_landing(worktree_path="../<repo>-wt-<task>")
 |---|---|---|
 | `main_dirty` | Files the landing touches are also uncommitted-dirty in the main tree (often TD's own re-exports) | Reconcile: rebase the worktree on the main tree, or commit/save the main tree first — never overwrite blind |
 | `peers` | A peer session holds a `file:` claim on — or recently wrote — a landing file | Coordinate with the named peer before proceeding |
-| `tdn_unsaved` | A landing file's live TDN/DAT state is unsaved (`dirty` in `externalizations.tsv`) | Save the project (or re-export) so the live state is on disk before you replace it |
+| `tdn_unsaved` | A landing file's live TDXN/DAT state is unsaved (`dirty` in `externalizations.tsv`) | Save the project (or re-export) so the live state is on disk before you replace it |
 
 The verdict is `clear` or `conflicts`; an empty intersection on all three classes means the diff can land as one reviewed unit (e.g. `git apply` of the worktree diff). After landing: let the hot-sync sweep pick the files up, check `get_op_errors`, and run the project's tests — worktree verification is static-only, so nothing is truly tested until the main tree runs it.
 

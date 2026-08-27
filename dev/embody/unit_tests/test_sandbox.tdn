@@ -1,10 +1,10 @@
-format: tdn
+format: tdxn
 version: '2.0'
-build: 1861
-generator: Embody/6.0.279
+build: 1989
+generator: Embody/6.1.0
 td_build: 099.2025.33070
-source_file: Embody-6.279.toe
-exported_at: '2026-08-25T20:39:24Z'
+source_file: Embody-6.282.toe
+exported_at: '2026-08-27T07:06:53Z'
 network_path: /embody/unit_tests/test_sandbox
 options:
   include_dat_content: false
@@ -16,7 +16,7 @@ color: [0.3, 0.5, 0.9]
 tags:
 - tdn
 operators:
-- name: sandbox_test_uninstall_execute
+- name: sandbox_test_updater
   type: baseCOMP
   size: [160, 130]
   color: [0.67, 0.67, 0.67]

@@ -239,7 +239,7 @@ class TestTagLifecycle(EmbodyTestCase):
         tdn_tag = self.embody.par.Tdntag.val
         initial_rows = self.embody_ext.Externalizations.numRows
 
-        cls = type(self.embody.ext.TDN)
+        cls = type(self.embody.ext.TDXN)
         orig_export = cls.ExportNetwork
         attempts = []
 

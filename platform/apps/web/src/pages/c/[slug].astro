@@ -110,7 +110,7 @@ try {
 
 // Quick counts for the raw-YAML viewer's summary bar.
 const countOf = (k: string): number => (Array.isArray(tdn[k]) ? (tdn[k] as unknown[]).length : 0);
-// Connections aren't a top-level array in TDN -- they're each operator's data
+// Connections aren't a top-level array in TDXN -- they're each operator's data
 // `inputs` (the wires the graph draws). Sum those (recursing into nested COMPs);
 // dock links (comp_inputs) are structural, not counted as connections.
 const countConnections = (ops: unknown): number => {
@@ -177,7 +177,7 @@ function specimenFromLive(
   // Only borrow fixture-authored copy (key_ops) when the fixture actually IS this
   // specimen. The caller falls back to the first fixture for any unknown slug, so
   // an unguarded read would bleed that fixture's text onto every community
-  // specimen. No match -> empty key_ops (derived from the TDN graph below).
+  // specimen. No match -> empty key_ops (derived from the TDXN graph below).
   const authored = fixture?.slug === live.slug ? fixture : undefined;
   return {
     slug: live.slug,
@@ -200,7 +200,7 @@ function specimenFromLive(
   };
 }
 
-// Render a parsed TDN object as faithful TDN v2.0 YAML for the raw view.
+// Render a parsed TDXN object as faithful TDXN v2.0 YAML for the raw view.
 // Matches Embody's writer: 2-space indent, flow style for short numeric
 // vectors, literal block scalar (|, |-, |+) for multi-line strings, and
 // expression/bind prefixes (=, ~) carried through untouched in the values.
@@ -603,7 +603,7 @@ function emitKey(key: string): string {
 
   {/* App shell: a full-viewport working canvas. The network graph fills the
       screen; the identity/actions + properties panels float over it (docked,
-      TouchDesigner-style), and the TDN source slides in from the left. */}
+      TouchDesigner-style), and the TDXN source slides in from the left. */}
   <div class={`specimen-app${isOwner ? " is-owner" : ""}`} data-tdn-app>
     <div class="specimen-app__canvas">
       <TdnViewer
@@ -796,10 +796,10 @@ function emitKey(key: string): string {
     <button class="panel-tab panel-tab--props" type="button" data-panel-open="properties" hidden aria-label="show properties (p)" title="properties (p)"><span class="kbd" aria-hidden="true">p</span>roperties</button>
     <button class="panel-tab panel-tab--thumb" type="button" data-panel-open="thumbnail" hidden aria-label="show rendered result (r)" title="rendered result (r)"><span class="kbd" aria-hidden="true">r</span>esult</button>
 
-    {/* Prominent TDN source tab ('t') + the left drawer. A wide handle docked
+    {/* Prominent TDXN source tab ('t') + the left drawer. A wide handle docked
         to the bottom edge, left-aligned with where the drawer opens -- the old
         slim vertical tab on the left edge was invisible to new visitors. */}
-    <button class="tdn-tab" type="button" data-panel-open="tdn" aria-expanded="false" aria-controls="tdn-panel" aria-label="show TDN source (t)" title="TDN source (t)">
+    <button class="tdn-tab" type="button" data-panel-open="tdn" aria-expanded="false" aria-controls="tdn-panel" aria-label="show TDXN source (t)" title="TDXN source (t)">
       <svg class="tdn-tab__icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6" /></svg>
       <span class="tdn-tab__label"><span class="kbd" aria-hidden="true">t</span><span class="tdn-acr">dn</span>&nbsp;source</span>
     </button>
@@ -864,7 +864,7 @@ function emitKey(key: string): string {
 
     // ---- Panel toggles + keyboard shortcuts -----------------------------------
     // o = overview (identity/description), p = properties, d = rendered result,
-    // t = TDN source. Each panel collapses to a labeled tab on its edge; a class
+    // t = TDXN source. Each panel collapses to a labeled tab on its edge; a class
     // on the app root lets neighbouring panels reclaim the freed space.
     {
       const app = document.querySelector("[data-tdn-app]") as HTMLElement | null;
@@ -931,7 +931,7 @@ function emitKey(key: string): string {
     // ---- Properties panel: render the selected operator ------------------------
     // The TdnViewer dispatches `tdnviewer:select` with the op's customized
     // parameters (or null when the selection is cleared). We render only what the
-    // TDN actually stores -- the values this network changed from defaults.
+    // TDXN actually stores -- the values this network changed from defaults.
     {
       const FAMILY_COLORS: Record<string, string> = {
         TOP: "#9d8cdb", CHOP: "#7cc45a", SOP: "#5fa3dd", POP: "#7a78ec",
@@ -1027,7 +1027,7 @@ function emitKey(key: string): string {
         }
 
         // DAT text content (shader source / scripts / tables) as a line-numbered
-        // code block, the way the TDN viewer shows source.
+        // code block, the way the TDXN viewer shows source.
         if (typeof sel.datContent === "string" && sel.datContent.trim()) {
           const lines = sel.datContent.replace(/\n+$/, "").split("\n");
           const wrap = el("div", "prop-code-wrap");
@@ -1626,7 +1626,7 @@ function emitKey(key: string): string {
   .specimen-app__left { transform-origin: top left; }
   .specimen-app__props { transform-origin: top right; }
   .specimen-app__thumb { transform-origin: bottom right; }
-  /* The TDN drawer is a left-edge drawer -- it slides off the left instead of
+  /* The TDXN drawer is a left-edge drawer -- it slides off the left instead of
      scaling toward a corner. */
   .specimen-app__tdn.is-collapsed {
     --panel-scale: 1;
@@ -1826,7 +1826,7 @@ function emitKey(key: string): string {
      the is:global block below -- Astro's scoped styles only reach server-rendered
      DOM, never script-created elements. */
 
-  /* Prominent TDN source tab on the left edge (the drawer's collapsed state).
+  /* Prominent TDXN source tab on the left edge (the drawer's collapsed state).
      Solid + opaque: no gradient/glow/backdrop-filter, and no hover size shift --
      those produced a doubled-outline artifact and cost frames. */
   .tdn-tab {
@@ -2136,7 +2136,7 @@ function emitKey(key: string): string {
     line-height: 1.5;
   }
 
-  /* Shader / script / table DAT content, shown as a code block like the TDN
+  /* Shader / script / table DAT content, shown as a code block like the TDXN
      viewer (monospace, line-numbered, scrollable). */
   .prop-code-wrap { margin-top: 14px; }
   .prop-code-label {

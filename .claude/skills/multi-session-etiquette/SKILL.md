@@ -105,7 +105,7 @@ of it until the diff lands. So coordinate by intent, not by touch records:
   in-flight edit is the worktree version of a blind overwrite.
   Run `preflight_landing(worktree_path)` FIRST -- it intersects the
   landing's files with main-tree dirt, peer file territory, and
-  unsaved live TDN state in one call; a `conflicts` verdict means
+  unsaved live TDXN state in one call; a `conflicts` verdict means
   reconcile before any file moves.
 - **Two sessions must never share one worktree** -- one writer per
   checkout, always. A second session starts its own

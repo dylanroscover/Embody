@@ -278,13 +278,13 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
 
         embody = self.embody
         ext_class = type(self.embody_ext)
-        tdn_class = type(self.embody.ext.TDN)
+        tdn_class = type(self.embody.ext.TDXN)
 
         # Capture originals. _read_existing_tdn and _tdn_content_equal are
         # @staticmethod - must capture/restore via __dict__ to preserve the
         # descriptor; assigning via cls.attr would silently strip the
         # staticmethod and turn it into a regular method, breaking every
-        # other caller that does TDNExt._read_existing_tdn(path).
+        # other caller that does TDXNExt._read_existing_tdn(path).
         orig_tdnmode = embody.par.Tdnmode.eval()
         orig_strip_on_save = bool(embody.par.Tdnstriponsave.eval())
         orig_update = ext_class.Update

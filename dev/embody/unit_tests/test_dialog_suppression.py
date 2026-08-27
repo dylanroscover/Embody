@@ -155,7 +155,7 @@ class TestDialogSuppression(EmbodyTestCase):
             op.Embody.unstore('_smoke_test_responses')    # no seed
             op.Embody.store('_suppress_dialogs', True)    # a save is mid-flight
             before_id = max((e['id'] for e in emb._log_buffer), default=0)
-            ret = emb._messageBox('TDN Content at Risk', 'guard',
+            ret = emb._messageBox('TDXN Content at Risk', 'guard',
                                   ['Externalize', 'Skip'])
             # Diff by entry id, not list index: _log_buffer is a bounded
             # deque(maxlen=200); once saturated, appends evict from the left, so a

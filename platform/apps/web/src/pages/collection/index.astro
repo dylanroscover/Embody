@@ -119,7 +119,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
 
 <Base
   title="the collection - embody.tools"
-  description="Browse transparent TouchDesigner networks - inspect every node and parameter, then copy any specimen's TDN straight into a live .toe running Embody."
+  description="Browse transparent TouchDesigner networks - inspect every node and parameter, then copy any specimen's TDXN straight into a live .toe running Embody."
 >
   <section class="page-section collection-hero">
     <p class="eyebrow">the Collection</p>
@@ -131,11 +131,11 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
         <svg class="btn__icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
           <path d="M12 5v14M5 12h14" />
         </svg>
-        post a TDN
+        post a TDXN
       </a>
     </div>
     <p class="lede">
-      Copy any specimen's TDN to your clipboard and paste it straight into a TouchDesigner .toe running <a href="https://github.com/dylanroscover/Embody/releases/latest">Embody</a>.
+      Copy any specimen's TDXN to your clipboard and paste it straight into a TouchDesigner .toe running <a href="https://github.com/dylanroscover/Embody/releases/latest">Embody</a>.
     </p>
   </section>
 
@@ -346,8 +346,8 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
                   class="card-copy"
                   data-card-copy
                   data-slug={specimen.slug}
-                  aria-label={`Embody it -- copy ${specimen.name}'s TDN for TouchDesigner`}
-                  title="Embody it -- copy this specimen's TDN for your agent"
+                  aria-label={`Embody it -- copy ${specimen.name}'s TDXN for TouchDesigner`}
+                  title="Embody it -- copy this specimen's TDXN for your agent"
                 >
                   <svg
                     class="card-copy__icon card-copy__icon--copy"
@@ -777,7 +777,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
             <span class="badge specimen-category">${esc(s.category)}</span>
             ${moreCats}
             <span class="badge license">CC-BY</span>
-            <button type="button" class="card-copy" data-card-copy data-slug="${esc(s.slug)}" aria-label="Embody it -- copy ${esc(s.name)}'s TDN for TouchDesigner" title="Embody it -- copy this specimen's TDN for your agent">
+            <button type="button" class="card-copy" data-card-copy data-slug="${esc(s.slug)}" aria-label="Embody it -- copy ${esc(s.name)}'s TDXN for TouchDesigner" title="Embody it -- copy this specimen's TDXN for your agent">
               <svg class="card-copy__icon card-copy__icon--copy" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
               <svg class="card-copy__icon card-copy__icon--check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
               <span class="card-copy__count mono" data-copy-count>${esc(String(s.copies_count ?? 0))}</span>
@@ -1174,7 +1174,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     flex-wrap: wrap;
   }
 
-  /* "post a TDN" -- the page's one solid-green action, parked beside the
+  /* "post a TDXN" -- the page's one solid-green action, parked beside the
      title where browsing eyes land (replaces the contribute nav item).
      Compact padding, so re-assert the repo's coarse-pointer touch floor. */
   .collection-post {

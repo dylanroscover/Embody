@@ -4,7 +4,7 @@ Test suite: save-path write contracts (the v6.0.243 optimization work).
 These cover code production now depends on that nothing asserted:
 
   - `_updateRowCells` is the SOLE writer for build/timestamp/dirty/position in
-    Save(), SaveTDN(), _updatePositionInTable() and TDNExt._trackTDNExport().
+    Save(), SaveTDN(), _updatePositionInTable() and TDXNExt._trackTDNExport().
     It returns False silently when a lookup misses, so a broken resolve drops a
     build stamp with no error raised anywhere.
   - `_dirtyHandlerDeferred` / `_sweepTDNDirtyChunk` replaced the synchronous

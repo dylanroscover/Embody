@@ -1,6 +1,6 @@
-// Faithful TDN v2.0 sample network. TDN files are YAML on disk; this fixture is
+// Faithful TDXN v2.0 sample network. TDXN files are YAML on disk; this fixture is
 // the parsed object the TdnViewer renders and that [slug].astro serializes for the
-// "raw TDN" panel. Keys, ordering, and value shorthand mirror a real v2.0 export
+// "raw TDXN" panel. Keys, ordering, and value shorthand mirror a real v2.0 export
 // (see specimens/simulation/murmuration.tdn).
 export const sampleTdn = {
   format: "tdn",

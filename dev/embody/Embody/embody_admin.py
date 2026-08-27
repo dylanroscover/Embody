@@ -1294,7 +1294,7 @@ def restore_settings(ext, kick_envoy: bool = False) -> bool:
     # so deferred onValueChange callbacks from init() are still suppressed.
     ext.my.store('_init_complete', True)
     ext.Log(f'Restored {restored} settings from config.json', 'INFO')
-    # TDN mode migration detection: an upgrading user will have
+    # TDXN mode migration detection: an upgrading user will have
     # 'Tdnenable' in their persisted params but not 'Tdnmode'. Defer
     # the nudge dialog so init can complete cleanly first.
     # Guarded by a schedule-time flag so a second _restoreSettings in
@@ -1343,28 +1343,28 @@ def show_tdn_migration_nudge(ext) -> None:
         pass
 
     if not tdn_comps:
-        # No TDN COMPs tracked -- silently accept the new default.
+        # No TDXN COMPs tracked -- silently accept the new default.
         ext.my.store('_tdn_mode_migration_shown', True)
         return
 
     prev_label = ('Full (bidirectional)' if prev_enable
-                  else 'Off (TDN disabled)')
+                  else 'Off (TDXN disabled)')
     msg = (
-        f'TDN default changed in this release.\n\n'
+        f'TDXN default changed in this release.\n\n'
         f'Your project was previously saved with the legacy Tdnenable '
         f'toggle ({prev_label}). The new system has three modes:\n\n'
-        f'  \u2022 Off -- no TDN runtime\n'
+        f'  \u2022 Off -- no TDXN runtime\n'
         f'  \u2022 Export-on-Save -- recommended; .toe is truth, '
         f'.tdn files are rewritten on save\n'
         f'  \u2022 Roundtrip (Experimental) -- bidirectional '
         f'strip/restore on save and reconstruction on open (previous '
         f'behavior)\n\n'
         f'Currently set to Export-on-Save. Your {len(tdn_comps)} '
-        f'tracked TDN COMP(s) will stop round-tripping on save.\n\n'
+        f'tracked TDXN COMP(s) will stop round-tripping on save.\n\n'
         f'Keep the new default, or restore Full?'
     )
     choice = ext._messageBox(
-        'Embody - TDN Mode Changed',
+        'Embody - TDXN Mode Changed',
         msg,
         buttons=['Keep Export-on-Save (recommended)',
                  'Restore Full (previous behavior)'])
@@ -1372,9 +1372,9 @@ def show_tdn_migration_nudge(ext) -> None:
         try:
             ext.my.par.Tdnmode = 'full'
             ext._applyTdnModeGating()
-            ext.Log('TDN mode restored to Full per user choice', 'INFO')
+            ext.Log('TDXN mode restored to Full per user choice', 'INFO')
         except Exception as e:
             ext.Log(f'Could not restore Full mode: {e}', 'WARNING')
     else:
-        ext.Log('TDN mode kept at Export-on-Save (new default)', 'INFO')
+        ext.Log('TDXN mode kept at Export-on-Save (new default)', 'INFO')
     ext.my.store('_tdn_mode_migration_shown', True)

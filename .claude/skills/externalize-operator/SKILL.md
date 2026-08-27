@@ -18,15 +18,15 @@ description: "MUST READ before calling externalize_op or save_externalization. R
 
 `save_externalization` force re-exports an already-externalized operator. Use it after modifying an operator in TD when you need to update its file on disk.
 
-## Excluding Runtime State from TDN Exports (`tdn_exclude:<par>` tags)
+## Excluding Runtime State from TDXN Exports (`tdn_exclude:<par>` tags)
 
-When a parameter holds **runtime state** (a session file path, a negotiated port, a live readout) rather than configuration, keep its value out of committed `.tdn` files by tagging the operator itself — one tag per parameter, using the colon-suffixed form of the exclude tag:
+When a parameter holds **runtime state** (a session file path, a negotiated port, a live readout) rather than configuration, keep its value out of committed `.tdxn` files by tagging the operator itself — one tag per parameter, using the colon-suffixed form of the exclude tag:
 
 ```python
 op('deck_a').tags.add('tdn_exclude:file')
 ```
 
-The operator and its other parameters export normally; the named parameter's constant value is omitted (expressions/binds still export — references are configuration). The bare `tdn_exclude` tag on a COMP is different: it makes the whole COMP invisible to TDN. The suffixed tag round-trips in the `.tdn`, so the omission is visible and survives reconstruction; it takes effect at the COMP's next export (Save tdn, Update, or project save). A tag naming a nonexistent parameter logs a WARNING at export. Users can manage these visually: the tagger's Actions menu on a TDN COMP has **Exclude from tdn**, a drop-zone panel that toggles `tdn_exclude:<par>` for dragged parameters and whole-COMP `tdn_exclude` for dragged COMPs, listing every exclusion in the subtree with a per-row **×** to remove it.
+The operator and its other parameters export normally; the named parameter's constant value is omitted (expressions/binds still export — references are configuration). The bare `tdn_exclude` tag on a COMP is different: it makes the whole COMP invisible to TDXN. The suffixed tag round-trips in the `.tdxn`, so the omission is visible and survives reconstruction; it takes effect at the COMP's next export (Save tdn, Update, or project save). A tag naming a nonexistent parameter logs a WARNING at export. Users can manage these visually: the tagger's Actions menu on a TDXN COMP has **Exclude from tdn**, a drop-zone panel that toggles `tdn_exclude:<par>` for dragged parameters and whole-COMP `tdn_exclude` for dragged COMPs, listing every exclusion in the subtree with a per-row **×** to remove it.
 
 ## Creating Python Files for TouchDesigner
 
@@ -53,9 +53,9 @@ The exported `.tox` works in any TD project with no missing file errors.
 - `get_externalizations` — list all externalized operators with status
 - `get_externalization_status` — get dirty state, build number, timestamp, file path for a specific operator
 
-## TDN Export — Palette COMP Handling
+## TDXN Export — Palette COMP Handling
 
-When exporting a TDN-strategy COMP whose network contains TD palette components (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`), Embody consults the `Tdnpalettehandling` par on the Embody COMP's TDN page:
+When exporting a TDXN-strategy COMP whose network contains TD palette components (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`), Embody consults the `Tdnpalettehandling` par on the Embody COMP's TDXN page:
 
 - **Ask** (default): On first encounter of each palette COMP, a four-button dialog appears — *Black Box* (this COMP), *Full Export* (this COMP), *Black Box for All*, *Full Export for All*. The per-COMP choice is stored via `comp.store('_tdn_palette_handling', ...)` so repeated exports don't re-prompt.
 - **Black Box**: reference the palette only, emit `"palette_clone": true`, skip internal children. Correct for stock palette COMPs.

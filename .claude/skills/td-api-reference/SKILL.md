@@ -183,21 +183,21 @@ op('myDat').module.myFunction()
 parent().MyExtensionProperty if parent().extensionsReady else 0
 ```
 
-## onInitTD and TDN Import Timing
+## onInitTD and TDXN Import Timing
 
-**Any initialization that sets up state inside a TDN-strategy COMP will be destroyed when TDN import runs.** TDN reconstruction (`ReconstructTDNComps`) calls `ImportNetwork` with `clear_first=True`, which deletes all children and recreates them from the `.tdn` file. If an extension's `onInitTD` creates operators, sets parameters, stores values, or builds internal state inside a TDN COMP, that work is wiped out by the import.
+**Any initialization that sets up state inside a TDXN-strategy COMP will be destroyed when TDXN import runs.** TDXN reconstruction (`ReconstructTDNComps`) calls `ImportNetwork` with `clear_first=True`, which deletes all children and recreates them from the `.tdxn` file. If an extension's `onInitTD` creates operators, sets parameters, stores values, or builds internal state inside a TDXN COMP, that work is wiped out by the import.
 
 This applies to:
 
-- **Project open**: `ReconstructTDNComps` runs at frame 60. Extensions inside TDN COMPs initialize earlier (when the COMP shell is created), so `onInitTD` fires before the import overwrites everything.
+- **Project open**: `ReconstructTDNComps` runs at frame 60. Extensions inside TDXN COMPs initialize earlier (when the COMP shell is created), so `onInitTD` fires before the import overwrites everything.
 - **Ctrl+S / `project.save()`**: The strip/restore cycle deletes children pre-save, then re-imports them post-save. Extensions reinitialize after the restore, but the import may still be completing.
 
 **Rules:**
 
-1. **Defer initialization that depends on network state.** Use `run('self.mySetup()', delayFrames=5)` in `onInitTD` so the setup executes after the TDN import completes. The delay must be long enough for all import phases to finish.
-2. **Never assume `onInitTD` runs once.** Inside TDN COMPs, extensions may reinitialize multiple times: on project open, after every save (strip/restore), and on manual TDN reimport. `onInitTD` must be idempotent.
+1. **Defer initialization that depends on network state.** Use `run('self.mySetup()', delayFrames=5)` in `onInitTD` so the setup executes after the TDXN import completes. The delay must be long enough for all import phases to finish.
+2. **Never assume `onInitTD` runs once.** Inside TDXN COMPs, extensions may reinitialize multiple times: on project open, after every save (strip/restore), and on manual TDXN reimport. `onInitTD` must be idempotent.
 3. **Guard against missing children.** During the strip phase of a save, the COMP's children are temporarily gone. If `onInitTD` fires during this window, `op('child')` returns `None`. Always null-check operators before accessing them.
-4. **Store persistent state outside the TDN boundary.** If an extension needs state that survives reimport, use `store()` on the COMP itself (storage is preserved through TDN import) or on an ancestor outside the TDN COMP.
+4. **Store persistent state outside the TDXN boundary.** If an extension needs state that survives reimport, use `store()` on the COMP itself (storage is preserved through TDXN import) or on an ancestor outside the TDXN COMP.
 
 
 

@@ -1,16 +1,16 @@
 # YAML Schema
 
-`.tdn` files are YAML -- and so is this schema. `tdn.schema.yaml` follows the [draft 2020-12 schema standard](https://json-schema.org) for validating structure and driving editor auto-completion.
+`.tdxn` files are YAML -- and so is this schema. `tdn.schema.yaml` follows the [draft 2020-12 schema standard](https://json-schema.org) for validating structure and driving editor auto-completion.
 
 ## Schema File
 
 The schema is available at [`tdn.schema.yaml`](../tdn.schema.yaml) in the repository.
 
-You can reference it from the top of your `.tdn` files for editor support:
+You can reference it from the top of your `.tdxn` files for editor support:
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/dylanroscover/Embody/main/docs/tdn.schema.yaml
-format: tdn
+format: tdxn
 version: '2.0'
 # ...
 ```
@@ -28,18 +28,21 @@ version: '2.0'
 
 ## Using with VS Code
 
-With the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) installed, add this to your VS Code `settings.json`. The `files.associations` entry is what makes VS Code treat `.tdn` files as YAML (they are not a built-in YAML extension) -- without it the YAML extension never activates on your `.tdn` files and the schema does nothing:
+With the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) installed, add this to your VS Code `settings.json`. The `files.associations` entry is what makes VS Code treat `.tdxn` files as YAML (they are not a built-in YAML extension) -- without it the YAML extension never activates on your `.tdxn` files and the schema does nothing:
 
 ```json
 {
   "files.associations": {
+    "*.tdxn": "yaml",
     "*.tdn": "yaml"
   },
   "yaml.schemas": {
-    "./docs/tdn.schema.yaml": ["*.tdn"]
+    "./docs/tdn.schema.yaml": ["*.tdxn", "*.tdn"]
   }
 }
 ```
+
+Both extensions are listed on purpose: networks externalized before Embody 6.1 keep the `.tdn` name and stay valid indefinitely, so a project can hold a mix. The schema **file** is still called `tdn.schema.yaml`, and its `$id` is unchanged -- that URL is a published contract, and renaming it would silently break every editor already configured against it.
 
 ## Schema Overview
 
@@ -49,7 +52,7 @@ The schema defines these key structures:
 
 ```
 tdn
-├── format: "tdn" (const)
+├── format: "tdxn" | "tdn"
 ├── version: string
 ├── build: integer | null
 ├── generator: string
@@ -94,7 +97,7 @@ operator
 ├── sequences: { name → [blocks] }
 ├── dat_read_only: true
 ├── palette_clone: true
-├── tdn_ref: string  (mutually exclusive with children — points to child .tdn)
+├── tdn_ref: string  (mutually exclusive with children — points to child .tdxn)
 └── tox_ref: string  (mutually exclusive with children — points to child .tox)
 ```
 

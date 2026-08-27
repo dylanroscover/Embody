@@ -1,10 +1,10 @@
-format: tdn
+format: tdxn
 version: '2.0'
-build: 1186
-generator: Embody/6.0.280
+build: 1194
+generator: Embody/6.1.2
 td_build: 099.2025.33070
-source_file: Embody-6.280.toe
-exported_at: '2026-08-25T20:51:21Z'
+source_file: Embody-6.284.toe
+exported_at: '2026-08-27T17:51:58Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -186,29 +186,29 @@ custom_pars:
     value: dat
   - name: Tdntags
     style: Header
-    label: TDN Tags
+    label: TDXN Tags
     startSection: true
-    help: Tag strings and operator colors for TDN externalization. COMPs tagged with the TDN tag have their children exported as human-readable .tdn JSON network files.
+    help: Tag strings and operator colors for TDXN externalization. COMPs tagged with the TDXN tag have their children exported as human-readable .tdxn JSON network files.
   - name: Tdntagcolor
     style: RGBA
-    label: TDN Tag Color
+    label: TDXN Tag Color
     default: 0.3
-    help: Color applied to TDN-tagged COMP operators in the network editor. Makes TDN-strategy COMPs visually identifiable.
+    help: Color applied to TDXN-tagged COMP operators in the network editor. Makes TDXN-strategy COMPs visually identifiable.
   - name: Tdntag
     style: Str
-    label: .tdn Tag
-    help: Tag string for .tdn externalization. Applied to COMPs whose children are exported as human-readable JSON network files.
+    label: TDXN Tag
+    help: 'Tag string applied to COMPs externalized with the TDXN strategy (their children are exported as human-readable YAML network files). The value stays ''tdn'': it is written into every tagged COMP in every existing project, so changing it would orphan them.'
     value: tdn
   - name: Tdnexcludetag
     style: Str
-    label: .tdn Exclude Tag
+    label: TDXN Exclude Tag
     startSection: true
     default: tdn_exclude
-    help: 'Tag family for excluding things from the TDN system (default ''tdn_exclude''). BARE tag on a COMP: the COMP is invisible to TDN -- never exported, never inlined in parent .tdn files, never stripped on save, never destroyed by reconstruction. Primary use: opt a single child out of cascade autotag, or app-managed COMPs (e.g. spawned via .copy() at runtime). SUFFIXED ''tdn_exclude:<parname>'' on ANY operator: that parameter''s constant value is omitted from TDN export while the operator, its other parameters, and its wiring export normally -- for runtime state a project must not commit (a negotiated port, a session file path). Expressions/binds still export; unknown parameter names log a WARNING. Manage both visually via the tagger''s Exclude from tdn panel. Clear this parameter to disable the whole family.'
-  TDN:
+    help: 'Tag family for excluding things from the TDXN system (default ''tdn_exclude''). BARE tag on a COMP: the COMP is invisible to TDXN -- never exported, never inlined in parent .tdxn files, never stripped on save, never destroyed by reconstruction. Primary use: opt a single child out of cascade autotag, or app-managed COMPs (e.g. spawned via .copy() at runtime). SUFFIXED ''tdn_exclude:<parname>'' on ANY operator: that parameter''s constant value is omitted from TDXN export while the operator, its other parameters, and its wiring export normally -- for runtime state a project must not commit (a negotiated port, a session file path). Expressions/binds still export; unknown parameter names log a WARNING. Manage both visually via the tagger''s Exclude from tdn panel. Clear this parameter to disable the whole family.'
+  TDXN:
   - name: Tdnmode
     style: Menu
-    label: TDN Mode
+    label: TDXN Mode
     startSection: true
     default: export
     menuNames:
@@ -219,7 +219,7 @@ custom_pars:
     - 'Off'
     - Export-on-Save
     - Roundtrip (Experimental)
-    help: Three-mode master for the TDN subsystem. Off = no TDN runtime (.tdn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Roundtrip (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with extension reload timing on deeply-nested TDN COMPs.
+    help: Three-mode master for the TDXN subsystem. Off = no TDXN runtime (.tdxn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdxn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Roundtrip (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with extension reload timing on deeply-nested TDXN COMPs.
   - name: Clipboardautopaste
     style: Toggle
     label: Clipboard Auto-Paste
@@ -230,10 +230,10 @@ custom_pars:
     style: Toggle
     label: Cascade to Children
     startSection: true
-    help: When tagging a COMP for TDN, automatically tag all child COMPs so each gets its own .tdn file.
+    help: When tagging a COMP for TDXN, automatically tag all child COMPs so each gets its own .tdxn file.
   - name: Tdncascadewarn
     style: Menu
-    label: Large TDN Warning
+    label: Large TDXN Warning
     default: ask
     menuNames:
     - ask
@@ -241,7 +241,7 @@ custom_pars:
     menuLabels:
     - Ask
     - Quiet
-    help: Controls whether a warning dialog is shown when a TDN file exceeds 5 MB. Set automatically when dismissed.
+    help: Controls whether a warning dialog is shown when a TDXN file exceeds 5 MB. Set automatically when dismissed.
   - name: Tdnlockedwarn
     style: Menu
     label: Locked Content Warning
@@ -252,29 +252,29 @@ custom_pars:
     menuLabels:
     - Ask
     - Quiet
-    help: Controls whether a dialog is shown when a TDN export contains locked TOPs, CHOPs, or SOPs whose frozen data will not survive the round-trip. Batch sweeps show one combined dialog. Set automatically when dismissed with Don't show again.
+    help: Controls whether a dialog is shown when a TDXN export contains locked TOPs, CHOPs, or SOPs whose frozen data will not survive the round-trip. Batch sweeps show one combined dialog. Set automatically when dismissed with Don't show again.
   - name: Embeddatsintdns
     style: Toggle
     label: Embed DATs (default)
     startSection: true
-    help: When enabled, DAT content (text and table data) is included in TDN exports by default. Can be overridden per-export. Disabling reduces file size but loses DAT content.
+    help: When enabled, DAT content (text and table data) is included in TDXN exports by default. Can be overridden per-export. Disabling reduces file size but loses DAT content.
   - name: Embedstorageintdns
     style: Toggle
     label: Embed Storage (default)
     default: true
-    help: Include Python storage entries in TDN exports. Disable for COMPs with large storage to reduce file size. Can be overridden per-COMP from the tagging menu.
+    help: Include Python storage entries in TDXN exports. Disable for COMPs with large storage to reduce file size. Can be overridden per-COMP from the tagging menu.
   - name: Autosave
     style: Toggle
     label: Auto-Save Checkpoints
     startSection: true
     default: true
-    help: When on, after the agent (or you) goes idle Embody writes changed TDN COMPs to disk as a cheap ~6ms .tdn checkpoint -- NO full project save, no strip/restore, no freeze -- so a crash loses little unsaved work. Checkpointed COMPs are rebuilt on next open. Skips during Perform Mode and project saves.
+    help: When on, after the agent (or you) goes idle Embody writes changed TDXN COMPs to disk as a cheap ~6ms .tdxn checkpoint -- NO full project save, no strip/restore, no freeze -- so a crash loses little unsaved work. Checkpointed COMPs are rebuilt on next open. Skips during Perform Mode and project saves.
   - name: Tdncreateonstart
     style: Toggle
-    label: TDN Create on Start
+    label: TDXN Create on Start
     startSection: true
     default: true
-    help: When enabled, reconstructs TDN-strategy COMP children from .tdn files on disk when the project opens. Required for TDN round-trip workflow where children are stripped on save.
+    help: When enabled, reconstructs TDXN-strategy COMP children from .tdxn files on disk when the project opens. Required for TDXN round-trip workflow where children are stripped on save.
   - name: Autosavestatus
     style: Str
     label: Auto-Save Status
@@ -285,7 +285,7 @@ custom_pars:
     style: Toggle
     label: Strip on Save
     default: true
-    help: When enabled, strips children from TDN-strategy COMPs during project save. Children are recreated on next open via TDN Create on Start. Keeps .toe files minimal.
+    help: When enabled, strips children from TDXN-strategy COMPs during project save. Children are recreated on next open via TDXN Create on Start. Keeps .toe files minimal.
   - name: Tdnpalettehandling
     style: Menu
     label: Palette Handling
@@ -299,21 +299,26 @@ custom_pars:
     - Ask
     - Black Box
     - Full Export
-    help: 'How to handle TD palette COMPs (e.g. abletonLink, Widget components) during TDN export. Ask: prompt on first encounter per COMP. Black Box: reference the palette and skip internal children -- the correct choice for stock palette components. Full Export: export all internals -- use when the palette COMP has been heavily customized internally.'
+    help: 'How to handle TD palette COMPs (e.g. abletonLink, Widget components) during TDXN export. Ask: prompt on first encounter per COMP. Black Box: reference the palette and skip internal children -- the correct choice for stock palette components. Full Export: export all internals -- use when the palette COMP has been heavily customized internally.'
     value: blackbox
   - name: Tdnfile
     style: File
-    label: TDN File
+    label: TDXN File
     startSection: true
-    help: Path to a .tdn file to import. Select a file, set the Network Path target, then pulse Import TDN.
+    help: Path to a .tdxn file to import. Select a file, set the Network Path target, then pulse Import TDXN.
   - name: Networkpath
     style: COMP
     label: Network Path
-    help: Target COMP where the TDN file will be imported. Operators from the .tdn are created as children of this COMP.
+    help: Target COMP where the TDXN file will be imported. Operators from the .tdxn are created as children of this COMP.
   - name: Importtdn
     style: Pulse
-    label: Import TDN
-    help: Imports the specified TDN File into the Network Path target. Creates all operators, sets parameters, connections, and positions.
+    label: Import TDXN
+    help: Imports the specified TDXN File into the Network Path target. Creates all operators, sets parameters, connections, and positions.
+  - name: Migratetotdxn
+    style: Pulse
+    label: Migrate .tdn to .tdxn
+    startSection: true
+    help: 'One-time, opt-in conversion of the network files you already have. Renames every tracked .tdn to .tdxn, repoints the externalizations table, and updates the tdn_ref pointers inside parent files so nested COMPs keep resolving. Contents are unchanged. New externalizations already use .tdxn -- this only affects existing files. Commit or stash first if the project is under version control; Embody performs the renames itself, so never git mv them. Safe to re-run: it converges.'
   Envoy:
   - name: Aiclient
     style: Menu
@@ -400,7 +405,7 @@ custom_pars:
     - DATs
     - COMPs
     - DATs and COMPs
-    help: 'Auto-tag operators that Envoy creates via create_op for externalization to version-control-friendly files. Neither = off. DATs = externalize created DATs (source files). COMPs = externalize created COMPs (TDN). DATs and COMPs = both. Only ops at an externalization boundary are tagged -- never ops already inside an externalized COMP, palette clones, or Embody itself. Additive only: it never deletes files or removes tags.'
+    help: 'Auto-tag operators that Envoy creates via create_op for externalization to version-control-friendly files. Neither = off. DATs = externalize created DATs (source files). COMPs = externalize created COMPs (TDXN). DATs and COMPs = both. Only ops at an externalization boundary are tagged -- never ops already inside an externalized COMP, palette clones, or Embody itself. Additive only: it never deletes files or removes tags.'
   - name: Toolpermissions
     style: Menu
     label: Tool Permissions
@@ -598,8 +603,8 @@ custom_pars:
     values: [1, 1, 1, 1]
   - name: Tdnsavedcolor
     style: RGBA
-    label: TDN Saved Color
-    help: Color indicator for TDN-strategy operators that are saved and up-to-date.
+    label: TDXN Saved Color
+    help: Color indicator for TDXN-strategy operators that are saved and up-to-date.
     values: [0.153552, 0.376081, 0.457, 1]
   Shortcuts:
   - name: Enablekeyboardshortcuts
@@ -653,37 +658,37 @@ custom_pars:
     help: 'Arm the shortcut recorder for Refresh Tracking: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
   - name: Shortcutexportproject
     style: Str
-    label: Export Project to TDN
+    label: Export Project to TDXN
     startSection: true
     default: ctrl+shift+e
-    help: 'Keyboard shortcut for Export Project to TDN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    help: 'Keyboard shortcut for Export Project to TDXN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
     value: cmd+shift+e
   - name: Recordexportproject
     style: Pulse
     label: Record
-    help: 'Arm the shortcut recorder for Export Project to TDN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+    help: 'Arm the shortcut recorder for Export Project to TDXN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
   - name: Shortcutexportcomp
     style: Str
-    label: Export Current COMP to TDN
+    label: Export Current COMP to TDXN
     startSection: true
     default: ctrl+alt+e
-    help: 'Keyboard shortcut for Export Current COMP to TDN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    help: 'Keyboard shortcut for Export Current COMP to TDXN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
     value: cmd+alt+e
   - name: Recordexportcomp
     style: Pulse
     label: Record
-    help: 'Arm the shortcut recorder for Export Current COMP to TDN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+    help: 'Arm the shortcut recorder for Export Current COMP to TDXN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
   - name: Shortcutcopytdn
     style: Str
-    label: Copy Selected COMP as TDN
+    label: Copy Selected COMP as TDXN
     startSection: true
     default: ctrl+shift+c
-    help: 'Keyboard shortcut for Copy Selected COMP as TDN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    help: 'Keyboard shortcut for Copy Selected COMP as TDXN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
     value: cmd+shift+c
   - name: Recordcopytdn
     style: Pulse
     label: Record
-    help: 'Arm the shortcut recorder for Copy Selected COMP as TDN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+    help: 'Arm the shortcut recorder for Copy Selected COMP as TDXN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
   - name: Shortcuttagger
     style: Menu
     label: Tagger Double-Tap Key
@@ -736,7 +741,7 @@ custom_pars:
     style: Toggle
     label: Restore DATs on Start
     default: true
-    help: When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs.
+    help: When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDXN COMPs.
   - name: Filecleanup
     style: Menu
     label: File Cleanup
@@ -778,7 +783,7 @@ custom_pars:
     - Ask Each Save
     - Always Externalize
     - Never Ask
-    help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
+    help: What to do when TDXN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
   - name: Showbuiltinpars
     style: Toggle
     label: Show Built-in Pars
@@ -807,14 +812,14 @@ custom_pars:
   - name: Uninstall
     style: Pulse
     startSection: true
-    help: 'Removes Embody from this project: deletes Embody-generated config (CLAUDE.md / AGENTS.md / .claude / .cursor / ...), Embody''s .venv, and .embody/ state; strips only Embody''s block from shared files (.gitignore, .gitattributes, .mcp.json); un-sets the .tdn git diff driver. Your own files, externalized .tox / .tdn / .py, and the Embody COMP are NOT removed. Asks for confirmation first.'
+    help: 'Removes Embody from this project: deletes Embody-generated config (CLAUDE.md / AGENTS.md / .claude / .cursor / ...), Embody''s .venv, and .embody/ state; strips only Embody''s block from shared files (.gitignore, .gitattributes, .mcp.json); un-sets the .tdxn git diff driver. Your own files, externalized .tox / .tdxn / .py, and the Embody COMP are NOT removed. Asks for confirmation first.'
   About:
   - name: Version
     style: Str
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.280
+    value: 6.1.2
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -892,8 +897,8 @@ sequences:
   - object: op('./EnvoyExt').module.EnvoyExt(me)
     name: Envoy
     promote: true
-  - object: op('./TDNExt').module.TDNExt(me)
-    name: TDN
+  - object: op('./TDXNExt').module.TDXNExt(me)
+    name: TDXN
     promote: true
   - object: op('./CatalogManagerExt').module.CatalogManagerExt(me)
     name: CatalogManager
@@ -976,106 +981,120 @@ operators:
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   dat_content:
-  - - '13:38:59 13463181 SUCCESS envoy_setup:816: Created .claude/settings.local.json (tool permissions: all) at C:\Users\admin\AppData\Local\Temp\tmpsq1whtgr\.claude\settings.local.json'
-  - - '13:39:01 13463205 SUCCESS envoy_setup:816: Updated .claude/settings.local.json (tool permissions: all) at C:\Users\admin\AppData\Local\Temp\tmpc8hfavx8\.claude\settings.local.json'
-  - - '13:39:02 13463217 INFO    envoy_setup:361: Mirrored AI config into sibling worktrees (2 file(s))'
-  - - '13:39:08 13463289 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 2'
-  - - '13:39:08 13463289 SUCCESS EmbodyExt: Reset externaltox for ''/embody/unit_tests/test_sandbox/sandbox_test_toxdrop_expr/dropped1'''
-  - - '13:39:08 13463289 INFO    EmbodyExt: Dropped .tox expression handling set to Always Clean'
-  - - '13:39:09 13463301 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 3'
-  - - '13:39:09 13463301 INFO    EmbodyExt: Dropped .tox expression handling set to Always Ignore'
-  - - '13:39:09 13463313 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 0'
-  - - '13:39:09 13463313 SUCCESS EmbodyExt: Reset externaltox for ''/embody/unit_tests/test_sandbox/sandbox_test_toxdrop_expr/dropped1'''
-  - - '13:39:10 13463325 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 1'
-  - - '13:39:13 13463349 WARNING EmbodyExt: [test] No response seeded for "Dropped .tox Expression Detected"; returning -1 instead of opening modal dialog. Seed it via op.Embody.store("_smoke_test_responses", {...}).'
-  - - '13:39:14 13463361 WARNING EmbodyExt: [test] No response seeded for "Dropped .tox Expression Detected"; returning -1 instead of opening modal dialog. Seed it via op.Embody.store("_smoke_test_responses", {...}).'
-  - - '13:39:16 13463397 SUCCESS EmbodyExt: Reset externaltox for ''/embody/Embody/_test_toxdrop_internal'''
-  - - '13:39:18 13463421 INFO    EmbodyExt: [test] Auto-responded to "Dropped .tox Expression Detected" -> button 1'
-  - - '13:39:19 13463433 SUCCESS EmbodyExt: Reset externaltox for ''/embody/unit_tests/test_sandbox/sandbox_test_toxdrop_expr/dropped1'''
-  - - '13:39:23 13463481 INFO    EnvoyExt: Processing: execute_python'
-  - - '13:39:23 13463481 INFO    EnvoyExt: execute_python: tr = op.unit_tests.ext.TestRunnerExtr = op.unit_tests.GetResults()res = r.get(''results'') or []fails = [x for x in res if str(x.get(''status'', '''')).upper() in (''FAIL'', ''ERROR'')]result = {''running'': ...'
-  - - '13:39:23 13463481 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '13:39:24 13463505 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox.tdn'
-  - - '13:39:29 13463565 WARNING embody_admin:328: Uninstall: refusing to remove C:\Users\admin\AppData\Local\Temp\embody_outside_lhszzfsp -- outside C:\Users\admin\AppData\Local\Temp\embody_uninstall_exec_r5yyczey'
-  - - '13:39:33 13463601 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall" -> button 0'
-  - - '13:39:33 13463601 INFO    embody_admin:559: Uninstall cancelled -- nothing was changed.'
-  - - '13:39:33 13463613 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall" -> button 1'
-  - - '13:39:33 13463613 SUCCESS embody_admin:501: Uninstall complete: {''deleted'': 1, ''stripped'': 0, ''unset'': 0, ''kept_review'': 1, ''errors'': 0, ''ran'': True}'
-  - - '13:39:33 13463613 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall Complete" -> button 0'
-  - - '13:39:35 13463625 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall" -> button 1'
-  - - '13:39:35 13463625 SUCCESS embody_admin:501: Uninstall complete: {''deleted'': 2, ''stripped'': 0, ''unset'': 0, ''kept_review'': 0, ''errors'': 0, ''ran'': True}'
-  - - '13:39:35 13463625 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall Complete" -> button 0'
-  - - '13:39:36 13463637 INFO    EmbodyExt: [test] Auto-responded to "Embody -- Uninstall" -> button 0'
-  - - '13:39:36 13463637 INFO    embody_admin:524: Uninstall: nothing to remove at C:\Users\admin\AppData\Local\Temp\embody_uninstall_handler_yvoyjp_3.'
-  - - '13:39:36 13463649 WARNING EmbodyExt: [test] No response seeded for "Embody -- Uninstall"; returning -1 instead of opening modal dialog. Seed it via op.Embody.store("_smoke_test_responses", {...}).'
-  - - '13:39:36 13463649 INFO    embody_admin:559: Uninstall cancelled -- nothing was changed.'
-  - - '13:39:46 13463769 INFO    embody_admin:312: Uninstall preview for C:\Users\admin\AppData\Local\Temp\embody_uninstall_test_c96fr9of (sources: fallback)  REMOVE (2):    - CLAUDE.md  [file] -- Embody-generated, unmodified    - .embody  [dir] -- Embody runtime state (manifest, bridge, config, hashes)'
-  - - '13:41:23 13464957 WARNING TDNExt: Failed to track TDN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_chomp_sc5im8pd\\one_nl.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
-  - - '13:41:23 13464957 SUCCESS TDNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_chomp_sc5im8pd\one_nl.tdn'
-  - - '13:41:23 13464957 INFO    TDNExt: Importing from C:\Users\admin\AppData\Local\Temp\v6h_chomp_sc5im8pd\one_nl.tdn into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/one_nl_target...'
-  - - '13:41:23 13464957 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/one_nl_target'
-  - - '13:41:24 13464969 WARNING TDNExt: Failed to track TDN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_chomp_jo7gb4e1\\two_nl.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
-  - - '13:41:24 13464969 SUCCESS TDNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_chomp_jo7gb4e1\two_nl.tdn'
-  - - '13:41:24 13464969 INFO    TDNExt: Importing from C:\Users\admin\AppData\Local\Temp\v6h_chomp_jo7gb4e1\two_nl.tdn into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/two_nl_target...'
-  - - '13:41:24 13464969 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/two_nl_target'
-  - - '13:41:33 13465077 WARNING TDNExt: Failed to track TDN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_load_wiwue3ew\\ver.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
-  - - '13:41:33 13465077 SUCCESS TDNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_load_wiwue3ew\ver.tdn'
-  - - '13:41:43 13465209 INFO    EmbodyExt: 307 externalized operator(s) found -- validating tracked operators'
-  - - '13:41:43 13465221 SUCCESS EmbodyExt: Tag ''tox'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
-  - - '13:41:43 13465221 SUCCESS EmbodyExt: Added ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
-  - - '13:41:44 13465221 INFO    EmbodyExt: Update complete -- everything up to date'
-  - - '13:41:44 13465221 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
-  - - '13:41:54 13465341 SUCCESS EmbodyExt: Tag ''tdn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
-  - - '13:41:54 13465341 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
-  - - '13:41:54 13465341 SUCCESS EmbodyExt: Added TDN ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
-  - - '13:41:54 13465341 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
-  - - '13:41:54 13465341 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
-  - - '13:41:54 13465341 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
-  - - '13:41:54 13465341 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
-  - - '13:41:54 13465341 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdn'
-  - - '13:41:55 13465341 SUCCESS EmbodyExt: Exported TDN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
-  - - '13:41:55 13465341 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'' delete_file=True rows=309'
-  - - '13:41:55 13465341 INFO    EmbodyExt: _removeTDNStrategy: found row 308, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard.tdn'' delete_file=True'
-  - - '13:41:57 13465365 INFO    EmbodyExt: Update complete -- everything up to date'
-  - - '13:42:06 13465437 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '13:42:10 13465461 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '13:42:10 13465461 WARNING EmbodyExt: Skipping the whole-project externalization: no saved .toe on disk to fall back on, and it re-tags every COMP and DAT in the project. Save the project first, then run Externalize Full Project from the Embody parameters. New work is still externalized automatically.'
-  - - '13:42:11 13465473 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '13:42:11 13465473 WARNING EmbodyExt: Whole-project externalization requested -- it re-tags every compatible COMP and DAT. Recovery point on disk: "/tmp/fake-project.toe". Confirm the format in the dialog.'
-  - - '13:42:18 13465557 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
-  - - '13:42:20 13465569 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '13:42:20 13465569 WARNING EmbodyExt: Skipping the whole-project externalization: no saved .toe on disk to fall back on, and it re-tags every COMP and DAT in the project. Save the project first, then run Externalize Full Project from the Embody parameters. New work is still externalized automatically.'
-  - - '13:42:20 13465569 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
-  - - '13:42:20 13465581 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '13:42:20 13465581 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
-  - - '13:42:21 13465593 WARNING EmbodyExt: Setup wizard: unrecognized externalize choice "externalize-everything!!" -- skipping externalization setup.'
-  - - '13:42:21 13465593 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
-  - - '13:42:24 13465653 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '13:42:26 13465677 ERROR   TestRunnerExt: Tests complete: 3912/4029 passed, 1 failed, 116 skipped'
-  - - '13:42:32 13466039 WARNING EnvoyExt: Watchdog: Embody Status stranded at ''Testing'' with no test run live -- restoring the saved status'
-  - - '13:44:08 13471790 INFO    EnvoyExt: Processing: execute_python'
-  - - '13:44:08 13471790 INFO    EnvoyExt: execute_python: tr = op.unit_tests.ext.TestRunnerExtr = op.unit_tests.GetResults()res = r.get(''results'') or []fails = [x for x in res if str(x.get(''status'', '''')).upper() in (''FAIL'', ''ERROR'')]result = {''running'': ...'
-  - - '13:44:08 13471790 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '13:44:10 13471861 WARNING EmbodyExt: REFUSED auto-export of /embody/unit_tests/test_sandbox: the COMP is empty but its .tdn on disk holds a non-empty network -- overwriting would destroy the only good copy. If the empty state is intentional, use the manager Save button.'
-  - - '13:44:10 13471862 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '13:44:10 13471874 SUCCESS TDNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '13:44:12 13472018 INFO    EnvoyExt: Processing: run_tests'
-  - - '13:44:12 13472018 INFO    TestRunnerExt: Discovered 1 test suite(s) [deferred-per-test]'
-  - - '13:44:12 13472022 SUCCESS TDNExt: Copied cw_probe TDN to clipboard (1 ops)'
-  - - '13:44:12 13472034 SUCCESS TDNExt: Copied cw_probe TDN to clipboard (1 ops)'
-  - - '13:44:12 13472036 SUCCESS TDNExt: Copied cw_probe TDN to clipboard (1 ops)'
-  - - '13:44:12 13472039 SUCCESS TDNExt: Copied cw_probe TDN to clipboard (1 ops)'
-  - - '13:44:12 13472040 SUCCESS TDNExt: Copied cw_probe TDN to clipboard (1 ops)'
-  - - '13:44:12 13472044 SUCCESS TDNExt: Copied cw_probe TDN to clipboard (1 ops)'
-  - - '13:44:12 13472045 SUCCESS TestRunnerExt: Tests complete: 9/9 passed'
-  - - '13:44:22 13472639 INFO    EnvoyExt: Processing: get_op_errors'
-  - - '13:46:48 13481374 INFO    EnvoyExt: Processing: execute_python'
-  - - '13:46:48 13481374 INFO    EnvoyExt: execute_python: result = {    ''version_par'': op.Embody.par.Version.eval(),    ''project_name'': project.name,    ''project_folder'': project.folder,}'
-  - - '13:46:48 13481374 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '13:51:17 13497489 INFO    EnvoyExt: Processing: save_project'
-  - - '13:51:17 13497491 INFO    envoy_setup:1334: Registered instance "Embody-6.280" in envoy.json (port 9870)'
-  - - '13:51:17 13497491 INFO    EmbodyExt: Update complete -- everything up to date'
-  - - '13:51:17 13497491 INFO    EmbodyExt: Exporting portable .tox: stripping 558 file reference(s) and 157 tagged operator(s) from /embody/Embody'
+  - - '00:07:19  457882 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_chomp_sq7vtwhz\\one_nl.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '00:07:19  457882 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_chomp_sq7vtwhz\one_nl.tdn'
+  - - '00:07:19  457882 INFO    TDXNExt: Importing from C:\Users\admin\AppData\Local\Temp\v6h_chomp_sq7vtwhz\one_nl.tdn into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/one_nl_target...'
+  - - '00:07:19  457882 SUCCESS TDXNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/one_nl_target'
+  - - '00:07:20  457894 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_chomp_ojbeo7nm\\two_nl.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '00:07:20  457894 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_chomp_ojbeo7nm\two_nl.tdn'
+  - - '00:07:20  457894 INFO    TDXNExt: Importing from C:\Users\admin\AppData\Local\Temp\v6h_chomp_ojbeo7nm\two_nl.tdn into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/two_nl_target...'
+  - - '00:07:20  457894 SUCCESS TDXNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/two_nl_target'
+  - - '00:07:30  458002 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_load_bkl69kqn\\ver.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '00:07:30  458002 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_load_bkl69kqn\ver.tdn'
+  - - '00:07:41  458134 INFO    EmbodyExt: 308 externalized operator(s) found -- validating tracked operators'
+  - - '00:07:42  458146 SUCCESS EmbodyExt: Tag ''tox'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
+  - - '00:07:42  458146 SUCCESS EmbodyExt: Added ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
+  - - '00:07:42  458146 INFO    EmbodyExt: Update complete -- everything up to date'
+  - - '00:07:42  458146 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
+  - - '00:07:52  458262 SUCCESS EmbodyExt: Tag ''tdn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
+  - - '00:07:52  458262 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdxn'
+  - - '00:07:52  458262 SUCCESS EmbodyExt: Added TDXN ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
+  - - '00:07:53  458262 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdxn'
+  - - '00:07:53  458262 SUCCESS EmbodyExt: Exported TDXN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
+  - - '00:07:53  458262 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdxn'
+  - - '00:07:53  458262 SUCCESS EmbodyExt: Exported TDXN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
+  - - '00:07:53  458262 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdxn'
+  - - '00:07:53  458262 SUCCESS EmbodyExt: Exported TDXN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
+  - - '00:07:53  458262 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'' delete_file=True rows=310'
+  - - '00:07:53  458262 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard.tdxn'' delete_file=True'
+  - - '00:07:55  458286 INFO    EmbodyExt: Update complete -- everything up to date'
+  - - '00:08:04  458382 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '00:08:07  458406 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '00:08:07  458406 WARNING EmbodyExt: Skipping the whole-project externalization: no saved .toe on disk to fall back on, and it re-tags every COMP and DAT in the project. Save the project first, then run Externalize Full Project from the Embody parameters. New work is still externalized automatically.'
+  - - '00:08:08  458418 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '00:08:08  458418 WARNING EmbodyExt: Whole-project externalization requested -- it re-tags every compatible COMP and DAT. Recovery point on disk: "/tmp/fake-project.toe". Confirm the format in the dialog.'
+  - - '00:08:15  458502 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
+  - - '00:08:17  458514 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '00:08:17  458514 WARNING EmbodyExt: Skipping the whole-project externalization: no saved .toe on disk to fall back on, and it re-tags every COMP and DAT in the project. Save the project first, then run Externalize Full Project from the Embody parameters. New work is still externalized automatically.'
+  - - '00:08:17  458514 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
+  - - '00:08:17  458526 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '00:08:17  458526 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
+  - - '00:08:18  458537 WARNING EmbodyExt: Setup wizard: unrecognized externalize choice "externalize-everything!!" -- skipping externalization setup.'
+  - - '00:08:18  458537 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
+  - - '00:08:23  458597 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
+  - - '00:08:24  458621 SUCCESS TestRunnerExt: Tests complete: 3932/4048 passed, 116 skipped'
+  - - '00:08:30  458932 WARNING EnvoyExt: Watchdog: Embody Status stranded at ''Testing'' with no test run live -- restoring the saved status'
+  - - '00:08:49  460094 INFO    EnvoyExt: Processing: save_project'
+  - - '00:08:49  460094 INFO    envoy_setup:1334: Registered instance "Embody-6.283" in envoy.json (port 9870)'
+  - - '00:08:50  460094 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '00:08:50  460094 SUCCESS EmbodyExt: Exported TDXN for /embody/Embody'
+  - - '00:08:50  460094 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '00:08:50  460094 SUCCESS EmbodyExt: Exported TDXN for /embody'
+  - - '00:08:50  460094 SUCCESS EmbodyExt: Saved 2 externalizations'
+  - - '00:08:50  460094 INFO    EmbodyExt: Exporting portable .tox: stripping 558 file reference(s) and 157 tagged operator(s) from /embody/Embody'
+  - - '00:08:55  460103 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '00:08:55  460103 SUCCESS EmbodyExt: Exported TDXN for /embody/Embody'
+  - - '00:08:55  460103 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '00:08:55  460103 SUCCESS EmbodyExt: Exported TDXN for /embody'
+  - - '00:08:59  460357 INFO    ConvoyExt: Convoy: Registered -- Envoy port pending'
+  - - '00:09:03  460582 WARNING EnvoyExt: Watchdog: enabled but socket dead (status ''Running on port 9870'') -- reviving'
+  - - '00:09:03  460582 WARNING EnvoyExt: Watchdog: MCP socket on port None unreachable while enabled (running=False) -- reviving server'
+  - - '00:09:03  460600 INFO    envoy_setup:861: Found git repo at C:\Users\admin\Documents\Git\Embody'
+  - - '00:09:04  460600 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
+  - - '00:09:09  460914 INFO    ConvoyExt: Convoy: Convoy App update: the running Convoy App is 6.1.0, this Embody ships 6.1.1 -- updating it in place now (automatic; Repair Convoy App remains the manual path)'
+  - - '00:09:23  461744 INFO    EnvoyExt: Processing: execute_python'
+  - - '00:09:23  461744 INFO    EnvoyExt: execute_python: import osemb = op.Embodyrel = os.path.join(os.path.dirname(project.folder.rstrip(''/'')), ''release'')result = {    ''par_Version'': emb.par.Version.eval(),    ''project_name'': project.name,    ''toes'':...'
+  - - '00:09:23  461744 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '00:09:25  461815 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '00:09:25  461816 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '10:47:32 2759118 INFO    EnvoyExt: Processing: execute_python'
+  - - '10:47:32 2759118 INFO    EnvoyExt: execute_python: emb = op.Embodyp = emb.par.Migratetotdxnresult = {''label'': p.label, ''help'': p.help}'
+  - - '10:47:32 2759118 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '10:47:33 2759189 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '10:47:34 2759190 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '10:47:38 2759472 INFO    EnvoyExt: Processing: execute_python'
+  - - '10:47:38 2759472 INFO    EnvoyExt: execute_python: emb = op.Embodyp = emb.par.Migratetotdxnp.label = ''Migrate .tdn to .tdxn''p.help = (''One-time, opt-in conversion of the network files you already have. ''          ''Renames every tracked .tdn to .td...'
+  - - '10:47:38 2759472 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '10:50:05 2768292 INFO    envoy_setup:1334: Registered instance "Embody-6.284" in envoy.json (port 9870)'
+  - - '10:50:06 2768292 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '10:50:06 2768292 SUCCESS EmbodyExt: Exported TDXN for /embody/Embody'
+  - - '10:50:06 2768292 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '10:50:06 2768292 SUCCESS EmbodyExt: Exported TDXN for /embody'
+  - - '10:50:06 2768292 SUCCESS EmbodyExt: Saved 2 externalizations'
+  - - '10:50:07 2768292 INFO    EmbodyExt: Exporting portable .tox: stripping 558 file reference(s) and 157 tagged operator(s) from /embody/Embody'
+  - - '10:50:10 2768292 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '10:50:11 2768292 SUCCESS EmbodyExt: Exported TDXN for /embody/Embody'
+  - - '10:50:11 2768292 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '10:50:11 2768292 SUCCESS EmbodyExt: Exported TDXN for /embody'
+  - - '10:50:16 2768573 INFO    ConvoyExt: Convoy: Registered -- Envoy port pending'
+  - - '10:50:19 2768771 WARNING EnvoyExt: Watchdog: enabled but socket dead (status ''Running on port 9870'') -- reviving'
+  - - '10:50:19 2768771 WARNING EnvoyExt: Watchdog: MCP socket on port None unreachable while enabled (running=False) -- reviving server'
+  - - '10:50:19 2768789 INFO    envoy_setup:861: Found git repo at C:\Users\admin\Documents\Git\Embody'
+  - - '10:50:20 2768789 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
+  - - '10:50:26 2769123 INFO    ConvoyExt: Convoy: Convoy App update: the running Convoy App is 6.1.1, this Embody ships 6.1.2 -- updating it in place now (automatic; Repair Convoy App remains the manual path)'
+  - - '10:50:55 2770916 INFO    EnvoyExt: Processing: execute_python'
+  - - |-
+      10:50:55 2770916 INFO    EnvoyExt: execute_python: emb = op.Embody
+      ext = emb.ext.Embody
+      table = ext.Externalizations
+      rows = []
+      for i in range(1, table.numRows):
+          p = ext._cellVal(i, 'path', table=table)
+          f = ext._cellVal(i, 'rel_file_path', tabl...
+  - - '10:50:55 2770916 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '10:50:57 2770987 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '10:50:57 2770988 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '10:51:56 2774508 INFO    EnvoyExt: Processing: execute_python'
+  - - |-
+      10:51:56 2774508 INFO    EnvoyExt: execute_python: emb = op.Embody
+      fixed = {}
+      for name, lab in (('Tdntag', 'TDXN Tag'), ('Tdnexcludetag', 'TDXN Exclude Tag')):
+          p = getattr(emb.par, name, None)
+          if p is not None:
+              before = p.label
+             ...
+  - - '10:51:56 2774508 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '10:51:57 2774579 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
   dat_content_format: table
 - name: null2
   type: nullCHOP
@@ -1086,17 +1105,6 @@ operators:
   size: [130, 90]
   inputs:
   - select1
-- name: TDNExt
-  type: textDAT
-  parameters:
-    file: embody/Embody/TDNExt.py
-    syncfile: true
-    language: python
-  position: [-700, 600]
-  size: [130, 90]
-  color: [0.9, 0.3, 0.4]
-  tags:
-  - py
 - name: convoy
   type: baseCOMP
   parameters:
@@ -1172,6 +1180,17 @@ operators:
     sel:
       mode: advanced
   tdn_ref: embody/Embody/wizard.tdn
+- name: TDXNExt
+  type: textDAT
+  parameters:
+    file: embody/Embody/TDXNExt.py
+    syncfile: true
+    language: python
+  position: [-700, 600]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
 - name: execute
   type: executeDAT
   parameters:
@@ -1482,7 +1501,7 @@ operators:
   - name: title
     type: textCOMP
     parameters:
-      text: Exclude from tdn
+      text: Exclude from tdxn
       callbacks: title_callbacks
       fontcolorr: 0.92
       fontcolorg: 0.92
@@ -1514,7 +1533,7 @@ operators:
     - name: drop_hint
       type: textCOMP
       parameters:
-        text: Drag a parameter or COMP here to exclude it from .tdn
+        text: Drag a parameter or COMP here to exclude it from .tdxn
         type: multiline
         wordwrap: true
         dragdropmode: panel
@@ -1943,7 +1962,7 @@ operators:
       - '0.4500'
       - '1'
     - - r0c1
-      - v6.0.280
+      - v6.1.2
       - '0.4000'
       - '0.4400'
       - '0.5000'
@@ -2578,7 +2597,7 @@ operators:
     position: [200, -200]
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
-    dat_content: "# Cancel button for the chunked TDN export progress dialog.\n\ndef onOffToOn(panelValue):\n\tparent.Embody.ext.TDN.CancelExport()\n\treturn\n"
+    dat_content: "# Cancel button for the chunked TDN export progress dialog.\n\ndef onOffToOn(panelValue):\n\tparent.Embody.ext.TDXN.CancelExport()\n\treturn\n"
     dat_content_format: text
 - name: window_tagging_menu
   type: windowCOMP

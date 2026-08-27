@@ -1739,6 +1739,11 @@ def configure_gitattributes(ext, git_root):
         '\n# Embody / Envoy -- normalize TD line endings (auto-managed)\n'
         '*.py text eol=lf\n'
         '*.md text eol=lf\n'
+        # Both suffixes point at the SAME driver name: git resolves
+        # `diff=tdn` to diff.tdn.textconv, so .tdxn needs no new git config
+        # key and nothing to add to the uninstall sweep. The driver script
+        # is extension-agnostic (it takes a blob path, never a filename).
+        '*.tdxn text eol=lf diff=tdn\n'
         '*.tdn text eol=lf diff=tdn\n'
         '*.json text eol=lf\n'
         '*.tsv text eol=lf\n'

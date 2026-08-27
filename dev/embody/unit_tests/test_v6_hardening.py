@@ -6,7 +6,7 @@ elsewhere (test_tdn_yaml.py, test_tdn_file_io.py, test_tdn_sequences.py,
 test_tdn_fingerprint.py). Each class targets one seam:
 
   TestTDNLoadMalformedJSON
-      tdn_load's narrowed-except (TDNExt.py ~L94): a brace-prefixed doc that
+      tdn_load's narrowed-except (TDXNExt.py ~L94): a brace-prefixed doc that
       is invalid JSON AND invalid YAML must RAISE, not silently degrade to a
       lenient default. Plus: ExportNetwork stamps the literal TDN_VERSION
       '2.0' (not just "a version key present").
@@ -17,7 +17,7 @@ test_tdn_fingerprint.py). Each class targets one seam:
       |+), and importFromFile yields byte-identical text.
 
   TestTDNBoilerplateNegativeGuards
-      The default-compute-DAT omission (TDNExt._exportDATContent) keys on
+      The default-compute-DAT omission (TDXNExt._exportDATContent) keys on
       DOCK IDENTITY (docked AND name == f'{dock.name}_compute'), never on
       text alone. Three negative cases must NOT be omitted.
 
@@ -27,7 +27,7 @@ test_tdn_fingerprint.py). Each class targets one seam:
 
   TestPOPSequenceResolution
       mathmixPOP `comb` -- subscript pop.seq['comb'] is None (TD quirk) while
-      TDNExt._getSequenceByName finds the real sequence; and a custom
+      TDXNExt._getSequenceByName finds the real sequence; and a custom
       appendSequence resolves through the prefixed target.par tier.
 
   TestTDNFingerprintExclusionAndRefs
@@ -63,7 +63,7 @@ class TestTDNLoadMalformedJSON(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.tdn = self.embody.ext.TDN
+        self.tdn = self.embody.ext.TDXN
         self._temp_dir = tempfile.mkdtemp(prefix='v6h_load_')
 
     def tearDown(self):
@@ -116,10 +116,10 @@ class TestTDNLoadMalformedJSON(EmbodyTestCase):
         """ExportNetwork must stamp the LITERAL current TDN_VERSION ('2.0'),
         verified against the module constant -- not merely "a version key is
         present". Read in-memory and from a written file."""
-        # Resolve the module-level TDN_VERSION constant from the TDNExt source.
-        tdn_version = self.embody.op('TDNExt').module.TDN_VERSION
+        # Resolve the module-level TDN_VERSION constant from the TDXNExt source.
+        tdn_version = self.embody.op('TDXNExt').module.TDN_VERSION
         self.assertEqual(tdn_version, '2.0',
-            'precondition: TDNExt.TDN_VERSION should be the v2.0 format')
+            'precondition: TDXNExt.TDN_VERSION should be the v2.0 format')
 
         self.sandbox.create(baseCOMP, 'ver_check')
         # In-memory result.
@@ -144,7 +144,7 @@ class TestTDNBlockScalarFileIO(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.tdn = self.embody.ext.TDN
+        self.tdn = self.embody.ext.TDXN
         self._temp_dir = tempfile.mkdtemp(prefix='v6h_chomp_')
 
     def tearDown(self):
@@ -228,7 +228,7 @@ class TestTDNBoilerplateNegativeGuards(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.tdn = self.embody.ext.TDN
+        self.tdn = self.embody.ext.TDXN
         # TD's live default compute-shader template -- the exact text the
         # omission compares against.
         self._default_text = self.tdn._defaultComputeShaderText()
@@ -342,7 +342,7 @@ class TestPOPSequenceResolution(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.tdn = self.embody.ext.TDN
+        self.tdn = self.embody.ext.TDXN
 
     def test_pop_comb_subscript_none_but_iter_finds_it(self):
         """mathmixPOP exposes its 'comb' sequence in iteration, but the

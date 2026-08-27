@@ -13,7 +13,7 @@ class TestTDNExportImport(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.tdn = self.embody.ext.TDN
+        self.tdn = self.embody.ext.TDXN
 
     # --- ExportNetwork ---
 
@@ -30,7 +30,7 @@ class TestTDNExportImport(EmbodyTestCase):
         result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
         tdn = result['tdn']
         self.assertDictHasKey(tdn, 'format')
-        self.assertEqual(tdn['format'], 'tdn')
+        self.assertEqual(tdn['format'], 'tdxn')
         self.assertDictHasKey(tdn, 'version')
         self.assertDictHasKey(tdn, 'network_path')
 

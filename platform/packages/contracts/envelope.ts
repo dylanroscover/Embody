@@ -1,6 +1,6 @@
 // FROZEN CONTRACT C1 - the `_embody_tdn` clipboard wire format.
-// Shared by: Embody Copy/Paste (Python mirror in dev/embody/Embody/TDNExt.py),
-// the web "Copy TDN" button, and the submit-form "Paste from clipboard" button.
+// Shared by: Embody Copy/Paste (Python mirror in dev/embody/Embody/TDXNExt.py),
+// the web "Copy TDXN" button, and the submit-form "Paste from clipboard" button.
 // Do NOT change without a contract bump (notify all dependents). ASCII only.
 
 export const EMBODY_TDN_MARKER = "_embody_tdn" as const;
@@ -31,7 +31,7 @@ export interface EmbodyTdnEnvelope {
    * "same content still on the clipboard" and is debounced).
    */
   copy_id?: string;
-  /** The full TDN network dict. Schema: docs/tdn/specification.md (contract C7). */
+  /** The full TDXN network dict. Schema: docs/tdn/specification.md (contract C7). */
   tdn: Record<string, unknown>;
 }
 

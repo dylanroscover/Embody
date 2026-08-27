@@ -114,7 +114,7 @@ export const POST: APIRoute = async ({ request }) => {
       return jsonResponse(
         {
           error: "scan_blocked",
-          detail: "The submitted TDN includes blocked capability surfaces.",
+          detail: "The submitted TDXN includes blocked capability surfaces.",
           scan
         },
         { status: 422 }
@@ -311,7 +311,7 @@ async function readSubmitRequest(
   };
 }
 
-// TDN is YAML v2.0 (a strict JSON superset, so legacy JSON still parses).
+// TDXN is YAML v2.0 (a strict JSON superset, so legacy JSON still parses).
 function parseTdn(
   value: string
 ): { ok: true; tdn: Record<string, unknown> } | { ok: false; detail: string } {

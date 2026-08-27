@@ -73,56 +73,61 @@ This table serves as the source of truth for what files Embody manages. Only fil
 !!! warning
     Never edit the `externalizations.tsv` file directly. It is managed exclusively by Embody's tracking system.
 
-## TDN Strategy
+## TDXN Strategy
 
-COMPs can also be externalized using the **TDN strategy** instead of `.tox`. This exports the COMP's network as human-readable YAML (`.tdn` files) instead of binary `.tox` files, enabling meaningful git diffs, code review, three-way merges, and schema-validated CI.
+COMPs can also be externalized using the **TDXN strategy** instead of `.tox`. This exports the COMP's network as human-readable YAML (`.tdxn` files) instead of binary `.tox` files, enabling meaningful git diffs, code review, three-way merges, and schema-validated CI.
 
-See [TDN Format](../tdn/index.md) for format details, and ["Why TDN"](#why-tdn) below for the concrete wins.
+!!! note "`.tdn` files from before Embody 6.1"
+    The format was called TDN (`.tdn`) until Embody 6.1 renamed it to TDXN (`.tdxn`). Existing files are **not** migrated: Embody keeps writing whichever extension a COMP already uses, and only a *new* externalization mints `.tdxn`, so a project can legitimately hold both. Convert when you choose to, with the **Migrate .tdn to .tdxn** pulse on the Embody COMP.
 
-### TOX vs TDN: pick by what you want from the file
+    Two internal identifiers deliberately still read `tdn` and always will: the `strategy` column in `externalizations.tsv`, and the operator tag. They are not user-facing names, and changing them would orphan every tracked row and tagged COMP in every existing project.
+
+See [TDXN Format](../tdn/index.md) for format details, and ["Why TDXN"](#why-tdxn) below for the concrete wins.
+
+### TOX vs TDXN: pick by what you want from the file
 
 Both strategies externalize a COMP to its own file on disk. The difference is **what's in the file**, not whether the parent embeds it:
 
-| | TOX | TDN |
+| | TOX | TDXN |
 |---|---|---|
-| File format | Binary `.tox` | YAML `.tdn` |
+| File format | Binary `.tox` | YAML `.tdxn` |
 | Git-diffable | No | Yes |
 | Load speed | Fast (native TD format) | Slower (parsed and rebuilt) |
 | PR review | None — binary blob | Line-by-line parameter diffs |
 | Cross-build portable | TD-build-coupled | Format-versioned, portable |
 | Best for | Palette widgets, third-party COMPs, anything you don't review at the parameter level | Anything you want code-reviewed, anything edited in a text editor, MCP/LLM workflows |
 
-**Both receive the same ownership treatment in parent `.tdn` files.** When the parent of an externalized child is exported as TDN, the parent emits a reference (`tdn_ref` or `tox_ref`) and **does not embed the child's internals**. The child's own file is the source of truth. This applies symmetrically — externalizing as TOX does not mean "embed me in the parent."
+**Both receive the same ownership treatment in parent `.tdxn` files.** When the parent of an externalized child is exported as TDXN, the parent emits a reference (`tdn_ref` or `tox_ref`) and **does not embed the child's internals**. The child's own file is the source of truth. This applies symmetrically — externalizing as TOX does not mean "embed me in the parent."
 
-If you want a parent `.tdn` that's fully self-contained (snapshot mode), pass `embed_all=True` on export. Otherwise, externalized children stay encapsulated and the parent stays small.
+If you want a parent `.tdxn` that's fully self-contained (snapshot mode), pass `embed_all=True` on export. Otherwise, externalized children stay encapsulated and the parent stays small.
 
 !!! info "If a COMP carries both tags"
-    A COMP with both the TDN tag and the TOX tag is an unusual configuration — strategies are normally mutually exclusive. If it does happen (e.g. tag added by hand), **the TDN tag wins**: the parent emits `tdn_ref` and the COMP is treated as TDN-externalized. To switch a COMP between strategies, remove the old tag first.
+    A COMP with both the TDXN tag and the TOX tag is an unusual configuration — strategies are normally mutually exclusive. If it does happen (e.g. tag added by hand), **the TDXN tag wins**: the parent emits `tdn_ref` and the COMP is treated as TDXN-externalized. To switch a COMP between strategies, remove the old tag first.
 
-### TDN Mode (master switch)
+### TDXN Mode (master switch)
 
-The `Tdnmode` parameter on the Embody COMP selects how the TDN subsystem behaves at save/open time:
+The `Tdnmode` parameter on the Embody COMP selects how the TDXN subsystem behaves at save/open time:
 
 | Mode | On save (++ctrl+s++) | On project open | When to pick |
 |------|----------------------|-----------------|--------------|
-| **Off** | No TDN activity. `.tdn` files on disk stay untouched. | No reconstruction. | Temporarily disabling TDN without deleting any files. |
-| **Export-on-Save** *(default, recommended)* | Writes `.tdn` files for every tagged TDN COMP **whose content changed** since the last save (unchanged COMPs are skipped to avoid noisy git diffs from header churn). `.toe` stays the source of truth; live network is never stripped. | No reconstruction — the `.toe` already has everything. | Day-to-day work. Cheap, predictable, no round-trip risk. Ideal for git-diff / MCP workflows. |
-| **Roundtrip (Experimental)** | Writes `.tdn` files **and** strips COMP children from the `.toe` so the `.toe` stays small. | Children are rebuilt from `.tdn` files at frame 60. | Large projects where the `.toe` bloats without strip, or workflows that treat `.tdn` as the primary source. May hit edge cases with extension reload timing on deeply-nested TDN COMPs. |
+| **Off** | No TDXN activity. `.tdxn` files on disk stay untouched. | No reconstruction. | Temporarily disabling TDXN without deleting any files. |
+| **Export-on-Save** *(default, recommended)* | Writes `.tdxn` files for every tagged TDXN COMP **whose content changed** since the last save (unchanged COMPs are skipped to avoid noisy git diffs from header churn). `.toe` stays the source of truth; live network is never stripped. | No reconstruction — the `.toe` already has everything. | Day-to-day work. Cheap, predictable, no round-trip risk. Ideal for git-diff / MCP workflows. |
+| **Roundtrip (Experimental)** | Writes `.tdxn` files **and** strips COMP children from the `.toe` so the `.toe` stays small. | Children are rebuilt from `.tdxn` files at frame 60. | Large projects where the `.toe` bloats without strip, or workflows that treat `.tdxn` as the primary source. May hit edge cases with extension reload timing on deeply-nested TDXN COMPs. |
 
-You can switch modes at any time — existing `.tdn` files on disk and tracked COMP entries are preserved across transitions.
+You can switch modes at any time — existing `.tdxn` files on disk and tracked COMP entries are preserved across transitions.
 
 !!! note "Opt-in per COMP"
-    Regardless of mode, only COMPs you've explicitly tagged with Embody's TDN tag are touched. A fresh `baseCOMP` you just created is invisible to Embody until you tag it.
+    Regardless of mode, only COMPs you've explicitly tagged with Embody's TDXN tag are touched. A fresh `baseCOMP` you just created is invisible to Embody until you tag it.
 
-### Excluding a COMP from TDN (the `tdn_exclude` tag)
+### Excluding a COMP from TDXN (the `tdn_exclude` tag)
 
-The `Tdnexcludetag` parameter on the Embody COMP (default value: `tdn_exclude`) defines a tag that **opts a single COMP out of the entire TDN system**. Tagged COMPs are invisible to TDN: never exported, never inlined in a parent's `.tdn`, never stripped on save, never destroyed by reconstruction.
+The `Tdnexcludetag` parameter on the Embody COMP (default value: `tdn_exclude`) defines a tag that **opts a single COMP out of the entire TDXN system**. Tagged COMPs are invisible to TDXN: never exported, never inlined in a parent's `.tdxn`, never stripped on save, never destroyed by reconstruction.
 
 **Primary use case: cascade-autotag bypass.** With cascade autotag enabled (`Tdncascade` parameter), tagging a parent COMP `tdn` propagates the `tdn` tag to every child in the subtree. If a specific child should *not* be externalized — typically because it's app-managed (spawned via `op.copy()` at runtime, populated from user data, or otherwise has a lifecycle outside Embody's control) — apply `tdn_exclude` to that child to keep it opted out.
 
 **Why not just leave the tag off?** With cascade autotag on, you can't — the cascade would re-apply `tdn` on the next scan. `tdn_exclude` is the only durable opt-out.
 
-**For app-managed copies**: a runtime `.copy()` does inherit `tdn_exclude`, but the tag only keeps the clone out of the **TDN pipeline** (cascade autotag, parent inlining, strip, reconstruction, and the dropped-`.tox` sweep). It is not a general "invisible to Embody" flag — duplicate-path detection never reads it. So `tdn_exclude` alone is sufficient only when the copied template is **not itself externalized**. Copy a COMP that *is* externalized (or that contains externalized DATs) and the copy carries the master's Embody tags and file references, joins the master's duplicate group, and still prompts.
+**For app-managed copies**: a runtime `.copy()` does inherit `tdn_exclude`, but the tag only keeps the clone out of the **TDXN pipeline** (cascade autotag, parent inlining, strip, reconstruction, and the dropped-`.tox` sweep). It is not a general "invisible to Embody" flag — duplicate-path detection never reads it. So `tdn_exclude` alone is sufficient only when the copied template is **not itself externalized**. Copy a COMP that *is* externalized (or that contains externalized DATs) and the copy carries the master's Embody tags and file references, joins the master's duplicate group, and still prompts.
 
 For app-spawned copies of an externalized master, use a relationship Embody's duplicate detection already resolves silently:
 
@@ -134,38 +139,38 @@ For app-spawned copies of an externalized master, use a relationship Embody's du
 **Constraints:**
 
 - Only COMPs are excludable. Annotation COMPs are explicitly ineligible.
-- Whole-subtree exclusion only applies to a **direct child** of a TDN boundary. If you nest an excluded COMP *deeper* (under a non-excluded TDN COMP), the exclusion tag has no effect at that depth — so instead of dropping it, Embody serializes the excluded child as **ordinary content** (it round-trips and survives strip/reconstruction) and warns at export time that the tag was ignored there. The warning names the intervening COMP(s) to tag, or suggests making it a direct child, if you want the exclusion honored.
-- Exclusion governs the automatic/cascade pipeline. An explicit user export call (`SaveTDN()` directly on an excluded COMP) currently still writes the `.tdn` — the opt-out applies to cascade, parent inlining, strip, and reconstruction, not to deliberate direct invocation.
+- Whole-subtree exclusion only applies to a **direct child** of a TDXN boundary. If you nest an excluded COMP *deeper* (under a non-excluded TDXN COMP), the exclusion tag has no effect at that depth — so instead of dropping it, Embody serializes the excluded child as **ordinary content** (it round-trips and survives strip/reconstruction) and warns at export time that the tag was ignored there. The warning names the intervening COMP(s) to tag, or suggests making it a direct child, if you want the exclusion honored.
+- Exclusion governs the automatic/cascade pipeline. An explicit user export call (`SaveTDN()` directly on an excluded COMP) currently still writes the `.tdxn` — the opt-out applies to cascade, parent inlining, strip, and reconstruction, not to deliberate direct invocation.
 
 ### Excluding a parameter's value (the `tdn_exclude:<par>` tag)
 
-Where the bare `tdn_exclude` removes a whole COMP from the TDN system, the **colon-suffixed** form removes a **single parameter's value** from an operator that otherwise exports normally. Tag the operator itself — any operator, any family — with one tag per parameter:
+Where the bare `tdn_exclude` removes a whole COMP from the TDXN system, the **colon-suffixed** form removes a **single parameter's value** from an operator that otherwise exports normally. Tag the operator itself — any operator, any family — with one tag per parameter:
 
 ```
 tdn_exclude:file
 tdn_exclude:Port
 ```
 
-This is the opt-out for **runtime state that must not be committed**: a movie player whose `file` par is set per-session by a playback engine, a negotiated network port, live UI readouts. Without it, every export bakes the current session's value into the `.tdn` and dirties git.
+This is the opt-out for **runtime state that must not be committed**: a movie player whose `file` par is set per-session by a playback engine, a negotiated network port, live UI readouts. Without it, every export bakes the current session's value into the `.tdxn` and dirties git.
 
 What it does and does not do:
 
 - The operator, its wiring, and its other parameters export normally — only the named parameter's **constant value** stays out of the file.
 - An **expression or bind** on the tagged parameter still exports (a reference is configuration, not session state).
 - For **custom parameters**, the definition still ships — style, range, default, help — without the `value` key.
-- The tag itself appears in the operator's `tags:` list in the `.tdn`, so the file records why the value is absent, and the marker survives reconstruction.
+- The tag itself appears in the operator's `tags:` list in the `.tdxn`, so the file records why the value is absent, and the marker survives reconstruction.
 - A tag naming a parameter the operator does not have logs a **WARNING** at export — a typo cannot silently no-op.
-- The prefix is the same **`.tdn` Exclude Tag** parameter that governs whole-COMP exclusion (Tags page, default `tdn_exclude`); clearing it disables the whole family.
-- Exclusions take effect at the COMP's **next export** — its **Save tdn** action, an **Update** sweep, or a project save — and the tags themselves persist in the `.toe`/`.tdn` like any other operator state.
+- The prefix is the same **`.tdxn` Exclude Tag** parameter that governs whole-COMP exclusion (Tags page, default `tdn_exclude`); clearing it disables the whole family.
+- Exclusions take effect at the COMP's **next export** — its **Save tdn** action, an **Update** sweep, or a project save — and the tags themselves persist in the `.toe`/`.tdxn` like any other operator state.
 
-**UI: the Exclude from tdn panel.** On any TDN-tagged COMP, the tagger's Actions menu (double-tap the tagger shortcut on the COMP) gains a **◇ Exclude from tdn** entry. It opens a panel scoped to that COMP: drag any parameter from a parameter dialog onto the drop zone to exclude its value (`tdn_exclude:<par>`), or drag a COMP from the network editor to exclude it entirely (bare `tdn_exclude`). The panel lists every exclusion of both kinds in the COMP's subtree with full paths; remove one with the **×** on its row, or by dropping the same item again. Items outside the subtree are refused with a warning, and a COMP excluded deeper than the TDN boundary gets the same "only honored at a boundary" warning the exporter gives.
+**UI: the Exclude from tdn panel.** On any TDXN-tagged COMP, the tagger's Actions menu (double-tap the tagger shortcut on the COMP) gains a **◇ Exclude from tdn** entry. It opens a panel scoped to that COMP: drag any parameter from a parameter dialog onto the drop zone to exclude its value (`tdn_exclude:<par>`), or drag a COMP from the network editor to exclude it entirely (bare `tdn_exclude`). The panel lists every exclusion of both kinds in the COMP's subtree with full paths; remove one with the **×** on its row, or by dropping the same item again. Items outside the subtree are refused with a warning, and a COMP excluded deeper than the TDXN boundary gets the same "only honored at a boundary" warning the exporter gives.
 
 ### Content Safety (save-time check)
 
-When you save a project (++ctrl+s++), Embody checks for **unprotected content** inside TDN-managed COMPs:
+When you save a project (++ctrl+s++), Embody checks for **unprotected content** inside TDXN-managed COMPs:
 
 - **At-risk DATs** — DATs that contain content but are neither externalized (no Embody tag) nor embedded (the **Embed DATs in TDNs** parameter is OFF).
-- **At-risk storage** — `comp.storage` entries on the TDN COMP or its descendants that won't be preserved when **Embed Storage in TDNs** is OFF.
+- **At-risk storage** — `comp.storage` entries on the TDXN COMP or its descendants that won't be preserved when **Embed Storage in TDNs** is OFF.
 
 DATs whose content is generated by TouchDesigner — Info DATs, Folder DAT, WebRTC DAT, Monitors DAT, device-discovery DATs, Error/Perform/Examine DATs, and similar read-only outputs — are excluded from the at-risk check. Their content is regenerated from inputs and parameters on cook, so warning that it will be lost is noise the user cannot act on. Callback DATs (Execute, CHOP Execute, DAT Execute, Panel Execute, Parameter Execute, etc.) hold user-authored Python and **continue to surface** in the warning — losing a callback silently is exactly what the check exists to prevent.
 
@@ -178,17 +183,17 @@ If at-risk content is found, Embody prompts you with four options:
 | **Skip Once** | Proceed with this save. Skipped content is logged so you know exactly what was dropped. You will be prompted again next save. |
 | **Always Skip** | Proceed and suppress the check on future saves. Sets `Tdndatsafety = 'ignore'` — the same opt-out described below. |
 
-The preference is stored in the **Content Safety** parameter (`Tdndatsafety`) and can be changed at any time from the Embody COMP's TDN settings. Setting `Tdndatsafety = 'ignore'` explicitly suppresses the check entirely — an opt-in escape hatch for power users who accept the risk.
+The preference is stored in the **Content Safety** parameter (`Tdndatsafety`) and can be changed at any time from the Embody COMP's TDXN settings. Setting `Tdndatsafety = 'ignore'` explicitly suppresses the check entirely — an opt-in escape hatch for power users who accept the risk.
 
 !!! tip
-    To avoid this prompt entirely, either enable **Embed DATs in TDNs** / **Embed Storage in TDNs** (stores content directly in the `.tdn` file) or externalize your DATs with Embody tags before saving.
+    To avoid this prompt entirely, either enable **Embed DATs in TDNs** / **Embed Storage in TDNs** (stores content directly in the `.tdxn` file) or externalize your DATs with Embody tags before saving.
 
 !!! warning "Locked TOPs, CHOPs, and SOPs lose their frozen data"
-    TDN cannot store frozen pixel, channel, or geometry data. If your network contains locked non-DAT operators, their lock flag is preserved but their content will be **empty after reload** when using Roundtrip mode. Use **TOX strategy** instead of TDN for COMPs that contain locked TOPs, CHOPs, or SOPs. See [Lock Flag Limitation](../tdn/specification.md#lock-flag-limitation) for details.
+    TDXN cannot store frozen pixel, channel, or geometry data. If your network contains locked non-DAT operators, their lock flag is preserved but their content will be **empty after reload** when using Roundtrip mode. Use **TOX strategy** instead of TDXN for COMPs that contain locked TOPs, CHOPs, or SOPs. See [Lock Flag Limitation](../tdn/specification.md#lock-flag-limitation) for details.
 
-    The save-time warning covers only locked operators the TDN export itself serializes. Locked content inside a **nested externalization boundary** — a child COMP with its own TOX or TDN tag, or an exclude-tagged subtree — is that boundary's own concern and does not trigger the parent's warning: a nested TOX-strategy COMP preserves its locked content in its own `.tox`, which is exactly the recommended remedy.
+    The save-time warning covers only locked operators the TDXN export itself serializes. Locked content inside a **nested externalization boundary** — a child COMP with its own TOX or TDXN tag, or an exclude-tagged subtree — is that boundary's own concern and does not trigger the parent's warning: a nested TOX-strategy COMP preserves its locked content in its own `.tox`, which is exactly the recommended remedy.
 
-    During a batch sweep — such as **Externalize Full Project** — the per-COMP findings are collected and shown as **one combined dialog** at the end, listing every affected COMP, instead of one popup per export. The dialog's **Don't show again** button sets the **Locked Content Warning** parameter (`Tdnlockedwarn`) to `quiet`, suppressing future dialogs; the warning is still written to the log on every export. Set it back to `ask` from the Embody COMP's TDN settings to re-enable the dialog.
+    During a batch sweep — such as **Externalize Full Project** — the per-COMP findings are collected and shown as **one combined dialog** at the end, listing every affected COMP, instead of one popup per export. The dialog's **Don't show again** button sets the **Locked Content Warning** parameter (`Tdnlockedwarn`) to `quiet`, suppressing future dialogs; the warning is still written to the log on every export. Set it back to `ask` from the Embody COMP's TDXN settings to re-enable the dialog.
 
 ### Empty-network overwrite protection
 
@@ -196,27 +201,27 @@ Automatic exports refuse to overwrite a substantial file on disk from a COMP tha
 
 | Strategy | What the guard checks | Refusal |
 |----------|-----------------------|---------|
-| **TDN** | The COMP has no children other than annotations, and the `.tdn` on disk parses to a non-empty network — or exists but cannot be parsed at all, which is exactly when its bytes are most worth keeping. | The automatic writers (the dirty sweep, checkpoints, the pre-save update pass) skip the file. |
+| **TDXN** | The COMP has no children other than annotations, and the `.tdxn` on disk parses to a non-empty network — or exists but cannot be parsed at all, which is exactly when its bytes are most worth keeping. | The automatic writers (the dirty sweep, checkpoints, the pre-save update pass) skip the file. |
 | **TOX** | The COMP has no children other than annotations and the `.tox` on disk is larger than 4 KB. A `.tox` can't be parsed for content, so size stands in: an empty COMP's `.tox` is only shell and parameters. | The automatic save skips the file. |
 
-A refusal is written to the log as a **WARNING** naming the operator and the reason (`REFUSED auto-export of ...` for TDN, `REFUSED auto-save of ...` for TOX). The TDN guard warns once per file state rather than on every sweep, and re-baselines its change fingerprint so a stable refusal stops repeating while any later real edit still registers as changed.
+A refusal is written to the log as a **WARNING** naming the operator and the reason (`REFUSED auto-export of ...` for TDXN, `REFUSED auto-save of ...` for TOX). The TDXN guard warns once per file state rather than on every sweep, and re-baselines its change fingerprint so a stable refusal stops repeating while any later real edit still registers as changed.
 
 !!! tip "When the empty state is intentional"
     Deliberately emptying a COMP and saving it is still supported — use the **Save** action in the manager (the row's Actions menu). The explicit Save is the deliberate override and writes the empty network to disk. Alternatively, untrack the operator or delete the file if it should no longer exist.
 
-### Why TDN
+### Why TDXN
 
-TDN isn't just a different file format — it unlocks workflows that binary `.toe`/`.tox` files can't support.
+TDXN isn't just a different file format — it unlocks workflows that binary `.toe`/`.tox` files can't support.
 
-**File size and density.** Even without compression, `.tdn` is comparable to or smaller than the equivalent binary `.tox` because only non-default parameters are emitted. Three compaction mechanisms kick in:
+**File size and density.** Even without compression, `.tdxn` is comparable to or smaller than the equivalent binary `.tox` because only non-default parameters are emitted. Three compaction mechanisms kick in:
 
 - Default omission — parameters are included only when they differ from the operator type's creation defaults.
 - `type_defaults` — properties shared across every operator of a type are hoisted once to a top-level block and stripped from each operator.
 - `par_templates` — repeated custom-parameter pages collapse into references.
 
-A real leaf-component file like `envoy_toggle.tdn` is ~1.3 KB — 38 readable lines including only the ~15 parameters whose values actually differ from a `textCOMP`'s defaults.
+A real leaf-component file like `envoy_toggle.tdxn` is ~1.3 KB — 38 readable lines including only the ~15 parameters whose values actually differ from a `textCOMP`'s defaults.
 
-**Git three-way merge on real conflicts.** `.toe` is binary, so git can't three-way merge it — one side wins, the other loses. `.tdn` is YAML; git merges it like any other text file, and conflicts show up as readable diffs you can resolve by reading intent:
+**Git three-way merge on real conflicts.** `.toe` is binary, so git can't three-way merge it — one side wins, the other loses. `.tdxn` is YAML; git merges it like any other text file, and conflicts show up as readable diffs you can resolve by reading intent:
 
 ```yaml
 - name: Speed
@@ -228,40 +233,40 @@ A real leaf-component file like `envoy_toggle.tdn` is ~1.3 KB — 38 readable li
 >>>>>>> feature/faster-playback
 ```
 
-**PR review humans can actually do.** A `.toe` diff is literally `Binary files differ`. A `.tdn` parameter change is a one-line delta. Reviewers comment on specific lines, request changes, and approve — the same workflow as any other text code review.
+**PR review humans can actually do.** A `.toe` diff is literally `Binary files differ`. A `.tdxn` parameter change is a one-line delta. Reviewers comment on specific lines, request changes, and approve — the same workflow as any other text code review.
 
-**Cross-version portability.** `.toe` and `.tox` are coupled to the exact TD build that wrote them. `.tdn` files are format-versioned and self-describing — every export stamps its own `version`, `td_build`, and `generator`. As long as the referenced operator types exist in the current TD build, the network rebuilds cleanly.
+**Cross-version portability.** `.toe` and `.tox` are coupled to the exact TD build that wrote them. `.tdxn` files are format-versioned and self-describing — every export stamps its own `version`, `td_build`, and `generator`. As long as the referenced operator types exist in the current TD build, the network rebuilds cleanly.
 
-**CI/CD integration.** The `docs/tdn.schema.yaml` schema (draft 2020-12) validates every `.tdn` file in CI. You can compute diff stats (operators added/removed, parameters changed), lint for forbidden patterns (absolute paths, missing help text, orphan ops), and gate merges — none of which is possible with binary `.toe`.
+**CI/CD integration.** The `docs/tdn.schema.yaml` schema (draft 2020-12) validates every `.tdxn` file in CI. You can compute diff stats (operators added/removed, parameters changed), lint for forbidden patterns (absolute paths, missing help text, orphan ops), and gate merges — none of which is possible with binary `.toe`.
 
 **Dramatically lower token cost for LLM / MCP workflows.** Reading a network via `read_tdn` (MCP tool) uses **~20-90× fewer tokens** than walking the same subtree via `get_op`+`query_network`:
 
 - `get_op` returns all 175-219 parameters per operator wrapped in `{value, mode, label}` triples — roughly 15-25 KB per operator.
-- `read_tdn` applies the same compaction as `.tdn` export — default omission, `type_defaults`, `par_templates` — and returns the full subtree in one call.
+- `read_tdn` applies the same compaction as `.tdxn` export — default omission, `type_defaults`, `par_templates` — and returns the full subtree in one call.
 
-For a 24-operator COMP (`container_left.tdn`), the TDN payload is ~12 KB (~3K tokens) vs an estimated ~360-480 KB (~90-120K tokens) via an equivalent `get_op` walk. The delta scales with network size and type homogeneity. A conservative 5× floor is verified in CI (`test_mcp_tdn_tools.py`); 20-90× is the typical real-world range. See the [Claude Code skills guide](../envoy/claude-code.md) for which Envoy skill to consult and when to prefer `read_tdn` vs the runtime probes (`get_parameter`, `get_op_errors`, `get_dat_content`, etc.).
+For a 24-operator COMP (`container_left.tdxn`), the TDXN payload is ~12 KB (~3K tokens) vs an estimated ~360-480 KB (~90-120K tokens) via an equivalent `get_op` walk. The delta scales with network size and type homogeneity. A conservative 5× floor is verified in CI (`test_mcp_tdn_tools.py`); 20-90× is the typical real-world range. See the [Claude Code skills guide](../envoy/claude-code.md) for which Envoy skill to consult and when to prefer `read_tdn` vs the runtime probes (`get_parameter`, `get_op_errors`, `get_dat_content`, etc.).
 
 ## Automatic Restoration
 
-Embody restores externalized operators from disk when a project is opened *and the recovered `.toe` doesn't already have them*. TOX-strategy COMPs are restored from `.tox` when missing; DATs sync from their external files. TDN behavior depends on the mode: in the default **Export-on-Save** mode the `.toe` stays authoritative and only a TDN COMP *absent* from the `.toe` (e.g. lost to a crash) is rebuilt from its `.tdn`; in **Roundtrip** mode children are stripped on save and fully rebuilt from `.tdn` on open, so disk is the source of truth for those COMPs.
+Embody restores externalized operators from disk when a project is opened *and the recovered `.toe` doesn't already have them*. TOX-strategy COMPs are restored from `.tox` when missing; DATs sync from their external files. TDXN behavior depends on the mode: in the default **Export-on-Save** mode the `.toe` stays authoritative and only a TDXN COMP *absent* from the `.toe` (e.g. lost to a crash) is rebuilt from its `.tdxn`; in **Roundtrip** mode children are stripped on save and fully rebuilt from `.tdxn` on open, so disk is the source of truth for those COMPs.
 
 | Strategy | Restoration Method | Toggle |
 |----------|-------------------|--------|
 | **TOX** | Missing COMPs are restored from `.tox` files on disk | `Toxrestoreonstart` (ON by default) |
-| **TDN** | Children are reconstructed from `.tdn` YAML files — **Roundtrip mode only** | `Tdnmode = Roundtrip` + `Tdncreateonstart` |
+| **TDXN** | Children are reconstructed from `.tdxn` YAML files — **Roundtrip mode only** | `Tdnmode = Roundtrip` + `Tdncreateonstart` |
 | **DAT** | Synced from external files via TouchDesigner's native `file` parameter | Always active |
 
-In **Roundtrip** mode the `.toe` is kept small (children are stripped on save) and rebuilt from `.tdn` on open, so the files on disk are the source of truth. In **Export-on-Save** mode the `.toe` keeps a complete copy of every COMP, so there's nothing to reconstruct — the `.toe` is the source of truth, and `.tdn` files exist purely for git diff / MCP reads.
+In **Roundtrip** mode the `.toe` is kept small (children are stripped on save) and rebuilt from `.tdxn` on open, so the files on disk are the source of truth. In **Export-on-Save** mode the `.toe` keeps a complete copy of every COMP, so there's nothing to reconstruct — the `.toe` is the source of truth, and `.tdxn` files exist purely for git diff / MCP reads.
 
 ### Crash Recovery
 
 The restoration above covers a *clean* reopen, where your last `.toe` is on disk. A **crash** is different: TouchDesigner exits before you saved, so the `.toe` rolls back to its last save and any work since is gone from it. The **Auto-Save Checkpoints** engine (ON by default) closes that gap.
 
-A beat after the agent (or you) goes idle, Embody writes each changed TDN COMP to disk as a frame-cheap `.tdn` checkpoint — **~3-6 ms, with no full project save, no TDN strip/restore, and no frame freeze**. It also fires a synchronous pre-checkpoint just before a destructive `delete_op` inside a tracked COMP. The engine is bypassed in Perform Mode and during saves, and perf-gated so a checkpoint never lands on a hot frame. `execute_python` and `exec_op_method` run arbitrary code, so neither can name the COMP it touched; rather than going unwatched they arm a *coarse* checkpoint — anything already queued is written before the code runs, and the settle-drain afterwards discovers which tracked COMPs actually changed (once per burst, not once per call).
+A beat after the agent (or you) goes idle, Embody writes each changed TDXN COMP to disk as a frame-cheap `.tdxn` checkpoint — **~3-6 ms, with no full project save, no TDXN strip/restore, and no frame freeze**. It also fires a synchronous pre-checkpoint just before a destructive `delete_op` inside a tracked COMP. The engine is bypassed in Perform Mode and during saves, and perf-gated so a checkpoint never lands on a hot frame. `execute_python` and `exec_op_method` run arbitrary code, so neither can name the COMP it touched; rather than going unwatched they arm a *coarse* checkpoint — anything already queued is written before the code runs, and the settle-drain afterwards discovers which tracked COMPs actually changed (once per burst, not once per call).
 
-On the next open after a crash, recovery runs even in Export-on-Save mode: any TDN COMP that has a `.tdn` file and a row in `externalizations.tsv` but is **missing from the recovered `.toe`** is rebuilt from its `.tdn`. This works because `externalizations.tsv` is a `syncfile` DAT, so checkpoint rows reach disk within a frame *without* a project save. Nested TDN children rebuild with their own content (no empty shells), and a COMP you deleted is not resurrected (its tracking row is purged on delete).
+On the next open after a crash, recovery runs even in Export-on-Save mode: any TDXN COMP that has a `.tdxn` file and a row in `externalizations.tsv` but is **missing from the recovered `.toe`** is rebuilt from its `.tdxn`. This works because `externalizations.tsv` is a `syncfile` DAT, so checkpoint rows reach disk within a frame *without* a project save. Nested TDXN children rebuild with their own content (no empty shells), and a COMP you deleted is not resurrected (its tracking row is purged on delete).
 
-So with auto-save on, a crash costs you at most the handful of operations since the last idle settle — not the whole session. The toggle and a read-only status readout live on the Embody COMP's TDN page; see [Configuration](configuration.md#tdn).
+So with auto-save on, a crash costs you at most the handful of operations since the last idle settle — not the whole session. The toggle and a read-only status readout live on the Embody COMP's TDXN page; see [Configuration](configuration.md#tdxn).
 
 ## Export Portable Tox
 
@@ -340,9 +345,9 @@ Both conditions matter: hooks alone would be too eager, because third-party comp
 - Nested releasable components release independently — their own `.tox` in addition to shipping inside any ancestor's artifact.
 - Don't call it from inside a release hook (nested exports run with hooks suppressed); export an untracked component explicitly with `ExportPortableTox` when needed.
 
-## Palette Handling During TDN Export
+## Palette Handling During TDXN Export
 
-When a TDN export encounters a TD palette COMP (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`), Embody consults the `Tdnpalettehandling` parameter on the TDN page to decide how to handle it:
+When a TDXN export encounters a TD palette COMP (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`), Embody consults the `Tdnpalettehandling` parameter on the TDXN page to decide how to handle it:
 
 - **Ask** (default): Prompts with four buttons on first encounter of each palette COMP.
     - *Black Box* — this COMP: reference only, skip children. Decision stored on the COMP via `comp.store('_tdn_palette_handling', 'blackbox')`.
@@ -354,7 +359,7 @@ When a TDN export encounters a TD palette COMP (e.g. `abletonLink`, Widget compo
 
 Per-COMP stored decisions take precedence over the project-wide par, so you can mix (most COMPs auto-use the par value; specific COMPs can override). To reset a stored decision, call `op('/path/to/palette_comp').unstore('_tdn_palette_handling')`.
 
-Detection details and the shipped palette catalog are documented in [TDN Palette Clones](../tdn/specification.md#palette-clones).
+Detection details and the shipped palette catalog are documented in [TDXN Palette Clones](../tdn/specification.md#palette-clones).
 
 ## Resetting
 

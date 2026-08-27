@@ -1110,7 +1110,7 @@ class TestTransientParScrub(EmbodyTestCase):
 
     def test_tdn_export_records_resting_definition_ships(self):
         comp = self._make_scrub_comp()
-        pages = self.embody.ext.TDN._exportCustomPars(comp)
+        pages = self.embody.ext.TDXN._exportCustomPars(comp)
         defs = {d['name']: d for d in pages.get('Info', [])}
         self.assertIn('Teststatus', defs,
                       'the definition (style/label/help) must still ship')
@@ -1126,7 +1126,7 @@ class TestTransientParScrub(EmbodyTestCase):
         the same; the two consumers must agree)."""
         comp = self._make_scrub_comp()
         comp.par.Teststatus.expr = "'live-' + 'value'"
-        pages = self.embody.ext.TDN._exportCustomPars(comp)
+        pages = self.embody.ext.TDXN._exportCustomPars(comp)
         defs = {d['name']: d for d in pages.get('Info', [])}
         value = defs['Teststatus'].get('value')
         self.assertTrue(
@@ -1143,7 +1143,7 @@ class TestTransientParScrub(EmbodyTestCase):
         patched[self._SHORTCUT] = frozenset({'Stampval'})
         self._cls._TDN_VALUE_OMIT_PARS = patched
 
-        pages = self.embody.ext.TDN._exportCustomPars(comp)
+        pages = self.embody.ext.TDXN._exportCustomPars(comp)
         defs = {d['name']: d for d in pages.get('Info', [])}
         self.assertIn('Stampval', defs,
                       'the omit-name definition must still ship')
@@ -1155,7 +1155,7 @@ class TestTransientParScrub(EmbodyTestCase):
         comp = self.sandbox.create(baseCOMP, 'rht_user_status')
         page = comp.appendCustomPage('Info')
         page.appendStr('Status')[0].val = 'user-authored'
-        pages = self.embody.ext.TDN._exportCustomPars(comp)
+        pages = self.embody.ext.TDXN._exportCustomPars(comp)
         defs = {d['name']: d for d in pages.get('Info', [])}
         self.assertEqual(
             defs['Status'].get('value'), 'user-authored',
@@ -1166,7 +1166,7 @@ class TestTransientParScrub(EmbodyTestCase):
         comp = self.sandbox.create(baseCOMP, 'rht_user_about')
         page = comp.appendCustomPage('About')
         page.appendStr('Version')[0].val = '1.0'
-        pages = self.embody.ext.TDN._exportCustomPars(comp)
+        pages = self.embody.ext.TDXN._exportCustomPars(comp)
         self.assertIn(
             'About', pages,
             'a user comp About page must survive -- only a page that is '
@@ -1177,7 +1177,7 @@ class TestTransientParScrub(EmbodyTestCase):
         record restings for registered pars, KEEP the About page
         definitions (they are the diffable record), and omit only the
         churning stamp values."""
-        pages = self.embody.ext.TDN._exportCustomPars(self.embody)
+        pages = self.embody.ext.TDXN._exportCustomPars(self.embody)
         self.assertIn(
             'About', pages,
             "the Embody About page's definitions belong in the .tdn")
@@ -1212,7 +1212,7 @@ class TestTransientParScrub(EmbodyTestCase):
         # Pre-check WITHOUT registration: the unfiltered export must carry
         # the session values -- proves the filtered assertion below cannot
         # pass vacuously (panel finding).
-        data = self.embody.ext.TDN._exportBuiltinSequences(comp)
+        data = self.embody.ext.TDXN._exportBuiltinSequences(comp)
         self.assertTrue(
             any(b for b in data.get('Rows', [])),
             'precondition: unregistered export must include block values')
@@ -1222,7 +1222,7 @@ class TestTransientParScrub(EmbodyTestCase):
                                    'Rows': None}
         self._cls._TRANSIENT_STATUS_PARS = patched
 
-        data = self.embody.ext.TDN._exportBuiltinSequences(comp)
+        data = self.embody.ext.TDXN._exportBuiltinSequences(comp)
         self.assertEqual(
             data.get('Rows'), [{}, {}, {}],
             'a registered sequence at a NON-default count must export the '
@@ -1254,7 +1254,7 @@ class TestTransientParScrub(EmbodyTestCase):
                                    'Cols': None}
         self._cls._TRANSIENT_STATUS_PARS = patched
 
-        data = self.embody.ext.TDN._exportBuiltinSequences(comp)
+        data = self.embody.ext.TDXN._exportBuiltinSequences(comp)
         self.assertNotIn(
             'Cols', data,
             "a registered sequence at the DEFAULT count ships nothing -- "

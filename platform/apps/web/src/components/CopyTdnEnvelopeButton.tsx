@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { buildEmbodyEnvelope } from "../lib/tdnEnvelope";
 
 const COPY_RESET_MS = 1500;
-const LABEL = "copy TDN for TouchDesigner";
+const LABEL = "copy TDXN for TouchDesigner";
 
 interface Props {
   tdn: Record<string, unknown>;

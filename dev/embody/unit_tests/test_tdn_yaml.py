@@ -62,7 +62,7 @@ class TestTDNYaml(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.tdn = self.embody.ext.TDN
+        self.tdn = self.embody.ext.TDXN
 
     # =================================================================
     # Round-trip + determinism on the real gallery specimens

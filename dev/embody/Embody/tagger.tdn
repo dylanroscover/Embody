@@ -1,10 +1,10 @@
-format: tdn
+format: tdxn
 version: '2.0'
-build: 30
-generator: Embody/6.0.276
+build: 31
+generator: Embody/6.1.0
 td_build: 099.2025.33070
-source_file: Embody-6.276.toe
-exported_at: '2026-08-24T18:11:10Z'
+source_file: Embody-6.282.toe
+exported_at: '2026-08-27T05:36:30Z'
 network_path: /embody/Embody/tagger
 options:
   include_dat_content: false
@@ -246,7 +246,7 @@ operators:
 - name: button2
   type: buttonCOMP
   parameters:
-    label: ×  Remove tdn
+    label: ×  Remove tdxn
     colorr: 0.2
     colorg: =parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05
     colorb: 0.2
@@ -296,7 +296,7 @@ operators:
 - name: btn_omit
   type: buttonCOMP
   parameters:
-    label: ◇  Exclude from tdn
+    label: ◇  Exclude from tdxn
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
@@ -343,7 +343,7 @@ operators:
 - name: btn_save
   type: buttonCOMP
   parameters:
-    label: ↓  Save tdn
+    label: ↓  Save tdxn
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
@@ -392,7 +392,7 @@ operators:
 - name: btn_embed
   type: buttonCOMP
   parameters:
-    label: ⊞  Embed DATs in tdn
+    label: ⊞  Embed DATs in tdxn
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
@@ -441,7 +441,7 @@ operators:
 - name: btn_reload
   type: buttonCOMP
   parameters:
-    label: ↻  Reload tdn
+    label: ↻  Reload tdxn
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
@@ -547,7 +547,7 @@ operators:
 - name: btn_restore
   type: buttonCOMP
   parameters:
-    label: Restore from tdn
+    label: Restore from tdxn
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
@@ -624,7 +624,7 @@ operators:
 - name: btn_copy_tdn
   type: buttonCOMP
   parameters:
-    label: =chr(10697) + '  Copy tdn'
+    label: =chr(10697) + '  Copy tdxn'
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
@@ -774,7 +774,7 @@ operators:
 - name: btn_paste_tdn
   type: buttonCOMP
   parameters:
-    label: =chr(10515) + '  Paste tdn'
+    label: =chr(10515) + '  Paste tdxn'
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2
@@ -835,7 +835,7 @@ operators:
 - name: btn_embed_storage
   type: buttonCOMP
   parameters:
-    label: ⊞  Embed storage in tdn  ✓
+    label: ⊞  Embed storage in tdxn  ✓
     colorr: 0.2
     colorg: 0.2
     colorb: 0.2

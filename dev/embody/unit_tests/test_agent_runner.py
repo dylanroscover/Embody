@@ -306,5 +306,5 @@ class TestAgentRunnerMachinery(EmbodyTestCase):
         It is wall-clock state; baking it into a committed .tdn would both
         churn the diff and restore a bogus 'a run is active' flag on load.
         """
-        skip = op.Embody.op('TDNExt').module.SKIP_STORAGE_KEYS
+        skip = op.Embody.op('TDXNExt').module.SKIP_STORAGE_KEYS
         self.assertIn(type(self.runner)._RUN_ACTIVE_KEY, skip)

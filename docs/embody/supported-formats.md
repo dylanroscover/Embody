@@ -2,7 +2,7 @@
 
 ## COMPs
 
-All COMPs except `engine`, `time`, and `annotate` can be externalized as `.tox` files (or `.tdn` files with the TDN strategy).
+All COMPs except `engine`, `time`, and `annotate` can be externalized as `.tox` files (or `.tdxn` files with the TDXN strategy).
 
 ## DATs
 
@@ -24,10 +24,12 @@ The following DAT types can be externalized:
 
 | Family | Formats |
 |--------|---------|
-| COMPs | `.tox`, `.tdn` |
+| COMPs | `.tox`, `.tdxn` |
 | DATs | `.py`, `.json`, `.xml`, `.html`, `.glsl`, `.frag`, `.vert`, `.txt`, `.md`, `.rtf`, `.csv`, `.tsv`, `.dat` |
 
-`.tdn` is a YAML document as of v2.0 (a strict JSON superset; legacy JSON `.tdn` still import). See the [TDN Specification](../tdn/specification.md).
+`.tdxn` is a YAML document as of v2.0 (a strict JSON superset; legacy JSON `.tdn` files still import). See the [TDXN Specification](../tdn/specification.md).
+
+Networks externalized before Embody 6.1 carry the `.tdn` extension. Both are read, written, and round-tripped indefinitely -- Embody keeps writing whichever extension a COMP already uses, and only a *new* externalization mints `.tdxn`, so a project can hold a mix. In `externalizations.tsv` the `strategy` column reads `tdn` for both; that token is an internal identifier and is deliberately unchanged by the rename.
 
 ## Excluded Operators
 

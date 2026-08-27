@@ -107,8 +107,13 @@ class TestMCPExternalization(EmbodyTestCase):
         self.assertTrue(result.get('success'),
             f"externalize failed: {result.get('error')}")
         reported = str(result.get('file', ''))
-        self.assertTrue(reported.endswith('.tdn'),
-            f"tdn externalization must report a .tdn file, got {reported!r}")
+        # A fresh externalization mints the current suffix (.tdxn as of
+        # v6.1.0). The regression this guards is reporting a bogus .tox,
+        # so assert the network-file suffix, never .tox.
+        self.assertTrue(reported.endswith('.tdxn'),
+            f"tdn externalization must report a .tdxn file, got {reported!r}")
+        self.assertFalse(reported.endswith('.tox'),
+            f'must not report a .tox for a TDN externalization: {reported!r}')
         self.envoy._remove_externalization_tag(op_path=comp.path)
         self._deleteExportedFile(reported)
 

@@ -4,7 +4,7 @@ Module DAT (mod.envoy_read) called by EnvoyExt on the MAIN THREAD only.
 Holds the private implementations behind the read-only / introspection MCP
 tools (get_op, query_network, connections, flags/position, network layout,
 annotations, errors, performance, TD/class/module introspection, DAT
-content, TOP capture, logs, externalization status, TDN read/export/diff,
+content, TOP capture, logs, externalization status, TDXN read/export/diff,
 exec_op_method). EnvoyExt keeps a thin delegating stub for each -- these
 functions carry the real bodies. The get_docs family is NOT here: it runs
 on the WORKER thread, where mod.* is unavailable, so it lives on the
@@ -61,7 +61,7 @@ def get_op(ext, op_path: str, include_defaults: bool = False) -> dict:
         'valid': target.valid,
     }
 
-    # Sequence collapse. Delegates to TDNExt's exporter rather than
+    # Sequence collapse. Delegates to TDXNExt's exporter rather than
     # re-deriving block grouping here -- that code carries hard-won gotchas
     # (uncooked-POP discovery, the list(target.seq) ordering contract,
     # sequenceBlock wrapper identity). scrub_transient=False because this is
@@ -71,7 +71,7 @@ def get_op(ext, op_path: str, include_defaults: bool = False) -> dict:
     sequences = {}
     if not include_defaults:
         try:
-            tdn = getattr(ext.ownerComp.ext, 'TDN', None)
+            tdn = getattr(ext.ownerComp.ext, 'TDXN', None)
             if tdn is not None:
                 sequences = tdn._exportBuiltinSequences(
                     target, scrub_transient=False) or {}
@@ -1875,7 +1875,7 @@ def get_externalizations(ext) -> dict:
                 'dirty': op.Embody.ext.Embody.DirtyState(
                     table[row, 'path'].val),
                 'build': table[row, 'build'].val,
-                # Hint so an agent seeing a dirty TDN row knows the tool
+                # Hint so an agent seeing a dirty TDXN row knows the tool
                 # that explains exactly what changed (live vs on-disk).
                 'recommended_tool': 'diff_tdn' if strategy == 'tdn' else None,
             })
@@ -1924,7 +1924,7 @@ def get_externalization_status(ext, op_path: str) -> dict:
                     'dirty': op.Embody.ext.Embody.DirtyState(op_path),
                     'build': table[row, 'build'].val,
                     'touch_build': table[row, 'touch_build'].val,
-                    # Hint so an agent seeing a dirty TDN row knows the
+                    # Hint so an agent seeing a dirty TDXN row knows the
                     # tool that explains what changed (live vs on-disk).
                     'recommended_tool': 'diff_tdn' if strategy == 'tdn' else None,
                 }
@@ -1939,13 +1939,13 @@ def get_externalization_status(ext, op_path: str) -> dict:
 
 def export_network(ext, root_path='/', include_dat_content=True,
                    output_file=None, max_depth=None, embed_all=False):
-    """Delegate to TDN extension for network export."""
-    if not getattr(ext.ownerComp.ext, 'TDN', None):
-        return {'error': 'TDN extension not loaded on Embody COMP'}
-    # Protect .tdn files belonging to other tracked TDN COMPs
+    """Delegate to TDXN extension for network export."""
+    if not getattr(ext.ownerComp.ext, 'TDXN', None):
+        return {'error': 'TDXN extension not loaded on Embody COMP'}
+    # Protect .tdn files belonging to other tracked TDXN COMPs
     protected = ext.ownerComp.ext.Embody._getAllTrackedTDNFiles(
         exclude_path=root_path) if output_file else None
-    result = ext.ownerComp.ext.TDN.ExportNetwork(
+    result = ext.ownerComp.ext.TDXN.ExportNetwork(
         root_path=root_path,
         include_dat_content=include_dat_content,
         output_file=output_file,
@@ -1972,15 +1972,15 @@ def export_network(ext, root_path='/', include_dat_content=True,
 
 def read_tdn(ext, comp_path='/', include_dat_content=None,
              max_depth=None, embed_all=False):
-    """Read a network subtree as a TDN dict (in-memory, no disk write).
+    """Read a network subtree as a TDXN dict (in-memory, no disk write).
 
-    Thin delegate over TDN.ExportNetwork(output_file=None). Kept as a
+    Thin delegate over TDXN.ExportNetwork(output_file=None). Kept as a
     separate MCP tool so LLM-facing docs can emphasize the token-cost
     win vs get_op/query_network walks.
     """
-    if not getattr(ext.ownerComp.ext, 'TDN', None):
-        return {'error': 'TDN extension not loaded on Embody COMP'}
-    return ext.ownerComp.ext.TDN.ExportNetwork(
+    if not getattr(ext.ownerComp.ext, 'TDXN', None):
+        return {'error': 'TDXN extension not loaded on Embody COMP'}
+    return ext.ownerComp.ext.TDXN.ExportNetwork(
         root_path=comp_path,
         include_dat_content=include_dat_content,
         output_file=None,
@@ -1990,7 +1990,7 @@ def read_tdn(ext, comp_path='/', include_dat_content=None,
 
 
 def resolve_diff_target(ext, target):
-    """Resolve a diff_tdn target to a TDN COMP path.
+    """Resolve a diff_tdn target to a TDXN COMP path.
 
     Accepts either a COMP path directly, or a .tdn file reference (absolute
     path, repo-relative path, or bare filename like "tooltip.tdn"), which is
@@ -2033,34 +2033,34 @@ def resolve_diff_target(ext, target):
     comp_path, strat = matches[0]
     if strat != 'tdn':
         return None, ('%s is externalized as %s, not tdn -- diff_tdn only '
-                      'applies to TDN-strategy COMPs.' % (comp_path, strat))
+                      'applies to TDXN-strategy COMPs.' % (comp_path, strat))
     return comp_path, None
 
 
 def diff_tdn(ext, target='', max_changed_ops=200, max_bytes=60000):
-    """Show what is UNSAVED in TDN-externalized COMPs: live network(s) vs
+    """Show what is UNSAVED in TDXN-externalized COMPs: live network(s) vs
     the on-disk .tdn(s) -- the view git cannot provide.
 
     `target` empty (or '/', 'project', '.', '*') -> PROJECT-WIDE: every live
-    TDN COMP, summarized (which changed + counts). Otherwise `target` is a
+    TDXN COMP, summarized (which changed + counts). Otherwise `target` is a
     COMP path OR a .tdn file path/bare filename (resolved via the
     externalizations table) -> that one COMP in full detail.
 
     For committed/history diffs use git (the .tdn git diff driver keeps
-    those clean). Thin delegate to TDN.DiffLiveVsDisk / DiffAllLiveVsDisk.
+    those clean). Thin delegate to TDXN.DiffLiveVsDisk / DiffAllLiveVsDisk.
     Read-only, non-interactive, pull-only.
     """
-    if not getattr(ext.ownerComp.ext, 'TDN', None):
-        return {'error': 'TDN extension not loaded on Embody COMP'}
+    if not getattr(ext.ownerComp.ext, 'TDXN', None):
+        return {'error': 'TDXN extension not loaded on Embody COMP'}
     # Empty / whole-project target -> project-wide summary. Per-COMP detail
     # uses DiffAllLiveVsDisk's own (smaller) caps; the handler's
     # max_changed_ops governs the single-COMP path below.
     if not target or str(target).strip() in ('', '/', 'project', '.', '*'):
-        return ext.ownerComp.ext.TDN.DiffAllLiveVsDisk(max_bytes=max_bytes)
+        return ext.ownerComp.ext.TDXN.DiffAllLiveVsDisk(max_bytes=max_bytes)
     comp_path, err = resolve_diff_target(ext, target)
     if err:
         return {'error': err}
-    return ext.ownerComp.ext.TDN.DiffLiveVsDisk(
+    return ext.ownerComp.ext.TDXN.DiffLiveVsDisk(
         comp_path=comp_path,
         max_changed_ops=max_changed_ops, max_bytes=max_bytes)
 

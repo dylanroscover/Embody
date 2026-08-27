@@ -249,7 +249,7 @@ async function readVideoUpload(
 // metadata. A dedicated single-column UPDATE (setSpecimenVideoKey) is used
 // instead of updateSpecimenMetadata so a cover-video attach/remove never re-runs
 // the FTS re-sync -- which would otherwise risk wiping the search dat_text when
-// the TDN blob failed to reload. `patch` is either { videoKey } (attach/replace)
+// the TDXN blob failed to reload. `patch` is either { videoKey } (attach/replace)
 // or { clearVideo: true } (remove).
 async function applyVideoKey(
   specimen: SpecimenEditData,

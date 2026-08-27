@@ -16,5 +16,5 @@ Before any MCP tool call, verify TD is running and reachable:
 Connectivity self-heals at two independent layers: the bridge reconciler reconnects the client-side STDIO bridge to a live Envoy, and the TD-side Envoy liveness watchdog revives an enabled-but-down server socket without restarting TD.
 
 - If `connected:false` while `td_process_alive:true`, WAIT ~10s and re-check `get_td_status`; do NOT `restart_td`, relaunch TD, or toggle Envoy unless it genuinely has not recovered after ~15s.
-- Editing an extension `.py` (EnvoyExt / EmbodyExt / TDNExt) does NOT need a restart; source DATs have `syncfile=True` and reinit on change.
+- Editing an extension `.py` (EnvoyExt / EmbodyExt / TDXNExt) does NOT need a restart; source DATs have `syncfile=True` and reinit on change.
 - Connectivity broken beyond ~15s of self-heal waiting -> MUST load /td-recovery before manual intervention.

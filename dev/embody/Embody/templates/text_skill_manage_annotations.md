@@ -51,16 +51,16 @@ To create an annotation that encloses a group of operators:
 
 **Delete via `delete_op`, never via raw `.destroy()` in `execute_python`.**
 `delete_op` resolves utility annotations, purges any tracking, and arms an
-auto-save checkpoint that re-exports the parent TDN COMP's `.tdn` without
+auto-save checkpoint that re-exports the parent TDXN COMP's `.tdxn` without
 the annotation -- the deletion is durable. A raw `.destroy()` leaves the
-stale `annotations:` entry in the parent's `.tdn` on disk, and the next
+stale `annotations:` entry in the parent's `.tdxn` on disk, and the next
 reimport of that COMP (import_network, manager Reload, or cold open)
 resurrects the annotation with its pre-delete text.
 
 ## `annotateCOMP` Quirks
 
 - **`utility` is `True` for every annotation** -- TD UI-drawn ones are born
-  that way, `create_annotation` sets it, and TDN import applies it on every
+  that way, `create_annotation` sets it, and TDXN import applies it on every
   annotation it recreates. (A bare Python `parent.create('annotateCOMP')`
   is `utility=False` -- set `ann.utility = True` immediately to match; a
   non-utility annotation is an ordinary COMP subtree that enumeration
@@ -78,7 +78,7 @@ resurrects the annotation with its pre-delete text.
   `query_network`/`find_children` -- with the default `False`, annotations
   are invisible in those listings.
 - **Annotations are never externalized per-op** -- they round-trip through
-  the parent TDN COMP's semantic `annotations:` section. `externalize_op`
+  the parent TDXN COMP's semantic `annotations:` section. `externalize_op`
   refuses them, and tagging sweeps skip them and their internals (the
   widget internals are TD-managed stock content cloned from TDAnnotate).
 - `.type` returns `'annotate'` (not `'annotateCOMP'`)

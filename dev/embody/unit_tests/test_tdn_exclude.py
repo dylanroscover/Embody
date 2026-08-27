@@ -31,8 +31,8 @@ class TestTDNExclude(EmbodyTestCase):
 
     @property
     def tdn_ext(self):
-        """Resolve TDNExt live on every access (never cache - reinit-safe)."""
-        return self.embody.ext.TDN
+        """Resolve TDXNExt live on every access (never cache - reinit-safe)."""
+        return self.embody.ext.TDXN
 
     @property
     def exclude_tag(self):

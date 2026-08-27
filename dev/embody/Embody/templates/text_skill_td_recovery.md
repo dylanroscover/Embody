@@ -31,7 +31,7 @@ This is verified, not aspirational: killing the live listener socket self-heals 
 Most connectivity issues self-heal (see the two layers above). Before any manual action, read `get_td_status` and distinguish the cause:
 
 - **`connected:false` while `td_process_alive:true`** (Envoy unreachable but TD still running) is the dropped-socket zombie. The TD-side watchdog self-heals it in ~6-8s. **WAIT ~10s and re-check `get_td_status`** (or probe the port directly: `python3 -c "import socket; socket.create_connection(('127.0.0.1',9870),0.4)"`). **Do NOT `restart_td`, relaunch TD, or toggle Envoy for this** -- it defeats the watchdog and is almost never necessary. Only escalate if it genuinely has not recovered after ~15s.
-- Editing an extension `.py` (EnvoyExt / EmbodyExt / TDNExt) does NOT need a restart either -- the source DATs have `syncfile=True` and reinit on change, so edits go live on their own.
+- Editing an extension `.py` (EnvoyExt / EmbodyExt / TDXNExt) does NOT need a restart either -- the source DATs have `syncfile=True` and reinit on change, so edits go live on their own.
 
 Manual recovery below is only for when TD is actually down or the bridge process itself is broken:
 

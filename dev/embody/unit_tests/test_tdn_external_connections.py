@@ -20,11 +20,11 @@ runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
-class TestTDNExternalConnections(EmbodyTestCase):
+class TestTDXNExternalConnections(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.tdn = self.embody.ext.TDN
+		self.tdn = self.embody.ext.TDXN
 
 	# --------------------------------------------------------------
 	# Helpers

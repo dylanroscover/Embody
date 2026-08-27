@@ -1,6 +1,6 @@
 import { type Page } from "@playwright/test";
 
-// The contribute/edit TDN field is a CodeMirror 6 editor (TdnYamlEditor) backed
+// The contribute/edit TDXN field is a CodeMirror 6 editor (TdnYamlEditor) backed
 // by a HIDDEN <textarea name="tdn"> (kept only for the form's FormData contract).
 // You therefore cannot `.fill('textarea[name="tdn"]')` -- the textarea is
 // display:none, so Playwright's fill() never sees an editable element and times

@@ -10,7 +10,7 @@ type TdnDict = Record<string, unknown>;
 
 const FAMILIES = ["TOP", "CHOP", "SOP", "DAT", "MAT", "POP", "COMP"] as const;
 
-// A network's child operators. TDN names them `operators` at the document root
+// A network's child operators. TDXN names them `operators` at the document root
 // and `children` inside a nested COMP -- accept either (and both, defensively),
 // so the same walk works at any depth. Order (children before operators) matches
 // the original flatten recursion so the dense view stays byte-identical.
@@ -19,7 +19,7 @@ function networkOperators(dict: TdnDict): TdnDict[] {
 }
 
 /**
- * Descend the raw TDN tree to the sub-network at `path` (each segment a COMP
+ * Descend the raw TDXN tree to the sub-network at `path` (each segment a COMP
  * name); the empty path is the document root. Returns null if a segment names no
  * operator at its level. The returned dict is the network whose operators the
  * viewer should draw -- feed it straight to parseTDNLevel via the path.
@@ -56,7 +56,7 @@ export function parseTDN(tdn: TdnDict): NormalizedGraph {
 }
 
 // Per-type default node sizes from the document's `type_defaults`. An operator
-// that omits its own `size` inherits the default for its type (the TDN exporter
+// that omits its own `size` inherits the default for its type (the TDXN exporter
 // writes size per-op only when it differs), so we resolve it here for a faithful
 // 1:1 layout instead of falling back to a guessed tile size.
 function typeDefaultSizes(tdn: TdnDict): Map<string, [number, number]> {

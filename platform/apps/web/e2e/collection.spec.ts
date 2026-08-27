@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 // Read path: the Collection is the public core of the site. These assert the
-// seeded first-party specimens render and their TDN blobs are served.
+// seeded first-party specimens render and their TDXN blobs are served.
 const SPECIMENS = [
   "murmuration",
   "reaction-diffusion",
@@ -70,7 +70,7 @@ test("cover network graph fits the cover (no min-height clipping)", async ({ pag
   expect(Math.abs(paneH - coverH)).toBeLessThanOrEqual(2);
 });
 
-test("specimen page renders + TDN blob downloads", async ({ page, request }) => {
+test("specimen page renders + TDXN blob downloads", async ({ page, request }) => {
   await page.goto("/c/murmuration");
   await expect(page.getByRole("heading", { level: 1, name: /murmuration/i })).toBeVisible();
 

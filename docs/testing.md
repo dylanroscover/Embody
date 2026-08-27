@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **131 test suites** and **4,105 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **131 test suites** and **4,105 test methods** covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -72,7 +72,7 @@ AI-client connectivity tier, listed separately under
 |-------|-------|----------|
 | `test_startup_progress` | 110 | The status readout's signals: the state each subsystem's status string maps to (including the idle states that used to read as work in progress), the age an auto-save stamp becomes, the elapsed clock a wedged step must show, and the rows `viz_status` renders -- including the predicate that decides whether the panel may re-arm a tick at all, and the mutation guard over the removed publish machinery. Pure module, so it also runs under plain pytest on the CI matrix |
 | `test_duplicate_handling` | 43 | Duplicate / clone / replicant resolution |
-| `test_custom_parameters` | 32 | Custom parameter behavior (Folder, Disable/Enable, Update, TDN controls, Logs, Envoy) |
+| `test_custom_parameters` | 32 | Custom parameter behavior (Folder, Disable/Enable, Update, TDXN controls, Logs, Envoy) |
 | `test_tag_management` | 29 | Tagging operators for externalization |
 | `test_rename_move_lifecycle` | 26 | Rename and move tracking |
 | `test_crud_operators` | 21 | Create, read, update, delete operations |
@@ -86,7 +86,7 @@ AI-client connectivity tier, listed separately under
 | `test_delete_cleanup` | 17 | Deletion and file cleanup |
 | `test_auto_externalize` | 16 | Auto-externalization flow and eligible operator handling |
 | `test_shortcuts` | 48 | Editable keyboard shortcuts: combo normalization, dispatch, TD reserved-list parsing, duplicate blocking, recorder state machine, parexec handlers, persistence whitelist |
-| `test_strategy_handlers` | 22 | TOX/TDN strategy switch, remove, DAT convert |
+| `test_strategy_handlers` | 22 | TOX/TDXN strategy switch, remove, DAT convert |
 | `test_issue21_safe_cell` | 14 | Safe table-cell handling |
 | `test_glsl_externalize` | 11 | GLSL shader auto-externalization |
 | `test_setup_wizard` | 21 | Setup Wizard flow and first-run prompts |
@@ -105,7 +105,7 @@ AI-client connectivity tier, listed separately under
 | `test_annotation_guards` | 20 | Annotations and their internals are never tagged, externalized, tracked, or enumerated as per-op boundaries |
 | `test_component_presentation` | 3 | Shipped-component presentation invariants |
 | `test_verify_upgrade` | 3 | Upgrade-path validation (the removed Skip/Re-scan dialog) |
-| `test_annotate_continuity` | 7 | Continuity sweep vs utility `annotateCOMP` rows: bare `op()` cannot resolve a utility annotate, so a legacy row at one read as a vanished operator and had its row + `.tdn` deleted on every save |
+| `test_annotate_continuity` | 7 | Continuity sweep vs utility `annotateCOMP` rows: bare `op()` cannot resolve a utility annotate, so a legacy row at one read as a vanished operator and had its row + `.tdxn` deleted on every save |
 
 ### MCP Tools (20 suites, 327 tests)
 
@@ -132,29 +132,29 @@ AI-client connectivity tier, listed separately under
 | `test_envoy_viz_gates` | 43 | Issue-57 viz activation gates in `envoy_viz` |
 | `test_envoy_tool_schema` | 8 | Tool-wrapper/handler signature conformance across every registered MCP tool (forwarded-but-unaccepted, required-but-unforwarded, advertised-but-ignored, duplicate dispatch). Static AST analysis -- invokes no tools |
 
-### TDN Format (20 suites, 695 tests)
+### TDXN Format (20 suites, 695 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_tdn_reconstruction` | 209 | Reconstruction round-trip fidelity + script-error reporting in the rebuild report |
-| `test_tdn_file_io` | 92 | TDN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
-| `test_tdn_helpers` | 67 | TDN serialization utility functions |
+| `test_tdn_file_io` | 92 | TDXN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
+| `test_tdn_helpers` | 67 | TDXN serialization utility functions |
 | `test_tdn_export_import` | 48 | Network export/import + storage round-trip |
 | `test_tdn_crash_safety` | 35 | Atomic writes, backup rotation, validation |
 | `test_tdn_sequences` | 27 | Parameter / operator sequence round-trip |
-| `test_tdn_diff_engine` | 25 | TDN structural diff engine |
+| `test_tdn_diff_engine` | 25 | TDXN structural diff engine |
 | `test_tdn_palette_catalog` | 34 | Palette-clone detection and handling |
 | `test_tdn_exclude` | 21 | `tdn_exclude` tag (app-managed subtree invisibility) |
 | `test_tdn_stability_hardening` | 21 | Import validation, DAT editability capture, flag defaults, stale cleanup, orphan shell recovery |
 | `test_tdn_mode` | 15 | Tdnmode gating (off / export / full) |
 | `test_dat_restoration` | 20 | DAT restoration from disk on startup |
 | `test_tdn_safety_guards` | 14 | At-risk storage / callback-DAT protection |
-| `test_tdn_yaml` | 14 | TDN v2.0 YAML emitter / parser |
+| `test_tdn_yaml` | 14 | TDXN v2.0 YAML emitter / parser |
 | `test_tdn_diff` | 11 | `diff_tdn` tool (live-vs-disk, project-wide) |
 | `test_tdn_fingerprint` | 15 | Param-aware dirty detection (fingerprint) |
-| `test_tdn_annotation_export` | 10 | Annotation-only `.tdn` export (annotateCOMP not double-captured) |
+| `test_tdn_annotation_export` | 10 | Annotation-only `.tdxn` export (annotateCOMP not double-captured) |
 | `test_tdn_external_connections` | 6 | External wire capture/restore across strip |
-| `test_tdn_export_progress` | 6 | Chunked TDN export progress dialog + cancellation (and that it leaves no transient state behind) |
+| `test_tdn_export_progress` | 6 | Chunked TDXN export progress dialog + cancellation (and that it leaves no transient state behind) |
 | `test_tdn_roundtrip_invariant` | 6 | Writer/reader contract: the exporter must never emit a document its own importer rejects (no empty sequence lists, no sequence silently dropped from an uncooked POP) |
 
 ### Community & Collection (6 suites, 123 tests)

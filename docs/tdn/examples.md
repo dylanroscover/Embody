@@ -2,7 +2,7 @@
 
 ## Complete Example
 
-A realistic `.tdn` file demonstrating all major features:
+A realistic `.tdxn` file demonstrating all major features:
 
 ```yaml
 format: tdn
@@ -126,7 +126,7 @@ Short numeric vectors like `[300, 0]` and `[0.2, 0.4, 0.8]` are inlined with YAM
 
 ## Minimal Example
 
-The simplest possible `.tdn` file — a single operator with no custom settings:
+The simplest possible `.tdxn` file — a single operator with no custom settings:
 
 ```yaml
 format: tdn

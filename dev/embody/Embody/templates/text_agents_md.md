@@ -4,7 +4,7 @@
 
 This project uses **[Embody](https://github.com/dylanroscover/Embody)** (TouchDesigner externalization) and **Envoy** (MCP server for AI coding tools).
 
-- Embody externalizes TouchDesigner operators to version-controlled files (`.py`, `.tox`, `.tdn`, `.json`, etc.)
+- Embody externalizes TouchDesigner operators to version-controlled files (`.py`, `.tox`, `.tdxn`, `.json`, etc.)
 - Envoy provides MCP tools for AI assistants to inspect and modify the live TD network
 - Use the `Aiclient` parameter on the Embody COMP to regenerate these files for your AI tool
 
@@ -14,8 +14,8 @@ This project uses **[Embody](https://github.com/dylanroscover/Embody)** (TouchDe
 
 ## Critical Rules
 
-1. **Prefer `.tdn` files for reading TDN-externalized COMPs** — `.tdn` files are YAML on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) to identify TDN-strategy COMPs. To edit: modify the `.tdn` file on disk, then call `import_network` via MCP with the COMP path, the parsed network, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDN operators.
-2. **Use Envoy MCP tools for live TD state and non-TDN operators** — never say "I can't access that binary file." For operators not externalized as TDN, use MCP tools to inspect and modify them.
+1. **Prefer the externalized network file for reading TDXN-externalized COMPs** — these are YAML on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. **Never glob for an extension:** Embody writes `.tdxn`, and keeps writing `.tdn` for any COMP externalized before Embody 6.1 — both are read and round-tripped forever, so a project can hold a mix. Let `externalizations.tsv` or `get_externalizations` name the exact file instead. **The strategy column value is `tdn` for all of them, unchanged by the rename** — searching for a `tdxn` strategy finds nothing and will make you wrongly conclude the project has no externalized networks. To edit: modify the file on disk, then call `import_network` via MCP with the COMP path, the parsed network, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDXN operators.
+2. **Use Envoy MCP tools for live TD state and non-TDXN operators** — never say "I can't access that binary file." For operators not externalized as TDXN, use MCP tools to inspect and modify them.
 3. **Do NOT assume network paths** — use `query_network` on `/` to discover the actual root structure.
 4. **Default new COMPs to Embody's container** — `execute_python` with `result = op.Embody.parent().path` returns the same home every run. Build in `ui.panes.current.owner.path` only when you have deliberately navigated into a content network, and never treat the bare root `/` as that home.
 5. **Never edit `externalizations.tsv` directly** — managed exclusively by Embody's tracking system.
@@ -69,7 +69,7 @@ Embody/
 │   │   └── Embody/                       # Main extension source
 │   │       ├── EmbodyExt.py              # Core externalization engine
 │   │       ├── EnvoyExt.py               # MCP server extension
-│   │       └── TDNExt.py                 # TDN network format export/import
+│   │       └── TDXNExt.py                 # TDXN network format export/import
 └── release/
     └── Embody-v*.tox                     # Latest release build
 ```

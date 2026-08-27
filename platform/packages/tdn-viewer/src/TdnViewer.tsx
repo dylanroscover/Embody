@@ -26,7 +26,7 @@ import type { GraphAnnotation, GraphNode, NormalizedGraph, RGB } from "@embody/c
 import { operatorsAtLevel, parseTDN, parseTDNLevel } from "./parseTDN";
 
 /**
- * The operator a viewer click selected, with the raw TDN fields a properties
+ * The operator a viewer click selected, with the raw TDXN fields a properties
  * panel needs. Carried both to the optional `onSelect` callback and on a
  * `tdnviewer:select` DOM CustomEvent (detail) so a non-React host (an Astro
  * page) can render the panel without a serialized callback prop. `null` = the
@@ -50,7 +50,7 @@ export interface TdnSelection {
   parameters?: Record<string, unknown>;
   /** Custom parameter pages (COMPs): { pageName: [par, ...] }. */
   customPars?: Record<string, unknown>;
-  /** DAT text content (shader source, scripts, tables) when the TDN captured it,
+  /** DAT text content (shader source, scripts, tables) when the TDXN captured it,
       normalized to a single newline-joined string. Shown as a code block. */
   datContent?: string;
 }
@@ -127,7 +127,7 @@ type OperatorNodeData = {
 };
 
 // Fallback node footprint, used only when an operator (and its type default)
-// carries no size in the TDN. Real sizes come straight from the TDN for a 1:1
+// carries no size in the TDXN. Real sizes come straight from the TDXN for a 1:1
 // layout; see toFlowElements.
 const DEFAULT_W = 130;
 const DEFAULT_H = 90;
@@ -303,7 +303,7 @@ export function TdnViewer({
             : undefined;
       const customPars = raw && isPlainRecord(raw.custom_pars) ? raw.custom_pars : undefined;
       // DAT text content (a shader's GLSL, a script DAT's Python, a table). The
-      // TDN may store it as one string or an array of lines -- normalize to one.
+      // TDXN may store it as one string or an array of lines -- normalize to one.
       const rawContent = raw ? raw.dat_content : undefined;
       const datContent =
         typeof rawContent === "string"
@@ -736,7 +736,7 @@ function toFlowElements(
   }
 
   // Dock relationships -- used now only for the dock TETHER edges + the dock
-  // handle flags. Docked ops keep their REAL TDN positions (no re-layout), so
+  // handle flags. Docked ops keep their REAL TDXN positions (no re-layout), so
   // they sit exactly where TD placed them (typically a row under their host,
   // inside the host's annotation) for a faithful 1:1 view.
   const byId = new Map<string, GraphNode>(graph.nodes.map((n) => [n.id, n]));

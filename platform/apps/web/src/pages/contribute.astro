@@ -45,7 +45,7 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
     <p class="eyebrow">contribute</p>
     <h1>share a specimen</h1>
     <p class="lede">
-      paste a TDN network to share it with the Collection. every contribution is
+      paste a TDXN network to share it with the Collection. every contribution is
       scanned for capability surfaces before it goes live.
     </p>
 
@@ -193,9 +193,9 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
 
       <div class="submit-col submit-col--tdn">
       <div class="submit-field submit-field--editor">
-        <span>TDN (YAML)</span>
+        <span>TDXN (YAML)</span>
         <small class="submit-hint">
-          quick export from TouchDesigner: with <a href="https://github.com/dylanroscover/Embody/releases/latest">Embody</a> running, select the COMP you want to share and press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd>. Embody copies that COMP's whole network to your clipboard as a TDN envelope &mdash; paste it here.
+          quick export from TouchDesigner: with <a href="https://github.com/dylanroscover/Embody/releases/latest">Embody</a> running, select the COMP you want to share and press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd>. Embody copies that COMP's whole network to your clipboard as a TDXN envelope &mdash; paste it here.
         </small>
         <TdnYamlEditor
           client:load
@@ -250,7 +250,7 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
   }
 
   // Inline field errors render directly beneath the offending field (the slot is
-  // <small data-error-for="NAME">). The TDN editor shows its own format error.
+  // <small data-error-for="NAME">). The TDXN editor shows its own format error.
   function setFieldError(name, message) {
     const el = form?.querySelector(`[data-error-for="${name}"]`);
     if (!el) return;
@@ -259,9 +259,9 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
 
   // --- Readiness gate -------------------------------------------------------
   // The submit button is greyed (aria-disabled) until the title is filled AND
-  // the TDN parses to a mapping. It stays clickable on purpose: a truly
+  // the TDXN parses to a mapping. It stays clickable on purpose: a truly
   // `disabled` button fires no click, so we could never explain WHY it isn't
-  // ready. The TDN editor (a React island) validates on every edit and
+  // ready. The TDXN editor (a React island) validates on every edit and
   // broadcasts a bubbling `tdn:change` event carrying its validity -- so the
   // button never lights up on unparseable YAML and re-checks after any edit.
   function titleEl() {
@@ -442,11 +442,11 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
     const tdnRaw = String(data.get("tdn") || "").trim();
     if (!isReady()) {
       // Summarize what's missing near the button, inline the title error under
-      // the title field, and land focus on the first problem. The TDN editor
+      // the title field, and land focus on the first problem. The TDXN editor
       // shows its own format error live, so we don't duplicate it here.
       const probs = [];
       if (titleMissing()) probs.push("a title");
-      if (!tdnValid) probs.push("a valid TDN network");
+      if (!tdnValid) probs.push("a valid TDXN network");
       setFieldError("title", titleMissing() ? "add a title." : "");
       const list =
         probs.length === 1
@@ -952,7 +952,7 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
       const image = item?.getAsFile();
       if (!image) return;
       const target = event.target;
-      // Text entry includes the TDN editor: CodeMirror's paste target is a
+      // Text entry includes the TDXN editor: CodeMirror's paste target is a
       // contenteditable div, never a textarea. Rich copies (Excel, Word,
       // web pages) carry text AND an image item -- those pastes belong to
       // the editor, not the thumbnail.
@@ -1044,7 +1044,7 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
     max-width: 100%;
   }
 
-  /* Two columns: metadata fields on the left, the large live TDN editor (plus
+  /* Two columns: metadata fields on the left, the large live TDXN editor (plus
      verification + status + submit) on the right, so as much as possible sits
      above the fold. The whole form sits inside one bordered panel (matching the
      site's .pillar cards). Collapses to a single column on narrow viewports. */
@@ -1097,7 +1097,7 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
     gap: 0.35rem;
   }
 
-  /* Inline error beneath a field (title); the TDN editor renders its own. */
+  /* Inline error beneath a field (title); the TDXN editor renders its own. */
   .submit-error {
     font-size: 0.8rem;
     line-height: 1.4;
@@ -1383,7 +1383,7 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
     outline-offset: 3px;
   }
 
-  /* Help line under the TDN box: how to grab a network from TD in one shortcut. */
+  /* Help line under the TDXN box: how to grab a network from TD in one shortcut. */
   .submit-hint {
     font-size: 0.8rem;
     line-height: 1.5;

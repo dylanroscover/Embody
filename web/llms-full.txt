@@ -1,8 +1,8 @@
-# Embody + Envoy + TDN - full text for AI agents
+# Embody + Envoy + TDXN - full text for AI agents
 
 > Open-source TouchDesigner toolkit. Envoy is an MCP server (54 tools) that lets AI
 > assistants build, wire, parameterize, and debug a LIVE TouchDesigner session; Embody
-> externalizes the network to version-control-friendly text on disk; TDN is the diffable
+> externalizes the network to version-control-friendly text on disk; TDXN is the diffable
 > YAML network format that makes both possible. Free, MIT, runs entirely on the user's
 > machine. Requires TouchDesigner 2025.33070+ (Windows/macOS).
 
@@ -15,8 +15,8 @@ Sections below, in order:
   2. Envoy - Setup
   3. Envoy - Claude Code Integration
   4. Envoy - Tools Reference (the 62 MCP tools + 20 bridge meta-tools)
-  5. TDN - Specification
-  6. TDN - Import & Export
+  5. TDXN - Specification
+  6. TDXN - Import & Export
   7. AI Instructions (AGENTS.md - critical rules for operating in a TD project)
 
 
@@ -489,13 +489,13 @@ Envoy exposes 62 MCP tools for interacting with TouchDesigner, plus 20 bridge me
 | `save_externalization` | `op_path` | Force save an externalized operator to disk |
 | `get_externalization_status` | `op_path` | Get dirty state, build number, timestamp, file path |
 
-## TDN Format
+## TDXN Format
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading >=3 operators.** Return the live network as a TDN dict (in-memory, never written to disk). ~20-90x fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
-| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup |
-| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from a `.tdn` document |
+| `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading >=3 operators.** Return the live network as a TDXN dict (in-memory, never written to disk). ~20-90x fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
+| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write a `.tdxn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup |
+| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from a `.tdxn` document |
 
 ## TOP Capture
 
@@ -561,19 +561,19 @@ These tools run locally on the STDIO bridge script, not inside TouchDesigner. Th
 
 
 ==============================================================================
-# TDN - Specification
+# TDXN - Specification
 # source: docs/tdn/specification.md
 ==============================================================================
 
-# TDN Specification
+# TDXN Specification
 
 **Version 2.0**
 
-TDN is the substrate that makes "create at the speed of thought" possible. It's the format your AI agent reads to understand what's on the screen, the format that lets you compare two attempts side by side, and the format a network rebuilds itself from on the next project open. Without it, AI-driven TouchDesigner work is one-directional - you generate, and you're stuck with what you got. With it, every step of the loop - generate, compare, revert, branch - runs at the speed of typing.
+TDXN is the substrate that makes "create at the speed of thought" possible. It's the format your AI agent reads to understand what's on the screen, the format that lets you compare two attempts side by side, and the format a network rebuilds itself from on the next project open. Without it, AI-driven TouchDesigner work is one-directional - you generate, and you're stuck with what you got. With it, every step of the loop - generate, compare, revert, branch - runs at the speed of typing.
 
-TDN (TouchDesigner Network) is a YAML-based file format (a strict JSON superset, so legacy JSON .tdn files still parse) for representing TouchDesigner operator networks as human-readable, diffable text. It stores only non-default properties, keeping files minimal.
+TDXN (TouchDesigner eXternal Network) is a YAML-based file format (a strict JSON superset, so legacy JSON .tdn files still parse) for representing TouchDesigner operator networks as human-readable, diffable text. It stores only non-default properties, keeping files minimal.
 
-- File extension: `.tdn`
+- File extension: `.tdxn`
 - MIME type: `application/yaml`
 - Encoding: UTF-8
 - Schema: [`tdn.schema.json`](../tdn.schema.json) - validates the parsed structure; YAML and JSON decode to the same object.
@@ -582,7 +582,7 @@ TDN (TouchDesigner Network) is a YAML-based file format (a strict JSON superset,
 
 ## Document Structure
 
-A `.tdn` file is a YAML document with the following top-level fields:
+A `.tdxn` file is a YAML document with the following top-level fields:
 
 ```yaml
 format: tdn
@@ -690,7 +690,7 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `annotations` | array | No | Only for COMPs with [annotations](#annotations). Contains annotation objects. |
 | `palette_clone` | boolean | No | `true` if this COMP is cloned from the TouchDesigner palette (`/sys/`). When set, children are not exported (TD recreates them from the clone source). |
 | `sequences` | object | No | Only if the operator has built-in parameter sequences with non-default block counts or values. See [Built-in Parameter Sequences](#built-in-parameter-sequences). *Added in v1.3.* |
-| `tdn_ref` | string | No | Only for COMPs with their own TDN externalization. Relative file path to the child's `.tdn` file. Mutually exclusive with `children`. See [COMP References](#comp-references-tdn_ref). *Added in v1.2.* |
+| `tdn_ref` | string | No | Only for COMPs with their own TDXN externalization. Relative file path to the child's `.tdxn` file. Mutually exclusive with `children`. See [COMP References](#comp-references-tdn_ref). *Added in v1.2.* |
 | `tox_ref` | string | No | Only for COMPs with their own TOX externalization. Relative file path to the child's `.tox` file. Mutually exclusive with `children`. See [TOX References](#tox-references-tox_ref). *Added in v1.4.* |
 
 ### Compact Formatting
@@ -720,7 +720,7 @@ v2.0 is the first YAML release of the format. Because YAML is a strict superset 
 - Legacy `.tdn` were tab-indented JSON, which YAML forbids as indentation; the json-first path reads them losslessly.
 - The v1.5 array-of-lines `dat_content` and the older newline-escaped string form both still import (see [DAT Content](#dat-content)).
 
-Migration is **lazy**: an existing JSON `.tdn` is rewritten as YAML the next time Embody saves it. A v2.0 YAML file opened by a pre-2.0 Embody build (JSON-only reader) will not parse - new builds read old files, but old builds cannot read new ones.
+Migration is **lazy**: an existing JSON `.tdxn` is rewritten as YAML the next time Embody saves it. A v2.0 YAML file opened by a pre-2.0 Embody build (JSON-only reader) will not parse - new builds read old files, but old builds cannot read new ones.
 
 **Hand-edit caveats** (do not apply to Embody-written files, which never emit these): a hand-written YAML float needing float typing must include a decimal point (`1.0e-07`, not `1e-07`); duplicate mapping keys are silently last-wins. Round-trip through Embody after manual edits.
 
@@ -756,7 +756,7 @@ parameters:
 ```
 
 !!! note
-    A fourth mode, **Export**, exists in TouchDesigner but is not stored in TDN. Export mode is set by the exporting operator, not the parameter itself, and cannot be meaningfully imported.
+    A fourth mode, **Export**, exists in TouchDesigner but is not stored in TDXN. Export mode is set by the exporting operator, not the parameter itself, and cannot be meaningfully imported.
 
 ### Escaping
 
@@ -781,7 +781,7 @@ The following built-in parameters are never exported, as they are internal actio
 - `pageindex`
 
 !!! info
-    `file` and `syncfile` parameters ARE exported when non-default, so that TDN files are self-contained for externalized DATs. This ensures file references survive import into a different project.
+    `file` and `syncfile` parameters ARE exported when non-default, so that TDXN files are self-contained for externalized DATs. This ensures file references survive import into a different project.
 
 **By style:**
 
@@ -810,7 +810,7 @@ Some TouchDesigner operators reset certain parameters during initialization, mea
 - `lightCOMP` `tz`: `p.default` reports `0`, but TD creates lights with `tz = 5`
 - `renderTOP` resolution parameters: reported defaults differ from creation values
 
-If TDN used `p.default` directly for non-default comparison, a user-set value that happens to match `p.default` but differs from the actual creation value would be silently omitted from export. On import, TD would create the operator with the (different) creation value, and the user's intended value would be lost. Conversely, a parameter at the true creation value might be incorrectly included in the export, bloating the file with false positives.
+If TDXN used `p.default` directly for non-default comparison, a user-set value that happens to match `p.default` but differs from the actual creation value would be silently omitted from export. On import, TD would create the operator with the (different) creation value, and the user's intended value would be lost. Conversely, a parameter at the true creation value might be incorrectly included in the export, bloating the file with false positives.
 
 #### The Catalog System
 
@@ -824,13 +824,13 @@ On project open, the `CatalogManager` extension checks whether a creation-values
 - Creates a temporary instance of each type
 - Records `p.val` (the actual value TD assigned) for every non-custom, non-read-only parameter
 
-The catalog stores **all** creation values, not just divergent ones. This means TDN always has the ground-truth creation value for every parameter - `_getCreationDefault()` returns the catalog value directly, falling back to `p.default` only for parameters the catalog doesn't cover. The divergent-default problem (where `p.val` differs from `p.default`) is solved implicitly: by recording what TD actually assigns, the catalog captures both correct and divergent defaults without needing to distinguish between them.
+The catalog stores **all** creation values, not just divergent ones. This means TDXN always has the ground-truth creation value for every parameter - `_getCreationDefault()` returns the catalog value directly, falling back to `p.default` only for parameters the catalog doesn't cover. The divergent-default problem (where `p.val` differs from `p.default`) is solved implicitly: by recording what TD actually assigns, the catalog captures both correct and divergent defaults without needing to distinguish between them.
 
 The scan processes 1-2 operator types per frame to avoid dropping frames. The resulting catalog is written to `.embody/catalog_{build}.json` (e.g., `.embody/catalog_099.2025.33070.json`) and cached for future sessions on the same TD build.
 
 **2. Export/import correction**
 
-During TDN export, the `_getCreationDefault()` method checks the catalog before falling back to `p.default`:
+During TDXN export, the `_getCreationDefault()` method checks the catalog before falling back to `p.default`:
 
 ```python
 def _getCreationDefault(self, op_type, par_name, par):
@@ -840,13 +840,13 @@ def _getCreationDefault(self, op_type, par_name, par):
     return par.default
 ```
 
-This means TDN compares parameter values against the *actual creation value*, not the *reported default*. Parameters are included in the export if and only if the user's value truly differs from what TD would assign to a freshly created operator.
+This means TDXN compares parameter values against the *actual creation value*, not the *reported default*. Parameters are included in the export if and only if the user's value truly differs from what TD would assign to a freshly created operator.
 
 **3. Cross-build patching**
 
-When a `.tdn` file is opened on a different TD build than the one that exported it, creation defaults may have shifted between builds. The `CatalogManager` handles this automatically:
+When a `.tdxn` file is opened on a different TD build than the one that exported it, creation defaults may have shifted between builds. The `CatalogManager` handles this automatically:
 
-1. Reads the `td_build` field from each `.tdn` file header
+1. Reads the `td_build` field from each `.tdxn` file header
 2. Loads the catalog for the source build (if available)
 3. Loads the catalog for the current build
 4. Finds parameters whose creation defaults changed between the two builds
@@ -980,7 +980,7 @@ The `$t` field names the template. Other keys are parameter value overrides (par
 
 ### Supported Styles
 
-All 32 parameter styles recognized by TDN:
+All 32 parameter styles recognized by TDXN:
 
 | Style | Category | Description |
 |-------|----------|-------------|
@@ -1205,13 +1205,13 @@ flags:
 
 !!! warning "Locked content is NOT preserved for TOPs, CHOPs, or SOPs"
 
-    TDN preserves the **lock flag** for all operator families, but it **cannot store frozen pixel, channel, or geometry data**. After a TDN round-trip (export + import), locked non-DAT operators will be locked but **empty** - no texture, no samples, no mesh.
+    TDXN preserves the **lock flag** for all operator families, but it **cannot store frozen pixel, channel, or geometry data**. After a TDXN round-trip (export + import), locked non-DAT operators will be locked but **empty** - no texture, no samples, no mesh.
 
-    **This is by design, not a bug.** Storing binary data would defeat TDN's purpose as a diffable, version-control-friendly format. A single locked 4K TOP could add over 100 MB to a `.tdn` file.
+    **This is by design, not a bug.** Storing binary data would defeat TDXN's purpose as a diffable, version-control-friendly format. A single locked 4K TOP could add over 100 MB to a `.tdxn` file.
 
     Embody warns you at save time if your network contains locked non-DAT operators.
 
-The `lock` flag applies to **all** operator families - DATs, TOPs, CHOPs, and SOPs - freezing their cooked output so it no longer updates from inputs or parameters. However, TDN only persists the frozen data for DATs.
+The `lock` flag applies to **all** operator families - DATs, TOPs, CHOPs, and SOPs - freezing their cooked output so it no longer updates from inputs or parameters. However, TDXN only persists the frozen data for DATs.
 
 | Family | Flag persisted? | Frozen data persisted? | Notes |
 |--------|:-:|:-:|---|
@@ -1223,14 +1223,14 @@ The `lock` flag applies to **all** operator families - DATs, TOPs, CHOPs, and SO
 **Workarounds:**
 
 - **Unlock before saving** - the operator will re-cook from its inputs on reload.
-- **Use TOX strategy** instead of TDN for COMPs containing locked non-DAT operators. TOX files are binary and preserve all locked content.
+- **Use TOX strategy** instead of TDXN for COMPs containing locked non-DAT operators. TOX files are binary and preserve all locked content.
 - **Store data externally** - write pixel data to image files, channel data to CSV, etc., and reference them from your network.
 
 ---
 
 ## Connections
 
-TouchDesigner operators have two kinds of connections. TDN stores both as string arrays where array position equals the input index.
+TouchDesigner operators have two kinds of connections. TDXN stores both as string arrays where array position equals the input index.
 
 ### Operator Connections
 
@@ -1274,7 +1274,7 @@ On import, the source is resolved by first looking for a sibling with that name,
 
 Operators in TouchDesigner can be visually docked to other operators. A docked operator moves with its host in the network editor and can be collapsed into the host's tile.
 
-When an operator is docked, TDN records a `"dock"` field on it:
+When an operator is docked, TDXN records a `"dock"` field on it:
 
 | Field | Type | Condition |
 |-------|------|-----------|
@@ -1371,7 +1371,7 @@ Auto-created default docked compute DATs (the "Example Compute Shader" companion
 
 ## Operator Storage
 
-Every TouchDesigner operator has a `.storage` dictionary for persistent Python data. TDN exports all serializable storage entries except known transient/internal keys used by Embody's runtime.
+Every TouchDesigner operator has a `.storage` dictionary for persistent Python data. TDXN exports all serializable storage entries except known transient/internal keys used by Embody's runtime.
 
 ### Per-COMP Storage Toggle
 
@@ -1416,7 +1416,7 @@ The following storage keys are never exported (runtime/transient state managed b
 
 ### Startup Storage
 
-TouchDesigner supports `storeStartupValue(key, value)` - values that reset to their initial state on every project open, regardless of what they were when the file was saved. TDN supports this via an optional `startup_storage` field:
+TouchDesigner supports `storeStartupValue(key, value)` - values that reset to their initial state on every project open, regardless of what they were when the file was saved. TDXN supports this via an optional `startup_storage` field:
 
 ```yaml
 - name: my_comp
@@ -1456,59 +1456,59 @@ Note that `container1` omits `position` (defaults to `[0, 0]`) and `noise1` also
 
 Nesting is recursive - COMPs inside COMPs can have their own `children`. The optional `max_depth` export parameter limits recursion depth (`null` means unlimited). COMPs may also contain an `annotations` array alongside `children` - see [Annotations](#annotations).
 
-### Nested TDN-Externalized COMPs
+### Nested TDXN-Externalized COMPs
 
-When a parent TDN file contains `children` for a child COMP that has its **own** TDN externalization entry in the externalizations table, the child's `children` array is **skipped during import**. The child COMP shell is still created (its operator definition - name, type, position, parameters - is applied), but its internal network is **not** populated from the parent's snapshot. The child's own `.tdn` file is the source of truth for its contents.
+When a parent TDXN file contains `children` for a child COMP that has its **own** TDXN externalization entry in the externalizations table, the child's `children` array is **skipped during import**. The child COMP shell is still created (its operator definition - name, type, position, parameters - is applied), but its internal network is **not** populated from the parent's snapshot. The child's own `.tdxn` file is the source of truth for its contents.
 
-This prevents a common problem: if a child COMP is updated and re-exported to its own `.tdn` file, but the parent is not re-exported, importing the parent would silently overwrite the child with stale data. By skipping nested TDN children, each `.tdn` file owns exactly one level of the hierarchy.
+This prevents a common problem: if a child COMP is updated and re-exported to its own `.tdxn` file, but the parent is not re-exported, importing the parent would silently overwrite the child with stale data. By skipping nested TDXN children, each `.tdxn` file owns exactly one level of the hierarchy.
 
 **What this means in practice:**
 
-- **Export** is unchanged - parent TDN files still include the full recursive hierarchy in their `children` arrays. This keeps the file self-contained and useful as a portable snapshot.
-- **Import** detects child COMPs with their own TDN entries and skips their children. A log message is emitted for each skipped child (e.g., `Skipping children of /project/parent/child - has its own TDN externalization`).
-- **Reconstruction on project open** imports parents before children (sorted by path depth). Combined with the skip logic, this means each COMP's network is populated exactly once, from its own authoritative `.tdn` file.
+- **Export** is unchanged - parent TDXN files still include the full recursive hierarchy in their `children` arrays. This keeps the file self-contained and useful as a portable snapshot.
+- **Import** detects child COMPs with their own TDXN entries and skips their children. A log message is emitted for each skipped child (e.g., `Skipping children of /project/parent/child - has its own TDXN externalization`).
+- **Reconstruction on project open** imports parents before children (sorted by path depth). Combined with the skip logic, this means each COMP's network is populated exactly once, from its own authoritative `.tdxn` file.
 
-If a child COMP is removed from the externalizations table (no longer tagged for TDN), its `children` array in the parent TDN will be imported normally - no special handling needed.
+If a child COMP is removed from the externalizations table (no longer tagged for TDXN), its `children` array in the parent TDXN will be imported normally - no special handling needed.
 
 ### COMP References (`tdn_ref`)
 
-*Added in TDN v1.2.*
+*Added in TDXN v1.2.*
 
-When a parent COMP is exported and a child COMP has its own TDN externalization, the parent's operator definition for that child includes a `tdn_ref` field instead of a `children` array:
+When a parent COMP is exported and a child COMP has its own TDXN externalization, the parent's operator definition for that child includes a `tdn_ref` field instead of a `children` array:
 
 ```yaml
 - name: audio_mixer
   type: baseCOMP
-  tdn_ref: Embody/project1/audio_mixer.tdn
+  tdn_ref: Embody/project1/audio_mixer.tdxn
   position: [600, 0]
 ```
 
 | Field | Type | Description |
 |---|---|---|
-| `tdn_ref` | `string` | Relative file path from the externalization folder to the child's `.tdn` file. Includes the COMP name in the path for cross-validation. |
+| `tdn_ref` | `string` | Relative file path from the externalization folder to the child's `.tdxn` file. Includes the COMP name in the path for cross-validation. |
 
 **Mutually exclusive with `children`**: When `tdn_ref` is present, the operator definition does not contain a `children` array. The COMP's internal network is defined entirely in the referenced file.
 
-**Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) but does not populate its children. The referenced `.tdn` file is imported separately during reconstruction (sorted by path depth - parents before children).
+**Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) but does not populate its children. The referenced `.tdxn` file is imported separately during reconstruction (sorted by path depth - parents before children).
 
 **Cross-validation**: The `tdn_ref` value is checked against two independent sources:
 
 1. **Externalizations table**: The child COMP's path must have an entry with `strategy='tdn'` and a matching `rel_file_path`.
-2. **Disk**: The referenced `.tdn` file must exist at the resolved absolute path.
+2. **Disk**: The referenced `.tdxn` file must exist at the resolved absolute path.
 
 Mismatches produce warnings, not errors - the COMP shell is always created regardless. This ensures graceful degradation when files are moved or the table is out of sync.
 
 **Backward compatibility**:
 
-- Files **without** `tdn_ref` (TDN v1.1 and earlier) continue to work. The existing `_stripNestedTDNChildren` mechanism handles them via the externalizations table.
+- Files **without** `tdn_ref` (TDXN v1.1 and earlier) continue to work. The existing `_stripNestedTDNChildren` mechanism handles them via the externalizations table.
 - Files **with** `tdn_ref` imported by an older Embody that doesn't recognize the field will silently ignore it. The `_stripNestedTDNChildren` path handles the nested COMP correctly as a fallback.
 - The `embed_all=True` export option suppresses `tdn_ref` and inlines all children, producing a fully self-contained file regardless of child externalization status.
 
 ### TOX References (`tox_ref`)
 
-*Added in TDN v1.4.*
+*Added in TDXN v1.4.*
 
-The same ownership principle applies when a child COMP is externalized as `.tox` instead of `.tdn`. The parent's operator definition for that child includes a `tox_ref` field instead of a `children` array:
+The same ownership principle applies when a child COMP is externalized as `.tox` instead of `.tdxn`. The parent's operator definition for that child includes a `tox_ref` field instead of a `children` array:
 
 ```yaml
 - name: wave_speed
@@ -1523,20 +1523,20 @@ The same ownership principle applies when a child COMP is externalized as `.tox`
 |---|---|---|
 | `tox_ref` | `string` | Relative file path from the externalization folder to the child's `.tox` file. |
 
-**Mutually exclusive with `children`**: When `tox_ref` is present, the operator definition does not contain a `children` array. The COMP's internal network is defined entirely in the referenced `.tox` file. This prevents the parent `.tdn` from duplicating the contents of the child `.tox`, which would otherwise pollute `type_defaults` with the child's internal operator types and bloat the parent file.
+**Mutually exclusive with `children`**: When `tox_ref` is present, the operator definition does not contain a `children` array. The COMP's internal network is defined entirely in the referenced `.tox` file. This prevents the parent `.tdxn` from duplicating the contents of the child `.tox`, which would otherwise pollute `type_defaults` with the child's internal operator types and bloat the parent file.
 
-**Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) but does not populate its children. `externaltox` is **not** present in the parent `.tdn`'s parameter dict (it's an Embody-managed parameter, excluded from TDN export). Instead, the importer stores the `tox_ref` path on the new shell as `_pending_tox_restore` storage, then a post-import phase (`_restoreTOXShells`) sets `externaltox` from that marker and calls `_reloadTox` to load the `.tox` content immediately. This means the `.tox` content is fully restored after import - both for runtime imports (e.g. `import_network` via MCP) and for project-open reconstruction. `RestoreTOXComps` (frame 45) still handles the case where the parent `.tdn` is not re-imported and the table is the only source.
+**Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) but does not populate its children. `externaltox` is **not** present in the parent `.tdxn`'s parameter dict (it's an Embody-managed parameter, excluded from TDXN export). Instead, the importer stores the `tox_ref` path on the new shell as `_pending_tox_restore` storage, then a post-import phase (`_restoreTOXShells`) sets `externaltox` from that marker and calls `_reloadTox` to load the `.tox` content immediately. This means the `.tox` content is fully restored after import - both for runtime imports (e.g. `import_network` via MCP) and for project-open reconstruction. `RestoreTOXComps` (frame 45) still handles the case where the parent `.tdxn` is not re-imported and the table is the only source.
 
-**TOX vs TDN, when to use which**:
+**TOX vs TDXN, when to use which**:
 
 - **TOX**: opaque binary encapsulation. The `.tox` is a single self-contained file, fast to load, but not git-diffable. Suitable for palette widgets, third-party COMPs, and anything where you don't need text-level review of internals.
-- **TDN**: text/YAML snapshot of the network. Fully git-diffable. Use this when you want pull requests to show changes to the COMP's internals.
+- **TDXN**: text/YAML snapshot of the network. Fully git-diffable. Use this when you want pull requests to show changes to the COMP's internals.
 
-Both strategies receive the same ownership treatment in parent `.tdn` files - neither embeds children into the parent. The strategy choice is about the **child file format**, not whether the parent embeds.
+Both strategies receive the same ownership treatment in parent `.tdxn` files - neither embeds children into the parent. The strategy choice is about the **child file format**, not whether the parent embeds.
 
 **Backward compatibility**:
 
-- Pre-v1.4 `.tdn` files that embedded TOX children's contents still import correctly: on import, `_stripNestedTOXChildren` consults the externalizations table and clears any embedded `children` for TOX-tagged paths. The COMP shell is created and `RestoreTOXComps` loads from the `.tox` file.
+- Pre-v1.4 `.tdxn` files that embedded TOX children's contents still import correctly: on import, `_stripNestedTOXChildren` consults the externalizations table and clears any embedded `children` for TOX-tagged paths. The COMP shell is created and `RestoreTOXComps` loads from the `.tox` file.
 - Files **with** `tox_ref` imported by an older Embody that doesn't recognize the field will silently ignore it. The strip path handles the nested COMP correctly as a fallback.
 - The `embed_all=True` export option suppresses `tox_ref` and inlines all children.
 
@@ -1557,7 +1557,7 @@ The catalog is loaded into memory by `CatalogManagerExt.EnsureCatalogs()` at sta
 
 #### Palette Handling
 
-When the export path encounters a detected palette COMP, the `Tdnpalettehandling` parameter on Embody's TDN page decides what to do:
+When the export path encounters a detected palette COMP, the `Tdnpalettehandling` parameter on Embody's TDXN page decides what to do:
 
 | Value | Behavior |
 |---|---|
@@ -1653,7 +1653,7 @@ An operator is excluded if its path equals one of these or starts with one follo
 
 ## Import Process
 
-Importing a `.tdn` file reconstructs the network in a pre-phase plus eight sequential phases. This ordering ensures that dependencies are satisfied - for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
+Importing a `.tdxn` file reconstructs the network in a pre-phase plus eight sequential phases. This ordering ensures that dependencies are satisfied - for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
 
 | Phase | Action | Details |
 |-------|--------|---------|
@@ -1668,12 +1668,12 @@ Importing a `.tdn` file reconstructs the network in a pre-phase plus eight seque
 | 7 | **Set positions** | Node positions, sizes, colors, and comments are applied last. Missing position defaults to `[0, 0]`. |
 | 7a | **Create annotations** | Annotations are created from the `annotations` array (top-level and per-COMP). Each annotation is created as an `annotateCOMP` with `utility=True`, then its mode, title, body text, position, size, color, and opacity are set. |
 
-The importer accepts either a full `.tdn` document (with metadata) or just the `operators` array directly.
+The importer accepts either a full `.tdxn` document (with metadata) or just the `operators` array directly.
 
 ### Extension Initialization Timing
 
-!!! danger "Extensions initialize BEFORE TDN import"
-    When a TDN COMP is reconstructed (on project open or after save), the COMP shell is created first and any extensions on it initialize immediately. The TDN import runs **after** extension initialization, calling `ImportNetwork` with `clear_first=True` - which deletes all children and recreates them from the `.tdn` file. This means any state set up by `onInitTD` inside the COMP is **overwritten**.
+!!! danger "Extensions initialize BEFORE TDXN import"
+    When a TDXN COMP is reconstructed (on project open or after save), the COMP shell is created first and any extensions on it initialize immediately. The TDXN import runs **after** extension initialization, calling `ImportNetwork` with `clear_first=True` - which deletes all children and recreates them from the `.tdxn` file. This means any state set up by `onInitTD` inside the COMP is **overwritten**.
 
 **Timeline on project open:**
 
@@ -1683,18 +1683,18 @@ The importer accepts either a full `.tdn` document (with metadata) or just the `
 | 2 | Early | Extension `__init__` runs |
 | 3 | End of frame | `onInitTD` fires - network may not exist yet |
 | 4 | Frame 60 | `ReconstructTDNComps` runs `ImportNetwork(clear_first=True)` |
-| 5 | Frame 60+ | All children deleted and recreated from `.tdn` |
+| 5 | Frame 60+ | All children deleted and recreated from `.tdxn` |
 
 **Timeline on save (strip/restore cycle):**
 
 | Step | What happens |
 |------|--------------|
-| 1 | Pre-save: children stripped from TDN COMPs |
-| 2 | `.toe` saved without TDN children |
-| 3 | Post-save: `ImportNetwork` re-imports children from `.tdn` |
+| 1 | Pre-save: children stripped from TDXN COMPs |
+| 2 | `.toe` saved without TDXN children |
+| 3 | Post-save: `ImportNetwork` re-imports children from `.tdxn` |
 | 4 | Extensions may reinitialize during restore |
 
-**Impact:** If an extension's `onInitTD` creates operators, sets parameter values, writes to storage, or builds any state inside the COMP, that work is destroyed by the import. This affects extensions that live inside TDN COMPs **and** extensions whose ownerComp is a TDN-strategy COMP.
+**Impact:** If an extension's `onInitTD` creates operators, sets parameter values, writes to storage, or builds any state inside the COMP, that work is destroyed by the import. This affects extensions that live inside TDXN COMPs **and** extensions whose ownerComp is a TDXN-strategy COMP.
 
 **Solution:** Defer initialization using `run()` with `delayFrames`:
 
@@ -1703,19 +1703,19 @@ def onInitTD(self):
     run('args[0].postInit()', self, delayFrames=5)
 
 def postInit(self):
-    """Runs after TDN import completes. Safe to set up state."""
+    """Runs after TDXN import completes. Safe to set up state."""
     pass
 ```
 
 The deferred method must be **idempotent** - it will run on every project open, after every save, and on manual reimport. Use a delay of at least 5 frames to ensure all import phases have completed.
 
-For full guidance on writing extensions that coexist with TDN, see the [Extensions](../td-development/extensions.md#initialization-and-tdn-import-timing) documentation.
+For full guidance on writing extensions that coexist with TDXN, see the [Extensions](../td-development/extensions.md#initialization-and-tdn-import-timing) documentation.
 
 ### Version Compatibility
 
-When importing a full `.tdn` document, the importer checks the metadata fields for compatibility:
+When importing a full `.tdxn` document, the importer checks the metadata fields for compatibility:
 
-- **`version`**: Compared against the current TDN format version. Because older files remain back-compatible, a warning is logged **only when the file's version is newer** than the running build (the genuinely risky direction, where the file may use schema this build does not understand). Equal or older versions import silently.
+- **`version`**: Compared against the current TDXN format version. Because older files remain back-compatible, a warning is logged **only when the file's version is newer** than the running build (the genuinely risky direction, where the file may use schema this build does not understand). Equal or older versions import silently.
 - **`td_build`**: Compared against the running TouchDesigner version. An informational message is logged if they differ, since operator types and parameter defaults may vary between TD builds.
 - **`build`**: Logged for informational purposes, identifying which save iteration is being imported.
 
@@ -1725,7 +1725,7 @@ These checks are non-blocking - the import always proceeds regardless of mismatc
 
 ## Round-Trip Guarantees
 
-For most networks, export -> import -> re-export produces identical `.tdn` output. The format is designed to be stable across round-trips, with a few documented exceptions.
+For most networks, export -> import -> re-export produces identical `.tdxn` output. The format is designed to be stable across round-trips, with a few documented exceptions.
 
 ### Preserved
 
@@ -1750,7 +1750,7 @@ For most networks, export -> import -> re-export produces identical `.tdn` outpu
 
 **Type defaults recomputation** - Type defaults and parameter templates are recomputed from scratch on each export. If operator populations change between exports (operators added/removed), different properties may qualify as "unanimous" for type_defaults, and different pages may qualify as templates. The final network state is always identical, but the YAML structure may differ.
 
-**Locked non-DAT data** - When a TOP, CHOP, or SOP is locked, TDN preserves the lock flag but not the frozen pixel, channel, or geometry data. After import, the operator is locked but empty. See [Lock Flag Limitation](#lock-flag-limitation).
+**Locked non-DAT data** - When a TOP, CHOP, or SOP is locked, TDXN preserves the lock flag but not the frozen pixel, channel, or geometry data. After import, the operator is locked but empty. See [Lock Flag Limitation](#lock-flag-limitation).
 
 ### Intentionally Excluded
 
@@ -1767,11 +1767,11 @@ The following are never exported and are not considered a loss:
 
 ## Error Handling
 
-TDN import is **best-effort** - individual failures should not abort the entire operation. This section describes the expected behavior for developers working with TDN files.
+TDXN import is **best-effort** - individual failures should not abort the entire operation. This section describes the expected behavior for developers working with TDXN files.
 
 ### Unknown Fields
 
-Developers should ignore unknown fields when parsing TDN documents. This ensures forward compatibility - a file exported by a newer version of Embody can still be imported by an older version, with unrecognized fields silently skipped.
+Developers should ignore unknown fields when parsing TDXN documents. This ensures forward compatibility - a file exported by a newer version of Embody can still be imported by an older version, with unrecognized fields silently skipped.
 
 ### Failure Modes
 
@@ -1799,7 +1799,7 @@ Log warnings for anything skipped so the developer can inspect the result. Never
 
 ## Complete Example
 
-A realistic `.tdn` file demonstrating all major features:
+A realistic `.tdxn` file demonstrating all major features:
 
 ```yaml
 format: tdn
@@ -1916,15 +1916,15 @@ Key observations:
 |---------|------|---------|
 | 1.0 | 2026-02-19 | Initial release with 8 format optimizations: expression shorthand (`=`/`~` prefixes), flags as arrays, page-grouped custom parameters, type defaults, parameter templates, optional position, simplified connections, compact formatting. |
 | 1.0 | 2026-02-22 | Extended `type_defaults` to support `flags`, `size`, `color`, and `tags` in addition to `parameters`. Backward-compatible: old importers ignore unknown keys, new importers handle files without the new keys. |
-| 1.0 | 2026-03-01 | Added annotation support (`annotations` array at top level and per-COMP). Added Phase 7a to import process. Removed `file`/`syncfile` from SKIP_PARAMS so DAT file references are preserved in TDN exports. Pre-save now auto-exports current state before stripping TDN COMPs. |
+| 1.0 | 2026-03-01 | Added annotation support (`annotations` array at top level and per-COMP). Added Phase 7a to import process. Removed `file`/`syncfile` from SKIP_PARAMS so DAT file references are preserved in TDXN exports. Pre-save now auto-exports current state before stripping TDXN COMPs. |
 | 1.3 | 2026-04-07 | Added built-in parameter sequence support (`sequences` key on operator objects). Operators with resizable parameter blocks (mathmixPOP, glslPOP, attributePOP, constantCHOP, etc.) now round-trip correctly. Added Phase 2.5 to import process. Sequence parameters excluded from `type_defaults` compression and `_buildParCache`. |
 | 1.4 | 2026-05-XX | Added `tox_ref` for COMPs with their own TOX externalization (relative path to the child's `.tox`, mutually exclusive with `children`). |
-| 1.5 | 2026-06-10 | A text DAT's `dat_content` may now be an **array of line-strings** (multi-line) as well as a plain string (single-line), rejoined with `\n` on import. Keeps `.tdn` files readable and git-diffable line-by-line. Import is fully back-compatible with the v1.x string form. The version-mismatch warning now fires only when the file is newer than the running build. |
+| 1.5 | 2026-06-10 | A text DAT's `dat_content` may now be an **array of line-strings** (multi-line) as well as a plain string (single-line), rejoined with `\n` on import. Keeps `.tdxn` files readable and git-diffable line-by-line. Import is fully back-compatible with the v1.x string form. The version-mismatch warning now fires only when the file is newer than the running build. |
 | 2.0 | 2026-06-10 | The on-disk format is now **YAML** (a strict JSON superset). Multi-line `dat_content` reverts to a **plain string** rendered as a YAML literal block scalar (`|`), preserving exact trailing newlines via `\|`/`\|-`/`\|+` chomping. Importers parse json-first (BOM/whitespace-stripped), so legacy tab-indented JSON `.tdn` (v1.x/v1.5) still load losslessly with no migration gate. Auto-created default docked compute DATs are no longer serialized (TD recreates them on import). Files are roughly 17% smaller and read top-to-bottom without escaped newlines. MIME type is now `application/yaml`. |
 
 
 ==============================================================================
-# TDN - Import & Export
+# TDXN - Import & Export
 # source: docs/tdn/import-export.md
 ==============================================================================
 
@@ -1934,16 +1934,16 @@ Key observations:
 
 ### MCP Tool
 
-Use the `read_tdn` tool to return the live network as a TDN dict **without writing anything to disk**. This is the preferred read path for LLM workflows exploring networks of more than ~3 operators - **typically 20-90x fewer tokens** than walking the same subtree with `get_op` + `query_network` because of default-omission, `type_defaults`, and `par_templates` compaction.
+Use the `read_tdn` tool to return the live network as a TDXN dict **without writing anything to disk**. This is the preferred read path for LLM workflows exploring networks of more than ~3 operators - **typically 20-90x fewer tokens** than walking the same subtree with `get_op` + `query_network` because of default-omission, `type_defaults`, and `par_templates` compaction.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `comp_path` | `"/"` | Starting COMP path |
 | `include_dat_content` | Toggle setting | Include DAT text/table content |
 | `max_depth` | `null` (unlimited) | Cap recursion on large roots |
-| `embed_all` | `false` | Recurse into TDN-tagged COMPs instead of skipping their children |
+| `embed_all` | `false` | Recurse into TDXN-tagged COMPs instead of skipping their children |
 
-Works in all three `Tdnmode` values (Off / Export-on-Save / Roundtrip) - `read_tdn` reads live state, not `.tdn` files on disk.
+Works in all three `Tdnmode` values (Off / Export-on-Save / Roundtrip) - `read_tdn` reads live state, not `.tdxn` files on disk.
 
 ### When NOT to use `read_tdn`
 
@@ -1963,8 +1963,8 @@ For these, reach for the runtime-state MCP tools instead:
 
 ### Keyboard Shortcuts
 
-- ++ctrl+shift+e++ - Export the entire project to a single `.tdn` file
-- ++ctrl+alt+e++ - Export just the current COMP to a `.tdn` file
+- ++ctrl+shift+e++ - Export the entire project to a single `.tdxn` file
+- ++ctrl+alt+e++ - Export just the current COMP to a `.tdxn` file
 
 ### MCP Tool
 
@@ -2004,7 +2004,7 @@ Use the `import_network` MCP tool:
 | Parameter | Description |
 |-----------|-------------|
 | `target_path` | Destination COMP path |
-| `tdn` | The `.tdn` document (full document or operators array) |
+| `tdn` | The `.tdxn` document (full document or operators array) |
 | `clear_first` | Delete existing children before importing |
 
 ### Import Phases
@@ -2037,7 +2037,7 @@ These checks are non-blocking - import always proceeds.
 
 ## Error Handling
 
-TDN import is **best-effort** - individual failures don't abort the entire operation.
+TDXN import is **best-effort** - individual failures don't abort the entire operation.
 
 | Situation | Behavior |
 |-----------|----------|
@@ -2065,7 +2065,7 @@ TDN import is **best-effort** - individual failures don't abort the entire opera
 
 This project uses **[Embody](https://github.com/dylanroscover/Embody)** (TouchDesigner externalization) and **Envoy** (MCP server for AI coding tools).
 
-- Embody externalizes TouchDesigner operators to version-controlled files (`.py`, `.tox`, `.tdn`, `.json`, etc.)
+- Embody externalizes TouchDesigner operators to version-controlled files (`.py`, `.tox`, `.tdxn`, `.json`, etc.)
 - Envoy provides MCP tools for AI assistants to inspect and modify the live TD network
 - Use the `Aiclient` parameter on the Embody COMP to regenerate these files for your AI tool
 
@@ -2075,8 +2075,8 @@ This project uses **[Embody](https://github.com/dylanroscover/Embody)** (TouchDe
 
 ## Critical Rules
 
-1. **Prefer `.tdn` files for reading TDN-externalized COMPs** - `.tdn` files are YAML on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) to identify TDN-strategy COMPs. To edit: modify the `.tdn` file on disk, then call `import_network` via MCP with the COMP path, the parsed network, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDN operators.
-2. **Use Envoy MCP tools for live TD state and non-TDN operators** - never say "I can't access that binary file." For operators not externalized as TDN, use MCP tools to inspect and modify them.
+1. **Prefer `.tdxn` files for reading TDXN-externalized COMPs** - `.tdxn` files are YAML on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) to identify TDXN-strategy COMPs. To edit: modify the `.tdxn` file on disk, then call `import_network` via MCP with the COMP path, the parsed network, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDXN operators.
+2. **Use Envoy MCP tools for live TD state and non-TDXN operators** - never say "I can't access that binary file." For operators not externalized as TDXN, use MCP tools to inspect and modify them.
 3. **Do NOT assume network paths** - use `query_network` on `/` to discover the actual root structure.
 4. **Default to the current network** - use `execute_python` with `result = ui.panes.current.owner.path` to find the active pane.
 5. **Never edit `externalizations.tsv` directly** - managed exclusively by Embody's tracking system.
@@ -2128,7 +2128,7 @@ Embody/
 |   |   +-- Embody/                       # Main extension source
 |   |       +-- EmbodyExt.py              # Core externalization engine
 |   |       +-- EnvoyExt.py               # MCP server extension
-|   |       +-- TDNExt.py                 # TDN network format export/import
+|   |       +-- TDXNExt.py                 # TDXN network format export/import
 +-- release/
     +-- Embody-v*.tox                     # Latest release build
 ```

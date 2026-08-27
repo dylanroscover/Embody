@@ -28,5 +28,5 @@ Skills are prerequisites, not optional reference. **Load the relevant skill BEFO
 | Preparing a release commit or a GitHub release | `/release` |
 | Running or modifying agent-tier tests (`RunAgentTests`) | `/agent-tests` |
 | `switch_instance` or multi-instance workflows | `/multi-instance` |
-| Building or persisting a Specimen (gallery TDN networks) | `/specimen-authoring` |
+| Building or persisting a Specimen (gallery TDXN networks) | `/specimen-authoring` |
 | First MCP call in a new session | `/mcp-tools-reference` |

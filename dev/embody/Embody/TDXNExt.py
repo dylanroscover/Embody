@@ -1,5 +1,5 @@
-"""
-TDN -- TouchDesigner Network open format (.tdn)
+﻿"""
+TDXN -- TouchDesigner eXternal Network open format (.tdxn)
 
 Exports and imports TouchDesigner networks as human-readable YAML files
 (a strict JSON superset, so legacy JSON .tdn still load). Only non-default
@@ -9,7 +9,7 @@ This extension lives on the Embody COMP and is callable via:
   - MCP tools (export_network / import_network) through Envoy
   - TD UI (the Shortcuts-page export bindings, default ctrl+shift+e /
     ctrl+alt+e -- cmd on macOS -- plus pulse parameters)
-  - Direct Python: op.Embody.ext.TDN.ExportNetwork(...)
+  - Direct Python: op.Embody.ext.TDXN.ExportNetwork(...)
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ except AttributeError:
 
 
 class _TDNYamlDumper(_TDN_BaseDumper):
-	"""Private subclass so TDN representers never leak into the global SafeDumper."""
+	"""Private subclass so TDXN representers never leak into the global SafeDumper."""
 	pass
 
 
@@ -67,7 +67,7 @@ _TDNYamlDumper.add_representer(list, _tdn_list_representer)
 
 
 def tdn_dump(data) -> str:
-	"""Serialize a TDN document to deterministic, readable YAML v2.0.
+	"""Serialize a TDXN document to deterministic, readable YAML v2.0.
 
 	Always ends with a single trailing newline (yaml.dump emits one; the
 	defensive guard locks the contract test_export_file_not_truncated relies on).
@@ -99,6 +99,31 @@ def tdn_load(text):
 
 
 TDN_VERSION = '2.0'  # was '1.5'
+
+# --- Format identity (v6.1.0: TDXN -> TDXN) -------------------------------
+# The format is "TDXN" (TouchDesigner eXternal Network). Only a FIRST
+# externalization mints .tdxn; an operator whose tracked file is already
+# .tdn keeps writing .tdn forever. Resolution is table-driven
+# (EmbodyExt._getStrategyFilePath), so nothing re-derives a suffix on read
+# and legacy files need no compat path. Readers accept BOTH suffixes and
+# BOTH format tokens, permanently.
+#
+# NOT derived from these -- frozen 'tdn' identity/wire values, forever:
+#   externalizations `strategy` token, par.Tdntag default, the diff=tdn git
+#   driver name, .tdn_backup/, the `tdn_ref` key, the _embody_tdn envelope
+#   marker, the MCP tool names, and all 25 Tdn*/*tdn* parameter NAMES.
+#   Changing any of them orphans existing rows, tags, git config, or
+#   clipboard payloads. See docs/tdn/specification.md.
+TDN_FILE_SUFFIX = '.tdxn'
+TDN_FILE_SUFFIXES = ('.tdxn', '.tdn')
+TDN_FORMAT = 'tdxn'
+TDN_ACCEPTED_FORMATS = frozenset({'tdxn', 'tdn'})
+
+
+def is_tdn_network_file(path) -> bool:
+	"""True when `path` names a TDXN network file -- either suffix."""
+	return Path(path).suffix.lower() in TDN_FILE_SUFFIXES
+
 
 # Parameters to always skip (Embody-managed or internal)
 SKIP_PARAMS = {
@@ -192,7 +217,7 @@ COLOR_TOLERANCE = 0.01
 # ~1s rebuild per fresh open. Cost: a user annotation named envoy_bot_*
 # outside the template is omitted.
 # Mirrored literals from envoy_viz (_VIZ_BOT_PREFIX/_VIZ_TEMPLATE_COMP) on
-# purpose: TDNExt must not import the viz DAT (Envoy is optional). Drift is
+# purpose: TDXNExt must not import the viz DAT (Envoy is optional). Drift is
 # silent; test_viz_bot_constants_match_the_tdn_exporter fails loudly.
 VIZ_BOT_ANNOTATION_PREFIX = 'envoy_bot_'
 VIZ_BOT_TEMPLATE_COMP = 'embot_template'
@@ -200,7 +225,7 @@ VIZ_BOT_TEMPLATE_COMP = 'embot_template'
 # System/internal paths to exclude from export
 SYSTEM_PATHS = ('/local', '/sys', '/perform', '/ui')
 
-# Storage keys to skip during TDN export (runtime/transient state)
+# Storage keys to skip during TDXN export (runtime/transient state)
 SKIP_STORAGE_KEYS = {
 	'_tdn_stripped_paths', '_git_root',
 	# Live server flags -- 'claudius_running' is the exact counterpart of
@@ -209,7 +234,7 @@ SKIP_STORAGE_KEYS = {
 	'envoy_running', 'envoy_shutdown_event', 'claudius_running',
 	'expanded_paths', 'expand_order', 'git_status', 'manage_file_path',
 	'visible_count', 'hover',
-	# TDN dirty-detection baselines -- runtime-only, storage-backed so they
+	# TDXN dirty-detection baselines -- runtime-only, storage-backed so they
 	# survive extension reinit; must never serialize into a .tdn.
 	'_tdn_fingerprints',
 	# Runtime dirty flags (2026-08-20) -- same contract as the
@@ -221,9 +246,9 @@ SKIP_STORAGE_KEYS = {
 	# one-way import ratchet (review blocker, 2026-08-12).
 	'_tdn_rel_path', '_pending_tox_restore', '_pending_tdn_restore',
 	# Save-window dialog guard. project.save() stores this True for the
-	# duration of the save, and the TDN strip/export runs INSIDE that window
+	# duration of the save, and the TDXN strip/export runs INSIDE that window
 	# -- so without this exclusion every save bakes _suppress_dialogs: true
-	# into Embody.tdn, and a TDN restore would then suppress dialogs for the
+	# into Embody.tdn, and a TDXN restore would then suppress dialogs for the
 	# whole session (observed on the v6.0.140 save, caught pre-commit).
 	'_suppress_dialogs',
 	# Per-session lifecycle flags. init() clears these on open so a release
@@ -232,7 +257,7 @@ SKIP_STORAGE_KEYS = {
 	# single leaked value then ratchets back on every export forever.
 	'_init_complete', '_start_in_progress', '_release_hook_active',
 	'_tdn_restore_failures',
-	# Test-runner bookkeeping. A TDN export landing mid-run captured these
+	# Test-runner bookkeeping. A TDXN export landing mid-run captured these
 	# (the runner stores them for the duration of a run and restores after),
 	# so they reached committed .tdn files.
 	'_test_saved_filecleanup', '_test_saved_toxdropexpr',
@@ -267,7 +292,7 @@ _SYSTEM_PATH_PREFIXES = tuple(p + '/' for p in SYSTEM_PATHS)
 # =============================================================================
 # C1 clipboard envelope (_embody_tdn) -- byte-parity with
 # platform/packages/contracts/envelope.ts. Module-level so it stays headless
-# unit-testable (import TDNExt; TDNExt.tdn_sha256(...)) and so the class methods
+# unit-testable (import TDXNExt; TDXNExt.tdn_sha256(...)) and so the class methods
 # below can call it directly. Trusted own-network Copy/Paste is the only thing
 # that needs it; the untrusted community layer lives in CollectionExt.
 # =============================================================================
@@ -286,7 +311,7 @@ def is_embody_tdn_envelope(value) -> bool:
 
 
 def canonical_tdn_bytes(tdn: dict) -> bytes:
-	"""Canonical JSON bytes used for TDN hashing (must match the TS side)."""
+	"""Canonical JSON bytes used for TDXN hashing (must match the TS side)."""
 	return json.dumps(tdn, sort_keys=True, separators=(",", ":"),
 					  ensure_ascii=False).encode("utf-8")
 
@@ -335,7 +360,7 @@ def verify_envelope_integrity(envelope: dict) -> bool:
 
 
 def resolve_tdn_name(tdn, slug=None):
-	"""Best name for a network being pasted from a TDN: the `network_path`
+	"""Best name for a network being pasted from a TDXN: the `network_path`
 	basename (a required field, so always present except for a whole-project
 	"/" export) -> envelope `slug` -> None. The caller sanitizes the result
 	with tdu.validName and supplies its own final fallback. Pure (no TD state)
@@ -352,7 +377,7 @@ def resolve_tdn_name(tdn, slug=None):
 	return None
 
 
-class TDNExt:
+class TDXNExt:
 	"""Extension for exporting/importing TouchDesigner networks as .tdn (YAML v2.0)."""
 
 	def __init__(self, ownerComp: 'COMP') -> None:
@@ -408,20 +433,29 @@ class TDNExt:
 			_clip_gen = self.ownerComp.fetch('_clip_watch_gen', 0) + 1
 			self.ownerComp.store('_clip_watch_gen', _clip_gen)
 			# Pending run() calls can outlive COMP replacement during upgrades.
-			run("o = op(%r)\nif o and o.valid: o.ext.TDN._clipboardWatchTick(%d)" %
+			run("o = op(%r)\nif o and o.valid: o.ext.TDXN._clipboardWatchTick(%d)" %
 				(self.ownerComp.path, _clip_gen),
 				fromOP=self.ownerComp, delayMilliSeconds=2500)
 		except Exception:
 			pass
 
 	# =========================================================================
-	# TDN SERIALIZATION (YAML v2.0) -- exposed for cross-extension access via
-	# parent.Embody.ext.TDN.tdn_dump / parent.Embody.ext.TDN.tdn_load.
+	# TDXN SERIALIZATION (YAML v2.0) -- exposed for cross-extension access via
+	# parent.Embody.ext.TDXN.tdn_dump / parent.Embody.ext.TDXN.tdn_load.
 	# Internal callers use the module-level funcs directly.
 	# =========================================================================
 
 	tdn_dump = staticmethod(tdn_dump)
 	tdn_load = staticmethod(tdn_load)
+	is_tdn_network_file = staticmethod(is_tdn_network_file)
+
+	# Format identity, mirrored so EmbodyExt can read it as
+	# self.my.ext.TDXN.FILE_SUFFIX. Distinct attribute names, not the
+	# `X = X` class-body idiom, which reads like a typo.
+	FILE_SUFFIX = TDN_FILE_SUFFIX
+	FILE_SUFFIXES = TDN_FILE_SUFFIXES
+	FORMAT = TDN_FORMAT
+	ACCEPTED_FORMATS = TDN_ACCEPTED_FORMATS
 
 	# =========================================================================
 	# CRASH SAFETY -- atomic writes, backup rotation, validation
@@ -464,8 +498,8 @@ class TDNExt:
 		if not src.is_file():
 			return
 
-		bak = TDNExt._get_backup_path(tdn_path, project_folder, '.bak')
-		bak2 = TDNExt._get_backup_path(tdn_path, project_folder, '.bak2')
+		bak = TDXNExt._get_backup_path(tdn_path, project_folder, '.bak')
+		bak2 = TDXNExt._get_backup_path(tdn_path, project_folder, '.bak2')
 
 		# Rotate: .bak -> .bak2
 		if bak.is_file():
@@ -529,10 +563,15 @@ class TDNExt:
 		try:
 			doc = tdn_load(text)
 		except Exception as e:
-			return {'valid': False, 'error': f'Invalid TDN: {e}'}
+			return {'valid': False, 'error': f'Invalid TDXN: {e}'}
 		if not isinstance(doc, dict):
 			return {'valid': False, 'error': 'Root is not a JSON object'}
-		if doc.get('format') != 'tdn':
+		# Allow-list, never a removed check: 'tdxn' (v6.1.0+) and legacy
+		# 'tdn' both pass, anything else still fails. This is a POST-WRITE
+		# self-check whose failure restores from .bak -- so it must move in
+		# lockstep with the two writers below, or every save silently rolls
+		# back.
+		if doc.get('format') not in TDN_ACCEPTED_FORMATS:
 			return {'valid': False,
 					'error': f'Missing or wrong format key: {doc.get("format")}'}
 		if 'operators' not in doc:
@@ -546,14 +585,14 @@ class TDNExt:
 
 		1. Rotate backups (.bak, .bak2)
 		2. Atomic write (temp file + rename + fsync)
-		3. Post-write validation (read back + TDN parse)
+		3. Post-write validation (read back + TDXN parse)
 		4. If validation fails, restore from .bak
 
 		Returns {'success': True} or {'error': '...'}.
 		"""
 		# Step 1: Backup rotation (only if file already exists)
 		try:
-			TDNExt._rotate_backups(tdn_path, project_folder)
+			TDXNExt._rotate_backups(tdn_path, project_folder)
 		except Exception:
 			# Backup failure should not block the write -- log but continue.
 			# The write itself is still atomic.
@@ -561,18 +600,18 @@ class TDNExt:
 
 		# Step 2: Atomic write
 		try:
-			TDNExt._atomic_write(tdn_path, content)
+			TDXNExt._atomic_write(tdn_path, content)
 		except Exception as e:
 			return {'error': f'Atomic write failed: {e}'}
 
 		# Step 3: Post-write validation
-		validation = TDNExt._validate_tdn_file(tdn_path)
+		validation = TDXNExt._validate_tdn_file(tdn_path)
 		if validation.get('valid'):
 			return {'success': True}
 
 		# Step 4: Validation failed -- attempt restore from backup
 		error_msg = validation.get('error', 'unknown')
-		bak = TDNExt._get_backup_path(tdn_path, project_folder, '.bak')
+		bak = TDXNExt._get_backup_path(tdn_path, project_folder, '.bak')
 		if bak.is_file():
 			try:
 				shutil.copy2(str(bak), tdn_path)
@@ -586,7 +625,7 @@ class TDNExt:
 	def _get_backup_path_instance(self, tdn_path: str,
 								  suffix: str = '.bak') -> Path:
 		"""Instance wrapper for _get_backup_path using project.folder."""
-		return TDNExt._get_backup_path(tdn_path, str(project.folder), suffix)
+		return TDXNExt._get_backup_path(tdn_path, str(project.folder), suffix)
 
 	# =========================================================================
 	# CONTENT COMPARISON
@@ -602,18 +641,18 @@ class TDNExt:
 
 	@staticmethod
 	def _tdn_content_equal(new_tdn: dict, existing_tdn: dict) -> bool:
-		"""Compare two TDN dicts ignoring volatile header metadata.
+		"""Compare two TDXN dicts ignoring volatile header metadata.
 
 		Returns True if all non-volatile keys (operators, parameters,
 		connections, annotations, custom_pars, options, etc.) are identical.
 		"""
 		for key in new_tdn:
-			if key in TDNExt._TDN_VOLATILE_KEYS:
+			if key in TDXNExt._TDN_VOLATILE_KEYS:
 				continue
 			if new_tdn[key] != existing_tdn.get(key):
 				return False
 		for key in existing_tdn:
-			if key in TDNExt._TDN_VOLATILE_KEYS:
+			if key in TDXNExt._TDN_VOLATILE_KEYS:
 				continue
 			if key not in new_tdn:
 				return False
@@ -666,14 +705,14 @@ class TDNExt:
 					and isinstance(node.get('dat_content'), list)):
 				node['dat_content'] = '\n'.join(node['dat_content'])
 			for value in node.values():
-				TDNExt._normalize_dat_content(value)
+				TDXNExt._normalize_dat_content(value)
 		elif isinstance(node, list):
 			for item in node:
-				TDNExt._normalize_dat_content(item)
+				TDXNExt._normalize_dat_content(item)
 
 	@staticmethod
 	def _normalize_tdn_for_compare(tdn):
-		"""Return a NEW normalized copy of a TDN dict (input untouched).
+		"""Return a NEW normalized copy of a TDXN dict (input untouched).
 
 		Drops volatile header keys (_TDN_VOLATILE_KEYS), expands par_templates
 		and type_defaults into the operators via the same import-side expanders,
@@ -684,15 +723,15 @@ class TDNExt:
 		if not isinstance(tdn, dict):
 			return {}
 		out = copy.deepcopy(tdn)
-		for key in TDNExt._TDN_VOLATILE_KEYS:
+		for key in TDXNExt._TDN_VOLATILE_KEYS:
 			out.pop(key, None)
 		# Reconcile a legacy v1.5 (array-of-lines) on-disk dat_content with the
 		# v2.0 (joined string) live form so an unchanged DAT does not false-diff.
-		TDNExt._normalize_dat_content(out)
+		TDXNExt._normalize_dat_content(out)
 		ops = out.get('operators', [])
 		if isinstance(ops, list):
-			TDNExt._resolve_par_templates(ops, out.get('par_templates', {}) or {})
-			TDNExt._merge_type_defaults(ops, out.get('type_defaults', {}) or {})
+			TDXNExt._resolve_par_templates(ops, out.get('par_templates', {}) or {})
+			TDXNExt._merge_type_defaults(ops, out.get('type_defaults', {}) or {})
 		out.pop('par_templates', None)
 		out.pop('type_defaults', None)
 		return out
@@ -734,7 +773,7 @@ class TDNExt:
 	def _diff_own_fields(live_op, disk_op, keys=None):
 		"""Return {key: change} for differing own-fields, or {} if identical."""
 		if keys is None:
-			keys = (set(live_op) | set(disk_op)) - TDNExt._DIFF_OP_SKIP_KEYS
+			keys = (set(live_op) | set(disk_op)) - TDXNExt._DIFF_OP_SKIP_KEYS
 		changes = {}
 		for key in keys:
 			# old = disk (saved baseline), new = live (unsaved current)
@@ -746,7 +785,7 @@ class TDNExt:
 					continue
 				ov, nv = sorted(ov), sorted(nv)
 			if ov != nv:
-				changes[key] = TDNExt._diff_field_change(key, ov, nv)
+				changes[key] = TDXNExt._diff_field_change(key, ov, nv)
 		return changes
 
 	@staticmethod
@@ -758,9 +797,9 @@ class TDNExt:
 	@staticmethod
 	def _diff_annotations(live_anns, disk_anns, parent_path, added, removed,
 						  modified, warnings):
-		live_idx = TDNExt._diff_index_by_name(
+		live_idx = TDXNExt._diff_index_by_name(
 			live_anns, warnings, parent_path, 'live-annotation')
-		disk_idx = TDNExt._diff_index_by_name(
+		disk_idx = TDXNExt._diff_index_by_name(
 			disk_anns, warnings, parent_path, 'disk-annotation')
 		for name in live_idx:
 			if name not in disk_idx:
@@ -776,7 +815,7 @@ class TDNExt:
 			if name not in disk_idx:
 				continue
 			keys = (set(live_idx[name]) | set(disk_idx[name])) - {'name'}
-			changes = TDNExt._diff_own_fields(
+			changes = TDXNExt._diff_own_fields(
 				live_idx[name], disk_idx[name], keys=keys)
 			if changes:
 				modified.append({
@@ -787,9 +826,9 @@ class TDNExt:
 	@staticmethod
 	def _diff_level(live_ops, disk_ops, parent_path, added, removed, modified,
 					warnings):
-		live_idx = TDNExt._diff_index_by_name(
+		live_idx = TDXNExt._diff_index_by_name(
 			live_ops, warnings, parent_path, 'live')
-		disk_idx = TDNExt._diff_index_by_name(
+		disk_idx = TDXNExt._diff_index_by_name(
 			disk_ops, warnings, parent_path, 'disk')
 
 		def _entry(path, op_def, kind):
@@ -798,28 +837,28 @@ class TDNExt:
 
 		for name in live_idx:
 			if name not in disk_idx:
-				added.append(_entry(TDNExt._diff_join(parent_path, name),
+				added.append(_entry(TDXNExt._diff_join(parent_path, name),
 									live_idx[name], 'op'))
 		for name in disk_idx:
 			if name not in live_idx:
-				removed.append(_entry(TDNExt._diff_join(parent_path, name),
+				removed.append(_entry(TDXNExt._diff_join(parent_path, name),
 									  disk_idx[name], 'op'))
 		for name in live_idx:
 			if name not in disk_idx:
 				continue
 			lo = live_idx[name]
 			do = disk_idx[name]
-			path = TDNExt._diff_join(parent_path, name)
-			changes = TDNExt._diff_own_fields(lo, do)
+			path = TDXNExt._diff_join(parent_path, name)
+			changes = TDXNExt._diff_own_fields(lo, do)
 			if changes:
 				entry = _entry(path, lo, 'op')
 				entry['changed_keys'] = sorted(changes.keys())
 				entry['changes'] = changes
 				modified.append(entry)
-			TDNExt._diff_level(lo.get('children', []) or [],
+			TDXNExt._diff_level(lo.get('children', []) or [],
 							   do.get('children', []) or [],
 							   path, added, removed, modified, warnings)
-			TDNExt._diff_annotations(lo.get('annotations', []) or [],
+			TDXNExt._diff_annotations(lo.get('annotations', []) or [],
 									 do.get('annotations', []) or [],
 									 path, added, removed, modified, warnings)
 
@@ -835,7 +874,7 @@ class TDNExt:
 		lv = live_raw.get('version')
 		dv = disk_raw.get('version')
 		if lv and dv and lv != dv:
-			warnings.append('TDN format version differs (disk %s vs live %s)'
+			warnings.append('TDXN format version differs (disk %s vs live %s)'
 							% (dv, lv))
 		return warnings
 
@@ -843,7 +882,7 @@ class TDNExt:
 	def _diff_normalized(live_raw, disk_raw, comp_path='', file=None,
 						 file_exists=True, baseline='disk',
 						 max_changed_ops=200, max_bytes=60000):
-		"""Semantic diff of two raw TDN documents.
+		"""Semantic diff of two raw TDXN documents.
 
 		The first argument is the NEW side, the second is the OLD side, so
 		per-field changes report old=<2nd>, new=<1st>. `baseline` labels what
@@ -853,16 +892,16 @@ class TDNExt:
 		and annotations. Returns the diff envelope. Pure -- no TD access;
 		unit-testable with dicts.
 		"""
-		warnings = TDNExt._diff_header_warnings(
+		warnings = TDXNExt._diff_header_warnings(
 			live_raw if isinstance(live_raw, dict) else {},
 			disk_raw if isinstance(disk_raw, dict) else {})
-		live = TDNExt._normalize_tdn_for_compare(live_raw)
-		disk = TDNExt._normalize_tdn_for_compare(disk_raw)
+		live = TDXNExt._normalize_tdn_for_compare(live_raw)
+		disk = TDXNExt._normalize_tdn_for_compare(disk_raw)
 
 		added, removed, modified = [], [], []
 
-		root_changes = TDNExt._diff_own_fields(
-			live, disk, keys=TDNExt._DIFF_ROOT_CONTENT_KEYS)
+		root_changes = TDXNExt._diff_own_fields(
+			live, disk, keys=TDXNExt._DIFF_ROOT_CONTENT_KEYS)
 		if root_changes:
 			modified.append({
 				'path': comp_path,
@@ -873,10 +912,10 @@ class TDNExt:
 				'changed_keys': sorted(root_changes.keys()),
 				'changes': root_changes})
 
-		TDNExt._diff_annotations(live.get('annotations', []) or [],
+		TDXNExt._diff_annotations(live.get('annotations', []) or [],
 								 disk.get('annotations', []) or [],
 								 comp_path, added, removed, modified, warnings)
-		TDNExt._diff_level(live.get('operators', []) or [],
+		TDXNExt._diff_level(live.get('operators', []) or [],
 						   disk.get('operators', []) or [],
 						   comp_path, added, removed, modified, warnings)
 
@@ -897,7 +936,7 @@ class TDNExt:
 				dropped = total - (len(added) + len(removed) + len(modified))
 
 		envelope = {
-			'schema_version': TDNExt._DIFF_SCHEMA_VERSION,
+			'schema_version': TDXNExt._DIFF_SCHEMA_VERSION,
 			'baseline': baseline,
 			'comp_path': comp_path,
 			'file': file,
@@ -935,13 +974,13 @@ class TDNExt:
 		return envelope
 
 	def DiffLiveVsDisk(self, comp_path='/', max_changed_ops=200, max_bytes=60000):
-		"""Diff a single TDN-externalized COMP: its live network vs the on-disk
+		"""Diff a single TDXN-externalized COMP: its live network vs the on-disk
 		.tdn -- i.e. what is UNSAVED.
 
 		This is the view git cannot provide: git only sees files on disk, never
 		TouchDesigner's live in-memory network. A save rewrites the .tdn, so the
 		result is empty right after saving. For committed/history diffs use git
-		(the .tdn git diff driver keeps those clean); for every TDN COMP at once,
+		(the .tdn git diff driver keeps those clean); for every TDXN COMP at once,
 		use DiffAllLiveVsDisk.
 
 		Read-only and non-interactive: the live export suppresses
@@ -957,7 +996,7 @@ class TDNExt:
 		except Exception as e:
 			return {'error': 'Failed to resolve .tdn path: %s' % e}
 		if not rel:
-			return {'error': '%s is not TDN-externalized (no .tdn file is '
+			return {'error': '%s is not TDXN-externalized (no .tdn file is '
 							 'tracked for it)' % comp_path}
 		try:
 			abs_path = str(self.ownerComp.ext.Embody.buildAbsolutePath(
@@ -989,14 +1028,14 @@ class TDNExt:
 					'comp_path': comp_path, 'file': abs_path,
 					'file_exists': True}
 
-		return TDNExt._diff_normalized(
+		return TDXNExt._diff_normalized(
 			live_tdn, disk_tdn, comp_path=comp_path, file=abs_path,
 			file_exists=True, baseline='disk',
 			max_changed_ops=max_changed_ops, max_bytes=max_bytes)
 
 	def DiffAllLiveVsDisk(self, max_comps=200, max_changed_ops=50,
 						  max_bytes=60000):
-		"""Project-wide unsaved diff: every live TDN-externalized COMP vs its
+		"""Project-wide unsaved diff: every live TDXN-externalized COMP vs its
 		on-disk .tdn. Answers "what has changed across the whole project that
 		isn't saved yet."
 
@@ -1047,7 +1086,7 @@ class TDNExt:
 				clean_count += 1
 
 		return {
-			'schema_version': TDNExt._DIFF_SCHEMA_VERSION,
+			'schema_version': TDXNExt._DIFF_SCHEMA_VERSION,
 			'baseline': 'disk',
 			'scope': 'project',
 			'changed_count': len(changed),
@@ -1080,8 +1119,8 @@ class TDNExt:
 			max_depth: Maximum recursion depth (None = unlimited)
 			cleanup_protected: List of absolute .tdn file paths that must NOT
 				be deleted by stale-file cleanup. Used by SaveTDN to protect
-				.tdn files belonging to other independently-tracked TDN COMPs.
-			embed_all: If True, recurse into TDN-tagged COMPs instead of
+				.tdn files belonging to other independently-tracked TDXN COMPs.
+			embed_all: If True, recurse into TDXN-tagged COMPs instead of
 				skipping their children. Produces a self-contained export.
 
 		Returns:
@@ -1126,14 +1165,14 @@ class TDNExt:
 			operators = self._exportChildren(root_op, options, depth=0)
 
 			# Post-processing optimizations
-			type_defaults = TDNExt._compute_type_defaults(operators)
+			type_defaults = TDXNExt._compute_type_defaults(operators)
 			if type_defaults:
-				TDNExt._strip_type_defaults(operators, type_defaults)
-			par_templates, operators = TDNExt._extract_par_templates(operators)
+				TDXNExt._strip_type_defaults(operators, type_defaults)
+			par_templates, operators = TDXNExt._extract_par_templates(operators)
 
 			build_num = self._getBuildNumber(root_op)
 			tdn = {
-				'format': 'tdn',
+				'format': TDN_FORMAT,
 				'version': TDN_VERSION,
 				'build': build_num,
 				'generator': f'Embody/{self._getEmbodyVersion()}',
@@ -1207,10 +1246,10 @@ class TDNExt:
 
 			# Write to file if requested
 			if output_file:
-				# Scan from project folder -- TDN paths mirror TD hierarchy
+				# Scan from project folder -- TDXN paths mirror TD hierarchy
 				scan_folder = str(project.folder)
 				filepath = self._resolveOutputPath(output_file, root_op)
-				content = TDNExt._compact_json_dumps(tdn)
+				content = TDXNExt._compact_json_dumps(tdn)
 
 				# Stale-file cleanup scans the whole project folder with rglob,
 				# which is hundreds of ms (the dominant checkpoint cost). Autosave
@@ -1225,14 +1264,14 @@ class TDNExt:
 				# Operation-scoped, so nothing is cached across saves.
 				resolve_cache = {}
 				if not skip_cleanup:
-					before_tdn = TDNExt._collectExistingTDNFiles(
+					before_tdn = TDXNExt._collectExistingTDNFiles(
 						scan_folder, root_path)
 					# Only files Embody tracks are deletion candidates --
 					# never reclaim a stray the user placed themselves.
 					before_tdn = self._restrictToTrackedTDN(
 						before_tdn, resolve_cache=resolve_cache)
 
-				write_result = TDNExt._safe_write_tdn(
+				write_result = TDXNExt._safe_write_tdn(
 					filepath, content, scan_folder)
 				if not write_result.get('success'):
 					return {'error':
@@ -1242,7 +1281,7 @@ class TDNExt:
 					protected = [filepath]
 					if cleanup_protected:
 						protected.extend(cleanup_protected)
-					stale = TDNExt._cleanupStaleTDNFiles(
+					stale = TDXNExt._cleanupStaleTDNFiles(
 						before_tdn, protected, scan_folder,
 						resolve_cache=resolve_cache)
 					if stale:
@@ -1262,9 +1301,9 @@ class TDNExt:
 				# (skip_cleanup). Reserved for explicit user/save exports.
 				if not skip_cleanup:
 					# Locked non-DAT operators whose frozen content won't
-					# survive a TDN round-trip.
+					# survive a TDXN round-trip.
 					self._warnLockedNonDATs(root_op, context='export')
-					# One-time warning for large monolithic TDN files.
+					# One-time warning for large monolithic TDXN files.
 					if not options.get('embed_all'):
 						self._warnLargeTDN(filepath, root_path)
 
@@ -1299,7 +1338,7 @@ class TDNExt:
 			include_dat_content: Include text/table content of DATs
 			output_file: File path to write JSON to. 'auto' generates a name.
 			max_depth: Maximum recursion depth (None = unlimited)
-			embed_all: If True, recurse into TDN-tagged COMPs instead of
+			embed_all: If True, recurse into TDXN-tagged COMPs instead of
 				skipping their children. Produces a self-contained export.
 			batch_size: Operators serialized per frame (min 10). Lower
 				values spread the work thinner for smoother UI at the cost
@@ -1368,14 +1407,14 @@ class TDNExt:
 		protected_files = []
 		if resolved_path:
 			proj_folder = metadata['project_folder']
-			before_tdn = TDNExt._collectExistingTDNFiles(
+			before_tdn = TDXNExt._collectExistingTDNFiles(
 				proj_folder, root_path)
 			# Only files Embody tracks are deletion candidates -- never
 			# reclaim a stray the user placed themselves. Computed on the
 			# main thread, BEFORE the write/track step, so a re-pathed
 			# row's OLD file is still reclaimed.
 			before_tdn = self._restrictToTrackedTDN(before_tdn)
-			# Protect .tdn files belonging to other tracked TDN COMPs
+			# Protect .tdn files belonging to other tracked TDXN COMPs
 			# so the stale-file cleanup doesn't delete them.
 			protected_files = list(
 				self.ownerComp.ext.Embody._getAllTrackedTDNFiles(
@@ -1423,22 +1462,22 @@ class TDNExt:
 				raise RuntimeError(state['error'])
 
 			# Assemble hierarchy from flat results (pure Python, no TD)
-			operators = TDNExt._assembleHierarchy(
+			operators = TDXNExt._assembleHierarchy(
 				state['results'], state['root_path'])
 
 			# Attach annotations to assembled hierarchy (pure Python dicts)
 			ann_results = state.get('annotation_results', {})
-			TDNExt._attachAnnotations(
+			TDXNExt._attachAnnotations(
 				operators, state['root_path'], ann_results)
 
 			# Post-processing optimizations
-			type_defaults = TDNExt._compute_type_defaults(operators)
+			type_defaults = TDXNExt._compute_type_defaults(operators)
 			if type_defaults:
-				TDNExt._strip_type_defaults(operators, type_defaults)
-			par_templates, operators = TDNExt._extract_par_templates(operators)
+				TDXNExt._strip_type_defaults(operators, type_defaults)
+			par_templates, operators = TDXNExt._extract_par_templates(operators)
 
 			tdn = {
-				'format': 'tdn',
+				'format': TDN_FORMAT,
 				'version': TDN_VERSION,
 				'build': state['metadata'].get('build'),
 				'generator': state['metadata']['generator'],
@@ -1507,8 +1546,8 @@ class TDNExt:
 				before_tdn = state.get('before_tdn', set())
 				base_folder = state['metadata']['project_folder']
 
-				content = TDNExt._compact_json_dumps(tdn)
-				write_result = TDNExt._safe_write_tdn(
+				content = TDXNExt._compact_json_dumps(tdn)
+				write_result = TDXNExt._safe_write_tdn(
 					state['output_file'], content, base_folder)
 				if not write_result.get('success'):
 					state['result'] = {
@@ -1518,7 +1557,7 @@ class TDNExt:
 
 				protected = [state['output_file']] + state.get(
 					'protected_files', [])
-				stale = TDNExt._cleanupStaleTDNFiles(
+				stale = TDXNExt._cleanupStaleTDNFiles(
 					before_tdn, protected,
 					base_folder)
 
@@ -1555,7 +1594,7 @@ class TDNExt:
 			'INFO')
 
 		if show_progress or (show_progress is None
-				and len(op_paths) >= TDNExt.EXPORT_PROGRESS_THRESHOLD):
+				and len(op_paths) >= TDXNExt.EXPORT_PROGRESS_THRESHOLD):
 			self._openExportProgress(state)
 
 	# ------------------------------------------------------------------
@@ -1613,7 +1652,7 @@ class TDNExt:
 		('sandbox_test_tdn_export_progress -- 400 / 1,000 operators (40%)')
 		reached the repository this way and survived several releases.
 		Resetting to the parameter defaults means the dialog contributes
-		NOTHING to the exported document (TDN omits default values).
+		NOTHING to the exported document (TDXN omits default values).
 		"""
 		try:
 			dlg = self._exportProgressComp()
@@ -1643,11 +1682,11 @@ class TDNExt:
 			state['cancel'] = True
 
 	def ExportProjectTDNInteractive(self):
-		"""Export project TDN with a dialog if TDN-tagged COMPs exist.
+		"""Export project TDXN with a dialog if TDXN-tagged COMPs exist.
 
 		Shows a ui.messageBox letting the user choose between a full
 		(self-contained) export or a modular export that skips children
-		of TDN-managed COMPs. If no TDN-tagged COMPs exist, exports
+		of TDXN-managed COMPs. If no TDXN-tagged COMPs exist, exports
 		everything directly without prompting.
 		"""
 		tdn_tag = self.ownerComp.par.Tdntag.val
@@ -1666,11 +1705,11 @@ class TDNExt:
 			return
 
 		choice = self.ownerComp.ext.Embody._messageBox(
-			'Embody \u2014 Export Project TDN',
+			'Embody \u2014 Export Project TDXN',
 			f'This project has {len(tdn_comps)} COMP(s) with their own '
 			f'.tdn files.\n\n'
 			'  Full: Self-contained file with all COMPs embedded.\n'
-			'  Modular: Skip children of TDN-managed COMPs.\n',
+			'  Modular: Skip children of TDXN-managed COMPs.\n',
 			buttons=['Cancel', 'Full', 'Modular'])
 
 		if choice not in (1, 2):
@@ -1826,11 +1865,11 @@ class TDNExt:
 			lister.reset()
 
 	def ReexportAllTDNs(self) -> None:
-		"""Re-export all tracked TDN files with current toggle setting."""
+		"""Re-export all tracked TDXN files with current toggle setting."""
 		try:
 			table = self.ownerComp.ext.Embody.Externalizations
 			if not table:
-				self._log('No TDN exports to update', 'INFO')
+				self._log('No TDXN exports to update', 'INFO')
 				return
 
 			tdn_entries = []
@@ -1848,18 +1887,18 @@ class TDNExt:
 						tdn_entries.append(root_path)
 
 			if not tdn_entries:
-				self._log('No TDN exports to update', 'INFO')
+				self._log('No TDXN exports to update', 'INFO')
 				return
 
 			self._reexport_queue = list(tdn_entries)
 			self._log(
-				f'Re-exporting {len(tdn_entries)} TDN file(s)...', 'INFO')
+				f'Re-exporting {len(tdn_entries)} TDXN file(s)...', 'INFO')
 			self._processNextReexport()
 		except Exception as e:
 			self._log(f'Failed to re-export TDNs: {e}', 'ERROR')
 
 	def _processNextReexport(self):
-		"""Pop next TDN from queue and start async export."""
+		"""Pop next TDXN from queue and start async export."""
 		if not getattr(self, '_reexport_queue', None):
 			self._reexport_queue = None
 			return
@@ -1886,7 +1925,7 @@ class TDNExt:
 						f'{type(op_def).__name__}')
 			children = op_def.get('children')
 			if children is not None:
-				err = TDNExt._validateOpDefs(
+				err = TDXNExt._validateOpDefs(
 					children, f'{path}[{i}].children')
 				if err:
 					return err
@@ -1905,7 +1944,7 @@ class TDNExt:
 			clear_first: Delete all existing children before importing
 			restore_file_links: Re-establish file/syncfile parameters on DATs
 				that are tracked in the externalizations table (used during
-				TDN reconstruction on project open)
+				TDXN reconstruction on project open)
 			restore_tdn_shells: Fill nested tdn_ref shells from their own
 				.tdn files immediately after import (Phase 8.6), recursing.
 				Default True: an individual reload, an MCP import, or any
@@ -1914,7 +1953,7 @@ class TDNExt:
 				fingerprint-dirty and the next auto-export overwrites the
 				child's good .tdn with an empty network (field data loss,
 				2026-08-12). Pass False ONLY from a caller whose own loop
-				already imports every tracked TDN COMP (startup
+				already imports every tracked TDXN COMP (startup
 				reconstruction, the post-save restore) so nested comps are
 				not imported twice per pass.
 			_tdn_seen: internal cycle guard -- normalized .tdn file paths
@@ -1926,15 +1965,15 @@ class TDNExt:
 		dest = op(target_path)
 		if not dest:
 			msg = f'Destination not found: {target_path}'
-			ui.status = f'TDN Import: {msg}'
+			ui.status = f'TDXN Import: {msg}'
 			return {'error': msg}
 		if not hasattr(dest, 'create'):
 			msg = f'{target_path} is not a COMP'
-			ui.status = f'TDN Import: {msg}'
+			ui.status = f'TDXN Import: {msg}'
 			return {'error': msg}
 
 		# Self-destruction guard: clearing the Embody COMP, an ancestor of it,
-		# or the root would delete the running TDNExt importer (a child of the
+		# or the root would delete the running TDXNExt importer (a child of the
 		# Embody COMP) mid-import, stranding the operation with a half-gutted
 		# network and no code left to finish or roll back. None of these are
 		# ever legitimate reconstruction targets (see _getTDNStrategyComps,
@@ -1945,10 +1984,10 @@ class TDNExt:
 			dest_prefix = dest.path.rstrip('/') + '/'
 			if embody_path == dest.path or embody_path.startswith(dest_prefix):
 				msg = (f'Refusing clear_first import into {target_path}: it '
-					   f'contains the Embody COMP and its TDN importer -- '
+					   f'contains the Embody COMP and its TDXN importer -- '
 					   f'clearing it would destroy the running importer. '
 					   f'Import into a specific child COMP instead.')
-				ui.status = f'TDN Import: {msg}'
+				ui.status = f'TDXN Import: {msg}'
 				return {'error': msg}
 
 		# Accept full .tdn document or just the operators array
@@ -1962,30 +2001,30 @@ class TDNExt:
 				_file_newer = (str(tdn_version) != TDN_VERSION)
 			if _file_newer:
 				self._log(
-					f'TDN file is v{tdn_version}, newer than this build '
+					f'TDXN file is v{tdn_version}, newer than this build '
 					f'(v{TDN_VERSION}); some content may not import', 'WARNING')
 
 			source_td = tdn.get('td_build', '')
 			current_td = f'{app.version}.{app.build}'
 			if source_td and source_td != current_td:
 				self._log(
-					f'TDN exported from TD {source_td} '
+					f'TDXN exported from TD {source_td} '
 					f'(current: {current_td})', 'INFO')
 
 			build_num = tdn.get('build')
 			if build_num is not None:
-				self._log(f'Importing TDN build {build_num} into {target_path}', 'DEBUG')
+				self._log(f'Importing TDXN build {build_num} into {target_path}', 'DEBUG')
 
 			op_defs = tdn['operators']
 		elif isinstance(tdn, list):
 			op_defs = tdn
 		else:
-			ui.status = 'TDN Import: Invalid .tdn format'
+			ui.status = 'TDXN Import: Invalid .tdn format'
 			return {'error': 'Invalid .tdn format'}
 
 		if not isinstance(op_defs, list):
 			msg = f'operators must be a list, got {type(op_defs).__name__}'
-			ui.status = f'TDN Import: {msg}'
+			ui.status = f'TDXN Import: {msg}'
 			return {'error': msg}
 
 		# Structural validation BEFORE anything destructive. Hand-edited
@@ -1995,10 +2034,10 @@ class TDNExt:
 		# landed AFTER clear_first had already destroyed the children --
 		# leaving the COMP empty with no error result. Reject cheaply
 		# here, while the network is still untouched.
-		structure_error = TDNExt._validateOpDefs(op_defs)
+		structure_error = TDXNExt._validateOpDefs(op_defs)
 		if structure_error:
-			msg = f'Malformed TDN document: {structure_error}'
-			ui.status = f'TDN Import: {msg}'
+			msg = f'Malformed TDXN document: {structure_error}'
+			ui.status = f'TDXN Import: {msg}'
 			self._log(msg, 'ERROR')
 			return {'error': msg}
 
@@ -2023,9 +2062,9 @@ class TDNExt:
 					f'({type(type_defaults).__name__})', 'WARNING')
 				type_defaults = {}
 			if par_templates:
-				TDNExt._resolve_par_templates(op_defs, par_templates)
+				TDXNExt._resolve_par_templates(op_defs, par_templates)
 			if type_defaults:
-				TDNExt._merge_type_defaults(op_defs, type_defaults)
+				TDXNExt._merge_type_defaults(op_defs, type_defaults)
 
 		# Pre-phase: Never overwrite a preserved excluded child. Excluded
 		# COMPs survive the clear_first pass below; if a stale .tdn still
@@ -2045,10 +2084,10 @@ class TDNExt:
 					f'entry(ies) matching preserved excluded COMP(s) in '
 					f'{target_path}', 'INFO')
 
-		# Pre-phase: Skip children of nested TDN-externalized COMPs.
+		# Pre-phase: Skip children of nested TDXN-externalized COMPs.
 		# If a child COMP has its own .tdn entry in the externalizations table,
 		# its own file is the source of truth -- not the parent's snapshot.
-		tdn_paths = self._getTDNExternalizedPaths()
+		tdn_paths = self._getTDXNExternalizedPaths()
 		if tdn_paths:
 			tdn_paths.discard(target_path)  # We ARE importing this one
 			if tdn_paths:
@@ -2056,11 +2095,11 @@ class TDNExt:
 					op_defs, target_path, tdn_paths)
 				for sp in skipped:
 					self._log(
-						f'Skipping children of {sp} -- has its own TDN '
+						f'Skipping children of {sp} -- has its own TDXN '
 						f'externalization (source of truth)', 'INFO')
 
 		# Pre-phase: Skip children of nested TOX-externalized COMPs.
-		# Same principle as TDN: the .tox file owns the child's internals.
+		# Same principle as TDXN: the .tox file owns the child's internals.
 		# Pre-fix .tdn files may still have these children embedded; strip
 		# them so we don't write stale snapshots into the live network.
 		tox_paths = self._getTOXExternalizedPaths()
@@ -2113,7 +2152,7 @@ class TDNExt:
 						pass
 
 			if clear_first:
-				# Excluded COMPs are invisible to TDN -- the owning app owns
+				# Excluded COMPs are invisible to TDXN -- the owning app owns
 				# their lifecycle. Never destroy them during clear_first: they
 				# are absent from the .tdn, so reconstruction would not recreate
 				# them, making destruction permanent data loss.
@@ -2226,10 +2265,10 @@ class TDNExt:
 			# without waiting for the next project open.
 			self._restoreTOXShells(dest)
 
-			# Phase 8.6: Restore TDN content for tdn_ref shells -- the
-			# missing TDN counterpart of Phase 8.5. Without it, every
+			# Phase 8.6: Restore TDXN content for tdn_ref shells -- the
+			# missing TDXN counterpart of Phase 8.5. Without it, every
 			# import path EXCEPT startup reconstruction left nested
-			# externalized-TDN children as empty shells (their fill was
+			# externalized-TDXN children as empty shells (their fill was
 			# deferred to a ReconstructTDNComps pass that only runs at
 			# project open), and the emptied shell's stale fingerprint
 			# then let auto-export destroy the child's .tdn on disk.
@@ -2246,7 +2285,7 @@ class TDNExt:
 						_cleanupRefs(children)
 			_cleanupRefs(op_defs)
 
-			# Phase 9: Apply target COMP's own properties from TDN.
+			# Phase 9: Apply target COMP's own properties from TDXN.
 			# Runs AFTER child creation so extension reinit (triggered by
 			# recreating extension source DATs) has already happened --
 			# this overwrites any defaults the extension set.
@@ -2255,7 +2294,7 @@ class TDNExt:
 				tdn_type = tdn.get('type')
 				if tdn_type and dest.OPType != tdn_type:
 					self._log(
-						f'Type mismatch: TDN expects {tdn_type} but '
+						f'Type mismatch: TDXN expects {tdn_type} but '
 						f'destination is {dest.OPType}', 'WARNING')
 
 				# Custom parameters
@@ -2283,7 +2322,7 @@ class TDNExt:
 						# up to the minimum, it would destroy live blocks.
 						self._log(
 							f'Sequence "{seq_name}" on {dest.path} has an '
-							f'empty block list in the TDN -- leaving the live '
+							f'empty block list in the TDXN -- leaving the live '
 							f'blocks untouched', 'WARNING')
 						continue
 					try:
@@ -2408,7 +2447,7 @@ class TDNExt:
 
 		except Exception as e:
 			self._log(f'Import failed: {e}', 'ERROR')
-			ui.status = f'TDN Import failed: {e}'
+			ui.status = f'TDXN Import failed: {e}'
 			# Clear any restore markers an aborted import stranded --
 			# _pending_tdn_restore is skip-listed from serialization as
 			# defence-in-depth, but a live stranded marker would still
@@ -2431,23 +2470,23 @@ class TDNExt:
 			clear_first: Delete all existing children before importing
 		"""
 		if not file_path:
-			self._log('No TDN file specified', 'WARNING')
-			ui.status = 'TDN Import: No file specified'
-			return {'error': 'No TDN file specified'}
+			self._log('No TDXN file specified', 'WARNING')
+			ui.status = 'TDXN Import: No file specified'
+			return {'error': 'No TDXN file specified'}
 
 		import os
 		if not os.path.isfile(file_path):
-			self._log(f'TDN file not found: {file_path}', 'ERROR')
-			ui.status = f'TDN Import: File not found -- {file_path}'
-			return {'error': f'TDN file not found: {file_path}'}
+			self._log(f'TDXN file not found: {file_path}', 'ERROR')
+			ui.status = f'TDXN Import: File not found -- {file_path}'
+			return {'error': f'TDXN file not found: {file_path}'}
 
 		try:
 			with open(file_path, 'r', encoding='utf-8') as f:
 				tdn_data = tdn_load(f.read())
 		except Exception as e:
-			self._log(f'Invalid TDN file: {e}', 'ERROR')
-			ui.status = f'TDN Import: Invalid TDN -- {e}'
-			return {'error': f'Invalid TDN file: {e}'}
+			self._log(f'Invalid TDXN file: {e}', 'ERROR')
+			ui.status = f'TDXN Import: Invalid TDXN -- {e}'
+			return {'error': f'Invalid TDXN file: {e}'}
 
 		self._log(f'Importing from {file_path} into {target_path}...', 'INFO')
 		return self.ImportNetwork(target_path, tdn_data, clear_first=clear_first)
@@ -2504,7 +2543,7 @@ class TDNExt:
 			if child.type == 'annotate':
 				continue
 
-			# Excluded COMPs are invisible to TDN -- but only at depth 0,
+			# Excluded COMPs are invisible to TDXN -- but only at depth 0,
 			# where the strip/clear passes preserve them. A nested excluded
 			# COMP is NOT preserved, so skipping it here while strip
 			# destroys it = data loss; serialize it as normal content and
@@ -2515,7 +2554,7 @@ class TDNExt:
 				self._log(
 					f'Excluded COMP {child.path} is nested under a '
 					f'non-excluded COMP -- whole-subtree exclusion only '
-					f'applies to direct children of a TDN boundary. It will '
+					f'applies to direct children of a TDXN boundary. It will '
 					f'be serialized as normal content. Tag the intervening '
 					f'COMP(s), or make it a direct child, to exclude it.',
 					'WARNING')
@@ -2628,7 +2667,7 @@ class TDNExt:
 		#
 		# include_dat_content=False means "skip content already saved
 		# elsewhere", never "throw authored code away". It is the DEFAULT, and
-		# it used to drop every unbacked DAT: a TDN COMP could export 185
+		# it used to drop every unbacked DAT: a TDXN COMP could export 185
 		# operators and zero lines of code, so a crash took every shader and
 		# callback with it (fork field report, 2026-08-21). Mirrors
 		# EmbodyExt._findAtRiskDATs so the warning and the export cannot
@@ -2648,7 +2687,7 @@ class TDNExt:
 				data['dat_read_only'] = True
 
 		# Emit child-reference metadata for COMPs whose contents are
-		# managed by a separate file (TDN/TOX externalization, or a
+		# managed by a separate file (TDXN/TOX externalization, or a
 		# palette clone). This runs even when recurse=False (async
 		# modular export) so the resulting shell carries a tdn_ref /
 		# tox_ref / palette_clone marker instead of an unmarked empty
@@ -2690,10 +2729,10 @@ class TDNExt:
 				# Child's network managed by its own .tox file.
 				# Write a tox_ref pointer for cross-validation.
 				# The .tox is opaque (binary); editing it directly in TD
-				# updates the file on save. The TDN exporter must not
+				# updates the file on save. The TDXN exporter must not
 				# recurse into the child or its internals would be
 				# duplicated into the parent .tdn, defeating the
-				# externalization. Use TDN strategy for git-diffable
+				# externalization. Use TDXN strategy for git-diffable
 				# nesting; use TOX for opaque encapsulation.
 				tox_ref = self._resolveTOXRef(target)
 				if tox_ref:
@@ -4112,7 +4151,7 @@ class TDNExt:
 			try:
 				new_op = parent.create(op_type, name)
 				# TD ignores the name param for some palette types
-				# (e.g. annotateCOMP). Explicitly rename to match the TDN.
+				# (e.g. annotateCOMP). Explicitly rename to match the TDXN.
 				if new_op.name != name:
 					try:
 						new_op.name = name
@@ -4135,7 +4174,7 @@ class TDNExt:
 			# import-then-establish, and enable-last all wipe). Only TD's
 			# native .toe/.tox loader restores a diverged enabled clone,
 			# so such COMPs belong in TOX strategy (or tdn_exclude), not
-			# TDN. The export is still faithful; the limit is rebuild.
+			# TDXN. The export is still faithful; the limit is rebuild.
 
 			# Recurse into children for COMPs
 			children = op_def.get('children', [])
@@ -4170,8 +4209,8 @@ class TDNExt:
 					f'managed by {tox_ref}', 'DEBUG')
 			elif children and new_op.isCOMP:
 				# Clear auto-created default children (e.g. torus1
-				# inside a geometryCOMP) before importing TDN children.
-				# These defaults aren't in the TDN (filtered by
+				# inside a geometryCOMP) before importing TDXN children.
+				# These defaults aren't in the TDXN (filtered by
 				# _TRIVIAL_KEYS on export) so they'd persist alongside
 				# the intended children if not removed here.
 				for default_child in list(new_op.children):
@@ -4436,7 +4475,7 @@ class TDNExt:
 		Custom sequences (defined via page.appendSequence) require
 		blockSize to be set before numBlocks. This is done in
 		_createCustomParsOnOp during Phase 2 based on the template
-		par count from the TDN.
+		par count from the TDXN.
 		"""
 		for op_def in op_defs:
 			sequences = op_def.get('sequences')
@@ -4470,7 +4509,7 @@ class TDNExt:
 						# replaces. Leave the live blocks alone.
 						self._log(
 							f'Sequence "{seq_name}" on {target.path} has an '
-							f'empty block list in the TDN -- leaving the live '
+							f'empty block list in the TDXN -- leaving the live '
 							f'blocks untouched', 'WARNING')
 						continue
 
@@ -4579,7 +4618,7 @@ class TDNExt:
 				self._setParValue(target, par_name, value)
 
 			# Custom parameter values
-			flat_defs = TDNExt._flattenCustomPars(
+			flat_defs = TDXNExt._flattenCustomPars(
 				op_def.get('custom_pars', {}))
 			self._setCustomParValues(target, flat_defs)
 
@@ -4892,7 +4931,7 @@ class TDNExt:
 				self._setDATContent(target, children)
 
 	def _restoreStorage(self, parent, op_defs):
-		"""Phase 6a: Restore operator storage from TDN data."""
+		"""Phase 6a: Restore operator storage from TDXN data."""
 		for op_def in op_defs:
 			target = self._resolveOp(parent, op_def)
 			if not target:
@@ -5125,7 +5164,7 @@ class TDNExt:
 	def _restoreFileLinks(self, dest) -> int:
 		"""Phase 8: Restore file/syncfile parameters on externalized DATs.
 
-		After TDN reconstruction, DATs that were previously externalized need
+		After TDXN reconstruction, DATs that were previously externalized need
 		their `file` parameter re-established so TD can sync content from disk.
 		Looks up each DAT in the externalizations table and restores the link.
 
@@ -5154,7 +5193,7 @@ class TDNExt:
 			if not row_path.startswith(dest_prefix):
 				continue
 
-			# Skip COMP entries (TOX/TDN strategies)
+			# Skip COMP entries (TOX/TDXN strategies)
 			row_type = table[i, 'type'].val
 			if has_strategy:
 				strategy = table[i, 'strategy'].val
@@ -5257,7 +5296,7 @@ class TDNExt:
 						  restore_file_links: bool = True) -> list:
 		"""Phase 8.6: Fill empty shells created from tdn_ref entries.
 
-		TDN counterpart of _restoreTOXShells: walks dest's subtree,
+		TDXN counterpart of _restoreTOXShells: walks dest's subtree,
 		imports each _pending_tdn_restore shell from its own file,
 		recursing via ImportNetwork. `seen` is an ANCESTOR CHAIN, not a
 		visited set: refuses true ref cycles while sibling shells
@@ -5290,13 +5329,13 @@ class TDNExt:
 						key = str(abs_path).replace('\\', '/').lower()
 						if key in seen:
 							self._log(
-								f'TDN shell restore: circular ref at '
+								f'TDXN shell restore: circular ref at '
 								f'{child.path} ({pending}) -- skipping',
 								'WARNING')
 							continue
 						if not abs_path.is_file():
 							self._log(
-								f'TDN shell restore: file missing for '
+								f'TDXN shell restore: file missing for '
 								f'{child.path} ({pending}) -- left '
 								f'empty', 'WARNING')
 							continue
@@ -5313,14 +5352,14 @@ class TDNExt:
 							seen.discard(key)
 						if res.get('error'):
 							self._log(
-								f'TDN shell restore failed for '
+								f'TDXN shell restore failed for '
 								f'{child.path}: {res["error"]}',
 								'WARNING')
 						else:
 							restored.append(child.path)
 					except Exception as e:
 						self._log(
-							f'Failed to restore TDN shell '
+							f'Failed to restore TDXN shell '
 							f'{child.path}: {e}', 'WARNING')
 				else:
 					if hasattr(child, 'children'):
@@ -5332,7 +5371,7 @@ class TDNExt:
 			if len(restored) > 8:
 				shown += f', ...and {len(restored) - 8} more'
 			self._log(
-				f'Restored {len(restored)} TDN shell(s) under '
+				f'Restored {len(restored)} TDXN shell(s) under '
 				f'{dest.path} from their own .tdn files: {shown}',
 				'INFO')
 		return restored
@@ -5357,13 +5396,13 @@ class TDNExt:
 			# by parent name).
 			if child.type == 'annotate':
 				continue
-			# Skip excluded COMPs and their whole subtree -- invisible to TDN.
+			# Skip excluded COMPs and their whole subtree -- invisible to TDXN.
 			if self._hasExcludeTag(child):
 				continue
 			paths.append(child.path)
 
 			# Recurse into COMPs (but skip palette clone children
-			# and TDN-tagged COMP children unless embed_all)
+			# and TDXN-tagged COMP children unless embed_all)
 			if hasattr(child, 'children'):
 				if (self._isPaletteClone(child)
 						and self._cloneRestorable(child)
@@ -5439,7 +5478,7 @@ class TDNExt:
 
 	@staticmethod
 	def _splitPerComp(ops, root_path, project_name, base_dir):
-		"""Split operator list into per-COMP files for multi-file TDN export.
+		"""Split operator list into per-COMP files for multi-file TDXN export.
 
 		Returns a dict mapping absolute file path -> list of op defs for that
 		file. COMPs with a 'children' key get their own .tdn file; leaf ops
@@ -5496,7 +5535,7 @@ class TDNExt:
 		"""Path.resolve() memoized per caller-supplied dict.
 
 		resolve() is a FILESYSTEM call (nt._getfinalpathname): 308 of them
-		measured in one TDN save, because the stale-cleanup pass and the
+		measured in one TDXN save, because the stale-cleanup pass and the
 		tracked-restriction pass each resolve the same ~65 tracked paths
 		independently. Sharing one cache for the duration of a single export
 		halves that. Scope the cache to one operation -- never module-global,
@@ -5531,12 +5570,12 @@ class TDNExt:
 			return set()
 		resolved_tracked = set()
 		for p in tracked:
-			r = TDNExt._resolveCached(p, resolve_cache)
+			r = TDXNExt._resolveCached(p, resolve_cache)
 			if r is not None:
 				resolved_tracked.add(r)
 		kept = set()
 		for f in files:
-			r = TDNExt._resolveCached(f, resolve_cache)
+			r = TDXNExt._resolveCached(f, resolve_cache)
 			if r is not None and r in resolved_tracked:
 				kept.add(f)
 		return kept
@@ -5560,20 +5599,28 @@ class TDNExt:
 		if not base.is_dir():
 			return set()
 
+		# One tree walk covering both suffixes, not two: the scan below is
+		# measured at 150-200ms per save and is the dominant checkpoint
+		# cost, so doubling it is not acceptable. The trailing 'n' anchor
+		# keeps '.tdn.tmp' write leftovers out; is_tdn_network_file is the
+		# authority on what actually counts.
 		if root_path == '/':
-			return {str(p) for p in base.rglob('*.tdn')}
+			return {str(p) for p in base.rglob('*.td*n')
+					if is_tdn_network_file(p)}
 
 		# Scope the SCAN, not just its result: a sub-COMP's files are only
-		# <prefix>.tdn or under <prefix>/, and rglobbing the whole project
-		# cost 150-200ms per save to find 1 file. Root '/' still full-scans.
+		# <prefix>.tdn/.tdxn or under <prefix>/, and rglobbing the whole
+		# project cost 150-200ms per save to find 1 file. Root '/' full-scans.
 		prefix = root_path.lstrip('/')
 		scoped = set()
-		own = base / f'{prefix}.tdn'
-		if own.is_file():
-			scoped.add(str(own))
+		for suffix in TDN_FILE_SUFFIXES:
+			own = base / f'{prefix}{suffix}'
+			if own.is_file():
+				scoped.add(str(own))
 		subtree = base / prefix
 		if subtree.is_dir():
-			scoped.update(str(p) for p in subtree.rglob('*.tdn'))
+			scoped.update(str(p) for p in subtree.rglob('*.td*n')
+						  if is_tdn_network_file(p))
 		return scoped
 
 	@staticmethod
@@ -5599,7 +5646,7 @@ class TDNExt:
 		base_root = Path(base_folder).resolve()
 		written_set = set()
 		for f in written_files:
-			r = TDNExt._resolveCached(f, resolve_cache)
+			r = TDXNExt._resolveCached(f, resolve_cache)
 			if r is None:
 				# Cannot prove this just-written file differs from a deletion
 				# candidate -> delete NOTHING. (The unguarded resolve() this
@@ -5610,13 +5657,13 @@ class TDNExt:
 		deleted = []
 
 		for fpath_str in before_files:
-			resolved = TDNExt._resolveCached(fpath_str, resolve_cache)
+			resolved = TDXNExt._resolveCached(fpath_str, resolve_cache)
 			if resolved is None:
 				continue  # unresolvable -> never a deletion candidate
 			fpath = Path(resolved)
 
-			# Safety: only delete .tdn files
-			if fpath.suffix.lower() != '.tdn':
+			# Safety: only delete TDXN network files (.tdxn or legacy .tdn)
+			if not is_tdn_network_file(fpath):
 				continue
 
 			# Safety: only delete files under base_folder
@@ -5664,7 +5711,7 @@ class TDNExt:
 	_PALETTE_HANDLING_VALUES = ('blackbox', 'fullexport')
 
 	def _resolvePaletteHandling(self, target):
-		"""Resolve how to handle a detected palette COMP during TDN export.
+		"""Resolve how to handle a detected palette COMP during TDXN export.
 
 		Precedence:
 		  1. Per-COMP storage override (`_tdn_palette_handling`).
@@ -5723,7 +5770,7 @@ class TDNExt:
 			choice = embody._messageBox(
 				'Embody - Palette Component Detected',
 				f'Palette component "{target.name}" ({target.OPType}) found '
-				f'in TDN export at {target.path}.\n\n'
+				f'in TDXN export at {target.path}.\n\n'
 				f'- Black Box: reference the palette only; internals are '
 				f're-dropped on import. Recommended for stock palette COMPs.\n'
 				f'- Full Export: export all internals. Use when this COMP has '
@@ -5927,8 +5974,8 @@ class TDNExt:
 				pass
 		return diffs
 
-	def _getTDNExternalizedPaths(self) -> set:
-		"""Return a set of all TDN-strategy COMP paths from the externalizations table."""
+	def _getTDXNExternalizedPaths(self) -> set:
+		"""Return a set of all TDXN-strategy COMP paths from the externalizations table."""
 		try:
 			table = self.ownerComp.ext.Embody.Externalizations
 			if not table or table.numRows < 2:
@@ -5961,7 +6008,7 @@ class TDNExt:
 
 	def _stripNestedTDNChildren(self, op_defs: list, parent_path: str,
 								tdn_paths: set) -> list:
-		"""Remove children from op_defs for COMPs with their own TDN entry.
+		"""Remove children from op_defs for COMPs with their own TDXN entry.
 
 		The child COMP shell is still created (its operator definition remains),
 		but its children array is emptied -- the child's own .tdn file is the
@@ -5970,7 +6017,7 @@ class TDNExt:
 		Args:
 			op_defs: List of operator definitions (mutated in place)
 			parent_path: TD path of the COMP being imported into
-			tdn_paths: Set of all TDN-strategy paths from externalizations table
+			tdn_paths: Set of all TDXN-strategy paths from externalizations table
 
 		Returns:
 			List of child paths that were skipped (for logging)
@@ -6028,19 +6075,19 @@ class TDNExt:
 		return skipped
 
 	def _hasTDNTag(self, target):
-		"""Check if a COMP has its own TDN externalization tag."""
+		"""Check if a COMP has its own TDXN externalization tag."""
 		if not target.isCOMP:
 			return False
 		tdn_tag = self.ownerComp.par.Tdntag.val
 		return tdn_tag in target.tags
 
 	def _hasExcludeTag(self, target):
-		"""Is this COMP tagged for exclusion from the TDN system?
+		"""Is this COMP tagged for exclusion from the TDXN system?
 
-		Excluded = invisible to TDN (never exported, stripped, or
+		Excluded = invisible to TDXN (never exported, stripped, or
 		reconstructed); the owning app manages its lifecycle. Annotation
 		COMPs are never eligible. Honored only for DIRECT CHILDREN of a
-		TDN boundary -- deeper tags serialize as normal content with a
+		TDXN boundary -- deeper tags serialize as normal content with a
 		warning (the strip/clear passes only preserve direct children).
 		"""
 		if not target.isCOMP or target.type == 'annotate':
@@ -6075,7 +6122,7 @@ class TDNExt:
 		return None
 
 	def _resolveTDNRef(self, target) -> 'Optional[str]':
-		"""Look up a TDN-tagged child COMP's relative file path.
+		"""Look up a TDXN-tagged child COMP's relative file path.
 
 		Returns the child's .tdn file path (relative to the project
 		externalization folder) from the externalizations table, or
@@ -6103,7 +6150,7 @@ class TDNExt:
 		Returns list of warning messages (empty = all valid).
 		"""
 		warnings = []
-		tdn_paths = self._getTDNExternalizedPaths()
+		tdn_paths = self._getTDXNExternalizedPaths()
 
 		for op_def in op_defs:
 			tdn_ref = op_def.get('tdn_ref')
@@ -6260,9 +6307,9 @@ class TDNExt:
 
 	@staticmethod
 	def _compact_json_dumps(data):  # name kept; body now YAML v2.0
-		"""Serialize a TDN dict to a readable, deterministic YAML v2.0 string.
+		"""Serialize a TDXN dict to a readable, deterministic YAML v2.0 string.
 
-		The name is retained so all callers (TDNExt 555/804, execute.py 187)
+		The name is retained so all callers (TDXNExt 555/804, execute.py 187)
 		stay valid. _tdn_list_representer inlines short numeric vectors and
 		literal block scalars render multi-line scripts readably -- replacing
 		the old json.dumps(indent='\\t') + regex array-inlining serializer.
@@ -6649,23 +6696,30 @@ class TDNExt:
 
 		if output_file == 'auto':
 			project_dir = Path(project.folder)
+			# An 'auto' export is user-reachable (ctrl+shift+e, the toolbar,
+			# MCP export_network) and _trackTDNExport repoints the table row
+			# at whatever we write. Minting unconditionally would therefore
+			# write a sibling .tdxn for an already-tracked legacy COMP and
+			# strand its .tdn untracked -- a silent migration. Ask what the
+			# operator already uses; only an UNtracked one mints .tdxn.
+			suffix = self.ownerComp.ext.Embody._trackedTDNSuffix(root_op.path)
 
 			if root_op.path == '/':
 				# Root export: strip build number for stable git-diffable name
 				raw_name = project.name.removesuffix('.toe')
-				safe_name = TDNExt._stripBuildSuffix(raw_name)
+				safe_name = TDXNExt._stripBuildSuffix(raw_name)
 				try:
 					ext_folder = self.ownerComp.ext.Embody.ExternalizationsFolder
 					if ext_folder:
 						out_dir = project_dir / ext_folder
 						out_dir.mkdir(parents=True, exist_ok=True)
-						return str(out_dir / f'{safe_name}.tdn')
+						return str(out_dir / f'{safe_name}{suffix}')
 				except Exception as e:
 					self._log(f'Could not resolve externalizations folder: {e}', 'WARNING')
-				return str(project_dir / f'{safe_name}.tdn')
+				return str(project_dir / f'{safe_name}{suffix}')
 			else:
 				# Non-root: use full TD path to mirror operator hierarchy
-				rel_path = root_op.path.lstrip('/') + '.tdn'
+				rel_path = root_op.path.lstrip('/') + suffix
 				out_path = project_dir / rel_path
 				out_path.parent.mkdir(parents=True, exist_ok=True)
 				return str(out_path)
@@ -6673,9 +6727,9 @@ class TDNExt:
 		return str(output_file)
 
 	def _trackTDNExport(self, root_path, file_path, build_num=None, touch_build=None):
-		"""Add/update a TDN row in the externalizations table.
+		"""Add/update a TDXN row in the externalizations table.
 
-		NEW rows only for TDN-tagged COMPs (plus root '/') -- ad-hoc file
+		NEW rows only for TDXN-tagged COMPs (plus root '/') -- ad-hoc file
 		exports must not subscribe untagged COMPs to the strip/reconstruct
 		lifecycle. Existing rows always update. Also stamps _tdn_rel_path
 		on the COMP as a recovery breadcrumb (RecoverOrphanShells).
@@ -6734,7 +6788,7 @@ class TDNExt:
 					_stamp_recovery_pointer()
 					return
 
-			# New rows require deliberate enrollment: the TDN tag (or the
+			# New rows require deliberate enrollment: the TDXN tag (or the
 			# whole-project root). An ad-hoc export of an untagged COMP
 			# writes its file but does NOT join the lifecycle.
 			if root_path != '/':
@@ -6745,7 +6799,7 @@ class TDNExt:
 				if not (target is not None and tdn_tag
 						and tdn_tag in target.tags):
 					self._log(
-						f'Ad-hoc TDN export of untagged {root_path} not '
+						f'Ad-hoc TDXN export of untagged {root_path} not '
 						f'tracked -- file written but not enrolled in the '
 						f'save/reconstruct lifecycle (tag it to enroll)',
 						'INFO')
@@ -6761,10 +6815,10 @@ class TDNExt:
 								 '', build_str, tb_str])
 			_stamp_recovery_pointer()
 		except Exception as e:
-			self._log(f'Failed to track TDN export: {e}', 'WARNING')
+			self._log(f'Failed to track TDXN export: {e}', 'WARNING')
 
 	def _warnLargeTDN(self, filepath: str, root_path: str) -> None:
-		"""Show a one-time warning when a TDN file exceeds the size threshold.
+		"""Show a one-time warning when a TDXN file exceeds the size threshold.
 
 		Uses the Tdncascadewarn parameter (ask/quiet) to control whether
 		the dialog is shown. 'Don't show again' sets the parameter to
@@ -6790,22 +6844,22 @@ class TDNExt:
 
 		size_mb = file_size / (1024 * 1024)
 		msg = (
-			f'The TDN file for {root_path} is {size_mb:.1f} MB.\n\n'
-			f'Large TDN files are difficult to diff in git. '
-			f'Enable "Cascade to Children" on the TDN page '
+			f'The TDXN file for {root_path} is {size_mb:.1f} MB.\n\n'
+			f'Large TDXN files are difficult to diff in git. '
+			f'Enable "Cascade to Children" on the TDXN page '
 			f'to split each child COMP into its own .tdn file.')
 		choice = self.ownerComp.ext.Embody._messageBox(
-			'Large TDN File',
+			'Large TDXN File',
 			msg,
 			buttons=['OK', "Don't show again"])
 
 		if choice == 1:  # Don't show again
 			self.ownerComp.par.Tdncascadewarn = 'quiet'
-			self._log('Large TDN warning silenced', 'INFO')
+			self._log('Large TDXN warning silenced', 'INFO')
 
 	# Shared footer for the locked-content dialogs (single and combined).
 	_LOCKED_WARN_FOOTER = (
-		'TDN preserves the lock flag but cannot store '
+		'TDXN preserves the lock flag but cannot store '
 		'frozen pixel, channel, or geometry data. '
 		'After reload these operators will be locked '
 		'but empty.\n\n'
@@ -6813,13 +6867,13 @@ class TDNExt:
 		'  - Unlock the operator(s) (they will re-cook '
 		'from inputs)\n'
 		'  - Switch the affected COMP(s) to TOX strategy '
-		'instead of TDN')
+		'instead of TDXN')
 
 	def _warnLockedNonDATs(self, root_op, context='export'):
 		"""Scan a network for locked non-DAT operators and warn.
 
 		Locked TOPs, CHOPs, and SOPs will have their lock flag preserved
-		in TDN but their frozen content (pixels, channels, geometry) is
+		in TDXN but their frozen content (pixels, channels, geometry) is
 		NOT stored. This warns users so they aren't surprised by data loss.
 
 		The export dialog honors the Tdnlockedwarn preference (ask/quiet,
@@ -6842,7 +6896,7 @@ class TDNExt:
 		if context == 'export':
 			self._log(
 				f'Locked non-DAT operators in {root_op.path}: {summary} '
-				f'-- frozen data will not persist through TDN', 'WARNING')
+				f'-- frozen data will not persist through TDXN', 'WARNING')
 			if not self._lockedWarnEnabled():
 				return
 			if self._locked_warn_batch is not None:
@@ -6942,7 +6996,7 @@ class TDNExt:
 
 		Skips ops inside clone/replicant interiors and ops below a nested
 		externalization boundary -- only locked content that THIS root's
-		TDN export would actually serialize (and lose) is reported.
+		TDXN export would actually serialize (and lose) is reported.
 		"""
 		locked = []
 		for child in root_op.findChildren():
@@ -6985,9 +7039,9 @@ class TDNExt:
 		owns its own export -- the exporter writes a tox_ref/tdn_ref
 		pointer instead of embedding its content. Locked data there is
 		that boundary's concern: a TOX-strategy COMP preserves locked
-		TOP/CHOP/SOP data fine in its own .tox, and a nested TDN-tagged
+		TOP/CHOP/SOP data fine in its own .tox, and a nested TDXN-tagged
 		COMP raises this same warning when it exports itself. An
-		exclude-tagged subtree is invisible to TDN entirely, so its
+		exclude-tagged subtree is invisible to TDXN entirely, so its
 		locked content is the owning application's concern (issue #53).
 		"""
 		p = child.parent()
@@ -7006,7 +7060,7 @@ class TDNExt:
 		except Exception:
 			pass  # Fallback below handles this -- avoid recursion in logger
 		# Fallback if Embody ext unavailable
-		print(f'[TDN][{level}] {message}')
+		print(f'[TDXN][{level}] {message}')
 
 	# =========================================================================
 	# CLIPBOARD -- copy/paste networks as portable _embody_tdn envelopes.
@@ -7039,11 +7093,11 @@ class TDNExt:
 		except Exception:
 			pass
 		op_count = len(env['tdn'].get('operators', []))
-		self._log("Copied %s TDN to clipboard (%d ops)" % (comp.name, op_count), 'SUCCESS')
+		self._log("Copied %s TDXN to clipboard (%d ops)" % (comp.name, op_count), 'SUCCESS')
 		return {'ok': True, 'name': comp.name, 'op_count': op_count, 'sha256': env['sha256']}
 
 	def CopySelectedToClipboard(self) -> dict:
-		"""Copy-TDN shortcut handler (Shortcutcopytdn binding, default
+		"""Copy-TDXN shortcut handler (Shortcutcopytdn binding, default
 		ctrl+shift+c / cmd+shift+c): copy the COMP selected in the current
 		network to the OS clipboard as a portable _embody_tdn envelope.
 		Mirror of PasteNetworkAsNewComp (clipboard auto-paste). No-op
@@ -7055,10 +7109,10 @@ class TDNExt:
 			return {'ok': False, 'reason': 'no_current_network'}
 		comps = [c for c in owner.selectedChildren if c.isCOMP]
 		if not comps:
-			self._log('Copy TDN: select a COMP in the network first', 'INFO')
+			self._log('Copy TDXN: select a COMP in the network first', 'INFO')
 			return {'ok': False, 'reason': 'no_comp_selected'}
 		if len(comps) > 1:
-			self._log('Copy TDN: %d COMPs selected; copying the first (%s)'
+			self._log('Copy TDXN: %d COMPs selected; copying the first (%s)'
 					  % (len(comps), comps[0].name), 'INFO')
 		return self.CopyNetworkToClipboard(comps[0])
 
@@ -7070,7 +7124,7 @@ class TDNExt:
 		on paste. A bare .tdn document with no envelope -- e.g. a .tdn file's
 		text copied from an editor -- carries NO provenance, so it is sandboxed
 		(inert) like community content; use ImportNetworkFromFile for a trusted
-		local file. Returns {'ok': False, ...} with no usable TDN.
+		local file. Returns {'ok': False, ...} with no usable TDXN.
 		"""
 		raw = ui.clipboard or ''
 		env = unwrap_clipboard(raw)
@@ -7143,7 +7197,7 @@ class TDNExt:
 			return plan
 		res = self._importPlanned(target, plan)
 		verdict = (plan.get('capability') or {}).get('verdict')
-		self._log("Pasted TDN into %s (mode=%s, source=%s, verdict=%s)"
+		self._log("Pasted TDXN into %s (mode=%s, source=%s, verdict=%s)"
 				  % (target.name, plan['mode'], plan.get('source'), verdict), 'SUCCESS')
 		return {'ok': True, 'target': target.path, 'mode': plan['mode'],
 				'source': plan.get('source'), 'verdict': verdict,
@@ -7184,8 +7238,8 @@ class TDNExt:
 
 	def PasteNetworkAsNewComp(self) -> dict:
 		"""Clipboard auto-paste handler (no key binding -- the watcher prompts
-		on inbound TDN): create a new COMP at the current network and
-		paste the clipboard TDN into it, named after the TDN (its network_path
+		on inbound TDXN): create a new COMP at the current network and
+		paste the clipboard TDXN into it, named after the TDXN (its network_path
 		basename, else slug). Accepts an Embody envelope or a bare .tdn
 		document. No-op (logged) when the clipboard holds neither.
 		"""
@@ -7195,17 +7249,17 @@ class TDNExt:
 			return {'ok': False, 'reason': 'no_current_network'}
 		plan = self._planPasteFromClipboard()
 		if not plan.get('ok'):
-			self._log('Paste TDN: clipboard holds no Embody envelope or .tdn document', 'INFO')
+			self._log('Paste TDXN: clipboard holds no Embody envelope or .tdn document', 'INFO')
 			return plan
 
-		# Name the new COMP after the TDN (network_path basename, else envelope
+		# Name the new COMP after the TDXN (network_path basename, else envelope
 		# slug), sanitized; TD uniquifies collisions.
 		comp_name = tdu.validName(resolve_tdn_name(plan.get('tdn'), plan.get('slug')) or 'pasted_tdn') or 'pasted_tdn'
 		base = owner.create(baseCOMP, comp_name)
 		self._placeAndSelectPasted(pane, owner, base)
 		res = self._importPlanned(base, plan)
 		verdict = (plan.get('capability') or {}).get('verdict')
-		self._log("Pasted new COMP '%s' from clipboard TDN (mode=%s, source=%s, verdict=%s)"
+		self._log("Pasted new COMP '%s' from clipboard TDXN (mode=%s, source=%s, verdict=%s)"
 				  % (base.name, plan['mode'], plan.get('source'), verdict), 'SUCCESS')
 		return {'ok': True, 'comp': base.path, 'mode': plan['mode'],
 				'source': plan.get('source'), 'verdict': verdict,
@@ -7229,7 +7283,7 @@ class TDNExt:
 		except Exception:
 			pass
 		# Pending run() calls can outlive COMP replacement during upgrades.
-		run("o = op(%r)\nif o and o.valid: o.ext.TDN._clipboardWatchTick(%d)" %
+		run("o = op(%r)\nif o and o.valid: o.ext.TDXN._clipboardWatchTick(%d)" %
 			(self.ownerComp.path, gen),
 			fromOP=self.ownerComp, delayMilliSeconds=1500)
 
@@ -7330,8 +7384,8 @@ class TDNExt:
 		name = resolve_tdn_name(env.get('tdn'), env.get('slug')) or 'network'
 		note = self._clipboardSafetyNote(env)
 		choice = self.ownerComp.ext.Embody._messageBox(
-			'Embody TDN from clipboard',
-			'A TDN named "%s" is on your clipboard.%s\n\n'
+			'Embody TDXN from clipboard',
+			'A TDXN named "%s" is on your clipboard.%s\n\n'
 			'Embody it into %s as a new COMP?' % (name, note, owner.path),
 			buttons=['Embody it', 'Dismiss'])
 		if choice == 0:
@@ -7341,7 +7395,7 @@ class TDNExt:
 		"""One-line provenance/safety note for the paste prompt.
 
 		Empty for a trusted own 'embody' envelope. For community ('embody.tools')
-		content the inner TDN is scanned: a 'clean' specimen pastes live and working;
+		content the inner TDXN is scanned: a 'clean' specimen pastes live and working;
 		anything flagged lists the risky surfaces that will be disabled on paste,
 		and reassures that pure value expressions are KEPT (so the network still
 		renders). Best-effort -- any scan error degrades to no note."""

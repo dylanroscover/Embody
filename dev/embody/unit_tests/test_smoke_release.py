@@ -16,7 +16,7 @@ clipboard TDN copy/paste, the Collection safety scanner, TDN v2.0 YAML
 round-trips, GLSL .glsl externalization, the Envoy liveness watchdog, and
 end-to-end TDN feature round-trips (POP chains, default-valued custom
 parameters, and the tdn_exclude tag). They reach the installed extensions
-exactly the way the existing smoke tests do (self.embody.ext.TDN /
+exactly the way the existing smoke tests do (self.embody.ext.TDXN /
 self.embody.ext.Envoy / self.embody.op('Collection').ext.Collection),
 never a dev-only EmbodyTestCase helper.
 """
@@ -127,9 +127,9 @@ class TestSmokeRelease(EmbodyTestCase):
         self.assertIsNotNone(ext, 'EnvoyExt should be loaded')
 
     def test_tdn_extension_loaded(self):
-        """TDNExt is accessible on the Embody COMP."""
-        ext = self.embody.ext.TDN
-        self.assertIsNotNone(ext, 'TDNExt should be loaded')
+        """TDXNExt is accessible on the Embody COMP."""
+        ext = self.embody.ext.TDXN
+        self.assertIsNotNone(ext, 'TDXNExt should be loaded')
 
     def test_no_script_errors(self):
         """Embody COMP has no script errors."""
@@ -370,7 +370,7 @@ class TestSmokeRelease(EmbodyTestCase):
     # v6 fresh-install: shared helpers
     #
     # These reach the SHIPPED extensions the same way the rest of this suite
-    # does -- self.embody.ext.TDN / .Envoy and self.embody.op('Collection')
+    # does -- self.embody.ext.TDXN / .Envoy and self.embody.op('Collection')
     # -- never a dev-only EmbodyTestCase convenience. Each helper resolves its
     # target inline (never cached) and skips gracefully when the feature isn't
     # present (e.g. an older .tox, or POPs unavailable in this TD build).
@@ -386,7 +386,7 @@ class TestSmokeRelease(EmbodyTestCase):
 
     def _tdn(self):
         """The shipped TDN extension (resolved live, never cached)."""
-        ext = self.embody.ext.TDN
+        ext = self.embody.ext.TDXN
         if ext is None:
             raise SkipTest('TDN extension not loaded on the release .tox')
         return ext
@@ -497,11 +497,11 @@ class TestSmokeRelease(EmbodyTestCase):
             self.assertTrue(Path(fp).exists(),
                 'ExportNetwork did not write the .tdn file')
 
-            # The on-disk file must parse as YAML and self-identify as TDN.
+            # The on-disk file must parse as YAML and self-identify as TDXN.
             with open(fp, 'r', encoding='utf-8') as f:
                 doc = yaml.safe_load(f)
-            self.assertEqual(doc.get('format'), 'tdn',
-                "Exported .tdn must declare format == 'tdn'")
+            self.assertEqual(doc.get('format'), 'tdxn',
+                "Exported network file must declare format == 'tdxn'")
 
             # Import the parsed doc into a CLEAN, separate COMP.
             target = self._make_sandbox_comp('v6_yaml_target')

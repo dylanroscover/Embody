@@ -2,9 +2,9 @@ import { parse } from "yaml";
 import { getCurrentTdnBlobForSlug } from "./db";
 import { getTdn } from "./r2";
 
-// The .tdn blobs stored in R2 are TDN v2.0 YAML (Embody's on-disk format).
+// The .tdn blobs stored in R2 are TDXN v2.0 YAML (Embody's on-disk format).
 // This helper resolves a slug to its current-version blob, downloads the raw
-// YAML text from R2, and parses it into a TDN object. The Cloudflare Workers
+// YAML text from R2, and parses it into a TDXN object. The Cloudflare Workers
 // runtime + the @astrojs/cloudflare adapter support the pure-JS 'yaml' parser.
 
 export interface ParsedTdn {
@@ -12,7 +12,7 @@ export interface ParsedTdn {
   key: string;
   /** Raw .tdn YAML text exactly as stored in R2. */
   raw: string;
-  /** Parsed TDN network dict. */
+  /** Parsed TDXN network dict. */
   tdn: Record<string, unknown>;
 }
 
@@ -28,13 +28,13 @@ export interface ParsedTdn {
 // helper below covers /tdn, /copy, /c/[slug], cover-graph.
 export const MAX_TDN_TEXT_CHARS = 8 * 1024 * 1024;
 
-/** Parse raw TDN v2.0 YAML text into a TDN object, or null if it is not a map. */
+/** Parse raw TDXN v2.0 YAML text into a TDXN object, or null if it is not a map. */
 export function parseTdnYaml(raw: string | null): Record<string, unknown> | null {
   if (!raw) return null;
 
   if (raw.length > MAX_TDN_TEXT_CHARS) {
     console.error(
-      `parseTdnYaml: raw TDN is ${raw.length} chars, over the ${MAX_TDN_TEXT_CHARS} cap -- refusing to parse`
+      `parseTdnYaml: raw TDXN is ${raw.length} chars, over the ${MAX_TDN_TEXT_CHARS} cap -- refusing to parse`
     );
     return null;
   }
@@ -52,7 +52,7 @@ export function parseTdnYaml(raw: string | null): Record<string, unknown> | null
 }
 
 /**
- * Resolve a slug to its current TDN blob: fetch the YAML text from R2 and parse
+ * Resolve a slug to its current TDXN blob: fetch the YAML text from R2 and parse
  * it. Returns null when the specimen, its blob, or a valid parse is missing.
  */
 export async function getParsedTdnForSlug(

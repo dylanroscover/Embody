@@ -374,7 +374,52 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
 
         new_rel = self.embody_ext.Externalizations[comp.path, 'rel_file_path'].val
         self.assertIn('tdn_rel_new', new_rel)
-        self.assertTrue(new_rel.endswith('.tdn'))
+        # A rename PRESERVES the suffix the file already had; it never
+        # migrates. This comp was freshly externalized, so it is .tdxn.
+        self.assertTrue(new_rel.endswith(old_rel[old_rel.rfind('.'):]),
+                        f'rename changed the suffix: {old_rel} -> {new_rel}')
+
+    def test_rename_preserves_legacy_tdn_suffix(self):
+        """A .tdn COMP must still be .tdn after a rename.
+
+        v6.1.0 mints .tdxn for NEW externalizations only. _updateMovedTDNOp
+        calls _buildTDNRelPath and then physically moves the file, so a
+        mint there would silently convert every legacy COMP the first time
+        it was renamed -- a migration the user never asked for, performed
+        as a bare file move.
+        """
+        from pathlib import Path as P
+        comp, old_path, old_rel = self._externalize_tdn_comp(
+            self.workspace, 'legacy_rename')
+
+        # Force the row + file to look like a pre-6.1 externalization.
+        legacy_rel = old_rel[:old_rel.rfind('.')] + '.tdn'
+        old_abs = self.embody_ext.buildAbsolutePath(
+            self.embody_ext.normalizePath(old_rel)).resolve()
+        legacy_abs = self.embody_ext.buildAbsolutePath(
+            self.embody_ext.normalizePath(legacy_rel)).resolve()
+        if old_abs.is_file():
+            old_abs.replace(legacy_abs)
+        self.embody_ext._updateRowCells(
+            comp.path, {'rel_file_path': legacy_rel}, strategy='tdn')
+
+        comp.name = 'legacy_rename_new'
+        self.embody_ext._findMovedTDNOp(old_path, legacy_rel, set())
+
+        new_rel = self.embody_ext.Externalizations[comp.path, 'rel_file_path'].val
+        self.assertIn('legacy_rename_new', new_rel)
+        self.assertTrue(
+            new_rel.endswith('.tdn'),
+            f'a legacy .tdn COMP must stay .tdn across a rename, got {new_rel!r}')
+        self.assertFalse(
+            new_rel.endswith('.tdxn'),
+            'rename silently migrated a legacy .tdn to .tdxn')
+
+    def test_trackedTDNSuffix_falls_back_to_mint_when_untracked(self):
+        """An operator with no TDN row mints the current suffix."""
+        self.assertEqual(
+            self.embody_ext._trackedTDNSuffix('/no/such/op/anywhere'),
+            self.embody_ext.my.ext.TDXN.FILE_SUFFIX)
 
     def test_findMovedTDNOp_renames_file_on_disk(self):
         """After _findMovedTDNOp, the .tdn file should be renamed on disk."""

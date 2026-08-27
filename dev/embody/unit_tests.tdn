@@ -1,10 +1,10 @@
-format: tdn
+format: tdxn
 version: '2.0'
-build: 249
-generator: Embody/6.0.279
+build: 252
+generator: Embody/6.1.1
 td_build: 099.2025.33070
-source_file: Embody-6.280.toe
-exported_at: '2026-08-25T20:51:17Z'
+source_file: Embody-6.284.toe
+exported_at: '2026-08-27T17:50:07Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -36,7 +36,7 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 3463
+    rows: 4049
     cols: 5
   flags:
   - viewer
@@ -248,6 +248,12 @@ operators:
   flags:
   - viewer
   position: [600, -400]
+  color: [0.9, 0.3, 0.4]
+- name: test_tdxn_migration
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_tdxn_migration.py
+  position: [1200, -3800]
   color: [0.9, 0.3, 0.4]
 - name: test_externalization
   type: textDAT

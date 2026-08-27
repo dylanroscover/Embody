@@ -1,11 +1,11 @@
 ---
 name: specimen-authoring
-description: Workflow and hard-won TD patterns for authoring Embody Specimens (the transparent TDN gallery networks). Load before building or persisting a Specimen.
+description: Workflow and hard-won TD patterns for authoring Embody Specimens (the transparent TDXN gallery networks). Load before building or persisting a Specimen.
 ---
 
 # Specimen Authoring
 
-How to build a Specimen for the Embody Collection -- a transparent, reusable TDN network that demonstrates a TouchDesigner technique. Two specimens set the bar: `reaction-diffusion` (generative, a GPU feedback simulation) and `kaleidoscope` (compositing, a reusable polar-mirror component).
+How to build a Specimen for the Embody Collection -- a transparent, reusable TDXN network that demonstrates a TouchDesigner technique. Two specimens set the bar: `reaction-diffusion` (generative, a GPU feedback simulation) and `kaleidoscope` (compositing, a reusable polar-mirror component).
 
 ## The bar -- every Specimen must clear it
 
@@ -94,14 +94,14 @@ A GPU particle sim is a **POP feedback loop**: `spherePOP/gridPOP -> particlePOP
 - **Point Sprite MAT**: `pointscaleattrib` reads a per-point `PointScale`; `pointsize` is the constant multiplier; additive glow = `blending=on, blendop=add, srcblend=one, destblend=one, depthtest=off, depthwriting=off`. For soft round dots, feed a radial-falloff texture into `colormap` (a tiny glslTOP: `a = smoothstep(1.0, 0.15, length(vUV.st*2-1)); fragColor = vec4(vec3(a),1)`); a square sprite otherwise.
 - **To add a `Color`/`PointScale` attribute** a glslPOP doesn't have, use its **New Attribute sequence** (`seq.attr.numBlocks`, `attrNcustomname`, `attrNnumcomps`), then write `Color[id]`/`PointScale[id]` in the shader. Map `length(PartVel)` to a 3-stop ramp for a speed-colored swarm. Additive blending blows out in dense moments - keep per-sprite brightness low (multiply the color down) and let Bloom carry the glow.
 
-### TDN round-trips single-component custom-parameter VALUES (verified v6.0.26)
-A specimen's exposed parameters export their **definitions** (default, range, help). A current value is written as an explicit `value:` only when it differs from the default; when value == default the `value:` is omitted. The importer covers both cases: it applies any explicit `value:`, and -- for a **single-component** par (Float, Int, Toggle, Str, Menu; no component suffixes, size 1) -- it seeds `.val` from the `default:` when no value was stored (TDNExt.py ~L3362-3377, the `elif ('values' not in par_def and 'default' in par_def ...)` branch). So a specimen authored with `default == intended value` drops in live with correct values -- no `onInitTD` value-setter or one-time "revert to default" is needed.
+### TDXN round-trips single-component custom-parameter VALUES (verified v6.0.26)
+A specimen's exposed parameters export their **definitions** (default, range, help). A current value is written as an explicit `value:` only when it differs from the default; when value == default the `value:` is omitted. The importer covers both cases: it applies any explicit `value:`, and -- for a **single-component** par (Float, Int, Toggle, Str, Menu; no component suffixes, size 1) -- it seeds `.val` from the `default:` when no value was stored (TDXNExt.py ~L3362-3377, the `elif ('values' not in par_def and 'default' in par_def ...)` branch). So a specimen authored with `default == intended value` drops in live with correct values -- no `onInitTD` value-setter or one-time "revert to default" is needed.
 
 **Verified v6.0.26**: re-importing `plasma-interference` via `ImportNetwork` brought every Float param back at its authored value (`Scale.val == 6.0`, not 0), and the network rendered and compiled identically to the original. (This is the fix the older "imports inert" warning anticipated -- that warning described pre-fix behavior and is now obsolete.)
 
 **The one real gap -- multi-component default-valued params.** The default->value seeding is single-component only; a multi-component def (RGB / RGBA / XYZ / WH -- anything with component suffixes) carries one `default` that does not map cleanly across components, so a color/vector par whose value == default still imports at 0/min. If a specimen exposes such a par, give it a value that differs from the default (forcing an explicit `value:`/`values:` on export) or set it in an init hook. Single-component params -- which is almost everything a specimen exposes to drive uniforms -- are fine.
 
-Still verify the round-trip in every build (cheap): re-import the exported `.tdn` into a throwaway COMP, check a couple of `.val`s and that `out1` renders, then destroy the temp COMP.
+Still verify the round-trip in every build (cheap): re-import the exported `.tdxn` into a throwaway COMP, check a couple of `.val`s and that `out1` renders, then destroy the temp COMP.
 
 ## Naming, layout, output
 
@@ -115,7 +115,7 @@ Still verify the round-trip in every build (cheap): re-import the exported `.tdn
 The collection lives at repo-root `specimens/`. Per specimen:
 
 1. The temp driver stays out of the export (it's outside the COMP).
-2. `export_network` the COMP -> `specimens/<category>/<slug>.tdn` with `include_dat_content=True` (captures the shaders). The "Failed to track" warning is expected (outside `dev/`). The on-disk `.tdn` is **YAML (TDN v2.0)**: shader/script `dat_content` is a plain string rendered as a YAML literal block scalar (`|`), so GLSL reads top-to-bottom and diffs line-by-line -- do not hand-author it as an array of lines (that was the v1.5 form; v2.0 reverts to a plain string). Keep shader source LF/space-indented, not tab-indented: a tab-bearing string falls back to an ugly double-quoted scalar. Auto-created default docked compute DATs are omitted on export and recreated by TD on import, so an unedited compute companion will not appear in the file. Legacy JSON `.tdn` still import unchanged (json-first parse).
+2. `export_network` the COMP -> `specimens/<category>/<slug>.tdxn` with `include_dat_content=True` (captures the shaders). The "Failed to track" warning is expected (outside `dev/`). The on-disk `.tdxn` is **YAML (TDXN v2.0)**: shader/script `dat_content` is a plain string rendered as a YAML literal block scalar (`|`), so GLSL reads top-to-bottom and diffs line-by-line -- do not hand-author it as an array of lines (that was the v1.5 form; v2.0 reverts to a plain string). Keep shader source LF/space-indented, not tab-indented: a tab-bearing string falls back to an ugly double-quoted scalar. Auto-created default docked compute DATs are omitted on export and recreated by TD on import, so an unedited compute companion will not appear in the file. Legacy JSON `.tdxn` still import unchanged (json-first parse).
 3. Write `specimens/<category>/<slug>.prompt.md` -- what it teaches, how it works, how to recreate it.
 4. Add the entry to `specimens/manifest.json` (validate against `specimens/manifest.schema.json`): `slug` is kebab-case (`reaction-diffusion`, not `reaction_diffusion`), `output_op` is `out1`, `requires` is `none` for self-contained specimens, `warmup_frames` covers the thumbnail bake (feedback sims need hundreds-to-thousands; a cheap effect needs a few), `operator_count` = all operators including those nested inside sub-COMPs (annotations not counted).
 5. **Bake the RESULT thumbnail.** `build_specimens.py` does not exist yet, so bake by hand -- this is required, not optional; an unbaked specimen shows "preview coming soon" in the gallery:

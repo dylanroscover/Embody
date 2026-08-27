@@ -224,7 +224,7 @@ class ToolbarExt:
 		emb.par.Performmode = not current
 
 	def _action_export_tdn(self):
-		self.ownerComp.parent.Embody.ext.TDN.ExportProjectTDNInteractive()
+		self.ownerComp.parent.Embody.ext.TDXN.ExportProjectTDNInteractive()
 
 	def _action_export_comp_tdn(self):
 		comp = None
@@ -233,7 +233,7 @@ class ToolbarExt:
 				comp = pane.owner
 				break
 		if comp:
-			self.ownerComp.parent.Embody.ext.TDN.ExportNetworkAsync(
+			self.ownerComp.parent.Embody.ext.TDXN.ExportNetworkAsync(
 				root_path=comp.path, output_file='auto')
 
 	def _action_clear_filter(self):

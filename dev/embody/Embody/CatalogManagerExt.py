@@ -133,7 +133,7 @@ class CatalogManagerExt:
 		# Idempotent: onStart and onCreate both call this; skip when
 		# the current run already populated the catalog.
 		try:
-			tdn_ext = self.ownerComp.ext.TDN
+			tdn_ext = self.ownerComp.ext.TDXN
 			if tdn_ext._divergent_loaded and tdn_ext._palette_catalog:
 				return
 		except Exception:
@@ -157,7 +157,7 @@ class CatalogManagerExt:
 				complete = ('_palette' in catalog
 							and not catalog.get('_palette_partial'))
 				if complete:
-					self._populateTDNExt(catalog)
+					self._populateTDXNExt(catalog)
 					self._log(f'Loaded catalog for build {self._build_str}')
 					# Still check for cross-build patches
 					self._patchCrossBuildDefaults(catalog)
@@ -173,7 +173,7 @@ class CatalogManagerExt:
 				# an earlier session (see _palette_blocked in __init__).
 				self._palette_blocked.update(
 					catalog.get('_palette_blocked', []))
-				self._populateTDNExt(op_catalog)
+				self._populateTDXNExt(op_catalog)
 				self._patchCrossBuildDefaults(op_catalog)
 				self._scan_in_flight = True
 				self._pending_resume = (op_catalog, done)
@@ -356,7 +356,7 @@ class CatalogManagerExt:
 		run('args[0]._processChunk()', self, delayFrames=1)
 
 	def _finalizeScan(self):
-		"""Write op-type catalog to disk, load into TDNExt, start palette scan."""
+		"""Write op-type catalog to disk, load into TDXNExt, start palette scan."""
 		self._cleanupWorkspace()
 
 		if self._scan_errors:
@@ -368,8 +368,8 @@ class CatalogManagerExt:
 		self._log(f'Scan complete: {self._scan_count} types, '
 				  f'{sum(len(v) for v in self._scan_results.values())} params')
 
-		# Load op-type defaults into TDNExt immediately (palette scan follows)
-		self._populateTDNExt(self._scan_results)
+		# Load op-type defaults into TDXNExt immediately (palette scan follows)
+		self._populateTDXNExt(self._scan_results)
 
 		# Run cross-build patch check (uses op-type catalog)
 		self._patchCrossBuildDefaults(self._scan_results)
@@ -1034,9 +1034,9 @@ class CatalogManagerExt:
 		# Clean outcome - nothing wedged; drop the forensics marker.
 		self._clearInflightSentinel()
 
-		# Push palette mapping into TDNExt
+		# Push palette mapping into TDXNExt
 		try:
-			self.ownerComp.ext.TDN._palette_catalog = self._palette_results
+			self.ownerComp.ext.TDXN._palette_catalog = self._palette_results
 		except Exception:
 			pass
 
@@ -1078,7 +1078,7 @@ class CatalogManagerExt:
 				if not os.path.isfile(abs_path):
 					continue
 				with open(abs_path, 'r', encoding='utf-8') as f:
-					tdn_doc = self.ownerComp.ext.TDN.tdn_load(f.read())
+					tdn_doc = self.ownerComp.ext.TDXN.tdn_load(f.read())
 				source_build = tdn_doc.get('td_build', '')
 			except Exception:
 				continue
@@ -1205,18 +1205,18 @@ class CatalogManagerExt:
 			self._log(f'  {op_path}.{par_name}: {from_val} -> {to_val}')
 
 	# =================================================================
-	# TDNExt Integration
+	# TDXNExt Integration
 	# =================================================================
 
-	def _populateTDNExt(self, catalog):
-		"""Load catalog data into TDNExt.
+	def _populateTDXNExt(self, catalog):
+		"""Load catalog data into TDXNExt.
 
 		Separates the reserved _palette key from op-type parameter data.
 		Op-type defaults go into _divergent_defaults; palette name->type
 		mapping goes into _palette_catalog.
 		"""
 		try:
-			tdn_ext = self.ownerComp.ext.TDN
+			tdn_ext = self.ownerComp.ext.TDXN
 		except Exception:
 			return
 
@@ -1287,7 +1287,7 @@ class CatalogManagerExt:
 		the current build; does not remove rows for other builds.
 		"""
 		try:
-			palette = dict(self.ownerComp.ext.TDN._palette_catalog)
+			palette = dict(self.ownerComp.ext.TDXN._palette_catalog)
 		except Exception as e:
 			self._log(f'ExportPaletteCatalog: no palette catalog: {e}', 'ERROR')
 			return

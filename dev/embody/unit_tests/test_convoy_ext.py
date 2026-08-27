@@ -33,7 +33,7 @@ Coverage:
   - Registrations: Convoyenable in _PERSISTED_PARAMS, the Phase 3 danger
     gates NOT in it (A-49), Convoystatus/Convoyid in
     _TRANSIENT_STATUS_PARS['Embody'] (the A-50 leak stop), _convoy_gen in
-    TDNExt's SKIP_STORAGE_KEYS, EnvoyExt.RuntimePort() exists.
+    TDXNExt's SKIP_STORAGE_KEYS, EnvoyExt.RuntimePort() exists.
   - Reconcile: an unchanged tuple issues ZERO calls; enable -> disable
     drives exactly one register and one unregister; a changed Envoy port
     re-registers with the SAME runtime_id.
@@ -373,7 +373,7 @@ class TestConvoyRegistrations(EmbodyTestCase):
                 'restatement of its label' % name)
 
     def test_convoy_generation_never_serializes(self):
-        skip = self.embody.op('TDNExt').module.SKIP_STORAGE_KEYS
+        skip = self.embody.op('TDXNExt').module.SKIP_STORAGE_KEYS
         self.assertIn('_convoy_gen', skip,
                       'the reconcile generation counter changes on every '
                       'reinit -- serializing it is pure diff churn, the '

@@ -13,7 +13,7 @@ def _publish():
     emb = op.Embody
     if not emb:
         return {'error': 'Embody not found'}
-    TDN = emb.ext.TDN
+    TDN = emb.ext.TDXN
     repo = Path(project.folder).resolve().parent          # dev/ -> repo root
     spec_dir = repo / 'specimens'
     manifest_path = spec_dir / 'manifest.json'

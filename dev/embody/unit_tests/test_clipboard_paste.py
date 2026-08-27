@@ -3,7 +3,7 @@ Test suite: TDN clipboard Copy/Paste (Ctrl+Shift+C / Ctrl+Shift+V).
 
 Covers TWO layers:
 
-  HEADLESS  -- the module-level envelope contract in TDNExt.py
+  HEADLESS  -- the module-level envelope contract in TDXNExt.py
               (wrap_tdn / canonical_tdn_bytes / tdn_sha256 / to_clipboard_str /
                unwrap_clipboard / is_embody_tdn_envelope / verify_envelope_integrity /
                resolve_tdn_name). Pure Python, no TD state, no clipboard.
@@ -13,8 +13,8 @@ Covers TWO layers:
                PasteNetworkAsNewComp / ClipboardHasNetwork, which round-trip
                a small COMP through the OS clipboard (ui.clipboard).
 
-The module-level funcs are reached via the TDNExt DAT module; the class methods
-via self.embody.ext.TDN. ASCII punctuation only.
+The module-level funcs are reached via the TDXNExt DAT module; the class methods
+via self.embody.ext.TDXN. ASCII punctuation only.
 """
 
 import json
@@ -29,8 +29,8 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 # ---------------------------------------------------------------------------
 
 def _tdn_module():
-    """The TDNExt DAT module -- home of the module-level envelope funcs."""
-    return op.Embody.op('TDNExt').module
+    """The TDXNExt DAT module -- home of the module-level envelope funcs."""
+    return op.Embody.op('TDXNExt').module
 
 
 def _sample_tdn():
@@ -52,7 +52,7 @@ def _sample_tdn():
 
 
 class TestClipboardEnvelopeHeadless(EmbodyTestCase):
-    """(1) Pure envelope contract -- TDNExt's own module-level funcs."""
+    """(1) Pure envelope contract -- TDXNExt's own module-level funcs."""
 
     def setUp(self):
         super().setUp()
@@ -237,7 +237,7 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.tdn_ext = self.embody.ext.TDN
+        self.tdn_ext = self.embody.ext.TDXN
         self._saved_clip = None
         try:
             self._saved_clip = ui.clipboard
@@ -383,7 +383,7 @@ class TestClipboardPasteRouting(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.tdn_ext = self.embody.ext.TDN
+        self.tdn_ext = self.embody.ext.TDXN
         self.m = _tdn_module()
         try:
             self._saved_clip = ui.clipboard
@@ -525,7 +525,7 @@ class TestClipboardCopySelectedAndIntegrity(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.tdn_ext = self.embody.ext.TDN
+        self.tdn_ext = self.embody.ext.TDXN
         self.m = _tdn_module()
         try:
             self._saved_clip = ui.clipboard

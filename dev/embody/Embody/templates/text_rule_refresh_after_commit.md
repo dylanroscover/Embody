@@ -5,7 +5,7 @@ description: "Refresh Embody after committing externalized files so the manager 
 # Refresh Embody After Committing
 
 Embody's manager list shows an **orange "uncommitted"** badge for any externalized
-file (`.tox`, `.tdn`, `.py`, `.glsl`, `.json`, ...) that is saved to disk but not
+file (`.tox`, `.tdxn`, `.py`, `.glsl`, `.json`, ...) that is saved to disk but not
 yet committed to git. That status is recomputed on Embody's refresh sweep, so a
 commit does NOT clear the orange badges on its own -- something has to trigger a
 refresh.

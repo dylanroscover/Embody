@@ -1,23 +1,23 @@
-# TDN Format
+# TDXN Format
 
-**TDN** (TouchDesigner Network) is the substrate that makes the rest of Embody possible. It's a YAML-based file format for representing TouchDesigner operator networks as text — text your AI agent can read, text any diff tool can compare, text a network can rebuild itself from. Unlike binary `.toe` and `.tox` files, a `.tdn` file is the network in a form anything can understand.
+**TDXN** (TouchDesigner eXternal Network) is the substrate that makes the rest of Embody possible. It's a YAML-based file format for representing TouchDesigner operator networks as text — text your AI agent can read, text any diff tool can compare, text a network can rebuild itself from. Unlike binary `.toe` and `.tox` files, a `.tdxn` file is the network in a form anything can understand.
 
-## Why TDN?
+## Why TDXN?
 
-Without a text format for networks, AI-driven TouchDesigner work is one-directional: you generate, and you're stuck with what you got. There's no way to compare attempts, no way to revert cleanly, no way to hand the agent a snapshot of what's already on screen. TDN closes that loop. The format is designed to be as **lean and efficient as possible** — both in file size and readability:
+Without a text format for networks, AI-driven TouchDesigner work is one-directional: you generate, and you're stuck with what you got. There's no way to compare attempts, no way to revert cleanly, no way to hand the agent a snapshot of what's already on screen. TDXN closes that loop. The format is designed to be as **lean and efficient as possible** — both in file size and readability:
 
 - **Non-default only** — only parameters that differ from their defaults are exported. No bloat, no noise — just what you actually changed
 - **Human-readable YAML** — easy to read, diff, and review (in pull requests or any text comparison tool); multi-line scripts render as literal block scalars instead of escaped strings
 - **Aggressive deduplication** — shared properties are hoisted into type defaults and parameter templates, eliminating redundancy across operators
 - **Round-trip fidelity** — export a network, modify the YAML, import it back with identical results
 
-TDN is designed from the ground up to produce the **smallest possible output** while remaining fully readable. Every design decision — from shorthand prefixes to compact formatting — serves this goal.
+TDXN is designed from the ground up to produce the **smallest possible output** while remaining fully readable. Every design decision — from shorthand prefixes to compact formatting — serves this goal.
 
 ## Key Design Principles
 
 ### Compact Shorthands
 
-TDN uses prefix characters instead of verbose wrapper objects:
+TDXN uses prefix characters instead of verbose wrapper objects:
 
 | Prefix | Meaning | Example | Instead of |
 |--------|---------|---------|------------|
@@ -40,7 +40,7 @@ No prefix means a constant value. This keeps the common case (constant parameter
 
 ## File Format
 
-- Extension: `.tdn`
+- Extension: `.tdxn`
 - MIME type: `application/yaml`
 - Encoding: UTF-8
 - Schema: [`tdn.schema.yaml`](https://github.com/dylanroscover/Embody/blob/main/docs/tdn.schema.yaml) — validates the parsed structure
@@ -49,12 +49,12 @@ No prefix means a constant value. This keeps the common case (constant parameter
 
 ### Read (live, no disk)
 
-Use the `read_tdn` MCP tool to return a live network as a TDN dict without writing anything to disk. Preferred for LLM workflows exploring multi-operator networks — **~20-90× fewer tokens** than walking the same subtree with `get_op` + `query_network`.
+Use the `read_tdn` MCP tool to return a live network as a TDXN dict without writing anything to disk. Preferred for LLM workflows exploring multi-operator networks — **~20-90× fewer tokens** than walking the same subtree with `get_op` + `query_network`.
 
 - `comp_path` — Starting COMP (default: `/`)
 - `include_dat_content` — Include DAT text/table content
 - `max_depth` — Cap recursion on large roots
-- `embed_all` — Recurse into TDN-tagged COMPs instead of skipping their children
+- `embed_all` — Recurse into TDXN-tagged COMPs instead of skipping their children
 
 Works in all three `Tdnmode` values. See [Import & Export → Reading a Network](import-export.md#reading-a-network-no-disk-io) for the full scope-boundary guide (when to reach for `get_parameter`, `get_op_errors`, `get_dat_content`, etc. instead).
 
@@ -62,8 +62,8 @@ Works in all three `Tdnmode` values. See [Import & Export → Reading a Network]
 
 === "Keyboard Shortcut"
 
-    - ++ctrl+shift+e++ — Export entire project to `.tdn`
-    - ++ctrl+alt+e++ — Export current COMP to `.tdn`
+    - ++ctrl+shift+e++ — Export entire project to `.tdxn`
+    - ++ctrl+alt+e++ — Export current COMP to `.tdxn`
 
 === "MCP Tool"
 
@@ -73,24 +73,24 @@ Works in all three `Tdnmode` values. See [Import & Export → Reading a Network]
     - `include_dat_content` — Include DAT text/table content
     - `output_file` — File path to write (use `"auto"` for automatic naming)
     - `max_depth` — Maximum recursion depth
-    - `embed_all` — Recurse into TDN-tagged COMPs instead of writing `tdn_ref` pointers, producing a self-contained export
+    - `embed_all` — Recurse into TDXN-tagged COMPs instead of writing `tdn_ref` pointers, producing a self-contained export
 
 ### Import
 
 Use the `import_network` MCP tool:
 
 - `target_path` — Destination COMP path
-- `tdn` — The TDN document (parsed object)
+- `tdn` — The TDXN document (parsed object)
 - `clear_first` — Delete existing children before importing
 
-## TDN as Externalization Strategy
+## TDXN as Externalization Strategy
 
-COMPs can use TDN as their externalization strategy (instead of `.tox`). With TDN strategy:
+COMPs can use TDXN as their externalization strategy (instead of `.tox`). With TDXN strategy:
 
-1. Press ++ctrl+shift+u++ to update — children are exported to `.tdn` files
-2. On project save (++ctrl+s++), children are exported to `.tdn` — in the default **Export-on-Save** mode nothing is stripped from the `.toe`, so the `.toe` remains authoritative. In the experimental **Roundtrip** mode, children are also stripped from the `.toe` to keep it small, then restored after save completes.
+1. Press ++ctrl+shift+u++ to update — children are exported to `.tdxn` files
+2. On project save (++ctrl+s++), children are exported to `.tdxn` — in the default **Export-on-Save** mode nothing is stripped from the `.toe`, so the `.toe` remains authoritative. In the experimental **Roundtrip** mode, children are also stripped from the `.toe` to keep it small, then restored after save completes.
 3. In git, you see readable YAML diffs instead of binary changes
 
-By default (Export-on-Save) the `.toe` is the source of truth on open, so COMPs are **not** rebuilt from `.tdn` — Embody only reconstructs a TDN COMP that is *absent* from the `.toe` (e.g. an agent built it and the `.toe` was never saved). In **Roundtrip** mode, every TDN COMP is reconstructed from its `.tdn` file on open.
+By default (Export-on-Save) the `.toe` is the source of truth on open, so COMPs are **not** rebuilt from `.tdxn` — Embody only reconstructs a TDXN COMP that is *absent* from the `.toe` (e.g. an agent built it and the `.toe` was never saved). In **Roundtrip** mode, every TDXN COMP is reconstructed from its `.tdxn` file on open.
 
 This is configured per-COMP through the Embody externalization interface, and the mode is set via the `Tdnmode` parameter (Off / Export-on-Save / Roundtrip).

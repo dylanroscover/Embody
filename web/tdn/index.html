@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>TDN — your network, as text.</title>
-  <meta name="description" content="TDN exports TouchDesigner networks as human-readable JSON. Diffable, AI-readable, and precise enough to rebuild any network from text." />
+  <title>TDXN — your network, as text.</title>
+  <meta name="description" content="TDXN exports TouchDesigner networks as human-readable JSON. Diffable, AI-readable, and precise enough to rebuild any network from text." />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="TDN — your network, as text." />
+  <meta property="og:title" content="TDXN — your network, as text." />
   <meta property="og:description" content="TouchDesigner networks as human-readable JSON. Diffable, AI-readable, and precise enough to rebuild any network from text." />
   <meta property="og:image" content="https://embody.tools/assets/embody-screenshot.png" />
   <meta property="og:url" content="https://embody.tools/tdn" />
@@ -16,7 +16,7 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="TDN — your network, as text." />
+  <meta name="twitter:title" content="TDXN — your network, as text." />
   <meta name="twitter:description" content="TouchDesigner networks as human-readable JSON. Diffable, AI-readable, and precise enough to rebuild any network from text." />
   <meta name="twitter:image" content="https://embody.tools/assets/embody-screenshot.png" />
 
@@ -39,7 +39,7 @@
   <!-- ============================================================
        STICKY MARK (top-left only — no nav)
        ============================================================ -->
-  <header class="mark" aria-label="Embody / TDN">
+  <header class="mark" aria-label="Embody / TDXN">
     <a href="/" class="mark__link">
       <span class="mark__word">embody</span>
     </a><span class="mark__bridge" aria-hidden="true"></span><a href="#top" class="mark__link mark__link--ext">
@@ -75,12 +75,12 @@
       <div class="hero__glow" aria-hidden="true"></div>
 
       <div class="container hero__inner">
-        <p class="eyebrow">TDN <span class="eyebrow__sep">/</span> TOUCHDESIGNER NETWORK FORMAT</p>
+        <p class="eyebrow">TDXN <span class="eyebrow__sep">/</span> TOUCHDESIGNER NETWORK FORMAT</p>
 
         <h1 class="hero__headline">your network,<br />as&nbsp;text.</h1>
 
         <p class="hero__sub">
-          TDN exports any TouchDesigner network as clean, human-readable JSON — only the parameters you actually changed, structured so any tool can understand it. Your AI agent reads it in one call, at <strong>20&ndash;90&times; fewer tokens</strong> than walking operators one by one. Your team reviews it. Git diffs it line by line.
+          TDXN exports any TouchDesigner network as clean, human-readable JSON — only the parameters you actually changed, structured so any tool can understand it. Your AI agent reads it in one call, at <strong>20&ndash;90&times; fewer tokens</strong> than walking operators one by one. Your team reviews it. Git diffs it line by line.
         </p>
 
         <div class="hero__ctas">
@@ -104,7 +104,7 @@
         <h2 class="section__title">binary vs. text.</h2>
 
         <p class="lede">
-          TDN gives your TouchDesigner networks a second representation — one designed for diffing, reviewing, and reading. A format where every change is visible, every version is comparable, and every operator is text your tools can work with.
+          TDXN gives your TouchDesigner networks a second representation — one designed for diffing, reviewing, and reading. A format where every change is visible, every version is comparable, and every operator is text your tools can work with.
         </p>
 
         <div class="compare">
@@ -120,7 +120,7 @@
             </ul>
           </article>
           <article class="compare__col compare__col--tdn">
-            <h3 class="compare__heading">text <code>.tdn</code></h3>
+            <h3 class="compare__heading">text <code>.tdxn</code></h3>
             <ul class="compare__list">
               <li>Readable in any text editor</li>
               <li>Line-by-line diff — "noise frequency changed from 1 to 2.5"</li>
@@ -144,7 +144,7 @@
         <h2 class="section__title">everything that matters.</h2>
 
         <p class="lede">
-          TDN captures the complete state of a network. Everything that defines the network is in the file; everything that doesn't is left out.
+          TDXN captures the complete state of a network. Everything that defines the network is in the file; everything that doesn't is left out.
         </p>
 
         <div class="features">
@@ -243,7 +243,7 @@
         </p>
 
         <div class="tdn__grid">
-          <pre class="code" aria-label="TDN shorthands"><code><span class="c-com">// expression — just prefix with =</span>
+          <pre class="code" aria-label="TDXN shorthands"><code><span class="c-com">// expression — just prefix with =</span>
 <span class="c-k">"period"</span><span class="c-p">:</span> <span class="c-s">"=absTime.frame * 0.1"</span>
 
 <span class="c-com">// bind — just prefix with ~</span>
@@ -269,7 +269,7 @@
 
         <p class="tdn__callout"><span class="tdn__callout-lead">Round-trip safe.</span> Export a network, edit the JSON, import it back. Same network. Every time.</p>
 
-        <p class="tdn__callout"><span class="tdn__callout-lead">And&nbsp;&mdash; this is where it earns its keep with AI.</span> The same compaction that keeps <code>.tdn</code> files small on disk keeps them cheap in a context window. Envoy's <code>read_tdn</code> MCP tool returns an entire subtree &mdash; operators, parameters, connections, DAT content &mdash; in one compacted call. <strong>20&ndash;90&times; fewer tokens</strong> than walking the same network with <code>get_op</code> + <code>query_network</code>, with a conservative 5&times; floor verified in CI. Your agent reads the structure once and starts working.</p>
+        <p class="tdn__callout"><span class="tdn__callout-lead">And&nbsp;&mdash; this is where it earns its keep with AI.</span> The same compaction that keeps <code>.tdxn</code> files small on disk keeps them cheap in a context window. Envoy's <code>read_tdn</code> MCP tool returns an entire subtree &mdash; operators, parameters, connections, DAT content &mdash; in one compacted call. <strong>20&ndash;90&times; fewer tokens</strong> than walking the same network with <code>get_op</code> + <code>query_network</code>, with a conservative 5&times; floor verified in CI. Your agent reads the structure once and starts working.</p>
 
       </div>
     </section>
@@ -284,7 +284,7 @@
         <h2 class="section__title">built for safety.</h2>
 
         <p class="lede">
-          TDN is the source of truth for externalized networks. Every write must be bulletproof.
+          TDXN is the source of truth for externalized networks. Every write must be bulletproof.
         </p>
 
         <div class="pillars">
@@ -332,11 +332,11 @@
         <h2 class="section__title">survives TD upgrades.</h2>
 
         <p class="lede">
-          Some TouchDesigner operators reset certain parameters during initialization — a camera's <code>tz</code> is reported as <code>0</code> by default, but TD actually creates it at <code>5</code>. A non-default comparison that trusts the reported value will silently omit your intended setting. TDN catches this.
+          Some TouchDesigner operators reset certain parameters during initialization — a camera's <code>tz</code> is reported as <code>0</code> by default, but TD actually creates it at <code>5</code>. A non-default comparison that trusts the reported value will silently omit your intended setting. TDXN catches this.
         </p>
 
         <p class="lede">
-          The first time you open a project on a new TD build, Embody scans every creatable operator type in the background, samples the <em>actual</em> creation values, and writes a per-build catalog. TDN exports compare against those real values instead of the reported defaults. When you upgrade TD, the catalog detects which creation values shifted between builds and automatically patches your operators to preserve your intent. An elegant solution to a very obscure problem — but the kind that would otherwise cost you hours of debugging a parameter that "just changed" after an update.
+          The first time you open a project on a new TD build, Embody scans every creatable operator type in the background, samples the <em>actual</em> creation values, and writes a per-build catalog. TDXN exports compare against those real values instead of the reported defaults. When you upgrade TD, the catalog detects which creation values shifted between builds and automatically patches your operators to preserve your intent. An elegant solution to a very obscure problem — but the kind that would otherwise cost you hours of debugging a parameter that "just changed" after an update.
         </p>
 
         <p class="tdn__callout"><span class="tdn__callout-lead">Upgrade-proof.</span> Export on one build, open on another. Every parameter value survives.</p>
@@ -345,7 +345,7 @@
 
 
     <!-- ============================================================
-         THE LOOP — how TDN fits with Embody and Envoy
+         THE LOOP — how TDXN fits with Embody and Envoy
          ============================================================ -->
     <section id="loop" class="section section--loop">
       <div class="container">
@@ -353,7 +353,7 @@
         <h2 class="section__title">part of the loop.</h2>
 
         <p class="lede">
-          TDN is not a standalone format. It's the substrate that connects the other two layers of Embody — the format that makes both forward and lateral velocity possible.
+          TDXN is not a standalone format. It's the substrate that connects the other two layers of Embody — the format that makes both forward and lateral velocity possible.
         </p>
 
         <div class="pillars pillars--three">
@@ -368,19 +368,19 @@
             <h3 class="pillar__name">Embody</h3>
             <p class="pillar__claim">lateral velocity.</p>
             <p class="pillar__body">
-              Tag a COMP as TDN and every save writes a <code>.tdn</code> next to the <code>.toe</code> &mdash; diffable, reviewable, readable by your agent. Opt into Roundtrip mode and the <code>.tdn</code> becomes the source of truth, rebuilding children on open.
+              Tag a COMP as TDXN and every save writes a <code>.tdxn</code> next to the <code>.toe</code> &mdash; diffable, reviewable, readable by your agent. Opt into Roundtrip mode and the <code>.tdxn</code> becomes the source of truth, rebuilding children on open.
             </p>
           </article>
           <article class="pillar">
             <h3 class="pillar__name">Git</h3>
             <p class="pillar__claim">the record.</p>
             <p class="pillar__body">
-              Commit the <code>.tdn</code> file. Every change is a clean diff. Review network modifications in pull requests. Branch off working versions. Revert broken experiments.
+              Commit the <code>.tdxn</code> file. Every change is a clean diff. Review network modifications in pull requests. Branch off working versions. Revert broken experiments.
             </p>
           </article>
         </div>
 
-        <p class="tdn__callout"><span class="tdn__callout-lead">The substrate.</span> Tag a COMP. Save it as TDN. Commit the file. Let your agent read it, modify it, import the result. All without touching a binary.</p>
+        <p class="tdn__callout"><span class="tdn__callout-lead">The substrate.</span> Tag a COMP. Save it as TDXN. Commit the file. Let your agent read it, modify it, import the result. All without touching a binary.</p>
       </div>
     </section>
 
@@ -396,7 +396,7 @@
         <div class="details">
           <div class="detail">
             <span class="detail__label">extension</span>
-            <span class="detail__value"><code>.tdn</code></span>
+            <span class="detail__value"><code>.tdxn</code></span>
           </div>
           <div class="detail">
             <span class="detail__label">encoding</span>
@@ -431,7 +431,7 @@
         <p class="eyebrow">A REAL FILE</p>
         <h2 class="section__title">this is what it looks like.</h2>
 
-        <pre class="code code--full" aria-label="Complete TDN example"><code><span class="c-p">{</span>
+        <pre class="code code--full" aria-label="Complete TDXN example"><code><span class="c-p">{</span>
   <span class="c-k">"format"</span><span class="c-p">:</span> <span class="c-s">"tdn"</span><span class="c-p">,</span>
   <span class="c-k">"version"</span><span class="c-p">:</span> <span class="c-s">"1.3"</span><span class="c-p">,</span>
   <span class="c-k">"generator"</span><span class="c-p">:</span> <span class="c-s">"Embody/5.0.372"</span><span class="c-p">,</span>
@@ -516,7 +516,7 @@
           <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdn/examples/">
             <h3 class="pillar__name">examples</h3>
             <p class="pillar__body">
-              Complete, minimal, and annotated <code>.tdn</code> files you can study and use as templates.
+              Complete, minimal, and annotated <code>.tdxn</code> files you can study and use as templates.
             </p>
             <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
           </a>
@@ -561,7 +561,7 @@
       <nav class="footer__col" aria-label="Reference">
         <h4 class="footer__h">Reference</h4>
         <ul>
-          <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDN spec</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDXN spec</a></li>
           <li><a href="https://dylanroscover.github.io/Embody/envoy/">Envoy setup</a></li>
           <li><a href="https://dylanroscover.github.io/Embody/#getting-started">get started</a></li>
           <li><a href="/for-ai">for AI agents</a></li>

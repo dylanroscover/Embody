@@ -10,7 +10,7 @@
 -- 'delete' command needs the ORIGINAL indexed column values (tags, dat_text,
 -- author_handle), and an AFTER DELETE trigger only sees the specimens row
 -- (OLD.*), which does NOT carry those. dat_text in particular lives outside D1
--- entirely (the R2 TDN blob), so no SQL trigger can reconstruct it.
+-- entirely (the R2 TDXN blob), so no SQL trigger can reconstruct it.
 --
 -- The version-safe fix is to recreate the mirror as a CONTENTLESS-DELETE table
 -- (content='', contentless_delete=1; SQLite 3.43.0+, which D1 is well past).
@@ -47,7 +47,7 @@ CREATE VIRTUAL TABLE specimens_fts USING fts5(
 );
 
 -- 3. Repopulate from the D1 rows that survive the recreate. dat_text is sourced
---    from the R2 TDN blob app-side, so it cannot be rebuilt in SQL here -- it is
+--    from the R2 TDXN blob app-side, so it cannot be rebuilt in SQL here -- it is
 --    seeded empty and re-filled on the next submit/edit (syncSpecimensFts). tags
 --    ARE in D1, so they are restored via a correlated GROUP_CONCAT. rowid must
 --    match specimens.rowid (the join key every MATCH query uses).

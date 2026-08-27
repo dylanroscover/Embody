@@ -10,3 +10,4 @@
 *.xml text eol=lf
 *.toe binary
 *.tox binary
+*.tdxn text eol=lf diff=tdn

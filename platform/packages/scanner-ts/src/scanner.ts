@@ -115,7 +115,7 @@ export function scanTdn(
       finding(
         "/",
         "storage_payloads",
-        "TDN could not be serialized safely for scanner bounds",
+        "TDXN could not be serialized safely for scanner bounds",
         "serialization failed"
       )
     );
@@ -127,7 +127,7 @@ export function scanTdn(
       finding(
         "/",
         "storage_payloads",
-        "Serialized TDN exceeds 5 MB scanner bound",
+        "Serialized TDXN exceeds 5 MB scanner bound",
         `${serializedSize} bytes`
       )
     );
@@ -141,7 +141,7 @@ export function scanTdn(
         finding(
           "/",
           "denylisted_types",
-          "TDN operator count exceeds scanner bound",
+          "TDXN operator count exceeds scanner bound",
           `${opBound.count} operators`
         )
       );

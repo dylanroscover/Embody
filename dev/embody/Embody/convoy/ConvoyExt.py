@@ -666,7 +666,7 @@ class ConvoyExt:
         """Resolve one custom-sequence block parameter across TD builds.
 
         Custom SequenceBlock ``.par`` lookup is inconsistent across builds;
-        this mirrors TDNExt's proven attribute/bracket/full-name fallback.
+        this mirrors TDXNExt's proven attribute/bracket/full-name fallback.
         """
         par_collection = getattr(block, 'par', None)
         par = getattr(par_collection, base_name, None)

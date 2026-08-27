@@ -1,5 +1,16 @@
 # Changelog
 
+## v6.1.2
+
+Embody's network format was called TDN, and the name read like something Derivative shipped.
+
+- **The format is TDXN -- TouchDesigner eXternal Network -- and new networks export as `.tdxn`**: Derivative asked community tools whose names begin with "TD" to move to "TDX" so nothing reads as an official product. The strongest claim Embody was making was not the three letters, it was the expansion: "TouchDesigner Network" describes Derivative's product, not this one. "External" is the verb the whole tool runs on (`externalize_op`, `externalizations.tsv`, Externalize Full Project), so the new name states exactly what the file is. Same YAML, same schema, same round-trip guarantees.
+- **Every `.tdn` file you already have keeps working, and none of them move**: Embody writes whichever extension a COMP already uses, so only a *new* externalization mints `.tdxn` and a project can hold a mix indefinitely. A rename, a project-name change, and an `output_file='auto'` re-export all preserve the existing suffix rather than minting -- each of those three would otherwise have migrated a file silently, and the root-name resync would have deleted it. Convert on your own schedule with the new **Migrate .tdn to .tdxn** pulse, which is idempotent and re-runnable.
+- **Nothing in your tracking table, tags, or settings changes**: the `strategy` token stays `tdn`, the operator tag stays `tdn`, all 25 `Tdn*` parameters keep their names, and `read_tdn` / `diff_tdn` / `import_network` keep their signatures. Those are machine identities, not names -- renaming them would destroy settings on every install, blank every tagged COMP, and orphan every tracked row. The rename is the format's name and its extension, nothing else.
+- **The git diff stays empty for the identity bump**: the `.tdxn` line is backfilled into `.gitattributes` pointing at the existing `diff=tdn` driver, so no new git config is registered and nothing leaks on uninstall; `format` joins the textconv's volatile keys so the one-time `tdn` -> `tdxn` header change does not churn a diff in every file.
+- **Your AI agent is told about both, and told what did *not* change**: the shipped rules and skills now say to read the file the tracking table names rather than globbing an extension, and state plainly that the strategy value is still `tdn` -- an agent that searched for `tdxn` there would find nothing and wrongly report a project as having no externalized networks.
+- **Embody now says it is not a Derivative product**: an affiliation and trademark notice ships on every documentation page, in the README, and in the machine-readable agent files. That addresses the provenance concern more directly than any prefix does.
+
 ## v6.0.280
 
 A download that hung owned the self-updater for the rest of the session -- every later attempt answered "an update is already in progress."

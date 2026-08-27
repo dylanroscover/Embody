@@ -201,9 +201,9 @@ A clean diff is **not** proof of equivalence. Invisible to it:
 | Blind spot | Consequence |
 |---|---|
 | Embedded VFS media (movies, images, fonts) | Never appears at all. Sanity-check file size against what the structure explains. |
-| **Export-mode** parameters (CHOP exports) | Not stored in TDN. A CHOP-export difference is completely invisible. |
+| **Export-mode** parameters (CHOP exports) | Not stored in TDXN. A CHOP-export difference is completely invisible. |
 | `par.enable` / `enableExpr` / `password` | Conditional-enable rules silently lost. |
-| Fully-default, unwired operators | Dropped from TDN export entirely. **Phase 2 covers this -- another reason not to skip it.** |
+| Fully-default, unwired operators | Dropped from TDXN export entirely. **Phase 2 covers this -- another reason not to skip it.** |
 | Locked TOP/CHOP/SOP frozen data | Arrives locked and empty. |
 | Parameters equal to a creation default that **changed between TD builds** | Two exports can match while the live networks differ. Always merge in the NEWER build, applying the older side's delta onto the newer. |
 | Derived DAT content under cooking-off | Empty, not deleted. |
@@ -218,13 +218,13 @@ any merge of a UI or networking component.
 
 Phases 1, 2 and 4 are mechanical, and two of them have shipping tools:
 
-- **`diff_tdn`** compares TDN networks and is the right instrument once both
+- **`diff_tdn`** compares TDXN networks and is the right instrument once both
   sides are loaded or exported. Pair it with `export_network(embed_all=True)`
   per Phase 4.
-- **Externalizing to TDN in the first place is the real fix.** A component
-  tracked as `.tdn` is YAML on disk: git three-way-merges it like any other
+- **Externalizing to TDXN in the first place is the real fix.** A component
+  tracked as `.tdxn` is YAML on disk: git three-way-merges it like any other
   text file and this entire skill becomes unnecessary for it. If you are
-  merging the same `.tox` by hand twice, externalize it as TDN instead.
+  merging the same `.tox` by hand twice, externalize it as TDXN instead.
 
 The judgement -- which side wins, and whether a subsystem is being retired --
 stays human.

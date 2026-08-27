@@ -8,7 +8,7 @@ def load_tdn_ext_headless():
     tests_dir = os.path.dirname(os.path.abspath(__file__))
     collection_dir = os.path.dirname(tests_dir)
     embody_dir = os.path.dirname(collection_dir)
-    path = os.path.join(embody_dir, "TDNExt.py")
+    path = os.path.join(embody_dir, "TDXNExt.py")
     source = io.open(path, encoding="utf-8-sig").read()
     module = types.ModuleType("_headless_tdn_ext")
     module.__file__ = path

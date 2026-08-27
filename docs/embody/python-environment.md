@@ -4,7 +4,7 @@ Embody maintains a Python virtual environment for every project at
 `.venv/` next to your `.toe` -- built with [uv](https://docs.astral.sh/uv/)
 against TouchDesigner's own embedded interpreter, so every wheel matches
 TD's Python version and architecture. Envoy's MCP stack runs from it, the
-`.tdn` git diff driver runs from it, and **your own packages can live in
+`.tdxn` git diff driver runs from it, and **your own packages can live in
 it too**.
 
 The environment is shared three ways:

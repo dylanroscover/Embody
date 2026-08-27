@@ -2,7 +2,7 @@
 Test suite: Auto-save / crash checkpoint engine.
 
 Covers the synchronous checkpoint path and its supporting machinery:
-- ExportNetwork skip_cleanup (TDNExt) -- skips the rglob stale-scan
+- ExportNetwork skip_cleanup (TDXNExt) -- skips the rglob stale-scan
 - EmbodyExt.Checkpoint() -- frame-cheap synchronous .tdn write + clean mark
 - the touched-boundary recorder (NoteCheckpointTouch walk-up resolution)
 - the idle-settle drain queue (_pending_checkpoint_roots)
@@ -90,7 +90,7 @@ class TestAutosave(EmbodyTestCase):
     # --- Stage 1: skip_cleanup ---
 
     def test_export_network_has_skip_cleanup_param(self):
-        sig = inspect.signature(self.embody.ext.TDN.ExportNetwork)
+        sig = inspect.signature(self.embody.ext.TDXN.ExportNetwork)
         self.assertIn('skip_cleanup', sig.parameters)
         self.assertEqual(sig.parameters['skip_cleanup'].default, False)
 
@@ -110,7 +110,7 @@ class TestAutosave(EmbodyTestCase):
         comp, abs_tdn = self._make_tdn('cp_state')
         comp.op('n1').par.period = 12.5
         self.embody_ext.Checkpoint(comp.path)
-        doc = self.embody.ext.TDN.tdn_load(open(abs_tdn).read())
+        doc = self.embody.ext.TDXN.tdn_load(open(abs_tdn).read())
         period = None
         for o in doc.get('operators', []):
             if o.get('name') == 'n1':
