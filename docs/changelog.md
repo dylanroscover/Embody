@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.1.8
+
+The idle checkpoint sweep stalled a frame for 184ms after every agent burst, because it walked further than the export actually writes.
+
+- **The fingerprint's boundary is the exporter's again.** `_computeTDNFingerprint` took its recursion boundary from `_getTDNPaths()`, but that set deliberately omits Embody, its ancestors and its descendants -- correct for strip/reconstruct, wrong as a fingerprint boundary -- so `/embody` re-walked the entire Embody subtree that `embody.tdn` holds only a `tdn_ref` for. It now stops on the same tag the exporter stops on: 197.7ms -> 59.0ms across 65 roots, `/embody` 61.6ms -> 0.61ms. It was a correctness bug as well as a cost -- an edit inside `wizard` marked `/embody` dirty, so every burst re-exported `embody.tdn` to a byte-identical file.
+- **The sweep runs in per-frame slices.** `_COARSE_SWEEP_CAP` bounded how many roots a sweep examined, never how long one frame spent doing it, and a single root fingerprints in ~62ms. It is now resumable under an 8ms budget (the pattern the dirty sweep already used), the drain stays armed until its cursor drains, and a failed sweep drops its cursor rather than resuming every frame forever. Worst frame per burst: 184-211ms -> 51ms, now bounded by the one root too expensive to split rather than by the sweep.
+- **The first sweep after upgrading checkpoints every tracked root once.** Narrowing the walk stales the baselines taken under the old one. That is deliberate: a checkpoint writes current state, while re-baselining instead would silently drop real unsaved work.
+
+Six new tests covering the boundary, the guard against over-fixing, resumption across frames, and cursor teardown on failure (**4,376 tests**, 136 suites).
+
 ## v6.1.7
 
 The TDXN rename shipped with its own name still showing in half the UI -- and two buttons that raised an exception when clicked.
