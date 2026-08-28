@@ -80,8 +80,8 @@ class EmbodyExt:
     # Explicit whitelist -- new params default to "not persisted" until added.
     _PERSISTED_PARAMS = frozenset({
         # Core
-        'Folder', 'Envoyenable', 'Envoyport', 'Aiclient', 'Aiprojectroot',
-        'Aiprojectrootcustom',
+        'Folder', 'Envoyenable', 'Envoyport', 'Aiclient', 'Configclient',
+        'Aiprojectroot', 'Aiprojectrootcustom',
         # Tag names
         'Toxtag', 'Tdntag', 'Tdnexcludetag', 'Pytag', 'Csvtag', 'Dattag',
         'Htmltag', 'Jsontag', 'Mdtag', 'Rtftag', 'Txttag',
@@ -129,96 +129,21 @@ class EmbodyExt:
         'Shortcutcopytdn', 'Shortcuttagger',
     })
 
-    # Aiclient token -> how the Launchaiclient button opens it at the project
-    # root (_findProjectRoot(), which honors Aiprojectroot).
-    #   kind 'editor'   -> GUI editor opened with the root as its workspace
-    #   kind 'terminal' -> new login-shell terminal at the root running the CLI
-    # Editors resolve the REAL app/exe, never a PATH shim -- a `code` shim can be
-    # hijacked (e.g. Cursor installs its own). CLIs run inside a real terminal so
-    # its login shell rebuilds PATH (defeats the Dock-truncated-PATH problem where
-    # a CLI in ~/.local/bin is invisible to a Dock-launched TD). Tokens absent
-    # here (e.g. 'none') -> Launchaiclient logs "no launcher".
-    _VSCODE_LAUNCH = {
-        'kind': 'editor', 'app': 'Visual Studio Code',
-        'bundle': 'com.microsoft.VSCode',
-        'mac_cli': '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
-        'win_exe': [
-            r'%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe',
-            r'%ProgramFiles%\Microsoft VS Code\Code.exe',
-            r'%ProgramFiles(x86)%\Microsoft VS Code\Code.exe',
-        ],
-        'win_shim': 'code',
-        'install': 'https://code.visualstudio.com/download  (macOS: brew install --cask visual-studio-code)',
-    }
-    # Terminal CLIs carry a per-OS install spec (dict) instead of a single
-    # string: the missing-CLI terminal guard renders it as step-by-step
-    # instructions with THE command to paste on its own line, correct for the
-    # shell the guard runs in (cmd.exe on Windows, zsh on macOS). Keys:
-    #   name    -> display name shown in the guard header
-    #   mac/win -> the one command to copy/paste (official installer, per
-    #              the tool's own docs; the win command must run in cmd.exe)
-    #   mac_alt/win_alt -> labeled alternative -- a PURE pasteable command
-    #   mac_alt_note/win_alt_note -> caveat rendered under the alternative
-    #   note    -> prerequisite line shown under the command (e.g. Node.js)
-    #   docs    -> official install docs URL
-    # A plain-string 'install' is still accepted (legacy single-line hint).
-    _AICLIENT_LAUNCH = {
-        'claudecode': {'kind': 'terminal', 'cli': 'claude', 'install': {
-            'name': 'Claude Code',
-            'mac': 'curl -fsSL https://claude.ai/install.sh | bash',
-            'mac_alt': 'brew install --cask claude-code',
-            'win': 'curl -fsSL https://claude.ai/install.cmd -o install.cmd '
-                   '&& install.cmd && del install.cmd',
-            'win_alt': 'winget install Anthropic.ClaudeCode',
-            'docs': 'https://code.claude.com/docs/en/setup',
-        }},
-        'opencode':   {'kind': 'terminal', 'cli': 'opencode', 'install': {
-            'name': 'OpenCode',
-            'mac': 'curl -fsSL https://opencode.ai/install | bash',
-            'mac_alt': 'brew install anomalyco/tap/opencode',
-            'win': 'choco install opencode',
-            'win_alt': 'npm install -g opencode-ai',
-            'win_alt_note': 'needs Node.js -- https://nodejs.org',
-            'docs': 'https://opencode.ai/docs/',
-        }},
-        'codex':      {'kind': 'terminal', 'cli': 'codex', 'install': {
-            'name': 'Codex CLI',
-            'mac': 'curl -fsSL https://chatgpt.com/codex/install.sh | sh',
-            'mac_alt': 'brew install --cask codex',
-            'win': 'powershell -ExecutionPolicy ByPass -c '
-                   '"irm https://chatgpt.com/codex/install.ps1 | iex"',
-            'win_alt': 'npm install -g @openai/codex',
-            'win_alt_note': 'needs Node.js -- https://nodejs.org',
-            'docs': 'https://developers.openai.com/codex/cli',
-        }},
-        'gemini':     {'kind': 'terminal', 'cli': 'gemini', 'install': {
-            'name': 'Gemini CLI',
-            'mac': 'npm install -g @google/gemini-cli',
-            'mac_alt': 'brew install gemini-cli',
-            'win': 'npm install -g @google/gemini-cli',
-            'note': 'needs Node.js 20 or newer -- https://nodejs.org',
-            'docs': 'https://www.geminicli.com/docs/get-started/installation',
-        }},
-        'copilot':    _VSCODE_LAUNCH,   # Copilot lives inside VS Code
-        'vscode':     _VSCODE_LAUNCH,   # VS Code uses the same launcher as Copilot
-        'cursor': {
-            'kind': 'editor', 'app': 'Cursor',
-            'bundle': 'com.todesktop.230313mzl4w4u92',
-            'mac_cli': '/Applications/Cursor.app/Contents/Resources/app/bin/cursor',
-            'win_exe': [r'%LOCALAPPDATA%\Programs\cursor\Cursor.exe'],
-            'win_shim': 'cursor',
-            'install': 'https://cursor.com/download  (macOS: brew install --cask cursor)',
-        },
-        'windsurf': {
-            'kind': 'editor', 'app': 'Windsurf',
-            'bundle': 'com.exafunction.windsurf',
-            'alt_names': ('Devin Desktop',),   # Windsurf rebrand
-            'win_exe': [r'%LOCALAPPDATA%\Programs\Windsurf\Windsurf.exe'],
-            'win_shim': 'windsurf',
-            'install': 'https://windsurf.com/editor/download  (macOS: brew install --cask windsurf)',
-        },
-        # 'none' -> not present -> "no launcher" log.
-    }
+    # Launch specs and every other per-client fact now live in ONE place:
+    # the ai_clients module DAT. These two properties keep the historical
+    # attribute names working for embody_launch and the tests; a property
+    # (not a class attr) because `mod.<name>` must not run at class-body
+    # time -- that is module-level TD access.
+
+    @property
+    def _VSCODE_LAUNCH(self):
+        """VS Code's launch spec (shared with the Copilot token)."""
+        return mod.ai_clients.VSCODE_LAUNCH
+
+    @property
+    def _AICLIENT_LAUNCH(self):
+        """Aiclient token -> launch spec; see ai_clients for the contract."""
+        return mod.ai_clients.launch_table()
 
     # TouchDesigner injects env vars that BREAK other apps launched as a fresh
     # process: ELECTRON_RUN_AS_NODE=1 makes Electron editors (VS Code, Cursor,
@@ -1897,12 +1822,15 @@ class EmbodyExt:
             return
         if assistant == 'claudecode':
             self.my.par.Aiclient = 'claudecode'
+            self._setClientMenus('claudecode')
         elif assistant == 'other' and client:
             try:
                 self.my.par.Aiclient = client
             except Exception:
                 self.Log(f'Unknown AI client "{client}" -- keeping the current '
                          f'selection.', 'WARNING')
+            else:
+                self._setClientMenus(client)
 
         # 3.5 Convoy. Flips the canonical Convoyenable toggle -- '' means an
         #     older wizard did not show the step, so leave the setting alone.
@@ -2509,17 +2437,57 @@ class EmbodyExt:
         pruned after deletion.
         """
         deleted = 0
+        hashes = self._loadHashManifest(str(old_root))
 
         def remove_if_marked(path):
             nonlocal deleted
             if not path.is_file():
                 return
             try:
-                content = path.read_text(encoding='utf-8', errors='ignore')
-            except OSError as e:
-                self.Log(f'Could not read {path}: {e}', 'WARNING')
+                # STRICT: this content is written back after the block is
+                # stripped, and errors='ignore' silently deleted every
+                # undecodable byte from the user's file while logging
+                # success. A file we cannot decode exactly is a file we
+                # must not rewrite.
+                content = path.read_text(encoding='utf-8')
+            except (OSError, UnicodeDecodeError) as e:
+                self.Log(f'Could not read {path} ({e}) -- leaving it alone.',
+                         'WARNING')
                 return
-            if self._EMBODY_MARKER not in content:
+            # Merge branch FIRST: our block carries the marker into a
+            # file the USER owns, so it is never at the top there and the
+            # ownership test below would bail before stripping it.
+            if mod.embody_git.AGENTS_BEGIN in content:
+                remaining = mod.embody_admin.strip_md_section(self, content)
+                try:
+                    if remaining.strip():
+                        path.write_text(remaining, encoding='utf-8',
+                                        newline='\n')
+                        self.Log(f'Removed the Embody section from {path} '
+                                 f'and kept your file.', 'INFO')
+                    else:
+                        path.unlink()
+                        deleted += 1
+                except OSError as e:
+                    self.Log(f'Could not update {path}: {e}', 'WARNING')
+                return
+            if not mod.embody_git.is_generated_by_embody(self, content):
+                return
+            # Edit protection, same rule write_template and Uninstall use.
+            # Without it the three policies disagreed about one file: a
+            # generated rule the user edited was KEPT on redeploy, KEPT by
+            # Uninstall as 'review' -- and deleted outright by an AI
+            # project-root change, which then regenerated the pristine
+            # template at the new root. The edit vanished with no warning.
+            try:
+                rel = path.resolve().relative_to(old_root).as_posix()
+            except Exception:
+                rel = path.name
+            if not mod.embody_git.embody_owns_unmodified(
+                    self, content, hashes, rel):
+                self.Log(f'Kept your edits to {path.name} at the old root '
+                         f'(move it yourself if you want it to travel).',
+                         'INFO')
                 return
             try:
                 path.unlink()
@@ -2527,23 +2495,22 @@ class EmbodyExt:
             except OSError as e:
                 self.Log(f'Could not delete {path}: {e}', 'WARNING')
 
-        # Top-level marker files
-        for name in ('AGENTS.md', 'CLAUDE.md', 'ENVOY.md'):
+        # Marker files: AGENTS.md is written for every client, the rest
+        # come from the registry (which is how GEMINI.md finally gets
+        # swept -- it was generated but never cleaned up).
+        for name in ['AGENTS.md'] + mod.ai_clients.cleanup_files():
             remove_if_marked(old_root / name)
 
-        # Tree-scoped marker files: anything Embody writes via _writeTemplate
-        for sub in ('.claude/rules', '.claude/skills',
-                    '.cursor/rules',
-                    '.github/instructions',
-                    '.windsurf/rules'):
+        # Tree-scoped marker files: anything Embody writes via _writeTemplate.
+        # Leaf dirs only, from the registry -- never a parent like .claude,
+        # whose other contents are not marker-bearing.
+        for sub in mod.ai_clients.cleanup_sweep_dirs():
             d = old_root / sub
             if not d.is_dir():
                 continue
             for p in d.rglob('*'):
                 if p.is_file():
                     remove_if_marked(p)
-        # Single-file marker location
-        remove_if_marked(old_root / '.github' / 'copilot-instructions.md')
 
         # .embody/ runtime files (Embody-owned, no marker -- safe to remove).
         # The .envoy-tools-cache.json (hidden dot variant) never lived under
@@ -2584,35 +2551,32 @@ class EmbodyExt:
                 except OSError as e:
                     self.Log(f'Could not delete legacy {legacy}: {e}', 'WARNING')
 
-        # .mcp.json: remove only the 'envoy' server entry, preserve others
-        mcp_file = old_root / '.mcp.json'
-        if mcp_file.is_file():
+        # Every client's MCP config, not just .mcp.json: each one holds an
+        # envoy entry pointing at the bridge, and a root we no longer
+        # manage must not keep spawning it. Registry-driven so a new
+        # client cannot be forgotten here (the old code named one file).
+        for spec in mod.ai_clients.project_mcp_specs():
+            cfg_path = old_root / spec['path']
+            if not cfg_path.is_file():
+                continue
             try:
-                import json
-                cfg = json.loads(mcp_file.read_text(encoding='utf-8'))
-                servers = cfg.get('mcpServers', {})
-                if 'envoy' in servers:
-                    del servers['envoy']
-                    if servers:
-                        cfg['mcpServers'] = servers
-                        mcp_file.write_text(
-                            json.dumps(cfg, indent=2) + '\n',
-                            encoding='utf-8')
-                        self.Log(
-                            f'Pruned envoy server from {mcp_file} '
-                            f'(other servers preserved)',
-                            'DEBUG')
-                    else:
-                        mcp_file.unlink()
-                        deleted += 1
-            except (json.JSONDecodeError, OSError) as e:
-                self.Log(f'Could not clean old .mcp.json: {e}', 'WARNING')
+                before = cfg_path.read_text(encoding='utf-8')
+                mod.embody_admin.strip_mcp_envoy(self, cfg_path)
+                if not cfg_path.exists():
+                    deleted += 1
+                elif cfg_path.read_text(encoding='utf-8') != before:
+                    self.Log(f'Pruned the Envoy entry from {cfg_path} '
+                             f'(your other servers preserved)', 'DEBUG')
+            except OSError as e:
+                self.Log(f'Could not clean old {spec["path"]}: {e}', 'WARNING')
 
         # Prune empty Embody-owned dirs (rmdir fails on non-empty -> safe).
         # Children-first so parents can empty as their leaves go.
         # First pass: sweep emptied skill/instruction subdirs.
-        for parent in (old_root / '.claude' / 'skills',
-                       old_root / '.github' / 'instructions'):
+        nested = [row['skills']['dir'] for row in mod.ai_clients.CLIENTS.values()
+                  if row.get('skills')]
+        nested.append('.github/instructions')
+        for parent in (old_root / sub for sub in dict.fromkeys(nested)):
             if not parent.is_dir():
                 continue
             for child in parent.iterdir():
@@ -2621,17 +2585,11 @@ class EmbodyExt:
                         child.rmdir()
                     except OSError:
                         pass  # User content inside -- leave alone
-        # Second pass: known top-level Embody-owned dirs.
-        for d in (old_root / '.claude' / 'rules',
-                  old_root / '.claude' / 'skills',
-                  old_root / '.claude',
-                  old_root / '.cursor' / 'rules',
-                  old_root / '.cursor',
-                  old_root / '.windsurf' / 'rules',
-                  old_root / '.windsurf',
-                  old_root / '.github' / 'instructions',
-                  old_root / '.github',
-                  old_root / '.embody'):
+        # Second pass: known Embody-owned dirs, deepest-first from the
+        # registry so a parent empties only after its leaves are gone.
+        dirs = [old_root / sub for sub in mod.ai_clients.cleanup_dirs()]
+        dirs.append(old_root / '.embody')
+        for d in dirs:
             try:
                 if d.is_dir():
                     d.rmdir()
@@ -2740,20 +2698,32 @@ class EmbodyExt:
 
     def _uninstallClassifyMarker(self, path, root, hashes):
         """Classify a candidate file: 'delete' (Embody-generated + unmodified),
-        'review' (marker present but edited -> keep + flag), or None (no marker
-        -> not ours, ignore)."""
+        'merged' (the user's file with our block spliced in -> strip the
+        block, keep the file), 'review' (marker present but edited -> keep +
+        flag), or None (no marker -> not ours, ignore)."""
         try:
             content = path.read_text(encoding='utf-8', errors='ignore')
         except OSError:
             return None
-        if self._EMBODY_MARKER not in content:
+        # Check the merge delimiter BEFORE the marker: our block carries the
+        # generated-by marker into a file the USER owns, so "has marker"
+        # stopped meaning "whole file is ours" the day merging shipped.
+        # Without this the fallback scan planned a hand-written AGENTS.md
+        # for deletion, labelled "Embody-generated, unmodified" -- and the
+        # fallback is exactly what runs on a clone, where the manifest that
+        # would have said otherwise is gitignored and absent.
+        if mod.embody_git.AGENTS_BEGIN in content:
+            return 'merged'
+        if not mod.embody_git.is_generated_by_embody(self, content):
             return None
         try:
             rel = path.resolve().relative_to(root).as_posix()
         except Exception:
             rel = path.name
-        stored = hashes.get(rel)
-        if stored is None or self._contentHash(content) == stored:
+        # The file's own stamp decides, so a clone -- where the sidecar
+        # never arrives -- no longer calls an edited file "unmodified"
+        # and deletes it.
+        if mod.embody_git.embody_owns_unmodified(self, content, hashes, rel):
             return 'delete'
         return 'review'  # user edited a generated file -> preserve it
 
@@ -2799,14 +2769,15 @@ class EmbodyExt:
     # AI-client tokens -> the config files _extractAIConfig writes for them (on
     # top of AGENTS.md, which is always written). Used to list the exact files
     # in the Advanced-mode confirm.
-    _AI_CONFIG_FILES = {
-        'claudecode': ['CLAUDE.md (or ENVOY.md)', '.claude/rules/', '.claude/skills/'],
-        'opencode':   ['opencode.json', '.claude/rules/', '.claude/skills/'],
-        'cursor':     ['.cursor/rules/'],
-        'copilot':    ['.github/copilot-instructions.md'],
-        'windsurf':   ['.windsurf/rules/'],
-        'gemini':     ['GEMINI.md'],
-    }
+    @property
+    def _AI_CONFIG_FILES(self):
+        """Token -> generated-file list for the Advanced consent dialog.
+
+        Derived from the ai_clients registry so a new client cannot be
+        added without its footprint appearing here.
+        """
+        reg = mod.ai_clients
+        return {t: reg.config_files(t) for t in reg.tokens()}
 
     def _extractAIConfig(self):
         """Extract AI coding assistant config files based on par.Aiclient -- see embody_git."""
@@ -10549,9 +10520,10 @@ class EmbodyExt:
         source of truth that can itself go stale.
 
         Renames happen BEFORE the row write: an orphan .tdxn with a stale
-        .tdn row is recoverable next run (and _trackTDNExport self-heals it
-        on the next export), whereas the reverse order would let SaveTDN
-        write a fresh file and strand the old one untracked.
+        .tdn row is repaired by the next run, which classifies from the stem.
+        An export in that window is the one unrecoverable interleaving -- it
+        mints a fresh .tdn off the stale row, and a stem holding BOTH suffixes
+        is refused rather than guessed.
 
         Args:
             auto: Skip the confirmation dialog (tests, scripted callers).
@@ -10636,29 +10608,56 @@ class EmbodyExt:
             if action in ('migrate', 'row_only'):
                 rename_map[self.normalizePath(old_rel)] = new_rel
 
-        if not plan:
-            self.Log('All tracked network files already use '
-                     f'{target_suffix}.', 'INFO')
-            return result
-
-        # --- parents whose tdn_ref pointers name a file we are renaming ----
-        parents = []
+        # --- parents whose tdn_ref pointers need repointing -----------------
+        # Resolve each parent by STEM, never by the row's suffix: after a crash
+        # the two disagree, and trusting the row drops that parent from the
+        # scan so its stale refs are never repaired. The scan also runs when
+        # `plan` is empty -- an earlier run may have renamed the children and
+        # died before Pass C, and only a ref repair converges that.
+        scanned = []       # (rel_on_disk, abs_path, doc, refs)
         for i in range(1, table.numRows):
             if self._cellVal(i, 'strategy', table=table) != 'tdn':
                 continue
-            rel = self._cellVal(i, 'rel_file_path', table=table)
-            abs_path = self.buildAbsolutePath(rel) if rel else None
-            if not abs_path or not abs_path.is_file():
+            row_rel = self._cellVal(i, 'rel_file_path', table=table)
+            if not row_rel:
                 continue
+            row_suffix = Path(row_rel).suffix.lower()
+            stem = (row_rel[:-len(row_suffix)] if row_suffix in suffixes
+                    else row_rel)
+            rel = next(
+                (self.normalizePath(stem + s) for s in suffixes
+                 if self.buildAbsolutePath(stem + s).is_file()), None)
+            if rel is None:
+                continue
+            abs_path = self.buildAbsolutePath(rel)
             try:
                 doc = self.my.ext.TDXN.tdn_load(
                     abs_path.read_text(encoding='utf-8'))
             except Exception:
                 continue
-            if self._collectTDNRefs(doc) & set(rename_map):
-                parents.append((i, rel, abs_path))
+            scanned.append((rel, abs_path, doc, self._collectTDNRefs(doc)))
 
-        result['parents'] = [p[1] for p in parents]
+        # Repair refs an interrupted earlier run left dangling: the named
+        # legacy file is gone and its target-suffix twin is on disk.
+        for _rel, _abs, _doc, refs in scanned:
+            for ref in refs:
+                key = self.normalizePath(ref)
+                suffix = Path(ref).suffix.lower()
+                if key in rename_map or suffix not in legacy:
+                    continue
+                twin = self.normalizePath(ref[:-len(suffix)] + target_suffix)
+                if (not self.buildAbsolutePath(ref).is_file()
+                        and self.buildAbsolutePath(twin).is_file()):
+                    rename_map[key] = twin
+
+        parents = [(rel, abs_path) for rel, abs_path, _doc, refs in scanned
+                   if refs & set(rename_map)]
+        result['parents'] = [p[0] for p in parents]
+
+        if not plan and not parents:
+            self.Log('All tracked network files already use '
+                     f'{target_suffix}.', 'INFO')
+            return result
         for _, op_path, old_rel, new_rel, action in plan:
             result[{'migrate': 'migrated', 'row_only': 'row_only',
                     'rename_only': 'rename_only'}[action]].append(
@@ -10703,6 +10702,11 @@ class EmbodyExt:
                 failed_rels.add(old_rel)
                 result['failed'].append(f'{old_rel}: {e}')
 
+        # A rename that did NOT land must not be advertised to Pass C, or every
+        # parent gets repointed at a file that was never created.
+        for rel in failed_rels:
+            rename_map.pop(self.normalizePath(rel), None)
+
         # --- Pass B: rows + recovery breadcrumb ----------------------------
         for row, op_path, old_rel, new_rel, action in plan:
             if old_rel in failed_rels:
@@ -10721,7 +10725,7 @@ class EmbodyExt:
         # --- Pass C: parents' tdn_ref pointers -----------------------------
         # A parent may itself have been renamed by Pass A, so resolve its
         # CURRENT path through the same rename map before reading it back.
-        for _, rel, _abs in parents:
+        for rel, _abs in parents:
             cur_rel = rename_map.get(self.normalizePath(rel), rel)
             cur_abs = self.buildAbsolutePath(cur_rel)
             if not cur_abs.is_file():
@@ -10731,9 +10735,15 @@ class EmbodyExt:
                 doc = self.my.ext.TDXN.tdn_load(
                     cur_abs.read_text(encoding='utf-8'))
                 if self._rewriteTDNRefs(doc, rename_map):
-                    self.my.ext.TDXN._safe_write_tdn(
+                    # A validation failure here ROLLS BACK from .bak, so an
+                    # unchecked return reports a reverted parent as repointed.
+                    res = self.my.ext.TDXN._safe_write_tdn(
                         str(cur_abs), self.my.ext.TDXN.tdn_dump(doc),
                         str(project.folder))
+                    if not (res or {}).get('success'):
+                        result['failed'].append(
+                            f'{cur_rel} refs: '
+                            f'{(res or {}).get("error", "write failed")}')
             except Exception as e:
                 result['failed'].append(f'{cur_rel} refs: {e}')
 
@@ -10877,12 +10887,29 @@ class EmbodyExt:
         self.my.par.Envoystatus = 'Perform Mode'
 
         # Grey out Envoy parameters so user sees they're frozen
-        for p in ('Envoyenable', 'Envoyport', 'Aiclient', 'Launchaiclient', 'Aiprojectroot', 'Aiprojectrootcustom'):
+        for p in self._envoyParamNames():
             par = getattr(self.my.par, p, None)
             if par is not None:
                 par.enable = False
 
         self.Log('Perform Mode ON -- features suspended', 'INFO')
+
+    def _setClientMenus(self, client):
+        """Point BOTH client menus at one selection.
+
+        The wizard asks a single question ("which AI tool?"), so it must
+        answer both: Configclient (whose files get written) and Aiclient
+        (what Launch opens). Leaving Configclient behind would generate
+        config for whatever the previous project used.
+        """
+        par = getattr(self.my.par, 'Configclient', None)
+        if par is not None:
+            par.val = client
+
+    def _envoyParamNames(self):
+        """Envoy parameters Perform Mode greys out."""
+        return ('Envoyenable', 'Envoyport', 'Aiclient', 'Configclient',
+                'Launchaiclient', 'Aiprojectroot', 'Aiprojectrootcustom')
 
     def _exitPerformMode(self) -> None:
         """Restore all Embody features after live performance."""
@@ -10894,7 +10921,7 @@ class EmbodyExt:
         self.my.op('chopexec_exit_tagger').par.active = state.get('exit_tagger_active', True)
 
         # Restore Envoy parameter enable state
-        for p in ('Envoyenable', 'Envoyport', 'Aiclient', 'Launchaiclient', 'Aiprojectroot', 'Aiprojectrootcustom'):
+        for p in self._envoyParamNames():
             par = getattr(self.my.par, p, None)
             if par is not None:
                 par.enable = True

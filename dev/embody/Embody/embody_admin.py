@@ -66,10 +66,25 @@ NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 # provably Embody-owned is classed 'review' (KEPT + flagged), never silently
 # deleted. See dev/embody/plan-init-deinit-wizard.md sec 5.
 
-_UNINSTALL_MARKER_FILES = ('AGENTS.md', 'CLAUDE.md', 'ENVOY.md', 'GEMINI.md')
-_UNINSTALL_MARKER_TREES = ('.claude/rules', '.claude/skills', '.cursor/rules',
-                           '.github/instructions', '.windsurf/rules')
-_UNINSTALL_MARKER_SINGLES = ('.github/copilot-instructions.md',)
+# Derived from the ai_clients registry, NOT hand-listed. These were the
+# last copies of the per-client tables the registry replaced, and they had
+# already gone stale: no .agents/rules, no .agents/skills, so every
+# Antigravity rule and skill orphaned on any install whose manifest was
+# missing -- which is exactly when the marker scan is the only thing left.
+# Module-level constants would need TD at import time, so they are
+# functions the planner calls.
+
+def _uninstall_marker_files():
+    return tuple(['AGENTS.md'] + [f for f in mod.ai_clients.cleanup_files()
+                                  if '/' not in f])
+
+
+def _uninstall_marker_trees():
+    return tuple(mod.ai_clients.cleanup_sweep_dirs())
+
+
+def _uninstall_marker_singles():
+    return tuple(f for f in mod.ai_clients.cleanup_files() if '/' in f)
 
 
 def compute_uninstall_plan(ext, target_dir=None):
@@ -125,6 +140,11 @@ def compute_uninstall_plan(ext, target_dir=None):
         cls = ext._uninstallClassifyMarker(p, root, hashes)
         if cls == 'delete':
             _add('delete', p, kind='file', why='Embody-generated, unmodified')
+        elif cls == 'merged':
+            # The user's own file with Embody's block spliced in: take the
+            # block, never the file.
+            _add_strip(p, 'md_section', mod.embody_git.AGENTS_BEGIN,
+                       'remove only the Embody section; your file is kept')
         elif cls == 'review':
             _add('review', p, why='you edited this generated file -- kept')
 
@@ -133,18 +153,21 @@ def compute_uninstall_plan(ext, target_dir=None):
             m.get('git_config'), m.get('venv'))):
         plan['sources'].append('manifest')
 
+    mcp_specs = {s['path']: s for s in mod.ai_clients.project_mcp_specs()}
+
+    def _strip_reason(spec):
+        if spec['style'] == 'opencode':
+            return ('remove Embody server + instructions entry; '
+                    'delete file only if nothing else remains')
+        return 'remove Embody server; delete file only if none remain'
+
     for stored in m.get('files_created', []):
         p = _abs(stored)
-        if p.name == '.mcp.json':
+        spec = mcp_specs.get(_rel(p))
+        if spec is not None:
             if p.exists():
-                _add_strip(p, 'json_key', 'mcpServers.envoy',
-                           'remove Embody server; delete file only if none remain')
-            continue
-        if p.name == 'opencode.json':
-            if p.exists():
-                _add_strip(p, 'json_key', 'mcp.envoy',
-                           'remove Embody server + instructions entry; '
-                           'delete file only if nothing else remains')
+                _add_strip(p, 'mcp_config', f'{spec["key"]}.envoy',
+                           _strip_reason(spec))
             continue
         if not p.exists():
             plan['missing'].append(stored); continue
@@ -202,39 +225,57 @@ def compute_uninstall_plan(ext, target_dir=None):
 
     # ---- marker-scan FALLBACK (pre-manifest installs / anything missed) ----
     before = sum(len(plan[b]) for b in ('delete', 'review', 'strip')) + len(plan['unset'])
-    for name in _UNINSTALL_MARKER_FILES:
+    for name in _uninstall_marker_files():
         p = root / name
         if p.is_file():
             _classify_into(p)
-    for sub in _UNINSTALL_MARKER_TREES:
+    for sub in _uninstall_marker_trees():
         d = root / sub
         if d.is_dir():
             for p in d.rglob('*'):
                 if p.is_file():
                     _classify_into(p)
-    for single in _UNINSTALL_MARKER_SINGLES:
+    for single in _uninstall_marker_singles():
         p = root / single
         if p.is_file():
             _classify_into(p)
-    mcp = root / '.mcp.json'
-    if mcp.is_file() and str(mcp.resolve()) not in seen:
+    # Every client's own MCP config, from the registry -- .mcp.json is only
+    # Claude Code's, and a project configured for Cursor/VS Code/Gemini/
+    # Codex/Antigravity has an envoy entry in files this scan used to miss.
+    for spec in mcp_specs.values():
+        cfg_path = root / spec['path']
+        if not cfg_path.is_file() or str(cfg_path.resolve()) in seen:
+            continue
         try:
-            if 'envoy' in json.loads(
-                    mcp.read_text(encoding='utf-8')).get('mcpServers', {}):
-                _add_strip(mcp, 'json_key', 'mcpServers.envoy',
-                           'remove Embody server; delete file only if none remain')
+            text = cfg_path.read_text(encoding='utf-8')
+            if spec['style'] == 'toml':
+                present = f'[{spec["key"]}.envoy]' in text
+            else:
+                present = 'envoy' in (
+                    json.loads(text).get(spec['key']) or {})
+            if present:
+                _add_strip(cfg_path, 'mcp_config', f'{spec["key"]}.envoy',
+                           _strip_reason(spec))
         except Exception:
             pass
-    oc = root / 'opencode.json'
-    if oc.is_file() and str(oc.resolve()) not in seen:
-        try:
-            if 'envoy' in json.loads(
-                    oc.read_text(encoding='utf-8')).get('mcp', {}):
-                _add_strip(oc, 'json_key', 'mcp.envoy',
-                           'remove Embody server + instructions entry; '
-                           'delete file only if nothing else remains')
-        except Exception:
-            pass
+    # Directories Embody created to hold generated files. Planned as
+    # 'emptydir' so they appear in the preview the user confirms -- the
+    # executor uses a bare rmdir, which FAILS on a non-empty directory, so
+    # anything of the user's still inside keeps the directory alive.
+    # Deepest-first, from the registry.
+    for sub in mod.ai_clients.cleanup_dirs():
+        dp = root / sub
+        if not dp.is_dir():
+            continue
+        # A skills tree holds one directory PER SKILL; those have to go
+        # before their parent can rmdir. Nested children first.
+        for child in sorted(dp.iterdir(), key=lambda c: c.name):
+            if child.is_dir():
+                _add('delete', child, kind='emptydir',
+                     why='Embody-generated skill folder -- removed if empty')
+        _add('delete', dp, kind='emptydir',
+             why='created by Embody -- removed only if empty afterwards')
+
     for gname, marker in (('.gitignore', '# Embody / Envoy'),
                           ('.gitattributes', 'Embody / Envoy')):
         gp = root / gname
@@ -367,22 +408,99 @@ def strip_marked_block(ext, text, marker):
     return '\n'.join(out)
 
 
-def strip_mcp_envoy(ext, path):
-    """Remove only Embody's entries from a .mcp.json OR opencode.json.
+def strip_md_section(ext, text):
+    """Remove Embody's delimited block from a user-authored markdown file.
 
-    Shape-aware: .mcp.json keeps servers under 'mcpServers'; opencode.json
-    keeps them under 'mcp' and additionally carries Embody's generated
-    '.claude/rules/*.md' instructions entry (see envoy_setup.
-    write_opencode_config). Never writes one shape's keys into the other's
-    file. Delete the file only if stripping leaves nothing but boilerplate
-    ('$schema') -- the user's servers/keys are always preserved."""
+    The counterpart of embody_git.merge_agents_section: everything the
+    user wrote survives, only the BEGIN..END span goes. Returns the text
+    unchanged when no block is present.
+    """
+    git = mod.embody_git
+    if git.AGENTS_BEGIN not in text and git.AGENTS_END not in text:
+        return text
+    # Same tolerant scanner the writer uses: a duplicated or half-deleted
+    # block must not leave one behind, and an orphan delimiter must not
+    # take the user's prose with it.
+    out = git.strip_all_blocks(text)
+    if not out.strip():
+        return ''
+    return out.rstrip('\n') + '\n'
+
+
+def mcp_spec_for(path):
+    """The registry MCP spec this path is an instance of, if any.
+
+    Matched on the whole relative path, never the basename: Cursor's
+    .cursor/mcp.json and VS Code's .vscode/mcp.json share a filename but
+    key their servers differently ('mcpServers' vs 'servers'), so a
+    basename match would strip the wrong key and silently leave the entry
+    behind. Deepest match wins.
+    """
+    posix = Path(path).as_posix()
+    best = None
+    for spec in mod.ai_clients.project_mcp_specs():
+        rel = spec['path']
+        if posix == rel or posix.endswith('/' + rel):
+            if best is None or rel.count('/') > best['path'].count('/'):
+                best = spec
+    return best
+
+
+def strip_toml_envoy(ext, path, key):
+    """Remove only the [<key>.envoy] table from a TOML config (Codex).
+
+    Surgical for the same reason the writer is: the rest of the user's
+    config.toml must survive untouched, not be reformatted by a
+    round-trip. Deletes the file only if nothing else remains.
+    """
+    header = f'[{key}.envoy]'
     try:
-        cfg = json.loads(path.read_text(encoding='utf-8'))
-    except (json.JSONDecodeError, OSError):
+        lines = path.read_text(encoding='utf-8').splitlines(keepends=True)
+    except OSError:
+        return
+    start = next((i for i, l in enumerate(lines) if l.strip() == header), None)
+    if start is None:
+        return
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].lstrip().startswith('['):
+            end = i
+            break
+    remaining = ''.join(lines[:start] + lines[end:])
+    if remaining.strip():
+        path.write_text(remaining, encoding='utf-8', newline='\n')
+    else:
+        path.unlink()
+
+
+def strip_mcp_envoy(ext, path):
+    """Remove only Embody's entries from a client's MCP config.
+
+    Shape comes from the ai_clients registry: each client keys its server
+    map differently (.mcp.json and Cursor use 'mcpServers', VS Code uses
+    'servers', opencode.json uses 'mcp', Codex uses a TOML table), and one
+    shape's keys must never be written into another's file. opencode.json
+    additionally carries Embody's generated '.claude/rules/*.md'
+    instructions entry (see envoy_setup.write_opencode_config). Delete the
+    file only if stripping leaves nothing but boilerplate ('$schema') --
+    the user's servers and keys are always preserved.
+    """
+    spec = mcp_spec_for(path)
+    if spec is not None and spec['style'] == 'toml':
+        strip_toml_envoy(ext, path, spec['key'])
+        return
+    try:
+        # utf-8-sig for the same reason the writer uses it: a BOM would
+        # otherwise leave the Envoy entry in the file forever.
+        cfg = json.loads(path.read_text(encoding='utf-8-sig'))
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
         return
     is_opencode = path.name == 'opencode.json' or (
         'mcp' in cfg and 'mcpServers' not in cfg)
-    key = 'mcp' if is_opencode else 'mcpServers'
+    if spec is not None:
+        key = spec['key']
+    else:
+        key = 'mcp' if is_opencode else 'mcpServers'
     servers = cfg.get(key, {})
     servers.pop('envoy', None)
     if is_opencode:
@@ -400,7 +518,8 @@ def strip_mcp_envoy(ext, path):
         # have edited it -- then the file survives below and keeps it).
     if servers:
         cfg[key] = servers
-        path.write_text(json.dumps(cfg, indent=2) + '\n', encoding='utf-8')
+        path.write_text(json.dumps(cfg, indent=2) + '\n',
+                        encoding='utf-8', newline='\n')
         return
     cfg.pop(key, None)
     leftover = [k for k in cfg if k not in ('$schema',)]
@@ -408,7 +527,8 @@ def strip_mcp_envoy(ext, path):
         # Only Embody's fresh-file permission block remains -> ours.
         leftover = []
     if leftover:
-        path.write_text(json.dumps(cfg, indent=2) + '\n', encoding='utf-8')
+        path.write_text(json.dumps(cfg, indent=2) + '\n',
+                        encoding='utf-8', newline='\n')
     else:
         path.unlink()  # the file held only Embody's config -> remove it
 
@@ -429,7 +549,17 @@ def execute_uninstall_plan(ext, plan, include_review=False):
     def _remove(entry):
         p = _abs(entry['path'])
         try:
-            if entry.get('kind') == 'dir':
+            if entry.get('kind') == 'emptydir':
+                # Bare rmdir on purpose: it raises on a non-empty
+                # directory, so a directory still holding the user's own
+                # files is never removed.
+                if p.is_dir():
+                    try:
+                        p.rmdir()
+                        summary['deleted'] += 1
+                    except OSError:
+                        pass          # not empty -> the user's, leave it
+            elif entry.get('kind') == 'dir':
                 if p.is_dir():
                     remove_tree_within(ext, p, root)
                     summary['deleted'] += 1
@@ -440,24 +570,54 @@ def execute_uninstall_plan(ext, plan, include_review=False):
             ext.Log(f'Uninstall: could not remove {p}: {e}', 'WARNING')
 
     for entry in plan['delete']:
-        _remove(entry)
+        if entry.get('kind') != 'emptydir':
+            _remove(entry)
 
     for a in plan['strip']:
         p = _abs(a['path'])
         if not p.exists():
             continue
         try:
-            if a['kind'] == 'json_key':
+            # 'toml_table' is Codex's config.toml: it MUST route to the
+            # shape-aware stripper like the JSON kinds. Falling through to
+            # strip_marked_block (a '#'-header line scanner built for
+            # .gitignore) silently left the envoy entry in place forever --
+            # the file was planned for stripping and then not stripped.
+            if a['kind'] in ('mcp_config', 'json_key', 'toml_table'):
                 strip_mcp_envoy(ext, p)
+            elif a['kind'] == 'md_section':
+                # A user-authored AGENTS.md we merged into: take back only
+                # our delimited block, never the file.
+                # Same newline discipline as the writer: the reverser
+                # must not hand back a CRLF-converted file.
+                original = p.read_text(encoding='utf-8')
+                stripped = strip_md_section(ext, original)
+                if not stripped.strip():
+                    # Nothing but Embody's block was ever in it. The root-move
+                    # sweep unlinks in this case; leaving a 0-byte file here
+                    # would be a different answer to the same question.
+                    p.unlink()
+                    summary['deleted'] += 1
+                elif stripped != original:
+                    p.write_text(stripped, encoding='utf-8',
+                                 newline='\n')
             else:
                 p.write_text(
                     strip_marked_block(
                         ext, p.read_text(encoding='utf-8'), a['marker']),
-                    encoding='utf-8')
+                    encoding='utf-8', newline='\n')
             summary['stripped'] += 1
         except OSError as e:
             summary['errors'] += 1
             ext.Log(f'Uninstall: could not strip {p}: {e}', 'WARNING')
+
+    # Directories last of all: a bare rmdir needs the contents gone, and
+    # the strip pass above is what removes the final file in .cursor/,
+    # .vscode/, .gemini/, .codex/ and .agents/. Plan order is
+    # deepest-first, so children are attempted before their parents.
+    for entry in plan['delete']:
+        if entry.get('kind') == 'emptydir':
+            _remove(entry)
 
     for key in plan['unset']:
         try:

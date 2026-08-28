@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **131 test suites** and **4,105 test methods** covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **126 test suites** and **4,001 test methods** in the standard tiers (the three agent-tier suites are excluded from normal runs) covering core externalization, MCP tools, TDXN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -62,11 +62,11 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 
 ## Test Coverage
 
-The tables below cover 120 suites. The remaining three are the
+The tables below cover 123 suites. The remaining three are the
 AI-client connectivity tier, listed separately under
 [Agent Tier](#agent-tier-ai-client-connectivity-tests).
 
-### Core Embody (36 suites, 701 tests)
+### Core Embody (36 suites, 697 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -107,7 +107,7 @@ AI-client connectivity tier, listed separately under
 | `test_verify_upgrade` | 3 | Upgrade-path validation (the removed Skip/Re-scan dialog) |
 | `test_annotate_continuity` | 7 | Continuity sweep vs utility `annotateCOMP` rows: bare `op()` cannot resolve a utility annotate, so a legacy row at one read as a vanished operator and had its row + `.tdxn` deleted on every save |
 
-### MCP Tools (20 suites, 327 tests)
+### MCP Tools (20 suites, 332 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -132,7 +132,7 @@ AI-client connectivity tier, listed separately under
 | `test_envoy_viz_gates` | 43 | Issue-57 viz activation gates in `envoy_viz` |
 | `test_envoy_tool_schema` | 8 | Tool-wrapper/handler signature conformance across every registered MCP tool (forwarded-but-unaccepted, required-but-unforwarded, advertised-but-ignored, duplicate dispatch). Static AST analysis -- invokes no tools |
 
-### TDXN Format (20 suites, 695 tests)
+### TDXN Format (20 suites, 696 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -168,12 +168,12 @@ AI-client connectivity tier, listed separately under
 | `test_collection_pure` | 14 | Pure-value-expression preservation (live-if-clean) |
 | `test_clipboard_watch` | 8 | Clipboard watcher poll + gating (incl. outbound-copy suppression) |
 
-### Envoy Server & Bridge (16 suites, 919 tests)
+### Envoy Server & Bridge (17 suites, 1029 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_envoy_bridge` | 428 | STDIO bridge: forwarding, reconciler, registry, meta-tools, and `crash_detected` lifecycle TRANSITIONS (reconnect clears, pid re-resolution honours the session pin, a foreign instance on the port never clears a real crash) |
-| `test_claude_config` | 84 | AI client config generation (Claude/Codex/Gemini/Cursor/Windsurf/GitHub Copilot) |
+| `test_claude_config` | 135 | AI client config generation and the restore-on-open probes (Claude Code/OpenCode/Codex/Gemini/VS Code/Cursor/Windsurf/GitHub Copilot) |
 | `test_envoy_sessions` | 55 | Multi-session awareness, scope claims, peer advisories, destructive-operation gates |
 | `test_server_lifecycle` | 24 | Envoy MCP server start/stop |
 | `test_envoy_watchdog` | 44 | Envoy liveness watchdog (revive on dropped socket / save) |
@@ -183,13 +183,14 @@ AI-client connectivity tier, listed separately under
 | `test_envoy_setup_environment` | 44 | MCP import verification (pydantic_core safety) |
 | `test_envoy_registry` | 18 | Instance registry and PID liveness |
 | `test_opencode_config` | 17 | OpenCode client config writer (`envoy_setup.write_opencode_config`) |
+| `test_ai_clients` | 55 | The `ai_clients` registry (row schema, launch-alias resolution, uninstall footprint) and the per-client MCP config writers -- Cursor/VS Code/Copilot/Gemini/Codex/Antigravity dialects, conservative merging, JSONC safety, and the launch-target vs Configure-For split |
 | `test_agent_runner` | 15 | AGENT-tier runner machinery in TestRunnerExt (the runner itself, no LLM) |
-| `test_envoy_lifecycle_hardening` | 4 | Save/reinit lifecycle hardening |
+| `test_envoy_lifecycle_hardening` | 8 | Save/reinit lifecycle hardening, and the cached-repo-root guard (a non-absolute root must never reach the job layer, task ledger, or docs catalog) |
 | `test_envoy_agent_ux` | 60 | Agent-ergonomics surface: `get_guidance`, the write-effect footer, `get_focus` |
 | `test_job_layer` | 25 | Background-job layer backing `get_job_status` / `save_project` / `run_tests background=True` -- the operations that outlive the 30 s MCP timeout |
 | `test_task_ledger` | 15 | Shared task ledger (`.embody/tasks.json`): work-STATE across AI sessions, including `done_uncommitted` |
 
-### Convoy (9 suites, 736 tests)
+### Convoy (9 suites, 772 tests)
 
 The LAN work relay: the node-side reconciler, the host-app client and installer, and the panel contracts. The host app itself is stdlib-only by design, so most of this tier also runs under plain pytest on the windows+macos CI matrix -- see `pytest.ini`.
 
@@ -205,7 +206,7 @@ The LAN work relay: the node-side reconciler, the host-app client and installer,
 | `test_wizard_convoy_contract` | 20 | Plain-Python contracts for Convoy's setup-wizard routing |
 | `test_convoy_forget_ux` | 5 | The Forget Offline Nodes daemon -> panel contract |
 
-### Install, Uninstall & Release (13 suites, 248 tests)
+### Install, Uninstall & Release (15 suites, 352 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|

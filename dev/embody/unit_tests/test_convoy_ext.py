@@ -392,7 +392,15 @@ class TestConvoyRegistrations(EmbodyTestCase):
         self.assertIn('ConvoyExt.Register()', src)
         self.assertIn('ConvoyExt.Unregister()', src)
         self.assertIn("parent.Embody.op('convoy')", src)
-        self.assertIn("par.Aiclient.eval() == 'none'", src)
+        # "No AI client" is the Configure For toggles being empty, NOT the
+        # Launch Client menu reading None. Since those axes were split,
+        # 'Launch Client: None' is a normal state for someone who opens
+        # their editor themselves -- gating on that token would flip
+        # Envoyenable underneath a fully configured project.
+        self.assertIn(
+            'not mod.embody_git.selected_clients(parent.Embody.ext.Embody)',
+            src)
+        self.assertNotIn("par.Aiclient.eval() == 'none'", src)
         self.assertIn('parent.Embody.par.Envoyenable = True', src,
                       'Convoy-only mode must keep Envoy\'s internal relay on')
         self.assertIn('parent.Embody.par.Envoyenable = False', src,

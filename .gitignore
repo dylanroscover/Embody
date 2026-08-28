@@ -40,6 +40,11 @@ logs/
 !**/.embody/project.json
 .envoy-tools-cache.json
 opencode.json
+.cursor/mcp.json
+.vscode/mcp.json
+.gemini/settings.json
+.codex/config.toml
+.agents/mcp_config.json
 
 # Other AI clients' generated configs. This repo's own AI client is Claude Code
 # (.claude/, CLAUDE.md, AGENTS.md are committed -- .claude/ is the source of

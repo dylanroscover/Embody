@@ -6,7 +6,7 @@ This project uses **[Embody](https://github.com/dylanroscover/Embody)** (TouchDe
 
 - Embody externalizes TouchDesigner operators to version-controlled files (`.py`, `.tox`, `.tdxn`, `.json`, etc.)
 - Envoy provides MCP tools for AI assistants to inspect and modify the live TD network
-- Use the `Aiclient` parameter on the Embody COMP to regenerate these files for your AI tool
+- Use the `Configure For` toggles on the Embody COMP's Envoy page to regenerate these files for your AI tool (more than one client can be on at once)
 
 > **Note:** For Claude Code users, a `CLAUDE.md` with modular `.claude/rules/` and `.claude/skills/` is also generated. This `AGENTS.md` is the universal fallback read by Codex, Cursor, GitHub Copilot, Windsurf, Gemini, and others.
 

@@ -5368,7 +5368,22 @@ class EnvoyExt:
 
     @staticmethod
     def _shouldConfigureAIClient(client) -> bool:
-        """Only the explicit ``none`` token selects internal-only startup."""
+        """Whether startup should write AI client config at all.
+
+        The question is whether any client is selected under Configure
+        For -- NOT what the Launch Client menu says. Since the two were
+        split, 'Launch Client: None' is a normal state for someone who
+        opens their editor themselves, and gating on that token would
+        skip config generation for a fully configured project. The
+        argument is still accepted (and still means 'none' -> off) so
+        callers passing the old token keep working.
+        """
+        try:
+            selected = mod.embody_git.selected_clients(op.Embody.ext.Embody)
+        except Exception:
+            return str(client or '').strip().lower() != 'none'
+        if selected:
+            return True
         return str(client or '').strip().lower() != 'none'
 
     def _continueStart(self, git_root) -> None:
@@ -5378,9 +5393,9 @@ class EnvoyExt:
         import-gate flag is already warm, from _pollImportGate(), or from
         _pollBootstrap() after a background dependency install. Allocates the
         port and spawns the server worker via the Thread Manager. MCP / git
-        client config is written only when Aiclient is not ``none``; Convoy-only
-        mode uses the same loopback command substrate without configuring or
-        launching an AI coding client.
+        client config is written only when at least one client is selected
+        under Configure For; Convoy-only mode uses the same loopback command
+        substrate without configuring or launching an AI coding client.
         """
         base_port = self.ownerComp.par.Envoyport.eval()
         port = self._findAvailablePort(base_port)
@@ -5523,8 +5538,26 @@ class EnvoyExt:
             # Cache the repo root for WORKER-side features (durable worktree
             # claims, preflight_landing) -- workers must never touch TD
             # objects, so resolve it here on the main thread once.
+            #
+            # ONLY an absolute path is cacheable. A sentinel ('no-git') or a
+            # relative string would be joined against TD's cwd by every
+            # reader, silently pointing the job layer, task ledger, docs
+            # catalog, and worktree claims at nowhere -- and it persists for
+            # the rest of the session because nothing but a restart rewrites
+            # it. _jobs_dir() grew its own isabs guard after this bit in
+            # 2026-07-29; guarding the WRITE instead means no reader has to
+            # repeat it (recurred 2026-08-27 via a suite patching
+            # _findProjectRoot to 'no-git', which then failed two unrelated
+            # docs tests for the rest of the run).
             try:
-                sys._envoy_repo_root = str(target_dir) if target_dir else None
+                cached = str(target_dir) if target_dir else None
+                if cached and not os.path.isabs(cached):
+                    self._log(
+                        f'Ignoring non-absolute project root {cached!r} -- '
+                        f'worker-side features stay disabled until a real '
+                        f'root resolves', 'DEBUG')
+                    cached = None
+                sys._envoy_repo_root = cached
             except Exception:
                 sys._envoy_repo_root = None
             try:

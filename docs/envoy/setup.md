@@ -25,7 +25,7 @@ op.Embody.InitEnvoy()   # Regenerate MCP + AI client config
 op.Embody.InitGit()     # Init/reconnect git repo + .gitignore/.gitattributes
 ```
 
-Use `InitEnvoy()` after updating Embody, changing the AI Client parameter, or if config files were accidentally deleted. Use `InitGit()` after creating a git repo manually, or to refresh `.gitignore`/`.gitattributes` entries. `InitGit()` also calls `InitEnvoy()` to update paths.
+Use `InitEnvoy()` after updating Embody, changing which clients you configure for, or if config files were accidentally deleted. Use `InitGit()` after creating a git repo manually, or to refresh `.gitignore`/`.gitattributes` entries. `InitGit()` also calls `InitEnvoy()` to update paths.
 
 ## Manual Configuration
 
@@ -61,7 +61,83 @@ If you prefer manual control, create `.mcp.json` in your project directory. You 
 
 The STDIO bridge provides meta-tools (`get_td_status`, `launch_td`, `restart_td`, `switch_instance`) that work even when TouchDesigner is not running. See [Claude Code Integration](claude-code.md#stdio-bridge) for details.
 
-**OpenCode** never reads `.mcp.json` — it uses `opencode.json` in the project root, which Embody generates automatically when the **AI Client** parameter is set to `opencode`. See [Local Models & Open Clients](local-models.md) for the full setup, including local-model recommendations.
+### Every client reads a different file
+
+`.mcp.json` is Claude Code's format, and **no other client reads it** — VS Code
+does not even use the same root key. So Embody writes each selected client's own
+MCP config as well, every one of them spawning the *same* STDIO bridge, so every
+client gets the bridge's resilience layer (meta-tools while TD is down,
+reconnection, instance-registry identity checks) rather than a bare URL.
+
+| Client | MCP config file | Root key |
+|---|---|---|
+| Claude Code | `.mcp.json` | `mcpServers` |
+| OpenCode | `opencode.json` | `mcp` |
+| Codex | `.codex/config.toml` | `[mcp_servers.envoy]` |
+| Gemini | `.gemini/settings.json` | `mcpServers` |
+| VS Code | `.vscode/mcp.json` | `servers` |
+| GitHub Copilot | `.vscode/mcp.json` (shared with VS Code) | `servers` |
+| Cursor | `.cursor/mcp.json` | `mcpServers` |
+| Antigravity | `.agents/mcp_config.json` | `mcpServers` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | `mcpServers` |
+
+Merging is conservative in every case: an existing file keeps all of its other
+servers and unrelated settings, only the `envoy` entry is written, a second
+deploy with an unchanged bridge command rewrites nothing, and a file Embody
+cannot parse (VS Code and Cursor both accept JSONC, which is not valid JSON) is
+left **completely untouched** with a warning rather than clobbered.
+
+Two clients need a manual step:
+
+- **Codex** reads project-level config only for projects you have trusted. Run
+  `codex` once in the project folder and trust it, or the `.codex/config.toml`
+  Embody writes is ignored.
+- **Windsurf** has no project-level MCP config at all — Cascade reads only the
+  user-global `~/.codeium/windsurf/mcp_config.json`, shared by every project you
+  open. Embody will **not** write a global file that points all of your projects
+  at this one's bridge, so add the `envoy` entry there by hand once. Everything
+  else for Windsurf (`.windsurf/rules/`) is generated normally.
+
+### Files you already own
+
+Embody never overwrites a file you wrote. Which of two things it does depends
+on the file:
+
+- **`AGENTS.md`, `GEMINI.md`, `ENVOY.md` and `.github/copilot-instructions.md`
+  are merged into.** Your content is left exactly as it is and Embody
+  maintains one delimited block inside the file, refreshed in place on later
+  deploys. Uninstall removes only that block and leaves the file.
+- **Per-rule and per-skill files are skipped.** `.claude/rules/td-python.md`,
+  `.cursor/rules/*.mdc` and their siblings have Embody-specific names, so a
+  file of yours at one of those paths is left completely alone -- the other
+  rules are still written around it.
+
+A file Embody cannot read as UTF-8 is skipped with a warning rather than
+rewritten, and it never stops the rest of the deploy.
+
+### Which files each client gets
+
+`AGENTS.md` (the universal standard read by all major AI tools) and `.mcp.json`
+are written whenever any client config is generated -- that is, unless
+**Configure For** is `None`.
+
+| Configure For | Also writes |
+|---|---|
+| Claude Code | `CLAUDE.md` (or `ENVOY.md` if you already have your own), `.claude/rules/`, `.claude/skills/` |
+| OpenCode | `opencode.json`, and shares Claude Code's `.claude/rules/` + `.claude/skills/` |
+| Codex | `.codex/config.toml` (Codex reads `AGENTS.md` natively, so it needs no rules files of its own) |
+| Gemini | `GEMINI.md` (a thin `@AGENTS.md` import), `.gemini/settings.json` |
+| VS Code | `.vscode/mcp.json` |
+| GitHub Copilot | `.github/copilot-instructions.md`, `.github/instructions/`, and `.vscode/mcp.json` (shared with VS Code) |
+| Cursor | `.cursor/rules/*.mdc`, `.cursor/mcp.json` |
+| Windsurf | `.windsurf/rules/` only — its MCP config is user-global and is never written, see above |
+| Antigravity | `.agents/rules/`, `.agents/skills/`, `.agents/mcp_config.json` |
+
+Serving more than one client is normal and supported: select each in turn.
+Generation is additive and never removes, so an earlier client stays configured
+and its MCP config keeps tracking bridge and port changes. See
+[Local Models & Open Clients](local-models.md) for OpenCode's full setup,
+including local-model recommendations.
 
 ## Changing the Port
 
@@ -83,12 +159,12 @@ To switch between instances from Claude Code, use the `switch_instance` bridge m
 
 When Envoy starts, it generates a full Claude Code configuration in your project root:
 
-- **`AGENTS.md`** — universal AI instructions, always written regardless of the selected AI Client
+- **`AGENTS.md`** — universal AI instructions, always written regardless of which clients are selected. If your repo already has its own `AGENTS.md`, Embody **merges** rather than replacing it: your content is left alone and Embody keeps a single delimited `<!-- BEGIN Embody/Envoy -->` block inside the file, updated in place on later deploys. Uninstall removes just that block
 - **`CLAUDE.md`** — project context and critical rules
 - **`.claude/rules/`** — always-loaded conventions (TD Python, network layout, MCP safety)
 - **`.claude/skills/`** — on-demand workflow guides (operator creation, debugging, externalization)
 
-Pristine generated files are refreshed each time Envoy starts to stay up to date. If you edit a generated rule or skill, Embody detects the change (via a content hash in `.embody/generated-hashes.json`) and keeps your version instead of overwriting it — delete the file to opt back into regeneration. See [Claude Code Integration](claude-code.md) for the full reference.
+Pristine generated files are refreshed each time Envoy starts to stay up to date. If you edit a generated rule or skill, Embody detects the change — Embody stamps each file it generates with a hash of its own content, in the `<!-- Generated by Embody/Envoy ... sha:... -->` marker line — and keeps your version instead of overwriting it; delete the file to opt back into regeneration. The stamp is part of the file, so an edit you commit is still recognised on every other machine that clones the repo. See [Claude Code Integration](claude-code.md) for the full reference.
 
 ## MCP Tool Permissions
 

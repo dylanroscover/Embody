@@ -50,7 +50,7 @@ Envoy is easy to remove later — see [Removing Embody](getting-started.md#remov
 
 ### 5. Pick your AI tool *(only when "Other AI tool" is selected)*
 
-Choose which client Embody generates config for: **OpenCode** (`opencode.json` plus shared `.claude/` rules and skills — see [Local Models & Open Clients](../envoy/local-models.md)), **Codex** (`AGENTS.md`), **Cursor** (`.cursor/`), **Gemini** (`GEMINI.md`), **VS Code** (MCP config), **GitHub Copilot** (`.github/`), or **Windsurf** (`.windsurf/`). Sets the **AI Client** (`Aiclient`) parameter. `AGENTS.md` is always written regardless of the client.
+Choose which client Embody generates config for: **OpenCode** (`opencode.json` plus shared `.claude/` rules and skills — see [Local Models & Open Clients](../envoy/local-models.md)), **Codex** (`.codex/config.toml`), **Cursor** (`.cursor/`), **Gemini** (`GEMINI.md` + `.gemini/settings.json`), **VS Code** (`.vscode/mcp.json`), **GitHub Copilot** (`.github/`), or **Windsurf** (`.windsurf/`). Sets both the **Configure For** (`Configclient`) and **Launch Client** (`Aiclient`) parameters to your choice. Antigravity is supported but is not yet offered by the wizard -- select it in **Configure For** on the Envoy parameter page. `AGENTS.md` is always written regardless of the client. To serve more than one client from the same project, select the others in **Configure For** afterwards -- generation is additive, so each one you pick stays configured.
 
 ### 6. Permissions — how the AI asks *(Claude Code only)*
 
@@ -118,7 +118,7 @@ A recap of your mode, externalization, assistant, Convoy, and (when asked) git c
 
 Most choices apply in one pass after the final click. **Externalize everything** is the deliberate exception: it opens its own whole-project confirmation and format choice before changing existing operators.
 
-1. **Persists your choices** to the corresponding parameters (Mode, AI Client, Tool Permissions, AI Project Root, auto-externalization, and Convoy when those steps were shown).
+1. **Persists your choices** to the corresponding parameters (Mode, Configure For and Launch Client, Tool Permissions, AI Project Root, auto-externalization, and Convoy when those steps were shown).
 2. **Applies your git choice.** If you chose **Initialize Git**, the repo is created first (with Embody's `.gitignore` / `.gitattributes` entries), so config lands inside it. If you chose **Skip for now** — or a repo already existed — config files are generated either way; a failed or skipped init never blocks setup, and `op.Embody.InitGit()` adds git integration later.
 3. **Applies the externalization choice.** New-work mode changes only the auto-externalization preference. Whole-project mode opens its own confirmation and format choice after setup; it never silently rewrites the project.
 4. **If you chose None with Convoy off**: Envoy stays off and you're set up for externalization only.
@@ -135,7 +135,7 @@ Every wizard choice maps to a parameter you can change directly, no wizard requi
 | Mode | **Mode** (`Embodymode`) | Embody |
 | Externalization | **Auto-Externalize New Ops** (`Autoexternalize`) or the manual project externalization action | Embody |
 | AI assistant on/off | **Envoy Enable** (`Envoyenable`) | Envoy |
-| AI tool | **AI Client** (`Aiclient`) | Envoy |
+| AI tool | **Configure For** (`Configclient`) + **Launch Client** (`Aiclient`) | Envoy |
 | Permissions | **Tool Permissions** (`Toolpermissions`) | Envoy |
 | Convoy membership | **Enable Convoy** (`Convoyenable`) | Convoy |
 | Git | `op.Embody.InitGit()` (no parameter — a one-time action) | — |

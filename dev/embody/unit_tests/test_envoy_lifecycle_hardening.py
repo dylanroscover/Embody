@@ -87,6 +87,17 @@ class EnvoyLifecycleContractBase(EmbodyTestCase):
             'startup_deadline': self.envoy._startup_deadline,
             'last_start_time': self.envoy._last_start_time,
             'sys_bad_ports': dict(getattr(sys, '_envoy_bad_bind_ports', {})),
+            # _continueStart caches the repo root here for worker-side
+            # features. These tests drive it with a patched
+            # _findProjectRoot, so without restoring it the suite poisoned
+            # the sentinel for the REST OF THE SESSION -- the job layer,
+            # task ledger, and docs catalog all read it, and two unrelated
+            # test_data_readers tests failed on every later full run
+            # (2026-08-27). EnvoyExt now also refuses to cache a
+            # non-absolute root; this restores the exact prior value.
+            'sys_repo_root': (
+                getattr(sys, '_envoy_repo_root', None),
+                hasattr(sys, '_envoy_repo_root')),
         }
 
         # Baseline for the mocked contracts: simulate a clean, not-yet-running
@@ -132,6 +143,14 @@ class EnvoyLifecycleContractBase(EmbodyTestCase):
         self.envoy._startup_deadline = st['startup_deadline']
         self.envoy._last_start_time = st['last_start_time']
         sys._envoy_bad_bind_ports = st['sys_bad_ports']
+        prior_root, had_root = st['sys_repo_root']
+        if had_root:
+            sys._envoy_repo_root = prior_root
+        else:
+            try:
+                del sys._envoy_repo_root
+            except AttributeError:
+                pass
 
         self.envoy._starting = self._saved_starting
         if self._saved_running is None:
@@ -248,3 +267,74 @@ class TestH1StartupStatusTruth(EnvoyLifecycleContractBase):
         after = len(self.envoy.ThreadManager.enqueued)
         self.assertEqual(before, after,
                          'Start() must be a no-op while a start is in progress')
+
+
+class TestRepoRootSentinel(EmbodyTestCase):
+    """The cached repo root must never hold a non-absolute value.
+
+    Every worker-side feature -- the job layer (save_project, background
+    run_tests), the task ledger, durable worktree claims, and the docs
+    defaults catalog -- joins paths onto sys._envoy_repo_root. A sentinel
+    ('no-git') or relative string resolves against TD's cwd instead, and
+    because only a server start rewrites the value it stays wrong for the
+    whole session. Observed twice: 2026-07-29 (job layer went dark, fixed
+    by a guard inside _jobs_dir) and 2026-08-27 (two test_data_readers
+    tests failed on every full run after this very suite ran). The guard
+    now lives at the WRITE, so no reader has to repeat it.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.envoy = op.Embody.ext.Envoy
+        self._had = hasattr(sys, '_envoy_repo_root')
+        self._prior = getattr(sys, '_envoy_repo_root', None)
+
+    def tearDown(self):
+        if self._had:
+            sys._envoy_repo_root = self._prior
+        else:
+            try:
+                del sys._envoy_repo_root
+            except AttributeError:
+                pass
+        super().tearDown()
+
+    def _jobs_dir(self):
+        return op.Embody.op('EnvoyExt').module._jobs_dir()
+
+    def test_jobs_dir_rejects_a_relative_root(self):
+        sys._envoy_repo_root = 'no-git'
+        self.assertIsNone(self._jobs_dir(),
+            'a sentinel root must never become a jobs path')
+
+    def test_jobs_dir_accepts_an_absolute_root(self):
+        sys._envoy_repo_root = str(op.Embody.ext.Embody._findProjectRoot())
+        self.assertIsNotNone(self._jobs_dir())
+
+    def test_continue_start_refuses_to_cache_a_sentinel(self):
+        """The production guard: a non-absolute root is dropped, not cached.
+
+        Driven through the same patched-_findProjectRoot shape the
+        lifecycle suite uses, which is what poisoned the sentinel.
+        """
+        src = op.Embody.op('EnvoyExt').text
+        self.assertIn('os.path.isabs(cached)', src,
+            '_continueStart must refuse a non-absolute project root')
+        marker = src.index('sys._envoy_repo_root = cached')
+        guard = src.rindex('os.path.isabs(cached)', 0, marker)
+        self.assertLess(guard, marker,
+            'the isabs guard must run BEFORE the cache assignment')
+
+    def test_lifecycle_suite_restores_the_sentinel(self):
+        """The suite that patches _findProjectRoot must put it back."""
+        # From disk: most suites exist only as files (TestRunnerExt
+        # discovers from the unit_tests folder, not from DATs).
+        import os
+        path = os.path.join(str(project.folder), 'embody', 'unit_tests',
+                            'test_envoy_lifecycle_hardening.py')
+        with open(path, 'r', encoding='utf-8') as f:
+            src = f.read()
+        self.assertIn("'sys_repo_root'", src,
+            'the harness must snapshot sys._envoy_repo_root')
+        self.assertIn('del sys._envoy_repo_root', src,
+            'and delete it again when it was previously unset')

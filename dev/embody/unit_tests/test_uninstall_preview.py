@@ -81,12 +81,19 @@ class TestUninstallPreview(EmbodyTestCase):
         self.assertIn('.gitignore', strip)
         self.assertEqual(strip['.gitignore']['kind'], 'block')
 
-    def test_mcp_json_is_strip_json_key(self):
+    def test_mcp_json_is_strip_mcp_config(self):
+        """Client MCP configs strip as 'mcp_config', not 'json_key'.
+
+        The kind covers every client's dialect now, and one of them
+        (Codex's .codex/config.toml) is TOML rather than JSON -- calling
+        that a json_key would be a lie about the mechanism. The apply
+        step still accepts the legacy 'json_key' from an older plan.
+        """
         self._w('.mcp.json', json.dumps(
             {'mcpServers': {'envoy': {'type': 'stdio'}, 'other': {'x': 1}}}))
         strip = {e['path']: e for e in self._plan()['strip']}
         self.assertIn('.mcp.json', strip)
-        self.assertEqual(strip['.mcp.json']['kind'], 'json_key')
+        self.assertEqual(strip['.mcp.json']['kind'], 'mcp_config')
 
     def test_manifest_venv_is_delete(self):
         os.makedirs(os.path.join(self.d, '.venv'), exist_ok=True)

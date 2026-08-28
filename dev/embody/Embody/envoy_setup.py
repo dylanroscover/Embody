@@ -273,6 +273,8 @@ def configure_mcp_client(ext, port, target_dir=None):
             ext._log('MCP .mcp.json already configured (STDIO bridge)', 'DEBUG')
             maybe_write_opencode_config(
                 ext, target_dir, port, [python_cmd] + expected_args)
+            write_client_mcp_configs(
+                ext, target_dir, port, [python_cmd] + expected_args)
             deploy_settings_local(ext, target_dir / '.claude')
             mirror_ai_config_to_worktrees(ext, target_dir)
             return
@@ -298,6 +300,10 @@ def configure_mcp_client(ext, port, target_dir=None):
 
         # --- OpenCode client config (only when that client is in play) ---
         maybe_write_opencode_config(
+            ext, target_dir, port, [python_cmd] + expected_args)
+
+        # --- Every other client's own MCP config file ---
+        write_client_mcp_configs(
             ext, target_dir, port, [python_cmd] + expected_args)
 
         # --- Deploy settings.local.json (auto-allow read-only MCP tools) ---
@@ -328,6 +334,15 @@ def mirror_ai_config_to_worktrees(ext, root):
         prefix = root.name + '-wt-'
         pairs = [(root / '.mcp.json', ('.mcp.json',)),
                  (root / 'opencode.json', ('opencode.json',)),
+                 # Every other client's MCP config travels too, or a
+                 # worktree session gets rules and no Envoy connection.
+                 (root / '.cursor' / 'mcp.json', ('.cursor', 'mcp.json')),
+                 (root / '.vscode' / 'mcp.json', ('.vscode', 'mcp.json')),
+                 (root / '.gemini' / 'settings.json',
+                  ('.gemini', 'settings.json')),
+                 (root / '.codex' / 'config.toml', ('.codex', 'config.toml')),
+                 (root / '.agents' / 'mcp_config.json',
+                  ('.agents', 'mcp_config.json')),
                  (root / '.claude' / 'settings.local.json',
                   ('.claude', 'settings.local.json'))]
         mirrored = 0
@@ -406,9 +421,12 @@ def maybe_write_opencode_config(ext, target_dir, port, command):
     """
     from pathlib import Path
     try:
+        # Selection goes through selected_clients like every other client,
+        # so this cannot drift from the menu the user actually set.
         selected = False
         try:
-            selected = (op.Embody.par.Aiclient.eval() == 'opencode')
+            selected = 'opencode' in mod.embody_git.selected_clients(
+                op.Embody.ext.Embody)
         except Exception:
             pass
         cfg_file = Path(target_dir) / 'opencode.json'
@@ -540,6 +558,211 @@ def write_opencode_config(ext, target_dir, port, command=None):
     op.Embody.ext.Embody._guardFileWrite(
         'OpenCode config', f'{verb} opencode.json in {target_dir}',
         [str(cfg_file)], _write)
+
+
+# ==========================================================================
+# Per-client MCP config (.cursor/mcp.json, .vscode/mcp.json, ...)
+# ==========================================================================
+# Every client but Claude Code reads its OWN file -- none of them reads the
+# root .mcp.json (VS Code even uses a different root key, 'servers'). Before
+# this, selecting Cursor/VS Code/Copilot/Gemini/Codex produced rules files
+# and no Envoy connection at all. Each entry spawns the SAME stdio bridge as
+# .mcp.json, so every client gets the bridge's resilience layer.
+
+def selected_mcp_clients():
+    """Client tokens whose MCP config should be kept current."""
+    try:
+        return mod.embody_git.selected_clients(op.Embody.ext.Embody)
+    except Exception:
+        return []
+
+
+def write_client_mcp_configs(ext, target_dir, port, command):
+    """Write the Envoy entry into each selected client's own MCP config.
+
+    A client is written when it is SELECTED, or when its config already
+    carries an envoy entry -- so a file stays current across port and
+    bridge changes even after the user switches clients (the same rule
+    maybe_write_opencode_config uses).
+    """
+    from pathlib import Path
+    reg = mod.ai_clients
+    selected = set(selected_mcp_clients())
+    for token in reg.tokens():
+        for mcp in reg.mcp_targets(token):
+            try:
+                path = Path(target_dir) / mcp['path']
+                if token not in selected and not mcp_entry_present(mcp, path):
+                    continue
+                if mcp['style'] == 'toml':
+                    write_toml_mcp_config(
+                        ext, target_dir, token, mcp, path, command)
+                else:
+                    write_json_mcp_config(
+                        ext, target_dir, token, mcp, path, command)
+            except Exception as e:
+                ext._log(f'Could not configure {reg.label(token)} MCP '
+                         f'config ({mcp["path"]}): {e}', 'WARNING')
+
+
+def mcp_entry_present(mcp, path):
+    """True when this config file already holds an envoy server entry."""
+    if not path.is_file():
+        return False
+    try:
+        text = path.read_text(encoding='utf-8-sig')
+    except (OSError, UnicodeDecodeError):
+        return False
+    if mcp['style'] == 'toml':
+        return f'[{mcp["key"]}.envoy]' in text
+    try:
+        cfg = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(cfg, dict) and 'envoy' in (cfg.get(mcp['key']) or {})
+
+
+def mcp_server_entry(style, command):
+    """The server entry for one client's dialect.
+
+    stdio_typed  -- {'type': 'stdio', ...}: Claude Code and VS Code.
+    command_args -- bare command/args: Cursor, Gemini, Antigravity.
+    """
+    entry = {'command': str(command[0]), 'args': [str(c) for c in command[1:]]}
+    if style == 'stdio_typed':
+        return {'type': 'stdio', **entry}
+    return entry
+
+
+def write_json_mcp_config(ext, target_dir, token, mcp, path, command):
+    """Merge the Envoy entry into a JSON MCP config, preserving the rest."""
+    label = mod.ai_clients.label(token)
+    entry = mcp_server_entry(mcp['style'], command)
+
+    config = {}
+    created = not path.exists()
+    if not created:
+        try:
+            # utf-8-sig: a leading BOM makes json.loads fail outright,
+            # and the failure path is "leave it alone" -- so one invisible
+            # byte meant that client was never configured, ever.
+            config = json.loads(path.read_text(encoding='utf-8-sig'))
+            if not isinstance(config, dict):
+                config = {}
+        except (json.JSONDecodeError, OSError) as e:
+            # VS Code and Cursor both accept JSONC; a comment-bearing file
+            # fails json.loads. Never risk clobbering hand-authored config.
+            ext._log(f'Could not parse existing {path} ({e}) -- '
+                     f'leaving it untouched.', 'WARNING')
+            return
+
+    servers = config.get(mcp['key']) or {}
+    if servers.get('envoy') == entry:
+        ext._log(f'{label} {path} already configured', 'DEBUG')
+        return
+
+    # Footprint BEFORE writing, mirroring the .mcp.json flow: a file we
+    # created may be deleted by Uninstall; one we merged into loses only
+    # our key.
+    try:
+        Embody = op.Embody.ext.Embody
+        if created:
+            Embody._manifestRecordCreatedFile(str(target_dir), path)
+        else:
+            Embody._manifestRecordAppendedFile(
+                str(target_dir), path, f'{mcp["key"]}.envoy',
+                kind='json_key')
+    except Exception:
+        pass
+
+    servers['envoy'] = entry
+    config[mcp['key']] = servers
+
+    def _write():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # newline= pinned: read_text universalises to LF, so a bare
+        # write_text re-expands every line to CRLF on Windows and
+        # rewrites the user's whole config as a one-line diff.
+        path.write_text(json.dumps(config, indent=2) + '\n',
+                        encoding='utf-8', newline='\n')
+        ext._log(f'Wrote {label} MCP config to {path} (STDIO bridge)')
+
+    verb = 'create' if created else 'add the Envoy MCP server entry to'
+    op.Embody.ext.Embody._guardFileWrite(
+        f'{label} MCP config', f'{verb} {mcp["path"]}',
+        [str(path)], _write)
+
+
+def write_toml_mcp_config(ext, target_dir, token, mcp, path, command):
+    """Merge the Envoy entry into a TOML MCP config (Codex).
+
+    Surgical on purpose: only the [mcp_servers.envoy] table is written or
+    replaced, so nothing else in the user's config.toml is reformatted by
+    a round-trip. Values are emitted as JSON strings, which are valid
+    TOML basic strings for the paths and flags a bridge command holds.
+    """
+    label = mod.ai_clients.label(token)
+    header = f'[{mcp["key"]}.envoy]'
+    args_toml = ', '.join(json.dumps(str(c)) for c in command[1:])
+    block = (f'{header}\n'
+             f'command = {json.dumps(str(command[0]))}\n'
+             f'args = [{args_toml}]\n')
+
+    created = not path.exists()
+    existing = ''
+    if not created:
+        try:
+            existing = path.read_text(encoding='utf-8')
+        except OSError as e:
+            ext._log(f'Could not read {path} ({e}) -- leaving it '
+                     f'untouched.', 'WARNING')
+            return
+        if block in existing:
+            ext._log(f'{label} {path} already configured', 'DEBUG')
+            return
+
+    if header in existing:
+        # Replace just this table: from its header to the next one.
+        lines = existing.splitlines(keepends=True)
+        start = next(i for i, l in enumerate(lines) if l.strip() == header)
+        end = len(lines)
+        for i in range(start + 1, len(lines)):
+            if lines[i].lstrip().startswith('['):
+                end = i
+                break
+        tail = ''.join(lines[end:])
+        # Keep the blank line that separated this table from the next --
+        # the replaced range swallowed it.
+        if tail and not tail.startswith('\n'):
+            tail = '\n' + tail
+        merged = ''.join(lines[:start]) + block + tail
+    else:
+        sep = '' if (created or existing.endswith('\n\n')) else (
+            '\n' if existing.endswith('\n') else '\n\n')
+        merged = existing + sep + block
+
+    try:
+        Embody = op.Embody.ext.Embody
+        if created:
+            Embody._manifestRecordCreatedFile(str(target_dir), path)
+        else:
+            Embody._manifestRecordAppendedFile(
+                str(target_dir), path, f'{mcp["key"]}.envoy',
+                kind='toml_table')
+    except Exception:
+        pass
+
+    def _write():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(merged, encoding='utf-8', newline='\n')
+        ext._log(f'Wrote {label} MCP config to {path} (STDIO bridge). '
+                 f'Codex ignores project-level config until the project '
+                 f'is trusted -- run codex in this folder and trust it.')
+
+    verb = 'create' if created else 'add the Envoy MCP server entry to'
+    op.Embody.ext.Embody._guardFileWrite(
+        f'{label} MCP config', f'{verb} {mcp["path"]}',
+        [str(path)], _write)
 
 
 def opencode_permission_block(ext, posture):
@@ -1482,8 +1705,17 @@ def configure_gitignore(ext, git_root):
         # Rotated .tdn crash-recovery copies (.bak/.bak2) -- machine-local
         # scratch, superseded by the committed .tdn on every write.
         '.tdn_backup/',
-        # OpenCode client config (embeds absolute venv/bridge paths)
+        # Client MCP configs -- ALL of them embed absolute venv/bridge
+        # paths, so committing one sends a teammate a config pointing at
+        # a venv that does not exist on their machine. .mcp.json and
+        # opencode.json were ignored for exactly this reason; the five
+        # per-client files added alongside them carry the same paths.
         'opencode.json',
+        '.cursor/mcp.json',
+        '.vscode/mcp.json',
+        '.gemini/settings.json',
+        '.codex/config.toml',
+        '.agents/mcp_config.json',
         # Ignore .embody/ runtime files but keep committed project.json
         '.embody/*',
         '!.embody/project.json',

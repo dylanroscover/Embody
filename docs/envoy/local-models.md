@@ -10,7 +10,7 @@ Everything runs on your machine: TouchDesigner, the model, and the agent. No acc
 
 ### Automatic setup (recommended)
 
-Set the **AI Client** parameter on the Embody COMP to `opencode` (or pick OpenCode in the setup wizard). Embody generates `opencode.json` in your project root with:
+Set **Configure For** to **OpenCode** on the Embody COMP's Envoy page (or pick OpenCode in the setup wizard). Embody generates `opencode.json` in your project root with:
 
 - **`mcp.envoy`** — spawns the same STDIO bridge Claude Code uses, so OpenCode gets the bridge meta-tools (`get_td_status`, `launch_td`, `restart_td`, `switch_instance`), a cached tool list while TouchDesigner is closed, automatic reconnection, and instance-registry identity checks.
 - **`instructions`** — loads the generated `.claude/rules/*.md` alongside `AGENTS.md`. (OpenCode reads `AGENTS.md` natively and discovers `.claude/skills/` through its Claude-compatibility layer, so the full rule-and-skill set carries over with one copy on disk.)

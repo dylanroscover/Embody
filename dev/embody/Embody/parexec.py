@@ -27,9 +27,17 @@ def onValueChange(par, prev):
 		if not par:
 			parent.Embody.MissingExternalizationsPar()
 
-	elif par.name == 'Aiclient':
+	elif par.name == 'Configclient':
+		# Whose files to write changed. InitEnvoy, not just
+		# _extractAIConfig: a client also needs the MCP config IT
+		# reads, and the root .mcp.json is Claude Code's format and
+		# no one else's. Writes are marker-gated and idempotent.
 		if parent.Embody.par.Envoyenable.eval():
-			op.Embody.ext.Embody._extractAIConfig()
+			parent.Embody.InitEnvoy()
+
+	elif par.name == 'Aiclient':
+		# Launch target only -- it opens an app and writes nothing.
+		pass
 
 	elif par.name == 'Aiprojectroot':
 		# Move Embody's own state (.embody/config.json, project.json) to the
@@ -102,15 +110,17 @@ def onValueChange(par, prev):
 				convoy.ext.ConvoyExt.Register()
 				# Convoy can run without an attached AI coding client, but its TD
 				# relay still terminates at Envoy's loopback command server. Keep
-				# only that internal substrate on; Aiclient='none' makes Start()
-				# skip MCP/client config generation.
-				if (parent.Embody.par.Aiclient.eval() == 'none'
+				# only that internal substrate on. 'No client' means nothing is
+				# ticked under Configure For -- NOT that the Launch Client menu
+				# says None, which is a normal state for someone who opens their
+				# editor themselves and would wrongly read as Convoy-only.
+				if (not mod.embody_git.selected_clients(parent.Embody.ext.Embody)
 						and parent.Embody.par.Convoyenable.eval()
 						and not parent.Embody.par.Envoyenable.eval()):
 					parent.Embody.par.Envoyenable = True
 			else:
 				convoy.ext.ConvoyExt.Unregister()
-				if (parent.Embody.par.Aiclient.eval() == 'none'
+				if (not mod.embody_git.selected_clients(parent.Embody.ext.Embody)
 						and parent.Embody.par.Envoyenable.eval()):
 					parent.Embody.par.Envoyenable = False
 		else:

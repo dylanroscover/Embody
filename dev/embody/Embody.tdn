@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
-build: 1194
-generator: Embody/6.1.2
+build: 1205
+generator: Embody/6.1.5
 td_build: 099.2025.33070
-source_file: Embody-6.284.toe
-exported_at: '2026-08-27T17:51:58Z'
+source_file: Embody-6.287.toe
+exported_at: '2026-08-28T04:51:21Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -320,9 +320,37 @@ custom_pars:
     startSection: true
     help: 'One-time, opt-in conversion of the network files you already have. Renames every tracked .tdn to .tdxn, repoints the externalizations table, and updates the tdn_ref pointers inside parent files so nested COMPs keep resolving. Contents are unchanged. New externalizations already use .tdxn -- this only affects existing files. Commit or stash first if the project is under version control; Embody performs the renames itself, so never git mv them. Safe to re-run: it converges.'
   Envoy:
+  - name: Configclient
+    style: Menu
+    label: Configure For
+    startSection: true
+    default: claudecode
+    menuNames:
+    - claudecode
+    - opencode
+    - codex
+    - gemini
+    - vscode
+    - cursor
+    - windsurf
+    - copilot
+    - antigravity
+    - none
+    menuLabels:
+    - Claude Code
+    - OpenCode
+    - Codex
+    - Gemini
+    - VS Code
+    - Cursor
+    - Windsurf
+    - GitHub Copilot (VS Code)
+    - Antigravity IDE
+    - None
+    help: 'Which AI client Embody generates config files for: its instruction files (rules, skills) and the MCP config THAT client reads -- the root .mcp.json is Claude Code''s format and no other client reads it. AGENTS.md and .mcp.json are written for every project regardless. Generation is additive and never removes, so selecting a second client later leaves the first one configured and still tracking bridge and port changes -- pick each in turn to serve several clients from one project. Set to None to generate no client config at all (Convoy-only projects).'
   - name: Aiclient
     style: Menu
-    label: AI Client
+    label: Launch Client
     default: '0'
     menuNames:
     - claudecode
@@ -333,6 +361,7 @@ custom_pars:
     - cursor
     - windsurf
     - copilot
+    - antigravity
     - none
     menuLabels:
     - Claude Code
@@ -342,14 +371,15 @@ custom_pars:
     - VS Code
     - Cursor
     - Windsurf
-    - GitHub Copilot
+    - GitHub Copilot (VS Code)
+    - Antigravity IDE
     - None
-    help: Selects the AI client used with Envoy. Determines which MCP configuration file format is generated (e.g. .mcp.json for Claude Code, opencode.json for OpenCode).
+    help: Which AI client the Launch button opens at the project root. Editors (VS Code, Cursor, Windsurf, Antigravity IDE) open the folder as a workspace; CLI tools (Claude Code, Codex, Gemini, OpenCode) open in a new terminal. GitHub Copilot runs inside VS Code, so it opens VS Code. This opens an app and writes nothing -- Configure For above decides which config files Embody generates.
     value: claudecode
   - name: Launchaiclient
     style: Pulse
     label: Launch AI Client
-    help: 'Open the AI client selected above at the project root: editors (VS Code, Cursor, Windsurf, Copilot) open the folder as a workspace; CLI tools (Claude Code, Codex, Gemini) open in a new terminal at the root.'
+    help: Open the client selected in AI Client at the project root (the AI Project Root setting decides which folder that is).
   - name: Aiprojectroot
     style: Menu
     label: AI Project Root
@@ -819,7 +849,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.1.2
+    value: 6.1.5
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -981,120 +1011,130 @@ operators:
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   dat_content:
-  - - '00:07:19  457882 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_chomp_sq7vtwhz\\one_nl.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
-  - - '00:07:19  457882 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_chomp_sq7vtwhz\one_nl.tdn'
-  - - '00:07:19  457882 INFO    TDXNExt: Importing from C:\Users\admin\AppData\Local\Temp\v6h_chomp_sq7vtwhz\one_nl.tdn into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/one_nl_target...'
-  - - '00:07:19  457882 SUCCESS TDXNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/one_nl_target'
-  - - '00:07:20  457894 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_chomp_ojbeo7nm\\two_nl.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
-  - - '00:07:20  457894 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_chomp_ojbeo7nm\two_nl.tdn'
-  - - '00:07:20  457894 INFO    TDXNExt: Importing from C:\Users\admin\AppData\Local\Temp\v6h_chomp_ojbeo7nm\two_nl.tdn into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/two_nl_target...'
-  - - '00:07:20  457894 SUCCESS TDXNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_v6_hardening/two_nl_target'
-  - - '00:07:30  458002 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\v6h_load_bkl69kqn\\ver.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
-  - - '00:07:30  458002 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\v6h_load_bkl69kqn\ver.tdn'
-  - - '00:07:41  458134 INFO    EmbodyExt: 308 externalized operator(s) found -- validating tracked operators'
-  - - '00:07:42  458146 SUCCESS EmbodyExt: Tag ''tox'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
-  - - '00:07:42  458146 SUCCESS EmbodyExt: Added ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
-  - - '00:07:42  458146 INFO    EmbodyExt: Update complete -- everything up to date'
-  - - '00:07:42  458146 SUCCESS EmbodyExt: Removed ''/embody/unit_tests/test_sandbox/sandbox_test_verify_upgrade/probe_savedirty'''
-  - - '00:07:52  458262 SUCCESS EmbodyExt: Tag ''tdn'' applied to ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
-  - - '00:07:52  458262 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdxn'
-  - - '00:07:52  458262 SUCCESS EmbodyExt: Added TDXN ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'''
-  - - '00:07:53  458262 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdxn'
-  - - '00:07:53  458262 SUCCESS EmbodyExt: Exported TDXN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
-  - - '00:07:53  458262 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdxn'
-  - - '00:07:53  458262 SUCCESS EmbodyExt: Exported TDXN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
-  - - '00:07:53  458262 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_version_sync\bumpguard.tdxn'
-  - - '00:07:53  458262 SUCCESS EmbodyExt: Exported TDXN for /embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'
-  - - '00:07:53  458262 INFO    EmbodyExt: _removeTDNStrategy: searching for ''/embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard'' delete_file=True rows=310'
-  - - '00:07:53  458262 INFO    EmbodyExt: _removeTDNStrategy: found row 309, rel_path=''embody/unit_tests/test_sandbox/sandbox_test_version_sync/bumpguard.tdxn'' delete_file=True'
-  - - '00:07:55  458286 INFO    EmbodyExt: Update complete -- everything up to date'
-  - - '00:08:04  458382 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '00:08:07  458406 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '00:08:07  458406 WARNING EmbodyExt: Skipping the whole-project externalization: no saved .toe on disk to fall back on, and it re-tags every COMP and DAT in the project. Save the project first, then run Externalize Full Project from the Embody parameters. New work is still externalized automatically.'
-  - - '00:08:08  458418 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '00:08:08  458418 WARNING EmbodyExt: Whole-project externalization requested -- it re-tags every compatible COMP and DAT. Recovery point on disk: "/tmp/fake-project.toe". Confirm the format in the dialog.'
-  - - '00:08:15  458502 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
-  - - '00:08:17  458514 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '00:08:17  458514 WARNING EmbodyExt: Skipping the whole-project externalization: no saved .toe on disk to fall back on, and it re-tags every COMP and DAT in the project. Save the project first, then run Externalize Full Project from the Embody parameters. New work is still externalized automatically.'
-  - - '00:08:17  458514 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
-  - - '00:08:17  458526 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '00:08:17  458526 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
-  - - '00:08:18  458537 WARNING EmbodyExt: Setup wizard: unrecognized externalize choice "externalize-everything!!" -- skipping externalization setup.'
-  - - '00:08:18  458537 SUCCESS EmbodyExt: Embody is set up for externalization only. Turn on the AI assistant or Convoy anytime by re-running the Setup Wizard.'
-  - - '00:08:23  458597 SUCCESS EmbodyExt: Auto-externalization ON -- new COMPs and DATs are written to disk as they are created (change it anytime via the Auto-Externalize New Ops parameter).'
-  - - '00:08:24  458621 SUCCESS TestRunnerExt: Tests complete: 3932/4048 passed, 116 skipped'
-  - - '00:08:30  458932 WARNING EnvoyExt: Watchdog: Embody Status stranded at ''Testing'' with no test run live -- restoring the saved status'
-  - - '00:08:49  460094 INFO    EnvoyExt: Processing: save_project'
-  - - '00:08:49  460094 INFO    envoy_setup:1334: Registered instance "Embody-6.283" in envoy.json (port 9870)'
-  - - '00:08:50  460094 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '00:08:50  460094 SUCCESS EmbodyExt: Exported TDXN for /embody/Embody'
-  - - '00:08:50  460094 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '00:08:50  460094 SUCCESS EmbodyExt: Exported TDXN for /embody'
-  - - '00:08:50  460094 SUCCESS EmbodyExt: Saved 2 externalizations'
-  - - '00:08:50  460094 INFO    EmbodyExt: Exporting portable .tox: stripping 558 file reference(s) and 157 tagged operator(s) from /embody/Embody'
-  - - '00:08:55  460103 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '00:08:55  460103 SUCCESS EmbodyExt: Exported TDXN for /embody/Embody'
-  - - '00:08:55  460103 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '00:08:55  460103 SUCCESS EmbodyExt: Exported TDXN for /embody'
-  - - '00:08:59  460357 INFO    ConvoyExt: Convoy: Registered -- Envoy port pending'
-  - - '00:09:03  460582 WARNING EnvoyExt: Watchdog: enabled but socket dead (status ''Running on port 9870'') -- reviving'
-  - - '00:09:03  460582 WARNING EnvoyExt: Watchdog: MCP socket on port None unreachable while enabled (running=False) -- reviving server'
-  - - '00:09:03  460600 INFO    envoy_setup:861: Found git repo at C:\Users\admin\Documents\Git\Embody'
-  - - '00:09:04  460600 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
-  - - '00:09:09  460914 INFO    ConvoyExt: Convoy: Convoy App update: the running Convoy App is 6.1.0, this Embody ships 6.1.1 -- updating it in place now (automatic; Repair Convoy App remains the manual path)'
-  - - '00:09:23  461744 INFO    EnvoyExt: Processing: execute_python'
-  - - '00:09:23  461744 INFO    EnvoyExt: execute_python: import osemb = op.Embodyrel = os.path.join(os.path.dirname(project.folder.rstrip(''/'')), ''release'')result = {    ''par_Version'': emb.par.Version.eval(),    ''project_name'': project.name,    ''toes'':...'
-  - - '00:09:23  461744 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '00:09:25  461815 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '00:09:25  461816 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '10:47:32 2759118 INFO    EnvoyExt: Processing: execute_python'
-  - - '10:47:32 2759118 INFO    EnvoyExt: execute_python: emb = op.Embodyp = emb.par.Migratetotdxnresult = {''label'': p.label, ''help'': p.help}'
-  - - '10:47:32 2759118 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '10:47:33 2759189 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '10:47:34 2759190 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '10:47:38 2759472 INFO    EnvoyExt: Processing: execute_python'
-  - - '10:47:38 2759472 INFO    EnvoyExt: execute_python: emb = op.Embodyp = emb.par.Migratetotdxnp.label = ''Migrate .tdn to .tdxn''p.help = (''One-time, opt-in conversion of the network files you already have. ''          ''Renames every tracked .tdn to .td...'
-  - - '10:47:38 2759472 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '10:50:05 2768292 INFO    envoy_setup:1334: Registered instance "Embody-6.284" in envoy.json (port 9870)'
-  - - '10:50:06 2768292 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '10:50:06 2768292 SUCCESS EmbodyExt: Exported TDXN for /embody/Embody'
-  - - '10:50:06 2768292 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '10:50:06 2768292 SUCCESS EmbodyExt: Exported TDXN for /embody'
-  - - '10:50:06 2768292 SUCCESS EmbodyExt: Saved 2 externalizations'
-  - - '10:50:07 2768292 INFO    EmbodyExt: Exporting portable .tox: stripping 558 file reference(s) and 157 tagged operator(s) from /embody/Embody'
-  - - '10:50:10 2768292 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '10:50:11 2768292 SUCCESS EmbodyExt: Exported TDXN for /embody/Embody'
-  - - '10:50:11 2768292 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '10:50:11 2768292 SUCCESS EmbodyExt: Exported TDXN for /embody'
-  - - '10:50:16 2768573 INFO    ConvoyExt: Convoy: Registered -- Envoy port pending'
-  - - '10:50:19 2768771 WARNING EnvoyExt: Watchdog: enabled but socket dead (status ''Running on port 9870'') -- reviving'
-  - - '10:50:19 2768771 WARNING EnvoyExt: Watchdog: MCP socket on port None unreachable while enabled (running=False) -- reviving server'
-  - - '10:50:19 2768789 INFO    envoy_setup:861: Found git repo at C:\Users\admin\Documents\Git\Embody'
-  - - '10:50:20 2768789 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
-  - - '10:50:26 2769123 INFO    ConvoyExt: Convoy: Convoy App update: the running Convoy App is 6.1.1, this Embody ships 6.1.2 -- updating it in place now (automatic; Repair Convoy App remains the manual path)'
-  - - '10:50:55 2770916 INFO    EnvoyExt: Processing: execute_python'
+  - - '20:14:42 4274739 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_dcwvdpsg\pos.tdn'
+  - - '20:14:42 4274744 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_507pbegp\\tags.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:42 4274744 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_507pbegp\tags.tdn'
+  - - '20:14:42 4274748 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_md22on4g\\rt.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:42 4274748 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_md22on4g\rt.tdn'
+  - - '20:14:42 4274748 SUCCESS TDXNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_file_io/rt_target'
+  - - '20:14:42 4274753 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_qs8ryp0p\\indent.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:42 4274753 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_qs8ryp0p\indent.tdn'
+  - - '20:14:43 4274758 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_0jdm160k\\big.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:43 4274758 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_0jdm160k\big.tdn'
+  - - '20:14:43 4274762 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_kqhtgdx5\\families.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:43 4274762 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_kqhtgdx5\families.tdn'
+  - - '20:14:43 4274766 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_oz_ynnpt\\overwrite.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:43 4274766 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_oz_ynnpt\overwrite.tdn'
+  - - '20:14:43 4274772 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_grhvtzci\\rp.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:43 4274772 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_grhvtzci\rp.tdn'
+  - - '20:14:43 4274776 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_7ug1hfjs\\unbacked.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:43 4274776 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_7ug1hfjs\unbacked.tdn'
+  - - '20:14:43 4274779 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_kr84_8rs\\uni.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:43 4274779 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_kr84_8rs\uni.tdn'
+  - - '20:14:43 4274783 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_t4j8wvfz\\imp.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:43 4274783 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_t4j8wvfz\imp.tdn'
+  - - '20:14:43 4274783 INFO    TDXNExt: Importing from C:\Users\admin\AppData\Local\Temp\tdn_test_t4j8wvfz\imp.tdn into /embody/unit_tests/test_sandbox/sandbox_test_tdn_file_io/fit...'
+  - - '20:14:43 4274783 SUCCESS TDXNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_file_io/fit'
+  - - '20:14:43 4274787 WARNING TDXNExt: No TDXN file specified'
   - - |-
-      10:50:55 2770916 INFO    EnvoyExt: execute_python: emb = op.Embody
-      ext = emb.ext.Embody
-      table = ext.Externalizations
-      rows = []
-      for i in range(1, table.numRows):
-          p = ext._cellVal(i, 'path', table=table)
-          f = ext._cellVal(i, 'rel_file_path', tabl...
-  - - '10:50:55 2770916 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '10:50:57 2770987 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
-  - - '10:50:57 2770988 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
-  - - '10:51:56 2774508 INFO    EnvoyExt: Processing: execute_python'
+      20:14:43 4274791 ERROR   TDXNExt: Invalid TDXN file: while parsing a flow mapping
+        in "<unicode string>", line 1, column 3
+      did not find expected ',' or '}'
+        in "<unicode string>", line 2, column 1
+  - - '20:14:43 4274792 ERROR   TDXNExt: TDXN file not found: /nonexistent/xyz.tdn'
+  - - '20:14:43 4274794 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_js_o03bk\\wire_rt.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:43 4274794 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_js_o03bk\wire_rt.tdn'
+  - - '20:14:43 4274794 INFO    TDXNExt: Importing from C:\Users\admin\AppData\Local\Temp\tdn_test_js_o03bk\wire_rt.tdn into /embody/unit_tests/test_sandbox/sandbox_test_tdn_file_io/wire_target...'
+  - - '20:14:43 4274794 SUCCESS TDXNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_file_io/wire_target'
+  - - '20:14:43 4274796 WARNING EmbodyExt: [test] No response seeded for "Large TDXN File"; returning -1 instead of opening modal dialog. Seed it via op.Embody.store("_smoke_test_responses", {...}).'
+  - - '20:14:44 4274846 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_file_io\parent_comp\child_comp.tdxn'
+  - - '20:14:44 4274846 INFO    TDXNExt: Cleaned up 1 stale .tdn file(s)'
+  - - '20:14:44 4274846 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_p5loe5fk\\embed.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:44 4274846 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_p5loe5fk\embed.tdn'
+  - - '20:14:44 4274847 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_f5yffg1l\\no_ref.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:44 4274847 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_f5yffg1l\no_ref.tdn'
+  - - '20:14:44 4274858 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_file_io\parent_comp\child_comp.tdxn'
+  - - '20:14:44 4274858 INFO    TDXNExt: Cleaned up 1 stale .tdn file(s)'
+  - - '20:14:44 4274858 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_0dam2zwk\\parent.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:44 4274858 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_0dam2zwk\parent.tdn'
+  - - '20:14:44 4274875 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_zwdw8p6d\\embed_tox.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:44 4274875 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_zwdw8p6d\embed_tox.tdn'
+  - - '20:14:45 4274879 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_r4ivnlpd\\no_tox_ref.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:45 4274879 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_r4ivnlpd\no_tox_ref.tdn'
+  - - '20:14:45 4274892 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_hijqhag2\\parent_tox.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:45 4274892 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_hijqhag2\parent_tox.tdn'
+  - - '20:14:45 4274894 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tdn_test_ik3ycu27\\no_pollute.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '20:14:45 4274894 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tdn_test_ik3ycu27\no_pollute.tdn'
+  - - '20:14:45 4274901 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\unit_tests\test_sandbox\sandbox_test_tdn_file_io\parent_comp\child_comp.tdxn'
+  - - '20:14:45 4274924 SUCCESS TestRunnerExt: Tests complete: 95/95 passed'
+  - - '20:15:12 4276509 INFO    EnvoyExt: Processing: execute_python'
   - - |-
-      10:51:56 2774508 INFO    EnvoyExt: execute_python: emb = op.Embody
-      fixed = {}
-      for name, lab in (('Tdntag', 'TDXN Tag'), ('Tdnexcludetag', 'TDXN Exclude Tag')):
-          p = getattr(emb.par, name, None)
-          if p is not None:
-              before = p.label
-             ...
-  - - '10:51:56 2774508 INFO    EnvoyExt: execute_python: completed successfully'
-  - - '10:51:57 2774579 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+      20:15:12 4276509 INFO    EnvoyExt: execute_python: btn = op('/embody/Embody/tagger/btn_copy_tdn/parexec1')
+      out = {}
+      try:
+          # Resolve exactly the expression the button callback runs.
+          scope = btn.parent()
+          emb = scope.parent.Embody
+          ext = em...
+  - - '20:15:12 4276509 SUCCESS TDXNExt: Copied tagger TDXN to clipboard (22 ops)'
+  - - '20:15:12 4276509 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '20:15:13 4276580 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '20:15:13 4276581 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '21:50:16 4618775 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
+  - - '21:50:22 4619087 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
+  - - '21:50:23 4619119 INFO    EnvoyExt: Processing: execute_python'
+  - - |-
+      21:50:23 4619119 INFO    EnvoyExt: execute_python: E = op.Embody
+      result = {'version': E.par.Version.eval(),
+                'toe': project.name,
+                'configclient': E.par.Configclient.eval()}
+  - - '21:50:23 4619119 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '21:50:24 4619190 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
+  - - '21:50:25 4619191 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody\Embody.tdn'
+  - - '21:50:27 4619323 INFO    EnvoyExt: Starting Envoy MCP server on port 9870'
+  - - '21:50:37 4619911 INFO    EnvoyExt: Processing: execute_python'
+  - - |-
+      21:50:37 4619911 INFO    EnvoyExt: execute_python: op.Embody.InitEnvoy()
+      result = 'regenerating all client config so the stamp is uniform'
+  - - '21:50:37 4619911 INFO    embody_git:1005: Kept your edits to AGENTS.md (delete the file to regenerate it from the template).'
+  - - '21:50:37 4619911 INFO    embody_git:1005: Kept your edits to .claude/skills/create-operator/SKILL.md (delete the file to regenerate it from the template).'
+  - - '21:50:37 4619911 INFO    embody_git:1005: Kept your edits to .claude/skills/debug-operator/SKILL.md (delete the file to regenerate it from the template).'
+  - - '21:50:37 4619911 INFO    embody_git:1005: Kept your edits to .claude/skills/externalize-operator/SKILL.md (delete the file to regenerate it from the template).'
+  - - '21:50:37 4619911 INFO    embody_git:1005: Kept your edits to .claude/skills/create-extension/SKILL.md (delete the file to regenerate it from the template).'
+  - - '21:50:37 4619911 INFO    embody_git:1005: Kept your edits to .claude/skills/manage-annotations/SKILL.md (delete the file to regenerate it from the template).'
+  - - '21:50:37 4619911 INFO    embody_git:1005: Kept your edits to .claude/skills/td-api-reference/SKILL.md (delete the file to regenerate it from the template).'
+  - - '21:50:37 4619911 INFO    embody_git:1005: Kept your edits to .claude/skills/parameter-design/SKILL.md (delete the file to regenerate it from the template).'
+  - - '21:50:37 4619911 INFO    embody_git:1005: Kept your edits to .claude/skills/td-recovery/SKILL.md (delete the file to regenerate it from the template).'
+  - - '21:50:37 4619911 INFO    embody_git:1005: Kept your edits to .claude/skills/multi-session-etiquette/SKILL.md (delete the file to regenerate it from the template).'
+  - - '21:50:37 4619911 INFO    embody_git:1005: Kept your edits to .claude/skills/mcp-tools-reference/SKILL.md (delete the file to regenerate it from the template).'
+  - - '21:50:37 4619911 INFO    embody_git:1005: Kept your edits to .claude/skills/visual-aesthetics/SKILL.md (delete the file to regenerate it from the template).'
+  - - '21:50:37 4619911 INFO    embody_git:1005: Kept your edits to .claude/skills/merge-divergent-tox/SKILL.md (delete the file to regenerate it from the template).'
+  - - '21:50:37 4619911 WARNING embody_git:656: CLAUDE.md already exists (not generated by Embody). Wrote MCP reference to C:\Users\admin\Documents\Git\Embody\ENVOY.md instead.'
+  - - '21:50:37 4619911 SUCCESS embody_git:140: Generated 3 .claude/ files at C:\Users\admin\Documents\Git\Embody'
+  - - '21:50:37 4619911 SUCCESS embody_git:1121: Envoy config regenerated for Claude Code at C:\Users\admin\Documents\Git\Embody'
+  - - '21:50:37 4619911 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '21:51:19 4622475 INFO    EnvoyExt: Processing: execute_python'
+  - - |-
+      21:51:19 4622475 INFO    EnvoyExt: execute_python: import tempfile, os, re, hashlib
+      home = op.Embody.parent()
+      scratch = home.op('tagsort_probe')
+      if scratch:
+          scratch.destroy()
+      scratch = home.create(baseCOMP, 'tagsort_probe')
+      scratch.nodeX, scratch....
+  - - '21:51:19 4622475 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tagsort_ghbv3w9k\\probe_0.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '21:51:19 4622475 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tagsort_ghbv3w9k\probe_0.tdn'
+  - - '21:51:19 4622475 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tagsort_ghbv3w9k\\probe_1.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '21:51:19 4622475 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tagsort_ghbv3w9k\probe_1.tdn'
+  - - '21:51:19 4622475 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tagsort_ghbv3w9k\\probe_2.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '21:51:19 4622475 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tagsort_ghbv3w9k\probe_2.tdn'
+  - - '21:51:19 4622475 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tagsort_ghbv3w9k\\probe_3.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '21:51:19 4622475 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tagsort_ghbv3w9k\probe_3.tdn'
+  - - '21:51:19 4622475 WARNING TDXNExt: Failed to track TDXN export: ''C:\\Users\\admin\\AppData\\Local\\Temp\\tagsort_ghbv3w9k\\probe_4.tdn'' is not in the subpath of ''C:\\Users\\admin\\Documents\\Git\\Embody\\dev'' OR one path is relative and the other is absolute.'
+  - - '21:51:19 4622475 SUCCESS TDXNExt: Exported network to C:\Users\admin\AppData\Local\Temp\tagsort_ghbv3w9k\probe_4.tdn'
+  - - '21:51:19 4622475 INFO    EnvoyExt: execute_python: completed successfully'
+  - - '21:51:19 4622475 WARNING EnvoyExt: CONFLICT WARNING: session "Embody@dev" wrote project:python (42.7s ago) -- coordinate before continuing'
+  - - '21:51:21 4622546 SUCCESS TDXNExt: Exported network to C:\Users\admin\Documents\Git\Embody\dev\embody.tdn'
   dat_content_format: table
 - name: null2
   type: nullCHOP
@@ -1319,8 +1359,8 @@ operators:
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
-  - py
   - TDExtension
+  - py
 - name: mousein1
   type: mouseinCHOP
   parameters:
@@ -1395,6 +1435,17 @@ operators:
   tags:
   - tdn
   tdn_ref: embody/Embody/Collection.tdn
+- name: ai_clients
+  type: textDAT
+  parameters:
+    file: embody/Embody/ai_clients.py
+    syncfile: true
+    language: python
+  position: [-700, 0]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
 - name: embody_git
   type: textDAT
   parameters:
@@ -1962,7 +2013,7 @@ operators:
       - '0.4500'
       - '1'
     - - r0c1
-      - v6.1.2
+      - v6.1.5
       - '0.4000'
       - '0.4400'
       - '0.5000'
@@ -2369,13 +2420,13 @@ operators:
   type: baseCOMP
   position: [1000, 475]
   color: [0.67, 0.67, 0.67]
-  comment: Chunked TDN export progress dialog
+  comment: Chunked TDXN export progress dialog
   children:
   - name: win
     type: windowCOMP
     parameters:
       winop: dialog
-      title: Embody - TDN Export
+      title: Embody - TDXN Export
       justifyh: center
       justifyv: center
       winw: 440
@@ -2399,7 +2450,7 @@ operators:
     - name: title
       type: textCOMP
       parameters:
-        text: Exporting TDN
+        text: Exporting TDXN
         callbacks: title_callbacks
         fontcolorr: 0.92
         fontcolorg: 0.92
@@ -2655,16 +2706,16 @@ annotations:
 - name: annotate2
   mode: annotate
   title: Collection -- community / embody.tools client
-  text: 'Untrusted-content layer: scans + default-inerts community TDN on paste. TDNExt delegates source==''embody.tools'' here.'
+  text: 'Untrusted-content layer: scans + default-inerts community TDXN on paste. TDXNExt delegates source==''embody.tools'' here.'
   position: [130, -620]
   size: [300, 370]
   color: [0.45, 0.45, 0.45]
 - name: annotation_logic
   mode: annotate
   title: Logic
-  text: Core extensions (Embody, Envoy, TDN), lifecycle callbacks, parameter handlers, logging, and CLAUDE.md template.
-  position: [-770, -3]
-  size: [670, 1001]
+  text: Core extensions (Embody, Envoy, TDXN), lifecycle callbacks, parameter handlers, logging, and CLAUDE.md template.
+  position: [-770, -103]
+  size: [670, 1101]
   color: [0.485, 0.0, 0.2748]
   opacity: 0.9
 - name: annotation_tagging

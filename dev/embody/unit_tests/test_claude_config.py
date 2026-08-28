@@ -34,6 +34,17 @@ class TestClaudeConfig(EmbodyTestCase):
 	# Group A: Template DAT integrity
 	# ------------------------------------------------------------------
 
+	def unstamped(self, text):
+		"""Generated content with the marker's hash removed.
+
+		Generated files now carry sha:<hash> in their marker line so
+		they can prove on their own whether they are still Embody's --
+		the sidecar that used to do that never survived a clone.
+		Content assertions compare against the template, so they
+		strip the stamp first."""
+		return op.Embody.op('embody_git').module.strip_stamp(
+			self.embody_ext, text)
+
 	def test_A00_no_absolute_paths_in_panel_watchers(self):
 		"""No panelexecuteDAT inside Embody may watch ABSOLUTE op paths.
 
@@ -250,7 +261,9 @@ class TestClaudeConfig(EmbodyTestCase):
 		result = self.embody_ext._writeTemplate(self._temp_dir, 'gen.md', new)
 		self.assertTrue(result, 'should regenerate an untouched generated file')
 		self.assertEqual(
-			(self._temp_dir / 'gen.md').read_text(encoding='utf-8'), new)
+			self.unstamped(
+				(self._temp_dir / 'gen.md').read_text(encoding='utf-8')),
+			new)
 
 	def test_B10_legacy_marker_without_tracked_hash_regenerates(self):
 		"""A pre-existing marker file with no tracked hash (legacy) is regenerated."""
@@ -262,12 +275,25 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertTrue(result,
 			'legacy marker file with no tracked hash should regenerate')
 
-	def test_B11_generated_files_stay_byte_identical(self):
-		"""The sidecar approach must NOT mutate generated content (no embedded hash)."""
+	def test_B11_generated_content_differs_only_by_its_stamp(self):
+		"""Generated files now carry their own hash, by design.
+
+		This test previously asserted the opposite -- that generated
+		content is byte-identical to its template, with the hash kept
+		in a sidecar. That sidecar lives in gitignored .embody/, so it
+		never reached a second machine: a clone saw a marker with no
+		record, read it as legacy, and regenerated over edits a
+		teammate had committed. The stamp travels inside the file.
+		What still holds: the marker line is the ONLY thing that
+		differs, so the body is byte-exact."""
 		content = self.MARKER + ' v1 -->\n# Rules\nexact body\n'
 		self.embody_ext._writeTemplate(self._temp_dir, 'exact2.md', content)
-		self.assertEqual(
-			(self._temp_dir / 'exact2.md').read_text(encoding='utf-8'), content)
+		written = (self._temp_dir / 'exact2.md').read_text(encoding='utf-8')
+		self.assertNotEqual(written, content, 'the file should be stamped')
+		self.assertEqual(self.unstamped(written), content,
+			'the stamp must be the only difference from the template')
+		self.assertEqual(written.split('\n')[1:], content.split('\n')[1:],
+			'the body below the marker must be byte-exact')
 
 	def test_B12_manifest_records_generated_file(self):
 		"""Generating a file records its hash in the sidecar manifest."""
@@ -294,7 +320,7 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.embody_ext._writeClaudeMd(self._temp_dir)
 		expected = self.embody_ext.my.op('templates/text_claude').text
 		actual = (self._temp_dir / 'CLAUDE.md').read_text(encoding='utf-8')
-		self.assertEqual(actual, expected)
+		self.assertEqual(self.unstamped(actual), expected)
 
 	def test_C03_overwrites_claude_md_with_marker(self):
 		"""_writeClaudeMd should overwrite CLAUDE.md when it has the marker."""
@@ -304,7 +330,7 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertEqual(result, existing)
 		updated = existing.read_text(encoding='utf-8')
 		expected = self.embody_ext.my.op('templates/text_claude').text
-		self.assertEqual(updated, expected)
+		self.assertEqual(self.unstamped(updated), expected)
 
 	def test_C04_falls_back_to_envoy_md_without_marker(self):
 		"""_writeClaudeMd should write to ENVOY.md if CLAUDE.md lacks marker."""
@@ -324,7 +350,7 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.embody_ext._writeClaudeMd(self._temp_dir)
 		expected = self.embody_ext.my.op('templates/text_claude').text
 		actual = (self._temp_dir / 'ENVOY.md').read_text(encoding='utf-8')
-		self.assertEqual(actual, expected)
+		self.assertEqual(self.unstamped(actual), expected)
 
 	def test_C06_returns_claude_md_path_on_create(self):
 		"""_writeClaudeMd should return the CLAUDE.md path on fresh create."""
@@ -357,7 +383,7 @@ class TestClaudeConfig(EmbodyTestCase):
 		for dat_name, slug in self.embody_ext._TEMPLATE_MAP_RULES.items():
 			dat = templates_comp.op(dat_name)
 			full = self._temp_dir / '.claude' / 'rules' / f'{slug}.md'
-			actual = full.read_text(encoding='utf-8')
+			actual = self.unstamped(full.read_text(encoding='utf-8'))
 			# Claude Code rules have YAML frontmatter stripped by _writeClaudeCodeConfig
 			expected = self.embody_ext._stripFrontmatter(dat.text)
 			self.assertEqual(actual, expected,
@@ -566,7 +592,7 @@ class TestClaudeConfig(EmbodyTestCase):
 		for dat_name, slug in self.embody_ext._TEMPLATE_MAP_RULES.items():
 			dat = templates_comp.op(dat_name)
 			f = windsurf_dir / f'{slug}.md'
-			actual = f.read_text(encoding='utf-8')
+			actual = self.unstamped(f.read_text(encoding='utf-8'))
 			self.assertEqual(actual, dat.text,
 				f'Content mismatch for {slug}.md')
 
@@ -633,10 +659,20 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertTrue(
 			self.embody_ext._clientFilesMissing(self._temp_dir, 'cursor'))
 
-	def test_E06_cursor_not_missing_when_rules_exist(self):
-		"""cursor: not missing when .cursor/rules exists."""
+	def test_E06_cursor_not_missing_when_rules_and_mcp_exist(self):
+		"""cursor: not missing once BOTH its rules and mcp.json exist."""
 		(self._temp_dir / '.cursor' / 'rules').mkdir(parents=True)
+		(self._temp_dir / '.cursor' / 'mcp.json').write_text(
+			'{}', encoding='utf-8')
 		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'cursor'))
+
+	def test_E06b_cursor_missing_when_only_rules_exist(self):
+		"""cursor: rules alone are NOT enough -- Cursor reads its own
+		MCP config, and without .cursor/mcp.json the client has rules
+		but no Envoy connection at all."""
+		(self._temp_dir / '.cursor' / 'rules').mkdir(parents=True)
+		self.assertTrue(
 			self.embody_ext._clientFilesMissing(self._temp_dir, 'cursor'))
 
 	def test_E07_copilot_missing_when_no_files(self):
@@ -677,16 +713,43 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertTrue(
 			self.embody_ext._clientFilesMissing(self._temp_dir, 'gemini'))
 
-	def test_E14_gemini_not_missing_when_file_exists(self):
-		"""gemini: not missing when GEMINI.md exists."""
+	def test_E14_gemini_not_missing_when_doc_and_mcp_exist(self):
+		"""gemini: needs GEMINI.md AND .gemini/settings.json."""
 		(self._temp_dir / 'GEMINI.md').write_text('x', encoding='utf-8')
+		(self._temp_dir / '.gemini').mkdir(parents=True)
+		(self._temp_dir / '.gemini' / 'settings.json').write_text(
+			'{}', encoding='utf-8')
 		self.assertFalse(
 			self.embody_ext._clientFilesMissing(self._temp_dir, 'gemini'))
 
-	def test_E15_codex_never_missing(self):
-		"""codex: covered by the always-written AGENTS.md, so never 'missing'."""
+	def test_E15_codex_missing_without_project_config(self):
+		"""codex: reads a project-level .codex/config.toml, so it is
+		'missing' without one -- it used to be absent from the probe
+		table entirely and silently defaulted to "nothing missing"."""
+		self.assertTrue(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'codex'))
+
+	def test_E15b_codex_not_missing_with_project_config(self):
+		"""codex: satisfied once .codex/config.toml exists."""
+		(self._temp_dir / '.codex').mkdir(parents=True)
+		(self._temp_dir / '.codex' / 'config.toml').write_text(
+			'', encoding='utf-8')
 		self.assertFalse(
 			self.embody_ext._clientFilesMissing(self._temp_dir, 'codex'))
+
+	def test_E16_vscode_missing_without_mcp_json(self):
+		"""vscode: has a probe at all now -- it was absent from the old
+		table, so restore-on-open could never fire for it."""
+		self.assertTrue(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'vscode'))
+
+	def test_E17_windsurf_not_missing_on_rules_alone(self):
+		"""windsurf: rules alone suffice -- its MCP config is user-global
+		(~/.codeium/...), which Embody deliberately never writes, so it
+		must not count toward "missing"."""
+		(self._temp_dir / '.windsurf' / 'rules').mkdir(parents=True)
+		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'windsurf'))
 
 	# ------------------------------------------------------------------
 	# Group F: _findProjectRoot()
@@ -794,3 +857,669 @@ class TestClaudeConfig(EmbodyTestCase):
 		for name in self._DRIFT_EXCLUSIONS:
 			self.assertIn(name, self.embody_ext._TEMPLATE_MAP_RULES,
 				f'Drift exclusion {name!r} not in _TEMPLATE_MAP_RULES')
+
+
+class TestAgentsMdMerge(EmbodyTestCase):
+	"""AGENTS.md is MERGED into, never overwritten and never skipped.
+
+	It is the one file every AI tool reads and the one a repo most likely
+	already has, so dragging Embody into an existing project meets a
+	user-authored AGENTS.md as the normal case. Overwriting it destroys
+	work; silently skipping it (the behavior before this) left the project
+	with no Embody instructions at all and said nothing. Field-reported.
+	"""
+
+	MARKER = '<!-- Generated by Embody/Envoy'
+	OWN = ('# My Project\n\n## House rules\n\nAlways run make lint.\n\n'
+		'## Notes\n\nThis section has blank lines in it.\n')
+
+	def setUp(self):
+		super().setUp()
+		self._temp_dir = Path(tempfile.mkdtemp(prefix='agents_merge_'))
+		self._git = op.Embody.op('embody_git').module
+		self._admin = op.Embody.op('embody_admin').module
+
+	def tearDown(self):
+		try:
+			shutil.rmtree(self._temp_dir)
+		except Exception:
+			pass
+		super().tearDown()
+
+	def _agents(self):
+		return (self._temp_dir / 'AGENTS.md').read_text(encoding='utf-8')
+
+	def _seed_user_file(self):
+		(self._temp_dir / 'AGENTS.md').write_text(self.OWN, encoding='utf-8')
+
+	def test_A01_user_content_survives_the_merge(self):
+		self._seed_user_file()
+		self._git.write_agents_md(self.embody_ext, self._temp_dir)
+		body = self._agents()
+		self.assertIn('Always run make lint.', body)
+		self.assertIn('This section has blank lines in it.', body)
+
+	def test_A02_embody_block_is_added(self):
+		"""Skipping the file left the project with NO Embody guidance."""
+		self._seed_user_file()
+		self._git.write_agents_md(self.embody_ext, self._temp_dir)
+		body = self._agents()
+		self.assertIn(self._git.AGENTS_BEGIN, body)
+		self.assertIn(self._git.AGENTS_END, body)
+
+	def test_A03_redeploy_updates_in_place(self):
+		"""A second deploy must not stack a second block."""
+		self._seed_user_file()
+		self._git.write_agents_md(self.embody_ext, self._temp_dir)
+		first = self._agents()
+		self._git.write_agents_md(self.embody_ext, self._temp_dir)
+		second = self._agents()
+		self.assertEqual(second.count(self._git.AGENTS_BEGIN), 1)
+		self.assertEqual(first, second, 'unchanged redeploy rewrote the file')
+
+	def test_A04_uninstall_takes_back_only_the_block(self):
+		self._seed_user_file()
+		self._git.write_agents_md(self.embody_ext, self._temp_dir)
+		stripped = self._admin.strip_md_section(self.embody_ext, self._agents())
+		self.assertNotIn(self._git.AGENTS_BEGIN, stripped)
+		self.assertEqual(stripped.strip(), self.OWN.strip(),
+			'uninstall must restore the user file exactly')
+
+	def test_A05_absent_file_is_still_written_whole(self):
+		"""The common case is unchanged: no file -> plain generated file."""
+		self._git.write_agents_md(self.embody_ext, self._temp_dir)
+		body = self._agents()
+		self.assertIn(self.MARKER, body)
+		self.assertNotIn(self._git.AGENTS_BEGIN, body,
+			'a file we own needs no merge delimiters')
+
+	def test_A06_our_own_file_keeps_the_whole_file_path(self):
+		"""An Embody-generated AGENTS.md refreshes wholesale, as before."""
+		self._git.write_agents_md(self.embody_ext, self._temp_dir)
+		self._git.write_agents_md(self.embody_ext, self._temp_dir)
+		self.assertNotIn(self._git.AGENTS_BEGIN, self._agents())
+
+	def test_A07_merge_is_pure_and_replaces_a_prior_block(self):
+		merged = self._git.merge_agents_section(
+			'top\n\n' + self._git.AGENTS_BEGIN + '\nOLD\n'
+			+ self._git.AGENTS_END + '\n\nbottom\n',
+			self._git.agents_block('NEW'))
+		self.assertIn('top', merged)
+		self.assertIn('bottom', merged)
+		self.assertIn('NEW', merged)
+		self.assertNotIn('OLD', merged)
+
+
+class TestMergeableDocsCoverage(EmbodyTestCase):
+	"""Every top-level instruction file a repo plausibly already has must
+	MERGE, not silently skip and not overwrite.
+
+	AGENTS.md was the reported one, but it was never alone: GEMINI.md and
+	.github/copilot-instructions.md had the same silent-skip behavior, and
+	the ENVOY.md fallback was worse still -- it wrote over a hand-authored
+	ENVOY.md with no marker check at all, the one path in the whole
+	generated-file set that destroyed a user file on FIRST contact.
+	"""
+
+	USER = ('# MY OWN FILE\n\nDo not lose this line.\n\n'
+		'## Section\n\nWith blank lines.\n')
+
+	def setUp(self):
+		super().setUp()
+		self._temp_dir = Path(tempfile.mkdtemp(prefix='mergeable_'))
+		self._git = op.Embody.op('embody_git').module
+		self._admin = op.Embody.op('embody_admin').module
+
+	def tearDown(self):
+		try:
+			shutil.rmtree(self._temp_dir)
+		except Exception:
+			pass
+		super().tearDown()
+
+	def _seed(self, rel):
+		p = self._temp_dir / rel
+		p.parent.mkdir(parents=True, exist_ok=True)
+		p.write_text(self.USER, encoding='utf-8')
+		return p
+
+	def _assert_merged(self, p):
+		body = p.read_text(encoding='utf-8')
+		self.assertIn('Do not lose this line.', body)
+		self.assertIn('With blank lines.', body)
+		self.assertIn(self._git.AGENTS_BEGIN, body)
+		self.assertEqual(body.count(self._git.AGENTS_BEGIN), 1)
+		self.assertEqual(
+			self._admin.strip_md_section(self.embody_ext, body).strip(),
+			self.USER.strip(),
+			'uninstall must give the user their file back unchanged')
+
+	def test_C01_gemini_md_merges(self):
+		p = self._seed('GEMINI.md')
+		self._git.write_gemini_doc(self.embody_ext, self._temp_dir)
+		self._assert_merged(p)
+
+	def test_C02_copilot_instructions_merges(self):
+		p = self._seed('.github/copilot-instructions.md')
+		self._git.write_copilot_combined(self.embody_ext, self._temp_dir)
+		self._assert_merged(p)
+
+	def test_C03_user_envoy_md_is_never_clobbered(self):
+		"""The sharpest one: a hand-written ENVOY.md used to be destroyed
+		outright by the CLAUDE.md fallback."""
+		(self._temp_dir / 'CLAUDE.md').write_text(
+			'# their CLAUDE.md\nkeep\n', encoding='utf-8')
+		p = self._seed('ENVOY.md')
+		self._git.write_claude_md(self.embody_ext, self._temp_dir)
+		self._assert_merged(p)
+		self.assertIn('keep',
+			(self._temp_dir / 'CLAUDE.md').read_text(encoding='utf-8'),
+			'their CLAUDE.md must still be untouched')
+
+	def test_C04_every_mergeable_doc_is_actually_wired(self):
+		"""The registry of mergeable docs must not drift from the writers.
+
+		A name listed here that no writer routes through write_or_merge is
+		a file that still silently skips.
+		"""
+		writers = {
+			'AGENTS.md': lambda d: self._git.write_agents_md(self.embody_ext, d),
+			'GEMINI.md': lambda d: self._git.write_gemini_doc(self.embody_ext, d),
+			'.github/copilot-instructions.md':
+				lambda d: self._git.write_copilot_combined(self.embody_ext, d),
+			'ENVOY.md': lambda d: self._git.write_claude_md(self.embody_ext, d),
+		}
+		for rel in self._git.MERGEABLE_DOCS:
+			self.assertIn(rel, writers,
+				f'{rel} is declared mergeable but no writer is wired to it')
+
+	def test_C05_per_rule_files_still_skip_rather_than_merge(self):
+		"""Deliberate contrast: per-rule filenames are Embody-specific, a
+		collision is a coincidence, and merging into one of many would be
+		noise. They stay skip-and-preserve."""
+		reg = op.Embody.op('ai_clients').module
+		p = self._seed('.claude/rules/td-python.md')
+		self._git.write_rules_files(
+			self.embody_ext, self._temp_dir, reg.spec('claudecode')['rules'])
+		body = p.read_text(encoding='utf-8')
+		self.assertEqual(body, self.USER, 'user rule file must be untouched')
+		self.assertNotIn(self._git.AGENTS_BEGIN, body)
+		self.assertTrue(
+			(self._temp_dir / '.claude' / 'rules' / 'mcp-safety.md').exists(),
+			'the other rules must still be written')
+
+
+class TestMergedFileIsNeverDeleted(EmbodyTestCase):
+	"""A merged user file must survive every path that deletes "our" files.
+
+	Merging put Embody's generated-by marker INSIDE a file the user owns,
+	which silently broke the invariant two separate sweeps relied on --
+	"contains the marker" no longer means "the whole file is ours". Three
+	independent reviewers found this; both sweeps deleted a hand-written
+	AGENTS.md outright, which is precisely what merging exists to prevent.
+	"""
+
+	USER = "# Their AGENTS.md\n\nHand written. Must survive.\n"
+
+	def setUp(self):
+		super().setUp()
+		self._temp_dir = Path(tempfile.mkdtemp(prefix='never_del_'))
+		self._git = op.Embody.op('embody_git').module
+		self._admin = op.Embody.op('embody_admin').module
+
+	def tearDown(self):
+		try:
+			shutil.rmtree(self._temp_dir)
+		except Exception:
+			pass
+		super().tearDown()
+
+	def _merged(self, name='AGENTS.md'):
+		(self._temp_dir / name).write_text(self.USER, encoding='utf-8')
+		self._git.write_agents_md(self.embody_ext, self._temp_dir)
+		body = (self._temp_dir / name).read_text(encoding='utf-8')
+		self.assertIn(self.embody_ext._EMBODY_MARKER, body,
+			'precondition: the block carries the marker into the user file')
+		return self._temp_dir / name
+
+	def _drop_manifest(self):
+		"""Simulate a clone: .embody/ is gitignored, so it never travels."""
+		shutil.rmtree(self._temp_dir / '.embody', ignore_errors=True)
+
+	def test_D01_root_move_keeps_the_users_file(self):
+		"""Changing AI Project Root ran a marker sweep over the old root."""
+		p = self._merged()
+		self.embody_ext._cleanupOldRootFiles(self._temp_dir)
+		self.assertTrue(p.exists(), 'the user file was deleted by the sweep')
+		self.assertEqual(p.read_text(encoding='utf-8'), self.USER,
+			'the sweep must take the block and leave the file byte-exact')
+
+	def test_D02_uninstall_keeps_it_even_with_no_manifest(self):
+		"""The fallback scan is what runs on a clone -- the manifest that
+		would have said "appended, not created" is gitignored and gone."""
+		p = self._merged()
+		self._drop_manifest()
+		plan = self._admin.compute_uninstall_plan(
+			self.embody_ext, target_dir=str(self._temp_dir))
+		self.assertNotIn('AGENTS.md', [e['path'] for e in plan['delete']],
+			'a user file must never be PLANNED for deletion')
+		self._admin.execute_uninstall_plan(self.embody_ext, plan)
+		self.assertTrue(p.exists())
+		self.assertEqual(p.read_text(encoding='utf-8'), self.USER)
+
+	def test_D03_a_file_embody_owns_outright_is_still_deleted(self):
+		"""The guard must not make Uninstall timid about its OWN files."""
+		self._git.write_agents_md(self.embody_ext, self._temp_dir)
+		self._drop_manifest()
+		self.embody_ext._cleanupOldRootFiles(self._temp_dir)
+		self.assertFalse((self._temp_dir / 'AGENTS.md').exists(),
+			'an Embody-generated AGENTS.md should still be removed')
+
+	def test_D04_classifier_reports_merged_not_delete(self):
+		self._merged()
+		self._drop_manifest()
+		verdict = self.embody_ext._uninstallClassifyMarker(
+			self._temp_dir / 'AGENTS.md', self._temp_dir,
+			self.embody_ext._loadHashManifest(str(self._temp_dir)))
+		self.assertEqual(verdict, 'merged')
+
+
+class TestMergeToleratesMangledDelimiters(EmbodyTestCase):
+	"""The block delimiters live in a file humans and git both edit.
+
+	Matching the FIRST BEGIN against the FIRST following END destroyed
+	user content: an orphan BEGIN above Embody's real block made the pair
+	span everything between them, so the next deploy deleted the prose in
+	the middle. Delimiters are line-anchored and the scanner is tolerant.
+	"""
+
+	KEEP = '## MY IMPORTANT NOTES\nkeep me\n'
+
+	def setUp(self):
+		super().setUp()
+		self._git = op.Embody.op('embody_git').module
+		self._admin = op.Embody.op('embody_admin').module
+		self.B = self._git.AGENTS_BEGIN
+		self.X = self._git.AGENTS_END
+
+	def _converges(self, text):
+		"""Three deploys, then assert one clean block and intact content."""
+		out = text
+		for n in range(3):
+			out = self._git.merge_agents_section(
+				out, self._git.agents_block(f'EMBODY v{n}'))
+		return out
+
+	def test_E01_orphan_begin_without_end(self):
+		out = self._converges(f'# repo\n\n{self.B}\n(old)\n\n{self.KEEP}')
+		self.assertIn('keep me', out)
+		self.assertEqual(self._git.block_count(out), 1)
+
+	def test_E02_stray_end_alone(self):
+		out = self._converges(f'# repo\n\n{self.X}\n\n{self.KEEP}')
+		self.assertIn('keep me', out)
+		self.assertEqual(self._git.block_count(out), 1)
+
+	def test_E03_duplicated_blocks_from_a_merge_conflict(self):
+		out = self._converges(
+			f'# repo\n\n{self.B}\nA\n{self.X}\n\n{self.KEEP}\n'
+			f'{self.B}\nBB\n{self.X}\n')
+		self.assertIn('keep me', out)
+		self.assertEqual(self._git.block_count(out), 1)
+
+	def test_E04_marker_quoted_in_the_users_own_prose(self):
+		"""A delimiter only counts alone on its line. Quoted in a sentence
+		it is the user's text, and taking it as real made the span swallow
+		everything up to Embody's actual END."""
+		out = self._converges(
+			f'# repo\n\nI use `{self.B}` in my docs.\n\n{self.KEEP}\n'
+			f'{self.B}\nreal\n{self.X}\n')
+		self.assertIn('keep me', out)
+		self.assertIn('I use `', out, 'the quoted mention is user prose')
+		self.assertEqual(self._git.block_count(out), 1)
+
+	def test_E05_redeploy_is_stable_for_every_shape(self):
+		for name, text in (
+				('orphan', f'# r\n\n{self.B}\nx\n\n{self.KEEP}'),
+				('dupes', f'# r\n\n{self.B}\nA\n{self.X}\n{self.B}\nB\n{self.X}\n'),
+				('clean', f'# r\n\n{self.B}\nA\n{self.X}\n\n{self.KEEP}')):
+			once = self._git.merge_agents_section(
+				text, self._git.agents_block('E'))
+			twice = self._git.merge_agents_section(
+				once, self._git.agents_block('E'))
+			self.assertEqual(once, twice, f'{name}: redeploy was not stable')
+
+	def test_E06_strip_removes_every_block_shape(self):
+		out = self._converges(
+			f'# repo\n\n{self.B}\nA\n{self.X}\n\n{self.KEEP}\n'
+			f'{self.B}\nB\n{self.X}\n')
+		stripped = self._admin.strip_md_section(self.embody_ext, out)
+		self.assertEqual(self._git.block_count(stripped), 0)
+		self.assertIn('keep me', stripped)
+
+
+class TestEditProtectionIsConsistent(EmbodyTestCase):
+	"""Editing a generated file must mean the same thing everywhere.
+
+	Three code paths decide whether a generated file is Embody's to
+	replace: write_template (redeploy), _uninstallClassifyMarker
+	(Uninstall), and _cleanupOldRootFiles (AI-project-root change). They
+	disagreed. A rule the user edited was kept on redeploy, kept by
+	Uninstall as 'review' -- and deleted outright by a root change, which
+	then wrote the pristine template at the new root. CLAUDE.md was worse:
+	it bypassed write_template entirely, so it was never hash-tracked and
+	was overwritten on EVERY deploy, manifest intact.
+	"""
+
+	MARKER = '<!-- Generated by Embody/Envoy'
+
+	def setUp(self):
+		super().setUp()
+		self._temp_dir = Path(tempfile.mkdtemp(prefix='editprot_'))
+		self._git = op.Embody.op('embody_git').module
+		self._admin = op.Embody.op('embody_admin').module
+
+	def tearDown(self):
+		try:
+			shutil.rmtree(self._temp_dir)
+		except Exception:
+			pass
+		super().tearDown()
+
+	def _edit(self, path):
+		path.write_text(path.read_text(encoding='utf-8') + '\n## Mine\nKeep this.\n',
+			encoding='utf-8')
+
+	def _a_rule(self):
+		return next((self._temp_dir / '.claude' / 'rules').glob('*.md'))
+
+	def test_F01_claude_md_is_hash_tracked_like_everything_else(self):
+		"""It was the ONLY generated markdown bypassing write_template."""
+		self._git.write_claude_md(self.embody_ext, self._temp_dir)
+		manifest = self.embody_ext._loadHashManifest(str(self._temp_dir))
+		self.assertIn('CLAUDE.md', manifest,
+			'CLAUDE.md must be recorded, or nothing can protect edits to it')
+
+	def test_F02_an_edited_claude_md_survives_a_redeploy(self):
+		self._git.write_claude_md(self.embody_ext, self._temp_dir)
+		self._edit(self._temp_dir / 'CLAUDE.md')
+		self._git.write_claude_md(self.embody_ext, self._temp_dir)
+		self.assertIn('Keep this.',
+			(self._temp_dir / 'CLAUDE.md').read_text(encoding='utf-8'))
+
+	def test_F03_an_unedited_claude_md_still_refreshes(self):
+		"""Protection must not freeze a file the user never touched."""
+		self._git.write_claude_md(self.embody_ext, self._temp_dir)
+		path = self._temp_dir / 'CLAUDE.md'
+		# A sentinel that cannot occur in the template -- 'stale' does:
+		# the template says "Cached refs go stale on reinit".
+		sentinel = 'ZZ_OUTDATED_SENTINEL_ZZ'
+		path.write_text(self.MARKER + ' -->\n' + sentinel + '\n',
+			encoding='utf-8')
+		(self._temp_dir / self.embody_ext._HASH_MANIFEST).unlink()
+		self._git.write_claude_md(self.embody_ext, self._temp_dir)
+		self.assertNotIn(sentinel, path.read_text(encoding='utf-8'))
+
+	def test_F04_root_move_keeps_an_edited_generated_rule(self):
+		"""write_template kept it; the root sweep deleted it anyway."""
+		self._git.write_client_config(
+			self.embody_ext, self._temp_dir, 'claudecode')
+		rule = self._a_rule()
+		self._edit(rule)
+		self.embody_ext._cleanupOldRootFiles(self._temp_dir)
+		self.assertTrue(rule.exists(), 'the root sweep deleted an edited file')
+		self.assertIn('Keep this.', rule.read_text(encoding='utf-8'))
+
+	def test_F05_root_move_still_removes_an_untouched_generated_rule(self):
+		"""The guard must not make the sweep timid about pristine files."""
+		self._git.write_client_config(
+			self.embody_ext, self._temp_dir, 'claudecode')
+		rule = self._a_rule()
+		self.embody_ext._cleanupOldRootFiles(self._temp_dir)
+		self.assertFalse(rule.exists())
+
+	def test_F06_root_move_keeps_an_edited_claude_md(self):
+		self._git.write_claude_md(self.embody_ext, self._temp_dir)
+		self._edit(self._temp_dir / 'CLAUDE.md')
+		self.embody_ext._cleanupOldRootFiles(self._temp_dir)
+		self.assertTrue((self._temp_dir / 'CLAUDE.md').exists())
+		self.assertIn('Keep this.',
+			(self._temp_dir / 'CLAUDE.md').read_text(encoding='utf-8'))
+
+	def test_F07_a_block_only_file_is_removed_not_left_empty(self):
+		"""A placeholder AGENTS.md that only ever held Embody's block must
+		go at Uninstall -- the root sweep already unlinks in this case, and
+		leaving a 0-byte file is a different answer to the same question."""
+		(self._temp_dir / 'AGENTS.md').write_text('   \n', encoding='utf-8')
+		self._git.write_agents_md(self.embody_ext, self._temp_dir)
+		plan = self._admin.compute_uninstall_plan(
+			self.embody_ext, target_dir=str(self._temp_dir))
+		self._admin.execute_uninstall_plan(self.embody_ext, plan)
+		self.assertFalse((self._temp_dir / 'AGENTS.md').exists(),
+			'a 0-byte AGENTS.md was left behind')
+
+
+class TestMarkerOwnershipIsPositional(EmbodyTestCase):
+	""""Contains our marker" is not the same as "we wrote it".
+
+	Embody puts the marker at the TOP of what it writes. A substring test
+	over the whole file also matched a user who merely QUOTED the marker
+	while documenting Embody in their own AGENTS.md -- and that file then
+	took the "ours, regenerate" path and was overwritten whole, on first
+	contact, with no log. Position separates the two.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self._temp_dir = Path(tempfile.mkdtemp(prefix='marker_'))
+		self._git = op.Embody.op('embody_git').module
+		self.MARK = self.embody_ext._EMBODY_MARKER
+
+	def tearDown(self):
+		try:
+			shutil.rmtree(self._temp_dir)
+		except Exception:
+			pass
+		super().tearDown()
+
+	def test_G01_a_user_quoting_the_marker_is_not_ours(self):
+		body = ('# AGENTS.md\n\nEmbody files start with `' + self.MARK
+			+ ' -->`.\n\n## Our rules\n- ask Priya\n')
+		self.assertFalse(
+			self._git.is_generated_by_embody(self.embody_ext, body))
+
+	def test_G02_that_file_is_merged_not_overwritten(self):
+		body = ('# AGENTS.md\n\nEmbody files start with `' + self.MARK
+			+ ' -->`.\n\n## Our rules\n- ask Priya\n')
+		(self._temp_dir / 'AGENTS.md').write_text(body, encoding='utf-8')
+		self._git.write_or_merge(
+			self.embody_ext, self._temp_dir, 'AGENTS.md', 'GENERATED\n')
+		after = (self._temp_dir / 'AGENTS.md').read_text(encoding='utf-8')
+		self.assertIn('ask Priya', after, 'the user file was overwritten')
+		self.assertEqual(self._git.block_count(after), 1)
+
+	def test_G03_frontmatter_first_generated_files_are_still_ours(self):
+		"""Several dialects need YAML frontmatter ABOVE the marker --
+		Cursor .mdc, Copilot .instructions.md, every SKILL.md. A strict
+		first-line rule stopped recognising them, so they were skipped on
+		redeploy and orphaned by Uninstall."""
+		for token in ('cursor', 'copilot', 'claudecode', 'antigravity'):
+			self._git.write_client_config(
+				self.embody_ext, self._temp_dir, token)
+		for label, pattern in (
+				('cursor', '.cursor/rules/*.mdc'),
+				('copilot', '.github/instructions/*.md'),
+				('claude skill', '.claude/skills/*/SKILL.md'),
+				('agents skill', '.agents/skills/*/SKILL.md'),
+				('claude rule', '.claude/rules/*.md')):
+			path = next(self._temp_dir.glob(pattern))
+			self.assertTrue(
+				self._git.is_generated_by_embody(
+					self.embody_ext, path.read_text(encoding='utf-8')),
+				f'{label} ({path.name}) is ours but was not recognised')
+
+	def test_G04_frontmatter_does_not_let_a_user_file_pass(self):
+		faux = ('---\ntitle: mine\n---\n\n# Mine\n\nI mention '
+			+ self.MARK + ' here.\n')
+		self.assertFalse(
+			self._git.is_generated_by_embody(self.embody_ext, faux))
+
+	def test_G05_an_indented_delimiter_example_is_not_a_delimiter(self):
+		"""A numbered list documenting the block used to eat the lines
+		between the example's own delimiters."""
+		B, X = self._git.AGENTS_BEGIN, self._git.AGENTS_END
+		doc = f'HEAD\n1. Example:\n\n    {B}\n    MY LINE\n    {X}\n\nTAIL\n'
+		merged = self._git.merge_agents_section(
+			doc, self._git.agents_block('EMBODY'))
+		self.assertIn('MY LINE', merged)
+		self.assertIn('TAIL', merged)
+
+	def test_G06_a_bom_on_the_begin_line_does_not_orphan_the_block(self):
+		"""'\ufeff' is not whitespace, so .strip() left it attached and
+		the block stopped matching itself -- stale content stranded and a
+		second block appended."""
+		B, X = self._git.AGENTS_BEGIN, self._git.AGENTS_END
+		bom = '﻿' + B + '\nOLD\n' + X + '\nUSER TAIL\n'
+		merged = self._git.merge_agents_section(
+			bom, self._git.agents_block('NEW'))
+		self.assertEqual(self._git.block_count(merged), 1)
+		self.assertNotIn('OLD', merged)
+		self.assertIn('USER TAIL', merged)
+
+	def test_G07_an_undecodable_file_is_left_alone_not_mangled(self):
+		"""The root sweep read with errors='ignore' and wrote the result
+		BACK, so every undecodable byte was dropped from the user's file
+		while the log claimed the file was kept."""
+		raw = ('# Caf' + chr(0xE9) + ' rules\n').encode('latin-1')
+		(self._temp_dir / 'AGENTS.md').write_bytes(raw)
+		self.embody_ext._cleanupOldRootFiles(self._temp_dir)
+		self.assertEqual((self._temp_dir / 'AGENTS.md').read_bytes(), raw)
+
+
+class TestGeneratedFilesCarryTheirOwnProof(EmbodyTestCase):
+	"""A generated file must prove on its own whether it is still ours.
+
+	Edit protection used to depend entirely on a hash sidecar in
+	.embody/, which Embody itself gitignores -- so it never survived a
+	clone. On any second machine a file with the marker and no record
+	read as "written before hashing existed, regenerate", silently
+	replacing edits a teammate had committed, and Uninstall called the
+	same file "Embody-generated, unmodified" and deleted it. The hash now
+	rides in the marker line, so the proof travels with the file.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self._tmp = Path(tempfile.mkdtemp(prefix='stamp_'))
+		self._git = op.Embody.op('embody_git').module
+
+	def tearDown(self):
+		try:
+			shutil.rmtree(self._tmp)
+		except Exception:
+			pass
+		super().tearDown()
+
+	def _generate(self, root=None):
+		root = root or self._tmp
+		self._git.write_client_config(self.embody_ext, root, 'claudecode')
+		return root / '.claude' / 'rules' / 'td-python.md'
+
+	def _clone_without_sidecar(self):
+		"""What git actually delivers: the files, never .embody/."""
+		dest = Path(tempfile.mkdtemp(prefix='stampclone_'))
+		shutil.copytree(self._tmp, dest, dirs_exist_ok=True,
+			ignore=shutil.ignore_patterns('.embody'))
+		self.addCleanup(lambda: shutil.rmtree(dest, ignore_errors=True))
+		return dest
+
+	def test_H01_the_marker_line_carries_the_hash(self):
+		rule = self._generate()
+		first = rule.read_text(encoding='utf-8').split('\n')[0]
+		self.assertIn('sha:', first)
+		self.assertIsNotNone(
+			self._git.read_stamp(self.embody_ext,
+				rule.read_text(encoding='utf-8')))
+
+	def test_H02_the_stamp_matches_a_freshly_written_file(self):
+		rule = self._generate()
+		body = rule.read_text(encoding='utf-8')
+		self.assertEqual(
+			self._git.content_hash(
+				self.embody_ext, self._git.strip_stamp(self.embody_ext, body)),
+			self._git.read_stamp(self.embody_ext, body))
+
+	def test_H03_an_edit_is_detected_with_no_sidecar_at_all(self):
+		"""The clone case, end to end."""
+		rule = self._generate()
+		rule.write_text(rule.read_text(encoding='utf-8')
+			+ '\n## House rule\nNever force-push main.\n', encoding='utf-8')
+		clone = self._clone_without_sidecar()
+		self.assertFalse((clone / self.embody_ext._HASH_MANIFEST).exists(),
+			'precondition: the sidecar must not have travelled')
+		cloned_rule = clone / '.claude' / 'rules' / 'td-python.md'
+		self._git.write_client_config(self.embody_ext, clone, 'claudecode')
+		self.assertIn('Never force-push main.',
+			cloned_rule.read_text(encoding='utf-8'),
+			'a committed edit was overwritten on a clone')
+
+	def test_H04_uninstall_on_a_clone_calls_an_edit_review_not_delete(self):
+		rule = self._generate()
+		rule.write_text(rule.read_text(encoding='utf-8')
+			+ '\n## House rule\nkeep\n', encoding='utf-8')
+		clone = self._clone_without_sidecar()
+		verdict = self.embody_ext._uninstallClassifyMarker(
+			clone / '.claude' / 'rules' / 'td-python.md', clone,
+			self.embody_ext._loadHashManifest(str(clone)))
+		self.assertEqual(verdict, 'review',
+			'an edited file on a clone was still classed as ours to delete')
+
+	def test_H05_an_untouched_file_on_a_clone_is_still_ours(self):
+		"""The stamp must not make Embody timid about its own files."""
+		self._generate()
+		clone = self._clone_without_sidecar()
+		verdict = self.embody_ext._uninstallClassifyMarker(
+			clone / '.claude' / 'rules' / 'td-python.md', clone,
+			self.embody_ext._loadHashManifest(str(clone)))
+		self.assertEqual(verdict, 'delete')
+
+	def test_H06_an_untouched_file_still_refreshes_on_a_clone(self):
+		self._generate()
+		clone = self._clone_without_sidecar()
+		rule = clone / '.claude' / 'rules' / 'td-python.md'
+		rule.write_text(
+			self._git.strip_stamp(self.embody_ext,
+				rule.read_text(encoding='utf-8')), encoding='utf-8')
+		self._git.write_client_config(self.embody_ext, clone, 'claudecode')
+		self.assertIn('sha:', rule.read_text(encoding='utf-8').split('\n')[0],
+			'a stamp-less legacy file should be re-stamped, not frozen')
+
+	def test_H07_a_pre_stamp_legacy_file_still_regenerates(self):
+		"""Backward compatibility: files written before stamping have no
+		stamp and no sidecar entry, and must keep their old behavior."""
+		rule = self._generate()
+		stripped = self._git.strip_stamp(
+			self.embody_ext, rule.read_text(encoding='utf-8'))
+		rule.write_text(stripped, encoding='utf-8')
+		(self._tmp / self.embody_ext._HASH_MANIFEST).unlink()
+		self.assertTrue(
+			self._git.embody_owns_unmodified(
+				self.embody_ext, stripped, {}, '.claude/rules/td-python.md'),
+			'a legacy stamp-less file must still be treated as ours')
+
+	def test_H08_stamping_survives_frontmatter_dialects(self):
+		"""Cursor .mdc, Copilot instructions and SKILL.md put YAML above
+		the marker; the stamp has to find it there."""
+		for token in ('cursor', 'copilot', 'antigravity'):
+			self._git.write_client_config(self.embody_ext, self._tmp, token)
+		for pattern in ('.cursor/rules/*.mdc', '.github/instructions/*.md',
+				'.agents/skills/*/SKILL.md'):
+			path = next(self._tmp.glob(pattern))
+			body = path.read_text(encoding='utf-8')
+			self.assertIsNotNone(
+				self._git.read_stamp(self.embody_ext, body),
+				f'{path.name} carries frontmatter and lost its stamp')
+			self.assertTrue(
+				self._git.embody_owns_unmodified(
+					self.embody_ext, body, {}, 'x'),
+				f'{path.name} should verify against its own stamp')

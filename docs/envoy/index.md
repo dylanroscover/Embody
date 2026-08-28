@@ -259,7 +259,7 @@ When Envoy starts for the first time, it generates a complete AI client configur
 |---|---|
 | `.mcp.json` | Registers Envoy's MCP bridge with Claude Code and other MCP clients |
 | `AGENTS.md` | Always written — universal AI instructions read by all major AI tools (Codex, Cursor, etc.) |
-| `CLAUDE.md` | Project context for Claude Code — what Embody is, how the network is structured, what tools to use (client-specific; written when AI Client is Claude Code) |
+| `CLAUDE.md` | Project context for Claude Code — what Embody is, how the network is structured, what tools to use (client-specific; written when **Configure For** is set to Claude Code) |
 | `.claude/rules/` | Claude Code — always-loaded coding conventions (TD Python patterns, parameter rules, network layout, MCP safety) |
 | `.claude/skills/` | Claude Code — on-demand reference (full MCP tool catalog, TD API reference, operator creation workflow, and more) |
 | `.gitignore` / `.gitattributes` | Git entries for `.toe`/`.tox` binary handling and externalized file tracking |

@@ -62,31 +62,29 @@ NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 # ==========================================================================
 
 def extract_ai_config(ext):
-    """Extract AI coding assistant config files based on par.Aiclient."""
+    """Write the AI assistant config for every selected client.
+
+    Dispatch is registry-driven (mod.ai_clients): a client contributes
+    rules, skills, docs, and at most one bespoke step, so adding a client
+    needs no branch here. 'none' selects nothing but still gets AGENTS.md.
+    """
     target_dir = ext._findProjectRoot()
-    client = ext.my.par.Aiclient.eval()
+    clients = selected_clients(ext)
 
     def _write():
         # Always: AGENTS.md (universal standard, read by all major AI tools)
         write_agents_md(ext, target_dir)
-        if client == 'claudecode':
-            write_claude_code_config(ext, target_dir)
-        elif client == 'opencode':
-            write_opencode_files(ext, target_dir)
-        elif client == 'cursor':
-            write_cursor_rules(ext, target_dir)
-        elif client == 'copilot':
-            write_copilot_instructions(ext, target_dir)
-        elif client == 'windsurf':
-            write_windsurf_rules(ext, target_dir)
-        elif client == 'gemini':
-            write_gemini_config(ext, target_dir)
-        # 'codex', 'none': AGENTS.md only (Codex reads AGENTS.md;
-        # Copilot config is its own token).
+        for client in clients:
+            write_client_config(ext, target_dir, client)
 
-    # Advanced mode: confirm before (re)writing AI assistant config files.
-    details = [f'{target_dir}/AGENTS.md'] + [
-        f'{target_dir}/{f}' for f in ext._AI_CONFIG_FILES.get(client, [])]
+    reg = mod.ai_clients
+    details = [f'{target_dir}/AGENTS.md']
+    for client in clients:
+        for f in reg.config_files(client):
+            entry = f'{target_dir}/{f}'
+            # Claude Code and OpenCode share .claude/ -- name it once.
+            if entry not in details:
+                details.append(entry)
     ext._guardFileWrite(
         'AI config',
         f'write AI assistant config for {ai_client_label(ext)} in '
@@ -94,8 +92,267 @@ def extract_ai_config(ext):
         details, _write)
 
 
+def selected_clients(ext):
+    """Client tokens whose config Embody should write, in registry order.
+
+    Two menus, two questions. Configclient decides whose files are
+    written; Aiclient decides what the Launch button opens. They are
+    separate because they genuinely differ -- configuring Cursor while
+    launching a terminal for Claude Code is a normal setup -- but each is
+    a single choice, because generation is ADDITIVE: selecting a second
+    client later leaves the first configured and still tracked, so
+    serving several clients needs no multi-select.
+
+    A project saved before Configclient existed has only Aiclient; fall
+    back to it so its behavior is unchanged, and so an older Embody COMP
+    without the parameter keeps working.
+    """
+    reg = mod.ai_clients
+    par = getattr(ext.my.par, 'Configclient', None)
+    client = par.eval() if par is not None else None
+    if client not in reg.CLIENTS and client != 'none':
+        client = ext.my.par.Aiclient.eval()
+    return [client] if client in reg.CLIENTS else []
+
+
+def write_client_config(ext, target_dir, client):
+    """Write one client's rules, skills, and bespoke files."""
+    row = mod.ai_clients.spec(client)
+    if not row:
+        return
+    written = 0
+    if row.get('rules'):
+        written += write_rules_files(ext, target_dir, row['rules'])
+    if row.get('skills'):
+        written += write_skills_files(ext, target_dir, row['skills'])
+    writer = row.get('writer')
+    if writer == 'claudecode':
+        write_claude_md(ext, target_dir)
+    elif writer == 'opencode':
+        write_opencode_json(ext, target_dir)
+    elif writer == 'copilot':
+        written += write_copilot_combined(ext, target_dir)
+    elif writer == 'gemini':
+        write_gemini_doc(ext, target_dir)
+    block = row.get('rules') or row.get('skills')
+    if written and block:
+        where = block['dir'].split('/')[0]
+        ext.Log(f'Generated {written} {where}/ files at {target_dir}',
+                'SUCCESS')
+
+
+# Delimiters for the block Embody maintains INSIDE a user-authored
+# markdown file. A BEGIN/END pair, not the line-oriented '#' header used
+# for .gitignore: markdown sections contain blank lines, which that
+# scanner treats as the end of the block.
+AGENTS_BEGIN = '<!-- BEGIN Embody/Envoy -- auto-managed, do not edit inside -->'
+AGENTS_END = '<!-- END Embody/Envoy -->'
+
+# Top-level, well-known instruction files a repo plausibly already has.
+# Per-rule files (.claude/rules/*, .cursor/rules/*, ...) are NOT here:
+# their names are Embody-specific, a collision is a coincidence rather
+# than the norm, and skipping one of many is the right answer there.
+MERGEABLE_DOCS = ('AGENTS.md', 'GEMINI.md', 'ENVOY.md',
+                  '.github/copilot-instructions.md')
+
+
+def _delimiter_lines(lines):
+    """Indices of lines that are ONLY a delimiter, as (index, is_begin).
+
+    Line-anchored on purpose. A substring match let a user QUOTING the
+    marker in their own prose (a code fence documenting the block, say)
+    act as a real delimiter, so the span from their quote to Embody's
+    real END swallowed everything between -- their content, silently.
+    A delimiter only counts when it is alone on its line, which is the
+    only way this writer ever emits one.
+    """
+    found = []
+    for n, line in enumerate(lines):
+        # Column 0, and only trailing whitespace forgiven. Stripping
+        # leading whitespace too made an INDENTED example count -- a
+        # user documenting the block inside a numbered list lost the
+        # lines between their example delimiters. We always emit at
+        # column 0, so nothing legitimate is missed. The BOM is
+        # tolerated because editors add one to the first line and it
+        # would otherwise orphan the block permanently.
+        bare = line.lstrip('\ufeff').rstrip()
+        if bare == AGENTS_BEGIN:
+            found.append((n, True))
+        elif bare == AGENTS_END:
+            found.append((n, False))
+    return found
+
+
+def strip_all_blocks(text):
+    """Remove every Embody block AND any orphan delimiter line.
+
+    Tolerates the states a real file reaches: a BEGIN whose END was
+    hand-deleted, a stray END, duplicated blocks from a git merge
+    resolution, and the marker quoted in the user's own prose.
+    Everything between a matched pair goes; an unmatched delimiter
+    loses only its own line, never the user's text.
+    """
+    lines = text.split('\n')
+    marks = _delimiter_lines(lines)
+    drop = set()
+    open_at = None
+    for idx, is_begin in marks:
+        if is_begin:
+            if open_at is not None:
+                drop.add(open_at)      # previous BEGIN never closed
+            open_at = idx
+        elif open_at is not None:
+            drop.update(range(open_at, idx + 1))
+            open_at = None
+        else:
+            drop.add(idx)              # stray END
+    if open_at is not None:
+        drop.add(open_at)
+    kept = [l for n, l in enumerate(lines) if n not in drop]
+    return '\n'.join(kept)
+
+
+def block_count(text):
+    """How many WELL-FORMED Embody blocks the text holds."""
+    marks = _delimiter_lines(text.split('\n'))
+    total, open_ = 0, False
+    for _, is_begin in marks:
+        if is_begin:
+            open_ = True
+        elif open_:
+            total += 1
+            open_ = False
+    return total
+
+
+def merge_agents_section(existing, block):
+    """Splice Embody's block into a user's file, preserving the rest.
+
+    ONE well-formed block is replaced in place, so it keeps the position
+    the user put it in. Anything else -- an orphan BEGIN, a stray END,
+    duplicates from a merge conflict, the marker quoted in prose -- is
+    normalized away first and one clean block is appended.
+    """
+    lines = existing.split('\n')
+    marks = _delimiter_lines(lines)
+    if (len(marks) == 2 and marks[0][1] and not marks[1][1]
+            and block_count(existing) == 1):
+        head = lines[:marks[0][0]]
+        tail = lines[marks[1][0] + 1:]
+        return '\n'.join(head + block.split('\n') + tail)
+    if marks:
+        existing = strip_all_blocks(existing)
+    sep = '' if existing.endswith('\n\n') else (
+        '\n' if existing.endswith('\n') else '\n\n')
+    if not existing.strip():
+        return block + '\n'
+    return existing + sep + block + '\n'
+
+
+def agents_block(content):
+    """Embody's instructions wrapped in the merge delimiters."""
+    return f'{AGENTS_BEGIN}\n{content.strip()}\n{AGENTS_END}'
+
+
+def is_generated_by_embody(ext, content):
+    """True when Embody wrote this file, judged by where the marker SITS.
+
+    Embody always puts the marker at the top of the content: either the
+    first line, or the first line after the YAML frontmatter a few
+    dialects require (Cursor .mdc, Copilot .instructions.md, SKILL.md).
+    A plain substring test over the whole file also matched a user who
+    merely QUOTED the marker in their own prose -- and that file then
+    took the "ours, regenerate" path, overwriting the lot on first
+    contact with no log. Position is what separates the two.
+    """
+    lines = content.lstrip('\ufeff').split('\n')
+    i = 0
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    # Skip one leading frontmatter block if present.
+    if i < len(lines) and lines[i].strip() == '---':
+        for j in range(i + 1, len(lines)):
+            if lines[j].strip() == '---':
+                i = j + 1
+                break
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    return i < len(lines) and ext._EMBODY_MARKER in lines[i]
+
+
+def write_or_merge(ext, target_dir, rel_path, content):
+    """Write a generated doc, MERGING when the user already owns the file.
+
+    Three cases:
+      absent, or ours (marker, no block) -> written whole, as before.
+      ours-inside-theirs (our BEGIN block
+        is present)                      -> block refreshed in place.
+      theirs (no marker)                 -> block merged in, their content
+                                            untouched.
+
+    The block-first ordering is load-bearing: our block CONTAINS the
+    generated-by marker, so on a redeploy a merged user file looks
+    marker-owned and the whole-file path would overwrite everything the
+    user wrote around it.
+
+    Used for the top-level files a repo plausibly already has. Skipping
+    them (the old behavior) silently left those projects with none of
+    Embody's instructions and said nothing about it.
+    """
+    path = Path(target_dir) / rel_path
+    if path.exists():
+        try:
+            existing = path.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError) as e:
+            # UnicodeDecodeError is a ValueError, not an OSError -- it used
+            # to escape here and abort the whole deploy mid-write, leaving
+            # some clients configured and others not.
+            ext.Log(f'Could not read {rel_path} ({e}) -- leaving it alone.',
+                    'WARNING')
+            return False
+        had_block = AGENTS_BEGIN in existing
+        if had_block or not is_generated_by_embody(ext, existing):
+            merged = merge_agents_section(existing, agents_block(content))
+            if merged == existing:
+                return False
+            try:
+                ext._manifestRecordAppendedFile(
+                    target_dir, path, AGENTS_BEGIN, kind='md_section')
+            except Exception:
+                pass
+
+            def _write():
+                path.write_text(merged, encoding='utf-8', newline='\n')
+                ext.Log(
+                    f'{"Updated" if had_block else "Added"} the Embody '
+                    f'section in your {rel_path} -- your own content is '
+                    f'untouched, and Uninstall removes only that block.',
+                    'SUCCESS')
+
+            ext._guardFileWrite(
+                f'{rel_path} merge',
+                f'{"update" if had_block else "add"} the Embody section in '
+                f'the existing {rel_path} in {target_dir}',
+                [str(path)], _write)
+            return True
+    return write_template(ext, target_dir, rel_path, content)
+
+
 def write_agents_md(ext, target_dir):
-    """Write AGENTS.md -- universal AI instructions read by all major AI tools."""
+    """Write AGENTS.md -- universal AI instructions read by all major AI tools.
+
+    A file we own (or no file at all) is written whole, marker-gated and
+    hash-tracked like every other template. A file the USER authored is
+    MERGED instead: their content is untouched and Embody maintains a
+    single delimited block inside it, refreshed in place on later
+    deploys and stripped by Uninstall.
+
+    Merging rather than skipping matters because AGENTS.md is the one
+    file every tool reads and the one a repo most likely already has.
+    Skipping it (the old behavior) silently left those projects with no
+    Embody instructions at all, and overwriting it would destroy work --
+    reported by a user who dragged Embody into a repo that had one.
+    """
     templates_comp = ext.my.op('templates')
     agents_md_dat = templates_comp.op('text_agents_md') if templates_comp else None
 
@@ -120,64 +377,146 @@ def write_agents_md(ext, target_dir):
                     parts.append('\n\n---\n\n')
         content = ''.join(parts)
 
-    write_template(ext, target_dir, 'AGENTS.md', content)
+    write_or_merge(ext, target_dir, 'AGENTS.md', content)
 
 
-def write_claude_code_config(ext, target_dir):
-    """Write Claude Code config: CLAUDE.md + .claude/rules/ + .claude/skills/"""
-    # 1. CLAUDE.md (with ENVOY.md fallback if user already has one)
-    write_claude_md(ext, target_dir)
+def write_client_files(ext, target_dir, section, block):
+    """Write one registry block (rules or skills) for a client.
 
-    # 2. .claude/rules/ and .claude/skills/ from template DATs
-    write_claude_rules_and_skills(ext, target_dir)
-
-
-def write_claude_rules_and_skills(ext, target_dir):
-    """Write .claude/rules/*.md + .claude/skills/*/SKILL.md from template
-    DATs. Shared by the Claude Code and OpenCode clients: OpenCode's
-    Claude-compat layer discovers .claude/skills/ natively, and the
-    generated opencode.json loads .claude/rules/ via an instructions
-    glob -- one copy on disk serves both clients, no drift."""
+    Returns the number of files written. Every rule dialect differs only
+    in the per-file transform (rule_content), so one loop serves them
+    all -- a new client with a known style needs no writer of its own.
+    """
     templates_comp = ext.my.op('templates')
     if not templates_comp:
-        ext.Log('Templates COMP not found -- skipping .claude/ generation', 'DEBUG')
-        return
+        ext.Log(f'Templates COMP not found -- skipping {block["dir"]}/ '
+                f'generation', 'DEBUG')
+        return 0
 
+    is_skills = (section == 'skills')
+    template_map = (ext._TEMPLATE_MAP_SKILLS if is_skills
+                    else ext._TEMPLATE_MAP_RULES)
     written = 0
+    for dat_name, slug in template_map.items():
+        template_dat = templates_comp.op(dat_name)
+        if not template_dat or not template_dat.text:
+            continue
+        if is_skills:
+            # Frontmatter KEPT: skills need name/description -- Claude
+            # Code, OpenCode, and Antigravity all validate it (and
+            # require the name to match the directory slug).
+            rel = f'{block["dir"]}/{slug}/SKILL.md'
+            content = template_dat.text
+        else:
+            rel = f'{block["dir"]}/{slug}{block["ext"]}'
+            content = rule_content(ext, template_dat.text, slug,
+                                   block.get('style', 'strip'))
+        if write_template(ext, target_dir, rel, content):
+            written += 1
+    return written
+
+
+def write_rules_files(ext, target_dir, block):
+    """Write a client's per-rule instruction files. -> count written."""
+    return write_client_files(ext, target_dir, 'rules', block)
+
+
+def write_skills_files(ext, target_dir, block):
+    """Write a client's SKILL.md folders. -> count written."""
+    return write_client_files(ext, target_dir, 'skills', block)
+
+
+def rule_content(ext, raw, slug, style):
+    """Transform one rule template into a client's rule dialect.
+
+    strip   -- plain markdown, frontmatter removed (Claude Code, OpenCode,
+               Antigravity); the generated-by marker stays for overwrite
+               protection.
+    raw     -- template verbatim, frontmatter included (Windsurf).
+    cursor  -- .mdc: globs/alwaysApply injected into the EXISTING
+               frontmatter rather than a duplicate block prepended.
+    copilot -- applyTo frontmatter over stripped content.
+    """
+    if style == 'raw':
+        return raw
+    if style == 'strip':
+        return strip_frontmatter(ext, raw)
+    if style == 'copilot':
+        body = strip_frontmatter(ext, raw).strip()
+        return ('---\napplyTo: "**"\n---\n\n'
+                '<!-- Generated by Embody/Envoy -- do not edit manually -->'
+                f'\n\n{body}')
+    if style == 'cursor':
+        raw = raw.lstrip('\ufeff')
+        SEP = '\n---\n'
+        if raw.startswith('---\n') and SEP in raw[4:]:
+            close_idx = raw.find(SEP, 4)
+            fm_lines = raw[4:close_idx]
+            rest = raw[close_idx + len(SEP):]
+            if 'alwaysApply:' not in fm_lines:
+                fm_lines += '\nglobs: []\nalwaysApply: true'
+            return '---\n' + fm_lines + SEP + rest
+        # No frontmatter -- build one from the first H1
+        description = slug.replace('-', ' ').title()
+        for line in raw.splitlines():
+            if line.startswith('# '):
+                description = line[2:].strip()
+                break
+        return (f'---\ndescription: "{description}"\n'
+                f'globs: []\nalwaysApply: true\n---\n\n{raw}')
+    return raw
+
+
+def write_copilot_combined(ext, target_dir):
+    """Write .github/copilot-instructions.md -- every rule in one file.
+
+    Copilot reads this always-on file plus the per-rule
+    .github/instructions/*.instructions.md the generic writer emits.
+    """
+    templates_comp = ext.my.op('templates')
+    if not templates_comp:
+        ext.Log('Templates COMP not found -- skipping .github/ generation',
+                'DEBUG')
+        return 0
+
+    parts = ['<!-- Generated by Embody/Envoy -- do not edit manually -->\n\n']
     for dat_name, slug in ext._TEMPLATE_MAP_RULES.items():
         template_dat = templates_comp.op(dat_name)
         if not template_dat or not template_dat.text:
             continue
-        # Claude Code doesn't use YAML frontmatter -- strip it.
-        # Keep the generated-by marker for overwrite protection.
-        content = strip_frontmatter(ext, template_dat.text)
-        if write_template(ext, target_dir, f'.claude/rules/{slug}.md', content):
-            written += 1
+        body = strip_frontmatter(ext, template_dat.text).strip()
+        heading = slug.replace('-', ' ').title()
+        for line in body.splitlines():
+            if line.startswith('# '):
+                heading = line[2:].strip()
+                break
+        parts.append(f'## {heading}\n\n{body}\n\n---\n\n')
 
-    for dat_name, slug in ext._TEMPLATE_MAP_SKILLS.items():
-        template_dat = templates_comp.op(dat_name)
-        if not template_dat or not template_dat.text:
-            continue
-        # Frontmatter KEPT: skills need name/description -- both Claude
-        # Code and OpenCode validate it (OpenCode also requires the name
-        # to match the directory slug).
-        if write_template(ext, target_dir, f'.claude/skills/{slug}/SKILL.md', template_dat.text):
-            written += 1
-
-    if written > 0:
-        ext.Log(f'Generated {written} .claude/ files at {target_dir}', 'SUCCESS')
+    rel = '.github/copilot-instructions.md'
+    return 1 if write_or_merge(ext, target_dir, rel, ''.join(parts)) else 0
 
 
-def write_opencode_files(ext, target_dir):
-    """Write OpenCode client config: shared .claude/ rules + skills, plus
-    the Envoy entry in opencode.json.
+def write_gemini_doc(ext, target_dir):
+    """Write GEMINI.md -- a thin @import of the always-written AGENTS.md.
 
-    No CLAUDE.md is written for this client: OpenCode reads CLAUDE.md
-    only as a fallback when AGENTS.md is absent, and AGENTS.md is always
-    written -- the full rule set reaches OpenCode through the
-    instructions glob (.claude/rules/*.md) in opencode.json instead.
+    Gemini reads GEMINI.md, not AGENTS.md, so this pulls the real
+    instructions in via Gemini's @file import syntax -- no duplication.
     """
-    write_claude_rules_and_skills(ext, target_dir)
+    content = (
+        '<!-- Generated by Embody/Envoy -- do not edit manually -->\n\n'
+        '# Project Context for Gemini CLI\n\n'
+        'This project uses Embody (TouchDesigner externalization) and Envoy\n'
+        '(MCP server for AI coding tools). The full instructions live in\n'
+        'AGENTS.md, imported below.\n\n'
+        '@AGENTS.md\n'
+    )
+    if write_or_merge(ext, target_dir, 'GEMINI.md', content):
+        ext.Log(f'Generated GEMINI.md at {target_dir}', 'SUCCESS')
+
+
+def write_opencode_json(ext, target_dir):
+    """Merge the Envoy entry into opencode.json (bespoke: the file also
+    carries an instructions glob and a permission posture block)."""
     try:
         mod.envoy_setup.ensure_opencode_config(
             op.Embody.ext.Envoy, target_dir)
@@ -201,134 +540,76 @@ def strip_frontmatter(ext, content):
     return content[close_idx + 5:].lstrip('\n')
 
 
-def write_cursor_rules(ext, target_dir):
-    """Write Cursor rules: .cursor/rules/{slug}.mdc with YAML frontmatter.
+# --- Legacy per-client entry points ---------------------------------------
+# Kept because EmbodyExt promotes them (_writeCursorRules etc.) and the
+# suites call them directly; each is now its registry row plus a bespoke
+# step, so the behavior is defined in exactly one place.
 
-    Templates already embed a 'description:' field. This injects 'globs: []'
-    and 'alwaysApply: true' into the existing frontmatter rather than
-    prepending a duplicate block.
-    """
-    templates_comp = ext.my.op('templates')
-    if not templates_comp:
-        ext.Log('Templates COMP not found -- skipping .cursor/ generation', 'DEBUG')
-        return
+def write_claude_code_config(ext, target_dir):
+    """Write Claude Code config: CLAUDE.md + .claude/rules/ + .claude/skills/"""
+    write_claude_md(ext, target_dir)
+    write_claude_rules_and_skills(ext, target_dir)
 
-    written = 0
-    for dat_name, slug in ext._TEMPLATE_MAP_RULES.items():
-        template_dat = templates_comp.op(dat_name)
-        if not template_dat or not template_dat.text:
-            continue
-        raw = template_dat.text.lstrip('\ufeff')
-        # Inject globs/alwaysApply into existing frontmatter
-        SEP = '\n---\n'
-        if raw.startswith('---\n') and SEP in raw[4:]:
-            close_idx = raw.find(SEP, 4)
-            fm_lines = raw[4:close_idx]
-            rest = raw[close_idx + len(SEP):]
-            if 'alwaysApply:' not in fm_lines:
-                fm_lines += '\nglobs: []\nalwaysApply: true'
-            content = '---\n' + fm_lines + SEP + rest
-        else:
-            # No frontmatter -- build one from first H1
-            description = slug.replace('-', ' ').title()
-            for line in raw.splitlines():
-                if line.startswith('# '):
-                    description = line[2:].strip()
-                    break
-            content = (
-                f'---\ndescription: "{description}"\n'
-                f'globs: []\nalwaysApply: true\n---\n\n{raw}'
-            )
-        if write_template(ext, target_dir, f'.cursor/rules/{slug}.mdc', content):
-            written += 1
 
+def write_claude_rules_and_skills(ext, target_dir):
+    """Write .claude/rules/*.md + .claude/skills/*/SKILL.md from template
+    DATs. Shared by the Claude Code and OpenCode clients: OpenCode's
+    Claude-compat layer discovers .claude/skills/ natively, and the
+    generated opencode.json loads .claude/rules/ via an instructions
+    glob -- one copy on disk serves both clients, no drift."""
+    row = mod.ai_clients.spec('claudecode')
+    written = (write_rules_files(ext, target_dir, row['rules'])
+               + write_skills_files(ext, target_dir, row['skills']))
     if written > 0:
-        ext.Log(f'Generated {written} .cursor/rules/ files at {target_dir}', 'SUCCESS')
+        ext.Log(f'Generated {written} .claude/ files at {target_dir}',
+                'SUCCESS')
+
+
+def write_opencode_files(ext, target_dir):
+    """Write OpenCode client config: shared .claude/ rules + skills, plus
+    the Envoy entry in opencode.json.
+
+    No CLAUDE.md is written for this client: OpenCode reads CLAUDE.md
+    only as a fallback when AGENTS.md is absent, and AGENTS.md is always
+    written -- the full rule set reaches OpenCode through the
+    instructions glob (.claude/rules/*.md) in opencode.json instead.
+    """
+    write_claude_rules_and_skills(ext, target_dir)
+    write_opencode_json(ext, target_dir)
+
+
+def write_cursor_rules(ext, target_dir):
+    """Write Cursor rules: .cursor/rules/{slug}.mdc with YAML frontmatter."""
+    written = write_rules_files(ext, target_dir,
+                                mod.ai_clients.spec('cursor')['rules'])
+    if written > 0:
+        ext.Log(f'Generated {written} .cursor/rules/ files at {target_dir}',
+                'SUCCESS')
 
 
 def write_copilot_instructions(ext, target_dir):
     """Write GitHub Copilot config: combined instructions + per-rule files."""
-    templates_comp = ext.my.op('templates')
-    if not templates_comp:
-        ext.Log('Templates COMP not found -- skipping .github/ generation', 'DEBUG')
-        return
-
-    written = 0
-    rule_parts = ['<!-- Generated by Embody/Envoy -- do not edit manually -->\n\n']
-    individual_contents = {}
-
-    for dat_name, slug in ext._TEMPLATE_MAP_RULES.items():
-        template_dat = templates_comp.op(dat_name)
-        if not template_dat or not template_dat.text:
-            continue
-        # Strip template frontmatter -- Copilot uses its own applyTo format
-        rule_content = strip_frontmatter(ext, template_dat.text).strip()
-        # Extract heading for section label
-        heading = slug.replace('-', ' ').title()
-        for line in rule_content.splitlines():
-            if line.startswith('# '):
-                heading = line[2:].strip()
-                break
-        rule_parts.append(f'## {heading}\n\n{rule_content}\n\n---\n\n')
-        # Individual file with applyTo frontmatter + generated marker
-        individual_contents[slug] = (
-            f'---\n'
-            f'applyTo: "**"\n'
-            f'---\n\n'
-            f'<!-- Generated by Embody/Envoy -- do not edit manually -->\n\n'
-            f'{rule_content}'
-        )
-
-    # Combined file (.github/copilot-instructions.md)
-    combined = ''.join(rule_parts)
-    if write_template(ext, target_dir, '.github/copilot-instructions.md', combined):
-        written += 1
-
-    # Individual per-rule files (.github/instructions/{slug}.instructions.md)
-    for slug, content in individual_contents.items():
-        if write_template(ext, target_dir, f'.github/instructions/{slug}.instructions.md', content):
-            written += 1
-
+    written = (write_copilot_combined(ext, target_dir)
+               + write_rules_files(ext, target_dir,
+                                   mod.ai_clients.spec('copilot')['rules']))
     if written > 0:
-        ext.Log(f'Generated {written} .github/ files at {target_dir}', 'SUCCESS')
+        ext.Log(f'Generated {written} .github/ files at {target_dir}',
+                'SUCCESS')
 
 
 def write_windsurf_rules(ext, target_dir):
     """Write Windsurf rules: .windsurf/rules/{slug}.md (plain markdown)."""
-    templates_comp = ext.my.op('templates')
-    if not templates_comp:
-        ext.Log('Templates COMP not found -- skipping .windsurf/ generation', 'DEBUG')
-        return
-
-    written = 0
-    for dat_name, slug in ext._TEMPLATE_MAP_RULES.items():
-        template_dat = templates_comp.op(dat_name)
-        if not template_dat or not template_dat.text:
-            continue
-        if write_template(ext, target_dir, f'.windsurf/rules/{slug}.md', template_dat.text):
-            written += 1
-
+    written = write_rules_files(ext, target_dir,
+                                mod.ai_clients.spec('windsurf')['rules'])
     if written > 0:
-        ext.Log(f'Generated {written} .windsurf/rules/ files at {target_dir}', 'SUCCESS')
+        ext.Log(f'Generated {written} .windsurf/rules/ files at {target_dir}',
+                'SUCCESS')
 
 
 def write_gemini_config(ext, target_dir):
-    """Write Gemini CLI config: a thin GEMINI.md that imports AGENTS.md.
+    """Write Gemini CLI config: a thin GEMINI.md that imports AGENTS.md."""
+    write_gemini_doc(ext, target_dir)
 
-    Gemini reads GEMINI.md (not AGENTS.md), so GEMINI.md pulls in the
-    always-written AGENTS.md via Gemini's @import syntax -- no content
-    duplication. See docs: gemini-cli/docs/cli/gemini-md.md (@file imports).
-    """
-    content = (
-        '<!-- Generated by Embody/Envoy -- do not edit manually -->\n\n'
-        '# Project Context for Gemini CLI\n\n'
-        'This project uses Embody (TouchDesigner externalization) and Envoy\n'
-        '(MCP server for AI coding tools). The full instructions live in\n'
-        'AGENTS.md, imported below.\n\n'
-        '@AGENTS.md\n'
-    )
-    if write_template(ext, target_dir, 'GEMINI.md', content):
-        ext.Log(f'Generated GEMINI.md at {target_dir}', 'SUCCESS')
 
 
 def write_claude_md(ext, target_dir):
@@ -347,13 +628,31 @@ def write_claude_md(ext, target_dir):
     claude_md_path = target_dir / 'CLAUDE.md'
 
     if claude_md_path.exists():
-        existing = claude_md_path.read_text(encoding='utf-8')
-        if '<!-- Generated by Embody/Envoy' in existing:
-            claude_md_path.write_text(content, encoding='utf-8', newline='\n')
-            ext.Log(f'Updated CLAUDE.md at {claude_md_path}', 'SUCCESS')
+        try:
+            existing = claude_md_path.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError) as e:
+            ext.Log(f'Could not read CLAUDE.md ({e}) -- leaving it alone.',
+                    'WARNING')
+            return None
+        if is_generated_by_embody(ext, existing):
+            # Through write_template, NOT a bare write_text. CLAUDE.md
+            # was the only generated markdown that bypassed it, so it
+            # was the only one never hash-tracked -- a user who edited
+            # their generated CLAUDE.md had it silently overwritten on
+            # the next deploy, with a perfectly intact manifest. Every
+            # other generated file has been edit-protected since
+            # v6.0.108.
+            if write_template(ext, target_dir, 'CLAUDE.md', content):
+                ext.Log(f'Updated CLAUDE.md at {claude_md_path}',
+                        'SUCCESS')
         else:
+            # The sidecar is only a safe home if the user does not already
+            # own a file by that name. Writing it blind clobbered a
+            # hand-written ENVOY.md outright -- the one path in the whole
+            # generated-file set that destroyed a user file on FIRST
+            # contact, no marker and no warning. Merge into it instead.
             fallback = target_dir / 'ENVOY.md'
-            fallback.write_text(content, encoding='utf-8', newline='\n')
+            write_or_merge(ext, target_dir, 'ENVOY.md', content)
             ext.Log(
                 f'CLAUDE.md already exists (not generated by Embody). '
                 f'Wrote MCP reference to {fallback} instead.',
@@ -361,8 +660,10 @@ def write_claude_md(ext, target_dir):
             )
             return fallback
     else:
-        claude_md_path.write_text(content, encoding='utf-8', newline='\n')
-        ext.Log(f'Created CLAUDE.md at {claude_md_path}', 'SUCCESS')
+        # Also via write_template: creating it here is what RECORDS
+        # the hash that protects the user's later edits.
+        if write_template(ext, target_dir, 'CLAUDE.md', content):
+            ext.Log(f'Created CLAUDE.md at {claude_md_path}', 'SUCCESS')
 
     return claude_md_path
 
@@ -570,6 +871,106 @@ def manifest_record_git_config(ext, target_dir, keys):
         ext.Log(f'Install-manifest git-config record failed: {e}', 'DEBUG')
 
 
+# The generated-file stamp. Embody's marker line carries the hash of the
+# content below it, so a generated file PROVES on its own whether it is
+# still ours:
+#
+#   <!-- Generated by Embody/Envoy - Do not remove this comment - sha:ab12... -->
+#
+# The sidecar manifest cannot do that job alone. It lives in .embody/,
+# which Embody itself gitignores, so it never survives a clone -- and on
+# any second machine a file with the marker and no record read as
+# "written before hashing existed, regenerate", silently replacing edits
+# a teammate had committed. Uninstall called the same file
+# "Embody-generated, unmodified" and deleted it. The stamp travels inside
+# the file, so the proof arrives with the thing it protects.
+#
+# The sidecar is still read for files stamped by older versions.
+_STAMP_PREFIX = ' - sha:'
+
+
+def stamp_marker(ext, content):
+    """Return `content` with its marker line carrying the content hash."""
+    lines = content.split('\n')
+    idx = _marker_line_index(ext, lines)
+    if idx is None:
+        return content
+    lines[idx] = _strip_stamp_from_line(lines[idx])
+    digest = content_hash(ext, '\n'.join(lines))
+    line = lines[idx]
+    close = line.rfind('-->')
+    if close == -1:
+        return content
+    lines[idx] = (line[:close].rstrip() + _STAMP_PREFIX + digest + ' '
+                  + line[close:])
+    return '\n'.join(lines)
+
+
+def read_stamp(ext, content):
+    """The hash a generated file carries, or None if it has no stamp."""
+    lines = content.split('\n')
+    idx = _marker_line_index(ext, lines)
+    if idx is None:
+        return None
+    at = lines[idx].find(_STAMP_PREFIX)
+    if at == -1:
+        return None
+    return lines[idx][at + len(_STAMP_PREFIX):].split()[0].rstrip('->').strip()
+
+
+def strip_stamp(ext, content):
+    """`content` with the stamp removed -- what the hash is taken over."""
+    lines = content.split('\n')
+    idx = _marker_line_index(ext, lines)
+    if idx is None:
+        return content
+    lines[idx] = _strip_stamp_from_line(lines[idx])
+    return '\n'.join(lines)
+
+
+def _strip_stamp_from_line(line):
+    at = line.find(_STAMP_PREFIX)
+    if at == -1:
+        return line
+    close = line.rfind('-->')
+    if close == -1 or close < at:
+        return line[:at].rstrip()
+    return line[:at].rstrip() + ' ' + line[close:]
+
+
+def _marker_line_index(ext, lines):
+    """Index of the marker line, skipping a leading frontmatter block."""
+    i = 0
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    if i < len(lines) and lines[i].lstrip('\ufeff').strip() == '---':
+        for j in range(i + 1, len(lines)):
+            if lines[j].strip() == '---':
+                i = j + 1
+                break
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    if i < len(lines) and ext._EMBODY_MARKER in lines[i]:
+        return i
+    return None
+
+
+def embody_owns_unmodified(ext, existing, manifest, rel_path):
+    """True when this file is still exactly what Embody last wrote.
+
+    The file's own stamp is authoritative and travels with it. Only a
+    file written before stamping existed falls back to the sidecar
+    manifest, and only then can a missing record mean "assume ours".
+    """
+    digest = read_stamp(ext, existing)
+    if digest is not None:
+        return content_hash(ext, strip_stamp(ext, existing)) == digest
+    stored = manifest.get(rel_path)
+    if stored is None:
+        return True          # pre-stamp legacy file: unchanged behavior
+    return content_hash(ext, existing) == stored
+
+
 def write_template(ext, target_dir, rel_path, content):
     """Write a single template file, respecting the Embody/Envoy marker.
 
@@ -592,11 +993,15 @@ def write_template(ext, target_dir, rel_path, content):
     was_new = not target_path.exists()  # pre-existence -> install-manifest safe-delete record
     manifest = load_hash_manifest(ext, target_dir)
     if target_path.exists():
-        existing = target_path.read_text(encoding='utf-8')
-        if ext._EMBODY_MARKER not in existing:
+        try:
+            existing = target_path.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError) as e:
+            ext.Log(f'Could not read {rel_path} ({e}) -- leaving it alone.',
+                    'WARNING')
             return False
-        stored = manifest.get(rel_path)
-        if stored is not None and content_hash(ext, existing) != stored:
+        if not is_generated_by_embody(ext, existing):
+            return False
+        if not embody_owns_unmodified(ext, existing, manifest, rel_path):
             ext.Log(
                 f'Kept your edits to {rel_path} '
                 f'(delete the file to regenerate it from the template).',
@@ -609,8 +1014,10 @@ def write_template(ext, target_dir, rel_path, content):
     # generated rule and skill on EVERY deploy (empty git diff, permanent
     # 'M' in the panel), and in a user project without .gitattributes it
     # commits CRLF outright.
+    content = stamp_marker(ext, content)
     target_path.write_text(content, encoding='utf-8', newline='\n')
-    manifest[rel_path] = content_hash(ext, content)
+    # Sidecar kept in step for anything still reading it.
+    manifest[rel_path] = content_hash(ext, strip_stamp(ext, content))
     save_hash_manifest(ext, target_dir, manifest)
     if was_new:
         ext._manifestRecordCreatedFile(target_dir, rel_path)
@@ -626,9 +1033,11 @@ def upgrade_envoy(ext):
     if not ext.my.par.Envoyenable.eval():
         return
     target_dir = ext._findProjectRoot()
-    client = ext.my.par.Aiclient.eval()
     agents_md_missing = not (target_dir / 'AGENTS.md').exists()
-    if not (agents_md_missing or client_files_missing(ext, target_dir, client)):
+    any_client_missing = any(
+        client_files_missing(ext, target_dir, c)
+        for c in selected_clients(ext))
+    if not (agents_md_missing or any_client_missing):
         return
     prior = ext._startup_config_pass
     ext._startup_config_pass = True
@@ -639,21 +1048,13 @@ def upgrade_envoy(ext):
 
 
 def client_files_missing(ext, target_dir, client):
-    """Return True if the primary config files for the selected client are absent."""
-    checks = {
-        'claudecode': lambda d: (
-            not (d / 'CLAUDE.md').exists() and not (d / 'ENVOY.md').exists()
-        ) or not (d / '.claude' / 'rules').exists(),
-        'opencode':   lambda d: (
-            not (d / 'opencode.json').exists()
-            or not (d / '.claude' / 'rules').exists()),
-        'cursor':     lambda d: not (d / '.cursor' / 'rules').exists(),
-        'copilot':    lambda d: not (d / '.github' / 'copilot-instructions.md').exists(),
-        'windsurf':   lambda d: not (d / '.windsurf' / 'rules').exists(),
-        'gemini':     lambda d: not (d / 'GEMINI.md').exists(),
-        'none':       lambda d: False,
-    }
-    return checks.get(client, lambda d: False)(target_dir)
+    """Return True if this client's config files should be regenerated.
+
+    The probe groups live in the registry, so a client can no longer be
+    added without one -- 'vscode' and 'codex' were absent from the old
+    hand-written table and silently defaulted to "nothing missing".
+    """
+    return mod.ai_clients.is_missing(target_dir, client)
 
 
 def ai_client_label(ext):

@@ -67,7 +67,7 @@ After verification, if Envoy is not yet enabled, the [Setup Wizard](setup-wizard
 
 - Install Python MCP dependencies (~30 MB via `uv`)
 - Start a local MCP server on the configured port
-- Generate AI config files in your project root: `.mcp.json`, an always-written `AGENTS.md` (the universal standard read by all major AI tools), and client-specific config for the AI Client you select. For Claude Code that is `CLAUDE.md` plus a `.claude/` directory with [coding rules, skills, and slash commands](../envoy/claude-code.md); other clients get their own file (`.cursor/rules`, `.github/copilot-instructions.md`, `.windsurf/rules`, `GEMINI.md`, etc.)
+- Generate AI config files in your project root: `.mcp.json`, an always-written `AGENTS.md` (the universal standard read by all major AI tools), and client-specific config for the client you pick in **Configure For**. For Claude Code that is `CLAUDE.md` plus a `.claude/` directory with [coding rules, skills, and slash commands](../envoy/claude-code.md); other clients get their own files (`.cursor/`, `.github/copilot-instructions.md`, `.windsurf/rules`, `GEMINI.md`, `.agents/`, etc.) plus the MCP config each one actually reads -- see [the full matrix](../envoy/setup.md#which-files-each-client-gets). Selecting another client later leaves the first one configured too.
 
 You can close the wizard with **Not now** (nothing is changed) and re-open it anytime via the **Setup Wizard** parameter on the Embody page — or enable Envoy directly from the **Envoy** parameter page.
 
