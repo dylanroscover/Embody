@@ -329,3 +329,143 @@ class TestTdxnMigration(EmbodyTestCase):
         self.assertTrue(res.get('success'), repr(res.get('error')))
         self.assertTrue(target.op('content') is not None,
                         'reimported COMP lost its content operator')
+
+    # ------------------------------------------------------------------
+    # The mint-vs-preserve rule (what stops a save renaming a user's file)
+    # ------------------------------------------------------------------
+
+    def test_tracked_suffix_mints_for_new_and_preserves_a_legacy_row(self):
+        """_trackedTDNSuffix is the single mechanism behind "existing files
+        are left alone". Both halves are asserted against LITERALS -- deriving
+        either expectation from the function under test would pass whether the
+        rule holds or not.
+        """
+        comp = self._externalize(self.workspace, 'suffix_probe')
+        rel = self._rel(comp.path)
+        self.assertTrue(rel.endswith('.tdxn'),
+                        'a NEW externalization must mint .tdxn, got %r' % rel)
+        self.assertEqual(self.embody_ext._trackedTDNSuffix(comp.path), '.tdxn')
+
+        legacy = rel[:-len('.tdxn')] + '.tdn'
+        src, dst = self._abs(rel), self._abs(legacy)
+        if src.is_file():
+            src.replace(dst)
+        self.embody_ext._updateRowCells(
+            comp.path, {'rel_file_path': legacy}, strategy='tdn')
+        self.assertEqual(
+            self.embody_ext._trackedTDNSuffix(comp.path), '.tdn',
+            'a tracked legacy row must keep .tdn -- minting here is what '
+            'silently renames (and for the root resync, deletes) user files')
+
+    def test_rename_of_a_legacy_comp_keeps_its_suffix(self):
+        """Renaming a .tdn COMP must move it to the new NAME, not convert it
+        to .tdxn -- an unrequested migration performed as a bare file move.
+        """
+        comp = self._externalize(self.workspace, 'rename_legacy')
+        rel = self._rel(comp.path)
+        legacy = rel[:-len('.tdxn')] + '.tdn'
+        src = self._abs(rel)
+        if src.is_file():
+            src.replace(self._abs(legacy))
+        self.embody_ext._updateRowCells(
+            comp.path, {'rel_file_path': legacy}, strategy='tdn')
+
+        comp.name = 'rename_legacy_moved'
+        self.embody_ext.checkOpsForContinuity(
+            self.embody_ext.ExternalizationsFolder)
+        moved = self._rel(comp.path)
+        self.assertTrue(
+            moved.endswith('.tdn'),
+            'rename converted a legacy file to %r -- renames must preserve '
+            'the tracked suffix' % moved)
+        self.assertIn('rename_legacy_moved', moved,
+                      'rename did not follow the new operator name: %r' % moved)
+
+    # ------------------------------------------------------------------
+    # Partial-failure and convergence (audit 2026-08-27)
+    # ------------------------------------------------------------------
+
+    def _break_refs_back_to_legacy(self, comp_path):
+        """Rewrite only this file's tdn_ref lines back to .tdn."""
+        abs_path = self._abs(self._rel(comp_path))
+        lines = abs_path.read_text(encoding='utf-8').split('\n')
+        for i, line in enumerate(lines):
+            if 'tdn_ref:' in line and line.rstrip().endswith('.tdxn'):
+                lines[i] = line.rstrip()[:-len('.tdxn')] + '.tdn'
+        abs_path.write_text('\n'.join(lines), encoding='utf-8')
+
+    def test_failed_rename_does_not_repoint_parent_refs(self):
+        """A rename that did NOT land must not be advertised to Pass C.
+
+        The parent would otherwise be repointed at a file that was never
+        created -- a dangling ref, which is worse than the stale one it
+        replaced because the child no longer resolves at all.
+        """
+        paths = self._buildLegacyProject()
+        leaf_rel = self._rel(paths['leaf'])
+        # A directory where the .tdxn should go makes replace() raise on
+        # every platform, without patching anything.
+        blocker = self._abs(leaf_rel[:-len('.tdn')] + '.tdxn')
+        blocker.mkdir(parents=True, exist_ok=True)
+        try:
+            res = self._migrate()
+            self.assertTrue(res.get('failed'),
+                            'blocked rename should be reported as failed')
+            self.assertTrue(self._abs(leaf_rel).is_file(),
+                            'source must survive a failed rename')
+            for ref in self._refs(paths['child']):
+                self.assertTrue(
+                    self._abs(ref).is_file(),
+                    'parent repointed at a file that was never created: %s'
+                    % ref)
+        finally:
+            try:
+                blocker.rmdir()
+            except Exception:
+                pass
+
+    def test_parent_scanned_by_stem_when_row_disagrees(self):
+        """A parent whose row and file disagree is the crash-resume shape.
+
+        Resolving it through the row drops it from the tdn_ref scan, so its
+        children are renamed and it keeps pointing at the old names.
+        """
+        paths = self._buildLegacyProject()
+        root_rel = self._rel(paths['root'])
+        self.assertTrue(root_rel.endswith('.tdn'))
+        # Row claims .tdxn; the file on disk is still .tdn.
+        self.embody_ext._updateRowCells(
+            paths['root'], {'rel_file_path': root_rel[:-len('.tdn')] + '.tdxn'},
+            strategy='tdn')
+        res = self._migrate()
+        self.assertEqual(res.get('failed'), [], repr(res.get('failed')))
+        refs = self._refs(paths['root'])
+        self.assertTrue(refs, 'root lost its tdn_ref pointers')
+        for ref in refs:
+            self.assertTrue(
+                ref.endswith('.tdxn'),
+                'row/file mismatch dropped the parent from the scan: %r' % ref)
+            self.assertTrue(self._abs(ref).is_file(),
+                            'repointed ref does not resolve: %s' % ref)
+
+    def test_dangling_refs_are_repaired_when_the_plan_is_empty(self):
+        """A run that died before Pass C leaves every row migrated but the
+        parents still pointing at .tdn. The plan is then empty, so the run
+        must still scan and repair -- otherwise it can never converge.
+        """
+        paths = self._buildLegacyProject()
+        self._migrate()
+        self._break_refs_back_to_legacy(paths['root'])
+        self.assertTrue(
+            any(r.endswith('.tdn') for r in self._refs(paths['root'])),
+            'fixture: root refs should be broken back to .tdn')
+
+        res = self._migrate()
+        self.assertEqual(res.get('migrated'), [],
+                         'nothing left to rename; the plan must be empty')
+        self.assertEqual(res.get('failed'), [], repr(res.get('failed')))
+        for ref in self._refs(paths['root']):
+            self.assertTrue(ref.endswith('.tdxn'),
+                            'dangling ref not repaired: %r' % ref)
+            self.assertTrue(self._abs(ref).is_file(),
+                            'repaired ref does not resolve: %s' % ref)

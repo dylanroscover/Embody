@@ -59,9 +59,9 @@ ACTIONS = (
     ('Shortcutupdateall', 'Update All Externalizations', f'{PRIMARY_TOKEN}+shift+u'),
     ('Shortcutupdatecomp', 'Update Current COMP', f'{PRIMARY_TOKEN}+alt+u'),
     ('Shortcutrefresh', 'Refresh Tracking', f'{PRIMARY_TOKEN}+shift+r'),
-    ('Shortcutexportproject', 'Export Project to TDN', f'{PRIMARY_TOKEN}+shift+e'),
-    ('Shortcutexportcomp', 'Export Current COMP to TDN', f'{PRIMARY_TOKEN}+alt+e'),
-    ('Shortcutcopytdn', 'Copy Selected COMP as TDN', f'{PRIMARY_TOKEN}+shift+c'),
+    ('Shortcutexportproject', 'Export Project to TDXN', f'{PRIMARY_TOKEN}+shift+e'),
+    ('Shortcutexportcomp', 'Export Current COMP to TDXN', f'{PRIMARY_TOKEN}+alt+e'),
+    ('Shortcutcopytdn', 'Copy Selected COMP as TDXN', f'{PRIMARY_TOKEN}+shift+c'),
 )
 SHORTCUT_PARS = tuple(a[0] for a in ACTIONS)
 
@@ -390,9 +390,9 @@ HELP_DESCRIPTIONS = {
     'Shortcutupdateall': 'Update all externalizations.',
     'Shortcutupdatecomp': 'Update only the COMP you are currently inside.',
     'Shortcutrefresh': 'Refresh tracking state.',
-    'Shortcutexportproject': 'Export the whole project to .tdn.',
-    'Shortcutexportcomp': 'Export just the current network to .tdn.',
-    'Shortcutcopytdn': 'Copy the selected COMP as portable TDN.',
+    'Shortcutexportproject': 'Export the whole project to .tdxn.',
+    'Shortcutexportcomp': 'Export just the current network to .tdxn.',
+    'Shortcutcopytdn': 'Copy the selected COMP as portable TDXN.',
 }
 
 

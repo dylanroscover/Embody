@@ -411,6 +411,54 @@ class TestTDNYaml(EmbodyTestCase):
         finally:
             mod._HAVE_YAML = orig
 
+    def test_textconv_hides_the_format_bump(self):
+        """v6.1 stamps `format: tdxn` where 6.0 stamped `format: tdn`.
+
+        The driver must strip it, or the one-time identity bump shows as a
+        one-line diff in EVERY tracked file. The test above cannot prove this
+        -- both of its blobs carry `format: tdn`, so it passes with or without
+        the key in VOLATILE_KEYS.
+        """
+        mod = self._load_textconv()
+        if mod is None:
+            self.skipTest('textconv template not found')
+        if not getattr(mod, '_HAVE_YAML', False):
+            self.skipTest('PyYAML unavailable in textconv module')
+
+        self.assertIn('format', mod.VOLATILE_KEYS,
+                      "'format' must be stripped or the 6.1 bump diffs "
+                      'one line in every tracked file')
+
+        net = {'version': '2.0', 'build': 7, 'generator': 'Embody/6.1.0',
+               'td_build': '2025', 'exported_at': '2026-08-27',
+               'source_file': 'P.toe',
+               'operators': [{'name': 'a', 'type': 'textDAT'}]}
+        old = self.tdn.tdn_dump(dict(net, format='tdn'))
+        new_ = self.tdn.tdn_dump(dict(net, format='tdxn'))
+        self.assertNotEqual(old, new_, 'fixture: the blobs must differ on disk')
+        self.assertEqual(
+            mod.normalize(old), mod.normalize(new_),
+            'the format bump must be invisible to git diff')
+
+    def test_content_equal_still_sees_the_format_bump(self):
+        """The paired inverse: 'format' is deliberately NOT in
+        TDXNExt._TDN_VOLATILE_KEYS, so the first save after upgrading rewrites
+        each tracked file once and then never again. Putting it there would
+        leave 6.0-stamped headers on disk forever.
+        """
+        self.assertNotIn('format', self.tdn._TDN_VOLATILE_KEYS,
+                         "'format' must stay comparable so files converge")
+        base = {'version': '2.0', 'operators': [{'name': 'a', 'type': 'textDAT'}]}
+        self.assertFalse(
+            self.tdn._tdn_content_equal(dict(base, format='tdxn'),
+                                        dict(base, format='tdn')),
+            'a format bump must count as a content change, or the one-time '
+            'convergence rewrite never happens')
+        self.assertTrue(
+            self.tdn._tdn_content_equal(dict(base, format='tdxn'),
+                                        dict(base, format='tdxn')),
+            'identical documents must still compare equal')
+
     # =================================================================
     # Save-path serializer emits YAML (guards the third caller)
     # =================================================================

@@ -1,10 +1,10 @@
-format: tdn
+format: tdxn
 version: '2.0'
 build: 41
-generator: Embody/6.0.25
-td_build: 099.2025.32820
-source_file: Embody-6.25.toe
-exported_at: '2026-06-13T05:52:38Z'
+generator: Embody/6.1.7
+td_build: 099.2025.33070
+source_file: Embody-6.289.toe
+exported_at: '2026-08-28T07:53:19Z'
 network_path: /embody/Embody/list
 options:
   include_dat_content: false
@@ -75,6 +75,7 @@ operators:
   - viewer
   position: [-275, 0]
   size: [130, 90]
+  dat_read_only: true
 - name: inject_parents
   type: scriptDAT
   parameters:
@@ -84,6 +85,7 @@ operators:
   color: [0.67, 0.67, 0.67]
   inputs:
   - select1
+  dat_read_only: true
 - name: list_callbacks
   type: textDAT
   parameters:

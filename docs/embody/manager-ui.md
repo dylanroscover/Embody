@@ -75,14 +75,14 @@ Since v6.0.278 the menu is ordered so the most-used actions (**Save**/**Reload**
 | Action | What it does |
 |--------|--------------|
 | **Reveal in Finder** / **Reveal in Explorer** | Opens the externalized file's folder. Shown only when the operator has a file on disk. |
-| **Embed DATs in tdn** | TDXN only. Per-COMP toggle (a check mark means on) overriding the **Embed DATs (default)** parameter. |
-| **Embed storage in tdn** | TDXN only. Per-COMP toggle for storage capture, same override behavior. |
-| **Copy tdn** / **Paste tdn** | TDXN only. Copies the COMP to the clipboard as a portable TDXN envelope, or pastes one over it. |
-| **Save tox** / **Save tdn** | Writes the externalization now. This is the one *explicit* save gesture, so it also overrides the empty-network overwrite guard — a deliberately emptied COMP can be written over its file here, where the automatic exports refuse (see [Externalization](externalization.md)). |
-| **Reload tox** / **Reload tdn** | Re-imports the COMP from its file on disk, discarding in-TD changes. Since v6.0.241 a `.tdxn` reload also rebuilds nested externalized children from their own `.tdxn` files, so nothing is left as an empty shell. |
+| **Embed DATs in tdxn** | TDXN only. Per-COMP toggle (a check mark means on) overriding the **Embed DATs (default)** parameter. |
+| **Embed storage in tdxn** | TDXN only. Per-COMP toggle for storage capture, same override behavior. |
+| **Copy tdxn** / **Paste tdxn** | TDXN only. Copies the COMP to the clipboard as a portable TDXN envelope, or pastes one over it. |
+| **Save tox** / **Save tdxn** | Writes the externalization now. This is the one *explicit* save gesture, so it also overrides the empty-network overwrite guard — a deliberately emptied COMP can be written over its file here, where the automatic exports refuse (see [Externalization](externalization.md)). |
+| **Reload tox** / **Reload tdxn** | Re-imports the COMP from its file on disk, discarding in-TD changes. Since v6.0.241 a `.tdxn` reload also rebuilds nested externalized children from their own `.tdxn` files, so nothing is left as an empty shell. |
 | **Export portable tox** | Writes a self-contained `.tox` with no external dependencies. |
-| **Convert to tox** / **Convert to tdn** | Switches the strategy; the button reads **Remove tox** / **Remove tdn** for the strategy that is currently active, which untags the operator instead. |
-| **Exclude from tdn** | TDXN only, since v6.0.278. Opens the exclusion panel scoped to this COMP: drag a parameter onto its drop zone to keep that value out of `.tdxn` exports (`tdn_exclude:<parname>`), or a COMP to exclude it entirely (bare `tdn_exclude`); every exclusion in the subtree is listed with a per-row **×**. See [Externalization](externalization.md#excluding-a-parameters-value-the-tdn_excludepar-tag). |
+| **Convert to tox** / **Convert to tdxn** | Switches the strategy; the button reads **Remove tox** / **Remove tdxn** for the strategy that is currently active, which untags the operator instead. |
+| **Exclude from tdxn** | TDXN only, since v6.0.278. Opens the exclusion panel scoped to this COMP: drag a parameter onto its drop zone to keep that value out of `.tdxn` exports (`tdn_exclude:<parname>`), or a COMP to exclude it entirely (bare `tdn_exclude`); every exclusion in the subtree is listed with a per-row **×**. See [Externalization](externalization.md#excluding-a-parameters-value-the-tdn_excludepar-tag). |
 
 Clicking a row's **File** cell opens the externalized file itself.
 

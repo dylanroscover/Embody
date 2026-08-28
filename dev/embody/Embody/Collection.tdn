@@ -1,10 +1,10 @@
-format: tdn
+format: tdxn
 version: '2.0'
-build: 2
-generator: Embody/6.0.138
+build: 3
+generator: Embody/6.1.4
 td_build: 099.2025.33070
-source_file: Embody-6.138.toe
-exported_at: '2026-07-20T11:16:09Z'
+source_file: Embody-6.286.toe
+exported_at: '2026-08-28T03:01:45Z'
 network_path: /embody/Embody/Collection
 options:
   include_dat_content: false
@@ -46,8 +46,8 @@ operators:
 annotations:
 - name: annotate1
   mode: annotate
-  title: scan + default-inert (untrusted TDN)
-  text: CollectionExt loads scanner + safe_import (self-contained DATs) to scan community TDN and disarm it before paste.
+  title: scan + default-inert (untrusted TDXN)
+  text: CollectionExt loads scanner + safe_import (self-contained DATs) to scan community TDXN and disarm it before paste.
   position: [-70, -270]
   size: [670, 530]
   color: [0.45, 0.45, 0.45]

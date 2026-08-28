@@ -5,7 +5,7 @@
 A realistic `.tdxn` file demonstrating all major features:
 
 ```yaml
-format: tdn
+format: tdxn
 version: '2.0'
 build: 3
 generator: Embody/6.0.4
@@ -129,7 +129,7 @@ Short numeric vectors like `[300, 0]` and `[0.2, 0.4, 0.8]` are inlined with YAM
 The simplest possible `.tdxn` file — a single operator with no custom settings:
 
 ```yaml
-format: tdn
+format: tdxn
 version: '2.0'
 generator: Embody/6.0.4
 td_build: '2025.32280'
@@ -147,7 +147,7 @@ operators:
 A network with annotations grouping related operators:
 
 ```yaml
-format: tdn
+format: tdxn
 version: '2.0'
 generator: Embody/6.0.4
 td_build: '2025.32280'

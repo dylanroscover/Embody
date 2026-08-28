@@ -801,11 +801,11 @@ function emitKey(key: string): string {
         slim vertical tab on the left edge was invisible to new visitors. */}
     <button class="tdn-tab" type="button" data-panel-open="tdn" aria-expanded="false" aria-controls="tdn-panel" aria-label="show TDXN source (t)" title="TDXN source (t)">
       <svg class="tdn-tab__icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6" /></svg>
-      <span class="tdn-tab__label"><span class="kbd" aria-hidden="true">t</span><span class="tdn-acr">dn</span>&nbsp;source</span>
+      <span class="tdn-tab__label"><span class="kbd" aria-hidden="true">t</span><span class="tdn-acr">dxn</span>&nbsp;source</span>
     </button>
-    <aside class="specimen-app__tdn app-panel is-collapsed" id="tdn-panel" data-panel="tdn" data-draggable aria-label="tdn source">
+    <aside class="specimen-app__tdn app-panel is-collapsed" id="tdn-panel" data-panel="tdn" data-draggable aria-label="tdxn source">
       <header class="specimen-app__tdn-head" data-drag-handle>
-        <p class="eyebrow"><span class="kbd" aria-hidden="true">t</span><span class="tdn-acr">dn</span> source</p>
+        <p class="eyebrow"><span class="kbd" aria-hidden="true">t</span><span class="tdn-acr">dxn</span> source</p>
         <CopyTdnEnvelopeButton
           tdn={tdn}
           slug={specimen.slug}
@@ -813,7 +813,7 @@ function emitKey(key: string): string {
           className="copy-button--summary"
           client:load
         />
-        <button type="button" class="tdn-close" data-panel-collapse="tdn" aria-label="close tdn source (t)" title="close (t)">
+        <button type="button" class="tdn-close" data-panel-collapse="tdn" aria-label="close tdxn source (t)" title="close (t)">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
         </button>
       </header>

@@ -1,5 +1,17 @@
 # Changelog
 
+## v6.1.7
+
+The TDXN rename shipped with its own name still showing in half the UI -- and two buttons that raised an exception when clicked.
+
+- **Copy tdxn / Paste tdxn work again.** Their callbacks still called `ext.TDN`, an accessor the rename removed. The live DATs had been fixed but `tagger.tdn` on disk had not, so the buttons worked in-session and would have raised `AttributeError` on the next project open, when the COMP is rebuilt from its file. The callbacks live as Python inside a `dat_content` string, which is why a search over `.py` files never saw them.
+- **The rest of the app says TDXN.** Keyboard-shortcut labels and help, the three Manager toolbar tooltips, the in-app Help panel, the chunked-export dialog window title and heading, and three network annotations were all untouched by the rename and still read TDN -- while the parameter labels beside them said TDXN. Of 207 custom parameters the only remaining TDN mention is **Migrate .tdn to .tdxn**, which is correct: that is what it migrates.
+- **An unchanged network is no longer rewritten.** Every `.tdxn` write funnels through one function, which now compares against what is already on disk and skips the write when only the volatile header differs. Before, any explicit save -- the Manager Save button, `save_externalization`, a dirty-driven save -- stamped a fresh `exported_at` and left the file modified in `git status` while `git diff` rendered *empty*, because the diff driver strips exactly those keys. The build number no longer advances on a save that writes nothing.
+- **Two more sources of that churn, closed.** Operator tags are a Python set and were serialized unsorted, so any operator with 2+ tags produced a phantom diff on every export (reported from the field). And a new `tdn_exclude:dat_content` tag drops a DAT rows while keeping the operator -- applied to Embody own log FIFO and status readout, which held a live "Saved 0s ago" string and between them rewrote `Embody.tdxn` on *every* save. That file is now byte-stable across repeated saves, and 15% smaller.
+- **Four ways the `.tdn` to `.tdxn` migration could corrupt a project.** A rename that failed still repointed every parent `tdn_ref` at a file that was never created. A parent whose ref rewrite failed validation and was rolled back from backup was reported as a success. A parent whose table row and file disagreed -- the crash-resume shape -- was dropped from the scan entirely, and an early return made that unrepairable on re-run. And `externalize_op` returned `success: True` for a `tag_type` the tagger had rejected, which after the rename is the natural wrong guess, since the strategy value is still `tdn`.
+
+30 new tests. Full suite: 4,069 passing, 116 skipped, zero failures.
+
 ## v6.1.5
 
 Picking one AI client used to mean the other one got nothing -- and five of the eight clients Embody offered were never given an Envoy connection at all.

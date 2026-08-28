@@ -4,7 +4,7 @@ Embody v{{VERSION}}
 
 Embody keeps TouchDesigner projects in version control. It
 externalizes your tagged COMPs and DATs to diffable files on
-disk (.tox, .tdn, .py, ...), so a binary .toe stops being the
+disk (.tox, .tdxn, .py, ...), so a binary .toe stops being the
 thing you have to trust -- the files are.
 
 Bundled with Embody is Envoy, an embedded MCP server that lets
@@ -41,7 +41,7 @@ the keys. Leave a binding empty to disable it.
 
 This panel is a quick orientation, not the manual. For the
 full reference -- supported formats, folder configuration,
-duplicate handling, the Manager UI, the TDN format, every
+duplicate handling, the Manager UI, the TDXN format, every
 Envoy tool, and troubleshooting -- see the docs:
 
   https://embody.tools

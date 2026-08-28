@@ -503,6 +503,36 @@ class TestTDNFileIO(EmbodyTestCase):
 			f"SaveTDN would write '{savetdn_name}{suffix}' but "
 			f"_resolveOutputPath returned '{resolved}'")
 
+	def test_savetdn_root_branch_derives_its_suffix_from_the_table(self):
+		"""Pin the mechanism the root snapshot's survival depends on.
+
+		SaveTDN('/') re-derives the root filename and calls safeDeleteFile()
+		on the stored one whenever the two differ. If that branch ever minted
+		the suffix instead of reading the tracked one, every legacy .tdn row
+		would differ from the derived .tdxn name and the first save after
+		upgrading would DELETE the project's existing root snapshot.
+
+		A source assertion because the behavioural test would need a live
+		strategy='tdn' root row, and creating one makes the next refresh
+		sweep export the entire project.
+		"""
+		src = self.embody.op('EmbodyExt').text
+		start = src.index("if opPath == '/':")
+		end = src.index("self.Externalizations[opPath, 'rel_file_path']", start)
+		branch = src[start:end]
+
+		# Guard the extraction itself: if these anchors ever drift apart the
+		# assertions below would pass against an empty/irrelevant slice.
+		self.assertIn('safeDeleteFile', branch,
+					  'anchors drifted -- this no longer covers the delete')
+		self.assertIn('_trackedTDNSuffix', branch,
+					  'root resync must read the tracked suffix from the table')
+		for minted in ("FILE_SUFFIX", "'.tdxn'", '".tdxn"', "'.tdn'", '".tdn"'):
+			self.assertNotIn(
+				minted, branch,
+				'root resync must not mint %s -- it would differ from every '
+				'legacy row and delete the stored snapshot' % minted)
+
 	# =================================================================
 	# ExportNetwork file output - end-to-end
 	# =================================================================
@@ -517,6 +547,61 @@ class TestTDNFileIO(EmbodyTestCase):
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = yaml.safe_load(f)
 		self.assertEqual(data['format'], 'tdxn')
+
+	def test_exported_tags_are_sorted_and_stable(self):
+		"""OP.tags is a SET, so an unsorted serialization reorders the tags
+		block between exports -- every operator with 2+ tags then shows a
+		phantom diff on every save, in a tool whose whole point is clean
+		diffs. Found in the field 2026-08-27 (moonshine output.tdn flipping
+		tdn_exclude:w / tdn_exclude:y with no real change).
+
+		Covers BOTH serialization paths: the root COMP's own tags and the
+		per-operator tags written by _exportSingleOp.
+		"""
+		root = self.sandbox.create(baseCOMP, 'tagsort_root')
+		for tag in ('omega', 'bravo'):          # deliberately unsorted
+			root.tags.add(tag)
+		kid = root.create(textDAT, 'tagsort_kid')
+		for tag in ('zebra', 'alpha', 'mango'):
+			kid.tags.add(tag)
+
+		docs = []
+		for i in range(3):
+			fp = str(Path(self._temp_dir) / ('tagsort_%d.tdn' % i))
+			res = self.embody.ext.TDXN.ExportNetwork(
+				root_path=root.path, output_file=fp)
+			self.assertTrue(res.get('success'), repr(res))
+			with open(fp, 'r', encoding='utf-8') as fh:
+				docs.append(yaml.safe_load(fh))
+
+		root_tags = docs[0].get('tags')
+		self.assertEqual(root_tags, sorted(root_tags),
+						 'root tags not sorted: %r' % (root_tags,))
+		self.assertIn('bravo', root_tags)
+
+		def all_tag_lists(node):
+			out = []
+			if isinstance(node, dict):
+				if isinstance(node.get('tags'), list):
+					out.append(node['tags'])
+				for v in node.values():
+					out.extend(all_tag_lists(v))
+			elif isinstance(node, list):
+				for v in node:
+					out.extend(all_tag_lists(v))
+			return out
+
+		lists = all_tag_lists(docs[0])
+		self.assertTrue(any(len(l) >= 3 for l in lists),
+						'fixture: expected a 3+ tag operator in the document')
+		for tags in lists:
+			self.assertEqual(tags, sorted(tags),
+							 'operator tags not sorted: %r' % (tags,))
+
+		# ...and identical across repeat exports, which is the actual symptom.
+		for later in docs[1:]:
+			self.assertEqual(all_tag_lists(later), lists,
+							 'tags block changed between exports')
 
 	def test_export_file_includes_source_file(self):
 		"""Exported TDN should contain source_file with the .toe filename."""

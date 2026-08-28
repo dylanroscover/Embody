@@ -18,7 +18,7 @@ TDXN (TouchDesigner eXternal Network) is a YAML-based file format for representi
 A `.tdxn` file is a YAML document with the following top-level fields:
 
 ```yaml
-format: tdn
+format: tdxn
 version: '2.0'
 build: 1
 generator: Embody/6.0.4
@@ -46,7 +46,7 @@ annotations: [ ... ]
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
+| `format` | string | Yes | `"tdxn"` as of Embody 6.1; `"tdn"` in files written by 6.0 and earlier, and by any older Embody that re-exports one. Both are permanently valid on read. |
 | `version` | string | Yes | Format version. Currently `2.0`. See [Back-compatibility](#back-compatibility) for how older versions are read. |
 | `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. **Omitted entirely** when the COMP has no build tracking (an untracked or portable network — no externalizations-table row and no `Build` parameter). Older files may carry an explicit `build: null`; readers still accept it. |
 | `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/6.0.4"`). |
@@ -154,7 +154,7 @@ v2.0 is the first YAML release of the format. Because YAML is a strict superset 
 - Legacy `.tdn` were tab-indented JSON, which YAML forbids as indentation; the json-first path reads them losslessly.
 - The v1.5 array-of-lines `dat_content` and the older newline-escaped string form both still import (see [DAT Content](#dat-content)).
 
-Migration is **lazy**: an existing JSON `.tdxn` is rewritten as YAML the next time Embody saves it. A v2.0 YAML file opened by a pre-2.0 Embody build (JSON-only reader) will not parse — new builds read old files, but old builds cannot read new ones.
+Migration is **lazy**: an existing JSON `.tdn` is rewritten as YAML the next time Embody saves it. A v2.0 YAML file opened by a pre-2.0 Embody build (JSON-only reader) will not parse — new builds read old files, but old builds cannot read new ones.
 
 **Hand-edit caveats** (do not apply to Embody-written files, which never emit these): a hand-written YAML float needing float typing must include a decimal point (`1.0e-07`, not `1e-07`); duplicate mapping keys are silently last-wins. Round-trip through Embody after manual edits.
 
@@ -1338,7 +1338,7 @@ Log warnings for skipped items where practical (a few malformed cases, like an o
 A realistic `.tdxn` file demonstrating all major features:
 
 ```yaml
-format: tdn
+format: tdxn
 version: '2.0'
 build: 3
 generator: Embody/6.0.4

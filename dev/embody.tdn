@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
-build: 1127
-generator: Embody/6.1.2
+build: 1155
+generator: Embody/6.1.7
 td_build: 099.2025.33070
-source_file: Embody-6.284.toe
-exported_at: '2026-08-27T17:51:57Z'
+source_file: Embody-6.289.toe
+exported_at: '2026-08-28T07:50:46Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -365,9 +365,37 @@ operators:
       startSection: true
       help: 'One-time, opt-in conversion of the network files you already have. Renames every tracked .tdn to .tdxn, repoints the externalizations table, and updates the tdn_ref pointers inside parent files so nested COMPs keep resolving. Contents are unchanged. New externalizations already use .tdxn -- this only affects existing files. Commit or stash first if the project is under version control; Embody performs the renames itself, so never git mv them. Safe to re-run: it converges.'
     Envoy:
+    - name: Configclient
+      style: Menu
+      label: Configure For
+      startSection: true
+      default: claudecode
+      menuNames:
+      - claudecode
+      - opencode
+      - codex
+      - gemini
+      - vscode
+      - cursor
+      - windsurf
+      - copilot
+      - antigravity
+      - none
+      menuLabels:
+      - Claude Code
+      - OpenCode
+      - Codex
+      - Gemini
+      - VS Code
+      - Cursor
+      - Windsurf
+      - GitHub Copilot (VS Code)
+      - Antigravity IDE
+      - None
+      help: 'Which AI client Embody generates config files for: its instruction files (rules, skills) and the MCP config THAT client reads -- the root .mcp.json is Claude Code''s format and no other client reads it. AGENTS.md and .mcp.json are written for every project regardless. Generation is additive and never removes, so selecting a second client later leaves the first one configured and still tracking bridge and port changes -- pick each in turn to serve several clients from one project. Set to None to generate no client config at all (Convoy-only projects).'
     - name: Aiclient
       style: Menu
-      label: AI Client
+      label: Launch Client
       default: '0'
       menuNames:
       - claudecode
@@ -378,6 +406,7 @@ operators:
       - cursor
       - windsurf
       - copilot
+      - antigravity
       - none
       menuLabels:
       - Claude Code
@@ -387,14 +416,15 @@ operators:
       - VS Code
       - Cursor
       - Windsurf
-      - GitHub Copilot
+      - GitHub Copilot (VS Code)
+      - Antigravity IDE
       - None
-      help: Selects the AI client used with Envoy. Determines which MCP configuration file format is generated (e.g. .mcp.json for Claude Code, opencode.json for OpenCode).
+      help: Which AI client the Launch button opens at the project root. Editors (VS Code, Cursor, Windsurf, Antigravity IDE) open the folder as a workspace; CLI tools (Claude Code, Codex, Gemini, OpenCode) open in a new terminal. GitHub Copilot runs inside VS Code, so it opens VS Code. This opens an app and writes nothing -- Configure For above decides which config files Embody generates.
       value: claudecode
     - name: Launchaiclient
       style: Pulse
       label: Launch AI Client
-      help: 'Open the AI client selected above at the project root: editors (VS Code, Cursor, Windsurf, Copilot) open the folder as a workspace; CLI tools (Claude Code, Codex, Gemini) open in a new terminal at the root.'
+      help: Open the client selected in AI Client at the project root (the AI Project Root setting decides which folder that is).
     - name: Aiprojectroot
       style: Menu
       label: AI Project Root
@@ -864,7 +894,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.1.2
+      value: 6.1.7
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -965,7 +995,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 309
+    rows: 311
     cols: 11
   flags:
   - viewer

@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
-build: 31
-generator: Embody/6.1.0
+build: 32
+generator: Embody/6.1.4
 td_build: 099.2025.33070
-source_file: Embody-6.282.toe
-exported_at: '2026-08-27T05:36:30Z'
+source_file: Embody-6.286.toe
+exported_at: '2026-08-28T02:59:05Z'
 network_path: /embody/Embody/tagger
 options:
   include_dat_content: false
@@ -660,7 +660,7 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDN.CopyNetworkToClipboard(oper)\n\treturn\n"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDXN.CopyNetworkToClipboard(oper)\n\treturn\n"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
@@ -810,7 +810,7 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDN.PasteNetworkFromClipboard(oper)\n\treturn\n"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDXN.PasteNetworkFromClipboard(oper)\n\treturn\n"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT

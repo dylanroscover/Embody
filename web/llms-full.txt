@@ -720,7 +720,7 @@ v2.0 is the first YAML release of the format. Because YAML is a strict superset 
 - Legacy `.tdn` were tab-indented JSON, which YAML forbids as indentation; the json-first path reads them losslessly.
 - The v1.5 array-of-lines `dat_content` and the older newline-escaped string form both still import (see [DAT Content](#dat-content)).
 
-Migration is **lazy**: an existing JSON `.tdxn` is rewritten as YAML the next time Embody saves it. A v2.0 YAML file opened by a pre-2.0 Embody build (JSON-only reader) will not parse - new builds read old files, but old builds cannot read new ones.
+Migration is **lazy**: an existing JSON `.tdn` is rewritten as YAML the next time Embody saves it. A v2.0 YAML file opened by a pre-2.0 Embody build (JSON-only reader) will not parse - new builds read old files, but old builds cannot read new ones.
 
 **Hand-edit caveats** (do not apply to Embody-written files, which never emit these): a hand-written YAML float needing float typing must include a decimal point (`1.0e-07`, not `1e-07`); duplicate mapping keys are silently last-wins. Round-trip through Embody after manual edits.
 

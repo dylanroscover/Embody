@@ -767,8 +767,17 @@ def externalize_op(ext, op_path: str, tag_type: str = None) -> dict:
             else:
                 return {'error': f'Cannot externalize {target.family} operators'}
 
-        # Apply the tag and run Update to externalize to disk
-        op.Embody.ext.Embody.applyTagToOperator(target, tag_type)
+        # Apply the tag and run Update to externalize to disk. The tagger
+        # REFUSES unknown values (the TDXN strategy's tag value is the frozen
+        # 'tdn', so 'tdxn' is the natural wrong guess) -- an unchecked return
+        # reported success while nothing was tagged.
+        if not op.Embody.ext.Embody.applyTagToOperator(target, tag_type):
+            tdn_tag = op.Embody.par.Tdntag.eval()
+            return {'error': f'{op_path}: tag_type {tag_type!r} was rejected. '
+                             f'COMPs accept "tox" or {tdn_tag!r} (the TDXN '
+                             f'strategy keeps the frozen {tdn_tag!r} value); '
+                             f'DATs accept a source type such as "py". '
+                             f'Nothing was tagged.'}
         op.Embody.Update()
 
         # Report the file actually written for the strategy: TDXN comps track

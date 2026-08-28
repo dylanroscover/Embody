@@ -371,6 +371,90 @@ class TestTDNExclude(EmbodyTestCase):
         walk(doc.get('operators', []))
         return names, refs
 
+    # ------------------------------------------------------------------
+    # H. tdn_exclude:dat_content -- drop a DAT's rows, keep the operator
+    # ------------------------------------------------------------------
+
+    @property
+    def content_tag(self):
+        return '%s:dat_content' % self.exclude_tag
+
+    def _table(self, name, rows, excluded=False):
+        d = self.sandbox.create(tableDAT, name)
+        d.clear()
+        for r in rows:
+            d.appendRow(r)
+        if excluded:
+            d.tags.add(self.content_tag)
+        return d
+
+    def test_dat_content_exclude_drops_rows_but_keeps_the_operator(self):
+        """A log FIFO / status readout is runtime state, not authored work.
+        The op must survive (it is real UI); only its rows are dropped.
+        """
+        host = self.sandbox.create(baseCOMP, 'dc_host')
+        keep = host.create(tableDAT, 'dc_keep')
+        keep.clear(); keep.appendRow(['authored', 'value'])
+        drop = host.create(tableDAT, 'dc_drop')
+        drop.clear(); drop.appendRow(['runtime', 'state'])
+        drop.tags.add(self.content_tag)
+
+        ops = {o.get('name'): o for o in self._export_doc(host).get(
+            'operators', [])}
+        self.assertIn('dc_drop', ops, 'the operator itself must still export')
+        self.assertIn('dat_content', ops['dc_keep'],
+                      'fixture: an untagged DAT should carry its content')
+        self.assertNotIn('dat_content', ops['dc_drop'],
+                         'tagged DAT still exported its rows')
+
+    def test_dat_content_exclude_beats_the_saved_nowhere_else_net(self):
+        """The content-safety net force-captures DATs whose content exists
+        nowhere on disk. This tag is the one sanctioned way past it -- without
+        that precedence the tag would be inert for exactly the ops it targets
+        (an unbacked table is the whole use case)."""
+        d = self._table('dc_unbacked', [['a']], excluded=True)
+        self.assertFalse(
+            self.tdn_ext._isDATContentSavedOnDisk(d),
+            'fixture: this DAT must be unbacked or the test proves nothing')
+        ops = {o.get('name'): o for o in self._export_doc(
+            self.sandbox).get('operators', [])}
+        self.assertIn('dc_unbacked', ops)
+        self.assertNotIn('dat_content', ops['dc_unbacked'])
+
+    def test_dat_content_exclude_survives_a_roundtrip(self):
+        """The tag round-trips, so the omission is visible on disk and the
+        next export from a reconstructed network still omits."""
+        d = self._table('dc_rt', [['x']], excluded=True)
+        ops = {o.get('name'): o for o in self._export_doc(
+            self.sandbox).get('operators', [])}
+        self.assertIn(self.content_tag, ops['dc_rt'].get('tags') or [],
+                      'the exclusion must be visible in the exported file')
+
+    def test_dat_content_exclude_does_not_warn_as_an_unknown_par(self):
+        """It shares the tdn_exclude:<par> prefix, so the par reader must
+        treat 'dat_content' as reserved rather than warning about a typo."""
+        d = self._table('dc_noparwarn', [['y']], excluded=True)
+        self.assertEqual(self.tdn_ext._tagOmittedParNames(d), set(),
+                         'reserved name leaked into the par-omission set')
+
+    def test_dat_content_exclude_silences_the_at_risk_warning(self):
+        """The at-risk warner exists to mirror the exporter. If it still
+        flagged a deliberately excluded DAT the two would contradict."""
+        d = self._table('dc_atrisk', [['z']], excluded=True)
+        flagged = [x.path
+                   for _c, dats in self.embody.ext.Embody._findAtRiskDATs()
+                   for x in dats]
+        self.assertNotIn(d.path, flagged,
+                         'excluded DAT still reported as at-risk')
+
+    def test_untagged_dat_is_unaffected(self):
+        """Guard the guard: the mechanism must be opt-in."""
+        d = self._table('dc_untagged', [['still', 'here']])
+        self.assertFalse(self.tdn_ext._datContentExcluded(d))
+        ops = {o.get('name'): o for o in self._export_doc(
+            self.sandbox).get('operators', [])}
+        self.assertIn('dat_content', ops['dc_untagged'])
+
     def test_export_has_no_structural_reference_to_excluded(self):
         parent, keep, drop, inside = self._build()
         names, refs = self._collect_all_refs(self._export_doc(parent))
