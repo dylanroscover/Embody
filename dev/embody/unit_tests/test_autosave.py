@@ -41,7 +41,7 @@ class TestAutosave(EmbodyTestCase):
 
     def tearDown(self):
         ext = self.embody_ext
-        backup_dir = Path(project.folder) / '.tdn_backup'
+        tdxn = self.embody.ext.TDXN
         for comp_path, abs_tdn in self._tdn_cleanup:
             try:
                 ext._removeTDNStrategy(comp_path, delete_file=True)
@@ -53,9 +53,16 @@ class TestAutosave(EmbodyTestCase):
             except OSError:
                 pass
             try:
-                # backups mirror the .tdn's relative path under .tdn_backup
-                for bak in backup_dir.rglob(os.path.basename(abs_tdn) + '*'):
-                    bak.unlink()
+                # EXACT mirrored paths, never an rglob on the basename:
+                # this is the LIVE project's backup dir, and a test COMP
+                # that happens to share a basename with a real one would
+                # unlink the real project's only recovery copy.
+                # _backup_candidates covers both dirs, both generations,
+                # and both network suffixes.
+                for bak in tdxn._backup_candidates(
+                        abs_tdn, str(project.folder)):
+                    if bak.is_file():
+                        bak.unlink()
             except Exception:
                 pass
         ext._pending_checkpoint_roots.clear()

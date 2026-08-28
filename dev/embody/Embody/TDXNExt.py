@@ -1,4 +1,4 @@
-﻿"""
+"""
 TDXN -- TouchDesigner eXternal Network open format (.tdxn)
 
 Exports and imports TouchDesigner networks as human-readable YAML files
@@ -110,10 +110,19 @@ TDN_VERSION = '2.0'  # was '1.5'
 #
 # NOT derived from these -- frozen 'tdn' identity/wire values, forever:
 #   externalizations `strategy` token, par.Tdntag default, the diff=tdn git
-#   driver name, .tdn_backup/, the `tdn_ref` key, the _embody_tdn envelope
-#   marker, the MCP tool names, and all 25 Tdn*/*tdn* parameter NAMES.
-#   Changing any of them orphans existing rows, tags, git config, or
-#   clipboard payloads. See docs/tdn/specification.md.
+#   driver name, the `tdn_ref` key, the _embody_tdn envelope marker, the
+#   MCP tool names, and all 25 Tdn*/*tdn* parameter NAMES.
+#   Every one is PERSISTED somewhere Embody does not own and cannot
+#   rewrite: rows in a committed .tsv, tags/pars baked into saved .toe
+#   files, a key in the user's .gitattributes + git config, a key INSIDE
+#   committed .tdxn files, a clipboard payload crossing machines and
+#   versions. Changing any of them orphans that data.
+#   NOT on this list (v6.1.6): the backup directory. It was frozen here by
+#   mistake -- regenerable scratch persisted nowhere, named by one literal,
+#   and safe to delete by our own docs. It is now BACKUP_DIR
+#   ('.embody_backup'), format-neutral because it holds .tdn.bak and
+#   .tdxn.bak simultaneously and always will.
+#   See docs/tdn/specification.md.
 TDN_FILE_SUFFIX = '.tdxn'
 TDN_FILE_SUFFIXES = ('.tdxn', '.tdn')
 TDN_FORMAT = 'tdxn'
@@ -461,32 +470,146 @@ class TDXNExt:
 	# CRASH SAFETY -- atomic writes, backup rotation, validation
 	# =========================================================================
 
+	# Backup dir name, renamed from '.tdn_backup' (v6.1.6). Two constraints
+	# fixed this shape:
+	#   - No format token: the dir holds .tdn.bak AND .tdxn.bak forever (a
+	#     COMP externalized before v6.1.0 keeps writing .tdn), so 'tdn'/
+	#     'tdxn' in the name is a lie about half the contents.
+	#   - NOT nested inside .embody/: Uninstall deletes that dir wholesale
+	#     (embody_admin.compute_uninstall_plan) and its ignore entry has an
+	#     interior slash, so git anchors it to the git root -- a .toe in a
+	#     repo subfolder would leave backups untracked AND inside a plain
+	#     `git clean -fd`'s reach (issue #85 class, verified with
+	#     git check-ignore). A slash-free name at project.folder matches at
+	#     any depth and stays outside the uninstall blast radius.
+	# Root is project.folder, never _findProjectRoot(): that resolver is
+	# steerable by the Aiprojectroot par and self-heals to a DIFFERENT dir
+	# on a missing custom drive -- a recovery store whose location a
+	# preference can move is not a recovery store.
+	BACKUP_DIR = '.embody_backup'
+	LEGACY_BACKUP_DIR = '.tdn_backup'
+
 	@staticmethod
-	def _get_backup_path(tdn_path: str, project_folder: str,
-						 suffix: str = '.bak') -> Path:
-		"""Compute backup path for a .tdn file.
+	def _get_backup_path(tdn_path: str, backup_root: str,
+						 suffix: str = '.bak', legacy: bool = False) -> Path:
+		"""Compute backup path for a network file (.tdxn or .tdn).
 
 		Mirrors the relative directory structure under
-		{project_folder}/.tdn_backup/.
+		{backup_root}/.embody_backup/. `backup_root` MUST be the same root
+		the mirror is measured from -- basing the dir on one root and the
+		relative path on another drops the intervening segment and lets two
+		sibling projects in one repo overwrite each other's copies.
+
+		legacy=True returns the pre-v6.1.6 .tdn_backup/ location. Writes
+		never use it; _find_existing_backup reads it so a project that
+		upgraded mid-life keeps its recovery net.
 
 		Example:
-			tdn_path:       /proj/embody/Foo/bar.tdn
-			project_folder: /proj
-			result:         /proj/.tdn_backup/embody/Foo/bar.tdn.bak
+			tdn_path:    /proj/embody/Foo/bar.tdxn
+			backup_root: /proj
+			result:      /proj/.embody_backup/embody/Foo/bar.tdxn.bak
 		"""
 		tdn = Path(tdn_path)
-		proj = Path(project_folder)
+		proj = Path(backup_root)
 		try:
 			rel = tdn.relative_to(proj)
 		except ValueError:
-			# tdn_path not under project_folder -- fall back to flat name
+			# tdn_path not under backup_root -- fall back to flat name
 			rel = Path(tdn.name)
-		backup_dir = proj / '.tdn_backup'
+		backup_dir = proj / (TDXNExt.LEGACY_BACKUP_DIR if legacy
+							 else TDXNExt.BACKUP_DIR)
 		return backup_dir / (str(rel) + suffix)
 
 	@staticmethod
-	def _rotate_backups(tdn_path: str, project_folder: str) -> None:
-		"""Rotate backup copies before overwriting a .tdn file.
+	def _backup_candidates(tdn_path: str, backup_root: str,
+						   legacy_only: bool = False) -> list:
+		"""Every path a backup of this network file could occupy.
+
+		THREE axes vary, because each one has silently orphaned copies:
+		  - directory: current .embody_backup/ and legacy .tdn_backup/
+		  - generation: .bak and .bak2
+		  - network suffix: MigrateToTDXN renames foo.tdn -> foo.tdxn on
+		    disk WITHOUT touching backups, so a migrated COMP's only copies
+		    are still named foo.tdn.bak. Confirmed in the wild: one backup
+		    dir holding Embody.tdn.bak beside guard_victim.tdxn.bak.
+		"""
+		src = Path(tdn_path)
+		names = [str(src)]
+		for suffix in TDN_FILE_SUFFIXES:
+			alt = str(src.with_suffix(suffix))
+			if alt not in names:
+				names.append(alt)
+		dirs = (True,) if legacy_only else (False, True)
+		return [TDXNExt._get_backup_path(name, backup_root, gen, legacy)
+				for name in names
+				for legacy in dirs
+				for gen in ('.bak', '.bak2')]
+
+	@staticmethod
+	def _find_existing_backup(tdn_path: str,
+							  backup_root: str) -> Optional[Path]:
+		"""Newest VALID backup of a network file, or None.
+
+		Switch-forward + dual-read: rotation only ever writes
+		.embody_backup/, and a legacy .tdn_backup/ is read for any file
+		whose copies were not superseded there yet (see _rotate_backups).
+
+		Selected by MTIME, never by probe order. shutil.copy2 preserves the
+		source mtime, so a backup's mtime IS the generation timestamp of
+		the content inside it -- and a fixed order is wrong the moment a
+		pre-v6.1.6 Embody (a downgrade, a mixed-version fleet, two machines
+		on one synced project folder) keeps rotating into the legacy dir
+		while the current one sits frozen. Handing back the stale copy is
+		not a near-miss: both consumers feed it to
+		ImportNetwork(clear_first=True).
+
+		VALIDITY is checked, not just existence. Rotation copies with
+		shutil.copy2, which is NOT atomic, so a crash or a full disk leaves
+		a truncated .bak -- and existence-only selection would return it
+		and stop, making .bak2 unreachable in exactly the case it exists
+		for. Only runs on failure paths (a failed validation or a failed
+		reconstruct), so parsing a handful of candidates costs nothing on
+		the save path.
+		"""
+		best = None
+		best_mtime = None
+		for p in TDXNExt._backup_candidates(tdn_path, backup_root):
+			try:
+				if not p.is_file():
+					continue
+				if not TDXNExt._validate_tdn_file(str(p)).get('valid'):
+					continue
+				mtime = p.stat().st_mtime
+			except OSError:
+				continue
+			if best_mtime is None or mtime > best_mtime:
+				best, best_mtime = p, mtime
+		return best
+
+	@staticmethod
+	def _ensure_backup_dir_ignored(backup_root: str) -> None:
+		"""Make the backup dir self-ignoring to git.
+
+		TDXNExt writes backups unconditionally, but the managed .gitignore
+		entry only lands when Envoy configures an AI client -- so an
+		Envoy-off, Convoy-only, or declined-prompt install would accumulate
+		untracked .bak files inside a plain `git clean -fd`'s reach (issue
+		#85's shape, re-armed by the rename since those repos may already
+		carry a hand-written .tdn_backup/ line). A one-line '*' beside the
+		copies needs no git-root discovery, is idempotent, and covers the
+		window before Envoy ever runs.
+		"""
+		marker = Path(backup_root) / TDXNExt.BACKUP_DIR / '.gitignore'
+		try:
+			if not marker.exists():
+				marker.parent.mkdir(parents=True, exist_ok=True)
+				marker.write_text('*\n', encoding='utf-8')
+		except OSError:
+			pass
+
+	@staticmethod
+	def _rotate_backups(tdn_path: str, backup_root: str) -> None:
+		"""Rotate backup copies before overwriting a network file.
 
 		Keeps 2 generations: .bak (previous) and .bak2 (one before that).
 		Uses shutil.copy2 (not rename) so the original stays in place
@@ -498,8 +621,8 @@ class TDXNExt:
 		if not src.is_file():
 			return
 
-		bak = TDXNExt._get_backup_path(tdn_path, project_folder, '.bak')
-		bak2 = TDXNExt._get_backup_path(tdn_path, project_folder, '.bak2')
+		bak = TDXNExt._get_backup_path(tdn_path, backup_root, '.bak')
+		bak2 = TDXNExt._get_backup_path(tdn_path, backup_root, '.bak2')
 
 		# Rotate: .bak -> .bak2
 		if bak.is_file():
@@ -508,7 +631,28 @@ class TDXNExt:
 
 		# Copy current -> .bak
 		bak.parent.mkdir(parents=True, exist_ok=True)
+		TDXNExt._ensure_backup_dir_ignored(backup_root)
 		shutil.copy2(str(src), str(bak))
+
+		# Retire THIS file's legacy copies, once its current-dir .bak is
+		# actually in place. Per-file and post-success, so a valid backup
+		# always exists -- none of the bulk-migration race this deliberately
+		# avoids. Without it a downgrade to <= v6.1.5 reads a .tdn_backup
+		# copy frozen at upgrade time and silently restores a stale network
+		# over live work; with the copies gone that old code reports "no
+		# backup available" and leaves the COMP alone, which is the safe
+		# outcome. Current-dir copies under a pre-migration suffix are NOT
+		# retired -- mtime selection can only pick one when it genuinely is
+		# the newest.
+		if not bak.is_file():
+			return
+		for stale in TDXNExt._backup_candidates(
+				tdn_path, backup_root, legacy_only=True):
+			try:
+				if stale.is_file():
+					stale.unlink()
+			except OSError:
+				pass  # best effort -- a surviving legacy copy is not fatal
 
 	@staticmethod
 	def _atomic_write(filepath: str, content: str) -> None:
@@ -580,52 +724,117 @@ class TDXNExt:
 
 	@staticmethod
 	def _safe_write_tdn(tdn_path: str, content: str,
-						project_folder: str) -> dict:
+						backup_root: str) -> dict:
 		"""Write a .tdn file with full crash safety.
 
+		0. Skip the write entirely when the file already holds this network
 		1. Rotate backups (.bak, .bak2)
 		2. Atomic write (temp file + rename + fsync)
 		3. Post-write validation (read back + TDXN parse)
-		4. If validation fails, restore from .bak
+		4. If validation fails, restore from the newest surviving backup
 
-		Returns {'success': True} or {'error': '...'}.
+		Returns {'success': True} or {'error': '...'}; a skipped no-op adds
+		'skipped': True.
 		"""
-		# Step 1: Backup rotation (only if file already exists)
+		# Step 0: no-op guard. EVERY .tdn write funnels through here, so one
+		# check covers every caller. Without it an explicit save rewrites the
+		# file with a fresh exported_at even when the network is identical --
+		# the file reads modified in `git status` while `git diff` renders
+		# EMPTY, because textconv strips exactly those header keys. Equality
+		# ignores the volatile header (_TDN_VOLATILE_KEYS) but NOT format or
+		# version, so the one-time tdn->tdxn convergence still writes.
+		# onProjectPreSave has always done this; here it covers all paths.
 		try:
-			TDXNExt._rotate_backups(tdn_path, project_folder)
+			existing = TDXNExt._read_existing_tdn(tdn_path)
+			if existing is not None:
+				incoming = tdn_load(content)
+				if isinstance(incoming, dict) and TDXNExt._tdn_content_equal(
+						incoming, existing):
+					return {'success': True, 'skipped': True}
 		except Exception:
-			# Backup failure should not block the write -- log but continue.
-			# The write itself is still atomic.
+			# Never let the optimization block a real write.
 			pass
+
+		# Step 1: Backup rotation (only if file already exists)
+		backup_error = None
+		try:
+			TDXNExt._rotate_backups(tdn_path, backup_root)
+		except Exception as e:
+			# Rotation failure must not BLOCK the write (that write is still
+			# atomic), but it must not be silent either -- this write ran
+			# with no recovery net, which is the one thing this subsystem
+			# exists to prevent. Rides back on the result instead of being
+			# logged here: _safe_write_tdn is reached from a WORKER thread
+			# (ExportNetworkAsync), where debug()/self._log are forbidden.
+			backup_error = str(e)
 
 		# Step 2: Atomic write
 		try:
 			TDXNExt._atomic_write(tdn_path, content)
 		except Exception as e:
-			return {'error': f'Atomic write failed: {e}'}
+			return {'error': f'Atomic write failed: {e}',
+					'backup_error': backup_error}
 
 		# Step 3: Post-write validation
 		validation = TDXNExt._validate_tdn_file(tdn_path)
 		if validation.get('valid'):
-			return {'success': True}
+			result = {'success': True}
+			if backup_error:
+				result['backup_error'] = backup_error
+			return result
 
 		# Step 4: Validation failed -- attempt restore from backup
 		error_msg = validation.get('error', 'unknown')
-		bak = TDXNExt._get_backup_path(tdn_path, project_folder, '.bak')
-		if bak.is_file():
+		bak = TDXNExt._find_existing_backup(tdn_path, backup_root)
+		if bak is not None:
 			try:
 				shutil.copy2(str(bak), tdn_path)
+				# Re-validate what actually landed. The candidate parsed
+				# before the copy, but the copy itself can truncate (full
+				# disk, killed mid-write) -- and reporting "restored from"
+				# over a still-corrupt file is the worst outcome available:
+				# it tells the caller recovery succeeded.
+				recheck = TDXNExt._validate_tdn_file(tdn_path)
+				if not recheck.get('valid'):
+					return {'error': f'Validation failed ({error_msg}) and '
+									 f'the restore from {bak} did not '
+									 f'validate either '
+									 f'({recheck.get("error", "unknown")})',
+							'backup_error': backup_error}
+				# Name the file restored FROM: the newest valid copy can be
+				# an older generation, a pre-migration suffix, or the legacy
+				# dir, and a silent revert to a stale network is its own
+				# data loss.
 				return {'error': f'Validation failed ({error_msg}), '
-								 f'restored from backup'}
+								 f'restored from {bak}',
+						'restored_from': str(bak),
+						'backup_error': backup_error}
 			except Exception as restore_e:
 				return {'error': f'Validation failed ({error_msg}) '
-								 f'and backup restore failed: {restore_e}'}
-		return {'error': f'Validation failed ({error_msg}), no backup available'}
+								 f'and backup restore failed: {restore_e}',
+						'backup_error': backup_error}
+		return {'error': f'Validation failed ({error_msg}), no backup available',
+				'backup_error': backup_error}
 
 	def _get_backup_path_instance(self, tdn_path: str,
 								  suffix: str = '.bak') -> Path:
-		"""Instance wrapper for _get_backup_path using project.folder."""
+		"""Instance wrapper for _get_backup_path, rooted at project.folder.
+
+		MAIN THREAD ONLY -- reads the TD `project` global.
+
+		Computes where the CURRENT .bak would go; does not check it exists.
+		No shipped caller uses it (both rollback sites moved to the finder);
+		kept because it is the natural probe when you want the write
+		location rather than the newest recoverable copy.
+		"""
 		return TDXNExt._get_backup_path(tdn_path, str(project.folder), suffix)
+
+	def _find_existing_backup_instance(self, tdn_path: str) -> Optional[Path]:
+		"""Instance wrapper for _find_existing_backup (project.folder root).
+
+		MAIN THREAD ONLY -- reads the TD `project` global.
+		"""
+		return TDXNExt._find_existing_backup(tdn_path, str(project.folder))
 
 	# =========================================================================
 	# CONTENT COMPARISON
@@ -1218,7 +1427,8 @@ class TDXNExt:
 			root_color = tuple(root_op.color)
 			if self._colorsDiffer(root_color, DEFAULT_COLOR):
 				tdn['color'] = [round(c, 4) for c in root_color]
-			root_tags = list(root_op.tags)
+			# sorted: see the tags note in _exportSingleOp
+			root_tags = sorted(root_op.tags)
 			if root_tags:
 				tdn['tags'] = root_tags
 			if root_op.comment:
@@ -1246,8 +1456,15 @@ class TDXNExt:
 
 			# Write to file if requested
 			if output_file:
-				# Scan from project folder -- TDXN paths mirror TD hierarchy
+				# Scan from project folder -- TDXN paths mirror TD hierarchy.
+				# scan_folder and backup_root are the SAME value but must
+				# stay separate names: scan_folder is _cleanupStaleTDNFiles'
+				# delete-safety boundary, backup_root is where rotation
+				# mirrors copies. One variable serving both meant a change
+				# to the backup root would silently widen a DELETE scope
+				# (the 2026-07-01 18-specimen shape).
 				scan_folder = str(project.folder)
+				backup_root = str(project.folder)
 				filepath = self._resolveOutputPath(output_file, root_op)
 				content = TDXNExt._compact_json_dumps(tdn)
 
@@ -1272,10 +1489,18 @@ class TDXNExt:
 						before_tdn, resolve_cache=resolve_cache)
 
 				write_result = TDXNExt._safe_write_tdn(
-					filepath, content, scan_folder)
+					filepath, content, backup_root)
 				if not write_result.get('success'):
 					return {'error':
 						f'Safe write failed: {write_result.get("error")}'}
+				# Rotation failed but the write went through -- that file
+				# was written with no recovery net. Main thread here, so
+				# this is where the worker-safe result dict gets voiced.
+				if write_result.get('backup_error'):
+					self._log(
+						f'Backup rotation FAILED for {filepath} '
+						f'({write_result["backup_error"]}) -- the write '
+						f'succeeded but had no recovery copy', 'WARNING')
 
 				if not skip_cleanup:
 					protected = [filepath]
@@ -1290,11 +1515,17 @@ class TDXNExt:
 							'INFO')
 
 				result['file'] = filepath
+				# Surface the no-op so callers can undo work they did in
+				# anticipation of a write (SaveTDN rolls its build bump back).
+				skipped = bool(write_result.get('skipped'))
+				if skipped:
+					result['skipped'] = True
 				self._trackTDNExport(root_path, filepath,
 					build_num=build_num,
 					touch_build=f'{app.version}.{app.build}')
 				self._log(
-					f'Exported network to {filepath}', 'SUCCESS')
+					f'Network unchanged, kept {filepath}' if skipped
+					else f'Exported network to {filepath}', 'SUCCESS')
 
 				# These warnings recursively scan descendants and can pop a modal
 				# ui.messageBox -- never do that on a frequent autosave checkpoint
@@ -1380,6 +1611,12 @@ class TDXNExt:
 			'build': self._getBuildNumber(root_op),
 			'project_name': project.name.removesuffix('.toe'),
 			'project_folder': str(project.folder),
+			# Same value as project_folder, separate key on purpose: the
+			# worker uses project_folder as _cleanupStaleTDNFiles' DELETE
+			# boundary and backup_root as the rotation root. Resolved here
+			# on the main thread and carried as a plain string -- the
+			# worker must never touch project/par/storage to get it.
+			'backup_root': str(project.folder),
 			'ext_folder': self.ownerComp.ext.Embody.ExternalizationsFolder,
 		}
 
@@ -1545,10 +1782,11 @@ class TDXNExt:
 				# to avoid GIL contention with rglob/scandir)
 				before_tdn = state.get('before_tdn', set())
 				base_folder = state['metadata']['project_folder']
+				backup_root = state['metadata']['backup_root']
 
 				content = TDXNExt._compact_json_dumps(tdn)
 				write_result = TDXNExt._safe_write_tdn(
-					state['output_file'], content, base_folder)
+					state['output_file'], content, backup_root)
 				if not write_result.get('success'):
 					state['result'] = {
 						'error': f'Safe write failed: '
@@ -1566,6 +1804,8 @@ class TDXNExt:
 					'op_count': op_count,
 					'file': state['output_file'],
 					'cleaned_up': len(stale) if stale else 0,
+					# Voiced by _onExportSuccess on the main thread.
+					'backup_error': write_result.get('backup_error'),
 				}
 			else:
 				state['result'] = {
@@ -1778,7 +2018,8 @@ class TDXNExt:
 					if self._colorsDiffer(root_color, DEFAULT_COLOR):
 						root_meta['color'] = [
 							round(c, 4) for c in root_color]
-					root_tags = list(root_op.tags)
+					# sorted: see the tags note in _exportSingleOp
+					root_tags = sorted(root_op.tags)
 					if root_tags:
 						root_meta['tags'] = root_tags
 					if root_op.comment:
@@ -1828,6 +2069,11 @@ class TDXNExt:
 					build_num=state['metadata'].get('build'),
 					touch_build=state['metadata'].get('td_build'))
 			self._log(msg, 'SUCCESS')
+			if result.get('backup_error'):
+				self._log(
+					f"Backup rotation FAILED for {result.get('file')} "
+					f"({result['backup_error']}) -- the write succeeded but "
+					f"had no recovery copy", 'WARNING')
 			if result.get('cleaned_up'):
 				self._log(
 					f"Cleaned up {result['cleaned_up']} stale .tdn file(s)",
@@ -2623,8 +2869,12 @@ class TDXNExt:
 		if target.comment:
 			data['comment'] = target.comment
 
-		# Tags
-		tags = list(target.tags)
+		# Tags. OP.tags is a SET, so serializing it unsorted reorders the
+		# block between exports and every 2+-tag operator shows a phantom
+		# diff on each save (field 2026-08-27, moonshine output.tdn).
+		# Import is order-independent (.add() into a set), and the rest of
+		# Embody already sorts -- see EmbodyExt._computeTDNFingerprint.
+		tags = sorted(target.tags)
 		if tags:
 			data['tags'] = tags
 
@@ -2675,7 +2925,10 @@ class TDXNExt:
 		#
 		# Skip content for read-only DATs (e.g. glsl1_info, popto1) --
 		# TD auto-generates their content and rejects writes on import.
-		if target.family == 'DAT' and (
+		# tdn_exclude:dat_content opts a DAT's rows out entirely -- the one
+		# case where "saved nowhere else" is fine to lose, because the content
+		# is runtime state (a log ring buffer) rather than authored work.
+		if target.family == 'DAT' and not self._datContentExcluded(target) and (
 				options.get('include_dat_content', True) or
 				self._isInsideAnimationCOMP(target) or
 				not self._isDATContentSavedOnDisk(target)):
@@ -2966,6 +3219,23 @@ class TDXNExt:
 			return divergent[par_name]
 		return par.default
 
+	# Reserved tdn_exclude:<name> target -- a DAT's live CONTENT rather than a
+	# parameter. For ops whose rows are runtime state with no authored value
+	# (the log FIFO, a status readout): the "content exists nowhere else on
+	# disk" safety net below would otherwise capture them on every export, and
+	# a ring buffer rewrites the .tdn on every save.
+	DAT_CONTENT_EXCLUDE = 'dat_content'
+
+	def _datContentExcluded(self, target) -> bool:
+		"""Is this DAT's content opted out via tdn_exclude:dat_content?"""
+		try:
+			prefix = str(self.ownerComp.par.Tdnexcludetag.eval()).strip()
+			if not prefix:
+				return False
+			return f'{prefix}:{TDXNExt.DAT_CONTENT_EXCLUDE}' in target.tags
+		except Exception:
+			return False
+
 	def _tagOmittedParNames(self, target):
 		"""Par names excluded from value export by the operator's own
 		tdn_exclude:<name> tags -- the project-side opt-out for runtime
@@ -2991,6 +3261,9 @@ class TDXNExt:
 					continue
 				name = t[len(marker):].strip()
 				if not name:
+					continue
+				if name == TDXNExt.DAT_CONTENT_EXCLUDE:
+					# Reserved: handled by _datContentExcluded, not a par.
 					continue
 				warn_key = (target.path, name)
 				par = getattr(target.par, name, None)

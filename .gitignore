@@ -45,6 +45,7 @@ opencode.json
 .gemini/settings.json
 .codex/config.toml
 .agents/mcp_config.json
+.embody_backup/
 
 # Other AI clients' generated configs. This repo's own AI client is Claude Code
 # (.claude/, CLAUDE.md, AGENTS.md are committed -- .claude/ is the source of
@@ -81,8 +82,6 @@ dev/marketing_lab/
 dev/_promo*
 
 # Embody / Envoy (auto-managed)
-.embody/*
-!.embody/project.json
 dev/embody/ext-diet-baseline/
 
 # Convoy planning documents -- internal, not for publication (CONVOY_PLAN.md D-3)

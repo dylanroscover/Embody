@@ -129,15 +129,16 @@ class TestConfigMigration(EmbodyTestCase):
                       f'entry must sit inside the managed block: {lines}')
 
     def test_negation_stays_below_its_ignore(self):
-        """git is last-match-wins: '!.embody/project.json' must remain
-        BELOW '.embody/*' or the committed td_build pin stops being
+        """git is last-match-wins: the negation must remain BELOW the
+        ignore it negates, or the committed td_build pin stops being
         tracked."""
         self._configure()
         lines = [ln.strip() for ln in self._lines()]
-        self.assertIn('.embody/*', lines)
-        self.assertIn('!.embody/project.json', lines)
+        self.assertIn('**/.embody/*', lines)
+        self.assertIn('!**/.embody/project.json', lines)
         self.assertLess(
-            lines.index('.embody/*'), lines.index('!.embody/project.json'),
+            lines.index('**/.embody/*'),
+            lines.index('!**/.embody/project.json'),
             f'negation must follow the ignore it negates: {lines}')
 
     def _setup_mod(self):
@@ -156,8 +157,8 @@ class TestConfigMigration(EmbodyTestCase):
             self._configure()
         finally:
             setup._project_json_ignore_decider = real
-        self.assertNotIn('!.embody/project.json', self._text())
-        self.assertNotIn('.embody/*', self._text(),
+        self.assertNotIn('!**/.embody/project.json', self._text())
+        self.assertNotIn('**/.embody/*', self._text(),
                          'the ignore half is withheld TOO: adding it would '
                          'make our rule the last file-level match on the '
                          'next startup, flip the decider to managed, and '
@@ -176,27 +177,34 @@ class TestConfigMigration(EmbodyTestCase):
             self._configure()
         finally:
             setup._project_json_ignore_decider = real
-        self.assertNotIn('!.embody/project.json', self._text())
-        self.assertNotIn('.embody/*', self._text())
+        self.assertNotIn('!**/.embody/project.json', self._text())
+        self.assertNotIn('**/.embody/*', self._text())
 
     def test_our_own_rule_as_decider_still_appends_the_pair(self):
-        """'.embody/*' deciding is OUR half of the pair mid-append,
-        never a user opt-out."""
-        setup = self._setup_mod()
-        real = setup._project_json_ignore_decider
-        setup._project_json_ignore_decider = (
-            lambda root: ('.embody/*', '.gitignore'))
-        try:
-            self._configure()
-        finally:
-            setup._project_json_ignore_decider = real
-        self.assertIn('!.embody/project.json', self._text())
+        """A .embody ignore deciding is OUR half of the pair mid-append,
+        never a user opt-out. BOTH the current '**/' form and the legacy
+        anchored one count: v6.1.6 changed the shipped entry, and a repo
+        still carrying '.embody/*' (ours until then, and hand-copied into
+        plenty of .gitignores) must not be read as a deliberate opt-out --
+        that withholds the negation and untracks project.json."""
+        for rule in ('**/.embody/*', '.embody/*'):
+            with self.subTest(rule=rule):
+                self.gitignore.unlink(missing_ok=True)
+                setup = self._setup_mod()
+                real = setup._project_json_ignore_decider
+                setup._project_json_ignore_decider = (
+                    lambda root, _r=rule: (_r, '.gitignore'))
+                try:
+                    self._configure()
+                finally:
+                    setup._project_json_ignore_decider = real
+                self.assertIn('!**/.embody/project.json', self._text())
 
     def test_probe_failure_fails_open(self):
         """No repo / no git -> None -> exactly the old behavior. The
         REAL probe runs here: self.tmp is not a git repository."""
         self._configure()
-        self.assertIn('!.embody/project.json', self._text())
+        self.assertIn('!**/.embody/project.json', self._text())
 
     def test_wrong_order_is_repaired_even_with_nothing_missing(self):
         """Both lines present but negation ABOVE the ignore used to
@@ -204,16 +212,16 @@ class TestConfigMigration(EmbodyTestCase):
         untracked."""
         self._configure()
         lines = [ln for ln in self._lines()
-                 if ln.strip() != '!.embody/project.json']
+                 if ln.strip() != '!**/.embody/project.json']
         idx = next(i for i, ln in enumerate(lines)
-                   if ln.strip() == '.embody/*')
-        lines.insert(idx, '!.embody/project.json')
+                   if ln.strip() == '**/.embody/*')
+        lines.insert(idx, '!**/.embody/project.json')
         self.gitignore.write_text('\n'.join(lines) + '\n',
                                   encoding='utf-8')
         self._configure()
         s = [ln.strip() for ln in self._lines()]
-        self.assertLess(s.index('.embody/*'),
-                        s.index('!.embody/project.json'),
+        self.assertLess(s.index('**/.embody/*'),
+                        s.index('!**/.embody/project.json'),
                         'negation must be re-seated BELOW the ignore')
 
     def test_stale_line_outside_a_managed_block_is_user_content(self):
@@ -294,11 +302,16 @@ class TestConfigMigration(EmbodyTestCase):
             encoding='utf-8')
         self._configure()
         lines = [ln.strip() for ln in self._lines()]
-        self.assertIn('!.embody/project.json', lines)
+        self.assertIn('!**/.embody/project.json', lines)
         self.assertIn('.embody/*', lines)
+        # The planted rule is the LEGACY anchored form on purpose: git is
+        # last-match-wins, so a pre-v6.1.6 line below the managed block
+        # re-ignores project.json unless the negation is seated under IT,
+        # not merely under our own current entry.
         self.assertLess(
-            lines.index('.embody/*'), lines.index('!.embody/project.json'),
-            f'negation must end up BELOW the ignore: {lines}')
+            lines.index('.embody/*'),
+            lines.index('!**/.embody/project.json'),
+            f'negation must end up BELOW the last .embody ignore: {lines}')
 
     def test_user_content_is_preserved(self):
         """The writer must never disturb lines the user owns."""
@@ -310,48 +323,109 @@ class TestConfigMigration(EmbodyTestCase):
             self.assertIn(own, text)
         self.assertEqual(1, self._header_count())
 
-    def test_tdn_backup_is_ignored(self):
-        """Issue #85: `.tdn_backup/` holds rotated .bak/.bak2 crash-recovery
-        copies of every .tdn -- machine-local scratch that git must not
-        track. The changelog claimed it was git-ignored from v5.0.227, but
-        the entry only ever existed in Embody's own hand-written
-        .gitignore; generated projects never got it and picked the backups
-        up as untracked files.
+    def test_backup_dirs_are_ignored(self):
+        """Issue #85: the rotated .bak/.bak2 crash-recovery copies of every
+        externalized network file are machine-local scratch git must not
+        track. The changelog claimed this from v5.0.227, but the entry only
+        ever existed in Embody's own hand-written .gitignore; generated
+        projects never got it and picked the backups up as untracked files.
 
-        Existing projects get it through the same backfill path, so this
-        asserts BOTH a fresh write and a second run against a file that
+        BOTH names ship (v6.1.6). Writes land in `.embody_backup/`, but
+        nothing moves or deletes a pre-v6.1.6 `.tdn_backup/`, so retiring
+        its rule would un-ignore every legacy backup on upgrade.
+
+        Existing projects get entries through the same backfill path, so
+        this asserts a fresh write AND a second run against a file that
         predates the entry.
 
         EXACTLY ONCE, not merely present. `assertIn` is true of a writer
-        that appends `.tdn_backup/` on every single run, so it cannot
-        tell the backfill from a file that grows an identical line each
-        time Embody starts -- and the third run below is the one that
-        catches it, because that is the ordinary case: the entry is
-        already there and nothing should be written.
+        that appends on every run, so it cannot tell the backfill from a
+        file that grows an identical line each time Embody starts -- and
+        the third run below is the one that catches it, because that is the
+        ordinary case: the entry is there and nothing should be written.
         """
-        def occurrences():
-            return [ln.strip() for ln in self._lines()].count('.tdn_backup/')
+        for entry in ('.embody_backup/', '.tdn_backup/'):
+            with self.subTest(entry=entry):
+                self.gitignore.unlink(missing_ok=True)
+
+                def occurrences():
+                    return [ln.strip() for ln in self._lines()].count(entry)
+
+                self._configure()
+                self.assertEqual(1, occurrences(),
+                                 f'a fresh write must produce one {entry}: '
+                                 f'{self._lines()}')
+
+                lines = [ln for ln in self._lines() if ln.strip() != entry]
+                self.gitignore.write_text(
+                    chr(10).join(lines) + chr(10), encoding='utf-8')
+                self._configure()
+                self.assertEqual(
+                    1, occurrences(),
+                    f'a project predating {entry} must be backfilled, '
+                    f'once: {self._lines()}')
+                self.assertEqual(1, self._header_count())
+
+                # The run that changes nothing. A writer that re-appends
+                # what is present stays green on every assertion above.
+                self._configure()
+                self.assertEqual(
+                    1, occurrences(),
+                    f'a second run duplicated {entry}: {self._lines()}')
+                self.assertEqual(1, self._header_count())
+
+    def test_embody_ignore_pair_is_depth_agnostic(self):
+        """v6.1.6: the .embody/ pair must carry a `**/` prefix.
+
+        The .gitignore is ALWAYS written at the git root, but the .toe may
+        sit in a subfolder. Any pattern with an interior slash anchors to
+        the .gitignore's directory, so the old anchored `.embody/*` left
+        `<subdir>/.embody/` untracked-and-visible AND inside a plain
+        `git clean -fd`'s reach -- issue #85's exact shape for a nested
+        project. Asserted on the SHIPPED entries, because this repo's own
+        hand-written .gitignore already used the `**/` form and so could
+        never have caught the drift.
+        """
+        self._configure()
+        stripped = [ln.strip() for ln in self._lines()]
+        self.assertIn('**/.embody/*', stripped)
+        self.assertIn('!**/.embody/project.json', stripped)
+        self.assertNotIn('.embody/*', stripped,
+                         'the anchored form must not ship alongside')
+        self.assertNotIn('!.embody/project.json', stripped)
+        # git is last-match-wins: the negation must sit BELOW the ignore
+        # or the committed project.json is silently untracked.
+        self.assertLess(stripped.index('**/.embody/*'),
+                        stripped.index('!**/.embody/project.json'))
+
+    def test_anchored_embody_pair_is_migrated(self):
+        """A project written by an older Embody carries the anchored pair
+        inside the managed block. It must be swapped for the `**/` forms in
+        one pass -- not left to sit as a second, contradicting rule.
+        """
+        self._configure()
+        # Rewrite the managed block the way a pre-v6.1.6 Embody left it.
+        lines = []
+        for ln in self._lines():
+            s = ln.strip()
+            if s == '**/.embody/*':
+                lines.append('.embody/*')
+            elif s == '!**/.embody/project.json':
+                lines.append('!.embody/project.json')
+            else:
+                lines.append(ln)
+        self.gitignore.write_text(chr(10).join(lines) + chr(10),
+                                  encoding='utf-8')
 
         self._configure()
-        self.assertEqual(1, occurrences(),
-                         f'a fresh write must produce one entry: '
-                         f'{self._lines()}')
-
-        lines = [ln for ln in self._lines() if ln.strip() != '.tdn_backup/']
-        self.gitignore.write_text('\n'.join(lines) + '\n', encoding='utf-8')
-        self._configure()
-        self.assertEqual(
-            1, occurrences(),
-            f'a project predating the entry must be backfilled, once: '
-            f'{self._lines()}')
-        self.assertEqual(1, self._header_count())
-
-        # The run that changes nothing. A writer that re-appends what is
-        # already present stays green on every assertion above.
-        self._configure()
-        self.assertEqual(
-            1, occurrences(),
-            f'a second run duplicated the entry: {self._lines()}')
+        stripped = [ln.strip() for ln in self._lines()]
+        self.assertNotIn('.embody/*', stripped,
+                         'the stale anchored entry must be removed')
+        self.assertNotIn('!.embody/project.json', stripped)
+        self.assertEqual(1, stripped.count('**/.embody/*'))
+        self.assertEqual(1, stripped.count('!**/.embody/project.json'))
+        self.assertLess(stripped.index('**/.embody/*'),
+                        stripped.index('!**/.embody/project.json'))
         self.assertEqual(1, self._header_count())
 
     # --- .gitattributes: same class ---------------------------------------

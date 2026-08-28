@@ -134,33 +134,40 @@ The comparison is **semantic, not byte-level**: both sides normalize through the
 
 ---
 
-## Crash safety and `.tdn_backup`
+## Crash safety and `.embody_backup`
 
 Every `.tdxn` write is **atomic** — the content goes to a temp file in the same directory, is flushed and `fsync`ed, then `os.replace()`s the target. A crash or power loss mid-write leaves either the complete old file or the complete new one, never a half-written one.
 
-Before each write, Embody also rotates two generations of the previous content into a `.tdn_backup/` folder at your project root, mirroring the `.tdxn`'s relative path:
+Before each write, Embody also rotates two generations of the previous content into a `.embody_backup/` folder beside your `.toe`, mirroring the network file's relative path:
 
 ```
 my-project/
 ├── embody/
 │   └── Foo/
 │       └── bar.tdxn          ← current
-└── .tdn_backup/
+└── .embody_backup/
     └── embody/
         └── Foo/
             ├── bar.tdxn.bak   ← previous write
             └── bar.tdxn.bak2  ← the one before that
 ```
 
-After each write the file is read back and re-parsed; if that validation fails, the `.bak` is restored automatically. `ReconstructTDNComps` and the post-save export roll back from `.bak` the same way if reconstruction fails.
+After each write the file is read back and re-parsed; if that validation fails, the newest surviving backup is restored automatically and the log names the exact file it came from. `ReconstructTDNComps` and the post-save export roll back the same way if reconstruction fails. Recovery tries `.bak` first, then `.bak2`.
 
-**`.tdn_backup/` is machine-local scratch and should not be committed.** It is superseded on every write and carries no history git does not already have — the `.tdxn` files themselves are the versioned record. Envoy adds `.tdn_backup/` to your project's auto-managed [`.gitignore`](../embody/getting-started.md#auto-managed-gitignore) on startup. If your repo predates that entry and already tracks the folder, untrack it once:
+The folder holds backups of **both** `.tdxn` and `.tdn` files — a COMP externalized before v6.1.0 keeps writing `.tdn` forever — which is why the name carries no format token.
+
+!!! note "Renamed in v6.1.6"
+    This folder was called `.tdn_backup/` before v6.1.6. Nothing moves or deletes an existing one: new backups are written to `.embody_backup/`, and recovery still reads `.tdn_backup/` when the newer folder has nothing for that file. Both stay git-ignored. Each COMP's legacy copies are retired automatically the first time Embody rotates a new backup for that COMP — which happens on the first save where its network actually **changed** (an unchanged COMP is skipped entirely and keeps its old copies, deliberately). Leave the old folder alone and it drains itself; there is no need to delete it by hand.
+
+**Backups are machine-local scratch and should not be committed.** They are superseded on every write and carry no history git does not already have — the `.tdxn` files themselves are the versioned record. Envoy adds both folder names to your project's auto-managed [`.gitignore`](../embody/getting-started.md#auto-managed-gitignore) on startup. If your repo predates those entries and already tracks a backup folder, untrack it once:
 
 ```bash
+# run for whichever folder your repo actually tracks -- git errors on a path it does not
+git rm -r --cached .embody_backup
 git rm -r --cached .tdn_backup
 ```
 
-Deleting `.tdn_backup/` at any time is safe — it is recreated on the next export.
+Deleting either folder at any time is safe — the current one is recreated on the next export.
 
 ---
 

@@ -117,6 +117,182 @@ class TestTDNCrashSafety(EmbodyTestCase):
 		os.chmod(ro_dir, stat.S_IRWXU)
 
 	# =================================================================
+	# B0. Backup location, dual-read, and failure surfacing (v6.1.6)
+	# =================================================================
+
+	def test_B00_writes_land_in_embody_backup_never_legacy(self):
+		"""Rotation writes ONLY the current dir. The legacy .tdn_backup/ is
+		read but never written -- nothing migrates or deletes it, because a
+		bulk move would race a concurrent rotate from a second TD instance
+		and _safe_write_tdn swallows that failure into the result dict."""
+		Path(self._tdn_path).write_text('v1', encoding='utf-8')
+		self.tdn._rotate_backups(self._tdn_path, self._proj_folder)
+		self.assertTrue(
+			(Path(self._proj_folder) / '.embody_backup').is_dir(),
+			'rotation must create .embody_backup/')
+		self.assertFalse(
+			(Path(self._proj_folder) / '.tdn_backup').exists(),
+			'rotation must never write the legacy dir')
+
+	def test_B00b_find_falls_back_to_legacy_tdn_backup(self):
+		"""A project that upgraded mid-life has its only recovery copy in
+		.tdn_backup/. The finder must still reach it -- otherwise the
+		rename silently discards every existing backup."""
+		legacy = self.tdn._get_backup_path(
+			self._tdn_path, self._proj_folder, '.bak', legacy=True)
+		legacy.parent.mkdir(parents=True, exist_ok=True)
+		legacy.write_text(_make_valid_tdn_json(7), encoding='utf-8')
+
+		found = self.tdn._find_existing_backup(
+			self._tdn_path, self._proj_folder)
+		self.assertIsNotNone(found, 'legacy backup must be found')
+		self.assertEqual(found.read_text(encoding='utf-8'),
+						 _make_valid_tdn_json(7))
+
+	def test_B00c_newest_wins_regardless_of_directory(self):
+		"""Selection is by MTIME, not probe order. A pre-v6.1.6 Embody
+		(downgrade, mixed fleet, shared project folder) keeps rotating into
+		the LEGACY dir while the current one sits frozen -- returning the
+		current copy just because it was probed first hands back a stale
+		network, and both consumers feed it to ImportNetwork(clear_first)."""
+		cur = self.tdn._get_backup_path(
+			self._tdn_path, self._proj_folder, '.bak')
+		cur.parent.mkdir(parents=True, exist_ok=True)
+		cur.write_text(_make_valid_tdn_json(2), encoding='utf-8')
+		os.utime(cur, (1_000_000, 1_000_000))          # old
+
+		legacy = self.tdn._get_backup_path(
+			self._tdn_path, self._proj_folder, '.bak', legacy=True)
+		legacy.parent.mkdir(parents=True, exist_ok=True)
+		legacy.write_text(_make_valid_tdn_json(9), encoding='utf-8')
+		os.utime(legacy, (2_000_000, 2_000_000))       # newer
+
+		found = self.tdn._find_existing_backup(
+			self._tdn_path, self._proj_folder)
+		self.assertEqual(found, legacy,
+			'the NEWER legacy copy must win over an older current one')
+
+		# ... and the ordinary case still resolves to the current dir.
+		os.utime(cur, (3_000_000, 3_000_000))
+		self.assertEqual(
+			self.tdn._find_existing_backup(
+				self._tdn_path, self._proj_folder), cur)
+
+	def test_B00d_corrupt_bak_falls_through_to_bak2(self):
+		"""THE REGRESSION: .bak2 was WRITTEN on every rotation since v5 and
+		read by nothing. Existence-only selection would also return a
+		TRUNCATED .bak -- rotation copies with shutil.copy2, which is not
+		atomic -- and stop, making .bak2 unreachable in exactly the case it
+		exists for. Candidates must be validated, not merely stat'd."""
+		Path(self._tdn_path).write_text(
+			_make_valid_tdn_json(3), encoding='utf-8')
+		self.tdn._rotate_backups(self._tdn_path, self._proj_folder)
+		Path(self._tdn_path).write_text(
+			_make_valid_tdn_json(4), encoding='utf-8')
+		self.tdn._rotate_backups(self._tdn_path, self._proj_folder)
+
+		bak = self.tdn._get_backup_path(
+			self._tdn_path, self._proj_folder, '.bak')
+		bak2 = self.tdn._get_backup_path(
+			self._tdn_path, self._proj_folder, '.bak2')
+		self.assertTrue(bak2.is_file(), '.bak2 must exist after 2 rotations')
+		# Truncate the newest generation the way a killed copy2 would.
+		bak.write_text('{"format": "tdxn", "operators": [', encoding='utf-8')
+
+		found = self.tdn._find_existing_backup(
+			self._tdn_path, self._proj_folder)
+		self.assertEqual(found, bak2,
+			'a corrupt .bak must fall through to .bak2, not be returned')
+
+	def test_B00d2_migrated_suffix_backups_are_still_found(self):
+		"""MigrateToTDXN renames foo.tdn -> foo.tdxn on disk WITHOUT
+		touching backups, so a migrated COMP's only copies stay named
+		foo.tdn.bak. Probing the current name alone orphans them -- one
+		real backup dir was found holding Embody.tdn.bak beside
+		guard_victim.tdxn.bak."""
+		migrated = os.path.join(self._tdn_dir, 'bar.tdxn')
+		old_name_bak = self.tdn._get_backup_path(
+			self._tdn_path, self._proj_folder, '.bak')   # bar.tdn.bak
+		old_name_bak.parent.mkdir(parents=True, exist_ok=True)
+		old_name_bak.write_text(_make_valid_tdn_json(5), encoding='utf-8')
+
+		found = self.tdn._find_existing_backup(migrated, self._proj_folder)
+		self.assertEqual(found, old_name_bak,
+			'a pre-migration .tdn.bak must be reachable from the .tdxn')
+
+	def test_B00d3_rotation_retires_this_files_legacy_copies(self):
+		"""Downgrade guard. Nothing bulk-migrates (that would race a
+		concurrent rotate), but once THIS file has a current-dir .bak the
+		legacy copies are retired. Otherwise a rollback to <= v6.1.5 reads
+		a .tdn_backup copy frozen at upgrade time and silently restores a
+		stale network over live work; with them gone the old code reports
+		'no backup available' and leaves the COMP alone."""
+		legacy = self.tdn._get_backup_path(
+			self._tdn_path, self._proj_folder, '.bak', legacy=True)
+		legacy.parent.mkdir(parents=True, exist_ok=True)
+		legacy.write_text(_make_valid_tdn_json(1), encoding='utf-8')
+		legacy2 = self.tdn._get_backup_path(
+			self._tdn_path, self._proj_folder, '.bak2', legacy=True)
+		legacy2.write_text(_make_valid_tdn_json(1), encoding='utf-8')
+
+		Path(self._tdn_path).write_text(
+			_make_valid_tdn_json(6), encoding='utf-8')
+		self.tdn._rotate_backups(self._tdn_path, self._proj_folder)
+
+		self.assertFalse(legacy.is_file(), 'legacy .bak must be retired')
+		self.assertFalse(legacy2.is_file(), 'legacy .bak2 must be retired')
+		self.assertTrue(
+			self.tdn._get_backup_path(
+				self._tdn_path, self._proj_folder, '.bak').is_file(),
+			'and only AFTER the replacement is in place')
+
+	def test_B00d4_backup_dir_is_self_ignoring(self):
+		"""The dir is written unconditionally, but the managed .gitignore
+		entry only lands when Envoy configures an AI client. An Envoy-off,
+		Convoy-only, or declined-prompt install would otherwise accumulate
+		untracked .bak files inside a plain `git clean -fd`'s reach."""
+		Path(self._tdn_path).write_text(
+			_make_valid_tdn_json(), encoding='utf-8')
+		self.tdn._rotate_backups(self._tdn_path, self._proj_folder)
+		marker = (Path(self._proj_folder) / '.embody_backup' / '.gitignore')
+		self.assertTrue(marker.is_file(),
+			'the backup dir must ignore itself without Envoy')
+		self.assertEqual(marker.read_text(encoding='utf-8').strip(), '*')
+
+	def test_B00e_no_backup_anywhere_returns_none(self):
+		"""The finder must not invent a path -- callers branch on None."""
+		self.assertIsNone(self.tdn._find_existing_backup(
+			self._tdn_path, self._proj_folder))
+
+	def test_B00f_rotation_failure_rides_back_on_the_result(self):
+		"""Rotation failure must not BLOCK the write, but must never be
+		silent: that write ran with no recovery net. It cannot log from
+		here (this path is reached from an export WORKER thread), so it
+		rides back on the result dict for a main-thread caller to voice.
+
+		The failure is induced the way it actually happens -- something
+		occupies the backup directory's path -- rather than by patching the
+		live extension class out from under a running session.
+		"""
+		Path(self._tdn_path).write_text('old', encoding='utf-8')
+		# A plain FILE where the backup tree must be rooted: mkdir(parents)
+		# raises, exactly as it would on a permission or disk error.
+		blocker = Path(self._proj_folder) / '.embody_backup'
+		blocker.write_text('not a directory', encoding='utf-8')
+
+		result = self.tdn._safe_write_tdn(
+			self._tdn_path, _make_valid_tdn_json(), self._proj_folder)
+
+		self.assertTrue(result.get('success'),
+			'a rotation failure must not block the write')
+		self.assertTrue(result.get('backup_error'),
+			'the failure must be surfaced, not swallowed')
+		self.assertEqual(
+			Path(self._tdn_path).read_text(encoding='utf-8'),
+			_make_valid_tdn_json(),
+			'the write itself must still have landed')
+
+	# =================================================================
 	# B. Backup Rotation Tests
 	# =================================================================
 
@@ -173,7 +349,8 @@ class TestTDNCrashSafety(EmbodyTestCase):
 		"""Backup path should mirror the relative directory hierarchy."""
 		bak = self.tdn._get_backup_path(
 			self._tdn_path, self._proj_folder, '.bak')
-		expected = Path(self._proj_folder) / '.tdn_backup' / 'embody' / 'Foo' / 'bar.tdn.bak'
+		expected = (Path(self._proj_folder) / '.embody_backup'
+					/ 'embody' / 'Foo' / 'bar.tdn.bak')
 		self.assertEqual(str(bak), str(expected))
 
 	def test_B06_rotate_creates_parent_dirs(self):
@@ -291,7 +468,16 @@ class TestTDNCrashSafety(EmbodyTestCase):
 			self._tdn_path, bad_content, self._proj_folder)
 		# Should report error
 		self.assertIn('error', result)
-		self.assertIn('restored from backup', result['error'])
+		self.assertIn('restored from', result['error'])
+		# v6.1.6: the message NAMES the file restored from, and the path
+		# rides back structurally. The fallback chain can land on an older
+		# generation or the legacy dir, and a silent revert to a stale
+		# network is its own data loss -- 'restored from backup' could not
+		# tell the user which one they got.
+		expected_bak = self.tdn._get_backup_path(
+			self._tdn_path, self._proj_folder, '.bak')
+		self.assertEqual(result.get('restored_from'), str(expected_bak))
+		self.assertIn(str(expected_bak), result['error'])
 		# File should be restored to v1
 		restored = Path(self._tdn_path).read_text(encoding='utf-8')
 		self.assertEqual(restored, v1)
@@ -375,7 +561,11 @@ class TestTDNCrashSafety(EmbodyTestCase):
 
 	def test_E07_readonly_backup_dir(self):
 		"""Read-only backup dir should not block the write itself."""
-		backup_dir = os.path.join(self._proj_folder, '.tdn_backup')
+		# The CURRENT backup dir -- chmod'ing the legacy one made this test
+		# vacuous after the v6.1.6 rename: rotation simply created a fresh
+		# .embody_backup/ and succeeded, so nothing about backup failure
+		# was exercised.
+		backup_dir = os.path.join(self._proj_folder, '.embody_backup')
 		os.makedirs(backup_dir)
 		os.chmod(backup_dir, stat.S_IRUSR | stat.S_IXUSR)
 		# Write initial file
@@ -389,6 +579,11 @@ class TestTDNCrashSafety(EmbodyTestCase):
 			f'Write should succeed despite backup failure: {result}')
 		self.assertEqual(
 			Path(self._tdn_path).read_text(encoding='utf-8'), v2)
+		if sys.platform != 'win32':
+			# chmod does not write-protect a directory on Windows (see
+			# test_A04), so only assert the surfacing where it can fail.
+			self.assertTrue(result.get('backup_error'),
+				f'a rotation failure must ride back, not vanish: {result}')
 		# Restore permissions for cleanup
 		os.chmod(backup_dir, stat.S_IRWXU)
 
@@ -549,6 +744,78 @@ class TestTDNCrashSafety(EmbodyTestCase):
 		for f in [tdn_file, str(found_bak)]:
 			v = self.tdn._validate_tdn_file(f)
 			self.assertTrue(v.get('valid'), f'{f} failed validation: {v}')
+
+	# =================================================================
+	# G: no-op guard -- an unchanged network must not be rewritten
+	# =================================================================
+
+	def _write(self, doc):
+		return self.tdn._safe_write_tdn(
+			self._tdn_path, json.dumps(doc), self._proj_folder)
+
+	def test_G01_skips_rewrite_when_network_is_unchanged(self):
+		"""Every .tdn write funnels through _safe_write_tdn, so this guard is
+		what stops an explicit save (manager Save, save_externalization,
+		dirty-driven SaveTDN) from rewriting a file whose network is
+		identical. Without it the file reads modified in `git status` while
+		`git diff` renders EMPTY -- textconv strips exactly these keys.
+		"""
+		base = dict(_make_valid_tdn(2), build=1, generator='Embody/6.1.0',
+					td_build='099.2025.33070', source_file='A.toe',
+					exported_at='2026-08-27T00:00:00Z')
+		self.assertTrue(self._write(base).get('success'))
+		before = open(self._tdn_path, 'rb').read()
+		mtime = os.path.getmtime(self._tdn_path)
+
+		# Same network, entirely fresh volatile header -- the real-world case.
+		churned = dict(base, build=2, generator='Embody/6.1.9',
+					   source_file='A.7.toe',
+					   exported_at='2026-09-01T12:34:56Z')
+		res = self._write(churned)
+		self.assertTrue(res.get('success'))
+		self.assertTrue(res.get('skipped'),
+						'unchanged network should report skipped: %r' % res)
+		self.assertEqual(open(self._tdn_path, 'rb').read(), before,
+						 'file was rewritten despite an identical network')
+		self.assertEqual(os.path.getmtime(self._tdn_path), mtime,
+						 'mtime moved, so the file was reopened for writing')
+
+	def test_G02_still_writes_a_real_content_change(self):
+		"""The guard must never swallow a genuine edit."""
+		self.assertTrue(self._write(_make_valid_tdn(2)).get('success'))
+		before = open(self._tdn_path, 'rb').read()
+		res = self._write(_make_valid_tdn(3))
+		self.assertTrue(res.get('success'))
+		self.assertFalse(res.get('skipped'), 'a real change must be written')
+		self.assertNotEqual(open(self._tdn_path, 'rb').read(), before)
+
+	def test_G03_still_writes_the_format_convergence(self):
+		"""`format` and `version` are deliberately NOT volatile, so the
+		one-time tdn -> tdxn header convergence still writes. If the guard
+		ever treated them as volatile, 6.0-stamped headers would stick
+		forever."""
+		self.assertTrue(self._write(_make_valid_tdn(1)).get('success'))
+		before = open(self._tdn_path, 'rb').read()
+		res = self._write(dict(_make_valid_tdn(1), format='tdxn'))
+		self.assertTrue(res.get('success'))
+		self.assertFalse(res.get('skipped'),
+						 'the format bump must still be written')
+		self.assertNotEqual(open(self._tdn_path, 'rb').read(), before)
+
+	def test_G04_skip_does_not_rotate_backups(self):
+		"""The guard sits BEFORE backup rotation, so a no-op save must not
+		churn .tdn_backup/ or push a good generation out of .bak2."""
+		self.assertTrue(self._write(_make_valid_tdn(1)).get('success'))
+		self.assertTrue(self._write(_make_valid_tdn(2)).get('success'))
+		bak = self.tdn._get_backup_path(
+			self._tdn_path, self._proj_folder, '.bak')
+		self.assertTrue(bak.is_file(), 'fixture: a .bak should exist by now')
+		bak_before = bak.read_bytes()
+
+		res = self._write(_make_valid_tdn(2))          # identical -> skip
+		self.assertTrue(res.get('skipped'))
+		self.assertEqual(bak.read_bytes(), bak_before,
+						 'a skipped write still rotated the backups')
 
 	def test_F03_1000_operator_corrupt_and_rollback(self):
 		"""1000 ops: export, corrupt .tdn, rollback from saved content."""

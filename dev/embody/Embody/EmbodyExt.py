@@ -1217,8 +1217,13 @@ class EmbodyExt:
 
     @property
     def TDNBackupDir(self) -> Path:
-        """Returns the .tdn_backup directory path (under the project root)."""
-        return Path(project.folder) / '.tdn_backup'
+        """Rotated network-file backups dir, beside the .toe.
+
+        Promoted, so it stays for anyone referencing it; it had no callers
+        and hardcoded the pre-v6.1.6 name while claiming 'project root'.
+        Derived from TDXNExt now so it cannot drift from the writer again.
+        """
+        return Path(project.folder) / self.my.ext.TDXN.BACKUP_DIR
 
     def _cellVal(self, row, col, default: str = '', table=None) -> str:
         """Safe read of an externalizations table cell.
@@ -4348,8 +4353,10 @@ class EmbodyExt:
             # '099.2025.33070' form, so writing app.build here only guaranteed
             # a second differing value and an extra full rewrite of the
             # syncfile-backed .tsv (~15ms measured -- see _updateRowCells).
+            prior_build = None
             if bump_build and hasattr(oper.par, 'Build'):
-                new_build = oper.par.Build.val + 1
+                prior_build = oper.par.Build.val
+                new_build = prior_build + 1
                 oper.par.Build = new_build
                 self._updateRowCells(opPath, {'build': str(new_build)},
                                      strategy='tdn')
@@ -4369,6 +4376,13 @@ class EmbodyExt:
                 cleanup_protected=protected)
 
             if result.get('success'):
+                # The write was a no-op (identical network), so the build must
+                # NOT advance -- otherwise par + table run one ahead of the
+                # file's header on every unchanged save, and the gap grows.
+                if result.get('skipped') and prior_build is not None:
+                    oper.par.Build = prior_build
+                    self._updateRowCells(opPath, {'build': str(prior_build)},
+                                         strategy='tdn')
                 timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
                 self.param_tracker.updateParamStore(oper)
                 # timestamp + position in ONE row write; dirty is runtime.
@@ -10204,9 +10218,12 @@ class EmbodyExt:
                 self.Log(f'Reconstruction failed for {comp_path}: {result["error"]}', 'ERROR')
                 # Attempt rollback from backup .tdn
                 try:
-                    backup_path = self.my.ext.TDXN._get_backup_path_instance(
+                    # Finder, not the raw path builder: falls back to .bak2
+                    # and to the legacy .tdn_backup/ dir, so an upgraded
+                    # project keeps its recovery net.
+                    backup_path = self.my.ext.TDXN._find_existing_backup_instance(
                         str(abs_path))
-                    if backup_path.is_file():
+                    if backup_path is not None:
                         backup_tdn = self.my.ext.TDXN.tdn_load(
                             backup_path.read_text(encoding='utf-8'))
                         rb_result = self.my.ext.TDXN.ImportNetwork(
@@ -10214,8 +10231,11 @@ class EmbodyExt:
                             clear_first=True, restore_file_links=True,
                             restore_tdn_shells=False)
                         if rb_result.get('success'):
+                            # Name the file: the fallback chain can land on
+                            # an older generation, and a silent revert to a
+                            # stale network is its own data loss.
                             self.Log(
-                                f'Rolled back {comp_path} from backup',
+                                f'Rolled back {comp_path} from {backup_path}',
                                 'WARNING')
                             continue
                         else:
@@ -10676,7 +10696,8 @@ class EmbodyExt:
                 f'- Update tdn_ref pointers inside {len(parents)} parent '
                 'file(s) so nested COMPs keep resolving\n\n'
                 'Your networks are unchanged -- only the file names change. '
-                'Backups under .tdn_backup/ are kept. Untracked files are '
+                'Existing backups are kept and still readable. '
+                'Untracked files are '
                 'not touched.\n\n'
                 'Under version control, commit or stash first. Embody '
                 'performs the renames itself -- do not git mv them.\n\n'
@@ -11292,6 +11313,13 @@ class EmbodyExt:
                 # it -- warning would be noise. Callback DATs (execute,
                 # parexec, etc.) are intentionally absent from this set.
                 if dat.type in self._TD_MANAGED_DAT_TYPES:
+                    continue
+
+                # Skip DATs whose content the project has deliberately opted
+                # out of (tdn_exclude:dat_content). Losing it IS the intent --
+                # warning here would contradict the export, and this warner
+                # exists to mirror it.
+                if self.my.ext.TDXN._datContentExcluded(dat):
                     continue
 
                 # Check for non-empty content

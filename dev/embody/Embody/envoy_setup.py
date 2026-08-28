@@ -1686,6 +1686,32 @@ def _project_json_ignore_decider(git_root):
     return pattern.strip(), (source.strip() or '.gitignore')
 
 
+# The .embody/ ignore pair, named once so the entry list, the
+# negation-withhold branch and the ordering enforcement below cannot drift
+# apart. A lingering old-form line would otherwise become git's decider
+# while not being in managed_set, and the negation would be wrongly
+# withheld. See the comment on these entries in MANAGED_ENTRIES.
+EMBODY_IGNORE = '**/.embody/*'
+EMBODY_NEG = '!**/.embody/project.json'
+# Every pattern that ignores .embody/ CONTENTS, current and historical.
+# Two rules depend on the whole set, not just the current entry:
+#   - "is the decider OUR rule?" -- a repo still carrying the anchored
+#     '.embody/*' (ours until v6.1.6, and hand-copied into plenty of
+#     .gitignores) must not be mistaken for a deliberate user ignore, or
+#     the negation is withheld and project.json goes untracked.
+#   - git is LAST-match-wins, so the negation must sit below the LAST of
+#     them. A legacy line below the managed block silently re-ignores
+#     project.json otherwise.
+EMBODY_IGNORE_FORMS = (EMBODY_IGNORE, '.embody/*')
+
+
+def _last_embody_ignore_index(stripped_lines):
+    """Index of the LAST .embody ignore rule, or -1. See EMBODY_IGNORE_FORMS."""
+    idxs = [i for i, ln in enumerate(stripped_lines)
+            if ln in EMBODY_IGNORE_FORMS]
+    return max(idxs) if idxs else -1
+
+
 def configure_gitignore(ext, git_root):
     """Ensure .gitignore in the git root contains entries for
     Embody/Envoy auto-generated files.
@@ -1702,8 +1728,12 @@ def configure_gitignore(ext, git_root):
         # Embody / Envoy
         '.venv/',
         '.mcp.json',
-        # Rotated .tdn crash-recovery copies (.bak/.bak2) -- machine-local
-        # scratch, superseded by the committed .tdn on every write.
+        # Rotated crash-recovery copies (.bak/.bak2) of externalized network
+        # files -- machine-local scratch, superseded on every write.
+        # Both names ship: nothing ever moves or deletes a pre-v6.1.6
+        # .tdn_backup/ (a bulk migration would race a concurrent rotate),
+        # so its ignore rule has to outlive the rename.
+        '.embody_backup/',
         '.tdn_backup/',
         # Client MCP configs -- ALL of them embed absolute venv/bridge
         # paths, so committing one sends a teammate a config pointing at
@@ -1716,9 +1746,15 @@ def configure_gitignore(ext, git_root):
         '.gemini/settings.json',
         '.codex/config.toml',
         '.agents/mcp_config.json',
-        # Ignore .embody/ runtime files but keep committed project.json
-        '.embody/*',
-        '!.embody/project.json',
+        # Ignore .embody/ runtime files but keep committed project.json.
+        # DEPTH-AGNOSTIC on purpose: the .gitignore is ALWAYS written at the
+        # git root, but the .toe may sit in a subfolder. Any pattern with an
+        # interior slash anchors to the .gitignore's directory, so the old
+        # '.embody/*' left <subdir>/.embody/ untracked-and-visible AND
+        # inside a plain `git clean -fd`'s reach -- issue #85's exact shape
+        # (verified with git check-ignore). '**/' matches at every depth.
+        EMBODY_IGNORE,
+        EMBODY_NEG,
         '.claude/settings.local.json',
         '.claude/projects/',
         # Task briefs compiled by the /brief skill (working documents)
@@ -1762,7 +1798,12 @@ def configure_gitignore(ext, git_root):
                          '.embody/envoy-tools-cache.json',
                          # v5.0.387: replaced by '.embody/*' + '!.embody/project.json'
                          # so .embody/project.json (committed metadata) is tracked.
-                         '.embody/'}
+                         '.embody/',
+                         # v6.1.6: the anchored pair, replaced by the '**/'
+                         # forms. Both are stripped here and re-added above
+                         # in one pass, so a .toe in a repo subfolder stops
+                         # leaking .embody/ into git status.
+                         '.embody/*', '!.embody/project.json'}
         stale_idx = {i for i in _managed_block_indexes(existing_lines)
                      if existing_lines[i].strip() in STALE_ENTRIES}
         found_stale = {existing_lines[i].strip() for i in stale_idx}
@@ -1820,19 +1861,27 @@ def configure_gitignore(ext, git_root):
         # Respect a deliberate user ignore of .embody/project.json: when
         # git names a NON-managed rule as decider, withhold the negation
         # instead of fighting the repo (Owlette fleet, 2026-08-19).
-        NEG = '!.embody/project.json'
+        NEG = EMBODY_NEG
         if NEG in missing:
             decider = _project_json_ignore_decider(git_root)
+            # found_stale is OUR OWN legacy just stripped from a managed
+            # block this run. The probe reads the PRE-write file, so a repo
+            # carrying e.g. '.embody/' (ours until v5.0.387) would name it
+            # as decider, fail the managed_set test, and get read as a
+            # deliberate user opt-out -- while the same run had already
+            # removed it, leaving the repo with NO .embody ignore at all.
             if (decider and not decider[0].startswith('!')
-                    and decider[0] not in managed_set):
+                    and decider[0] not in managed_set
+                    and decider[0] not in EMBODY_IGNORE_FORMS
+                    and decider[0] not in found_stale):
                 missing.remove(NEG)
-                # Leave '.embody/*' to the user too: appending it would
+                # Leave the ignore to the user too: appending it would
                 # make OUR rule git's last file-level match on the next
                 # startup, flip the decider to managed, and re-add the
                 # negation -- the withhold must be stable across runs
                 # (review find, 2026-08-19).
-                if '.embody/*' in missing:
-                    missing.remove('.embody/*')
+                if EMBODY_IGNORE in missing:
+                    missing.remove(EMBODY_IGNORE)
                 ext._log(
                     'this repo deliberately ignores .embody/project.json '
                     f"(rule '{decider[0]}' in {decider[1]}) -- respecting "
@@ -1842,14 +1891,16 @@ def configure_gitignore(ext, git_root):
                     'NOT travel via git; pre-seed .embody/project.json '
                     'when provisioning machines instead.', 'WARNING')
 
-        # git is LAST-match-wins: the negation must sit BELOW '.embody/*'
+        # git is LAST-match-wins: the negation must sit BELOW the ignore
         # or the committed metadata is silently untracked. Detect a wrong
         # order even when nothing is missing -- that state used to return
         # early and stay broken forever.
         def _misordered(lines):
             s = [ln.strip() for ln in lines]
-            return (NEG in s and '.embody/*' in s
-                    and s.index(NEG) < s.index('.embody/*'))
+            if NEG not in s:
+                return False
+            last = _last_embody_ignore_index(s)
+            return last != -1 and s.index(NEG) < last
 
         needs_reorder = _misordered(existing_lines)
         if (not missing and not found_stale and not merged
@@ -1893,11 +1944,15 @@ def configure_gitignore(ext, git_root):
         # order alone cannot guarantee it (see _misordered above).
         reordered = False
         stripped_new = [ln.strip() for ln in new_lines]
-        if NEG in stripped_new and '.embody/*' in stripped_new:
-            if stripped_new.index(NEG) < stripped_new.index('.embody/*'):
+        if NEG in stripped_new:
+            last = _last_embody_ignore_index(stripped_new)
+            if last != -1 and stripped_new.index(NEG) < last:
                 new_lines.pop(stripped_new.index(NEG))
                 stripped_new = [ln.strip() for ln in new_lines]
-                new_lines.insert(stripped_new.index('.embody/*') + 1, NEG)
+                # Below the LAST form: a user's legacy '.embody/*' sitting
+                # under the managed block would otherwise win last-match.
+                new_lines.insert(
+                    _last_embody_ignore_index(stripped_new) + 1, NEG)
                 reordered = True
 
         new_content = '\n'.join(new_lines)
@@ -1914,7 +1969,7 @@ def configure_gitignore(ext, git_root):
                 ext._log(f'Consolidated {merged} duplicate Embody block(s) '
                          f'in .gitignore')
             else:
-                ext._log('Reordered !.embody/project.json below .embody/* '
+                ext._log(f'Reordered {NEG} below the .embody ignore '
                          'in .gitignore')
             try:  # record the marked block so Uninstall strips only it (never the user's file)
                 Embody = op.Embody.ext.Embody
@@ -1946,7 +2001,7 @@ def configure_gitignore(ext, git_root):
             details = [f'{merged} redundant "{HEADER}" header(s) merged '
                        f'into the first; no entries added or removed']
         else:
-            action = ('reorder !.embody/project.json below .embody/* in '
+            action = (f'reorder {NEG} below the .embody ignore in '
                       f'.gitignore in {git_root}')
             details = ['git is last-match-wins; the committed '
                        '.embody/project.json was silently untracked']

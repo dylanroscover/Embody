@@ -326,13 +326,25 @@ def _runPreSaveExternalization():
 			before_tdn = parent.Embody.ext.TDXN._restrictToTrackedTDN(
 				before_tdn)
 			content = parent.Embody.ext.TDXN._compact_json_dumps(new_tdn)
+			# Same value as scan_folder, separate name on purpose:
+			# scan_folder is the stale-cleanup DELETE boundary, backup_root
+			# is where rotation mirrors copies. See the note in
+			# TDXNExt.ExportNetwork.
+			backup_root = str(project.folder)
 			write_result = parent.Embody.ext.TDXN._safe_write_tdn(
-				abs_path, content, scan_folder)
+				abs_path, content, backup_root)
 			if not write_result.get('success'):
 				parent.Embody.ext.Embody.Log(
 					f'Pre-save write failed for {comp_path}: '
 					f'{write_result.get("error")}', 'ERROR')
 				continue
+			# Rotation failed but the write landed -- that file has no
+			# recovery copy. Main thread here (TD's save handler).
+			if write_result.get('backup_error'):
+				parent.Embody.ext.Embody.Log(
+					f'Backup rotation FAILED for {abs_path} '
+					f'({write_result["backup_error"]}) -- the write '
+					f'succeeded but had no recovery copy', 'WARNING')
 
 			# Stale file cleanup
 			protected = [abs_path]
@@ -484,16 +496,23 @@ def onProjectPostSave():
 					pass
 				# Attempt rollback from backup .tdn
 				try:
-					backup_path = parent.Embody.ext.TDXN._get_backup_path_instance(
+					# Finder, not the raw path builder: falls back to .bak2
+					# and to the legacy .tdn_backup/ dir, so an upgraded
+					# project keeps its recovery net.
+					backup_path = parent.Embody.ext.TDXN._find_existing_backup_instance(
 						str(abs_path))
-					if backup_path.is_file():
+					if backup_path is not None:
 						backup_tdn = parent.Embody.ext.TDXN.tdn_load(
 							backup_path.read_text(encoding='utf-8'))
 						parent.Embody.ext.TDXN.ImportNetwork(
 							target_path=comp_path, tdn=backup_tdn,
 							clear_first=True, restore_file_links=True,
 							restore_tdn_shells=False)
-						print(f'Embody > Rolled back {comp_path} from backup')
+						# Name the file: the fallback chain can land on an
+						# older generation, and a silent revert to a stale
+						# network is its own data loss.
+						print(f'Embody > Rolled back {comp_path} from '
+							  f'{backup_path}')
 				except Exception as rb_e:
 					print(f'Embody > Rollback also failed for {comp_path}: {rb_e}')
 	# Restore pane owners that were orphaned during strip
