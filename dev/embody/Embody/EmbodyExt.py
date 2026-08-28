@@ -219,6 +219,12 @@ class EmbodyExt:
         # calls costs ONE sweep, not one per call.
         self._coarse_checkpoint_due = False
 
+        # Live cursor for a coarse sweep spread across frames: the roots still
+        # to examine (reverse-sorted, so pop() walks ascending) and the context
+        # they are examined with. None between sweeps.
+        self._coarse_sweep_cursor = None
+        self._coarse_sweep_ctx = None
+
         # COMP paths the user answered plain-Ignore for in the dropped-.tox
         # dialog this session -- subsequent sweeps skip them instead of
         # re-prompting (issue #60). Session-scoped by design: resets on
@@ -3779,6 +3785,7 @@ class EmbodyExt:
             'phase': 'head', 'save_dirty': save_dirty,
             'additions': [], 'subtractions': [],
             'queue': [], 'idx': 0, 'tdn_paths': None, 'exclude_tag': '',
+            'ext_tags': None,
             'exports': [], 'saved': [], 'batch_open': False,
         }
         # Defer even the first chunk so the pulse frame does no work.
@@ -3856,6 +3863,7 @@ class EmbodyExt:
             exclude_tag = self.my.par.Tdnexcludetag.eval()
             st['exclude_tag'] = exclude_tag
             st['tdn_paths'] = self._getTDNPaths()
+            st['ext_tags'] = self._extBoundaryTags()
             st['queue'] = [
                 oper.path
                 for oper in self.getExternalizedOps(COMP, strategy='tdn')
@@ -3877,7 +3885,7 @@ class EmbodyExt:
                 continue
             try:
                 dirty = self._isTDNDirty(oper, st['tdn_paths'],
-                                         st['exclude_tag'])
+                                         st['exclude_tag'], st['ext_tags'])
                 self._setDirtyState(oper.path, 'True' if dirty else '')
                 if dirty and st['save_dirty']:
                     st['exports'].append(('tdn', oper.path))
@@ -3911,7 +3919,8 @@ class EmbodyExt:
         if kind == 'tox':
             if self.Save(path):
                 st['saved'].append(path)
-        elif (self._isTDNDirty(oper, st['tdn_paths'], st['exclude_tag'])
+        elif (self._isTDNDirty(oper, st['tdn_paths'], st['exclude_tag'],
+                               st['ext_tags'])
                 and self.SaveTDN(path)):
             st['saved'].append(path)
 
@@ -4573,6 +4582,7 @@ class EmbodyExt:
             pass
 
     _COARSE_SWEEP_CAP = 60   # roots examined in one coarse sweep (bounded work)
+    _COARSE_SWEEP_BUDGET_MS = 8.0   # per-frame slice of that sweep
 
     def NoteCoarseCheckpointTouch(self) -> None:
         """Arm a checkpoint after an op that could touch ANY tracked root.
@@ -4593,7 +4603,7 @@ class EmbodyExt:
         except Exception:
             pass
 
-    def _queueDirtyTDNRoots(self) -> int:
+    def _queueDirtyTDNRoots(self, budget_ms: float = None) -> int:
         """Expand a coarse arm into the roots that ACTUALLY changed.
 
         Unions the externalizations table's TDXN rows with the fingerprint
@@ -4601,22 +4611,60 @@ class EmbodyExt:
         its descendants (reconstructing inside Embody is self-destruction) while
         the baselines DO cover them -- and the Embody COMP is exactly where an
         agent editing the manager UI does its work. Bounded by _COARSE_SWEEP_CAP
-        so one sweep can never become the frame cost it exists to avoid."""
+        so one sweep can never become the frame cost it exists to avoid.
+
+        RESUMABLE. _COARSE_SWEEP_CAP bounds how MANY roots a sweep examines,
+        never how long ONE frame spends doing it -- fingerprinting a single big
+        root costs ~62ms, so the cap alone still left a 188ms frame
+        (2026-08-28). With budget_ms the call examines roots until that slice is
+        spent and leaves the rest on _coarse_sweep_cursor for the next frame;
+        with budget_ms=None it runs the sweep to completion in one call. One
+        root is always examined per call: the budget slices the sweep, it
+        cannot split a single fingerprint.
+
+        Returns the roots queued BY THIS CALL. The sweep is finished when
+        _coarse_sweep_cursor is None."""
+        import time
         queued = 0
         try:
-            tdn_paths = self._getTDNPaths()
-            roots = set(tdn_paths) | set(self._tdn_fingerprints.keys())
-            for path in sorted(roots)[:self._COARSE_SWEEP_CAP]:
-                if path in self._pending_checkpoint_roots:
-                    continue
+            if self._coarse_sweep_cursor is None:
+                tdn_paths = self._getTDNPaths()
+                roots = set(tdn_paths) | set(self._tdn_fingerprints.keys())
+                self._coarse_sweep_cursor = sorted(
+                    roots)[:self._COARSE_SWEEP_CAP][::-1]
+                # Frozen for the whole sweep: re-reading the table and the tag
+                # pars per frame would undo the point of chunking.
+                self._coarse_sweep_ctx = (
+                    tdn_paths,
+                    self.my.par.Tdnexcludetag.eval(),
+                    self._extBoundaryTags())
+            tdn_paths, exclude_tag, ext_tags = self._coarse_sweep_ctx
+            cursor = self._coarse_sweep_cursor
+            # `is None`, not truthiness: budget_ms=0.0 means the SMALLEST
+            # slice (one root), not an unbounded sweep.
+            deadline = (None if budget_ms is None
+                        else time.perf_counter() + budget_ms / 1000.0)
+            while cursor:
+                path = cursor.pop()
                 comp = op(path)
-                if comp is None or not comp.valid:
-                    continue
-                if self._isTDNDirty(comp, tdn_paths=tdn_paths):
+                if (comp is not None and comp.valid
+                        and path not in self._pending_checkpoint_roots
+                        and self._isTDNDirty(comp, tdn_paths=tdn_paths,
+                                             exclude_tag=exclude_tag,
+                                             ext_tags=ext_tags)):
                     self._pending_checkpoint_roots.add(path)
                     queued += 1
+                if deadline is not None and time.perf_counter() >= deadline:
+                    break
+            if cursor:
+                return queued      # more roots -- cursor stays live
         except Exception:
             pass
+        # Done, or failed: drop the cursor so the next arm sweeps fresh. Never
+        # leave it live on a failure -- that would resume a broken sweep every
+        # frame forever.
+        self._coarse_sweep_cursor = None
+        self._coarse_sweep_ctx = None
         return queued
 
     def FlushPendingCheckpoints(self) -> int:
@@ -4683,12 +4731,21 @@ class EmbodyExt:
         if not self._autosavePerfOk():
             self._armAutosaveDrain()  # perf danger -- don't pile onto a hot frame
             return
-        # Coarse arm (execute_python): discover WHICH roots changed, now that we
-        # are settled and off a hot frame. Cleared before the sweep so a failure
-        # cannot re-sweep forever; a later touch simply re-arms.
+        # Coarse arm (execute_python): discover WHICH roots changed, now that
+        # we are settled and off a hot frame. The sweep runs in per-frame
+        # slices (see _queueDirtyTDNRoots), so stay armed until its cursor
+        # drains -- the due flag clears only then, and the sweep itself drops
+        # the cursor on failure, so this cannot re-sweep forever. A later touch
+        # simply re-arms.
         if self._coarse_checkpoint_due:
+            self._queueDirtyTDNRoots(self._COARSE_SWEEP_BUDGET_MS)
+            if self._coarse_sweep_cursor is not None:
+                self._autosave_armed = True
+                self._autosave_gen += 1
+                run(f"op({self.my.path!r}).ext.Embody._autosaveDrain({self._autosave_gen})",
+                    fromOP=self.my, delayFrames=1)
+                return
             self._coarse_checkpoint_due = False
-            self._queueDirtyTDNRoots()
             if not self._pending_checkpoint_roots:
                 return   # nothing actually changed -- the common case
         try:
@@ -5858,7 +5915,8 @@ class EmbodyExt:
 
     @staticmethod
     def _computeTDNFingerprint(comp, tdn_paths: set = None,
-                               exclude_tag: str = None) -> tuple:
+                               exclude_tag: str = None,
+                               ext_tags: frozenset = None) -> tuple:
         """Compute a hashable fingerprint of a TDXN COMP's network structure.
 
         Used instead of oper.dirty for TDXN COMPs (which always reads True
@@ -5867,12 +5925,15 @@ class EmbodyExt:
         embedded operator's name, type, position, size, color, tags, flags,
         comment, non-default parameters, connections, and annotations.
 
-        Recurses into child COMPs that are NOT separately TDXN-externalized,
-        so changes deep inside nested COMPs (e.g. editing a POP inside a
+        Recurses into child COMPs that are NOT separately externalized, so
+        changes deep inside nested COMPs (e.g. editing a POP inside a
         geometryCOMP) are detected by the parent's fingerprint. A separately
-        TDXN-externalized child is recorded only structurally -- its own
+        externalized child is recorded only structurally -- its own
         parameters are tracked by its own fingerprint, mirroring how a TDXN
         export emits a reference rather than the child's content.
+
+        ext_tags carries that boundary (see _extBoundaryTags). Pass it:
+        tdn_paths alone under-reports -- see the boundary comment below.
         """
         parts = []
         # The root COMP's own parameters are part of its TDXN export, so a
@@ -5902,11 +5963,24 @@ class EmbodyExt:
             for i, conn in enumerate(c.inputConnectors):
                 for link in conn.connections:
                     parts.append((c.name, 'in', i, link.owner.name))
-            # A separately TDXN-externalized child COMP is referenced, not
-            # embedded -- its params/content are tracked by its own
-            # fingerprint. Embedded ops (non-COMP children, or COMPs without
-            # their own .tdn) have their params recorded here.
-            is_embedded_comp = c.isCOMP and (tdn_paths is None or c.path not in tdn_paths)
+            # A separately externalized child is REFERENCED, not embedded:
+            # TDXNExt emits tdn_ref/tox_ref for a TAGGED child and stops, so
+            # its content is not in this file and must not move this
+            # fingerprint. The tag is that authority -- tdn_paths alone
+            # under-reports (_getTDNStrategyComps omits Embody, its ancestors
+            # and its descendants), which made /embody re-walk the entire
+            # Embody subtree: 188ms in one frame, plus a byte-identical
+            # re-export every burst (2026-08-28). Everything else -- non-COMP
+            # children, COMPs with no file of their own -- is embedded, so its
+            # params are recorded here. Narrowing the walk stales old
+            # baselines, so the first sweep after it checkpoints every root
+            # once: deliberate, since a checkpoint writes current state while
+            # re-baselining would silently drop real dirt (2026-07-20).
+            is_separate = (
+                (ext_tags is not None and c.isCOMP
+                 and not ext_tags.isdisjoint(c.tags))
+                or (tdn_paths is not None and c.path in tdn_paths))
+            is_embedded_comp = c.isCOMP and not is_separate
             if not c.isCOMP or is_embedded_comp:
                 parts.append((c.name, 'pars', EmbodyExt._parFingerprint(c)))
             if is_embedded_comp:
@@ -5917,7 +5991,7 @@ class EmbodyExt:
                 # -- otherwise an app edit to a nested "excluded" COMP would
                 # go undetected and the .tdn would drift stale.
                 child_fp = EmbodyExt._computeTDNFingerprint(
-                    c, tdn_paths, None)
+                    c, tdn_paths, None, ext_tags)
                 parts.append((c.name, 'children', child_fp))
         # All annotations (utility=True or False) -- uses annotation-specific attrs
         for ann in sorted(comp.findChildren(type=annotateCOMP, depth=1,
@@ -5941,6 +6015,17 @@ class EmbodyExt:
         """Return the set of all TDXN-externalized COMP paths."""
         return {path for path, _ in self._getTDNStrategyComps()}
 
+    def _extBoundaryTags(self) -> frozenset:
+        """Tags that mark a child COMP as managed by its OWN file.
+
+        The fingerprint's recursion boundary must be the exporter's, or the
+        two disagree about what a .tdn actually contains -- see
+        TDXNExt._hasTDNTag / _hasTOXTag, which stop the export at exactly
+        these tags.
+        """
+        return frozenset((self.my.par.Tdntag.eval(),
+                          self.my.par.Toxtag.eval()))
+
     @property
     def _tdn_fingerprints(self) -> dict:
         """TDXN fingerprint baselines, kept in ownerComp storage so they
@@ -5959,19 +6044,23 @@ class EmbodyExt:
         return cache
 
     def _isTDNDirty(self, comp, tdn_paths: set = None,
-                    exclude_tag: str = None) -> bool:
+                    exclude_tag: str = None,
+                    ext_tags: frozenset = None) -> bool:
         """Check if a TDXN COMP's network has changed since last export.
 
         Callers sweeping many COMPs in one pass (Update/dirtyHandler) should
-        precompute tdn_paths + exclude_tag once and pass them in, so the
-        per-COMP full-table scan in _getTDNPaths() and the par.eval() of the
-        exclude tag don't repeat for every COMP on every Refresh.
+        precompute tdn_paths + exclude_tag + ext_tags once and pass them in, so
+        the per-COMP full-table scan in _getTDNPaths() and the par.eval()s
+        don't repeat for every COMP on every Refresh.
         """
         if tdn_paths is None:
             tdn_paths = self._getTDNPaths()
         if exclude_tag is None:
             exclude_tag = self.my.par.Tdnexcludetag.eval()
-        current = self._computeTDNFingerprint(comp, tdn_paths, exclude_tag)
+        if ext_tags is None:
+            ext_tags = self._extBoundaryTags()
+        current = self._computeTDNFingerprint(comp, tdn_paths, exclude_tag,
+                                              ext_tags)
         stored = self._tdn_fingerprints.get(comp.path)
         if stored is None:
             # No stored fingerprint -- assume clean (just initialized)
@@ -5980,14 +6069,21 @@ class EmbodyExt:
         return current != stored
 
     def _storeTDNFingerprint(self, comp, tdn_paths: set = None,
-                             exclude_tag: str = None) -> None:
-        """Snapshot the TDXN COMP's network structure after export."""
+                             exclude_tag: str = None,
+                             ext_tags: frozenset = None) -> None:
+        """Snapshot the TDXN COMP's network structure after export.
+
+        MUST use the same boundary as _isTDNDirty -- a baseline stored with a
+        wider walk than the check reads false-dirty forever.
+        """
         if tdn_paths is None:
             tdn_paths = self._getTDNPaths()
         if exclude_tag is None:
             exclude_tag = self.my.par.Tdnexcludetag.eval()
+        if ext_tags is None:
+            ext_tags = self._extBoundaryTags()
         self._tdn_fingerprints[comp.path] = self._computeTDNFingerprint(
-            comp, tdn_paths, exclude_tag)
+            comp, tdn_paths, exclude_tag, ext_tags)
 
     def _getStrategyFilePath(self, op_path: str, strategy: str) -> Optional[str]:
         """Return the rel_file_path for a given operator + strategy, or None."""
@@ -6258,12 +6354,14 @@ class EmbodyExt:
         if self._tdnEnabled():
             tdn_paths = self._getTDNPaths()
             exclude_tag = self.my.par.Tdnexcludetag.eval()
+            ext_tags = self._extBoundaryTags()
             for oper in self.getExternalizedOps(COMP, strategy='tdn'):
                 # Skip root "/" (Full Project export, not a managed COMP) and
                 # excluded app-managed COMPs -- never auto dirty-check/save.
                 if oper.path == '/' or exclude_tag in oper.tags:
                     continue
-                dirty = self._isTDNDirty(oper, tdn_paths, exclude_tag)
+                dirty = self._isTDNDirty(oper, tdn_paths, exclude_tag,
+                                         ext_tags)
                 self._setDirtyState(oper.path, 'True' if dirty else '')
                 if dirty and update:
                     if self.SaveTDN(oper.path):
@@ -6334,6 +6432,7 @@ class EmbodyExt:
         # frame budget, so each chunk really cost scan + budget.
         self._dirty_tdn_paths = self._getTDNPaths()
         self._dirty_exclude_tag = exclude_tag
+        self._dirty_ext_tags = self._extBoundaryTags()
         # Defer even the FIRST chunk, so the frame that triggered the Refresh
         # (the user's save) does no fingerprinting at all.
         run(f"op('{self.my}').ext.Embody._sweepTDNDirtyChunk({gen})",
@@ -6359,6 +6458,7 @@ class EmbodyExt:
         exclude_tag = getattr(self, '_dirty_exclude_tag', None)
         if exclude_tag is None:
             exclude_tag = self.my.par.Tdnexcludetag.eval()
+        ext_tags = getattr(self, '_dirty_ext_tags', None)
         deadline = time.perf_counter() + self._DIRTY_SWEEP_BUDGET_MS / 1000.0
         i = getattr(self, '_dirty_idx', 0)
         while i < len(queue):
@@ -6373,7 +6473,8 @@ class EmbodyExt:
             # for the rest of the session with nothing pointing at the cause.
             # A detached callback must not be able to fail silently.
             try:
-                dirty = self._isTDNDirty(oper, tdn_paths, exclude_tag)
+                dirty = self._isTDNDirty(oper, tdn_paths, exclude_tag,
+                                         ext_tags)
                 self._setDirtyState(oper.path, 'True' if dirty else '')
             except Exception as e:
                 self.Log(f"Dirty scan failed for {oper.path}: {e}", "WARNING")

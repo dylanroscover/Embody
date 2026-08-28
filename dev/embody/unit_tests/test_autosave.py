@@ -29,6 +29,8 @@ class TestAutosave(EmbodyTestCase):
         ext._pending_checkpoint_roots.clear()
         ext._autosave_armed = False
         ext._coarse_checkpoint_due = False
+        ext._coarse_sweep_cursor = None
+        ext._coarse_sweep_ctx = None
         # Several tests below reach code that early-returns when auto-save is
         # off, so they would pass or fail on a USER PREFERENCE rather than on
         # the behaviour under test. Force it on for the suite and put the
@@ -75,6 +77,9 @@ class TestAutosave(EmbodyTestCase):
         # data loss. Bumping the generation is the invalidation the code itself
         # provides (_autosaveDrain returns immediately on a stale gen).
         ext._coarse_checkpoint_due = False
+        # A live cursor would let a later drain resume THIS suite's sweep.
+        ext._coarse_sweep_cursor = None
+        ext._coarse_sweep_ctx = None
         ext._autosave_gen += 1
         if getattr(self, '_autosave_par_was', None) is not None:
             par = getattr(self.embody.par, 'Autosave', None)
@@ -93,6 +98,25 @@ class TestAutosave(EmbodyTestCase):
         abs_tdn = str(ext.buildAbsolutePath(rel)) if rel else None
         self._tdn_cleanup.append((comp.path, abs_tdn))
         return comp, abs_tdn
+
+    def _make_nested_tdn(self, parent_name, child_name):
+        """A TDN COMP holding a child that is SEPARATELY TDXN-externalized.
+
+        The parent's .tdn carries only a tdn_ref for that child, so the child's
+        contents live in the child's own file -- the boundary the fingerprint
+        must respect.
+        """
+        ext = self.embody_ext
+        parent = self.sandbox.create(baseCOMP, parent_name)
+        child = parent.create(baseCOMP, child_name)
+        child.create(noiseTOP, 'inner')
+        for comp in (child, parent):     # child first: parent refs it
+            ext.applyTagToOperator(comp, 'tdn')
+            ext.ExternalizeImmediate(comp)
+            rel = ext._getStrategyFilePath(comp.path, 'tdn')
+            self._tdn_cleanup.append(
+                (comp.path, str(ext.buildAbsolutePath(rel)) if rel else None))
+        return parent, child
 
     # --- Stage 1: skip_cleanup ---
 
@@ -200,6 +224,121 @@ class TestAutosave(EmbodyTestCase):
                              'the sweep examined more roots than its cap allows')
         self.assertGreater(type(ext)._COARSE_SWEEP_CAP, 0,
                            'the shipped cap must still bound a real sweep')
+
+    # --- the fingerprint's recursion boundary (must match the exporter) ---
+
+    def test_boundary_tags_match_the_exporter(self):
+        """TDXNExt stops the export at _hasTDNTag / _hasTOXTag. If the
+        fingerprint's boundary drifts from those tags the two disagree about
+        what a .tdn actually holds -- the whole class of bug here."""
+        ext = self.embody_ext
+        self.assertEqual(
+            ext._extBoundaryTags(),
+            frozenset((self.embody.par.Tdntag.eval(),
+                       self.embody.par.Toxtag.eval())),
+            'boundary tags must be exactly the exporter\'s TDXN + TOX tags')
+
+    def test_fingerprint_boundary_honors_the_tag_not_just_the_path_set(self):
+        """The regression this fixes.
+
+        _getTDNStrategyComps deliberately omits Embody, its ancestors and its
+        descendants -- correct for strip/reconstruct, wrong as a fingerprint
+        boundary. Driving the boundary off that path set made a parent re-walk
+        a child whose content its own file merely references (/embody re-walked
+        the entire Embody subtree: 188ms in one frame, and a byte-identical
+        re-export every burst). The TAG is the authority.
+        """
+        parent, child = self._make_nested_tdn('fp_tagonly', 'fp_tagchild')
+        ext = self.embody_ext
+        tags = ext._extBoundaryTags()
+        # An EMPTY path set stands in for the excluded region: the child is
+        # tagged, but absent from the set -- exactly the Embody-descendant case.
+        before = ext._computeTDNFingerprint(parent, set(), None, tags)
+        child.op('inner').par.period = 3.25
+        after = ext._computeTDNFingerprint(parent, set(), None, tags)
+        self.assertEqual(
+            before, after,
+            'a TDXN-tagged child must bound the walk even when the path set '
+            'omits it')
+        # ...and without the tag boundary it does NOT hold. This half fails if
+        # the fix is ever reverted to a path-set-only boundary.
+        before_old = ext._computeTDNFingerprint(parent, set(), None, None)
+        child.op('inner').par.period = 7.5
+        after_old = ext._computeTDNFingerprint(parent, set(), None, None)
+        self.assertNotEqual(
+            before_old, after_old,
+            'path-set-only boundary should still over-walk -- if this passes, '
+            'the test no longer proves the tag boundary does anything')
+
+    def test_fingerprint_still_walks_an_untagged_child(self):
+        """Guard against over-fixing: a child with no file of its own IS
+        embedded in the parent's .tdn, so its edits must still dirty it."""
+        comp, _ = self._make_tdn('fp_embedded')
+        inner = comp.create(baseCOMP, 'plain')
+        inner.create(noiseTOP, 'deep')
+        ext = self.embody_ext
+        args = (ext._getTDNPaths(), None, ext._extBoundaryTags())
+        before = ext._computeTDNFingerprint(comp, *args)
+        inner.op('deep').par.period = 6.5
+        after = ext._computeTDNFingerprint(comp, *args)
+        self.assertNotEqual(before, after,
+                            'an embedded child must still move the fingerprint')
+
+    # --- the sweep runs in per-frame slices ---
+
+    def test_coarse_sweep_resumes_across_frames(self):
+        """_COARSE_SWEEP_CAP bounds how MANY roots a sweep examines, never how
+        long one frame spends: a single big root fingerprints in ~62ms, so the
+        cap alone still left a 188ms frame. A budgeted call must leave the rest
+        on the cursor, and resuming must not lose a dirty root."""
+        comp, _ = self._make_tdn('chunk_resume')
+        comp.op('n1').par.period = 11.0          # genuinely dirty
+        ext = self.embody_ext
+        ext._pending_checkpoint_roots.clear()
+        ext._coarse_sweep_cursor = None
+        # Lift the cap for this test: it slices the roots alphabetically, and
+        # the live project already carries more than the shipped 60, so our
+        # sandbox root's presence in the slice would otherwise depend on how
+        # many roots the project happens to have.
+        ext._COARSE_SWEEP_CAP = 100000       # instance shadow; removed below
+        try:
+            ext._queueDirtyTDNRoots(budget_ms=0.0)   # smallest possible slice
+            self.assertIsNotNone(ext._coarse_sweep_cursor,
+                                 'a budgeted sweep must leave a live cursor')
+            self.assertIn(comp.path, ext._coarse_sweep_cursor,
+                          'the dirty root must be in the sweep to begin with')
+            guard = 0
+            while ext._coarse_sweep_cursor is not None and guard < 100000:
+                ext._queueDirtyTDNRoots(budget_ms=0.0)
+                guard += 1
+        finally:
+            del ext._COARSE_SWEEP_CAP        # back to the class attribute
+        self.assertIsNone(ext._coarse_sweep_cursor,
+                          'the sweep must finish and drop its cursor')
+        self.assertIn(comp.path, ext._pending_checkpoint_roots,
+                      'chunking must not lose a dirty root')
+
+    def test_coarse_sweep_unbudgeted_completes_in_one_call(self):
+        """Back-compat: no budget means the whole sweep, so every existing
+        caller keeps its one-shot contract."""
+        ext = self.embody_ext
+        ext._coarse_sweep_cursor = None
+        ext._queueDirtyTDNRoots()
+        self.assertIsNone(ext._coarse_sweep_cursor,
+                          'an unbudgeted sweep must complete in one call')
+
+    def test_coarse_sweep_drops_its_cursor_on_failure(self):
+        """A sweep that raises must not leave a live cursor: the drain stays
+        armed while one exists, so a broken sweep would resume every frame
+        forever."""
+        ext = self.embody_ext
+        ext._coarse_sweep_cursor = None
+        ext._queueDirtyTDNRoots(budget_ms=0.0)
+        self.assertIsNotNone(ext._coarse_sweep_cursor)
+        ext._coarse_sweep_ctx = None        # force the context unpack to raise
+        ext._queueDirtyTDNRoots(budget_ms=0.0)
+        self.assertIsNone(ext._coarse_sweep_cursor,
+                          'a failed sweep must clear its cursor')
 
     # --- Stage 2d: the WIRING (the chokepoint must actually call all this) ---
 
