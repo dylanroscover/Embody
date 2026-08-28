@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.1.9
+
+An update check that finds nothing no longer opens a window to say so.
+
+- **The "Embody is up to date" modal is gone from the check path.** The line directly above it already wrote that same sentence to the **Update Status** parameter, so a clean check reported itself twice -- once in the readout, once in a modal that interrupted to announce that nothing had happened. The status par is now the single report. The confirmation *after* a successful install is deliberately untouched: that one reports a change you cannot otherwise see.
+
+Three new tests pin the behaviour, including one asserting the status par still reports -- with the modal gone, that par is the only feedback a check has left (**4,379 tests**, 136 suites).
+
 ## v6.1.8
 
 The idle checkpoint sweep stalled a frame for 184ms after every agent burst, because it walked further than the export actually writes.

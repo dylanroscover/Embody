@@ -722,12 +722,12 @@ class UpdaterExt:
         # releases/latest is commit-date ordered, NOT semver -- only a
         # strictly greater remote version is an update.
         if remote <= local:
+            # No dialog here. _status writes this same sentence to the Update
+            # Status par, so a modal repeats it to interrupt with "nothing
+            # happened". The post-INSTALL confirmation stays: that one reports
+            # a change the user cannot otherwise see (2026-08-28).
             self._status(f'Up to date (v{".".join(map(str, local))})')
             self._log('up to date')
-            if interactive:
-                self._dialog('Embody Update',
-                             'Embody is up to date '
-                             f'(v{".".join(map(str, local))}).', ['OK'])
             return
 
         tag = result['tag']

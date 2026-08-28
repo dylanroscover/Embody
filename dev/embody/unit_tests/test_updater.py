@@ -1407,3 +1407,77 @@ class TestUpdaterCappedRead(EmbodyTestCase):
         feed = self._Feed([b'x' * 64] * 100, now)
         got = _updater_cls()._readCapped(feed, 100, 300, clock=clock)
         self.assertEqual(100, len(got))
+
+
+class TestUpdateCheckIsQuiet(EmbodyTestCase):
+    """A check that finds nothing must not open a modal.
+
+    Its result already lands in the Update Status par, so a dialog states the
+    same sentence twice and interrupts the user to report that nothing
+    happened. The post-INSTALL confirmation is the opposite case -- it reports
+    a change the user cannot otherwise see -- and must survive this.
+    """
+
+    def _checker(self, local='6.1.8'):
+        U = _updater_cls()
+
+        class FakePar:
+            def __init__(self, val):
+                self.val = val
+                self.readOnly = True
+
+            def eval(self):
+                return self.val
+
+        class FakePars:
+            pass
+
+        pars = FakePars()
+        pars.Version = FakePar(local)
+
+        class FakeEmbody:
+            par = pars
+
+        class Harness(U):
+            _embody = FakeEmbody()   # shadow the property with an attribute
+
+            def __init__(self):
+                self.dialogs = []
+                self.statuses = []
+                self.logs = []
+
+            def _status(self, text, *a, **k):
+                self.statuses.append(text)
+
+            def _log(self, message, level='INFO'):
+                self.logs.append(message)
+
+            def _dialog(self, title, body, buttons):
+                self.dialogs.append(body)
+                return buttons[0]
+
+        return Harness()
+
+    def test_an_up_to_date_check_raises_no_dialog(self):
+        c = self._checker(local='6.1.8')
+        c._finishCheck({'tag': 'v6.1.8'}, interactive=True, auto_install=False)
+        self.assertEqual(
+            [], c.dialogs,
+            'an interactive check that finds nothing must not open a modal -- '
+            'the Update Status par already carries this exact result')
+
+    def test_an_older_remote_also_raises_no_dialog(self):
+        """releases/latest is commit-date ordered, so a LOWER remote reaches
+        the same branch -- it must be equally quiet."""
+        c = self._checker(local='6.1.8')
+        c._finishCheck({'tag': 'v6.1.7'}, interactive=True, auto_install=False)
+        self.assertEqual([], c.dialogs)
+
+    def test_removing_the_dialog_did_not_remove_the_report(self):
+        """The par is now the ONLY report of a clean check; if this regresses,
+        an interactive check becomes completely silent."""
+        c = self._checker(local='6.1.8')
+        c._finishCheck({'tag': 'v6.1.8'}, interactive=True, auto_install=False)
+        self.assertTrue(
+            any('Up to date' in s for s in c.statuses),
+            'the status par must still report the check: %r' % (c.statuses,))
