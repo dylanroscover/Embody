@@ -154,7 +154,7 @@ HOST_REPAIRING = "repairing"
 
 HEALTH_TIMEOUT_S = 3.0
 REGISTER_TIMEOUT_S = 10.0
-# Unregister is best-effort on the way out the door: one attempt, and a
+# unregister is best-effort on the way out the door: one attempt, and a
 # short one. A shutting-down session must never block on a host app that
 # is itself going away.
 UNREGISTER_TIMEOUT_S = 1.0

@@ -5556,7 +5556,7 @@ class TestConvoyRepairRuntime(EmbodyTestCase):
     THE DEAD END THIS EXISTS FOR: the recorded Python is gone, so
     host_state says 'Needs repair -- Python not found (reinstall)', but
     the record was written by a NEWER Embody, so plan_install answers
-    refuse_downgrade and InstallHost overwrites the warning with
+    refuse_downgrade and installHost overwrites the warning with
     'installed by a newer Embody'. The machine's daemon stays dead with
     no route back through the UI.
 

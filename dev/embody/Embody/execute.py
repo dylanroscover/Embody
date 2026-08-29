@@ -150,7 +150,7 @@ def onExit():
 	# Best-effort by contract (one attempt, 1s timeout, every outcome a
 	# value) and BLOCKING, because no run() callback will ever fire again
 	# on a TD that is closing. Costs nothing at all when Convoy was never
-	# enabled -- Unregister() returns before touching the filesystem when
+	# enabled -- unregister() returns before touching the filesystem when
 	# this process holds no node id.
 	#
 	# NOT suppressed for an in-flight Convoy-relayed job, deliberately.
@@ -165,7 +165,7 @@ def onExit():
 	try:
 		convoy = parent.Embody.op('convoy')
 		if convoy:
-			convoy.ext.ConvoyExt.Unregister(blocking=True, reason='TD exit')
+			convoy.ext.ConvoyExt.unregister(blocking=True, reason='TD exit')
 	except Exception:
 		# A shutting-down TD must never be blocked or broken by this.
 		pass

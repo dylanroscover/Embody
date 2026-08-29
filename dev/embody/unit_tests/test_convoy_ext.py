@@ -294,9 +294,9 @@ class TestConvoyRegistrations(EmbodyTestCase):
         self.assertIsNotNone(
             comp, "the 'convoy' child COMP must exist inside the Embody COMP")
         self.assertTrue(
-            callable(getattr(comp.ext.ConvoyExt, 'Register', None)),
+            callable(getattr(comp.ext.ConvoyExt, 'register', None)),
             'ConvoyExt must be promoted on the convoy COMP with Register()')
-        for name in ('Unregister', 'ConvoyStatus', '_convoyTick',
+        for name in ('unregister', 'convoyStatus', '_convoyTick',
                      '_reconcile', '_desiredState', '_beginCall',
                      '_pollCall', 'listNodes', 'ping', 'call', 'batch',
                      'getJob', 'cancelJob', 'requestResult'):
@@ -389,8 +389,8 @@ class TestConvoyRegistrations(EmbodyTestCase):
     def test_parexec_wires_the_convoy_toggle(self):
         src = self.embody.op('parexec').text
         self.assertIn("par.name == 'Convoyenable'", src)
-        self.assertIn('ConvoyExt.Register()', src)
-        self.assertIn('ConvoyExt.Unregister()', src)
+        self.assertIn('ConvoyExt.register()', src)
+        self.assertIn('ConvoyExt.unregister()', src)
         self.assertIn("parent.Embody.op('convoy')", src)
         # "No AI client" is the Configure For toggles being empty, NOT the
         # Launch Client menu reading None. Since those axes were split,
@@ -411,7 +411,7 @@ class TestConvoyRegistrations(EmbodyTestCase):
         self.assertIn("'Convoyenable'", src,
                       'init() must scrub the baked Convoyenable, exactly '
                       'as it does for Envoyenable')
-        self.assertIn('Unregister(blocking=True', src,
+        self.assertIn('unregister(blocking=True', src,
                       'onExit() must clear this node port best-effort')
 
     def test_the_exit_callback_is_actually_armed(self):
@@ -856,7 +856,7 @@ class TestReconcileCalls(ConvoyExtBase):
 
     def test_convoy_status_snapshot_is_total(self):
         self.convoy._reconcile()
-        snap = self.convoy.ConvoyStatus()
+        snap = self.convoy.convoyStatus()
         for key in ('enabled', 'performing', 'perform_mode_requested',
                     'wake_active', 'remote_wake', 'wake_port',
                     'saved_project', 'convoy_id',
@@ -871,14 +871,14 @@ class TestReconcileCalls(ConvoyExtBase):
 
     def test_td_exit_is_sent_as_shutdown_not_membership_disable(self):
         self.convoy._reconcile()
-        self.convoy.Unregister(blocking=False, reason='TD exit')
+        self.convoy.unregister(blocking=False, reason='TD exit')
         sent = self.client.last('unregister')
         self.assertEqual(sent['reason'], 'shutdown')
 
     def test_invalid_unregister_intent_fails_closed(self):
         self.convoy._reconcile()
         before = self.client.count('unregister')
-        result = self.convoy.Unregister(blocking=False,
+        result = self.convoy.unregister(blocking=False,
                                         reason='remote-request')
         self.assertEqual(result['reason'], 'invalid_unregister_reason')
         self.assertEqual(self.client.count('unregister'), before)
@@ -1588,7 +1588,7 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
     def setUp(self):
         super().setUp()
         self._patch(self.convoy, '_installConsentGiven', lambda: False)
-        self._patch(self.convoy, 'RecordInstallConsent', lambda: True)
+        self._patch(self.convoy, 'recordInstallConsent', lambda: True)
         self.embody_target = self.embody.ext.Embody
         self.entry = {}
         self.dialogs = []
@@ -1728,18 +1728,18 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
 
     def test_register_runs_the_gate_before_any_network_call(self):
         self.choice = 0
-        self.convoy.Register()
+        self.convoy.register()
         self.assertEqual(self.client.calls, [],
                          'a declined enable must not reach the host app')
         self.choice = 1
-        self.convoy.Register()
+        self.convoy.register()
         self.assertEqual(self.client.count('register'), 1)
 
     def test_explicit_enable_can_register_the_wake_plane_while_performing(self):
         self._patch(self.convoy, '_performing', lambda: True)
         self._patch(self.convoy, '_performRequested', lambda: True)
         self._patch(self.convoy, '_envoyPort', lambda: None)
-        result = self.convoy.Register()
+        result = self.convoy.register()
         self.assertNotEqual(result.get('state'), 'deferred')
         self.assertEqual(self.client.count('register'), 1)
         self.assertTrue(self.client.last('register')['perform_mode'])

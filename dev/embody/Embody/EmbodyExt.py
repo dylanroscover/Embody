@@ -1846,7 +1846,7 @@ class EmbodyExt:
         # 3.5 Convoy. Flips the canonical Convoyenable toggle -- '' means an
         #     older wizard did not show the step, so leave the setting alone.
         #     Installing/starting the per-user host app is a SEPARATE explicit
-        #     pulse (ConvoyExt.InstallHost); the wizard only sets the flag.
+        #     pulse (ConvoyExt.installHost); the wizard only sets the flag.
         if convoy in ('enable', 'disable'):
             # The wizard's Convoy step IS the consent: it names the trusted
             # LAN, what enabling permits, and the background app. Record that
@@ -1857,7 +1857,7 @@ class EmbodyExt:
                 try:
                     comp = self.my.op('convoy')
                     if comp:
-                        comp.ext.ConvoyExt.RecordInstallConsent()
+                        comp.ext.ConvoyExt.recordInstallConsent()
                 except Exception as e:
                     self.Log(f'Convoy consent not recorded: {e}', 'DEBUG')
             self.my.par.Convoyenable = (convoy == 'enable')

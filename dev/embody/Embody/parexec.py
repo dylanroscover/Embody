@@ -77,7 +77,7 @@ def onValueChange(par, prev):
 	elif par.name == 'Performmode':
 		convoy = parent.Embody.op('convoy')
 		if convoy:
-			convoy.ext.ConvoyExt.ResetWakeLeases(close_override=True)
+			convoy.ext.ConvoyExt.resetWakeLeases(close_override=True)
 		if par.eval():
 			parent.Embody.ext.Embody._enterPerformMode()
 		else:
@@ -97,7 +97,7 @@ def onValueChange(par, prev):
 		# startup: a restored Convoyenable=True never reaches here, so it
 		# can never raise a modal on project open. Register() owns the
 		# consent gate (mint + confirm on first enable) and the reconcile;
-		# Unregister() clears this node's port on the host app.
+		# unregister() clears this node's port on the host app.
 		# Guarded like the other child-COMP hooks -- a partial or
 		# pre-Convoy install where the par exists but the child does not
 		# skips with one warning instead of raising every toggle.
@@ -106,8 +106,8 @@ def onValueChange(par, prev):
 			if par.eval():
 				# The explicit toggle is the one gesture that may raise
 				# the realm-rejoin dialog; arm its bounded window here.
-				convoy.ext.ConvoyExt.ArmRejoinOffer()
-				convoy.ext.ConvoyExt.Register()
+				convoy.ext.ConvoyExt.armRejoinOffer()
+				convoy.ext.ConvoyExt.register()
 				# Convoy can run without an attached AI coding client, but its TD
 				# relay still terminates at Envoy's loopback command server. Keep
 				# only that internal substrate on. 'No client' means nothing is
@@ -119,7 +119,7 @@ def onValueChange(par, prev):
 						and not parent.Embody.par.Envoyenable.eval()):
 					parent.Embody.par.Envoyenable = True
 			else:
-				convoy.ext.ConvoyExt.Unregister()
+				convoy.ext.ConvoyExt.unregister()
 				if (not mod.embody_git.selected_clients(parent.Embody.ext.Embody)
 						and parent.Embody.par.Envoyenable.eval()):
 					parent.Embody.par.Envoyenable = False
@@ -135,7 +135,7 @@ def onValueChange(par, prev):
 		# first-enable consent dialog remains owned exclusively by its toggle.
 		convoy = parent.Embody.op('convoy')
 		if convoy and parent.Embody.par.Convoyenable.eval():
-			convoy.ext.ConvoyExt.Register()
+			convoy.ext.ConvoyExt.register()
 
 	elif par.name in ('Convoyremotewake', 'Convoywakegrace'):
 		# Both are local membership/runtime settings.  The listener remains
@@ -143,7 +143,7 @@ def onValueChange(par, prev):
 		# and immediately closes a temporary wake when the user switches it off.
 		convoy = parent.Embody.op('convoy')
 		if convoy:
-			convoy.ext.ConvoyExt.WakeSettingsChanged()
+			convoy.ext.ConvoyExt.wakeSettingsChanged()
 
 	elif par.name in ('Convoyallowtdpython', 'Convoyallowfullshell'):
 		# Fast path only: TD defers this callback to the next cook, so it
@@ -153,7 +153,7 @@ def onValueChange(par, prev):
 		# that on its tick, so a swallowed callback cannot grant either.
 		convoy = parent.Embody.op('convoy')
 		if convoy:
-			convoy.ext.ConvoyExt.LocalDangerGateChanged(
+			convoy.ext.ConvoyExt.localDangerGateChanged(
 				par.name, bool(par.eval()))
 		elif par.eval():
 			par.val = 0
@@ -168,7 +168,7 @@ def onValueChange(par, prev):
 		# accepted value back into every local node.
 		convoy = parent.Embody.op('convoy')
 		if convoy:
-			convoy.ext.ConvoyExt.LocalArtifactQuotaChanged(par.eval())
+			convoy.ext.ConvoyExt.localArtifactQuotaChanged(par.eval())
 
 	# UI color pars changed - reload list theme
 	elif 'color' in par.name.lower():
@@ -317,12 +317,12 @@ def onPulse(par):
 		convoy = parent.Embody.op('convoy')
 		if convoy:
 			getattr(convoy.ext.ConvoyExt, {
-				'Convoyinstallhost': 'InstallHost',
-				'Convoystarthost': 'StartHost',
-				'Convoystophost': 'StopHost',
-				'Convoyuninstallhost': 'UninstallHost',
-				'Convoyforgetoffline': 'ForgetOfflineNodes',
-				'Convoyresolverealm': 'ResolveRealmConflict',
+				'Convoyinstallhost': 'installHost',
+				'Convoystarthost': 'startHost',
+				'Convoystophost': 'stopHost',
+				'Convoyuninstallhost': 'uninstallHost',
+				'Convoyforgetoffline': 'forgetOfflineNodes',
+				'Convoyresolverealm': 'resolveRealmConflict',
 			}[par.name])()
 		else:
 			parent.Embody.Log(
@@ -341,7 +341,7 @@ def onPulse(par):
 		# action, so it is the honest home for this.
 		convoy = parent.Embody.op('convoy')
 		if convoy:
-			convoy.ext.ConvoyExt.HostStatus(refresh=True)
+			convoy.ext.ConvoyExt.refreshHostStatus(refresh=True)
 
 	elif par.name == 'Setupwizard':
 		parent.Embody.ext.Embody._openSetupWizard()

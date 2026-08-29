@@ -856,10 +856,10 @@ class TestARepairDoesNotSayItIsInstalling(_LadderBase):
                             convoy_mod.ConvoyExt.HOST_INSTALLING)
 
     def test_the_install_button_picks_the_note_from_repair_only(self):
-        """Read InstallHost itself: the note handed to _beginHostCall is
+        """Read installHost itself: the note handed to _beginHostCall is
         chosen by `repair_only`, not fixed at HOST_INSTALLING."""
         import inspect
-        source = inspect.getsource(convoy_mod.ConvoyExt.InstallHost)
+        source = inspect.getsource(convoy_mod.ConvoyExt.installHost)
         self.assertIn('self.HOST_REPAIRING if repair_only', source)
         self.assertIn('else self.HOST_INSTALLING', source)
 
@@ -870,7 +870,7 @@ class TestEnablingWaitsForTheSharedEnvironment(EmbodyTestCase):
     THE FIELD FAILURE THIS PINS (2026-08-09, clean v6.0.230 install on a
     clean machine): the wizard enabled Envoy, which starts building its
     venv on a background worker that runs for MINUTES, then enabled Convoy
-    a second later. Convoy's enable path went straight to InstallHost,
+    a second later. Convoy's enable path went straight to installHost,
     found no interpreter -- because the venv did not exist YET -- failed
     the install outright, and told the user to "Enable Envoy first", which
     is precisely what they had just done.
@@ -925,7 +925,7 @@ class TestEnablingWaitsForTheSharedEnvironment(EmbodyTestCase):
     def test_enabling_asks_before_it_installs(self):
         """The ORDERING, pinned at the source.
 
-        _ensureHostApp must consult the predicate before InstallHost --
+        _ensureHostApp must consult the predicate before installHost --
         that is the entire fix. A source check rather than a behavioural
         one because the method needs a live COMP; without it this class
         would pass while the enable path still raced the venv.
@@ -939,8 +939,8 @@ class TestEnablingWaitsForTheSharedEnvironment(EmbodyTestCase):
                       'enabling Convoy must check for a runtime BEFORE '
                       'attempting the install')
         self.assertLess(
-            body.index('_hostRuntimeResolvable'), body.index('InstallHost'),
-            'the runtime check must come BEFORE InstallHost, or the install '
+            body.index('_hostRuntimeResolvable'), body.index('installHost'),
+            'the runtime check must come BEFORE installHost, or the install '
             'still races the venv Envoy is building')
         self.assertIn('_awaitHostRuntime', body,
                       'a missing runtime must schedule a retry, not give up')

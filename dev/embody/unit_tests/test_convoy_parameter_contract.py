@@ -241,7 +241,7 @@ def test_synthetic_on_request_cannot_create_local_approval():
     calls = []
     ext._beginPolicyCall = lambda action, **request: calls.append(
         (action, request)) or True
-    result = ext.LocalDangerGateChanged("Convoyallowtdpython", True)
+    result = ext.localDangerGateChanged("Convoyallowtdpython", True)
     assert result == {"ok": True, "pending": True,
                       "requested": "Convoyallowtdpython",
                       "reverted": ["Convoyallowtdpython"]}
@@ -254,7 +254,7 @@ def test_synthetic_on_request_cannot_create_local_approval():
 #
 # TD defers parexec onValueChange to the next cook, so a write-time flag
 # can never mark the extension's own writes: every projection re-entered
-# LocalDangerGateChanged as if a human had toggled it, and a callback
+# localDangerGateChanged as if a human had toggled it, and a callback
 # swallowed by a suppressed window (a save, settings restore) left an
 # unauthorized, unenforced On standing until the next startup. The rule
 # that replaced the flag: the extension only writes authoritative
@@ -278,10 +278,10 @@ def test_projection_writes_do_not_route_on_their_deferred_callbacks():
     assert pars.Convoyartifactquota.eval() == 2048
     # the deferred callbacks TD queued for those writes arrive NOW:
     for name in ("Convoyallowtdpython", "Convoyallowfullshell"):
-        late = ext.LocalDangerGateChanged(
+        late = ext.localDangerGateChanged(
             name, bool(getattr(pars, name).eval()))
         assert late == {"ok": True, "in_sync": True}, name
-    assert ext.LocalArtifactQuotaChanged(2048) == {"ok": True,
+    assert ext.localArtifactQuotaChanged(2048) == {"ok": True,
                                                    "in_sync": True}
     assert calls == []
 

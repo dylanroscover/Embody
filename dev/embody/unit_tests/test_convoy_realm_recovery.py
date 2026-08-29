@@ -1,6 +1,6 @@
 """The TD-side realm-conflict recovery: worker bodies + the rejoin rebind.
 
-The adversarial panel's finding: the entire ResolveRealmConflict surface
+The adversarial panel's finding: the entire resolveRealmConflict surface
 shipped with zero tests while driving two destructive host operations.
 These run under plain pytest -- the worker bodies are module-level
 functions that touch no TD object BY CONTRACT (same load-off-disk

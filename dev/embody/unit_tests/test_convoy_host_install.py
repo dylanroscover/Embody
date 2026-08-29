@@ -603,7 +603,7 @@ class ConvoyHostBase(EmbodyTestCase):
 class TestInstallOrchestration(ConvoyHostBase):
 
     def test_install_writes_the_payload_and_starts_the_supervisor(self):
-        result = self.convoy.InstallHost()
+        result = self.convoy.installHost()
         self.assertEqual(result['state'], 'installing')
         self.assertEqual(self.installer.count('install'), 1)
         sent = self.installer.last('install')
@@ -625,7 +625,7 @@ class TestInstallOrchestration(ConvoyHostBase):
         self.assertEqual(self.host_texts[0], 'Installing...')
 
     def test_install_asks_first_and_names_what_it_registers(self):
-        self.convoy.InstallHost()
+        self.convoy.installHost()
         self.assertLen(self.dialogs, 1)
         _title, message, buttons = self.dialogs[0]
         self.assertEqual(buttons[0], 'Cancel', 'the safe answer is button 0')
@@ -649,7 +649,7 @@ class TestInstallOrchestration(ConvoyHostBase):
 
     def test_cancel_writes_nothing(self):
         self.choice = 0
-        result = self.convoy.InstallHost()
+        result = self.convoy.installHost()
         self.assertEqual(result['state'], 'declined')
         self.assertEqual(self.installer.count('install'), 0)
         self.assertEqual(self.installer.count('start'), 0)
@@ -661,7 +661,7 @@ class TestInstallOrchestration(ConvoyHostBase):
 
     def test_a_suppressed_dialog_is_a_decline(self):
         self.choice = -1
-        self.assertEqual(self.convoy.InstallHost()['state'], 'declined')
+        self.assertEqual(self.convoy.installHost()['state'], 'declined')
         self.assertEqual(self.installer.count('install'), 0)
 
     def test_install_is_the_repair_path(self):
@@ -669,7 +669,7 @@ class TestInstallOrchestration(ConvoyHostBase):
         self.installer.installed = {'version': VERSION,
                                     'supervisor': 'scheduled_task',
                                     'interpreter': 'C:/gone/pythonw.exe'}
-        result = self.convoy.InstallHost()
+        result = self.convoy.installHost()
         self.assertEqual(result['state'], 'installing')
         self.assertEqual(result['action'], self.install_mod.ACTION_CURRENT,
                          'the same version is a stated no-op to plan_install')
@@ -686,7 +686,7 @@ class TestInstallOrchestration(ConvoyHostBase):
     def test_a_newer_install_is_the_one_refusal(self):
         self.installer.installed = {'version': '6.0.180',
                                     'supervisor': 'scheduled_task'}
-        result = self.convoy.InstallHost()
+        result = self.convoy.installHost()
         self.assertEqual(result['state'], 'refused')
         self.assertEqual(self.installer.count('install'), 0)
         self.assertEqual(self.dialogs, [],
@@ -704,7 +704,7 @@ class TestInstallOrchestration(ConvoyHostBase):
         self.installer.installed = {'version': '6.0.180',
                                     'supervisor': 'scheduled_task',
                                     'interpreter': 'C:/gone/pythonw.exe'}
-        result = self.convoy.InstallHost()
+        result = self.convoy.installHost()
         self.assertEqual(result['state'], 'installing')
         self.assertEqual(result['action'],
                          self.install_mod.ACTION_REPAIR_RUNTIME)
@@ -717,7 +717,7 @@ class TestInstallOrchestration(ConvoyHostBase):
         self.installer.installed = {'version': '6.0.180',
                                     'supervisor': 'scheduled_task',
                                     'interpreter': 'C:/gone/pythonw.exe'}
-        self.convoy.InstallHost()
+        self.convoy.installHost()
         self.assertLen(self.dialogs, 1)
         title, message, buttons = self.dialogs[0]
         self.assertEqual(buttons[0], 'Cancel', 'the safe answer is button 0')
@@ -732,7 +732,7 @@ class TestInstallOrchestration(ConvoyHostBase):
         self.installer.installed = {'version': '6.0.180',
                                     'supervisor': 'scheduled_task',
                                     'interpreter': 'C:/gone/pythonw.exe'}
-        result = self.convoy.InstallHost()
+        result = self.convoy.installHost()
         self.assertEqual(result['state'], 'declined')
         self.assertEqual(self.installer.count('repair_runtime'), 0)
         self.assertEqual(self.installer.argvs(), [])
@@ -748,7 +748,7 @@ class TestInstallOrchestration(ConvoyHostBase):
             self.installer.installed = {'version': '6.0.180',
                                         'supervisor': 'scheduled_task',
                                         'interpreter': interpreter}
-            result = self.convoy.InstallHost()
+            result = self.convoy.installHost()
             self.assertEqual(result['state'], 'refused')
             self.assertEqual(self.installer.count('repair_runtime'), 0)
             self.assertEqual(self.installer.count('install'), 0)
@@ -765,7 +765,7 @@ class TestInstallOrchestration(ConvoyHostBase):
         self.installer.installed = {'version': '6.0.180',
                                     'supervisor': 'scheduled_task',
                                     'interpreter': 'C:/gone/pythonw.exe'}
-        result = self.convoy.InstallHost()
+        result = self.convoy.installHost()
         self.assertEqual(result['state'], 'installing')
         self.assertEqual(self.installer.count('repair_runtime'), 1)
 
@@ -790,7 +790,7 @@ class TestInstallOrchestration(ConvoyHostBase):
     def test_an_external_supervisor_is_never_given_a_second_one(self):
         self.installer.installed = {'version': '6.0.100',
                                     'supervisor': 'external'}
-        self.convoy.InstallHost()
+        self.convoy.installHost()
         sent = self.installer.last('install')
         self.assertEqual(sent['supervisor'],
                          self.install_mod.SUPERVISOR_EXTERNAL,
@@ -811,14 +811,14 @@ class TestInstallOrchestration(ConvoyHostBase):
         ctx = self._fakeContext()
         ctx['version'] = '../evil'
         self._patch(self.convoy, '_hostContext', lambda: ctx)
-        result = self.convoy.InstallHost()
+        result = self.convoy.installHost()
         self.assertEqual(result['state'], 'refused')
         self.assertEqual(self.host_texts[-1], 'Install failed -- see log')
         self.assertEqual(self.installer.count('install'), 0)
 
     def test_no_vendored_modules_refuses_loudly(self):
         self._patch(self.convoy, '_hostModules', lambda: {})
-        result = self.convoy.InstallHost()
+        result = self.convoy.installHost()
         self.assertEqual(result['state'], 'error')
         self.assertEqual(self.installer.count('install'), 0)
         self.assertEqual(self.dialogs, [])
@@ -827,7 +827,7 @@ class TestInstallOrchestration(ConvoyHostBase):
 
     def test_no_interpreter_refuses_before_the_dialog(self):
         self.installer.interpreters = []
-        result = self.convoy.InstallHost()
+        result = self.convoy.installHost()
         self.assertEqual(result['state'], 'error')
         self.assertEqual(self.dialogs, [],
                          'a machine with no managed Convoy runtime must refuse '
@@ -836,20 +836,20 @@ class TestInstallOrchestration(ConvoyHostBase):
 
     def test_perform_mode_does_nothing(self):
         self._patch(self.convoy, '_performing', lambda: True)
-        self.assertEqual(self.convoy.InstallHost()['state'], 'deferred')
+        self.assertEqual(self.convoy.installHost()['state'], 'deferred')
         self.assertEqual(self.installer.calls, [])
         self.assertEqual(self.dialogs, [])
 
     def test_a_second_pulse_while_busy_is_ignored(self):
         self._patch(self.convoy, '_host_busy', True)
-        self.assertEqual(self.convoy.InstallHost()['state'], 'deferred')
+        self.assertEqual(self.convoy.installHost()['state'], 'deferred')
         self.assertEqual(self.installer.calls, [])
 
 
 class TestStartStopOrchestration(ConvoyHostBase):
 
     def test_start_refuses_when_nothing_is_installed(self):
-        result = self.convoy.StartHost()
+        result = self.convoy.startHost()
         self.assertEqual(result['state'], 'not_installed')
         self.assertEqual(self.installer.count('start'), 0)
         self.assertEqual(self.host_texts[-1], 'Not installed')
@@ -860,7 +860,7 @@ class TestStartStopOrchestration(ConvoyHostBase):
                                     'interpreter': FAKE_INTERPRETER}
         self.client.probe_status = self.client.STATUS_RUNNING
         self.client.portfile = {'pid': 4242, 'port': 41999}
-        self.convoy.StartHost()
+        self.convoy.startHost()
         self.assertEqual(self.installer.count('start'), 1)
         self.assertEqual(self.host_texts[0], 'Installed -- starting...')
         # host_state is the SHIPPING computation; needs_repair_python
@@ -869,9 +869,9 @@ class TestStartStopOrchestration(ConvoyHostBase):
         self.assertStartsWith(self.host_texts[-1], 'Needs repair')
 
     def test_stop_goes_through_the_installer_that_disables_first(self):
-        self.convoy.StopHost()
+        self.convoy.stopHost()
         self.assertEqual(self.installer.count('stop'), 1,
-                         'StopHost must never kill the daemon directly -- '
+                         'stopHost must never kill the daemon directly -- '
                          'without the disable inside stop() the supervisor '
                          'respawns it within a minute and the button looks '
                          'broken')
@@ -885,13 +885,13 @@ class TestStartStopOrchestration(ConvoyHostBase):
 
     def test_the_injected_shutdown_posts_to_a_confirmed_live_host(self):
         self.client.probe_status = self.client.STATUS_RUNNING
-        self.convoy.StopHost()
+        self.convoy.stopHost()
         self.assertEqual(self.client.count('host_post'), 1)
         self.assertEqual(self.installer.last('shutdown')['ok'], True)
 
     def test_the_shutdown_is_a_stated_no_op_when_nothing_answers(self):
         self.client.probe_status = self.client.STATUS_ABSENT
-        self.convoy.StopHost()
+        self.convoy.stopHost()
         self.assertEqual(self.client.count('host_post'), 0,
                          'no token may be sent to a host app that did not '
                          'confirm its identity on /health')
@@ -902,7 +902,7 @@ class TestStartStopOrchestration(ConvoyHostBase):
 
     def test_the_liveness_observer_reads_through_the_pid_check(self):
         self.client.portfile = None
-        self.convoy.StopHost()
+        self.convoy.stopHost()
         self.assertFalse(self.installer.last('is_running'))
 
 
@@ -910,7 +910,7 @@ class TestUninstallSafety(ConvoyHostBase):
     """A-41: uninstall is never an evidence-destruction path."""
 
     def test_preview_alters_nothing_at_all(self):
-        result = self.convoy.PreviewHostUninstall()
+        result = self.convoy.previewHostUninstall()
         self.assertEqual(result['state'], 'previewing')
         self.assertEqual(self.installer.count('uninstall'), 0)
         self.assertEqual(self.installer.count('plan_host_uninstall'), 1)
@@ -922,7 +922,7 @@ class TestUninstallSafety(ConvoyHostBase):
         self.assertIsNotNone(self.session.get('uninstall_preview'))
 
     def test_uninstall_previews_then_confirms_then_removes(self):
-        self.convoy.UninstallHost()
+        self.convoy.uninstallHost()
         self.assertLen(self.dialogs, 1)
         _title, message, buttons = self.dialogs[0]
         self.assertEqual(buttons[0], 'Cancel')
@@ -934,7 +934,7 @@ class TestUninstallSafety(ConvoyHostBase):
 
     def test_cancelling_the_uninstall_removes_nothing(self):
         self.choice = 0
-        self.convoy.UninstallHost()
+        self.convoy.uninstallHost()
         self.assertLen(self.dialogs, 1)
         self.assertEqual(self.installer.count('uninstall'), 0)
         self.assertEqual(self._warnings(), [])
@@ -963,7 +963,7 @@ class TestUninstallSafety(ConvoyHostBase):
         poisoned['remove'] = list(poisoned['remove']) + [
             self.install_mod._join('win32')(root, 'host.json')]
         self.installer.plan = poisoned
-        self.convoy.UninstallHost()
+        self.convoy.uninstallHost()
         self.assertEqual(self.installer.count('uninstall'), 0,
                          'a plan that would delete host.json must be refused '
                          'outright, not shown to the user to click past')
@@ -977,7 +977,7 @@ class TestUninstallSafety(ConvoyHostBase):
         poisoned['remove'] = list(poisoned['remove']) + [
             join(join(root, 'jobs'), 'job_abc.json')]
         self.installer.plan = poisoned
-        self.convoy.UninstallHost()
+        self.convoy.uninstallHost()
         self.assertEqual(self.installer.count('uninstall'), 0,
                          'jobs/ is retained as a DIRECTORY -- a target '
                          'underneath it destroys the same evidence without '
@@ -1032,7 +1032,7 @@ class TestHostChainHygiene(ConvoyHostBase):
         """A 20 s install and a 30 s heartbeat must not drain each other."""
         self.convoy._result = {'_gen': 99, '_action': 'register'}
         self.convoy._host_result = None
-        self.convoy.HostStatus()
+        self.convoy.refreshHostStatus()
         self.assertEqual(self.convoy._result,
                          {'_gen': 99, '_action': 'register'},
                          'the host chain must never touch _result')
@@ -1046,16 +1046,16 @@ class TestHostChainHygiene(ConvoyHostBase):
         self.assertLen(self._warnings(), 1)
 
     def test_checking_never_flashes_over_a_known_state(self):
-        self.convoy.HostStatus()
+        self.convoy.refreshHostStatus()
         self.assertEqual(self.host_texts[0], 'Checking...')
         settled = len(self.host_texts)
-        self.convoy.HostStatus()
+        self.convoy.refreshHostStatus()
         self.assertNotIn('Checking...', self.host_texts[settled:],
                          'flashing Checking... over a good "Running X "'
                          '(pid N)" on every refresh is pure flicker')
 
     def test_host_status_snapshot_is_total(self):
-        snap = self.convoy.HostStatus()
+        snap = self.convoy.refreshHostStatus()
         for key in ('state', 'installed_version', 'supervisor', 'live',
                     'pid', 'detail', 'busy', 'status'):
             self.assertDictHasKey(snap, key)
@@ -1893,8 +1893,8 @@ class TestHostThreadingDiscipline(EmbodyTestCase):
                 % (banned, found.group(0) if found else None))
 
     def test_the_promoted_host_api_exists(self):
-        for name in ('InstallHost', 'StartHost', 'StopHost', 'UninstallHost',
-                     'PreviewHostUninstall', 'HostStatus'):
+        for name in ('installHost', 'startHost', 'stopHost', 'uninstallHost',
+                     'previewHostUninstall', 'refreshHostStatus'):
             self.assertTrue(callable(getattr(self.comp.ext.ConvoyExt, name,
                                              None)),
                             'ConvoyExt must expose a callable %s' % (name,))
@@ -1934,7 +1934,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
 
     def test_the_dialog_names_offline_rows_and_cancel_touches_nothing(self):
         self.choice = 0                       # Cancel
-        self.convoy.ForgetOfflineNodes()
+        self.convoy.forgetOfflineNodes()
         self.assertLen(self.dialogs, 1)
         _title, message, buttons = self.dialogs[0]
         self.assertEqual(buttons[0], 'Cancel', 'the safe answer is button 0')
@@ -1950,7 +1950,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
 
     def test_confirm_forgets_each_offline_row(self):
         self.choice = 1
-        self.convoy.ForgetOfflineNodes()
+        self.convoy.forgetOfflineNodes()
         forgets = [body for path, body in self.client.posted
                    if path == '/nodes/forget']
         self.assertEqual([b['node_id'] for b in forgets],
@@ -1965,7 +1965,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         ]})
         self.client.get_results = [self.ROWS, rows_later]
         self.choice = 1
-        self.convoy.ForgetOfflineNodes()
+        self.convoy.forgetOfflineNodes()
         forgets = [body for path, body in self.client.posted
                    if path == '/nodes/forget']
         self.assertEqual([b['node_id'] for b in forgets], ['a' * 32],
@@ -1991,7 +1991,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
             return 200, {'ok': True, 'forgotten': True}
 
         self.client.post_result = refuse_busy
-        self.convoy.ForgetOfflineNodes()
+        self.convoy.forgetOfflineNodes()
         self.assertTrue(
             any('kept 1 with unfinished deliveries' in m for m, _l in self._logs),
             self._logs)
@@ -2020,7 +2020,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         button, and the daemon is never touched."""
         self.client.get_results = [
             (200, {'ok': True, 'host_id': 'h' * 32, 'nodes': []})]
-        self.convoy.ForgetOfflineNodes()
+        self.convoy.forgetOfflineNodes()
         self.assertLen(self.dialogs, 1)
         _title, message, buttons = self.dialogs[0]
         self.assertEqual(buttons, ['OK'])
@@ -2032,7 +2032,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         import time as _time
         self.convoy._host_busy = True
         self.convoy._host_busy_since = _time.time()
-        got = self.convoy.ForgetOfflineNodes()
+        got = self.convoy.forgetOfflineNodes()
         self.assertEqual(got['state'], 'busy')
         self.assertLen(self.dialogs, 0)
         self.convoy._host_busy = False
@@ -2052,7 +2052,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         orig_gen = self.comp.fetch('_convoy_gen', 0)
         try:
             self.choice = 1
-            self.convoy.ForgetOfflineNodes()
+            self.convoy.forgetOfflineNodes()
             self.assertTrue(any(path == '/nodes/forget'
                                 for path, _b in self.client.posted),
                             'the apply must actually have run')
@@ -2100,7 +2100,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
                  'last_seen_age_s': 3.0},
             ]})
         self.choice = 1
-        self.convoy.ForgetOfflineNodes()
+        self.convoy.forgetOfflineNodes()
         self.assertTrue(projected, 'the confirm must re-project the rows '
                                    'itself, synchronously')
         names = [r['Nodename'] for r in projected[-1]]
@@ -2120,7 +2120,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         self.session['next_call_at'] = later
         self.convoy._tick_ms = self.convoy._TICK_MAX_MS
         self.choice = 0                       # Cancel
-        self.convoy.ForgetOfflineNodes()
+        self.convoy.forgetOfflineNodes()
         self.assertEqual(self.session.get('next_call_at'), later,
                          'nothing was forgotten, nothing redraws early')
         self.assertEqual(self.convoy._tick_ms, self.convoy._TICK_MAX_MS)
@@ -2140,7 +2140,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
                  'hostname': me, 'node_name': '%s / smoke' % me,
                  'toe_name': 'smoke.1.toe', 'last_seen_age_s': 9999.0},
             ]})]
-        self.convoy.ForgetOfflineNodes()
+        self.convoy.forgetOfflineNodes()
         self.assertLen(self.dialogs, 1)
         _title, message, buttons = self.dialogs[0]
         self.assertEqual(buttons, ['OK'])
@@ -2167,7 +2167,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
                  'node_name': 'TEC-X / live', 'toe_name': 'live.1.toe',
                  'last_seen_age_s': 3.0},
             ]})]
-        self.convoy.ForgetOfflineNodes()
+        self.convoy.forgetOfflineNodes()
         self.assertLen(self.dialogs, 1)
         _title, message, buttons = self.dialogs[0]
         self.assertEqual(buttons, ['OK'])
@@ -2341,7 +2341,7 @@ class TestHostAutoUpdate(ConvoyHostBase):
     def test_register_success_wires_the_version_through(self):
         """The trigger rides the register drain -- the ONE moment we
         provably talked to the daemon -- but DEFERRED onto its own frame
-        callback: InstallHost's main-thread prelude must never run
+        callback: installHost's main-thread prelude must never run
         inside the register poll (TD crashed seconds after the first
         in-drain firing, 2026-08-05). Pin the wiring AND the deferral."""
         src = self.comp.op('ConvoyExt').text
@@ -2358,7 +2358,7 @@ class TestHostAutoUpdate(ConvoyHostBase):
             "self._maybeUpdateHostApp(result", registered_branch,
             'no inline call may sneak back into the register drain')
         update_body = src.split('def _maybeUpdateHostApp', 1)[1]
-        update_body = update_body.split('def InstallHost', 1)[0]
+        update_body = update_body.split('def installHost', 1)[0]
         self.assertIn('_staleInstance', update_body,
                       'the deferred callback must drop on a reinit-ed '
                       'instance like every other deferred run() in this '
@@ -2383,7 +2383,7 @@ class TestHostAutoUpdate(ConvoyHostBase):
         self.client.probe_status = self.client.STATUS_RUNNING
         self.client.get_results = [
             (200, {'ok': True, 'host_id': 'h' * 32})]   # /health: no version
-        self.convoy.InstallHost(confirm=False)
+        self.convoy.installHost(confirm=False)
         self.assertTrue(
             any('still reports' in w or 'may be stale' in w
                 for w in self._warnings()), self._warnings())
@@ -2393,7 +2393,7 @@ class TestHostAutoUpdate(ConvoyHostBase):
         self.client.probe_status = self.client.STATUS_RUNNING
         self.client.get_results = [
             (200, {'ok': True, 'host_id': 'h' * 32, 'app_version': VERSION})]
-        self.convoy.InstallHost(confirm=False)
+        self.convoy.installHost(confirm=False)
         self.assertFalse([w for w in self._warnings() if 'stale' in w],
                          self._warnings())
 

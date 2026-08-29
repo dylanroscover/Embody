@@ -397,7 +397,7 @@ class ConvoyExt:
         searches TD/system Python.
 
         The current checked-in catalog intentionally has no published assets.
-        Returning it is still valuable: InstallHost can report the exact
+        Returning it is still valuable: installHost can report the exact
         release gate (rather than pretending some other interpreter is usable)
         before showing a confirmation or starting a worker.
         """
@@ -1071,7 +1071,7 @@ class ConvoyExt:
             return False
         return True
 
-    def LocalDangerGateChanged(self, par_name, requested):
+    def localDangerGateChanged(self, par_name, requested):
         """Parexec fast path: reconcile the capability pars NOW.
 
         `requested` is advisory (the par value at callback time). TD
@@ -1084,7 +1084,7 @@ class ConvoyExt:
             return {'ok': False, 'reason': 'unknown_capability'}
         return self._reconcileDangerGates()
 
-    def LocalArtifactQuotaChanged(self, requested):
+    def localArtifactQuotaChanged(self, requested):
         """Parexec fast path for the quota par: the same reconcile."""
         return self._reconcileDangerGates()
 
@@ -1404,7 +1404,7 @@ class ConvoyExt:
             registry.pop(self.ownerComp.path, None)
         self._wake_record = None
         self._wake_poll_gen += 1
-        self.ResetWakeLeases(close_override=True)
+        self.resetWakeLeases(close_override=True)
 
     def _wakeEndpoint(self):
         record = self._wake_record
@@ -1478,7 +1478,7 @@ class ConvoyExt:
         run('args[0]._pollWakeCommands(args[1])', self, generation,
             delayMilliSeconds=self._WAKE_POLL_MS)
 
-    def ResetWakeLeases(self, close_override=True):
+    def resetWakeLeases(self, close_override=True):
         """Drop process-local leases after a local mode/membership change."""
         session = self._session()
         session['wake_leases'] = {}
@@ -1488,7 +1488,7 @@ class ConvoyExt:
             except Exception:
                 pass
 
-    def WakeSettingsChanged(self):
+    def wakeSettingsChanged(self):
         """Apply local wake/grace changes and refresh host registration."""
         if not self._remoteWakeEnabled():
             self._stopWakeListener()
@@ -3253,7 +3253,7 @@ class ConvoyExt:
             # Daemon provably answered: if its code is older than this
             # Embody, update in place (once per session,
             # _maybeUpdateHostApp). DEFERRED to its own frame callback --
-            # InstallHost's prelude has no business inside the register
+            # installHost's prelude has no business inside the register
             # poll (TD crashed seconds after an in-drain firing,
             # 2026-08-05).
             sess_flags = self._session()
@@ -4299,7 +4299,7 @@ class ConvoyExt:
     # Promoted API: the host app
     # ==================================================================
 
-    def HostStatus(self, refresh=True):
+    def refreshHostStatus(self, refresh=True):
         """A plain-dict snapshot of the host app's state. Never raises.
 
         refresh=True (the default) also kicks ONE bounded worker to
@@ -4424,13 +4424,13 @@ class ConvoyExt:
         self._log('Convoy App update: %s -- updating it in place now '
                   '(automatic; Repair Convoy App remains the manual '
                   'path)' % (detail,), 'INFO')
-        out = self.InstallHost(confirm=False)
+        out = self.installHost(confirm=False)
         if isinstance(out, dict) and out.get('state') == 'deferred':
             # The host slot was busy -- that must not spend this
             # session's one attempt.
             session['host_auto_update_done'] = False
 
-    def InstallHost(self, confirm=True):
+    def installHost(self, confirm=True):
         """Install -- or REPAIR -- the Convoy host app for this user.
 
         Re-runs a full install even at current version: rewriting
@@ -4555,7 +4555,7 @@ class ConvoyExt:
                 'interpreter': interpreter, 'venv_runtime': venv_runtime,
                 'modules': sorted(modules)}
 
-    def StartHost(self):
+    def startHost(self):
         """Enable the supervisor and run it now, then wait for /health."""
         if not self._hostActionAllowed('starting the host app'):
             return {'state': 'deferred'}
@@ -4573,7 +4573,7 @@ class ConvoyExt:
                             note=self.HOST_STARTING)
         return {'state': 'starting'}
 
-    def StopHost(self):
+    def stopHost(self):
         """Stop the host app AND stop it coming back.
 
         The order lives in convoy_install.stop() and it is the whole
@@ -4593,13 +4593,13 @@ class ConvoyExt:
                             note=self.HOST_CHECKING)
         return {'state': 'stopping'}
 
-    def PreviewHostUninstall(self):
+    def previewHostUninstall(self):
         """AUDIT ONLY: what an uninstall would remove and keep.
 
         Alters nothing -- not even the readout. Plan computed in a worker
         (reads every job record), logged, stashed in the session. Returns
         the LAST preview plus busy=True while a fresh one is in flight
-        (why UninstallHost does not call this: it needs the plan in hand).
+        (why uninstallHost does not call this: it needs the plan in hand).
         """
         if not self._hostActionAllowed('previewing the uninstall'):
             return {'state': 'deferred'}
@@ -4610,7 +4610,7 @@ class ConvoyExt:
         return {'state': 'previewing', 'busy': True,
                 'preview': self._session().get('uninstall_preview')}
 
-    def ResolveRealmConflict(self):
+    def resolveRealmConflict(self):
         """Surface a split-realm CONFLICT and offer the sanctioned exit.
 
         The recovery the plan promised (ADR-003's 'advanced local
@@ -4690,7 +4690,7 @@ class ConvoyExt:
     # tick raise the dialog arbitrarily long after the toggle).
     _REJOIN_OFFER_WINDOW_S = 120.0
 
-    def ArmRejoinOffer(self):
+    def armRejoinOffer(self):
         """Arm the one-shot rejoin offer. Called ONLY from the explicit
         Convoy Enable toggle (parexec), which is already suppressed
         during init and settings restore -- the arming lives THERE, not
@@ -4778,7 +4778,7 @@ class ConvoyExt:
         self._log('Rejoining the local Convoy: binding is candidate; '
                   'adoption completes on the next registration', 'SUCCESS')
 
-    def ForgetOfflineNodes(self):
+    def forgetOfflineNodes(self):
         """Forget this machine's offline node rows -- after NAMING them.
 
         The user's judgment call the automatic sweeps can't make. The
@@ -4947,7 +4947,7 @@ class ConvoyExt:
         # report eat the confirmation's seeded answer in a scripted run.
         self._dialog('Forget Offline Nodes - Nodes Kept', message, ['OK'])
 
-    def UninstallHost(self, confirm=True):
+    def uninstallHost(self, confirm=True):
         """Remove the host app: preview (worker), then confirm, then run.
 
         Refuses outright if the plan touches retained paths (host.json,
@@ -5053,7 +5053,7 @@ class ConvoyExt:
         except Exception:
             return False
 
-    def RecordInstallConsent(self):
+    def recordInstallConsent(self):
         """Remember that the user accepted Convoy on this install.
 
         Called by the Setup Wizard's Convoy step and by the first-enable
@@ -5216,7 +5216,7 @@ class ConvoyExt:
 
         self._publishId(recorded)
         # The one and only time this install asks.
-        self.RecordInstallConsent()
+        self.recordInstallConsent()
         self._log('enabled for this project: convoy %s, consent scope %r '
                   '(recorded in .embody/project.json)'
                   % (recorded, self._CONSENT_SCOPE), 'SUCCESS')
@@ -5226,7 +5226,7 @@ class ConvoyExt:
     # Promoted API
     # ==================================================================
 
-    def Register(self):
+    def register(self):
         """Reconcile NOW. The explicit-enable entry point (parexec).
 
         A-13: the first explicit enable of a project with no convoy key in
@@ -5243,7 +5243,7 @@ class ConvoyExt:
         self._ensureHostApp()
         self._ensureWakeListener()
         self._reconcile(force=True)
-        return self.ConvoyStatus()
+        return self.convoyStatus()
 
     # Wait for Envoy to finish building the shared venv (fresh install =
     # minutes; the wizard enables Convoy seconds after Envoy). Budget is
@@ -5307,7 +5307,7 @@ class ConvoyExt:
             if self._hostRuntimeResolvable(ctx):
                 self._log('the shared Python environment is ready -- '
                           'installing the host app now', 'INFO')
-                self.InstallHost(confirm=False)
+                self.installHost(confirm=False)
                 return
             building = self._envoyIsBringingTheEnvironment()
             if attempt == 0:
@@ -5389,21 +5389,21 @@ class ConvoyExt:
                     return
                 self._log('Convoy enabled -- installing the host app it '
                           'needs to reach the LAN', 'INFO')
-                self.InstallHost(confirm=False)
+                self.installHost(confirm=False)
                 return
             # Installed already: start it only if nothing is answering.
             probe = ctx['client'].probe(ctx['data_dir'])
             if getattr(probe, 'status', None) != ctx['client'].STATUS_RUNNING:
                 self._log('Convoy enabled -- starting the installed host app',
                           'INFO')
-                self.StartHost()
+                self.startHost()
         except Exception as e:
             # A host-app problem must never block enabling; the Host App
             # readout and log carry the reason.
             self._log('could not ensure the Convoy host app: %s' % (e,),
                       'WARNING')
 
-    def Unregister(self, blocking=False, reason='disabled'):
+    def unregister(self, blocking=False, reason='disabled'):
         """Best-effort: clear this node's Envoy port on the local host.
 
         One attempt, 1 s timeout, every outcome a value (callers are a
@@ -5473,7 +5473,7 @@ class ConvoyExt:
             pass
         return result
 
-    def ConvoyStatus(self):
+    def convoyStatus(self):
         """A plain-dict snapshot of this node's Convoy state. Never raises."""
         out = {'enabled': False, 'performing': False,
                'perform_mode_requested': False, 'wake_active': False,
@@ -5927,7 +5927,7 @@ def _run_sibling_api_request(client, kind, context, request, progress,
 def _host_recorded_interpreter_exists(installed):
     """Does the Python installed.json recorded still exist?
 
-    ONE probe shared by _host_snapshot (readout) and InstallHost
+    ONE probe shared by _host_snapshot (readout) and installHost
     (planner) -- their agreement is the point (b73fcd0 removed the
     readout/planner contradiction two copies produce). None = UNKNOWN,
     never False; plan_install's repair branch is strictly `is False`.

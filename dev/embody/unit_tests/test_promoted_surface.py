@@ -39,7 +39,8 @@ PROMOTED_CEILING = {
     # module constants in convoy/convoy_client.py -- test_convoy_client reaches
     # them as client.HOST_INSTALLING on the module, so renaming only the class
     # side would split a parity contract that exists on purpose.
-    "ConvoyExt": 22,
+    # WP4 wave 4c: all 17 promoted methods demoted to lowerCamel wiring.
+    "ConvoyExt": 5,
     "TDXNExt": 16,
     "UpdaterExt": 5,
     "CatalogManagerExt": 2,
