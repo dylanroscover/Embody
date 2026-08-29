@@ -33,14 +33,15 @@ CALLER_INDEX = REPO / "docs" / "reports" / "issue-94-caller-index.json"
 # fails. Lower a number when you demote; raising one is a deliberate decision
 # to widen the public API and belongs in review, not in a drive-by.
 PROMOTED_CEILING = {
-    "EmbodyExt": 78,
-    # WP4 wave 4b: 50 internal-only class constants renamed _UPPER and 2 dead
-    # ones deleted, taking promoted constants 79 -> 29. The 29 that remain have
-    # cross-file callers (tests, sibling modules, an iteration-order contract)
-    # and move individually in a later wave, not by bulk rename.
-    "ConvoyExt": 35,
-    "TDXNExt": 20,
-    "UpdaterExt": 10,
+    "EmbodyExt": 77,
+    # WP4 waves 4b/4b-2: promoted class constants went 79 -> 5. The five that
+    # remain are ConvoyExt's HOST_* states, which are DELIBERATELY mirrored as
+    # module constants in convoy/convoy_client.py -- test_convoy_client reaches
+    # them as client.HOST_INSTALLING on the module, so renaming only the class
+    # side would split a parity contract that exists on purpose.
+    "ConvoyExt": 22,
+    "TDXNExt": 16,
+    "UpdaterExt": 5,
     "CatalogManagerExt": 2,
     # WP4 wave 4a: both UI extensions demoted to zero promoted members. Every
     # caller was already a file-backed .py using .ext.<Class>., so nothing had
@@ -248,6 +249,47 @@ class TestInvisibleCallSites(unittest.TestCase):
             "Referenced from DAT text inside the .toe but absent from every "
             "extension: {}. These fail silently at runtime -- no traceback, "
             "just a dead button.".format("; ".join(sorted(broken))))
+
+
+class TestStringNamedAttributes(unittest.TestCase):
+    """Attribute names written as STRINGS survive no rename.
+
+    Wave 4b-2 renamed 24 class constants and updated every attribute access --
+    but `self._patch(self.convoy, 'API_REQUEST_MAX', 2)` passes the name as a
+    string literal, so the rename missed it. The patch then wrote a key nothing
+    read, the real constant kept its default, and four tests failed with value
+    mismatches that pointed nowhere near the cause.
+    """
+
+    _PATTERN = re.compile(
+        r"""(?:_patch|setattr|getattr|hasattr)\(\s*[^,()]+,\s*(['"])([A-Z][A-Z0-9_]{3,})\1""")
+
+    def test_F01_string_named_constants_exist_on_some_extension(self):
+        members = set()
+        for path in _ext_source_files():
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    members |= _all_members(node.name)
+
+        missing = []
+        for path in sorted((REPO / "dev" / "embody" / "unit_tests").glob("test_*.py")):
+            if path.name == Path(__file__).name:
+                continue  # this file QUOTES the pattern in its own docstring
+            for match in self._PATTERN.finditer(
+                    path.read_text(encoding="utf-8", errors="replace")):
+                name = match.group(2)
+                # Only judge names that LOOK like our constants: an underscored
+                # twin exists, so the bare form is almost certainly a stale
+                # pre-rename reference.
+                if name not in members and ("_" + name) in members:
+                    missing.append("{}: '{}' (did you mean '_{}'?)".format(
+                        path.name, name, name))
+        self.assertEqual(
+            missing, [],
+            "String-literal attribute names left behind by a rename: {}. These "
+            "patch or probe a key nothing reads, so the test passes the wrong "
+            "value silently.".format("; ".join(missing)))
 
 
 class TestToolbarActionsResolve(unittest.TestCase):

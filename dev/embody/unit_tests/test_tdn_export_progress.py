@@ -92,6 +92,6 @@ class TestTDNExportProgress(EmbodyTestCase):
     # --- Auto-show threshold ---
 
     def test_progress_threshold_is_positive_int(self):
-        thr = self.tdn.EXPORT_PROGRESS_THRESHOLD
+        thr = self.tdn._EXPORT_PROGRESS_THRESHOLD
         self.assertIsInstance(thr, int)
         self.assertGreater(thr, 0)

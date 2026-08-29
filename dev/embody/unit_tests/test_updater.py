@@ -1175,7 +1175,7 @@ class TestUpdaterBusyLatch(EmbodyTestCase):
     def test_a_stalled_latch_is_cleared_by_the_next_attempt(self):
         h = _stall_harness()
         h._setBusy('download')
-        h.now += h.BUSY_CEILING_S['download'] + 1
+        h.now += h._BUSY_CEILING_S['download'] + 1
         self.assertIsNone(h._busyBlocks(interactive=True),
                           'past its ceiling the phase cannot be running')
         self.assertFalse(h._busy)
@@ -1187,7 +1187,7 @@ class TestUpdaterBusyLatch(EmbodyTestCase):
         h._setBusy('check')
         h._check_result = {'_gen': 0}
         gen_before = h._check_gen
-        h.now += h.BUSY_CEILING_S['check'] + 1
+        h.now += h._BUSY_CEILING_S['check'] + 1
         h._busyBlocks(interactive=False)
         self.assertGreater(h._check_gen, gen_before)
         self.assertIsNone(h._check_result)
@@ -1204,9 +1204,9 @@ class TestUpdaterBusyLatch(EmbodyTestCase):
     def test_ceilings_outlast_the_phases_they_guard(self):
         """The backstop must never fire on a healthy phase."""
         h = _stall_harness()
-        self.assertGreater(h.BUSY_CEILING_S['check'], h.CHECK_DEADLINE_S)
-        self.assertGreater(h.BUSY_CEILING_S['download'],
-                           h.DOWNLOAD_DEADLINE_S)
+        self.assertGreater(h._BUSY_CEILING_S['check'], h._CHECK_DEADLINE_S)
+        self.assertGreater(h._BUSY_CEILING_S['download'],
+                           h._DOWNLOAD_DEADLINE_S)
 
 
 class TestUpdaterRetryLadder(EmbodyTestCase):
@@ -1326,7 +1326,7 @@ class TestUpdaterPollDeadlines(EmbodyTestCase):
         h = _stall_harness()
         h._download_gen = 1
         h._setBusy('download')
-        h._pollDownload(True, True, 1, h.now + h.DOWNLOAD_DEADLINE_S)
+        h._pollDownload(True, True, 1, h.now + h._DOWNLOAD_DEADLINE_S)
         self.assertEqual(1, len(h.scheduled))
 
     def test_download_error_enters_the_retry_ladder(self):

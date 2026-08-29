@@ -356,7 +356,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		resolved = self.embody.ext.TDXN._resolveOutputPath('auto', child)
 		# Derived, not hardcoded: an UNTRACKED comp mints the current suffix,
 		# so this stays correct across any future extension rename.
-		expected_suffix = child.path.lstrip('/') + self.embody.ext.TDXN.FILE_SUFFIX
+		expected_suffix = child.path.lstrip('/') + self.embody.ext.TDXN._FILE_SUFFIX
 		self.assertTrue(
 			resolved.replace('\\', '/').endswith(expected_suffix),
 			f"Expected suffix '{expected_suffix}', got '{resolved}'")
@@ -366,7 +366,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		outer = self.sandbox.create(baseCOMP, 'ro')
 		inner = outer.create(baseCOMP, 'ri')
 		resolved = self.embody.ext.TDXN._resolveOutputPath('auto', inner)
-		expected_suffix = inner.path.lstrip('/') + self.embody.ext.TDXN.FILE_SUFFIX
+		expected_suffix = inner.path.lstrip('/') + self.embody.ext.TDXN._FILE_SUFFIX
 		self.assertTrue(
 			resolved.replace('\\', '/').endswith(expected_suffix),
 			f"Expected suffix '{expected_suffix}', got '{resolved}'")

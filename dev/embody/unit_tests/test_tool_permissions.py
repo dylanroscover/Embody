@@ -79,7 +79,7 @@ class TestToolPermissions(EmbodyTestCase):
     def test_compose_some_is_readonly_only(self):
         cfg = self._env._composeSettings(self._baseline(), 'some')
         entries = set(self._envoy_entries(cfg))
-        want = {f'mcp__envoy__{t}' for t in self._env.READ_ONLY_TOOLS}
+        want = {f'mcp__envoy__{t}' for t in self._env._READ_ONLY_TOOLS}
         self.assertEqual(entries, want,
                          "posture 'some' must auto-approve exactly the read-only tools")
         self.assertNotIn('mcp__envoy', entries, "'some' must not include the wildcard")
@@ -105,7 +105,7 @@ class TestToolPermissions(EmbodyTestCase):
                      'import_network', 'externalize_op', 'exec_op_method',
                      'connect_ops', 'set_dat_content', 'edit_dat_content',
                      'copy_op', 'rename_op', 'run_tests', 'restart_td'}
-        self.assertFalse(forbidden & set(self._env.READ_ONLY_TOOLS),
+        self.assertFalse(forbidden & set(self._env._READ_ONLY_TOOLS),
                          "READ_ONLY_TOOLS must not contain any mutating tool")
 
     # ---- _worktreePermissionRules (pure) ---------------------------------

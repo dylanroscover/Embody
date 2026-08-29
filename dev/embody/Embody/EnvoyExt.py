@@ -8652,7 +8652,7 @@ class EnvoyExt:
     # deletes, connects, executes, imports, or externalizes is deliberately
     # omitted so it still prompts. Entries are the tool short-names; the
     # permission strings written are 'mcp__envoy__<name>'.
-    READ_ONLY_TOOLS = [
+    _READ_ONLY_TOOLS = [
         'get_td_status', 'get_td_info', 'get_td_classes', 'get_td_class_details',
         'get_op', 'get_op_errors', 'get_op_flags', 'get_op_position',
         'get_op_performance', 'get_project_performance', 'get_parameter',

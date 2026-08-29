@@ -152,7 +152,7 @@ class TestOpencodeConfig(EmbodyTestCase):
         self.assertEqual(keys[0], 'envoy_*',
                          'catch-all must come FIRST (last matching rule wins)')
         self.assertEqual(perm['envoy_*'], 'ask')
-        readonly = set(self._env.READ_ONLY_TOOLS)
+        readonly = set(self._env._READ_ONLY_TOOLS)
         allows = {k[len('envoy_'):] for k, v in perm.items()
                   if v == 'allow'}
         self.assertEqual(allows, readonly,

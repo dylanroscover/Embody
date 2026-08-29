@@ -72,7 +72,7 @@ class ConvoyExt:
     # Consent scope recorded beside the convoy id (A-13).  Pre-LAN projects
     # carry 'local host app only'; the reconciler refuses to expose those
     # until an explicit local enable upgrades this marker.
-    CONSENT_SCOPE = 'trusted LAN Convoy mesh'
+    _CONSENT_SCOPE = 'trusted LAN Convoy mesh'
 
     # Cadences, in seconds, for the NEXT call. The tick wakes just often
     # enough to serve whichever one is pending (see _scheduleFrom).
@@ -81,21 +81,21 @@ class ConvoyExt:
     _ABSENT_S = 60.0       # no host app, or a policy refusal: stay quiet
 
     # Tick bounds, in milliseconds.
-    TICK_MIN_MS = 4000
-    TICK_MAX_MS = 60000
+    _TICK_MIN_MS = 4000
+    _TICK_MAX_MS = 60000
 
     # Deferred-challenge retry: while dialogs are suppressed (a save
     # window) the local confirmation re-arms instead of auto-declining.
     # 20 x 60 frames ~ 20 s at 60 fps -- far past the 120-frame post-save
     # suppression, bounded so a stuck flag still declines eventually.
-    CHALLENGE_WAIT_FRAMES = 60
-    CHALLENGE_WAIT_MAX = 20
+    _CHALLENGE_WAIT_FRAMES = 60
+    _CHALLENGE_WAIT_MAX = 20
 
     # Worker poll chain. Worst case in the worker is a 3 s /health plus a
     # 10 s /register; the budget is >= 3x that (160 x 15 frames ~= 40 s at
     # 60 fps), matching UpdaterExt's sizing rule.
     _POLL_FRAMES = 15
-    POLL_ATTEMPTS = 160
+    _POLL_ATTEMPTS = 160
 
     # Host-app poll cap: the worst-case legitimate install (supervisor
     # spawns + graceful stop + candidate probes + venv repair + daemon
@@ -105,7 +105,7 @@ class ConvoyExt:
     # the work. Headroom is thin: lengthen this path and the cap must
     # rise with it, or Install reports timed_out over work that later
     # succeeds.
-    HOST_POLL_ATTEMPTS = 3400
+    _HOST_POLL_ATTEMPTS = 3400
 
     # At most one node call and one host-lifecycle call can be outstanding.
     # The long-lived worker serializes them, so two slots are sufficient and
@@ -121,9 +121,9 @@ class ConvoyExt:
     # results) inside a .toe would be an easy way to exhaust TD's process.
     # Progress and completion are separate queues so a chatty long-running
     # job can never crowd its own terminal result out of the handoff channel.
-    API_REQUEST_MAX = 64
-    API_COMPLETION_MAX = 64
-    API_PROGRESS_MAX = 128
+    _API_REQUEST_MAX = 64
+    _API_COMPLETION_MAX = 64
+    _API_PROGRESS_MAX = 128
     _API_PROGRESS_PER_REQUEST_MAX = 32
     _API_EVENT_DRAIN_MAX = 128
     _API_POLL_FRAMES = 4
@@ -131,8 +131,8 @@ class ConvoyExt:
     # identities and JSON envelope overhead instead of accepting a payload
     # here that the next hop must deterministically refuse.
     _API_REQUEST_MAX_BYTES = 960 * 1024
-    API_RESULT_MAX_BYTES = 2 * 1024 * 1024
-    _API_SNAPSHOT_MAX_BYTES = API_RESULT_MAX_BYTES + 64 * 1024
+    _API_RESULT_MAX_BYTES = 2 * 1024 * 1024
+    _API_SNAPSHOT_MAX_BYTES = _API_RESULT_MAX_BYTES + 64 * 1024
     _API_PROGRESS_VALUE_MAX_BYTES = 128 * 1024
     _API_BATCH_TARGET_MAX = 64
     _API_BATCH_OPERATION_MAX = 512
@@ -141,7 +141,7 @@ class ConvoyExt:
     # keep a few-dozen-node LAN busy without letting one TD session create a
     # thread per peer.  Every worker draws from one shared bounded queue, so
     # this is a hard concurrency ceiling rather than a chunk size.
-    API_BATCH_WORKER_MAX = 8
+    _API_BATCH_WORKER_MAX = 8
     # A wait occupies the same serial worker that heals registration. Keep
     # every public turn below two heartbeat windows; longer operations return
     # a durable delivery id and are reconciled through getJob() instead.
@@ -155,7 +155,7 @@ class ConvoyExt:
     # handed to the TD main thread through a bounded Queue; the listener never
     # imports or touches TD.
     _WAKE_PROTOCOL = 1
-    WAKE_PACKET_MAX = 1024
+    _WAKE_PACKET_MAX = 1024
     _WAKE_QUEUE_MAX = 128
     _WAKE_SOCKET_TIMEOUT_S = 0.25
     _WAKE_POLL_MS = 250
@@ -225,7 +225,7 @@ class ConvoyExt:
         self._policy_busy = False
         self._post_init_done = False
         self._logged = ''        # last logged status class (transitions only)
-        self._tick_ms = self.TICK_MIN_MS
+        self._tick_ms = self._TICK_MIN_MS
         self._network_rows_digest = None
         self._last_nodes_result = None
         # Rows a confirmed Forget removed from the sequence optimistically,
@@ -247,7 +247,7 @@ class ConvoyExt:
         # Pending run() calls can outlive COMP replacement during upgrades,
         # so the scheduled string re-resolves the op and checks validity.
         run("o = op(%r)\nif o and o.valid: o.ext.ConvoyExt._convoyTick(%d)"
-            % (ownerComp.path, gen), delayMilliSeconds=int(self.TICK_MIN_MS))
+            % (ownerComp.path, gen), delayMilliSeconds=int(self._TICK_MIN_MS))
 
     # ==================================================================
     # Lifecycle
@@ -1250,7 +1250,7 @@ class ConvoyExt:
         """
         try:
             if (not isinstance(packet, bytes)
-                    or not packet or len(packet) > cls.WAKE_PACKET_MAX):
+                    or not packet or len(packet) > cls._WAKE_PACKET_MAX):
                 return None
             if (not isinstance(address, tuple) or not address
                     or address[0] != '127.0.0.1'):
@@ -1373,7 +1373,7 @@ class ConvoyExt:
         task = self.ThreadManager.TDTask(
             target=ConvoyExt._wakeListenerLoop,
             args=(command_queue, shutdown, ready, token, state,
-                  self.WAKE_PACKET_MAX, self._WAKE_SOCKET_TIMEOUT_S))
+                  self._WAKE_PACKET_MAX, self._WAKE_SOCKET_TIMEOUT_S))
         thread = self.ThreadManager.EnqueueTask(task, standalone=True)
         if thread is None:
             shutdown.set()
@@ -1592,7 +1592,7 @@ class ConvoyExt:
             pass
         if self._busy:
             # A call is already in flight; its poll owns the next schedule.
-            self._tick_ms = self.TICK_MIN_MS
+            self._tick_ms = self._TICK_MIN_MS
             return
         if self._host_busy and not self._recoverWedgedHostSlot():
             # One worker serializes registration with install/start/stop
@@ -1601,12 +1601,12 @@ class ConvoyExt:
             # button presses could unwedge the slot, a wedged flag
             # starved registration/heartbeat/node-list forever
             # (2026-08-04 Mac).
-            self._tick_ms = self.TICK_MIN_MS
+            self._tick_ms = self._TICK_MIN_MS
             return
 
         client = self._safeClient()
         if client is None:
-            self._tick_ms = self.TICK_MAX_MS
+            self._tick_ms = self._TICK_MAX_MS
             self._status('Error: convoy_client module missing')
             self._logOnce('client_missing',
                           'the convoy_client module is missing from the '
@@ -1626,7 +1626,7 @@ class ConvoyExt:
                 return
             session['sent'] = None
             session['next_call_at'] = None
-            self._tick_ms = self.TICK_MAX_MS
+            self._tick_ms = self._TICK_MAX_MS
             self._apply({'state': client.STATE_DISABLED}, client)
             self._projectNodeRows([], 'Convoy is disabled')
             return
@@ -1636,7 +1636,7 @@ class ConvoyExt:
             # mints a junk node record keyed on a throwaway folder.
             session['sent'] = None
             session['next_call_at'] = None
-            self._tick_ms = self.TICK_MAX_MS
+            self._tick_ms = self._TICK_MAX_MS
             self._apply({'state': client.STATE_UNSAVED}, client)
             return
 
@@ -1646,12 +1646,12 @@ class ConvoyExt:
         # user to enable it locally, where _ensureConsent shows the trusted-
         # LAN warning and records the new scope.
         convoy_id = self._readConvoyId()
-        if convoy_id and self._readConsentScope() != self.CONSENT_SCOPE:
+        if convoy_id and self._readConsentScope() != self._CONSENT_SCOPE:
             session['sent'] = None
             session['next_call_at'] = None
             self._setEnabled(False)
             self._publishId(convoy_id)
-            self._tick_ms = self.TICK_MAX_MS
+            self._tick_ms = self._TICK_MAX_MS
             self._status('Consent required -- enable Convoy again')
             self._projectNodeRows([], 'Trusted-LAN consent required')
             self._logOnce(
@@ -1670,7 +1670,7 @@ class ConvoyExt:
             # Say so honestly, do no network work, and wait.
             session['sent'] = None
             session['next_call_at'] = None
-            self._tick_ms = self.TICK_MAX_MS
+            self._tick_ms = self._TICK_MAX_MS
             self._apply({'state': client.STATE_ERROR,
                          'detail': 'no convoy id -- turn Convoy Enable off '
                                    'and on again to mint one'}, client)
@@ -1860,12 +1860,12 @@ class ConvoyExt:
 
     def _scheduleFrom(self, session):
         """Tick delay in ms: soon enough to serve the next due call, never a
-        busy loop. Clamped to [TICK_MIN_MS, TICK_MAX_MS]."""
+        busy loop. Clamped to [_TICK_MIN_MS, _TICK_MAX_MS]."""
         due_at = session.get('next_call_at')
         if due_at is None:
-            return self.TICK_MAX_MS
+            return self._TICK_MAX_MS
         remaining_ms = int(max(0.0, due_at - time.monotonic()) * 1000)
-        return max(self.TICK_MIN_MS, min(remaining_ms, self.TICK_MAX_MS))
+        return max(self._TICK_MIN_MS, min(remaining_ms, self._TICK_MAX_MS))
 
     # ==================================================================
     # Long-lived ThreadManager worker + bounded main-thread poll
@@ -2025,7 +2025,7 @@ class ConvoyExt:
         if not targets:
             return False
         worker_count = min(
-            len(targets), max(1, int(self.API_BATCH_WORKER_MAX)))
+            len(targets), max(1, int(self._API_BATCH_WORKER_MAX)))
         work_queue = Queue(maxsize=len(targets))
         result_queue = Queue(maxsize=len(targets))
         start_event = Event()
@@ -2092,8 +2092,8 @@ class ConvoyExt:
         self._api_requests = OrderedDict()
         self._api_callbacks = {}
         self._api_completion_events = Queue(
-            maxsize=self.API_COMPLETION_MAX)
-        self._api_progress_events = Queue(maxsize=self.API_PROGRESS_MAX)
+            maxsize=self._API_COMPLETION_MAX)
+        self._api_progress_events = Queue(maxsize=self._API_PROGRESS_MAX)
         self._api_gate_event = Event()
         self._api_poll_armed = False
 
@@ -2168,7 +2168,7 @@ class ConvoyExt:
         """Detach a worker result and replace oversized/broken values."""
         try:
             return self._apiPlain(
-                value, self.API_RESULT_MAX_BYTES, 'result')
+                value, self._API_RESULT_MAX_BYTES, 'result')
         except ValueError as e:
             reason = ('result_too_large' if 'byte limit' in str(e)
                       else 'invalid_worker_result')
@@ -2181,7 +2181,7 @@ class ConvoyExt:
         while request_id in self._api_requests:
             request_id = 'cr_' + secrets.token_hex(16)
 
-        while len(self._api_requests) >= self.API_REQUEST_MAX:
+        while len(self._api_requests) >= self._API_REQUEST_MAX:
             evicted = False
             for old_id, old in tuple(self._api_requests.items()):
                 if old.get('state') in self._API_TERMINAL_REQUEST_STATES:
@@ -2559,7 +2559,7 @@ class ConvoyExt:
                 completion_queue.put_nowait(event)
                 return True
             except Full:
-                # Invariant: there can be at most API_REQUEST_MAX retained
+                # Invariant: there can be at most _API_REQUEST_MAX retained
                 # in-flight requests and each publishes exactly one terminal
                 # event into an equally sized queue. Reaching this branch is
                 # a programming fault; a short bounded wait still gives the
@@ -2592,7 +2592,7 @@ class ConvoyExt:
             request = dict(request)
             request['idempotency_key_prefix'] = request_id
             request['result_budget_bytes'] = max(
-                64 * 1024, self.API_RESULT_MAX_BYTES - 256 * 1024)
+                64 * 1024, self._API_RESULT_MAX_BYTES - 256 * 1024)
 
         client = self._safeClient()
         if client is None:
@@ -2867,7 +2867,7 @@ class ConvoyExt:
         try:
             out = self._policy_result
             if out is None or out.get('_gen') != gen:
-                if attempts < self.POLL_ATTEMPTS:
+                if attempts < self._POLL_ATTEMPTS:
                     run('args[0]._pollPolicyCall(args[1], args[2])',
                         self, gen, attempts + 1,
                         delayFrames=self._POLL_FRAMES)
@@ -2954,12 +2954,12 @@ class ConvoyExt:
             except Exception:
                 suppressed = False
             waited = int((request or {}).get('_challenge_wait', 0))
-            if suppressed and waited < self.CHALLENGE_WAIT_MAX:
+            if suppressed and waited < self._CHALLENGE_WAIT_MAX:
                 deferred = dict(request or {})
                 deferred['_challenge_wait'] = waited + 1
                 run('args[0]._finishPolicyCall(args[1], args[2], args[3])',
                     self, action, result, deferred,
-                    delayFrames=self.CHALLENGE_WAIT_FRAMES)
+                    delayFrames=self._CHALLENGE_WAIT_FRAMES)
                 return
             setting = str(challenge.get('setting') or '')
             phrase = str(challenge.get('confirmation') or '')
@@ -3017,7 +3017,7 @@ class ConvoyExt:
             session['registered'] = False
             session['sent'] = None
             session['next_call_at'] = None
-            self._tick_ms = self.TICK_MAX_MS
+            self._tick_ms = self._TICK_MAX_MS
             self._apply({'state': client.STATE_UNREGISTERED}, client)
             return
 
@@ -3115,7 +3115,7 @@ class ConvoyExt:
                               'worker or its bounded queue was full',
                 },
             }
-        self._tick_ms = self.TICK_MIN_MS
+        self._tick_ms = self._TICK_MIN_MS
         run('args[0]._pollCall(args[1], args[2], args[3])',
             self, action, gen, 0, delayFrames=self._POLL_FRAMES)
 
@@ -3137,7 +3137,7 @@ class ConvoyExt:
             out = self._result
             # Only accept the result from THIS call's worker generation.
             if out is None or out.get('_gen') != gen:
-                if attempts < self.POLL_ATTEMPTS:
+                if attempts < self._POLL_ATTEMPTS:
                     run('args[0]._pollCall(args[1], args[2], args[3])',
                         self, action, gen, attempts + 1,
                         delayFrames=self._POLL_FRAMES)
@@ -3173,7 +3173,7 @@ class ConvoyExt:
             session['sent'] = None
             session['pending_sent'] = None
             session['next_call_at'] = None
-            self._tick_ms = self.TICK_MAX_MS
+            self._tick_ms = self._TICK_MAX_MS
             if not self._enabled():
                 # The resting readout after a disable is 'Disabled' whatever
                 # the host said: this node IS off locally even when the host
@@ -3657,7 +3657,7 @@ class ConvoyExt:
             out = self._host_result
             # Only accept the result from THIS call's worker generation.
             if out is None or out.get('_gen') != gen:
-                if attempts < self.HOST_POLL_ATTEMPTS:
+                if attempts < self._HOST_POLL_ATTEMPTS:
                     run('args[0]._pollHostCall(args[1], args[2], args[3])',
                         self, action, gen, attempts + 1,
                         delayFrames=self._POLL_FRAMES)
@@ -3868,7 +3868,7 @@ class ConvoyExt:
             # the optimistic drop would leave rows missing until the
             # next heartbeat.
             session['next_call_at'] = None
-            self._tick_ms = self.TICK_MIN_MS
+            self._tick_ms = self._TICK_MIN_MS
             self._kickTick()
             kept = [k for k in (result.get('kept_busy') or ())]
             forgotten = list(result.get('forgotten') or ())
@@ -5049,7 +5049,7 @@ class ConvoyExt:
         try:
             with open(path, 'r', encoding='utf-8') as handle:
                 return str(json.load(handle).get('scope') or '') == \
-                    self.CONSENT_SCOPE
+                    self._CONSENT_SCOPE
         except Exception:
             return False
 
@@ -5067,7 +5067,7 @@ class ConvoyExt:
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, 'w', encoding='utf-8') as handle:
-                json.dump({'scope': self.CONSENT_SCOPE,
+                json.dump({'scope': self._CONSENT_SCOPE,
                            'recorded_unix': time.time()}, handle)
             return True
         except Exception as e:
@@ -5101,7 +5101,7 @@ class ConvoyExt:
             return False
         existing_id = str(entry.get('id') or '')
         existing_scope = str(entry.get('consent_scope') or '')
-        if existing_id and existing_scope == self.CONSENT_SCOPE:
+        if existing_id and existing_scope == self._CONSENT_SCOPE:
             self._publishId(entry.get('id'))
             return True
 
@@ -5139,7 +5139,7 @@ class ConvoyExt:
         if self._installConsentGiven():
             try:
                 recorded = embody._ensureConvoyId(
-                    candidate, self.CONSENT_SCOPE,
+                    candidate, self._CONSENT_SCOPE,
                     ('established' if existing_id else 'candidate'))
             except Exception as e:
                 recorded = None
@@ -5187,7 +5187,7 @@ class ConvoyExt:
              'Allow Execute TD Python and Allow Full Shell remain separate, '
              'local, default-Off approvals. Turn Enable Convoy off at any '
              'time to withdraw this node.\n\n'
-             'Scope granted: ' + self.CONSENT_SCOPE + '.'),
+             'Scope granted: ' + self._CONSENT_SCOPE + '.'),
             ['Cancel', 'Enable Convoy'])
         if choice != 1:
             # -1 is the suppressed-dialog / unseeded-test default, and every
@@ -5202,7 +5202,7 @@ class ConvoyExt:
 
         try:
             recorded = embody._ensureConvoyId(
-                candidate, self.CONSENT_SCOPE,
+                candidate, self._CONSENT_SCOPE,
                 ('established' if existing_id else 'candidate'))
         except Exception as e:
             recorded = None
@@ -5219,7 +5219,7 @@ class ConvoyExt:
         self.RecordInstallConsent()
         self._log('enabled for this project: convoy %s, consent scope %r '
                   '(recorded in .embody/project.json)'
-                  % (recorded, self.CONSENT_SCOPE), 'SUCCESS')
+                  % (recorded, self._CONSENT_SCOPE), 'SUCCESS')
         return True
 
     # ==================================================================
@@ -6773,7 +6773,7 @@ def _host_is_running(ctx):
 
 
 # One bounded uv reinstall of the cryptography pin. Sized for a cold
-# wheel fetch on a slow link, and accounted for in HOST_POLL_ATTEMPTS --
+# wheel fetch on a slow link, and accounted for in _HOST_POLL_ATTEMPTS --
 # raising this without re-checking that budget makes Install report
 # timed_out over a repair that later succeeds.
 VENV_REPAIR_TIMEOUT_S = 120.0

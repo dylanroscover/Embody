@@ -119,7 +119,7 @@ TDN_VERSION = '2.0'  # was '1.5'
 #   versions. Changing any of them orphans that data.
 #   NOT on this list (v6.1.6): the backup directory. It was frozen here by
 #   mistake -- regenerable scratch persisted nowhere, named by one literal,
-#   and safe to delete by our own docs. It is now BACKUP_DIR
+#   and safe to delete by our own docs. It is now _BACKUP_DIR
 #   ('.embody_backup'), format-neutral because it holds .tdn.bak and
 #   .tdxn.bak simultaneously and always will.
 #   See docs/tdn/specification.md.
@@ -459,10 +459,10 @@ class TDXNExt:
 	is_tdn_network_file = staticmethod(is_tdn_network_file)
 
 	# Format identity, mirrored so EmbodyExt can read it as
-	# self.my.ext.TDXN.FILE_SUFFIX. Distinct attribute names, not the
+	# self.my.ext.TDXN._FILE_SUFFIX. Distinct attribute names, not the
 	# `X = X` class-body idiom, which reads like a typo.
-	FILE_SUFFIX = TDN_FILE_SUFFIX
-	FILE_SUFFIXES = TDN_FILE_SUFFIXES
+	_FILE_SUFFIX = TDN_FILE_SUFFIX
+	_FILE_SUFFIXES = TDN_FILE_SUFFIXES
 
 	# =========================================================================
 	# CRASH SAFETY -- atomic writes, backup rotation, validation
@@ -484,7 +484,7 @@ class TDXNExt:
 	# steerable by the Aiprojectroot par and self-heals to a DIFFERENT dir
 	# on a missing custom drive -- a recovery store whose location a
 	# preference can move is not a recovery store.
-	BACKUP_DIR = '.embody_backup'
+	_BACKUP_DIR = '.embody_backup'
 	_LEGACY_BACKUP_DIR = '.tdn_backup'
 
 	@staticmethod
@@ -515,7 +515,7 @@ class TDXNExt:
 			# tdn_path not under backup_root -- fall back to flat name
 			rel = Path(tdn.name)
 		backup_dir = proj / (TDXNExt._LEGACY_BACKUP_DIR if legacy
-							 else TDXNExt.BACKUP_DIR)
+							 else TDXNExt._BACKUP_DIR)
 		return backup_dir / (str(rel) + suffix)
 
 	@staticmethod
@@ -597,7 +597,7 @@ class TDXNExt:
 		copies needs no git-root discovery, is idempotent, and covers the
 		window before Envoy ever runs.
 		"""
-		marker = Path(backup_root) / TDXNExt.BACKUP_DIR / '.gitignore'
+		marker = Path(backup_root) / TDXNExt._BACKUP_DIR / '.gitignore'
 		try:
 			if not marker.exists():
 				marker.parent.mkdir(parents=True, exist_ok=True)
@@ -1547,7 +1547,7 @@ class TDXNExt:
 	# Ops-count threshold above which the progress dialog auto-opens
 	# (show_progress=None). Below it, exports finish in a blink and a
 	# dialog would just flash.
-	EXPORT_PROGRESS_THRESHOLD = 500
+	_EXPORT_PROGRESS_THRESHOLD = 500
 
 	def ExportNetworkAsync(self, root_path: str = '/', include_dat_content: Optional[bool] = None,
 						   output_file: Optional[str] = None, max_depth: Optional[int] = None,
@@ -1573,7 +1573,7 @@ class TDXNExt:
 				values spread the work thinner for smoother UI at the cost
 				of wall-clock time.
 			show_progress: Open the progress dialog. None = auto (opens
-				when the export covers >= EXPORT_PROGRESS_THRESHOLD ops).
+				when the export covers >= _EXPORT_PROGRESS_THRESHOLD ops).
 		"""
 		# Reject if export already running
 		if (self._export_state is not None
@@ -1832,7 +1832,7 @@ class TDXNExt:
 			'INFO')
 
 		if show_progress or (show_progress is None
-				and len(op_paths) >= TDXNExt.EXPORT_PROGRESS_THRESHOLD):
+				and len(op_paths) >= TDXNExt._EXPORT_PROGRESS_THRESHOLD):
 			self._openExportProgress(state)
 
 	# ------------------------------------------------------------------

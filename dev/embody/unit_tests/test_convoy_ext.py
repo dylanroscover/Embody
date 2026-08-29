@@ -561,7 +561,7 @@ class ConvoyExtBase(EmbodyTestCase):
         self._patch(self.convoy, '_result', None)
         self._patch(self.convoy, '_logged', '')
         self._patch(self.convoy, '_gen', 0)
-        self._patch(self.convoy, '_tick_ms', self.convoy.TICK_MIN_MS)
+        self._patch(self.convoy, '_tick_ms', self.convoy._TICK_MIN_MS)
         # Fresh bounded sibling API state for every test. The live extension
         # instance is shared by TestRunnerExt, so retaining one test's local
         # callbacks/results into the next would be both a leak and a race.
@@ -570,9 +570,9 @@ class ConvoyExtBase(EmbodyTestCase):
         self._patch(self.convoy, '_api_requests', OrderedDict())
         self._patch(self.convoy, '_api_callbacks', {})
         self._patch(self.convoy, '_api_completion_events', Queue(
-            maxsize=self.convoy.API_COMPLETION_MAX))
+            maxsize=self.convoy._API_COMPLETION_MAX))
         self._patch(self.convoy, '_api_progress_events', Queue(
-            maxsize=self.convoy.API_PROGRESS_MAX))
+            maxsize=self.convoy._API_PROGRESS_MAX))
         self._patch(self.convoy, '_api_gate_event', Event())
         self._patch(self.convoy, '_api_poll_armed', False)
 
@@ -899,7 +899,7 @@ class TestReconcileCalls(ConvoyExtBase):
         self.convoy._reconcile()
         self.assertEqual(self.status_writes[-1],
                          'Registered -- Envoy port pending')
-        self.assertLessEqual(self.convoy._tick_ms, self.convoy.TICK_MIN_MS,
+        self.assertLessEqual(self.convoy._tick_ms, self.convoy._TICK_MIN_MS,
                              'a portless registration is NOT steady state')
 
 
@@ -1123,7 +1123,7 @@ class TestSiblingAPI(ConvoyExtBase):
         self.assertLen(result['results'], 2)
 
     def test_batch_enforces_cumulative_result_budget_in_the_worker(self):
-        self._patch(self.convoy, 'API_RESULT_MAX_BYTES', 128 * 1024)
+        self._patch(self.convoy, '_API_RESULT_MAX_BYTES', 128 * 1024)
         self.client.sibling_submit_result['job']['result'] = {
             'blob': 'x' * (80 * 1024)}
         handle = self.convoy.batch([
@@ -1141,7 +1141,7 @@ class TestSiblingAPI(ConvoyExtBase):
 
     def test_batch_targets_overlap_and_terminal_rows_keep_input_order(self):
         manager = self._useRealBatchFanout()
-        self._patch(self.convoy, 'API_BATCH_WORKER_MAX', 4)
+        self._patch(self.convoy, '_API_BATCH_WORKER_MAX', 4)
         hosts = [character * 32 for character in 'abcd']
         indexes = {host: index for index, host in enumerate(hosts)}
         releases = [Event() for _ in hosts]
@@ -1206,7 +1206,7 @@ class TestSiblingAPI(ConvoyExtBase):
 
     def test_batch_fanout_has_a_hard_worker_bound(self):
         manager = self._useRealBatchFanout()
-        self._patch(self.convoy, 'API_BATCH_WORKER_MAX', 3)
+        self._patch(self.convoy, '_API_BATCH_WORKER_MAX', 3)
         release = Event()
         first_wave = Event()
         lock = Lock()
@@ -1251,7 +1251,7 @@ class TestSiblingAPI(ConvoyExtBase):
 
     def test_slow_target_does_not_block_peers_or_extend_total_timeout(self):
         manager = self._useRealBatchFanout()
-        self._patch(self.convoy, 'API_BATCH_WORKER_MAX', 2)
+        self._patch(self.convoy, '_API_BATCH_WORKER_MAX', 2)
         slow_host = 's' * 32
         fast_hosts = [character * 32 for character in 'fgh']
         release_slow = Event()
@@ -1345,7 +1345,7 @@ class TestSiblingAPI(ConvoyExtBase):
 
     def test_result_limit_replaces_oversized_payload_and_lookup_is_detached(self):
         self.client.network_result['oversized'] = 'x' * 4096
-        self._patch(self.convoy, 'API_RESULT_MAX_BYTES', 1024)
+        self._patch(self.convoy, '_API_RESULT_MAX_BYTES', 1024)
         handle = self.convoy.listNodes()
         self._poll()
         first = self.convoy.requestResult(handle)
@@ -1388,7 +1388,7 @@ class TestSiblingAPI(ConvoyExtBase):
 
     def test_request_capacity_never_evicts_an_inflight_handle(self):
         queued = []
-        self._patch(self.convoy, 'API_REQUEST_MAX', 2)
+        self._patch(self.convoy, '_API_REQUEST_MAX', 2)
         self._patch(self.convoy, '_runInWorker',
                     lambda fn: (queued.append(fn), True)[1])
         first = self.convoy.listNodes()
@@ -1571,7 +1571,7 @@ class TestTickHygiene(ConvoyExtBase):
         self.assertLen(self._runs, 1, 'the poll re-arms instead')
 
     def test_poll_gives_up_with_an_honest_error(self):
-        self.convoy._pollCall('register', 5, self.convoy.POLL_ATTEMPTS)
+        self.convoy._pollCall('register', 5, self.convoy._POLL_ATTEMPTS)
         self.assertStartsWith(self.status_writes[-1], 'Error:')
         self.assertFalse(self.convoy._busy)
 
@@ -1613,7 +1613,7 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
         self._patch(self.embody_target, '_messageBox', _messageBox)
 
     def test_consent_scope_is_the_lan_scope(self):
-        self.assertEqual(self.convoy.CONSENT_SCOPE, CONSENT_SCOPE,
+        self.assertEqual(self.convoy._CONSENT_SCOPE, CONSENT_SCOPE,
                          'the LAN build must never inherit the older '
                          'loopback-only grant')
 
@@ -1628,7 +1628,7 @@ class TestFirstEnableConfirmation(ConvoyExtBase):
         self.assertEqual(self.dialogs, [],
                          'an install that already consented must not be asked')
         self.assertLen(self.recorded, 1, 'the project id is still recorded')
-        self.assertEqual(self.recorded[0][1], self.convoy.CONSENT_SCOPE)
+        self.assertEqual(self.recorded[0][1], self.convoy._CONSENT_SCOPE)
 
     def test_confirm_mints_and_records_the_scope(self):
         self.choice = 1

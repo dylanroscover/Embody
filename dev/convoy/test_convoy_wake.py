@@ -58,7 +58,7 @@ def test_parser_silently_drops_unauthenticated_nonloopback_and_open_schema():
         packet = json.dumps(body).encode("utf-8")
         assert ext._parseWakeDatagram(packet, TOKEN, address) is None
     assert ext._parseWakeDatagram(
-        b"x" * (ext.WAKE_PACKET_MAX + 1), TOKEN,
+        b"x" * (ext._WAKE_PACKET_MAX + 1), TOKEN,
         ("127.0.0.1", 1)) is None
 
 
@@ -70,7 +70,7 @@ def test_real_loopback_datagram_reaches_the_thread_parser():
     state = {"port": None, "error": "", "stopped": False}
     thread = Thread(target=ext._wakeListenerLoop,
                     args=(commands, stop, ready, TOKEN, state,
-                          ext.WAKE_PACKET_MAX, 0.05), daemon=True)
+                          ext._WAKE_PACKET_MAX, 0.05), daemon=True)
     thread.start()
     assert ready.wait(2.0), state
     assert isinstance(state["port"], int), state

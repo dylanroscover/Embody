@@ -419,7 +419,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         """An operator with no TDN row mints the current suffix."""
         self.assertEqual(
             self.embody_ext._trackedTDNSuffix('/no/such/op/anywhere'),
-            self.embody_ext.my.ext.TDXN.FILE_SUFFIX)
+            self.embody_ext.my.ext.TDXN._FILE_SUFFIX)
 
     def test_findMovedTDNOp_renames_file_on_disk(self):
         """After _findMovedTDNOp, the .tdn file should be renamed on disk."""

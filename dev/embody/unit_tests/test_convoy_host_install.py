@@ -1023,7 +1023,7 @@ class TestHostChainHygiene(ConvoyHostBase):
         self.assertLen(self._runs, 1, 'the poll re-arms instead')
 
     def test_the_poll_gives_up_with_an_honest_status(self):
-        self.convoy._pollHostCall('install', 5, self.convoy.HOST_POLL_ATTEMPTS)
+        self.convoy._pollHostCall('install', 5, self.convoy._HOST_POLL_ATTEMPTS)
         self.assertEqual(self.host_texts[-1], 'Install failed -- see log')
         self.assertFalse(self.convoy._host_busy)
         self.assertLen(self._warnings(), 1)
@@ -2048,7 +2048,7 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         fires now."""
         import time as _time
         self.session['next_call_at'] = _time.monotonic() + 999.0
-        self.convoy._tick_ms = self.convoy.TICK_MAX_MS
+        self.convoy._tick_ms = self.convoy._TICK_MAX_MS
         orig_gen = self.comp.fetch('_convoy_gen', 0)
         try:
             self.choice = 1
@@ -2118,12 +2118,12 @@ class TestForgetOfflineNodes(ConvoyHostBase):
         import time as _time
         later = _time.monotonic() + 999.0
         self.session['next_call_at'] = later
-        self.convoy._tick_ms = self.convoy.TICK_MAX_MS
+        self.convoy._tick_ms = self.convoy._TICK_MAX_MS
         self.choice = 0                       # Cancel
         self.convoy.ForgetOfflineNodes()
         self.assertEqual(self.session.get('next_call_at'), later,
                          'nothing was forgotten, nothing redraws early')
-        self.assertEqual(self.convoy._tick_ms, self.convoy.TICK_MAX_MS)
+        self.assertEqual(self.convoy._tick_ms, self.convoy._TICK_MAX_MS)
 
     def test_all_clear_does_not_send_you_to_the_machine_you_are_on(self):
         """Ownership is host_id; the message names a HOSTNAME. A computer

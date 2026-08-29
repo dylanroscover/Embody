@@ -339,7 +339,7 @@ class TestVenvPaths(EmbodyTestCase):
 		spec = self.ext._venvPaths()
 		mcp_deps = [d for d in spec['deps'] if d.startswith('mcp>=')]
 		self.assertEqual(len(mcp_deps), 1, 'exactly one mcp requirement')
-		expected = (f"mcp>={self.ext.MCP_MIN_VERSION}"
+		expected = (f"mcp>={self.ext._MCP_MIN_VERSION}"
 					f",<{spec['mcp_ceiling_major']}")
 		self.assertEqual(mcp_deps[0], expected)
 		self.assertIn('attrs<25', spec['deps'])
@@ -355,12 +355,12 @@ class TestVenvPaths(EmbodyTestCase):
 
 	def test_ceiling_is_next_major(self):
 		spec = self.ext._venvPaths()
-		min_major = int(self.ext.MCP_MIN_VERSION.split('.')[0])
+		min_major = int(self.ext._MCP_MIN_VERSION.split('.')[0])
 		self.assertEqual(spec['mcp_ceiling_major'], min_major + 1)
 
 	def test_min_version_matches_class_constant(self):
 		spec = self.ext._venvPaths()
-		self.assertEqual(spec['mcp_min_version'], self.ext.MCP_MIN_VERSION)
+		self.assertEqual(spec['mcp_min_version'], self.ext._MCP_MIN_VERSION)
 
 	def test_python_tag_matches_interpreter(self):
 		spec = self.ext._venvPaths()

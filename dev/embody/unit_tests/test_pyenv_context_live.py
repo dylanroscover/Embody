@@ -64,7 +64,7 @@ class TestEnsurePyEnvContextLive(EmbodyTestCase):
         self.root = os.path.realpath(
             tempfile.mkdtemp(prefix='embody_pyenv_ctx_live_'))
         self.spec = self.pyenv.venv_paths(self.root,
-                                          self.ext.MCP_MIN_VERSION)
+                                          self.ext._MCP_MIN_VERSION)
         self.ctx_path = os.path.join(self.root,
                                      self.pyenv.TD_CONTEXT_FILENAME)
         self.guard_calls = []

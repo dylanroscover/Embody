@@ -48,12 +48,12 @@ Failure surfacing:
 
 Stalls never latch (field 2026-08-25: a download hung, and every later attempt
 answered 'an update is already in progress'):
-    - Network phases retry themselves up to MAX_NET_ATTEMPTS, then give up
+    - Network phases retry themselves up to _MAX_NET_ATTEMPTS, then give up
       LOUDLY (check your connection) and reset -- a give-up leaves NOTHING a
       later attempt can trip over.
     - Every phase is bounded by wall clock, not by frames: the worker's own
       read budget, the poll chain's deadline (re-armed in real ms, so a stalled
-      frame clock cannot extend it), and BUSY_CEILING_S -- the independent
+      frame clock cannot extend it), and _BUSY_CEILING_S -- the independent
       backstop a LATER attempt uses to clear a latch whose poll chain died
       (a raise, a swapped instance, a stopped frame loop). A superseded
       generation makes a stale poll stand down instead of fighting the new one.
@@ -119,18 +119,18 @@ class UpdaterExt:
     _MANIFEST_ASSET = 'embody-release.json'
     # A release tox is ~700KB; cap well above that but below anything that
     # could exhaust memory when buffered (GitHub allows 2GB assets).
-    MAX_ASSET_BYTES = 50_000_000
+    _MAX_ASSET_BYTES = 50_000_000
     # A backup must look like a plausible portable tox, not a truncated stub.
     _MIN_BACKUP_BYTES = 100_000
     _ASSET_RE = re.compile(r'^[A-Za-z0-9._-]+\.tox$')
 
     # Stall budgets, all wall clock (see the module docstring). The poll
-    # deadlines are what a phase is allowed to take; BUSY_CEILING_S is the
+    # deadlines are what a phase is allowed to take; _BUSY_CEILING_S is the
     # slack-added backstop a LATER attempt uses to declare a latch dead.
-    CHECK_DEADLINE_S = 60        # two sequential 10s requests + DNS + slack
-    DOWNLOAD_DEADLINE_S = 300    # a ~1MB asset on a bad line, then give up
-    BUSY_CEILING_S = {'check': 120, 'download': 420, 'install': 1800}
-    MAX_NET_ATTEMPTS = 3         # tries per user-visible operation
+    _CHECK_DEADLINE_S = 60        # two sequential 10s requests + DNS + slack
+    _DOWNLOAD_DEADLINE_S = 300    # a ~1MB asset on a bad line, then give up
+    _BUSY_CEILING_S = {'check': 120, 'download': 420, 'install': 1800}
+    _MAX_NET_ATTEMPTS = 3         # tries per user-visible operation
     _RETRY_DELAY_MS = 3000
     _POLL_INTERVAL_MS = 250
 
@@ -226,9 +226,9 @@ class UpdaterExt:
             return f'manifest min_td_build malformed: {data["min_td_build"]!r}'
         if not isinstance(data['size'], int) or data['size'] <= 0:
             return 'manifest size must be a positive integer'
-        if data['size'] > UpdaterExt.MAX_ASSET_BYTES:
+        if data['size'] > UpdaterExt._MAX_ASSET_BYTES:
             return (f'manifest size {data["size"]} exceeds the '
-                    f'{UpdaterExt.MAX_ASSET_BYTES}-byte cap')
+                    f'{UpdaterExt._MAX_ASSET_BYTES}-byte cap')
         if not re.match(r'^[0-9a-f]{64}$', str(data['sha256'])):
             return 'manifest sha256 is not a 64-char lowercase hex digest'
         if not UpdaterExt._ASSET_RE.match(str(data['asset'])):
@@ -454,7 +454,7 @@ class UpdaterExt:
     def _setBusy(self, phase):
         self._busy = True
         self._busy_phase = phase
-        self._busy_deadline = self._clock() + self.BUSY_CEILING_S.get(
+        self._busy_deadline = self._clock() + self._BUSY_CEILING_S.get(
             phase, 300)
 
     def _clearBusy(self):
@@ -507,12 +507,12 @@ class UpdaterExt:
         """
         self._clearBusy()
         self._net_attempt = getattr(self, '_net_attempt', 0) + 1
-        if self._net_attempt < self.MAX_NET_ATTEMPTS:
+        if self._net_attempt < self._MAX_NET_ATTEMPTS:
             nth = self._net_attempt + 1
             self._log(f'{phase} failed ({why}) -- retrying '
-                      f'({nth}/{self.MAX_NET_ATTEMPTS})', 'WARNING')
+                      f'({nth}/{self._MAX_NET_ATTEMPTS})', 'WARNING')
             self._status(f'Retrying {phase} '
-                         f'({nth}/{self.MAX_NET_ATTEMPTS})...')
+                         f'({nth}/{self._MAX_NET_ATTEMPTS})...')
             self._retry_spec = dict(retry_spec)
             self._schedule('args[0]._retryNetworkPhase()', self,
                            delayMilliSeconds=self._RETRY_DELAY_MS)
@@ -672,7 +672,7 @@ class UpdaterExt:
         # (or stops) with the frame clock, and the phase it bounds does not.
         self._schedule('args[0]._pollCheck(args[1], args[2], args[3], args[4])',
                        self, interactive, auto_install, gen,
-                       self._clock() + self.CHECK_DEADLINE_S,
+                       self._clock() + self._CHECK_DEADLINE_S,
                        delayMilliSeconds=self._POLL_INTERVAL_MS)
         return {'status': 'checking'}
 
@@ -816,7 +816,7 @@ class UpdaterExt:
         # asset is validated as a bare .tox filename -> safe to join.
         dest = self._posix(self._updatesDir(create=True)
                            / pending['manifest']['asset'])
-        budget = self.DOWNLOAD_DEADLINE_S
+        budget = self._DOWNLOAD_DEADLINE_S
 
         read_capped = self._readCapped  # bound on the main thread
 
@@ -856,7 +856,7 @@ class UpdaterExt:
         self._schedule(
             'args[0]._pollDownload(args[1], args[2], args[3], args[4])',
             self, interactive, apply_after, gen,
-            self._clock() + self.DOWNLOAD_DEADLINE_S + 15,
+            self._clock() + self._DOWNLOAD_DEADLINE_S + 15,
             delayMilliSeconds=self._POLL_INTERVAL_MS)
         return {'status': 'downloading'}
 

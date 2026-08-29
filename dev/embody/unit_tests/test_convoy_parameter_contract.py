@@ -434,14 +434,14 @@ def test_challenge_defers_while_dialogs_are_suppressed():
     assert len(ext._scheduled) == 1
     args, kwargs = ext._scheduled[0]
     assert args[4]["_challenge_wait"] == 1
-    assert kwargs["delayFrames"] == type(ext).CHALLENGE_WAIT_FRAMES
+    assert kwargs["delayFrames"] == type(ext)._CHALLENGE_WAIT_FRAMES
 
 
 def test_challenge_wait_budget_exhaustion_still_declines():
     ext = _finish_ext(suppressed=True)
     ext._finishPolicyCall(
         "policy_begin", _challenge_result(),
-        {"_challenge_wait": type(ext).CHALLENGE_WAIT_MAX})
+        {"_challenge_wait": type(ext)._CHALLENGE_WAIT_MAX})
     assert ext._scheduled == []
     assert len(ext._dialogs) == 1          # asked; -1 = suppressed decline
     assert ext._policy_calls and ext._policy_calls[0][0] == "policy_decline"
@@ -497,7 +497,7 @@ def test_status_projection_is_the_four_agreed_columns():
 
 def test_lan_scope_requires_a_new_explicit_consent_marker():
     ext_class = _load_convoy_ext_class()
-    assert ext_class.CONSENT_SCOPE == "trusted LAN Convoy mesh"
+    assert ext_class._CONSENT_SCOPE == "trusted LAN Convoy mesh"
     source = CONVOY_EXT.read_text(encoding="utf-8")
     assert "local host app only" in source  # legacy migration marker/prose
     assert "convoy_scope_upgrade_required" in source

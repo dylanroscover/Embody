@@ -83,7 +83,7 @@ def venv_paths(project_dir, mcp_min_version, declared_extras=None,
 
     Ported from EmbodyExt._venvPaths; project folder and the pinned MCP
     floor are passed in so this stays pure (the constant remains
-    authoritative on EmbodyExt.MCP_MIN_VERSION -- releases bump it there).
+    authoritative on EmbodyExt._MCP_MIN_VERSION -- releases bump it there).
     ``declared_extras`` (the committed python.extras list, when the caller
     has it) rides along so worker-side freeze_constraints can exclude the
     user's own packages from the core constraints snapshot.

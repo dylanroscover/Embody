@@ -775,7 +775,7 @@ def opencode_permission_block(ext, posture):
     """
     if posture == 'some':
         block = {'envoy_*': 'ask'}
-        for t in sorted(ext.READ_ONLY_TOOLS):
+        for t in sorted(ext._READ_ONLY_TOOLS):
             block[f'envoy_{t}'] = 'allow'
         return block
     if posture == 'prompt':
@@ -932,7 +932,7 @@ def compose_settings(ext, cfg, posture, root=None):
     if posture == 'all':
         allow.append('mcp__envoy')          # wildcard: all current + future tools
     elif posture == 'some':
-        allow.extend(f'mcp__envoy__{t}' for t in ext.READ_ONLY_TOOLS)
+        allow.extend(f'mcp__envoy__{t}' for t in ext._READ_ONLY_TOOLS)
     # posture == 'prompt': no Envoy entries -> every tool prompts.
     for rule in worktree_permission_rules(ext, root):
         if rule not in allow:
@@ -977,7 +977,7 @@ def settings_satisfies(ext, cfg, posture, root=None):
     if posture == 'prompt':
         return len(envoy) == 0
     if posture == 'some':
-        return set(envoy) == {f'mcp__envoy__{t}' for t in ext.READ_ONLY_TOOLS}
+        return set(envoy) == {f'mcp__envoy__{t}' for t in ext._READ_ONLY_TOOLS}
     return False
 
 

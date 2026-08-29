@@ -331,15 +331,15 @@ class EmbodyExt:
     # PYTHON ENVIRONMENT SETUP (uv)
     # ==========================================================================
 
-    # Bump MCP_MIN_VERSION when a new release is tested and verified. The
-    # dependency pin is always ``mcp>=MCP_MIN_VERSION,<next-major``: SDK 2.0.0
+    # Bump _MCP_MIN_VERSION when a new release is tested and verified. The
+    # dependency pin is always ``mcp>=_MCP_MIN_VERSION,<next-major``: SDK 2.0.0
     # (2026-07-28) removed mcp.server.fastmcp overnight and every fresh
     # unpinned install broke (issue #81), so a new SDK major is adopted only
     # by a deliberate port + this constant's bump -- never by the resolver.
     # Bumping it (or changing any dep below) re-stamps the spec, and
     # _environmentNeedsInstall then auto-upgrades every existing venv on its
     # next Start -- users never rebuild a venv by hand.
-    MCP_MIN_VERSION = '2.0.0'
+    _MCP_MIN_VERSION = '2.0.0'
 
     # The venv machinery lives in mod.embody_pyenv (extracted 2026-08-19;
     # one module owns spec building, uv invocation, stamping, wiring, the
@@ -371,7 +371,7 @@ class EmbodyExt:
         # project.folder it lands outside the managed gitignore when the
         # .toe sits in a repo subfolder (review find, 2026-08-19).
         return mod.embody_pyenv.venv_paths(
-            project.folder, self.MCP_MIN_VERSION, declared_extras=declared,
+            project.folder, self._MCP_MIN_VERSION, declared_extras=declared,
             state_root=root)
 
     @staticmethod
@@ -400,7 +400,7 @@ class EmbodyExt:
         """Cheap, non-blocking check: does the venv need a (slow) install?
 
         Returns True when a venv build / pip install is required -- because the
-        mcp package is absent, outside ``[MCP_MIN_VERSION, next-major)``,
+        mcp package is absent, outside ``[_MCP_MIN_VERSION, next-major)``,
         paired with an incompatible attrs 25.x, or because the venv was built
         for a DIFFERENT dependency spec or Python than this Embody wants (the
         ``embody-env.json`` stamp _installDependencies writes). The stamp is
@@ -1098,7 +1098,7 @@ class EmbodyExt:
         # read.
         self._mcp_update_notice = None
 
-        ceiling_major = int(self.MCP_MIN_VERSION.split('.')[0]) + 1
+        ceiling_major = int(self._MCP_MIN_VERSION.split('.')[0]) + 1
 
         def _parse(ver):
             try:
@@ -1131,7 +1131,7 @@ class EmbodyExt:
                 installed_t = _parse(installed) or ()
                 # Newest stable, NON-YANKED release INSIDE the supported major
                 # -- the only thing worth nagging about. Yanked releases must
-                # not be recommended (a maintainer pinning MCP_MIN_VERSION to
+                # not be recommended (a maintainer pinning _MCP_MIN_VERSION to
                 # one would make the range unresolvable for fresh installs).
                 # Releases at/after the ceiling are a new SDK major: adopting
                 # one takes a deliberate port (issue #81), so those get a calm
@@ -1153,7 +1153,7 @@ class EmbodyExt:
                     # the main thread by _pollMCPUpdate.
                     notice = ('WARNING', (
                         f'MCP update available: {installed} -> {ver_str}. '
-                        f'Bump EmbodyExt.MCP_MIN_VERSION in a release; every '
+                        f'Bump EmbodyExt._MCP_MIN_VERSION in a release; every '
                         f'venv then auto-upgrades on its next start.'
                     ))
                 elif latest_overall and latest_overall[0] >= ceiling_major:
@@ -1229,7 +1229,7 @@ class EmbodyExt:
         and hardcoded the pre-v6.1.6 name while claiming 'project root'.
         Derived from TDXNExt now so it cannot drift from the writer again.
         """
-        return Path(project.folder) / self.my.ext.TDXN.BACKUP_DIR
+        return Path(project.folder) / self.my.ext.TDXN._BACKUP_DIR
 
     def _cellVal(self, row, col, default: str = '', table=None) -> str:
         """Safe read of an externalizations table cell.
@@ -6111,13 +6111,13 @@ class EmbodyExt:
         and an output_file='auto' re-export all ask this INSTEAD of
         minting, so only a FIRST externalization can produce .tdxn.
         """
-        suffixes = self.my.ext.TDXN.FILE_SUFFIXES
+        suffixes = self.my.ext.TDXN._FILE_SUFFIXES
         rel = self._getStrategyFilePath(op_path, 'tdn')
         if rel:
             suffix = Path(rel).suffix.lower()
             if suffix in suffixes:
                 return suffix
-        return self.my.ext.TDXN.FILE_SUFFIX
+        return self.my.ext.TDXN._FILE_SUFFIX
 
     # Frozen wire value -> the name a human should read. The tag value and
     # the strategy token are deliberately still 'tdn' (changing either
@@ -6730,7 +6730,7 @@ class EmbodyExt:
             path_parts.append(ext_folder)
         path_parts.extend(parts)
 
-        filename = oper.name + (suffix or self.my.ext.TDXN.FILE_SUFFIX)
+        filename = oper.name + (suffix or self.my.ext.TDXN._FILE_SUFFIX)
         if path_parts:
             return Path('/'.join(path_parts)) / filename
         return Path(filename)
@@ -10539,7 +10539,7 @@ class EmbodyExt:
                 except Exception:
                     abs_path = None
             if abs_path is None:
-                for suffix in self.my.ext.TDXN.FILE_SUFFIXES:
+                for suffix in self.my.ext.TDXN._FILE_SUFFIXES:
                     conv = Path(project.folder) / (p.lstrip('/') + suffix)
                     if conv.is_file():
                         abs_path = conv
@@ -10661,8 +10661,8 @@ class EmbodyExt:
             'skipped', 'failed', 'refused'.
         """
         scope = (scope or '').rstrip('/') or None
-        suffixes = self.my.ext.TDXN.FILE_SUFFIXES
-        target_suffix = self.my.ext.TDXN.FILE_SUFFIX
+        suffixes = self.my.ext.TDXN._FILE_SUFFIXES
+        target_suffix = self.my.ext.TDXN._FILE_SUFFIX
         legacy = [s for s in suffixes if s != target_suffix]
         result = {'migrated': [], 'row_only': [], 'rename_only': [],
                   'parents': [], 'skipped': [], 'failed': [], 'refused': ''}
@@ -12754,7 +12754,7 @@ class EmbodyExt:
         # Strip whichever TDXN suffix is present. A bare .tdn strip would
         # leave 'x.tdxn' as 'x.tdxn' and infer the WRONG COMP path.
         stem = str(rel).replace('\\', '/')
-        for suffix in self.my.ext.TDXN.FILE_SUFFIXES:
+        for suffix in self.my.ext.TDXN._FILE_SUFFIXES:
             if stem.lower().endswith(suffix):
                 stem = stem[:-len(suffix)]
                 break
