@@ -47,12 +47,21 @@ class ToolbarExt:
 			handler()
 			return
 
+		# Fail LOUD on an unresolved action. This getattr also reaches TD's own
+		# OP API (openParameters is a builtin, not an extension method), so a
+		# miss means the name is wrong -- and a silent miss is a button that
+		# does nothing, which is how two dead rows survived unnoticed until the
+		# promoted-surface census found them (issue #94).
 		try:
-			method = getattr(self.ownerComp.parent.Embody, action, None)
-			if method and callable(method):
+			method = getattr(self.embody, action, None)
+			if callable(method):
 				method()
+			else:
+				self.embody.Warn(
+					f'Toolbar action "{action}" resolves to nothing -- '
+					f'button "{name}" does nothing.')
 		except Exception as e:
-			debug(f'ToolbarExt error calling {action}: {e}')
+			self.embody.Error(f'Toolbar action "{action}" raised: {e}')
 
 	# -- Press / Release ---------------------------------------------
 

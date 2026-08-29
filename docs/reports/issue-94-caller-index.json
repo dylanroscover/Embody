@@ -1,10 +1,27 @@
 {
  "generated_by": "execute_python walk of root.findChildren(type=DAT, includeUtility=True)",
+ "regenerated": "2026-08-29 -- dead tagger/btn_restore deleted; scan limited to code-bearing DAT types",
+ "code_dat_types_scanned": [
+  "chopexec",
+  "datexec",
+  "eval",
+  "execute",
+  "filein",
+  "keyboardin",
+  "opexec",
+  "panelexec",
+  "parexec",
+  "script",
+  "table",
+  "text"
+ ],
+ "excluded_note": "fifo/info/in/out/merge/null/select/switch are display sinks; the log fifo echoes executed code back and produced phantom callers",
  "td_build": "2025.33070",
- "dats_scanned": 840,
- "dats_unbacked": 594,
- "distinct_names": 410,
- "names_with_toe_only_callers": 43,
+ "dats_scanned": 781,
+ "dats_skipped_non_code": 60,
+ "dats_unbacked": 535,
+ "distinct_names": 411,
+ "names_with_toe_only_callers": 42,
  "invisible_call_sites": {
   "AbsoluteTween": {
    "files": [],
@@ -60,7 +77,6 @@
   "Do_Callback": {
    "files": [],
    "toe_only": [
-    "/utils/remote/tweener/callbackManager/in1",
     "/utils/remote/tweener/callbackManager/internal_default_callbacks"
    ]
   },
@@ -134,12 +150,6 @@
    ],
    "toe_only": [
     "/embody/Embody/tagger/btn_remove/parexec1"
-   ]
-  },
-  "HandleStrategyRestore": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_restore/parexec1"
    ]
   },
   "HandleStrategySave": {
@@ -253,6 +263,7 @@
     "/embody/Embody/list/list_callbacks",
     "/embody/Embody/parexec",
     "/embody/Embody/EmbodyExt",
+    "/embody/Embody/templates/text_agents_md",
     "/embody/Embody/viz_status/status_publish",
     "/embody/Embody/windowHeader/WindowHeaderExt",
     "/embody/Embody/CatalogManagerExt",
@@ -303,7 +314,6 @@
     "/embody/Embody/tagger/btn_embed/parexec1",
     "/embody/Embody/tagger/btn_reload/parexec1",
     "/embody/Embody/tagger/btn_remove/parexec1",
-    "/embody/Embody/tagger/btn_restore/parexec1",
     "/embody/Embody/tagger/btn_copy_tdn/parexec1",
     "/embody/Embody/tagger/btn_openfile/parexec1",
     "/embody/Embody/tagger/btn_portable/parexec1",
@@ -356,7 +366,6 @@
     "/embody/Embody/tagger/btn_embed/parexec1",
     "/embody/Embody/tagger/btn_reload/parexec1",
     "/embody/Embody/tagger/btn_remove/parexec1",
-    "/embody/Embody/tagger/btn_restore/parexec1",
     "/embody/Embody/tagger/btn_copy_tdn/parexec1",
     "/embody/Embody/tagger/btn_openfile/parexec1",
     "/embody/Embody/tagger/btn_portable/parexec1",
@@ -649,6 +658,7 @@
   },
   "Dependency": {
    "files": [
+    "/embody/Embody/templates/text_skill_parameter_design",
     "/embody/Embody/templates/text_skill_td_api_reference"
    ],
    "toe_only": []
@@ -720,7 +730,6 @@
   "Do_Callback": {
    "files": [],
    "toe_only": [
-    "/utils/remote/tweener/callbackManager/in1",
     "/utils/remote/tweener/callbackManager/internal_default_callbacks"
    ]
   },
@@ -750,6 +759,7 @@
   },
   "Error": {
    "files": [
+    "/embody/Embody/templates/text_skill_parameter_design",
     "/embody/unit_tests/test_logging"
    ],
    "toe_only": []
@@ -806,6 +816,7 @@
    "files": [
     "/embody/Embody/updater/UpdaterExt",
     "/embody/Embody/EmbodyExt",
+    "/embody/Embody/templates/text_agents_md",
     "/embody/Embody/templates/text_skill_externalize",
     "/embody/unit_tests/test_release_hooks",
     "/embody/execute_src_ctrl"
@@ -1057,12 +1068,6 @@
    ],
    "toe_only": [
     "/embody/Embody/tagger/btn_remove/parexec1"
-   ]
-  },
-  "HandleStrategyRestore": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_restore/parexec1"
    ]
   },
   "HandleStrategySave": {
@@ -1358,7 +1363,8 @@
   },
   "Method": {
    "files": [
-    "/embody/Embody/EnvoyExt"
+    "/embody/Embody/EnvoyExt",
+    "/embody/Embody/templates/text_rule_td_python"
    ],
    "toe_only": []
   },
@@ -1758,6 +1764,7 @@
     "/embody/Embody/list/list_callbacks",
     "/embody/Embody/parexec",
     "/embody/Embody/EmbodyExt",
+    "/embody/Embody/templates/text_agents_md",
     "/embody/Embody/viz_status/status_publish",
     "/embody/Embody/windowHeader/WindowHeaderExt",
     "/embody/Embody/CatalogManagerExt",
@@ -2052,7 +2059,6 @@
     "/embody/Embody/parexec",
     "/embody/Embody/EnvoyExt",
     "/embody/Embody/EmbodyExt",
-    "/embody/Embody/templates/text_agents_md",
     "/embody/Embody/embody_admin"
    ],
    "toe_only": []
@@ -2141,7 +2147,6 @@
     "/embody/Embody/tagger/btn_embed/parexec1",
     "/embody/Embody/tagger/btn_reload/parexec1",
     "/embody/Embody/tagger/btn_remove/parexec1",
-    "/embody/Embody/tagger/btn_restore/parexec1",
     "/embody/Embody/tagger/btn_copy_tdn/parexec1",
     "/embody/Embody/tagger/btn_openfile/parexec1",
     "/embody/Embody/tagger/btn_portable/parexec1",
@@ -3129,7 +3134,6 @@
   "helperMethod": {
    "files": [
     "/embody/Embody/templates/text_claude",
-    "/embody/Embody/templates/text_skill_create_extension",
     "/embody/Embody/templates/text_skill_td_api_reference"
    ],
    "toe_only": []
@@ -3142,7 +3146,8 @@
   },
   "method": {
    "files": [
-    "/embody/Embody/EnvoyExt"
+    "/embody/Embody/EnvoyExt",
+    "/embody/Embody/templates/text_rule_td_python"
    ],
    "toe_only": []
   },
@@ -3150,6 +3155,12 @@
    "files": [
     "/embody/Embody/TDXNExt",
     "/embody/Embody/envoy_read"
+   ],
+   "toe_only": []
+  },
+  "onFrame": {
+   "files": [
+    "/embody/Embody/templates/text_skill_create_extension"
    ],
    "toe_only": []
   },
@@ -3172,7 +3183,6 @@
     "/embody/Embody/tagger/btn_embed/parexec1",
     "/embody/Embody/tagger/btn_reload/parexec1",
     "/embody/Embody/tagger/btn_remove/parexec1",
-    "/embody/Embody/tagger/btn_restore/parexec1",
     "/embody/Embody/tagger/btn_copy_tdn/parexec1",
     "/embody/Embody/tagger/btn_openfile/parexec1",
     "/embody/Embody/tagger/btn_portable/parexec1",
@@ -3200,6 +3210,14 @@
     "/embody/Embody/EmbodyExt",
     "/embody/Embody/CatalogManagerExt",
     "/embody/unit_tests/test_tdxn_migration"
+   ],
+   "toe_only": []
+  },
+  "x": {
+   "files": [
+    "/embody/Embody/templates/text_agents_md",
+    "/embody/Embody/templates/text_rule_td_python",
+    "/embody/Embody/templates/text_skill_create_extension"
    ],
    "toe_only": []
   }

@@ -234,24 +234,30 @@ def pytest_collection_finish(session):
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """Tripwire: the suite must not have written to the live install.
+    """Tripwire: THIS process must not have written to the live install.
 
-    Fails the run rather than warning. A suite that can append to the live
-    bridge log can also reach the live Envoy port, and that has taken the
-    developer's TouchDesigner down.
+    Scoped to our own pid, not to file growth. The log is shared -- every live
+    AI session's bridge appends to it constantly -- so a size check would fire
+    on a concurrent session and get switched off as noise. The bridge tags each
+    line "[envoy-bridge:<pid>]", and under pytest the module runs in-process,
+    so our own pid appearing in the appended region is proof the cage leaked.
     """
     if _live_log_size_at_start is None:
         return
     try:
-        grew = os.path.getsize(_LIVE_BRIDGE_LOG) - _live_log_size_at_start
+        with open(_LIVE_BRIDGE_LOG, 'r', encoding='utf-8', errors='replace') as fh:
+            fh.seek(_live_log_size_at_start)
+            appended = fh.read()
     except OSError:
         return
-    if grew > 0:
+    ours = '[envoy-bridge:%d]' % os.getpid()
+    mine = [ln for ln in appended.splitlines() if ours in ln]
+    if mine:
         session.exitstatus = 1
         print(
-            '\nISOLATION FAILURE: the test run appended %d bytes to the live\n'
-            '%s\n'
+            '\nISOLATION FAILURE: this pytest process (pid %d) wrote %d line(s)\n'
+            'to the live %s\n'
             'The bridge under test reached the real install instead of the\n'
-            'sandbox. Do not trust this run, and do not run it again against a\n'
-            'live TouchDesigner until the leak is closed.'
-            % (grew, _LIVE_BRIDGE_LOG))
+            'sandbox. Do not trust this run, and do not run it against a live\n'
+            'TouchDesigner until the leak is closed. First leaked line:\n  %s'
+            % (os.getpid(), len(mine), _LIVE_BRIDGE_LOG, mine[0][:200]))

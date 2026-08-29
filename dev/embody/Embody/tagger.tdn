@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
-build: 32
-generator: Embody/6.1.4
+build: 33
+generator: Embody/6.1.13
 td_build: 099.2025.33070
-source_file: Embody-6.286.toe
-exported_at: '2026-08-28T02:59:05Z'
+source_file: Embody-6.295.toe
+exported_at: '2026-08-29T16:34:28Z'
 network_path: /embody/Embody/tagger
 options:
   include_dat_content: false
@@ -544,56 +544,6 @@ operators:
   position: [-1000, 0]
   size: [130, 90]
   dat_read_only: true
-- name: btn_restore
-  type: buttonCOMP
-  parameters:
-    label: Restore from tdxn
-    colorr: 0.2
-    colorg: 0.2
-    colorb: 0.2
-    alignorder: 0.5
-    display: false
-  position: [-640, 275]
-  size: [160, 134]
-  storage:
-    _tdn_palette_handling: blackbox
-  children:
-  - name: out1
-    type: outCHOP
-    position: [275, 175]
-    inputs:
-    - par1
-  - name: par1
-    type: parameterCHOP
-    position: [65, 175]
-  - name: text
-    type: textCOMP
-    parameters:
-      scaletofit: =parent().par[me.curPar.name] or me.curPar.val
-      linespacing: =parent().par[me.curPar.name] or me.curPar.val
-      textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
-      textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
-      textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
-      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
-      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
-    position: [74, 26]
-    size: [113, 96]
-  - name: parexec1
-    type: parameterexecuteDAT
-    parameters:
-      op: ..
-      loadonstart: true
-    position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.HandleStrategyRestore(oper)\n\treturn"
-    dat_content_format: text
-  - name: panelexec1
-    type: panelexecuteDAT
-    parameters:
-      loadonstart: true
-    position: [247, -81]
-    dat_content: "# panelValue - the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onValueChange(panelValue):\n\tparent().par.value0 = panelValue\n\treturn"
-    dat_content_format: text
 - name: replicator1
   type: replicatorCOMP
   parameters:

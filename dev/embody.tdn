@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
 build: 1161
-generator: Embody/6.1.12
+generator: Embody/6.1.14
 td_build: 099.2025.33070
-source_file: Embody-6.294.toe
-exported_at: '2026-08-29T00:47:25Z'
+source_file: Embody-6.296.toe
+exported_at: '2026-08-29T16:47:28Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -68,6 +68,10 @@ operators:
     - {}
     - {}
     Convoynodes:
+    - {}
+    - {}
+    - {}
+    - {}
     - {}
     - {}
     - {}
@@ -367,7 +371,7 @@ operators:
     Envoy:
     - name: Envoyenable
       style: Toggle
-      label: Envoy Enable
+      label: Enable Envoy
       startSection: true
       help: Enables/disables the Envoy MCP server. When enabled, starts an HTTP server that exposes TouchDesigner operations to Claude Code and other MCP clients.
       value: true
@@ -894,7 +898,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.1.12
+      value: 6.1.14
     - name: Touchbuild
       style: Str
       label: Touch Build
