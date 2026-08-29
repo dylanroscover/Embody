@@ -26,7 +26,7 @@ class ToolbarExt:
 
 	# -- Click dispatch ----------------------------------------------
 
-	def OnContainerClick(self, container):
+	def onContainerClick(self, container):
 		"""Called by panelexec_left/right on lselect offToOn."""
 		btn = self._findClickedButton(container)
 		if not btn:
@@ -65,13 +65,13 @@ class ToolbarExt:
 
 	# -- Press / Release ---------------------------------------------
 
-	def OnContainerPress(self, container):
+	def onContainerPress(self, container):
 		"""Called by panelexec on lselect offToOn -- set pressed visual."""
 		btn = self._findClickedButton(container)
 		if btn:
 			self._setPressed(btn)
 
-	def OnContainerRelease(self, container):
+	def onContainerRelease(self, container):
 		"""Called by panelexec on lselect onToOff -- clear pressed visual."""
 		self._clearPressed()
 
@@ -93,7 +93,7 @@ class ToolbarExt:
 
 	# -- Rollover / Hover --------------------------------------------
 
-	def OnContainerRollover(self, container, state):
+	def onContainerRollover(self, container, state):
 		"""Called by panelexec on rollover/insideu valueChange."""
 		if state:
 			btn = self._findButtonByPosition(container)
@@ -208,7 +208,7 @@ class ToolbarExt:
 
 	# -- Filter handling ---------------------------------------------
 
-	def OnFilterChanged(self):
+	def onFilterChanged(self):
 		"""Called when filter text changes. Refresh the externalization list."""
 		self.ownerComp.parent.Embody.op('list/inject_parents').cook(force=True)
 		self.ownerComp.parent.Embody.op('list/list1').par.reset.pulse()
@@ -249,7 +249,7 @@ class ToolbarExt:
 		f = self.ownerComp.op('container_right/filter')
 		if f:
 			f.par.text = ''
-			self.OnFilterChanged()
+			self.onFilterChanged()
 
 	# -- Helpers -----------------------------------------------------
 

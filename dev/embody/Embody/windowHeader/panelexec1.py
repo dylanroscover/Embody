@@ -1,16 +1,16 @@
 def onOffToOn(panelValue):
 	if panelValue.name == 'lselect':
-		me.parent().ext.WindowHeaderExt.OnPress()
-		me.parent().ext.WindowHeaderExt.OnClick()
+		me.parent().ext.WindowHeaderExt.onPress()
+		me.parent().ext.WindowHeaderExt.onClick()
 
 def whileOn(panelValue):
 	return
 
 def onOnToOff(panelValue):
 	if panelValue.name == 'rollover':
-		me.parent().ext.WindowHeaderExt.OnRollover(False)
+		me.parent().ext.WindowHeaderExt.onRollover(False)
 	if panelValue.name == 'lselect':
-		me.parent().ext.WindowHeaderExt.OnRelease()
+		me.parent().ext.WindowHeaderExt.onRelease()
 
 def whileOff(panelValue):
 	return
@@ -18,4 +18,4 @@ def whileOff(panelValue):
 def onValueChange(panelValue, prev):
 	if panelValue.name in ('insideu', 'rollover'):
 		if me.parent().panel.rollover.val:
-			me.parent().ext.WindowHeaderExt.OnRollover(True)
+			me.parent().ext.WindowHeaderExt.onRollover(True)

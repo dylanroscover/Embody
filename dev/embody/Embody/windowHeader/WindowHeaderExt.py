@@ -60,13 +60,13 @@ class WindowHeaderExt:
 
 	# -- Press / Release ---------------------------------------------
 
-	def OnPress(self):
+	def onPress(self):
 		"""Called by panelexec1 on lselect offToOn -- set pressed visual."""
 		btn = self._findClickedButton()
 		if btn:
 			self._setPressed(btn)
 
-	def OnRelease(self):
+	def onRelease(self):
 		"""Called by panelexec1 on lselect onToOff -- clear pressed visual."""
 		self._clearPressed()
 
@@ -86,15 +86,15 @@ class WindowHeaderExt:
 
 	# -- Click dispatch ----------------------------------------------
 
-	def OnClick(self):
+	def onClick(self):
 		"""Called by panelexec1 on lselect offToOn."""
 		btn = self._findClickedButton()
 		if not btn:
 			return
 		actions = {
-			'button_min': self.Windowminimize,
-			'button_max': self.Windowmaximize,
-			'button_close': self.Windowclose,
+			'button_min': self._windowMinimize,
+			'button_max': self._windowMaximize,
+			'button_close': self._windowClose,
 		}
 		action = actions.get(btn.name)
 		if action:
@@ -102,7 +102,7 @@ class WindowHeaderExt:
 
 	# -- Rollover ----------------------------------------------------
 
-	def OnRollover(self, state):
+	def onRollover(self, state):
 		"""Called by panelexec1 on rollover/insideu changes."""
 		if state:
 			btn = self._findButtonByPosition()
@@ -125,13 +125,13 @@ class WindowHeaderExt:
 
 	# -- Window actions ----------------------------------------------
 
-	def Windowclose(self):
+	def _windowClose(self):
 		"""Close the manager window."""
 		windowComp = self.ownerComp.par.Windowcomp.eval()
 		if isinstance(windowComp, windowCOMP):
 			windowComp.par.winclose.pulse()
 
-	def Windowmaximize(self):
+	def _windowMaximize(self):
 		"""Restore to full manager view."""
 		container_left = self._container_left
 		if container_left:
@@ -164,7 +164,7 @@ class WindowHeaderExt:
 		run("args[0].par.h = args[1]", mgr, self.max_height, delayFrames=1)
 		self._mgr.Refresh()
 
-	def Windowminimize(self):
+	def _windowMinimize(self):
 		"""Collapse to compact widget mode."""
 		container_left = self._container_left
 		if container_left:

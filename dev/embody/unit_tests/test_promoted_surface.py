@@ -38,9 +38,12 @@ PROMOTED_CEILING = {
     "TDXNExt": 24,
     "UpdaterExt": 18,
     "CatalogManagerExt": 7,
-    "WindowHeaderExt": 7,
+    # WP4 wave 4a: both UI extensions demoted to zero promoted members. Every
+    # caller was already a file-backed .py using .ext.<Class>., so nothing had
+    # to change but the names -- which is exactly why this wave went first.
+    "WindowHeaderExt": 0,
     "EnvoyExt": 5,
-    "ToolbarExt": 5,
+    "ToolbarExt": 0,
     "CollectionExt": 2,
 }
 
