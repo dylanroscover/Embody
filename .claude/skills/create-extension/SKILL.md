@@ -63,14 +63,24 @@ What makes an over-wide tier 1 harmful is concrete, not cosmetic: co-mounted ext
 Two traps:
 
 - **`.ext.<Name>` resolves by the Extension Name parameter, not the class name.** If `ext_name='MyFeature'` and the class is `MyFeatureExt`, then `op.MyFeature.ext.MyFeature.x()` works and `op.MyFeature.ext.MyFeatureExt.x()` raises.
-- **`op.MyFeature` requires a Global OP Shortcut, and `create_extension` does not set one.** Straight out of the tool, `op.MyFeature` raises `AttributeError`. Either reach the COMP by a relative path (`op('./MyFeature')`, `parent.Host.op('MyFeature')`), or set a shortcut deliberately:
+- **`op.MyFeature` requires a Global OP Shortcut, and `create_extension` never sets one.** Straight out of the tool, `op.MyFeature` raises `AttributeError`. Reach the COMP by a relative path (`op('./MyFeature')`, `parent.Host.op('MyFeature')`), or set `par.opshortcut` deliberately -- it is globally unique, so assigning a name already in use silently steals it from the previous holder. Reserve it for genuine project-wide singletons.
+
+**Pass `parent_shortcut` when descendants need to reach the COMP.** It sets `par.parentshortcut`, which is what makes `parent.MyFeature` resolve and keeps the COMP's own callback DATs off depth-coupled `parent()` chains:
+
+```
+create_extension(parent_path='/project1', class_name='MyFeatureExt',
+                 name='MyFeature', ext_name='MyFeature',
+                 parent_shortcut='MyFeature')
+```
+
+It refuses to overwrite a shortcut the COMP already declares -- re-pointing one silently redirects every reference already using it -- and says so in the result's `warning`.
+
+Both shortcuts can also be set by hand:
 
 ```python
 comp.par.parentshortcut = 'MyFeature'   # descendants reach it as parent.MyFeature
 comp.par.opshortcut = 'MyFeature'       # project-wide: op.MyFeature -- singletons only
 ```
-
-Set `parentshortcut` on any COMP whose descendants need to reach it; that is what makes `parent.MyFeature` work and keeps callback DATs off `parent()` chains. Reserve `opshortcut` for genuine project-wide singletons -- it is globally unique, so assigning a name already in use silently steals it from the previous holder.
 
 **NEVER cache extension references** in variables -- always call inline. Cached refs go stale on reinit.
 

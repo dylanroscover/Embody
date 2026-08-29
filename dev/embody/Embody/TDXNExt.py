@@ -4594,13 +4594,7 @@ class TDXNExt:
 
 			# Get or create page
 			if page_name not in pages:
-				page = None
-				for p in target.customPages:
-					if p.name == page_name:
-						page = p
-						break
-				if page is None:
-					page = target.appendCustomPage(page_name)
+				page = mod.embody_pardef.ensureCustomPage(target, page_name)
 				pages[page_name] = page
 
 			page = pages[page_name]

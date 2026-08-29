@@ -959,7 +959,8 @@ def create_extension(ext, parent_path: str, class_name: str,
                      name: str = None, code: str = None,
                      promote: bool = True, ext_name: str = None,
                      ext_index: int = None,
-                     existing_comp: bool = False) -> dict:
+                     existing_comp: bool = False,
+                     parent_shortcut: str = None) -> dict:
     """Create a TD extension: COMP + text DAT + extension wiring"""
 
     # Validate class_name
@@ -1029,14 +1030,23 @@ def create_extension(ext, parent_path: str, class_name: str,
     if code:
         text_dat.text = code
     else:
+        # Skeleton follows the three tiers in td-python.md: only UpperCamelCase
+        # is promoted to the COMP, so the lifecycle hooks are lowerCamel (tier 2)
+        # and reached through .ext -- promoting a frame hook is a design flaw.
         text_dat.text = (
             f'class {class_name}:\n'
-            f'    """\n'
-            f'    {class_name} description.\n'
-            f'    """\n'
+            f'    """TODO: one line on what this component does."""\n'
             f'\n'
             f'    def __init__(self, ownerComp):\n'
             f'        self.ownerComp = ownerComp\n'
+            f'\n'
+            f'    def onDestroyTD(self):\n'
+            f'        """Teardown of the OLD instance before TD reinitializes."""\n'
+            f'        pass\n'
+            f'\n'
+            f'    def onInitTD(self):\n'
+            f'        """End of the frame after init; the network is cooked."""\n'
+            f'        pass\n'
         )
 
     # Set extension parameters
@@ -1053,6 +1063,22 @@ def create_extension(ext, parent_path: str, class_name: str,
         else:
             text_dat.destroy()
         return {'error': f'Failed to set extension parameters: {e}'}
+
+    shortcut_warning = None
+    # Optional parent shortcut. Without one, descendants have no
+    # parent.<Name> to reach the COMP by and fall back to parent() chains,
+    # which encode nesting depth (issue #94). Never overwrite an existing
+    # shortcut -- that would silently re-point references already in use.
+    if parent_shortcut:
+        try:
+            current = str(comp.par.parentshortcut.eval()).strip()
+            if current and current != parent_shortcut:
+                shortcut_warning = (f'parent_shortcut not set: {comp.path} already '
+                                f'declares "{current}"')
+            else:
+                comp.par.parentshortcut = parent_shortcut
+        except Exception as e:
+            shortcut_warning = f'parent_shortcut could not be set: {e}'
 
     # Initialize the extension
     init_warning = None
@@ -1098,6 +1124,8 @@ def create_extension(ext, parent_path: str, class_name: str,
 
     if init_warning:
         result['warning'] = init_warning
+    elif shortcut_warning:
+        result['warning'] = shortcut_warning
 
     return result
 

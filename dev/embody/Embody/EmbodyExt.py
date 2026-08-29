@@ -6641,9 +6641,7 @@ class EmbodyExt:
             self.Log(f"Error creating directory {abs_path.parent}", "ERROR", str(e))
 
         # Setup build parameters
-        build_page = next((p for p in oper.customPages if p.name == 'About'), None)
-        if not build_page:
-            build_page = oper.appendCustomPage('About')
+        build_page = mod.embody_pardef.ensureCustomPage(oper, 'About')
 
         current_build = 1
         if hasattr(oper.par, 'Build'):
@@ -6738,9 +6736,7 @@ class EmbodyExt:
     def _setupCompForExternalization(self, oper, rel_file_path, save_file_path):
         """Configure a COMP for TOX externalization."""
         # Setup build info page
-        build_page = next((p for p in oper.customPages if p.name == 'Build Info'), None)
-        if not build_page:
-            build_page = oper.appendCustomPage('About')
+        build_page = mod.embody_pardef.ensureCustomPage(oper, 'About')
         
         current_build = 1
         if hasattr(oper.par, 'Build'):
@@ -6934,9 +6930,7 @@ class EmbodyExt:
         ts_cell = self.Externalizations[comp_path, 'timestamp']
         date_str = (ts_cell.val if hasattr(ts_cell, 'val') else str(ts_cell)) if ts_cell else ''
 
-        build_page = next((p for p in comp.customPages if p.name == 'About'), None)
-        if not build_page:
-            build_page = comp.appendCustomPage('About')
+        build_page = mod.embody_pardef.ensureCustomPage(comp, 'About')
 
         self.setupBuildParameters(comp, build_page, build_num, touch_build)
         # Override Date with TSV timestamp (not current time from setupBuildParameters)

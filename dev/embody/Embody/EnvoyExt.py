@@ -3188,7 +3188,8 @@ class EnvoyMCPServer:
                              name: str = None, code: str = None,
                              promote: bool = True, ext_name: str = None,
                              ext_index: int = None,
-                             existing_comp: bool = False) -> dict:
+                             existing_comp: bool = False,
+                             parent_shortcut: str = None) -> dict:
             """
             Create or attach a TouchDesigner extension COMP and code DAT.
 
@@ -3204,6 +3205,9 @@ class EnvoyMCPServer:
                 ext_name: Custom extension name
                 ext_index: Extension slot 0-3; omitted auto-detects
                 existing_comp: True attaches to parent_path instead of creating
+                parent_shortcut: Set par.parentshortcut so descendants reach
+                    the COMP as parent.<Name> rather than a depth-coupled
+                    parent() chain. Refuses to overwrite an existing one.
 
             Returns:
                 Dict with comp_path, dat_path, class_name, ext_index, success status
@@ -3217,6 +3221,7 @@ class EnvoyMCPServer:
                 'ext_name': ext_name,
                 'ext_index': ext_index,
                 'existing_comp': existing_comp,
+                'parent_shortcut': parent_shortcut,
             })
 
         # === TDXN Network Format Tools ===
@@ -8607,9 +8612,10 @@ class EnvoyExt:
                           name: str = None, code: str = None,
                           promote: bool = True, ext_name: str = None,
                           ext_index: int = None,
-                          existing_comp: bool = False) -> dict:
+                          existing_comp: bool = False,
+                          parent_shortcut: str = None) -> dict:
         """Create a TD extension: COMP + text DAT + extension wiring -- see envoy_ops."""
-        return mod.envoy_ops.create_extension(self, parent_path, class_name, name, code, promote, ext_name, ext_index, existing_comp)
+        return mod.envoy_ops.create_extension(self, parent_path, class_name, name, code, promote, ext_name, ext_index, existing_comp, parent_shortcut)
 
     # === TDXN Network Format (Main Thread Only) ===
 
