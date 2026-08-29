@@ -43,7 +43,7 @@ class TestDiffTdnHandler(EmbodyTestCase):
             except Exception:
                 pass
             try:
-                self.embody_ext.RemoveListerRow(comp.path, rel, delete_file=True)
+                self.embody_ext.removeListerRow(comp.path, rel, delete_file=True)
             except Exception:
                 pass
         try:

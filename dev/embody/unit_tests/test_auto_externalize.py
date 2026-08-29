@@ -153,7 +153,7 @@ class TestAutoExternalize(EmbodyTestCase):
         self.embody.par.Autoexternalize = 'neither'
         c = self._box.create('baseCOMP', 'ae_copy_off')
         c.tags.add(self.embody.par.Tdntag.val)
-        r = self.embody_ext.AutoExternalizeCopiedOp(c)
+        r = self.embody_ext.autoExternalizeCopiedOp(c)
         self.assertIsNone(r)
         self.assertIn(self.embody.par.Tdntag.val, c.tags)
 
@@ -162,7 +162,7 @@ class TestAutoExternalize(EmbodyTestCase):
         self.embody.par.Autoexternalize = 'comps'
         d = self._box.create('textDAT', 'ae_copy_fam')
         d.tags.add(self.embody.par.Pytag.val)
-        r = self.embody_ext.AutoExternalizeCopiedOp(d)
+        r = self.embody_ext.autoExternalizeCopiedOp(d)
         self.assertIsNone(r)
         self.assertIn(self.embody.par.Pytag.val, d.tags)
 

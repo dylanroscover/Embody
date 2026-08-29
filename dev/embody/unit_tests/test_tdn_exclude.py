@@ -177,7 +177,7 @@ class TestTDNExclude(EmbodyTestCase):
 
     def test_strip_preserves_excluded_comp(self):
         parent, keep, drop, inside = self._build()
-        self.embody_ext.StripCompChildren(parent)
+        self.embody_ext.stripCompChildren(parent)
         self.assertIsNotNone(op(parent.path + '/drop'),
             'Excluded COMP must survive the save-time strip pass')
         self.assertIsNone(op(parent.path + '/keep'),

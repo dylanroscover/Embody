@@ -120,7 +120,7 @@ class TestTdnMode(EmbodyTestCase):
     def test_reconstruct_skips_in_off(self):
         self._setMode('off')
         log_before = self.embody_ext._log_counter
-        self.embody_ext.ReconstructTDNComps()
+        self.embody_ext.reconstructTDNComps()
         new_logs = [e for e in self.embody_ext._log_buffer
                     if e['id'] > log_before]
         messages = ' | '.join(e.get('message', '') for e in new_logs)
@@ -129,7 +129,7 @@ class TestTdnMode(EmbodyTestCase):
     def test_reconstruct_skips_in_export(self):
         self._setMode('export')
         log_before = self.embody_ext._log_counter
-        self.embody_ext.ReconstructTDNComps()
+        self.embody_ext.reconstructTDNComps()
         new_logs = [e for e in self.embody_ext._log_buffer
                     if e['id'] > log_before]
         messages = ' | '.join(e.get('message', '') for e in new_logs)
@@ -142,7 +142,7 @@ class TestTdnMode(EmbodyTestCase):
     def test_savetdn_skips_when_off(self):
         self._setMode('off')
         log_before = self.embody_ext._log_counter
-        self.embody_ext.SaveTDN('/no_such_op')
+        self.embody_ext.saveTDN('/no_such_op')
         new_logs = [e for e in self.embody_ext._log_buffer
                     if e['id'] > log_before]
         messages = ' | '.join(e.get('message', '') for e in new_logs)

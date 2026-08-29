@@ -10,11 +10,11 @@
 def _runAction(par_name):
 	e = parent.Embody
 	if par_name == 'Shortcutmanager':
-		e.Manager('open')
+		e.manager('open')
 	elif par_name == 'Shortcutupdateall':
-		e.UpdateHandler()
+		e.updateHandler()
 	elif par_name == 'Shortcutupdatecomp':
-		e.SaveCurrentComp()
+		e.saveCurrentComp()
 	elif par_name == 'Shortcutrefresh':
 		e.Refresh()
 	elif par_name == 'Shortcutexportproject':
@@ -49,7 +49,7 @@ def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShif
 	if sc.taggerKeyMatches(tap_key, key):
 		timer = op('timer1')
 		if timer['running']:
-			run(f"op('{parent.Embody}').TagGetter()", delayFrames=6)
+			run(f"op('{parent.Embody}').ext.Embody.tagGetter()", delayFrames=6)
 
 		timer.par.active = 1
 		timer.par.start.pulse()

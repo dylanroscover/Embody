@@ -105,5 +105,5 @@ class TestExternalization(EmbodyTestCase):
     # --- ExternalizationsFolder property ---
 
     def test_externalizations_folder_returns_string(self):
-        result = self.embody_ext.ExternalizationsFolder
+        result = self.embody_ext.externalizationsFolder
         self.assertIsInstance(result, str)

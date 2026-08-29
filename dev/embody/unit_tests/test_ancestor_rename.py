@@ -236,7 +236,7 @@ class TestAncestorRename(EmbodyTestCase):
 
     def test_disk_segment_includes_ext_folder(self):
         """With ExternalizationsFolder set, rel_file matching must include the prefix."""
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         if not ext_folder:
             return  # Skip if no folder configured
 
@@ -315,7 +315,7 @@ class TestAncestorRename(EmbodyTestCase):
 
     def test_phase_a_matches_rel_files_with_folder_prefix(self):
         """Phase A must match rel_file paths that include ExternalizationsFolder."""
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         if not ext_folder:
             return
 
@@ -365,7 +365,7 @@ class TestAncestorRename(EmbodyTestCase):
 
     def test_user_cancel_returns_false(self):
         """User clicking Cancel should return False without renaming."""
-        ext_folder = self.embody_ext.ExternalizationsFolder or 'embody'
+        ext_folder = self.embody_ext.externalizationsFolder or 'embody'
         old_prefix = '/cancel_test/parent'
 
         old_rel = ext_folder + '/cancel_test/parent/c1/c1.tox'
@@ -391,7 +391,7 @@ class TestAncestorRename(EmbodyTestCase):
 
     def test_source_dir_not_found_returns_false(self):
         """Missing source directory should return False (the original bug)."""
-        ext_folder = self.embody_ext.ExternalizationsFolder or 'embody'
+        ext_folder = self.embody_ext.externalizationsFolder or 'embody'
         old_prefix = '/nosource/parent'
 
         old_rel = ext_folder + '/nosource/parent/c1/c1.tox'
@@ -412,7 +412,7 @@ class TestAncestorRename(EmbodyTestCase):
 
     def test_target_dir_exists_returns_false(self):
         """Existing target directory should return False."""
-        ext_folder = self.embody_ext.ExternalizationsFolder or 'embody'
+        ext_folder = self.embody_ext.externalizationsFolder or 'embody'
         old_prefix = '/conflict/parent'
 
         old_rel = ext_folder + '/conflict/parent/c1/c1.tox'
@@ -436,7 +436,7 @@ class TestAncestorRename(EmbodyTestCase):
 
     def test_table_entries_updated_after_rename(self):
         """Table path and rel_file_path columns should reflect the new name."""
-        ext_folder = self.embody_ext.ExternalizationsFolder or 'embody'
+        ext_folder = self.embody_ext.externalizationsFolder or 'embody'
         old_prefix = '/tblupd/scene'
         new_prefix = '/tblupd/newscene'
 
@@ -490,7 +490,7 @@ class TestAncestorRename(EmbodyTestCase):
 
     def test_tdn_strategy_skips_param_update_but_updates_table(self):
         """TDN-strategy ops should have table updated but skip externaltox changes."""
-        ext_folder = self.embody_ext.ExternalizationsFolder or 'embody'
+        ext_folder = self.embody_ext.externalizationsFolder or 'embody'
         old_prefix = '/tdntest/parent'
         new_prefix = '/tdntest/newparent'
 
@@ -521,7 +521,7 @@ class TestAncestorRename(EmbodyTestCase):
 
     def test_returns_true_on_success(self):
         """Successful rename should return True."""
-        ext_folder = self.embody_ext.ExternalizationsFolder or 'embody'
+        ext_folder = self.embody_ext.externalizationsFolder or 'embody'
         old_prefix = '/retval/parent'
         new_prefix = '/retval/renamed'
 
@@ -568,7 +568,7 @@ class TestAncestorRename(EmbodyTestCase):
         c3, p3, r3 = self._externalize_comp(parent, 'fb3')
 
         # Delete the source directory to ensure ancestor rename fails
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         old_dir_seg = parent.path.strip('/')
         if ext_folder:
             disk_dir = Path(project.folder) / ext_folder / old_dir_seg
@@ -622,7 +622,7 @@ class TestAncestorRename(EmbodyTestCase):
         new_parent_path = parent.path
 
         # Run continuity check
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         self.embody_ext.checkOpsForContinuity(ext_folder)
 
         # Old paths should be gone
@@ -652,7 +652,7 @@ class TestAncestorRename(EmbodyTestCase):
         c2, _, r2 = self._externalize_comp(parent, 'dir_c2')
         c3, _, r3 = self._externalize_comp(parent, 'dir_c3')
 
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         old_seg = parent.path.strip('/')
         if ext_folder:
             old_disk = Path(project.folder) / ext_folder / old_seg
@@ -679,7 +679,7 @@ class TestAncestorRename(EmbodyTestCase):
 
     def test_confirmation_dialog_shown(self):
         """The Ancestor Rename Detected dialog should be shown during rename."""
-        ext_folder = self.embody_ext.ExternalizationsFolder or 'embody'
+        ext_folder = self.embody_ext.externalizationsFolder or 'embody'
         old_prefix = '/dlgtest/parent'
         new_prefix = '/dlgtest/renamed'
 

@@ -33,7 +33,13 @@ CALLER_INDEX = REPO / "docs" / "reports" / "issue-94-caller-index.json"
 # fails. Lower a number when you demote; raising one is a deliberate decision
 # to widen the public API and belongs in review, not in a drive-by.
 PROMOTED_CEILING = {
-    "EmbodyExt": 77,
+    # WP4 waves 4e-1/4e-2: 44 methods demoted. The remainder is the
+    # documented op.Embody API plus the 13 tagger/panel handlers whose
+    # only callers live in .toe DAT text (wave 4f), plus Disable and
+    # Externalizations -- both collide with same-named CUSTOM PARAMETERS,
+    # and Externalizations is a @property, so par.Externalizations and
+    # self.Externalizations are indistinguishable to any mechanical rule.
+    "EmbodyExt": 33,
     # WP4 waves 4b/4b-2: promoted class constants went 79 -> 5. The five that
     # remain are ConvoyExt's HOST_* states, which are DELIBERATELY mirrored as
     # module constants in convoy/convoy_client.py -- test_convoy_client reaches
@@ -294,6 +300,47 @@ class TestStringNamedAttributes(unittest.TestCase):
             "String-literal attribute names left behind by a rename: {}. These "
             "patch or probe a key nothing reads, so the test passes the wrong "
             "value silently.".format("; ".join(missing)))
+
+
+class TestSourceTextAssertions(unittest.TestCase):
+    """Tests that slice Embody's own source on a 'def Name' literal.
+
+    This is the SILENT half of the rename problem. `src.split('def Foo', 1)[1]`
+    against a renamed method either raises IndexError (loud, fine) or -- when
+    the split target is merely absent from a longer string -- returns the WHOLE
+    source, so the test keeps passing while asserting against a slice many times
+    larger than intended. Wave 4c shipped exactly that: split('def InstallHost')
+    went vacuous and nothing reported it.
+    """
+
+    # Uppercase-initial only: that is the promoted-surface class this guards.
+    # Fixture code that BUILDS Python source ("def onStart") is lowerCamel
+    # by TD callback convention and is not slicing Embody's own source.
+    _PATTERN = re.compile(r"""['"]def ([A-Z]\w*)['"(]""")
+
+    def test_G01_every_sliced_def_name_exists(self):
+        defined = set()
+        for path in _ext_source_files():
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    defined.add(node.name)
+
+        missing = []
+        for path in sorted((REPO / "dev" / "embody" / "unit_tests").glob("test_*.py")):
+            if path.name == Path(__file__).name:
+                continue
+            for match in self._PATTERN.finditer(
+                    path.read_text(encoding="utf-8", errors="replace")):
+                name = match.group(1)
+                if name not in defined:
+                    missing.append("{}: 'def {}'".format(path.name, name))
+        self.assertEqual(
+            missing, [],
+            "Tests slice source on a def that no longer exists: {}. The slice "
+            "silently returns the whole file instead of the intended function, "
+            "so the assertions still pass against the wrong text."
+            .format("; ".join(missing)))
 
 
 class TestToolbarActionsResolve(unittest.TestCase):

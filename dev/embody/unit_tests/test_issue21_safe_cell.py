@@ -151,7 +151,7 @@ class TestIssue21SafeCellAccess(EmbodyTestCase):
         row[path_idx] = match_path
         bad.appendRow(row)
         # Production: matches path, then tries to read rel_file_path -> crash pre-fix.
-        self.embody_ext.RemoveListerRow(
+        self.embody_ext.removeListerRow(
             match_path, '', delete_file=False)
 
     # Crash site 5: checkOpsForContinuity has its own try/except wrapper
@@ -292,7 +292,7 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
         orig_safety = ext_class._checkTDNContentSafety
         orig_export = tdn_class.ExportNetwork
         orig_read = tdn_class.__dict__['_read_existing_tdn']  # staticmethod descriptor
-        orig_strip = ext_class.StripCompChildren
+        orig_strip = ext_class.stripCompChildren
 
         # Fake fixtures: pretend 3 TDN COMPs exist and were exported
         fake_tdn_comps = [
@@ -319,7 +319,7 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
         ext_class.Update = lambda self_, suppress_refresh=False: None
         ext_class._getTDNStrategyComps = lambda self_: list(fake_tdn_comps)
         ext_class._checkTDNContentSafety = lambda self_: None
-        ext_class.StripCompChildren = crashing_strip
+        ext_class.stripCompChildren = crashing_strip
         # Make every "comp exists" check return a stub object that has a path
         # and findChildren so the export loop accepts them. Easiest hack: skip
         # the export by making _read_existing_tdn return a matching dict so
@@ -376,7 +376,7 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
             ext_class.Update = orig_update
             ext_class._getTDNStrategyComps = orig_get_tdn
             ext_class._checkTDNContentSafety = orig_safety
-            ext_class.StripCompChildren = orig_strip
+            ext_class.stripCompChildren = orig_strip
             tdn_class.ExportNetwork = orig_export
             tdn_class._read_existing_tdn = orig_read
             tdn_class._tdn_content_equal = orig_equal

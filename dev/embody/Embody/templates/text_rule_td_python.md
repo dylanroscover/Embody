@@ -55,7 +55,10 @@ Four things that decide the tier for you:
 
 - **`.ext.<Name>` resolves by the Extension Name parameter, not the class name.** Embody's extensions are named `Embody`/`Envoy`/`TDXN` against classes `EmbodyExt`/`EnvoyExt`/`TDXNExt`, so `op.Embody.ext.Embody.x()` works and `op.Embody.ext.EmbodyExt.x()` raises.
 - **A capitalized class constant is promoted too.** `FILE_SUFFIX = '.tdxn'` on the class is reachable as `op.Comp.FILE_SUFFIX` and is a live `getattr` dispatch target beside your methods (verified on 2025.33070). Constants belong at module level, or renamed `_UPPER`.
-- **A name reachable only from a `run()` string, a parameter expression, or Python inside a `.tdxn` `dat_content` stays tier 1 until its call site is rewritten.** No static scan sees those callers, so renaming one is a silent runtime break, not a traceback.
+- **A name reachable only from a `run()` string, a parameter expression, or Python inside a `.tdxn` `dat_content` stays tier 1 until its call site is rewritten.** No static scan sees those callers, so renaming one is a silent runtime break, not a traceback. Three surfaces, and the third is the one people miss:
+    - **`run()` strings resolve against the COMP.** `run(f"op('{x}').Method()")` reaches a *promoted* name; demote it and the deferred call silently stops resolving. Reroute to `.ext.<Name>.method()` **before** renaming.
+    - **DAT text inside the `.toe`.** Walk it live -- `findChildren(type=DAT)` and read `.text` -- because it is in no file you can grep.
+    - **A widget's parameter expression is a COPY taken at build time.** Fixing the config table that a builder reads does NOT fix widgets already built from it; the live `par.expr` keeps the old name and the COMP forwards the miss to the extension, so the error names the *extension* and points nowhere near the config. Sweep live `par.expr` values, not just the source of truth they came from.
 - **Demote behind a fail-loud call site.** `getattr(ext, name, None)` and `hasattr` guards turn a missed rename into a no-op button; log the miss instead of falling back.
 
 ## Operator Access

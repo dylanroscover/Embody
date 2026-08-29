@@ -78,7 +78,7 @@ class TestUninstallHandler(EmbodyTestCase):
     def test_cancel_removes_nothing(self):
         self._seed_footprint()
         self._seed({CONFIRM_TITLE: 0})   # Cancel
-        result = self.ext.UninstallHandler(target_dir=self.d)
+        result = self.ext.uninstallHandler(target_dir=self.d)
         self.assertFalse(result.get('ran', True),
                          'Cancel must not run the uninstall')
         self.assertEqual(result.get('reason'), 'cancelled')
@@ -91,7 +91,7 @@ class TestUninstallHandler(EmbodyTestCase):
         # handler treats it as cancel. A save/test must NEVER uninstall silently.
         self._seed_footprint()
         op.Embody.unstore('_smoke_test_responses')
-        result = self.ext.UninstallHandler(target_dir=self.d)
+        result = self.ext.uninstallHandler(target_dir=self.d)
         self.assertFalse(result.get('ran', True),
                          'a suppressed confirm must not uninstall')
         self.assertTrue(self._exists('CLAUDE.md'))
@@ -102,7 +102,7 @@ class TestUninstallHandler(EmbodyTestCase):
     def test_nothing_to_uninstall(self):
         # Empty dir -> no footprint -> early return, destructive path unreached.
         self._seed({CONFIRM_TITLE: 0})
-        result = self.ext.UninstallHandler(target_dir=self.d)
+        result = self.ext.uninstallHandler(target_dir=self.d)
         self.assertFalse(result.get('ran', True))
         self.assertEqual(result.get('reason'), 'nothing to uninstall')
 
@@ -117,7 +117,7 @@ class TestUninstallHandler(EmbodyTestCase):
         prev_restoring = getattr(self.ext, '_restoring_settings', False)
         self.ext._restoring_settings = True
         try:
-            result = self.ext.UninstallHandler(target_dir=self.d)
+            result = self.ext.uninstallHandler(target_dir=self.d)
         finally:
             op.Embody.par.Envoyenable = prev_env
             self.ext._restoring_settings = prev_restoring
@@ -141,7 +141,7 @@ class TestUninstallHandler(EmbodyTestCase):
         prev_restoring = getattr(self.ext, '_restoring_settings', False)
         self.ext._restoring_settings = True
         try:
-            result = self.ext.UninstallHandler(target_dir=self.d)
+            result = self.ext.uninstallHandler(target_dir=self.d)
         finally:
             op.Embody.par.Envoyenable = prev_env
             self.ext._restoring_settings = prev_restoring

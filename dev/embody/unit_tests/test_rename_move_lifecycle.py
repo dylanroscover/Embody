@@ -96,7 +96,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         comp.name = 'moved_path'
         new_path = comp.path
 
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         self.embody_ext.updateMovedOp(comp, old_path, old_rel, ext_folder)
 
         found_new = False
@@ -111,7 +111,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         comp, old_path, old_rel = self._externalize_comp(self.workspace, 'move_ext')
         comp.name = 'moved_ext'
 
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         self.embody_ext.updateMovedOp(comp, old_path, old_rel, ext_folder)
 
         new_ext = comp.par.externaltox.eval()
@@ -123,7 +123,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         comp.name = 'moved_rel'
         new_path = comp.path
 
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         self.embody_ext.updateMovedOp(comp, old_path, old_rel, ext_folder)
 
         new_rel = self.embody_ext.Externalizations[new_path, 'rel_file_path'].val
@@ -134,7 +134,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         comp, old_path, old_rel = self._externalize_comp(self.workspace, 'move_ro')
         comp.name = 'moved_ro'
 
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         self.embody_ext.updateMovedOp(comp, old_path, old_rel, ext_folder)
 
         self.assertTrue(comp.par.externaltox.readOnly)
@@ -144,7 +144,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         comp, old_path, old_rel = self._externalize_comp(self.workspace, 'move_enable')
         comp.name = 'moved_enable'
 
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         self.embody_ext.updateMovedOp(comp, old_path, old_rel, ext_folder)
 
         self.assertTrue(comp.par.enableexternaltox.eval())
@@ -158,7 +158,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         dat, old_path, old_rel = self._externalize_dat(self.workspace, 'move_dat')
         dat.name = 'moved_dat'
 
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         self.embody_ext.updateMovedOp(dat, old_path, old_rel, ext_folder)
 
         new_file = dat.par.file.eval()
@@ -169,7 +169,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         dat, old_path, old_rel = self._externalize_dat(self.workspace, 'move_sync')
         dat.name = 'moved_sync'
 
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         self.embody_ext.updateMovedOp(dat, old_path, old_rel, ext_folder)
 
         self.assertTrue(dat.par.syncfile.eval())
@@ -184,7 +184,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         tox_tag = self.embody.par.Toxtag.val
         comp.tags.add(tox_tag)
 
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         # Should not raise - old path doesn't exist in table
         self.embody_ext.updateMovedOp(comp, '/nonexistent/old', 'fake/path.tox', ext_folder)
 
@@ -198,7 +198,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         comp.name = 'found_comp'
 
         processed = set()
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         found = self.embody_ext._findMovedOp(old_path, old_rel, ext_folder, processed)
         self.assertTrue(found, 'Should find the renamed COMP')
 
@@ -208,14 +208,14 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         dat.name = 'found_dat'
 
         processed = set()
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         found = self.embody_ext._findMovedOp(old_path, old_rel, ext_folder, processed)
         self.assertTrue(found, 'Should find the renamed DAT')
 
     def test_findMovedOp_returns_false_when_truly_missing(self):
         """_findMovedOp should return False when no operator has the file path."""
         processed = set()
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         found = self.embody_ext._findMovedOp(
             '/nonexistent/path', 'nonexistent/file.tox', ext_folder, processed
         )
@@ -477,7 +477,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         new_path = comp.path
 
         # Run the full continuity check (what Refresh triggers)
-        ext_folder = self.embody_ext.ExternalizationsFolder
+        ext_folder = self.embody_ext.externalizationsFolder
         self.embody_ext.checkOpsForContinuity(ext_folder)
 
         # Table should now have the new path

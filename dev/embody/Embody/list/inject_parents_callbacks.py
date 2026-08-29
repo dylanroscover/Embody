@@ -44,7 +44,7 @@ def onCook(scriptOp):
 		# DirtyState) badges this node long after the code is fine
 		# (field 2026-08-22).
 		embody_ext = parent.Embody.ext.Embody
-		row['dirty'] = (embody_ext.DirtyState(path)
+		row['dirty'] = (embody_ext.dirtyState(path)
 			if hasattr(embody_ext, 'DirtyState') else '')
 		data_rows[path] = row
 		oper = op(path)

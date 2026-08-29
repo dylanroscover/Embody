@@ -165,8 +165,8 @@ class TestDeferredDirtySweep(_SyntheticTable):
         # the tsv cell stays blank by contract.
         t, clean, dirty = self._two_comps()
         self._drain()
-        self.assertEqual('True', self.embody_ext.DirtyState(dirty.path))
-        self.assertEqual('', self.embody_ext.DirtyState(clean.path))
+        self.assertEqual('True', self.embody_ext.dirtyState(dirty.path))
+        self.assertEqual('', self.embody_ext.dirtyState(clean.path))
         self.assertEqual('', t[dirty.path, 'dirty'].val,
                          'dirty never persists into the table')
 
@@ -211,7 +211,7 @@ class TestDeferredDirtySweep(_SyntheticTable):
         self.embody_ext._dirty_queue = ['/no/such/comp', dirty.path]
         self.embody_ext._dirty_idx = 0
         self.embody_ext._sweepTDNDirtyChunk(self.embody_ext._dirty_gen)
-        self.assertEqual('True', self.embody_ext.DirtyState(dirty.path),
+        self.assertEqual('True', self.embody_ext.dirtyState(dirty.path),
                          'a vanished path must not abort the rest of the queue')
 
     def test_root_and_excluded_comps_never_enter_the_queue(self):

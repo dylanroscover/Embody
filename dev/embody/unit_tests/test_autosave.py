@@ -3,7 +3,7 @@ Test suite: Auto-save / crash checkpoint engine.
 
 Covers the synchronous checkpoint path and its supporting machinery:
 - ExportNetwork skip_cleanup (TDXNExt) -- skips the rglob stale-scan
-- EmbodyExt.Checkpoint() -- frame-cheap synchronous .tdn write + clean mark
+- EmbodyExt.checkpoint() -- frame-cheap synchronous .tdn write + clean mark
 - the touched-boundary recorder (NoteCheckpointTouch walk-up resolution)
 - the idle-settle drain queue (_pending_checkpoint_roots)
 - export-mode missing-only recovery (_recoverMissingTDNComps)
@@ -129,18 +129,18 @@ class TestAutosave(EmbodyTestCase):
 
     def test_checkpoint_writes_and_marks_clean(self):
         comp, abs_tdn = self._make_tdn('cp_writes')
-        ok = self.embody_ext.Checkpoint(comp.path)
+        ok = self.embody_ext.checkpoint(comp.path)
         self.assertTrue(ok)
         self.assertTrue(os.path.isfile(abs_tdn))
         self.assertEqual(self.embody_ext.Externalizations[comp.path, 'dirty'].val, '',
                          'tsv dirty cell stays blank (runtime-only, 2026-08-20)')
-        self.assertEqual(self.embody_ext.DirtyState(comp.path), '',
+        self.assertEqual(self.embody_ext.dirtyState(comp.path), '',
                          'checkpoint clears the runtime dirty flag')
 
     def test_checkpoint_captures_current_state(self):
         comp, abs_tdn = self._make_tdn('cp_state')
         comp.op('n1').par.period = 12.5
-        self.embody_ext.Checkpoint(comp.path)
+        self.embody_ext.checkpoint(comp.path)
         doc = self.embody.ext.TDXN.tdn_load(open(abs_tdn).read())
         period = None
         for o in doc.get('operators', []):
@@ -150,7 +150,7 @@ class TestAutosave(EmbodyTestCase):
 
     def test_checkpoint_returns_false_for_untracked(self):
         comp = self.sandbox.create(baseCOMP, 'cp_untracked')
-        self.assertFalse(self.embody_ext.Checkpoint(comp.path))
+        self.assertFalse(self.embody_ext.checkpoint(comp.path))
 
     # --- Stage 2: touched-boundary recorder ---
 
@@ -158,13 +158,13 @@ class TestAutosave(EmbodyTestCase):
         comp, _ = self._make_tdn('touch_res')
         ext = self.embody_ext
         ext._pending_checkpoint_roots.clear()
-        ext.NoteCheckpointTouch(comp.path + '/n1')
+        ext.noteCheckpointTouch(comp.path + '/n1')
         self.assertIn(comp.path, ext._pending_checkpoint_roots)
 
     def test_note_touch_ignores_untracked_path(self):
         ext = self.embody_ext
         ext._pending_checkpoint_roots.clear()
-        ext.NoteCheckpointTouch('/no/such/op')
+        ext.noteCheckpointTouch('/no/such/op')
         self.assertEqual(len(ext._pending_checkpoint_roots), 0)
 
     # --- Stage 2b: the COARSE arm (execute_python has no path to resolve) ---
@@ -175,7 +175,7 @@ class TestAutosave(EmbodyTestCase):
         ext = self.embody_ext
         ext._coarse_checkpoint_due = False
         ext._autosave_armed = False
-        ext.NoteCoarseCheckpointTouch()
+        ext.noteCoarseCheckpointTouch()
         self.assertTrue(ext._coarse_checkpoint_due,
                         'coarse touch must mark a sweep due')
         self.assertTrue(ext._autosave_armed,
@@ -397,7 +397,7 @@ class TestAutosave(EmbodyTestCase):
         comp.op('n1').par.period = 3.0
         ext._pending_checkpoint_roots.clear()
         ext._pending_checkpoint_roots.add(comp.path)
-        written = ext.FlushPendingCheckpoints()
+        written = ext.flushPendingCheckpoints()
         self.assertGreaterEqual(written, 1, 'a queued root must be written')
         self.assertNotIn(comp.path, ext._pending_checkpoint_roots,
                          'a written root must leave the queue')
@@ -407,7 +407,7 @@ class TestAutosave(EmbodyTestCase):
         cost an empty-set check and never sweep for new dirt."""
         ext = self.embody_ext
         ext._pending_checkpoint_roots.clear()
-        self.assertEqual(ext.FlushPendingCheckpoints(), 0)
+        self.assertEqual(ext.flushPendingCheckpoints(), 0)
         self.assertEqual(len(ext._pending_checkpoint_roots), 0)
 
     # --- Stage 6: export-mode missing-only recovery ---
@@ -415,7 +415,7 @@ class TestAutosave(EmbodyTestCase):
     def test_recover_missing_rebuilds_crash_lost_comp(self):
         comp, abs_tdn = self._make_tdn('recov')
         comp.op('n1').par.period = 4.0
-        self.embody_ext.Checkpoint(comp.path)
+        self.embody_ext.checkpoint(comp.path)
         comp_path = comp.path
         comp.destroy()  # simulate a crash: net loses it, .tdn + row persist
         self.assertIsNone(op(comp_path))
@@ -429,7 +429,7 @@ class TestAutosave(EmbodyTestCase):
         # resurrect it (the delete-undo guard). _delete_op calls
         # _purgeExternalizationTracking.
         comp, abs_tdn = self._make_tdn('del_undo')
-        self.embody_ext.Checkpoint(comp.path)
+        self.embody_ext.checkpoint(comp.path)
         comp_path = comp.path
         self.embody_ext._purgeExternalizationTracking(comp_path)
         comp.destroy()
@@ -467,7 +467,7 @@ class TestAutosave(EmbodyTestCase):
         comp, abs_tdn = self._make_tdn('savewin')
         self.embody.store('_suppress_dialogs', True)
         try:
-            ok = self.embody_ext.Checkpoint(comp.path)
+            ok = self.embody_ext.checkpoint(comp.path)
             self.assertFalse(ok)
         finally:
             self.embody.unstore('_suppress_dialogs')
@@ -480,9 +480,9 @@ class TestAutosave(EmbodyTestCase):
         par.val = True
         try:
             self.assertTrue(ext._performMode)
-            self.assertFalse(ext.Checkpoint(comp.path))
+            self.assertFalse(ext.checkpoint(comp.path))
             ext._pending_checkpoint_roots.clear()
-            ext.NoteCheckpointTouch(comp.path + '/n1')
+            ext.noteCheckpointTouch(comp.path + '/n1')
             self.assertEqual(len(ext._pending_checkpoint_roots), 0)
         finally:
             par.val = old
@@ -583,8 +583,8 @@ class TestAutosave(EmbodyTestCase):
             ext.ExternalizeImmediate(c)
             rel = ext._getStrategyFilePath(c.path, 'tdn')
             self._tdn_cleanup.append((c.path, str(ext.buildAbsolutePath(rel)) if rel else None))
-        ext.Checkpoint(parent.path)
-        ext.Checkpoint(child.path)
+        ext.checkpoint(parent.path)
+        ext.checkpoint(child.path)
         ppath, cpath = parent.path, child.path
         parent.destroy()  # destroys child too -- both missing
         self.assertIsNone(op(ppath))

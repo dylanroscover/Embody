@@ -1,5 +1,5 @@
 """
-Test suite: TDN -> TDXN migration (EmbodyExt.MigrateToTDXN).
+Test suite: TDN -> TDXN migration (EmbodyExt.migrateToTDXN).
 
 The migration is the one v6.1.0 path that MOVES a user's files, so it gets a
 full smoke project rather than unit pokes: _buildLegacyProject() externalizes
@@ -116,7 +116,7 @@ class TestTdxnMigration(EmbodyTestCase):
         # the now-.tdn table rows. Without this the refs still say .tdxn and
         # the fixture would not be a real pre-6.1 project.
         for key in ('child', 'root'):
-            self.embody_ext.SaveTDN(paths[key])
+            self.embody_ext.saveTDN(paths[key])
 
         return paths
 
@@ -132,7 +132,7 @@ class TestTdxnMigration(EmbodyTestCase):
     def _migrate(self, **kw):
         kw.setdefault('auto', True)
         kw.setdefault('scope', self.workspace.path)
-        return self.embody_ext.MigrateToTDXN(**kw)
+        return self.embody_ext.migrateToTDXN(**kw)
 
     # ------------------------------------------------------------------
     # The fixture itself must be a real legacy project
@@ -300,9 +300,9 @@ class TestTdxnMigration(EmbodyTestCase):
         """Scope is opt-in: the shipped pulse passes none, so a bare
         dry_run must plan across every tracked row, not just a subtree."""
         self._buildLegacyProject()
-        scoped = self.embody_ext.MigrateToTDXN(
+        scoped = self.embody_ext.migrateToTDXN(
             auto=True, dry_run=True, scope=self.workspace.path)
-        every = self.embody_ext.MigrateToTDXN(auto=True, dry_run=True)
+        every = self.embody_ext.migrateToTDXN(auto=True, dry_run=True)
         self.assertGreaterEqual(
             len(every.get('migrated', [])), len(scoped.get('migrated', [])),
             'unscoped plan should cover at least the scoped one')
@@ -372,7 +372,7 @@ class TestTdxnMigration(EmbodyTestCase):
 
         comp.name = 'rename_legacy_moved'
         self.embody_ext.checkOpsForContinuity(
-            self.embody_ext.ExternalizationsFolder)
+            self.embody_ext.externalizationsFolder)
         moved = self._rel(comp.path)
         self.assertTrue(
             moved.endswith('.tdn'),

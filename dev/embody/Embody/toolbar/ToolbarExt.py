@@ -52,8 +52,13 @@ class ToolbarExt:
 		# miss means the name is wrong -- and a silent miss is a button that
 		# does nothing, which is how two dead rows survived unnoticed until the
 		# promoted-surface census found them (issue #94).
+		# Resolve on the COMP first (promoted tier-1 API and TD builtins such as
+		# openParameters), then on the extension -- WP4 demoted most handlers to
+		# tier-2 lowerCamel, which is reachable only through .ext (issue #94).
 		try:
 			method = getattr(self.embody, action, None)
+			if not callable(method):
+				method = getattr(self.embody.ext.Embody, action, None)
 			if callable(method):
 				method()
 			else:
@@ -218,9 +223,9 @@ class ToolbarExt:
 	def _action_toggle_disable(self):
 		emb = self.ownerComp.parent.Embody
 		if emb.par.Status.eval() == 'Enabled':
-			emb.DisableHandler()
+			emb.disableHandler()
 		else:
-			emb.UpdateHandler()
+			emb.updateHandler()
 
 	def _action_toggle_envoy(self):
 		emb = self.ownerComp.parent.Embody

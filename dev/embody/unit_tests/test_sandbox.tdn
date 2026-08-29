@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
-build: 2144
-generator: Embody/6.1.9
+build: 2145
+generator: Embody/6.1.18
 td_build: 099.2025.33070
-source_file: Embody-6.291.toe
-exported_at: '2026-08-29T00:05:38Z'
+source_file: Embody-6.300.toe
+exported_at: '2026-08-29T22:28:36Z'
 network_path: /embody/unit_tests/test_sandbox
 options:
   include_dat_content: false
@@ -16,7 +16,40 @@ color: [0.3, 0.5, 0.9]
 tags:
 - tdn
 operators:
-- name: sandbox_test_uninstall_execute
+- name: sandbox_test_tdn_reconstruction
   type: baseCOMP
+  parameters:
+    parentshortcut: mycomp
+  custom_pars:
+    Creds:
+    - name: Privatekey
+      style: File
+      label: Private Key
+      value: /path/to/key.json
+    - name: Databaseid
+      style: Str
+      label: Database ID
+      value: my-project-id
+    - name: Autoconnect
+      style: Toggle
+      label: Auto Connect
+      value: true
+    Test:
+    - name: Speed
+      style: Float
+      value: =absTime.seconds
+    Config:
+    - name: Threshold
+      style: Float
+      value: 0.75
+  flags:
+  - viewer
   size: [160, 130]
-  color: [0.67, 0.67, 0.67]
+  color: [0.2, 0.8, 0.4]
+  comment: Test comment
+  tags:
+  - test_tag
+  storage:
+    portability_key: 42
+    config:
+      nested: true

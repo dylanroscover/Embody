@@ -344,7 +344,7 @@ class TestTDNStabilityHardening(EmbodyTestCase):
         for child in list(comp.children):
             child.destroy()
         self.assertEqual(len(comp.children), 0)
-        res = self.embody_ext.RecoverOrphanShells(auto=True)
+        res = self.embody_ext.recoverOrphanShells(auto=True)
         self.assertIn(comp.path, res.get('restored', []),
                       f'orphan not restored: {res}')
         self.assertIsNotNone(comp.op('payload'),
@@ -365,7 +365,7 @@ class TestTDNStabilityHardening(EmbodyTestCase):
         comp.unstore('_tdn_rel_path')  # force the convention-path fallback
         for child in list(comp.children):
             child.destroy()
-        res = self.embody_ext.RecoverOrphanShells(auto=True)
+        res = self.embody_ext.recoverOrphanShells(auto=True)
         self.assertIn(comp.path, res.get('restored', []),
                       f'convention-path orphan not restored: {res}')
         self.assertIsNotNone(comp.op('payload'))
@@ -383,7 +383,7 @@ class TestTDNStabilityHardening(EmbodyTestCase):
         self.assertTrue(result.get('success'))
         for child in list(comp.children):
             child.destroy()
-        res = self.embody_ext.RecoverOrphanShells(auto=True)
+        res = self.embody_ext.recoverOrphanShells(auto=True)
         self.assertNotIn(comp.path, res.get('found', []),
                          'tracked empty COMP wrongly flagged as an orphan')
 
@@ -395,6 +395,6 @@ class TestTDNStabilityHardening(EmbodyTestCase):
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text('format: tdn\noperators: []\n', encoding='utf-8')
         self._temp_files.append(str(out))
-        res = self.embody_ext.RecoverOrphanShells(auto=True)
+        res = self.embody_ext.recoverOrphanShells(auto=True)
         self.assertNotIn(comp.path, res.get('found', []),
                          'COMP with live content wrongly flagged as orphan')

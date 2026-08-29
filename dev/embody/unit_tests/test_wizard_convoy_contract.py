@@ -173,7 +173,7 @@ def test_every_self_initiated_writer_is_save_gated():
     tdn_fn = src.split("def _handleTDNAddition", 1)[1].split(
         "\n    def ", 1)[0]
     assert "_projectSavedOnDisk" in tdn_fn
-    uh = src.split("def UpdateHandler", 1)[1].split("\n    def ", 1)[0]
+    uh = src.split("def updateHandler", 1)[1].split("\n    def ", 1)[0]
     assert "_projectSavedOnDisk" in uh
     pj = src.split("def _writeProjectJson", 1)[1].split("\n    def ", 1)[0]
     assert "_projectSavedOnDisk" in pj

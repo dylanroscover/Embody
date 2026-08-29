@@ -482,7 +482,7 @@ class TestLaunchAIClient(EmbodyTestCase):
 								   return_value=self._temp_dir), \
 				 mock.patch.object(type(self.embody_ext), '_launchEditor',
 								   return_value=False):
-				self.embody_ext.LaunchAIClient()
+				self.embody_ext.launchAIClient()
 			self.assertIsNone(op.Embody.fetch('_smoke_test_responses', None,
 											  search=False))
 		finally:
@@ -499,7 +499,7 @@ class TestLaunchAIClient(EmbodyTestCase):
 								   return_value=self._temp_dir), \
 				 mock.patch.object(type(self.embody_ext), '_launchTerminal',
 								   return_value=False):
-				self.embody_ext.LaunchAIClient()
+				self.embody_ext.launchAIClient()
 			self.assertIsNone(op.Embody.fetch('_smoke_test_responses', None,
 											  search=False))
 		finally:
@@ -536,7 +536,7 @@ class TestLaunchAIClient(EmbodyTestCase):
 								   return_value=self._temp_dir), \
 				 mock.patch.object(type(self.embody_ext), '_messageBox',
 								   capture_message):
-				self.embody_ext.LaunchAIClient()
+				self.embody_ext.launchAIClient()
 
 			self.assertTrue(captured, 'No-launcher path must show the dialog')
 			self.assertIn(expected_label, captured[0][1])

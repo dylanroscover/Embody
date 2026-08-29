@@ -6898,7 +6898,7 @@ class EnvoyExt:
                     # nothing is queued -- the steady state -- this costs an
                     # empty-set check.
                     try:
-                        op.Embody.ext.Embody.FlushPendingCheckpoints()
+                        op.Embody.ext.Embody.flushPendingCheckpoints()
                     except Exception:
                         pass
                 undo_open = self._beginUndoBlock(operation)
@@ -7017,7 +7017,7 @@ class EnvoyExt:
                 # the call lands, not the bound on what it changed. Arm coarsely;
                 # the drain discovers which roots actually changed, once, after
                 # the burst.
-                op.Embody.ext.Embody.NoteCoarseCheckpointTouch()
+                op.Embody.ext.Embody.noteCoarseCheckpointTouch()
                 return
             if operation not in self._CHECKPOINT_MUTATING_OPS:
                 return
@@ -7027,7 +7027,7 @@ class EnvoyExt:
                 path = (params.get('op_path') or params.get('target_path')
                         or params.get('dest_path') or params.get('parent_path'))
             if path:
-                op.Embody.ext.Embody.NoteCheckpointTouch(path)
+                op.Embody.ext.Embody.noteCheckpointTouch(path)
         except Exception:
             pass
 

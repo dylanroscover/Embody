@@ -57,7 +57,7 @@ class TestCustomParameters(EmbodyTestCase):
     def tearDownSuite(self):
         """Safety net: ensure Embody is operational after suite."""
         path = self.embody.path
-        run(f"op('{path}').UpdateHandler()", delayFrames=5)
+        run(f"op('{path}').ext.Embody.updateHandler()", delayFrames=5)
         run(f"op('{path}').Update()", delayFrames=10)
 
     # ==================================================================
@@ -128,7 +128,7 @@ class TestCustomParameters(EmbodyTestCase):
                 ext.applyTagToOperator(oper, comp_tag)
 
         # Run Update to write files and populate table
-        ext.UpdateHandler()
+        ext.updateHandler()
         ext.Update()
 
     # ==================================================================
@@ -159,12 +159,12 @@ class TestCustomParameters(EmbodyTestCase):
     def test_update_pulse_sets_status_enabled(self):
         """Call UpdateHandler, verify Status is Enabled."""
         # Status should already be Enabled, but let's confirm UpdateHandler maintains it
-        self.embody_ext.UpdateHandler()
+        self.embody_ext.updateHandler()
         self.assertEqual(self.embody.par.Status.eval(), 'Enabled')
 
     def test_update_creates_externalization_folder(self):
         """After UpdateHandler, externalization folder exists on disk."""
-        self.embody_ext.UpdateHandler()
+        self.embody_ext.updateHandler()
         folder = self.embody_ext.getProjectFolder()
         self.assertTrue(os.path.isdir(folder))
 
@@ -192,7 +192,7 @@ class TestCustomParameters(EmbodyTestCase):
                         self.assertIn(t, oper.tags)
 
             # Re-enable
-            self.embody_ext.UpdateHandler()
+            self.embody_ext.updateHandler()
             self.assertEqual(self.embody.par.Status.eval(), 'Enabled')
             self.embody_ext.Update()
         finally:
@@ -219,7 +219,7 @@ class TestCustomParameters(EmbodyTestCase):
                     self.assertNotIn(t, test_comp.tags)
 
             # Re-enable
-            self.embody_ext.UpdateHandler()
+            self.embody_ext.updateHandler()
             self.assertEqual(self.embody.par.Status.eval(), 'Enabled')
             self.embody_ext.Update()
         finally:
@@ -575,7 +575,7 @@ class TestCustomParameters(EmbodyTestCase):
 
     def test_zz_folder_02_reenable_new(self):
         """Step 2: Call UpdateHandler, verify Enabled and new folder exists."""
-        self.embody_ext.UpdateHandler()
+        self.embody_ext.updateHandler()
         self.assertEqual(self.embody.par.Status.eval(), 'Enabled')
 
         new_folder = self.embody_ext.getProjectFolder()
@@ -607,7 +607,7 @@ class TestCustomParameters(EmbodyTestCase):
 
     def test_zz_folder_05_reenable_original(self):
         """Step 5: Re-enable with original folder, verify operational."""
-        self.embody_ext.UpdateHandler()
+        self.embody_ext.updateHandler()
         self.assertEqual(self.embody.par.Status.eval(), 'Enabled')
         self.embody_ext.Update()
 
@@ -668,7 +668,7 @@ class TestCustomParameters(EmbodyTestCase):
                             f'Target directory was deleted during Disable: {target_dir}')
 
             # Re-enable - UpdateHandler should create the subfolder
-            self.embody_ext.UpdateHandler()
+            self.embody_ext.updateHandler()
             self.assertEqual(self.embody.par.Status.eval(), 'Enabled')
 
             project_folder = self.embody_ext.getProjectFolder()
@@ -679,7 +679,7 @@ class TestCustomParameters(EmbodyTestCase):
             # Restore original folder
             self.embody.par.Folder.val = original_folder
             self.embody_ext.Disable(target_name, removeTags=False)
-            self.embody_ext.UpdateHandler()
+            self.embody_ext.updateHandler()
             self.embody_ext.Update()
             parexec.par.active = True
 
@@ -719,7 +719,7 @@ class TestCustomParameters(EmbodyTestCase):
 
         finally:
             self.embody.par.Folder.val = original_folder
-            self.embody_ext.UpdateHandler()
+            self.embody_ext.updateHandler()
             self.embody_ext.Update()
             parexec.par.active = True
 

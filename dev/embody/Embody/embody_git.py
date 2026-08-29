@@ -1231,7 +1231,7 @@ def init_git(ext) -> None:
 def reset(ext, removeTags: bool = False) -> None:
     """Reset Embody to initial state."""
     parent.Embody.Disable(False, removeTags)
-    run(f"op('{ext.my}').UpdateHandler()", delayFrames=10)
+    run(f"op('{ext.my}').ext.Embody.updateHandler()", delayFrames=10)
     ext.createExternalizationsTable()
     ext.my.par.externaltox = ''
 

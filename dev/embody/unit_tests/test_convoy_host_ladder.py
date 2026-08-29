@@ -1109,7 +1109,7 @@ class TestStartupConstructsConvoyExt(EmbodyTestCase):
                             'EmbodyExt.py')
         with open(path, 'r', encoding='utf-8') as f:
             src = f.read()
-        body = src.split('def ReconstructTDNComps', 1)[1]
+        body = src.split('def reconstructTDNComps', 1)[1]
         head = body.split('def ', 1)[0]
         self.assertIn('.ext.ConvoyExt', head,
                       'the startup construction kick is gone')

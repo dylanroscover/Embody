@@ -45,7 +45,7 @@ BENIGN = [
 # Patterns that MUST be neutralized (side-effecting / not provably pure).
 MALICIOUS = [
     "op('victim').destroy()",
-    "op('button').par.Reset.pulse()",
+    "op('button').par.reset.pulse()",
     "__import__('os').system('id')",
     "eval('1+1')",
     "open('/etc/passwd').read()",

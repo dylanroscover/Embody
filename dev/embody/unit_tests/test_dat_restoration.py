@@ -86,7 +86,7 @@ class TestDATRestoration(EmbodyTestCase):
         self._create_file(rel_path, '# restored content')
         self._add_table_entry(dat_path, 'text', 'py', rel_path)
 
-        self.embody_ext.RestoreDATs()
+        self.embody_ext.restoreDATs()
 
         restored = op(dat_path)
         self.assertIsNotNone(restored, 'textDAT should be restored')
@@ -101,7 +101,7 @@ class TestDATRestoration(EmbodyTestCase):
         self._create_file(rel_path, 'col1\tcol2\nval1\tval2')
         self._add_table_entry(dat_path, 'table', 'tsv', rel_path)
 
-        self.embody_ext.RestoreDATs()
+        self.embody_ext.restoreDATs()
 
         restored = op(dat_path)
         self.assertIsNotNone(restored, 'tableDAT should be restored')
@@ -114,7 +114,7 @@ class TestDATRestoration(EmbodyTestCase):
         self._create_file(rel_path)
         self._add_table_entry(dat_path, 'text', 'py', rel_path)
 
-        self.embody_ext.RestoreDATs()
+        self.embody_ext.restoreDATs()
 
         restored = op(dat_path)
         self.assertIsNotNone(restored, 'DAT should be restored for tag check')
@@ -127,7 +127,7 @@ class TestDATRestoration(EmbodyTestCase):
         self._create_file(rel_path)
         self._add_table_entry(dat_path, 'text', 'py', rel_path)
 
-        self.embody_ext.RestoreDATs()
+        self.embody_ext.restoreDATs()
 
         restored = op(dat_path)
         self.assertIsNotNone(restored, 'DAT should be restored for color check')
@@ -149,7 +149,7 @@ class TestDATRestoration(EmbodyTestCase):
         self._create_file(rel_path)
         self._add_table_entry(existing.path, 'text', 'py', rel_path)
 
-        self.embody_ext.RestoreDATs()
+        self.embody_ext.restoreDATs()
         self.assertIs(op(existing.path), existing)
 
     def test_restore_skips_missing_file(self):
@@ -159,7 +159,7 @@ class TestDATRestoration(EmbodyTestCase):
         # Do NOT create the file
         self._add_table_entry(dat_path, 'text', 'py', rel_path)
 
-        self.embody_ext.RestoreDATs()
+        self.embody_ext.restoreDATs()
 
         self.assertIsNone(op(dat_path), 'DAT should not be created without file')
 
@@ -215,7 +215,7 @@ class TestDATRestoration(EmbodyTestCase):
         self._add_table_entry(dat_path, 'text', 'py', rel_path)
 
         # Should not raise
-        self.embody_ext.RestoreDATs()
+        self.embody_ext.restoreDATs()
         self.assertIsNone(op(dat_path))
 
     def test_restore_disabled_by_toggle(self):
@@ -228,7 +228,7 @@ class TestDATRestoration(EmbodyTestCase):
         orig = self.embody.par.Datrestoreonstart.eval()
         self.embody.par.Datrestoreonstart = False
         try:
-            self.embody_ext.RestoreDATs()
+            self.embody_ext.restoreDATs()
             self.assertIsNone(op(dat_path),
                               'DAT should not be restored when toggle is off')
         finally:
@@ -246,7 +246,7 @@ class TestDATRestoration(EmbodyTestCase):
         self._add_table_entry(dat_path, 'text', 'py', rel_path)
 
         self.embody_ext.checkOpsForContinuity(
-            self.embody_ext.ExternalizationsFolder)
+            self.embody_ext.externalizationsFolder)
 
         self.assertTrue(self._table_has_path(dat_path),
                         'Recoverable DAT entry should be preserved')
@@ -259,7 +259,7 @@ class TestDATRestoration(EmbodyTestCase):
         self._add_table_entry(dat_path, 'text', 'py', rel_path)
 
         self.embody_ext.checkOpsForContinuity(
-            self.embody_ext.ExternalizationsFolder)
+            self.embody_ext.externalizationsFolder)
 
         self.assertFalse(self._table_has_path(dat_path),
                          'Unrecoverable entry should be removed')
@@ -272,7 +272,7 @@ class TestDATRestoration(EmbodyTestCase):
         self._add_table_entry(comp_path, 'container', 'tox', rel_path)
 
         self.embody_ext.checkOpsForContinuity(
-            self.embody_ext.ExternalizationsFolder)
+            self.embody_ext.externalizationsFolder)
 
         self.assertTrue(self._table_has_path(comp_path),
                         'Recoverable TOX entry should be preserved')
@@ -370,7 +370,7 @@ class TestTOXRestoration(EmbodyTestCase):
         comp_path = self._root_sandbox.path + '/tox_restore_full'
         self._add_tox_row(comp_path, 'container', rel)
 
-        self.embody_ext.RestoreTOXComps()
+        self.embody_ext.restoreTOXComps()
 
         restored = op(comp_path)
         self.assertIsNotNone(restored, 'COMP should be restored')
@@ -391,7 +391,7 @@ class TestTOXRestoration(EmbodyTestCase):
         self._add_tox_row(comp_path, 'container', rel)
 
         log_id = self._get_log_id()
-        self.embody_ext.RestoreTOXComps()
+        self.embody_ext.restoreTOXComps()
 
         self.assertTrue(
             self._has_log_message(log_id, f'Restore of {comp_path}'),
@@ -417,7 +417,7 @@ class TestTOXRestoration(EmbodyTestCase):
         self._add_tox_row(comp_path, 'container', rel)
 
         log_id = self._get_log_id()
-        self.embody_ext.RestoreTOXComps()
+        self.embody_ext.restoreTOXComps()
 
         restored = op(comp_path)
         self.assertIsNotNone(restored,
@@ -457,7 +457,7 @@ class TestTOXRestoration(EmbodyTestCase):
         good.tags.discard(tox_tag)
         self._add_tox_row(good.path, 'container', rel)
 
-        self.embody_ext.ReconcileMetadata()
+        self.embody_ext.reconcileMetadata()
 
         self.assertIn(tox_tag, good.tags,
                       'row after a broken row was not reconciled -- the '

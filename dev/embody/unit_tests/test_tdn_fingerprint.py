@@ -128,7 +128,7 @@ class TestTDNFingerprint(EmbodyTestCase):
                 except Exception:
                     pass
                 try:
-                    emb.RemoveListerRow(comp.path, rel, delete_file=True)
+                    emb.removeListerRow(comp.path, rel, delete_file=True)
                 except Exception:
                     pass
             emb._tdn_fingerprints.pop(comp.path, None)
@@ -185,7 +185,7 @@ class TestTDNDirtyState(EmbodyTestCase):
         # Passive scan: the COMP is clean now, so the stale flag must clear.
         self.embody_ext.dirtyHandler(False)
         self.assertEqual(
-            self.embody_ext.DirtyState(comp.path), '',
+            self.embody_ext.dirtyState(comp.path), '',
             'A clean TDN COMP must have its stale dirty flag cleared by the '
             'passive scan (otherwise the indicator sticks after a revert)')
         self.assertEqual(
@@ -203,7 +203,7 @@ class TestTDNDirtyState(EmbodyTestCase):
         comp.create(constantCHOP, 'c2')
         self.embody_ext.dirtyHandler(False)
         self.assertEqual(
-            self.embody_ext.DirtyState(comp.path), 'True',
+            self.embody_ext.dirtyState(comp.path), 'True',
             'A structurally changed TDN COMP must be flagged dirty')
         self.assertEqual(
             t[comp.path, 'dirty'].val, '',
@@ -218,7 +218,7 @@ class TestTDNDirtyState(EmbodyTestCase):
         self._tdn_table(comp.path)
         self.embody_ext._setDirtyState(comp.path, '')
         self.assertEqual(
-            self.embody_ext.DirtyCount(), 0,
+            self.embody_ext.dirtyCount(), 0,
             'A clean TDN COMP (DirtyState "") must NOT be counted')
 
     def test_DirtyCount_counts_dirty_tdn_comp_from_runtime(self):
@@ -235,7 +235,7 @@ class TestTDNDirtyState(EmbodyTestCase):
         self.embody_ext._setDirtyState(comp.path, 'True')
         try:
             self.assertEqual(
-                self.embody_ext.DirtyCount(), 1,
+                self.embody_ext.dirtyCount(), 1,
                 'A TDN COMP flagged dirty at runtime must be counted even '
                 'when live oper.dirty is False')
         finally:
@@ -266,7 +266,7 @@ class TestDirtyNeverPersists(EmbodyTestCase):
             m0 = os.path.getmtime(tsv)
 
             ext.dirtyHandler(False)
-            ext.updateDirtyStates(ext.ExternalizationsFolder)
+            ext.updateDirtyStates(ext.externalizationsFolder)
 
             self.assertEqual(
                 os.path.getmtime(tsv), m0,

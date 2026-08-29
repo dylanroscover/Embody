@@ -648,7 +648,7 @@ def _exercise_features(attempt=0):
             'ops missing from .tdn'
         # mutate -> save -> the file must carry the new value
         n.par.period = 9.25
-        ext.SaveTDN(comp.path)
+        ext.saveTDN(comp.path)
         text = open(path, encoding='utf-8').read()
         assert '9.25' in text, 'SaveTDN did not persist the change'
         # disk -> network: rebuild from the file, verify the value returns
@@ -675,7 +675,7 @@ def _exercise_features(attempt=0):
         assert pre.startswith('Saved'), \
             'post-save stamp missing: Autosavestatus=%r after save' % pre
         comp.op('noise_src').par.period = 4.5
-        ok = ext.Checkpoint(comp.path)
+        ok = ext.checkpoint(comp.path)
         assert ok, 'Checkpoint returned falsy'
         status = str(embody.par.Autosavestatus.eval())
         assert status.startswith('Saved'), 'Autosavestatus=%r' % status

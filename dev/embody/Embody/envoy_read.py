@@ -1872,7 +1872,7 @@ def get_externalizations(ext) -> dict:
                 'absolute_path': abs_path,
                 'timestamp': table[row, 'timestamp'].val,
                 # Runtime-only since 2026-08-20; the tsv column is blank.
-                'dirty': op.Embody.ext.Embody.DirtyState(
+                'dirty': op.Embody.ext.Embody.dirtyState(
                     table[row, 'path'].val),
                 'build': table[row, 'build'].val,
                 # Hint so an agent seeing a dirty TDXN row knows the tool
@@ -1921,7 +1921,7 @@ def get_externalization_status(ext, op_path: str) -> dict:
                     'absolute_path': abs_path,
                     'timestamp': table[row, 'timestamp'].val,
                     # Runtime-only since 2026-08-20; tsv column is blank.
-                    'dirty': op.Embody.ext.Embody.DirtyState(op_path),
+                    'dirty': op.Embody.ext.Embody.dirtyState(op_path),
                     'build': table[row, 'build'].val,
                     'touch_build': table[row, 'touch_build'].val,
                     # Hint so an agent seeing a dirty TDXN row knows the

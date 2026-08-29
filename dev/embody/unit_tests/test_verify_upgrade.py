@@ -116,7 +116,7 @@ class TestVerifyUpgradePath(EmbodyTestCase):
                 os.path.getmtime(path), m0,
                 'validation mode must not write a dirty COMP to disk')
             self.assertEqual(
-                ext.DirtyState(comp.path), 'Par',
+                ext.dirtyState(comp.path), 'Par',
                 'the dirty flag must survive validation for the UI')
         finally:
             # Through the Embody COMP: bare `mod` resolves relative to the
@@ -148,7 +148,7 @@ class TestVerifyUpgradePath(EmbodyTestCase):
         doc_open = body.index('"""')
         doc_close = body.index('"""', doc_open + 3)
         body = body[:doc_open] + body[doc_close + 3:]
-        for forbidden in ('_messageBox', 'ui.messageBox', 'self.Reset(',
+        for forbidden in ('_messageBox', 'ui.messageBox', 'self.reset(',
                           'Disable('):
             self.assertNotIn(
                 forbidden, body,

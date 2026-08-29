@@ -1615,7 +1615,7 @@ class TDXNExt:
 			# on the main thread and carried as a plain string -- the
 			# worker must never touch project/par/storage to get it.
 			'backup_root': str(project.folder),
-			'ext_folder': self.ownerComp.ext.Embody.ExternalizationsFolder,
+			'ext_folder': self.ownerComp.ext.Embody.externalizationsFolder,
 		}
 
 		# Resolve from per-COMP storage, falling back to global toggle
@@ -6980,7 +6980,7 @@ class TDXNExt:
 				raw_name = project.name.removesuffix('.toe')
 				safe_name = TDXNExt._stripBuildSuffix(raw_name)
 				try:
-					ext_folder = self.ownerComp.ext.Embody.ExternalizationsFolder
+					ext_folder = self.ownerComp.ext.Embody.externalizationsFolder
 					if ext_folder:
 						out_dir = project_dir / ext_folder
 						out_dir.mkdir(parents=True, exist_ok=True)

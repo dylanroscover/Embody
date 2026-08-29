@@ -136,13 +136,13 @@ class TestVersionSync(EmbodyTestCase):
         # skip cannot fire: the live .tdn files are already stamped with the
         # current version, so every row would otherwise be skipped and this
         # would assert on an empty list.
-        ext.SaveTDN = lambda path, bump_build=True: calls.append(
+        ext.saveTDN = lambda path, bump_build=True: calls.append(
             (path, bump_build))
         ext.buildAbsolutePath = lambda rel: Path('/no/such/tdn/file')
         try:
             op('/embody/execute_src_ctrl').module.syncVersionIntoTDN()
         finally:
-            del ext.SaveTDN
+            del ext.saveTDN
             del ext.buildAbsolutePath
         picked = [path for path, _bump in calls]
         self.assertIn(embody_path, picked,
@@ -159,13 +159,13 @@ class TestVersionSync(EmbodyTestCase):
         same drift, one size smaller."""
         ext = self.embody_ext
         calls = []
-        ext.SaveTDN = lambda path, bump_build=True: calls.append(
+        ext.saveTDN = lambda path, bump_build=True: calls.append(
             (path, bump_build))
         ext.buildAbsolutePath = lambda rel: Path('/no/such/tdn/file')
         try:
             op('/embody/execute_src_ctrl').module.syncVersionIntoTDN()
         finally:
-            del ext.SaveTDN
+            del ext.saveTDN
             del ext.buildAbsolutePath
         self.assertTrue(calls, 'the sync re-exported nothing to assert on')
         for path, bump in calls:
@@ -192,10 +192,10 @@ class TestVersionSync(EmbodyTestCase):
             # and advances the counter itself, so the starting value is
             # whatever that left behind, not the 5 seeded above.
             base = comp.par.Build.eval()
-            ext.SaveTDN(comp.path, bump_build=False)
+            ext.saveTDN(comp.path, bump_build=False)
             self.assertEqual(comp.par.Build.eval(), base,
                              'bump_build=False still advanced par.Build')
-            ext.SaveTDN(comp.path, bump_build=True)
+            ext.saveTDN(comp.path, bump_build=True)
             self.assertEqual(comp.par.Build.eval(), base + 1,
                              'the default must still bump par.Build')
         finally:

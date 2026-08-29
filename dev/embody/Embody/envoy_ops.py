@@ -37,7 +37,7 @@ def create_op(ext, parent_path: str, op_type: str, name: str = None) -> dict:
         # never raises (must not break op creation).
         auto_tag = None
         try:
-            auto_tag = op.Embody.ext.Embody.AutoExternalizeNewOp(new_op)
+            auto_tag = op.Embody.ext.Embody.autoExternalizeNewOp(new_op)
         except Exception as e:
             ext._log(f'auto-externalize failed for {new_op.path}: {e}', 'WARNING')
         result = {
@@ -279,7 +279,7 @@ def copy_op(ext, source_path: str, dest_parent: str, new_name: str = None) -> di
         # own path and never shares the source's files. Never breaks the copy.
         auto_tag = None
         try:
-            auto_tag = op.Embody.ext.Embody.AutoExternalizeCopiedOp(new_op)
+            auto_tag = op.Embody.ext.Embody.autoExternalizeCopiedOp(new_op)
         except Exception as e:
             ext._log(f'auto-externalize (copy) failed for {new_op.path}: {e}', 'WARNING')
         result = {
@@ -863,10 +863,10 @@ def remove_externalization_tag(ext, op_path: str,
         if is_tdn:
             # Strips tags, drops the row + _tdn_rel_path breadcrumb,
             # resets color (issue #48).
-            embody.RemoveTDNEntry(target.path, delete_file=delete_file)
+            embody.removeTDNEntry(target.path, delete_file=delete_file)
         elif removed:
             rel_fp = embody.getExternalPath(target)
-            embody.RemoveListerRow(target.path, rel_fp,
+            embody.removeListerRow(target.path, rel_fp,
                                    delete_file=delete_file)
         # No tags and no TDXN row: nothing tracked -- report success with
         # an empty removal list (previous behavior, kept for callers that
@@ -926,7 +926,7 @@ def save_externalization(ext, op_path: str) -> dict:
         if target.family == 'COMP':
             strategy = op.Embody.ext.Embody._getCompStrategy(target)
             if strategy == 'tdn':
-                written = op.Embody.SaveTDN(op_path)
+                written = op.Embody.saveTDN(op_path)
             else:
                 written = op.Embody.Save(op_path)
             if not written:
@@ -1073,10 +1073,10 @@ def create_extension(ext, parent_path: str, class_name: str,
     try:
         emb = op.Embody.ext.Embody
         if created_comp:
-            t = emb.AutoExternalizeNewOp(comp)
+            t = emb.autoExternalizeNewOp(comp)
             if t:
                 auto_ext['comp'] = t
-        t = emb.AutoExternalizeNewOp(text_dat)
+        t = emb.autoExternalizeNewOp(text_dat)
         if t:
             auto_ext['dat'] = t
     except Exception as e:

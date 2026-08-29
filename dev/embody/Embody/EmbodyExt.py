@@ -1094,7 +1094,7 @@ class EmbodyExt:
 
         # Sentinel: None = worker still in flight; '' = done, no update (or the
         # network failed); a truthy (level, message) tuple = the notice to log.
-        # Reset before spawning so a stale value from a prior check can't be
+        # reset before spawning so a stale value from a prior check can't be
         # read.
         self._mcp_update_notice = None
 
@@ -1217,12 +1217,12 @@ class EmbodyExt:
         return self.my.par.Externalizations.eval()
 
     @property
-    def ExternalizationsFolder(self) -> str:
+    def externalizationsFolder(self) -> str:
         """Returns the configured externalization folder, or empty string."""
         return self.my.par.Folder.eval() or ''
 
     @property
-    def TDNBackupDir(self) -> Path:
+    def _tdnBackupDir(self) -> Path:
         """Rotated network-file backups dir, beside the .toe.
 
         Promoted, so it stays for anyone referencing it; it had no callers
@@ -1237,7 +1237,7 @@ class EmbodyExt:
         TD's `table[row, col]` returns None when the column doesn't exist or
         the row-key lookup misses, and `None.val` then raises AttributeError.
         Issue #21 traced multiple crashes (`'NoneType' object has no
-        attribute 'val'`) to such reads after a partial ExternalizeProject
+        attribute 'val'`) to such reads after a partial externalizeProject
         cascade left the table in an inconsistent state.
 
         Returns the cell's string value, or `default` (empty string) when
@@ -1397,7 +1397,7 @@ class EmbodyExt:
                    or (None, None, None, None) on error
         """
         if externalizationsFolder is None or externalizationsFolder is False:
-            externalizationsFolder = self.ExternalizationsFolder
+            externalizationsFolder = self.externalizationsFolder
         
         # Normalize folder path
         if externalizationsFolder:
@@ -1480,7 +1480,7 @@ class EmbodyExt:
         True when a test run is active OR a project save is in progress
         (onProjectPreSave sets _suppress_dialogs; it is cleared after the
         post-save restore + Envoy-restart window, and again on next open via
-        init()). Every _messageBox, the Verify() queue site, and _promptEnvoy
+        init()). Every _messageBox, the verify() queue site, and _promptEnvoy
         consult this, so a save's strip/restore reinit burst can never show --
         or even queue -- the onboarding modal. Timing-independent: it is checked
         at the moment a dialog would display/queue, not via deferred scheduling."""
@@ -1714,7 +1714,7 @@ class EmbodyExt:
                        Autoexternalize preference ('both') so new DATs/COMPs
                        externalize as they are created; 'full' does that AND
                        offers the project-wide externalization
-                       (ExternalizeProject, which keeps its own confirmation
+                       (externalizeProject, which keeps its own confirmation
                        + TOX/TDXN choice, and is refused outright when there
                        is no saved .toe to fall back on); 'skip' / '' change
                        nothing.
@@ -1904,7 +1904,7 @@ class EmbodyExt:
         that plus the project-wide sweep. 'full' is the one wizard action
         touching the whole project (a project-wide re-tag destroyed 18
         specimen .tdn on 2026-07-01, see destructive-tests.md): it only
-        calls ExternalizeProject() -- which keeps its own confirmation --
+        calls externalizeProject() -- which keeps its own confirmation --
         and refuses without a reopenable .toe recovery point on disk
         (RunDestructiveTests' invariant). Never raises."""
         token = (externalize or '').strip().lower()
@@ -2039,14 +2039,14 @@ class EmbodyExt:
         return False
 
     def _scheduleProjectExternalization(self):
-        """Run ExternalizeProject() a few frames out (wizard externalize step).
+        """Run externalizeProject() a few frames out (wizard externalize step).
 
         Deferred so its modal opens after the wizard's apply path has fully
         unwound (window closed, params written, Envoy enable kicked off) --
         a modal raised mid-apply would stall the rest of setup behind it.
         Isolated in its own method so tests can stub the schedule."""
         try:
-            run(f"op('{self.my}').ext.Embody.ExternalizeProject()",
+            run(f"op('{self.my}').ext.Embody.externalizeProject()",
                 delayFrames=30, fromOP=self.my)
         except Exception as e:
             self.Log(f'Could not start the whole-project externalization: {e} '
@@ -2772,7 +2772,7 @@ class EmbodyExt:
             self, confirm=confirm, include_review=include_review,
             target_dir=target_dir)
 
-    def UninstallHandler(self, target_dir=None):
+    def uninstallHandler(self, target_dir=None):
         """Uninstall pulse handler: preview the footprint, confirm via
         ui.messageBox, then run Uninstall on Yes. See embody_admin."""
         return mod.embody_admin.uninstall_handler(self, target_dir=target_dir)
@@ -2952,8 +2952,8 @@ class EmbodyExt:
     # INITIALIZATION & RESET
     # ==========================================================================
 
-    def Reset(self, removeTags: bool = False) -> None:
-        """Reset Embody to initial state -- see embody_git."""
+    def reset(self, removeTags: bool = False) -> None:
+        """reset Embody to initial state -- see embody_git."""
         return mod.embody_git.reset(self, removeTags)
 
     def createExternalizationsTable(self) -> None:
@@ -2991,11 +2991,11 @@ class EmbodyExt:
             self.Log(f"Created '{table_name}' tableDAT", "SUCCESS")
         else:
             externalizations_dat.clear(keepFirstRow=True)
-            self.Log(f"Reset '{table_name}' tableDAT", "INFO")
+            self.Log(f"reset '{table_name}' tableDAT", "INFO")
 
         self.my.par.Externalizations.val = externalizations_dat
 
-    def CreateExternalizationsTable(self) -> None:
+    def createExternalizationsTable(self) -> None:
         """Recovery/init method: create or reconnect the externalizations table.
 
         Safe to call at any time. No-op if the table already exists and is
@@ -3227,14 +3227,14 @@ class EmbodyExt:
         """One-time dialog after upgrading from the binary Tdnenable toggle -- see embody_admin."""
         return mod.embody_admin.show_tdn_migration_nudge(self)
 
-    def Verify(self) -> None:
+    def verify(self) -> None:
         """Initialize or reconnect Embody on install or update.
 
-        Called from execute.py onCreate() after CreateExternalizationsTable()
+        Called from execute.py onCreate() after createExternalizationsTable()
         has already run.  Two scenarios:
 
         - Fresh install: table exists but is empty (just created) -- skip dialog,
-          run UpdateHandler quietly, then offer Envoy opt-in.
+          run updateHandler quietly, then offer Envoy opt-in.
         - Update install: table has prior data -- validate tracked operators
           quietly (no dialog; see _validateTrackedOperators).
         """
@@ -3258,16 +3258,16 @@ class EmbodyExt:
 
         if has_prior_data:
             # UPDATE scenario (surviving table): validate quietly via the
-            # deferred UpdateHandler() -- the old Re-scan dialog wired to
-            # Reset(), which unlinked EVERY tracked file then re-exported
+            # deferred updateHandler() -- the old Re-scan dialog wired to
+            # reset(), which unlinked EVERY tracked file then re-exported
             # the project in one frame (minutes-long freeze, zero files on
             # disk in the crash window). Ground-up rebuild stays available
             # via Disable -> Enable, which discloses the deletion.
             self._validateTrackedOperators()
         else:
             # FRESH INSTALL: table was just created (empty). No dialog needed --
-            # just run UpdateHandler quietly; it will find nothing yet.
-            run(f"op('{self.my}').UpdateHandler()", delayFrames=10)
+            # just run updateHandler quietly; it will find nothing yet.
+            run(f"op('{self.my}').ext.Embody.updateHandler()", delayFrames=10)
 
         # Defer Envoy opt-in until after the full init/update cycle completes.
         if settings_restored and has_prior_data:
@@ -3276,7 +3276,7 @@ class EmbodyExt:
             # the prompt; kick Envoy start if the restored settings have it
             # enabled (onValueChange was suppressed during restore).
             if self.my.par.Envoyenable.eval():
-                # Longer delay on the upgrade path (onCreate -> Verify) to give
+                # Longer delay on the upgrade path (onCreate -> verify) to give
                 # the old server thread time to release its port.  onDestroyTD
                 # signals the old shutdown_event, but uvicorn can take 1-3s to
                 # fully close its listener socket.  delayFrames=10 (~0.17s) was
@@ -3321,7 +3321,7 @@ class EmbodyExt:
             f'{count} externalized operator(s) found -- '
             'validating tracked operators', 'INFO')
         self.my.par.externaltox = ''
-        run(f"op('{self.my}').UpdateHandler(save_dirty=False)",
+        run(f"op('{self.my}').ext.Embody.updateHandler(save_dirty=False)",
             delayFrames=10)
 
     # ==========================================================================
@@ -3403,7 +3403,7 @@ class EmbodyExt:
         SAFETY: Only deletes files that Embody is tracking - never deletes
         untracked files that may exist in the externalization folder.
         """
-        folder = self.ExternalizationsFolder if prevFolder is None else prevFolder
+        folder = self.externalizationsFolder if prevFolder is None else prevFolder
         if prevFolder == '':
             folder = project.folder
 
@@ -3535,18 +3535,18 @@ class EmbodyExt:
                 except Exception as e:
                     self.Log(f"Error with previous folder: {prev_path}", "ERROR", str(e))
 
-    def DisableHandler(self) -> None:
+    def disableHandler(self) -> None:
         """Handle disable button with confirmation dialog."""
         choice = self._messageBox('Embody Warning',
             'Disable Embody?\nOnly files created by Embody will be deleted.\n'
             '(Non-Embody files in the folder will be preserved)',
             buttons=['No', 'Yes, keep Tags', 'Yes, remove Tags'])
         if choice == 1:
-            self.Disable(self.ExternalizationsFolder, False)
+            self.Disable(self.externalizationsFolder, False)
         elif choice == 2:
-            self.Disable(self.ExternalizationsFolder, True)
+            self.Disable(self.externalizationsFolder, True)
 
-    def UpdateHandler(self, save_dirty: bool = True) -> None:
+    def updateHandler(self, save_dirty: bool = True) -> None:
         """Enable/Update handler - main entry point for initialization.
 
         save_dirty=False (the upgrade-path validation) reconciles
@@ -3580,7 +3580,7 @@ class EmbodyExt:
         # Interactive path: frame-chunked so the pulse never stalls the
         # session (synchronous Update() measured 0.5-1s = 30-60 dropped
         # frames). Programmatic callers still use Update() directly.
-        run(f"op('{self.my}').UpdateDeferred(save_dirty={save_dirty})",
+        run(f"op('{self.my}').ext.Embody.updateDeferred(save_dirty={save_dirty})",
             delayFrames=1)
 
     def normalizeAllPaths(self) -> None:
@@ -3666,7 +3666,7 @@ class EmbodyExt:
             run(f"op('{self.my}').par.Refresh.pulse()", delayFrames=1)
 
         # Chain the first-run setup wizard AFTER init completes.
-        # Verify() sets this flag; we consume it here so the wizard opens only
+        # verify() sets this flag; we consume it here so the wizard opens only
         # after deprecated-pattern and re-scan dialogs resolve. _openSetupWizard
         # respects _suppressDialogs (never opens during a test/save) and falls
         # back to the classic _promptEnvoy dialog if the wizard UI is absent.
@@ -3698,7 +3698,7 @@ class EmbodyExt:
         except Exception as e:
             self.Log(f'registry rename-detect failed: {e}', 'WARNING')
 
-        self.checkOpsForContinuity(self.ExternalizationsFolder)
+        self.checkOpsForContinuity(self.externalizationsFolder)
 
         # Parameter changes on TOX-strategy COMPs. (TDXN dirty detection
         # is NOT here -- the fingerprint sweep in dirtyHandler / the
@@ -3764,7 +3764,7 @@ class EmbodyExt:
 
     # -- Deferred (frame-chunked) Update: the interactive pulse path ----
 
-    def UpdateDeferred(self, save_dirty: bool = True) -> None:
+    def updateDeferred(self, save_dirty: bool = True) -> None:
         """Frame-chunked Update for the interactive pulse: identical
         work and reporting to Update(), spread across frames so no
         single frame pays the whole sweep (a synchronous Update
@@ -3852,7 +3852,7 @@ class EmbodyExt:
         for oper in self.getExternalizedOps(COMP, strategy='tox'):
             dirty = oper.dirty
             try:
-                if dirty or self.DirtyState(oper.path) != 'Par':
+                if dirty or self.dirtyState(oper.path) != 'Par':
                     self._setDirtyState(oper.path, dirty)
             except Exception as e:
                 self.Log(f'Failed to update dirty state for '
@@ -3921,7 +3921,7 @@ class EmbodyExt:
                 st['saved'].append(path)
         elif (self._isTDNDirty(oper, st['tdn_paths'], st['exclude_tag'],
                                st['ext_tags'])
-                and self.SaveTDN(path)):
+                and self.saveTDN(path)):
             st['saved'].append(path)
 
     def _updReportPhase(self, st: dict) -> None:
@@ -3955,10 +3955,10 @@ class EmbodyExt:
         if self._performMode:
             return
         self.cleanupAllDuplicateRows()
-        self.updateDirtyStates(self.ExternalizationsFolder)
+        self.updateDirtyStates(self.externalizationsFolder)
         self.my.op('list/inject_parents').cook(force=True)
         self.lister.reset()
-        self.checkOpsForContinuity(self.ExternalizationsFolder)
+        self.checkOpsForContinuity(self.externalizationsFolder)
         
         if self.my.par.Detectduplicatepaths:
             self.checkForDuplicates()
@@ -4182,7 +4182,7 @@ class EmbodyExt:
         the live tree). One helper rather than five inline blocks so a sixth
         writer added later is an obvious omission rather than a silent leak:
         Embot's nine annotateCOMPs shipping inside a tracked or released .tox is
-        a data defect, not a cosmetic one -- RestoreTOXComps then re-materialises
+        a data defect, not a cosmetic one -- restoreTOXComps then re-materialises
         them on every open.
 
         Subtree-scoped inside envoy_viz, so the many unrelated Save() calls
@@ -4200,7 +4200,7 @@ class EmbodyExt:
         """Save a TOX-strategy COMP and update tracking. Returns True
         only when the .tox was actually written.
 
-        allow_empty mirrors SaveTDN: an AUTOMATIC save of an
+        allow_empty mirrors saveTDN: an AUTOMATIC save of an
         operator-empty COMP over a substantial existing .tox is the
         transiently-emptied-shell shape (the TOX-side twin of the TDXN
         data loss, review finding 2026-08-12). A .tox cannot be parsed
@@ -4283,7 +4283,7 @@ class EmbodyExt:
             self.Log("Save failed", "ERROR", str(e))
             return False
 
-    def SaveTDN(self, opPath: str, bump_build: bool = True,
+    def saveTDN(self, opPath: str, bump_build: bool = True,
                 allow_empty: bool = False) -> bool:
         """Save a TDXN-strategy COMP by re-exporting its .tdn file.
         Returns True only when the file was actually written -- callers
@@ -4294,7 +4294,7 @@ class EmbodyExt:
         post-save version sync needs that: the release manifest records
         par.Build before the sync runs, so a second bump would leave the
         manifest one behind the .tdn -- a smaller copy of the very drift
-        the sync exists to remove. Checkpoint() already skips the bump
+        the sync exists to remove. checkpoint() already skips the bump
         for the same class of reason.
 
         allow_empty=False (every automatic caller) refuses to overwrite
@@ -4309,7 +4309,7 @@ class EmbodyExt:
         if self._performMode:
             return False
         if not self._tdnEnabled():
-            self.Log(f'TDXN disabled -- skipping SaveTDN for {opPath}', 'INFO')
+            self.Log(f'TDXN disabled -- skipping saveTDN for {opPath}', 'INFO')
             return False
         try:
             oper = op(opPath)
@@ -4334,7 +4334,7 @@ class EmbodyExt:
                 from pathlib import Path
                 raw_name = project.name.removesuffix('.toe')
                 safe_name = self.my.ext.TDXN._stripBuildSuffix(raw_name)
-                ext_folder = self.ExternalizationsFolder or ''
+                ext_folder = self.externalizationsFolder or ''
                 # Re-derive the STEM only. The suffix must come from what
                 # is already tracked: minting here would make new_rel
                 # differ from every legacy row, and the safeDeleteFile
@@ -4406,10 +4406,10 @@ class EmbodyExt:
             self.Log(f"TDXN export failed for {opPath}: {result.get('error')}", "ERROR")
             return False
         except Exception as e:
-            self.Log(f"SaveTDN failed for {opPath}", "ERROR", str(e))
+            self.Log(f"saveTDN failed for {opPath}", "ERROR", str(e))
             return False
 
-    def Checkpoint(self, opPath: str) -> bool:
+    def checkpoint(self, opPath: str) -> bool:
         """Frame-cheap SYNCHRONOUS auto-save checkpoint of one TDXN COMP.
 
         Re-exports with stale-cleanup skipped (the ~700ms rglob is the
@@ -4440,7 +4440,7 @@ class EmbodyExt:
             result = self.my.ext.TDXN.ExportNetwork(
                 root_path=opPath, output_file=abs_path, skip_cleanup=True)
             if not result.get('success'):
-                self.Log(f'Checkpoint export failed for {opPath}: '
+                self.Log(f'checkpoint export failed for {opPath}: '
                          f'{result.get("error")}', 'WARNING')
                 return False
             # Mark clean + stamp now; defer the heavy fingerprint re-baseline off
@@ -4465,7 +4465,7 @@ class EmbodyExt:
                 fromOP=self.my, delayFrames=2)
             return True
         except Exception as e:
-            self.Log(f'Checkpoint failed for {opPath}', 'WARNING', str(e))
+            self.Log(f'checkpoint failed for {opPath}', 'WARNING', str(e))
             return False
 
     def _refusesEmptyTDNOverwrite(self, oper, abs_path: str) -> bool:
@@ -4550,7 +4550,7 @@ class EmbodyExt:
             self.param_tracker.updateParamStore(oper)
             self._storeTDNFingerprint(oper)
         except Exception as e:
-            self.Log(f'Checkpoint re-baseline failed for {opPath}', 'DEBUG', str(e))
+            self.Log(f'checkpoint re-baseline failed for {opPath}', 'DEBUG', str(e))
 
     # --- Auto-save / crash checkpoint engine (event-armed idle-settle drain) ---
     _AUTOSAVE_IDLE_SECONDS = 1.0    # checkpoint this long after the last MCP mutation
@@ -4562,7 +4562,7 @@ class EmbodyExt:
         p = getattr(self.my.par, 'Autosave', None)
         return bool(p.eval()) if p is not None else True
 
-    def NoteCheckpointTouch(self, op_path: str) -> None:
+    def noteCheckpointTouch(self, op_path: str) -> None:
         """Record (best-effort) that op_path was mutated via MCP, and queue an idle
         checkpoint of its nearest tracked TDXN boundary. HOT PATH: cheap, never
         raises. Walks the PATH STRING up to the boundary so it survives a
@@ -4584,7 +4584,7 @@ class EmbodyExt:
     _COARSE_SWEEP_CAP = 60   # roots examined in one coarse sweep (bounded work)
     _COARSE_SWEEP_BUDGET_MS = 8.0   # per-frame slice of that sweep
 
-    def NoteCoarseCheckpointTouch(self) -> None:
+    def noteCoarseCheckpointTouch(self) -> None:
         """Arm a checkpoint after an op that could touch ANY tracked root.
 
         execute_python names no path, so it used to arm nothing -- whole
@@ -4667,7 +4667,7 @@ class EmbodyExt:
         self._coarse_sweep_ctx = None
         return queued
 
-    def FlushPendingCheckpoints(self) -> int:
+    def flushPendingCheckpoints(self) -> int:
         """Write ALREADY-QUEUED checkpoints now, before risky code runs.
 
         Same ordering argument as _preRiskyCheckpoint: a root queued by an
@@ -4683,7 +4683,7 @@ class EmbodyExt:
             if self.my.fetch('_suppress_dialogs', False, search=False):
                 return 0
             for path in list(self._pending_checkpoint_roots):
-                if self.Checkpoint(path):
+                if self.checkpoint(path):
                     self._pending_checkpoint_roots.discard(path)
                     written += 1
         except Exception:
@@ -4752,8 +4752,8 @@ class EmbodyExt:
             root = self._pending_checkpoint_roots.pop()
         except KeyError:
             return
-        if not self.Checkpoint(root):
-            # Export/write failed (rare; logged in Checkpoint). We don't re-add
+        if not self.checkpoint(root):
+            # Export/write failed (rare; logged in checkpoint). We don't re-add
             # here -- that would tight-loop on a persistently-failing COMP; the
             # next edit to this COMP re-queues it.
             self.Log(f'Autosave: checkpoint of {root} did not complete', 'DEBUG')
@@ -4810,7 +4810,7 @@ class EmbodyExt:
             except Exception:
                 pass
 
-    def SeedAutosaveStatus(self) -> str:
+    def seedAutosaveStatus(self) -> str:
         """Seed the last-write readout from the table instead of 'Idle'.
 
         'Idle' is right to SHIP (release scrub) and wrong to display --
@@ -4862,7 +4862,7 @@ class EmbodyExt:
         """Synchronously checkpoint the touched TDXN root BEFORE a destructive
         delete (delete_op of a CHILD inside a tracked COMP) so an agent-induced
         crash DURING it loses nothing since it. ~6ms one COMP; gated like
-        Checkpoint. Called from EnvoyExt _execute_operation before the handler.
+        checkpoint. Called from EnvoyExt _execute_operation before the handler.
 
         NOT for import_network: its .tdn is the user's source-of-truth being
         reloaded, so checkpointing the live state over it would corrupt the edit.
@@ -4885,7 +4885,7 @@ class EmbodyExt:
                 if m and m[1] == 'tdn':
                     if first and cand == norm:
                         return  # deleting the boundary itself -- nothing to protect
-                    if self.Checkpoint(cand):
+                    if self.checkpoint(cand):
                         self._pending_checkpoint_roots.discard(cand)
                     return
                 parts.pop()
@@ -4953,7 +4953,7 @@ class EmbodyExt:
                         'INFO')
                 if not rel_path:
                     continue
-                # Shared-file guards, mirroring RemoveListerRow: never unlink
+                # Shared-file guards, mirroring removeListerRow: never unlink
                 # a file that a clone-tagged op owns or that another live op
                 # still references (two ops CAN share one rel_file_path).
                 # Both checks must run NOW -- the op still exists (purge runs
@@ -5016,7 +5016,7 @@ class EmbodyExt:
             # that installs it, without anyone opting in. The user's own
             # choice is NOT lost by scrubbing: Convoyenable is in the
             # config.json prefs whitelist above, which is what restores it
-            # across restarts and upgrades. Reset to its default (Off).
+            # across restarts and upgrades. reset to its default (Off).
             'Convoyenable': None,
             # The node's display name. It is auto-derived per machine at
             # runtime (hostname / .toe stem), so a baked value ships one
@@ -5032,12 +5032,12 @@ class EmbodyExt:
             # A dev dialog preference that SHIPPED On in v6.0.246 (every
             # download saw TD's built-in pages instead of the POPX
             # filter). Not in the config.json whitelist, so the scrub
-            # costs the developer nothing and closes the leak. Reset Off.
+            # costs the developer nothing and closes the leak. reset Off.
             'Showbuiltinpars': None,
             # Same leak class, opposite direction: v6.0.251 shipped
             # Clipboardautopaste Off (dev machine quieted at bake time),
             # killing the "Embody it" copy flow on fresh installs
-            # (2026-08-18). Reset On; a deliberate user Off persists via
+            # (2026-08-18). reset On; a deliberate user Off persists via
             # the _PERSISTED_PARAMS whitelist.
             'Clipboardautopaste': None,
         },
@@ -5080,7 +5080,7 @@ class EmbodyExt:
         return self._TDN_VALUE_OMIT_PARS.get(shortcut, frozenset())
 
     def _scrubTransientPars(self, root) -> list:
-        """Reset registered runtime-status pars to their RESTING values on
+        """reset registered runtime-status pars to their RESTING values on
         `root` and every descendant COMP; return a [(par, value)] snapshot
         so a live-mode export can hand the session its readouts back.
 
@@ -5401,7 +5401,7 @@ class EmbodyExt:
                         f"Failed to strip tags from {op_path}: {e}",
                         "WARNING")
 
-            # Phase 2c: Reset runtime-status pars (A-50) -- 'Testing',
+            # Phase 2c: reset runtime-status pars (A-50) -- 'Testing',
             # 'Saved <time>', 'Running on port N' must never ship in a
             # released artifact. Snapshot taken; Phase 4 always restores.
             transient_snapshot = self._scrubTransientPars(target)
@@ -6035,7 +6035,7 @@ class EmbodyExt:
         real dirty state from the manager (observed 2026-07-20: 13 dirty
         COMPs vanished after an EmbodyExt.py edit). Mutated in place, never
         re-store()d (mirrors expanded_paths); excluded from TDXN export via
-        SKIP_STORAGE_KEYS; cleared at project open by ReconstructTDNComps
+        SKIP_STORAGE_KEYS; cleared at project open by reconstructTDNComps
         so a .toe-persisted copy cannot poison fresh baselines."""
         cache = self.my.fetch('_tdn_fingerprints', None, search=False)
         if cache is None:
@@ -6170,7 +6170,7 @@ class EmbodyExt:
                     return s
         return None
 
-    def SaveCurrentComp(self) -> None:
+    def saveCurrentComp(self) -> None:
         """Update only the COMP we're currently working inside of (Ctrl/Cmd+Alt+U)."""
         if self._performMode:
             return
@@ -6227,7 +6227,7 @@ class EmbodyExt:
     def _saveByStrategy(self, op_path: str, strategy: str) -> None:
         """Save a COMP using the appropriate strategy."""
         if strategy == 'tdn':
-            self.SaveTDN(op_path)
+            self.saveTDN(op_path)
         else:
             self.Save(op_path)
 
@@ -6317,7 +6317,7 @@ class EmbodyExt:
             self.my.store('_dirty_states', states)
         return states
 
-    def DirtyState(self, path: str) -> str:
+    def dirtyState(self, path: str) -> str:
         """Runtime dirty flag for a tracked op: '' | 'True' | 'Par'."""
         return self._dirtyStates().get(str(path), '')
 
@@ -6332,7 +6332,7 @@ class EmbodyExt:
                 # Preserve 'Par' dirty state when oper.dirty is False --
                 # parameter changes are tracked independently from TD's
                 # native dirty flag and should only be cleared on Save.
-                if dirty or self.DirtyState(oper.path) != 'Par':
+                if dirty or self.dirtyState(oper.path) != 'Par':
                     self._setDirtyState(oper.path, dirty)
             except Exception as e:
                 self.Log(f"Failed to update dirty state for {oper.path}: {e}", "DEBUG")
@@ -6364,7 +6364,7 @@ class EmbodyExt:
                                          ext_tags)
                 self._setDirtyState(oper.path, 'True' if dirty else '')
                 if dirty and update:
-                    if self.SaveTDN(oper.path):
+                    if self.saveTDN(oper.path):
                         updates.append(oper.path)
 
         return updates
@@ -6397,7 +6397,7 @@ class EmbodyExt:
             try:
                 # Preserve 'Par' dirty state when oper.dirty is False -- see
                 # dirtyHandler; parameter changes clear only on Save.
-                if dirty or self.DirtyState(oper.path) != 'Par':
+                if dirty or self.dirtyState(oper.path) != 'Par':
                     self._setDirtyState(oper.path, dirty)
             except Exception as e:
                 self.Log(f"Failed to update dirty state for {oper.path}: {e}",
@@ -6671,7 +6671,7 @@ class EmbodyExt:
             # instead of being set lazily by the first _isTDNDirty scan. Without
             # this, a param edit landing before that first scan would be absorbed
             # into the baseline and the COMP would wrongly read clean. Mirrors
-            # SaveTDN, which snapshots the fingerprint after every export.
+            # saveTDN, which snapshots the fingerprint after every export.
             self._storeTDNFingerprint(oper)
             self.Log(f"Added TDXN '{oper.path}'", "SUCCESS")
 
@@ -6721,7 +6721,7 @@ class EmbodyExt:
         file already uses, or they silently migrate it. See
         _trackedTDNSuffix.
         """
-        ext_folder = self.ExternalizationsFolder
+        ext_folder = self.externalizationsFolder
         parent_path = str(oper.parent().path).strip('/')
         parts = [p for p in parent_path.split('/') if p]
 
@@ -6986,7 +6986,7 @@ class EmbodyExt:
             #   strip, or crash during the strip/restore cycle)
             # - Missing: COMP was deleted entirely (e.g., crash before
             #   post-save restore, or .toe opened without reconstruction)
-            # Their children will be restored by ReconstructTDNComps(),
+            # Their children will be restored by reconstructTDNComps(),
             # so we must skip ALL their entries (even individually-
             # externalized ones like .py files) to prevent false removals.
             stripped_tdn_paths = set()
@@ -7069,7 +7069,7 @@ class EmbodyExt:
                 existing_op = op(old_op_path)
 
                 if existing_op:
-                    # Verify this is actually the SAME operator (not a different one at same path)
+                    # verify this is actually the SAME operator (not a different one at same path)
                     # by checking if externaltox matches what we expect
                     current_ext_path = self.getExternalPath(existing_op)
 
@@ -7081,7 +7081,7 @@ class EmbodyExt:
                         # every .tdn file (bumping every mtime), and continuity then
                         # propagated those bumps into every TSV row even when content
                         # was unchanged. The timestamp now reflects only explicit
-                        # Save/SaveTDN/rename events.
+                        # Save/saveTDN/rename events.
                         pass
                     else:
                         # Different operator at this path! The original was likely moved.
@@ -7138,7 +7138,7 @@ class EmbodyExt:
         try:
             comp.par.externaltox.expr = ''
             comp.par.externaltox = ''
-            self.Log(f"Reset externaltox for '{comp.path}'", "SUCCESS")
+            self.Log(f"reset externaltox for '{comp.path}'", "SUCCESS")
         except Exception as e:
             self.Log(f"Error resetting '{comp.path}'", "ERROR", str(e))
 
@@ -7299,7 +7299,7 @@ class EmbodyExt:
         if oper.family != 'COMP':
             return
             
-        save_file_path = self.getOpPaths(oper, self.ExternalizationsFolder)[1]
+        save_file_path = self.getOpPaths(oper, self.externalizationsFolder)[1]
         try:
             last_modified = int(Path(save_file_path).stat().st_mtime)
             last_modified_utc = datetime.utcfromtimestamp(last_modified)
@@ -7497,7 +7497,7 @@ class EmbodyExt:
             if new_child:
                 self.updateMovedOp(
                     new_child, child_path, child_rel_file,
-                    self.ExternalizationsFolder)
+                    self.externalizationsFolder)
             else:
                 # Child no longer exists at expected new path -- remove stale row
                 self._handleMissingOperator(child_path, child_rel_file)
@@ -7538,7 +7538,7 @@ class EmbodyExt:
             return None
         ancestor_path = common[:slash_pos]
 
-        # 3. Verify the ancestor COMP no longer exists at old path
+        # 3. verify the ancestor COMP no longer exists at old path
         if op(ancestor_path):
             return None
 
@@ -7574,14 +7574,14 @@ class EmbodyExt:
             return None
         new_prefix = new_op.path[:-len(suffix)] if suffix else new_op.path
 
-        # 6. Verify ALL missing ops exist at new_prefix + their suffix
+        # 6. verify ALL missing ops exist at new_prefix + their suffix
         for old_path, _, _, _ in missing:
             old_suffix = old_path[len(ancestor_path):]
             expected_new = new_prefix + old_suffix
             if not op(expected_new):
                 return None
 
-        # 7. Verify no present ops are under the old prefix
+        # 7. verify no present ops are under the old prefix
         #    (if some ops under the prefix still exist, not a clean rename)
         for p in present:
             if p.startswith(ancestor_path + '/'):
@@ -7606,7 +7606,7 @@ class EmbodyExt:
         old_dir_segment = old_prefix.strip('/')
         new_dir_segment = new_prefix.strip('/')
 
-        # Include ExternalizationsFolder prefix for disk path operations
+        # Include externalizationsFolder prefix for disk path operations
         if externalizationsFolder:
             old_disk_segment = externalizationsFolder + '/' + old_dir_segment
             new_disk_segment = externalizationsFolder + '/' + new_dir_segment
@@ -7780,7 +7780,7 @@ class EmbodyExt:
         for i in range(1, self.Externalizations.numRows):
             if (self._cellVal(i, 'path') == old_op_path
                     and self.normalizePath(self._cellVal(i, 'rel_file_path')) == normalized):
-                self.RemoveListerRow(old_op_path, old_rel_file_path,
+                self.removeListerRow(old_op_path, old_rel_file_path,
                                      delete_file=delete_file)
                 break
 
@@ -8485,7 +8485,7 @@ class EmbodyExt:
     # TAGGING UI
     # ==========================================================================
 
-    def TagGetter(self) -> None:
+    def tagGetter(self) -> None:
         """Open tagging menu for rollover operator."""
         if self._performMode:
             return
@@ -8513,7 +8513,7 @@ class EmbodyExt:
             switch.par.index = 1
             active_tag = self._getActiveDATTag(oper)
             if active_tag:
-                run(lambda: self.SetupTaggerDATManageMode(oper, active_tag), delayFrames=1)
+                run(lambda: self.setupTaggerDATManageMode(oper, active_tag), delayFrames=1)
                 run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
                 return
         elif oper.family == 'COMP':
@@ -8521,11 +8521,11 @@ class EmbodyExt:
             tox_tag = self.my.par.Toxtag.val
             tdn_tag = self.my.par.Tdntag.val
             if tox_tag in oper.tags:
-                run(lambda: self.SetupTaggerManageMode(oper, 'TOX_'), delayFrames=1)
+                run(lambda: self.setupTaggerManageMode(oper, 'TOX_'), delayFrames=1)
                 run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
                 return
             elif tdn_tag in oper.tags:
-                run(lambda: self.SetupTaggerManageMode(oper, 'TDN_'), delayFrames=1)
+                run(lambda: self.setupTaggerManageMode(oper, 'TDN_'), delayFrames=1)
                 run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
                 return
         else:
@@ -8535,10 +8535,10 @@ class EmbodyExt:
             return
 
         # Untagged operator -- show tag selection
-        run(lambda: self.SetupTaggerTagMode(oper), delayFrames=1)
+        run(lambda: self.setupTaggerTagMode(oper), delayFrames=1)
         run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
 
-    def SetupTagger(self, oper: OP) -> None:
+    def setupTagger(self, oper: OP) -> None:
         """Configure tagger button colors."""
         params = self.tagger.op('tags')
 
@@ -8553,7 +8553,7 @@ class EmbodyExt:
         """Generate alternating color expression."""
         return f'{color_ref} if me.digits % 2 else {color_ref} - 0.05'
 
-    def SetupTaggerManageMode(self, oper: OP, strategy_state: str) -> None:
+    def setupTaggerManageMode(self, oper: OP, strategy_state: str) -> None:
         """Configure tagger for manage mode on an already-tagged COMP.
 
         Shows Switch/Remove buttons for tox/tdn plus Save.
@@ -8567,7 +8567,7 @@ class EmbodyExt:
             switch.par.index = 2
 
         # Keep replicated tag buttons visible and highlight active tag
-        self.SetupTagger(oper)
+        self.setupTagger(oper)
 
         # Set dynamic labels on tag buttons based on current strategy
         is_tox = strategy_state.startswith('TOX_')
@@ -8685,7 +8685,7 @@ class EmbodyExt:
         visible_count = 6 + (3 if embed_visible else 0) + (1 if rel_fp else 0)
         self.tagger.store('visible_count', visible_count)
 
-    def SetupTaggerDATManageMode(self, oper: OP, active_tag: str) -> None:
+    def setupTaggerDATManageMode(self, oper: OP, active_tag: str) -> None:
         """Configure tagger for manage mode on an already-tagged DAT.
 
         Shows Convert to <format> options, Remove, and Reveal in Finder.
@@ -8698,7 +8698,7 @@ class EmbodyExt:
         if switch:
             switch.par.index = 1
 
-        self.SetupTagger(oper)
+        self.setupTagger(oper)
 
         # COMP tags that should not appear as "Convert to" options for DATs
         comp_tags = {self.my.par.Toxtag.val, self.my.par.Tdntag.val}
@@ -8778,12 +8778,12 @@ class EmbodyExt:
         if panel is None or oper is None:
             return
         panel.store('omit_target', oper.path)
-        self.RefreshOmitPanel()
+        self.refreshOmitPanel()
         win = self.my.op('window_omit')
         if win:
             win.par.winopen.pulse()
 
-    def RefreshOmitPanel(self) -> None:
+    def refreshOmitPanel(self) -> None:
         """Rebuild the omit panel's subtree listing from live tags.
 
         Rows land in panel storage as [op_path, label, par_name]; the
@@ -8846,7 +8846,7 @@ class EmbodyExt:
         if tag and tag in o.tags:
             o.tags.remove(tag)
             self.Log(f'{o.path}: removed {self._tagLabel(tag)}', 'INFO')
-        self.RefreshOmitPanel()
+        self.refreshOmitPanel()
 
     def OmitPanelDrop(self, items) -> None:
         """Toggle exclusion tags for items dropped on the panel's drop
@@ -8920,9 +8920,9 @@ class EmbodyExt:
                             f'{item.path} is not a direct child of '
                             f'{target.path} -- the exclusion is only '
                             f'honored at a TDXN boundary', 'WARNING')
-        self.RefreshOmitPanel()
+        self.refreshOmitPanel()
 
-    def SetupTaggerTagMode(self, oper: OP) -> None:
+    def setupTaggerTagMode(self, oper: OP) -> None:
         """Restore tagger to tag selection mode, then set up colors."""
         self._tagger_mode = 'tag'
 
@@ -8992,7 +8992,7 @@ class EmbodyExt:
         self.tagger.store('visible_count', visible_count + 1)
 
         # Delegate to existing color setup
-        self.SetupTagger(oper)
+        self.setupTagger(oper)
 
     def TagSetter(self, oper: OP, tag: str) -> bool:
         """Toggle a tag on an operator. Enforces mutual exclusivity."""
@@ -9027,7 +9027,7 @@ class EmbodyExt:
                     if existing in dat_tags:
                         oper.tags.remove(existing)
                         rel_file_path = self.getExternalPath(oper)
-                        self.RemoveListerRow(oper.path, rel_file_path)
+                        self.removeListerRow(oper.path, rel_file_path)
                         oper.par.file = ''
                         oper.par.file.readOnly = False
                         break
@@ -9043,7 +9043,7 @@ class EmbodyExt:
             if oper.family == 'COMP':
                 if tag == self.my.par.Toxtag.val:
                     rel_file_path = self.getExternalPath(oper)
-                    self.RemoveListerRow(oper.path, rel_file_path,
+                    self.removeListerRow(oper.path, rel_file_path,
                                          delete_file=delete_file)
                     oper.par.externaltox = ''
                     oper.par.externaltox.readOnly = False
@@ -9052,7 +9052,7 @@ class EmbodyExt:
                                             delete_file=delete_file)
             elif oper.family == 'DAT':
                 rel_file_path = self.getExternalPath(oper)
-                self.RemoveListerRow(oper.path, rel_file_path,
+                self.removeListerRow(oper.path, rel_file_path,
                                      delete_file=delete_file)
                 oper.par.file = ''
                 oper.par.file.readOnly = False
@@ -9100,7 +9100,7 @@ class EmbodyExt:
         oper.tags.discard(tag)
         if tag == self.my.par.Toxtag.val:
             rel_file_path = self.getExternalPath(oper)
-            self.RemoveListerRow(oper.path, rel_file_path,
+            self.removeListerRow(oper.path, rel_file_path,
                                  delete_file=delete_file)
             oper.par.externaltox = ''
             oper.par.externaltox.readOnly = False
@@ -9245,7 +9245,7 @@ class EmbodyExt:
         a utility annotate still resolve, only the node itself does not).
 
         Removal primitives must use this: with bare op() returning None,
-        RemoveListerRow / RemoveTDNEntry dropped the table row but never
+        removeListerRow / removeTDNEntry dropped the table row but never
         stripped the operator's tag, colour, or _tdn_rel_path breadcrumb,
         so the next Refresh sweep resurrected the row -- the silent no-op
         reported against v6.0.157. Returns None when the path genuinely
@@ -9380,7 +9380,7 @@ class EmbodyExt:
                     if existing in dat_tags:
                         oper.tags.remove(existing)
                         rel_file_path = self.getExternalPath(oper)
-                        self.RemoveListerRow(oper.path, rel_file_path)
+                        self.removeListerRow(oper.path, rel_file_path)
                         oper.par.file = ''
                         oper.par.file.readOnly = False
                         self.Log(f"Removed existing '{existing}' tag from '{oper.path}' (replaced by '{tag}')", "INFO")
@@ -9409,7 +9409,7 @@ class EmbodyExt:
     # AUTO-EXTERNALIZATION (Envoy-created ops)
     # ==========================================================================
 
-    def AutoExternalizeNewOp(self, oper: OP) -> Optional[str]:
+    def autoExternalizeNewOp(self, oper: OP) -> Optional[str]:
         """Auto-tag a newly Envoy-created op for externalization, per the
         'Autoexternalize' preference on the Envoy page.
 
@@ -9455,12 +9455,12 @@ class EmbodyExt:
             self.Log(f"Auto-externalized {oper.family} '{oper.path}' ({tag})", "INFO")
             return tag
         except Exception as e:
-            self.Log(f"AutoExternalizeNewOp failed for "
+            self.Log(f"autoExternalizeNewOp failed for "
                      f"{getattr(oper, 'path', '?')}: {e}", "WARNING")
             return None
 
     def _autoExternalizeTagFor(self, oper: OP) -> Optional[str]:
-        """Pure decision behind AutoExternalizeNewOp: the tag that WOULD be
+        """Pure decision behind autoExternalizeNewOp: the tag that WOULD be
         applied to a newly-created `oper` under the current 'Autoexternalize'
         preference, or None if the op should be skipped. No side effects -- the
         whole boundary matrix is unit-testable without any file I/O.
@@ -9547,7 +9547,7 @@ class EmbodyExt:
             return
         self.Update()
 
-    def AutoExternalizeCopiedOp(self, oper: OP) -> Optional[str]:
+    def autoExternalizeCopiedOp(self, oper: OP) -> Optional[str]:
         """Auto-externalize a COPIED op (copy_op), per the Autoexternalize
         preference. A copy made with COMP.copy() inherits the SOURCE's
         externalization tags -- and a copied DAT inherits its `file` par pointing
@@ -9569,9 +9569,9 @@ class EmbodyExt:
             if oper.family not in ('COMP', 'DAT'):
                 return None
             self._resetInheritedExternalization(oper)
-            return self.AutoExternalizeNewOp(oper)
+            return self.autoExternalizeNewOp(oper)
         except Exception as e:
-            self.Log(f"AutoExternalizeCopiedOp failed for "
+            self.Log(f"autoExternalizeCopiedOp failed for "
                      f"{getattr(oper, 'path', '?')}: {e}", "WARNING")
             return None
 
@@ -9618,7 +9618,7 @@ class EmbodyExt:
         self.my.op('list/list_callbacks').module.clearActiveStrategy()
         self.lister.reset()
 
-    def HandleStrategySwitch(self, oper: OP) -> None:
+    def handleStrategySwitch(self, oper: OP) -> None:
         """Switch a COMP between TOX and TDXN strategies."""
         tox_tag = self.my.par.Toxtag.val
         tdn_tag = self.my.par.Tdntag.val
@@ -9647,14 +9647,14 @@ class EmbodyExt:
             # automatic writers refuse that shape as data loss).
             self.Save(oper.path, allow_empty=True)
         elif tdn_tag in oper.tags:
-            self.SaveTDN(oper.path, allow_empty=True)
+            self.saveTDN(oper.path, allow_empty=True)
         else:
             # Fallback: check externalizations table for untagged COMPs (e.g. root)
             strategy = self._getCompStrategy(oper)
             if strategy == 'tox':
                 self.Save(oper.path, allow_empty=True)
             elif strategy == 'tdn':
-                self.SaveTDN(oper.path, allow_empty=True)
+                self.saveTDN(oper.path, allow_empty=True)
 
         self.Refresh()
 
@@ -9864,11 +9864,11 @@ class EmbodyExt:
         tdn_tag = self.my.par.Tdntag.val
 
         if tdn_tag in oper.tags:
-            # RemoveTDNEntry strips the tags itself (issue #48)
-            self.RemoveTDNEntry(oper.path)
+            # removeTDNEntry strips the tags itself (issue #48)
+            self.removeTDNEntry(oper.path)
         elif tox_tag in oper.tags:
             rel_fp = self.getExternalPath(oper)
-            self.RemoveListerRow(oper.path, rel_fp)
+            self.removeListerRow(oper.path, rel_fp)
             oper.tags.discard(tox_tag)
             oper.par.externaltox = ''
             oper.par.externaltox.readOnly = False
@@ -9876,13 +9876,13 @@ class EmbodyExt:
             active_tag = self._getActiveDATTag(oper)
             if active_tag:
                 rel_fp = self.getExternalPath(oper)
-                self.RemoveListerRow(oper.path, rel_fp)
+                self.removeListerRow(oper.path, rel_fp)
                 oper.tags.discard(active_tag)
                 oper.par.file = ''
                 oper.par.file.readOnly = False
         elif self._getStrategyFilePath(oper.path, 'tdn'):
             # Table-only TDXN entry (e.g., Full Project export) -- no tag on operator
-            self.RemoveTDNEntry(oper.path)
+            self.removeTDNEntry(oper.path)
 
         self.resetOpColor(oper)
         self.Refresh()
@@ -9903,11 +9903,11 @@ class EmbodyExt:
         if 'Remove' in label:
             self.HandleStrategyRemove(oper)
         elif 'Convert to' in label:
-            self.HandleDATConvert(oper, tag)
+            self.handleDATConvert(oper, tag)
         else:
-            self.HandleStrategySwitch(oper)
+            self.handleStrategySwitch(oper)
 
-    def HandleDATConvert(self, oper: OP, new_tag: str) -> None:
+    def handleDATConvert(self, oper: OP, new_tag: str) -> None:
         """Convert a DAT's externalization to a different format."""
         self.applyTagToOperator(oper, new_tag)
         if new_tag in oper.tags:
@@ -9952,7 +9952,7 @@ class EmbodyExt:
                 if is_tox:
                     self.Save(oper.path)
                 elif is_tdn:
-                    self.SaveTDN(oper.path)
+                    self.saveTDN(oper.path)
                 # DATs use syncfile -- no explicit save needed
                 return
 
@@ -9963,7 +9963,7 @@ class EmbodyExt:
     # PROJECT-WIDE EXTERNALIZATION
     # ==========================================================================
 
-    def ExternalizeProject(self) -> None:
+    def externalizeProject(self) -> None:
         """Externalize all compatible COMPs and DATs in project."""
         if self._performMode:
             return
@@ -10023,7 +10023,7 @@ class EmbodyExt:
                     continue
                 self.applyTagToOperator(oper, comp_tag)
 
-        self.UpdateHandler()
+        self.updateHandler()
 
         # Export project-wide TDXN snapshot if requested
         if export_project_tdn:
@@ -10034,7 +10034,7 @@ class EmbodyExt:
         """Check if operator should be skipped in project externalization.
 
         The exclude tag is honored for the WHOLE tagged subtree (ancestry
-        walk, issue #60): ExternalizeProject iterates a flat findChildren,
+        walk, issue #60): externalizeProject iterates a flat findChildren,
         so an own-tag-only check would still tag every untagged descendant
         inside an excluded tree.
         """
@@ -10057,7 +10057,7 @@ class EmbodyExt:
     # LISTER ROW REMOVAL
     # ==========================================================================
 
-    def RemoveListerRow(self, op_path: str, rel_file_path: str, delete_file: bool = True) -> None:
+    def removeListerRow(self, op_path: str, rel_file_path: str, delete_file: bool = True) -> None:
         """
         Remove an operator from externalization tracking.
         SAFETY: Only deletes the file if it's tracked by Embody and not referenced elsewhere.
@@ -10172,17 +10172,17 @@ class EmbodyExt:
         
         return False
 
-    def RemoveTDNEntry(self, op_path: str, delete_file: bool = True) -> None:
+    def removeTDNEntry(self, op_path: str, delete_file: bool = True) -> None:
         """Remove a TDXN strategy entry and delete the .tdn file from disk.
 
         Also strips the operator's externalization tags, clears the
         `_tdn_rel_path` recovery breadcrumb, resets its color, and drops
-        its parameter-tracker entry (mirroring RemoveListerRow).
+        its parameter-tracker entry (mirroring removeListerRow).
         Leaving the tdn tag in place turns removal into resurrection: the
         Update sweep that runs on every save re-externalizes any
         tagged-but-untracked COMP, restoring the row and .tdn file the user
         just deleted (issue #48). The breadcrumb must go for the same
-        reason: ReconcileMetadata and RecoverOrphanShells treat it as
+        reason: reconcileMetadata and recoverOrphanShells treat it as
         tracking truth and would resurrect the row from it. Tolerates a
         missing operator -- Full Project entries track paths (e.g. '/')
         that carry no tag.
@@ -10193,10 +10193,10 @@ class EmbodyExt:
                 lister X button keeps the default True).
         """
         try:
-            # Utility-aware -- see RemoveListerRow. A legacy row AT a utility
+            # Utility-aware -- see removeListerRow. A legacy row AT a utility
             # annotate resolved to None here, so the tag and the
             # _tdn_rel_path breadcrumb survived the removal and
-            # ReconcileMetadata / RecoverOrphanShells rebuilt the row.
+            # reconcileMetadata / recoverOrphanShells rebuilt the row.
             oper = self.resolveOpIncludingUtility(op_path)
             if oper:
                 for tag in self.getTags():
@@ -10214,7 +10214,7 @@ class EmbodyExt:
     # TDXN RECONSTRUCTION ON START
     # ==========================================================================
 
-    def ReconstructTDNComps(self) -> None:
+    def reconstructTDNComps(self) -> None:
         """Reconstruct all TDXN-strategy COMPs from .tdn files on project open."""
         # Convoy: registration lives in ConvoyExt's tick, which starts at
         # extension CONSTRUCTION -- and TD constructs extensions lazily. In
@@ -10364,7 +10364,7 @@ class EmbodyExt:
             # (clean) network so the dirty indicator is accurate from project
             # open, rather than being set lazily by the first scan -- which
             # would absorb any edit made before it and wrongly read clean.
-            # Mirrors _handleTDNAddition and SaveTDN (both snapshot here).
+            # Mirrors _handleTDNAddition and saveTDN (both snapshot here).
             self.param_tracker.updateParamStore(comp)
             self._storeTDNFingerprint(comp)
 
@@ -10412,7 +10412,7 @@ class EmbodyExt:
         missing.sort(key=lambda m: m[0].count('/'))
         recovered = 0
         for comp_path, abs_path in missing:
-            # Same per-row re-check as ReconstructTDNComps: a parent import
+            # Same per-row re-check as reconstructTDNComps: a parent import
             # earlier in this pass may have just recreated the annotate this
             # legacy row points into -- never import into its widget.
             if self._isAnnotateInteriorPath(comp_path):
@@ -10466,7 +10466,7 @@ class EmbodyExt:
                      f'from .tdn (crash-before-save)', 'SUCCESS')
         return recovered
 
-    def RecoverOrphanShells(self, auto: bool = False) -> dict:
+    def recoverOrphanShells(self, auto: bool = False) -> dict:
         """Detect and restore TDXN-tagged empty COMPs that lost their table row.
 
         The externalizations table is the single driver of reconstruction: a
@@ -10480,7 +10480,7 @@ class EmbodyExt:
 
         Additive and consent-gated: only empty, tagged, untracked, non-excluded
         COMPs qualify; nothing with content is ever touched. Runs on project
-        open after ReconcileMetadata.
+        open after reconcileMetadata.
 
         Args:
             auto: True restores without prompting (tests / headless callers).
@@ -10626,7 +10626,7 @@ class EmbodyExt:
     # Params visible only in 'full' mode (strip/reconstruction concepts).
     _TDN_FULL_ONLY_PARAMS = {'Tdnstriponsave', 'Tdncreateonstart'}
 
-    def MigrateToTDXN(self, auto: bool = False, dry_run: bool = False,
+    def migrateToTDXN(self, auto: bool = False, dry_run: bool = False,
                       scope: str = None) -> dict:
         """Opt-in, one-time conversion of tracked .tdn files to .tdxn.
 
@@ -10838,7 +10838,7 @@ class EmbodyExt:
                                      strategy='tdn')
                 target = op(op_path)
                 if target is not None and target.valid:
-                    # RecoverOrphanShells chases this breadcrumb; a stale one
+                    # recoverOrphanShells chases this breadcrumb; a stale one
                     # points at a file that no longer exists.
                     target.store('_tdn_rel_path', new_rel)
             except Exception as e:
@@ -11723,7 +11723,7 @@ class EmbodyExt:
             f'Dropping {total} TDXN storage entr{"y" if total == 1 else "ies"} '
             f'on save (Embed Storage OFF): {shown}', 'SUCCESS')
 
-    def StripCompChildren(self, comp: OP) -> int:
+    def stripCompChildren(self, comp: OP) -> int:
         """Remove children from a TDXN-strategy COMP (for smaller .toe).
 
         Destroys both regular children and utility operators (annotations).
@@ -11839,7 +11839,7 @@ class EmbodyExt:
                                comp_type_override: str = None) -> 'OP | None':
         """Create a missing COMP that was tagged but not saved in the .toe.
 
-        Used by both ReconstructTDNComps and RestoreTOXComps when a tracked
+        Used by both reconstructTDNComps and restoreTOXComps when a tracked
         COMP doesn't exist on project open.
 
         Args:
@@ -11935,7 +11935,7 @@ class EmbodyExt:
     # METADATA RECONCILIATION ON START
     # ==========================================================================
 
-    def ReconcileMetadata(self) -> None:
+    def reconcileMetadata(self) -> None:
         """Re-apply tags, colors, and file parameters from the externalizations table.
 
         Handles the case where the user tagged operators (writing to the table
@@ -11972,7 +11972,7 @@ class EmbodyExt:
 
             oper = op(path)
             if oper is None:
-                continue  # Missing ops handled by RestoreTOXComps / ReconstructTDNComps
+                continue  # Missing ops handled by restoreTOXComps / reconstructTDNComps
 
             # Determine expected tag from strategy
             if strategy == 'tox':
@@ -12025,7 +12025,7 @@ class EmbodyExt:
                             f'.tox missing on disk: {rel_file_path}')
                     # The tag goes on AFTER the pulse: the reload replaces
                     # the COMP from disk, and a tag added before it does
-                    # not survive (same reasoning as RestoreTOXComps'
+                    # not survive (same reasoning as restoreTOXComps'
                     # post-load re-tag).
                     oper.par.externaltox.readOnly = False
                     oper.par.externaltox = rel_file_path
@@ -12074,7 +12074,7 @@ class EmbodyExt:
     # TOX RESTORATION ON START
     # ==========================================================================
 
-    def RestoreTOXComps(self) -> None:
+    def restoreTOXComps(self) -> None:
         """Restore missing TOX-strategy COMPs from .tox files on project open.
 
         For each TOX-strategy entry in the externalizations table where the
@@ -12115,7 +12115,7 @@ class EmbodyExt:
                          f'(loaded from parent .tox)', 'INFO')
                 continue
 
-            # Verify parent exists
+            # verify parent exists
             parent_path = comp_path.rsplit('/', 1)[0] or '/'
             parent_op = op(parent_path)
             if not parent_op:
@@ -12297,7 +12297,7 @@ class EmbodyExt:
     # DAT RESTORATION ON START
     # ==========================================================================
 
-    def RestoreDATs(self) -> None:
+    def restoreDATs(self) -> None:
         """Restore missing DATs from externalized files on project open.
 
         For each DAT-strategy entry in the externalizations table where the
@@ -12341,7 +12341,7 @@ class EmbodyExt:
                          f'(loaded from parent)', 'INFO')
                 continue
 
-            # Verify parent exists and is a COMP
+            # verify parent exists and is a COMP
             parent_path = dat_path.rsplit('/', 1)[0] or '/'
             parent_op = op(parent_path)
             if not parent_op:
@@ -12417,7 +12417,7 @@ class EmbodyExt:
 
         Never includes Embody itself or its descendants.
         Excludes DATs inside TOX-strategy or TDXN-strategy COMPs
-        (those are handled by RestoreTOXComps / ReconstructTDNComps).
+        (those are handled by restoreTOXComps / reconstructTDNComps).
         """
         table = self.Externalizations
         if not table:
@@ -12531,7 +12531,7 @@ class EmbodyExt:
     # UI HELPERS
     # ==========================================================================
 
-    def DirtyCount(self) -> int:
+    def dirtyCount(self) -> int:
         """Return the number of dirty externalized operators.
 
         For TOX-strategy COMPs, checks live oper.dirty (TD's native dirty flag
@@ -12540,10 +12540,10 @@ class EmbodyExt:
 
         For TDXN-strategy COMPs, oper.dirty is ALWAYS True (their externaltox is
         empty), so it is meaningless -- the fingerprint-derived runtime
-        DirtyState maintained by dirtyHandler is authoritative. Using
+        dirtyState maintained by dirtyHandler is authoritative. Using
         oper.dirty here counted every clean TDXN COMP as dirty.
 
-        For DATs and missing operators, uses the runtime DirtyState.
+        For DATs and missing operators, uses the runtime dirtyState.
         """
         if self._performMode:
             return 0
@@ -12554,7 +12554,7 @@ class EmbodyExt:
         for i in range(1, table.numRows):
             op_path = str(self._cellVal(i, 'path'))
             oper = op(op_path)
-            val = self.DirtyState(op_path)
+            val = self.dirtyState(op_path)
             if oper and oper.valid and oper.family == 'COMP':
                 # TDXN COMPs: oper.dirty is always True -- trust the table.
                 if self._cellVal(i, 'strategy') == 'tdn':
@@ -12571,7 +12571,7 @@ class EmbodyExt:
                 count += 1
         return count
 
-    def Manager(self, action: str) -> None:
+    def manager(self, action: str) -> None:
         """Open or close the manager window."""
         win = self.my.op('window_manager')
         if action == 'open':
@@ -12581,7 +12581,7 @@ class EmbodyExt:
             win.par.winclose.pulse()
 
     def resetOpColor(self, oper: OP) -> None:
-        """Reset operator to Embody's default node color.
+        """reset operator to Embody's default node color.
 
         Annotations are exempt. Making the removal primitives utility-aware
         newly exposed annotateCOMPs to this call (bare op() used to return
@@ -12605,7 +12605,7 @@ class EmbodyExt:
             return self.my.par.Folder.eval()
         return project.folder + '/' + self.my.par.Folder
 
-    def OpenSaveFolder(self) -> None:
+    def openSaveFolder(self) -> None:
         """Open externalization folder in file browser."""
         save_folder = str(Path(self.getSaveFolder()).resolve())
 
@@ -12641,7 +12641,7 @@ class EmbodyExt:
         except Exception as e:
             self.Log(f'Failed to open file location: {e}', 'ERROR')
 
-    def LaunchAIClient(self) -> None:
+    def launchAIClient(self) -> None:
         """Open the AI client selected in the Aiclient menu at the project root.
 
         Editors (Cursor, Windsurf; Copilot -> VS Code) open the root as a
@@ -12678,15 +12678,15 @@ class EmbodyExt:
         """Open a new terminal at cwd running <cli> -- see embody_launch."""
         return mod.embody_launch.launch_terminal(self, cwd, cli, install)
 
-    def OpenTable(self) -> None:
+    def openTable(self) -> None:
         """Open externalizations table viewer."""
         self.Externalizations.openViewer()
 
-    def MissingExternalizationsPar(self) -> None:
+    def missingExternalizationsPar(self) -> None:
         """Log error for missing externalizations table."""
         self.Log("Missing Externalization tableDAT - required for operation", "ERROR")
 
-    def ImportTDNFromDialog(self) -> None:
+    def importTDNFromDialog(self) -> None:
         """Open file dialog and import selected .tdn file.
 
         Auto-detects the target COMP from the file's location relative to

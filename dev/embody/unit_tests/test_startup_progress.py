@@ -1021,7 +1021,7 @@ class TestTheReadoutIsFedAndRedrawn(EmbodyTestCase):
         for the whole session.
         """
         source = self._source(_EXECUTE)
-        self.assertEqual(source.count('SeedAutosaveStatus'), 2,
+        self.assertEqual(source.count('seedAutosaveStatus'), 2,
                          'both onStart and onCreate must seed the row')
 
     def test_the_seed_exists_and_redraws_what_it_wrote(self):
@@ -1029,7 +1029,7 @@ class TestTheReadoutIsFedAndRedrawn(EmbodyTestCase):
         not watching yet at frame 0, so this write has to announce itself
         or the seeded row is not drawn until the next unrelated event."""
         tree = self._tree(_EMBODY_EXT)
-        seed = self._func(tree, 'SeedAutosaveStatus')
+        seed = self._func(tree, 'seedAutosaveStatus')
         self.assertTrue(self._calls(seed, '_setAutosaveStatus'),
                         'the seed writes nothing')
         self.assertTrue(self._calls(seed, '_republishStatusPanel'),

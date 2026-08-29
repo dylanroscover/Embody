@@ -155,7 +155,7 @@ class TestRemoveTDNEntry(EmbodyTestCase):
     def test_remove_tdn_entry_strips_tag(self):
         """REGRESSION (issue #48): RemoveTDNEntry must strip the tdn tag."""
         comp, tdn_tag = self._externalizedTDN('x_strip_tag')
-        self.embody_ext.RemoveTDNEntry(comp.path)
+        self.embody_ext.removeTDNEntry(comp.path)
         self.assertNotIn(tdn_tag, comp.tags,
             'RemoveTDNEntry must strip the tdn tag or the next Update '
             'sweep resurrects the externalization')
@@ -163,7 +163,7 @@ class TestRemoveTDNEntry(EmbodyTestCase):
     def test_remove_tdn_entry_removes_row(self):
         """RemoveTDNEntry must delete the tracking row."""
         comp, _ = self._externalizedTDN('x_remove_row')
-        self.embody_ext.RemoveTDNEntry(comp.path)
+        self.embody_ext.removeTDNEntry(comp.path)
         rows = [self.embody_ext.Externalizations[i, 'path'].val
                 for i in range(1, self.embody_ext.Externalizations.numRows)]
         self.assertNotIn(comp.path, rows)
@@ -171,7 +171,7 @@ class TestRemoveTDNEntry(EmbodyTestCase):
     def test_remove_tdn_entry_resets_color(self):
         """RemoveTDNEntry must reset the operator color to default."""
         comp, _ = self._externalizedTDN('x_reset_color')
-        self.embody_ext.RemoveTDNEntry(comp.path)
+        self.embody_ext.removeTDNEntry(comp.path)
         default_color = (0.55, 0.55, 0.55)
         close = all(abs(a - b) < 0.02
                     for a, b in zip(comp.color, default_color))
@@ -189,7 +189,7 @@ class TestRemoveTDNEntry(EmbodyTestCase):
         self.assertIn(comp.path, candidates,
             'Precondition: tagged comp must be a sweep candidate')
 
-        self.embody_ext.RemoveTDNEntry(comp.path)
+        self.embody_ext.removeTDNEntry(comp.path)
         candidates = [o.path for o in self.embody_ext.getOpsToExternalize(COMP)]
         self.assertNotIn(comp.path, candidates,
             'A removed COMP must not be re-externalized by the next '
@@ -201,7 +201,7 @@ class TestRemoveTDNEntry(EmbodyTestCase):
         Full Project entries track paths (e.g. '/') that carry no tag, and
         stale rows can outlive their operators.
         """
-        self.embody_ext.RemoveTDNEntry('/nonexistent_issue48_probe')
+        self.embody_ext.removeTDNEntry('/nonexistent_issue48_probe')
 
     def test_remove_tdn_entry_clears_breadcrumb(self):
         """REGRESSION (2026-07-24): must unstore the _tdn_rel_path breadcrumb.
@@ -211,7 +211,7 @@ class TestRemoveTDNEntry(EmbodyTestCase):
         """
         comp, _ = self._externalizedTDN('x_breadcrumb')
         comp.store('_tdn_rel_path', 'embody/fake_breadcrumb.tdn')
-        self.embody_ext.RemoveTDNEntry(comp.path)
+        self.embody_ext.removeTDNEntry(comp.path)
         self.assertIsNone(comp.fetch('_tdn_rel_path', None, search=False),
             'RemoveTDNEntry must clear the _tdn_rel_path breadcrumb')
 
@@ -222,7 +222,7 @@ class TestRemoveTDNEntry(EmbodyTestCase):
         non-destructively; only the lister X button deletes by default.
         """
         comp, tdn_tag = self._externalizedTDN('x_keep_file')
-        self.embody_ext.RemoveTDNEntry(comp.path, delete_file=False)
+        self.embody_ext.removeTDNEntry(comp.path, delete_file=False)
         self.assertNotIn(tdn_tag, comp.tags)
         rows = [self.embody_ext.Externalizations[i, 'path'].val
                 for i in range(1, self.embody_ext.Externalizations.numRows)]
@@ -249,7 +249,7 @@ class TestHandleStrategySwitch(EmbodyTestCase):
         tdn_tag = self.embody.par.Tdntag.val
         self.embody_ext.applyTagToOperator(comp, tox_tag)
 
-        self.embody_ext.HandleStrategySwitch(comp)
+        self.embody_ext.handleStrategySwitch(comp)
         self.assertNotIn(tox_tag, comp.tags)
         self.assertIn(tdn_tag, comp.tags)
 
@@ -260,7 +260,7 @@ class TestHandleStrategySwitch(EmbodyTestCase):
         tdn_tag = self.embody.par.Tdntag.val
         self.embody_ext.applyTagToOperator(comp, tdn_tag)
 
-        self.embody_ext.HandleStrategySwitch(comp)
+        self.embody_ext.handleStrategySwitch(comp)
         self.assertNotIn(tdn_tag, comp.tags)
         self.assertIn(tox_tag, comp.tags)
 
@@ -278,15 +278,15 @@ class TestDispatchTaggerButton(EmbodyTestCase):
         # Track whether handlers were called
         self._called = None
         self._original_remove = self.embody_ext.HandleStrategyRemove
-        self._original_switch = self.embody_ext.HandleStrategySwitch
-        self._original_convert = self.embody_ext.HandleDATConvert
+        self._original_switch = self.embody_ext.handleStrategySwitch
+        self._original_convert = self.embody_ext.handleDATConvert
         self._original_exiter = self.embody_ext.TagExiter
 
     def tearDown(self):
         # Restore original methods
         self.embody_ext.HandleStrategyRemove = self._original_remove
-        self.embody_ext.HandleStrategySwitch = self._original_switch
-        self.embody_ext.HandleDATConvert = self._original_convert
+        self.embody_ext.handleStrategySwitch = self._original_switch
+        self.embody_ext.handleDATConvert = self._original_convert
         self.embody_ext.TagExiter = self._original_exiter
         for i in range(self.embody_ext.Externalizations.numRows - 1, 0, -1):
             path = self.embody_ext.Externalizations[i, 'path'].val
@@ -297,8 +297,8 @@ class TestDispatchTaggerButton(EmbodyTestCase):
     def _mock_handlers(self):
         """Replace handlers with tracking stubs."""
         self.embody_ext.HandleStrategyRemove = lambda oper: setattr(self, '_called', 'remove')
-        self.embody_ext.HandleStrategySwitch = lambda oper: setattr(self, '_called', 'switch')
-        self.embody_ext.HandleDATConvert = lambda oper, tag: setattr(self, '_called', 'convert')
+        self.embody_ext.handleStrategySwitch = lambda oper: setattr(self, '_called', 'switch')
+        self.embody_ext.handleDATConvert = lambda oper, tag: setattr(self, '_called', 'convert')
         self.embody_ext.TagExiter = lambda: None
 
     def test_dispatch_remove_tox_label(self):

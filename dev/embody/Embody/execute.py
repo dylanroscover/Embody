@@ -73,7 +73,7 @@ def onStart():
 	# left Autosavestatus at its resting value, and on a project that is
 	# not being edited that is what it stays -- so the row whose whole job
 	# is answering "is my work safe?" would say nothing all session.
-	parent.Embody.ext.Embody.SeedAutosaveStatus()
+	parent.Embody.ext.Embody.seedAutosaveStatus()
 	# Restore settings from .embody/config.json -- recovers user config after
 	# crash, force-quit, or any unsaved session. On normal open where
 	# .toe was saved, values match and this is a no-op.
@@ -92,17 +92,17 @@ def onStart():
 	# enabled but the file is missing (handles upgrades from older versions)
 	run(f"op('{parent.Embody}').ext.Embody._upgradeEnvoy()", delayFrames=30)
 	# Restore missing TOX-strategy COMPs from .tox files on disk
-	run(f"op('{parent.Embody}').RestoreTOXComps()", delayFrames=45)
+	run(f"op('{parent.Embody}').ext.Embody.restoreTOXComps()", delayFrames=45)
 	# Restore missing standalone DATs from externalized files on disk
-	run(f"op('{parent.Embody}').RestoreDATs()", delayFrames=50)
+	run(f"op('{parent.Embody}').ext.Embody.restoreDATs()", delayFrames=50)
 	# Reconstruct TDXN-strategy COMPs from .tdn files
-	run(f"op('{parent.Embody}').ReconstructTDNComps()", delayFrames=60)
+	run(f"op('{parent.Embody}').ext.Embody.reconstructTDNComps()", delayFrames=60)
 	# Reconcile metadata for operators that exist but lost tags/colors/file params
-	run(f"op('{parent.Embody}').ext.Embody.ReconcileMetadata()", delayFrames=75)
+	run(f"op('{parent.Embody}').ext.Embody.reconcileMetadata()", delayFrames=75)
 	# Offer to restore TDXN-tagged empty shells whose table row was lost
 	# (tsv truncation/crash) but whose .tdn survives on disk. Additive +
 	# consent-gated; after ReconcileMetadata so tags are re-applied first.
-	run(f"op('{parent.Embody}').ext.Embody.RecoverOrphanShells()", delayFrames=90)
+	run(f"op('{parent.Embody}').ext.Embody.recoverOrphanShells()", delayFrames=90)
 	# Pin current TD build into .embody/project.json so the Envoy bridge can
 	# pick a matching install on fresh clones (committed; survives git clone).
 	run(f"op('{parent.Embody}').ext.Embody._writeProjectJson()", delayFrames=80)
@@ -119,11 +119,11 @@ def onStart():
 def onCreate():
 	init()
 	# Same seed as onStart -- see there.
-	parent.Embody.ext.Embody.SeedAutosaveStatus()
+	parent.Embody.ext.Embody.seedAutosaveStatus()
 	# Auto-create (or reconnect) the externalizations table before Verify()
-	run(f"op('{parent.Embody}').ext.Embody.CreateExternalizationsTable()", delayFrames=15)
+	run(f"op('{parent.Embody}').ext.Embody.createExternalizationsTable()", delayFrames=15)
 	# Verify handles update-scenario detection and Envoy opt-in
-	run(f"op('{parent.Embody}').Verify()", delayFrames=30)
+	run(f"op('{parent.Embody}').ext.Embody.verify()", delayFrames=30)
 	# Ensure catalogs load on fresh-project drops too, not just onStart.
 	# Delayed past Verify() so the setup dialog isn't fighting the scan.
 	# Skip in Off mode -- see onStart() for rationale.
@@ -419,7 +419,7 @@ def _runPreSaveExternalization():
 	for comp_path, rel_tdn_path in exported_by_depth:
 		comp = op(comp_path)
 		if comp:
-			parent.Embody.ext.Embody.StripCompChildren(comp)
+			parent.Embody.ext.Embody.stripCompChildren(comp)
 	return
 
 def onProjectPostSave():

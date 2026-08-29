@@ -869,7 +869,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		(review finding)."""
 		rel = self.embody_ext._getStrategyFilePath(comp_path, 'tdn')
 		if rel:
-			self.embody_ext.RemoveListerRow(comp_path, rel,
+			self.embody_ext.removeListerRow(comp_path, rel,
 											delete_file=True)
 
 	def test_D10_individual_reload_recurses_into_nested_tdn(self):
@@ -901,7 +901,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			# tdn_ref pointer (its initial export predated the child's
 			# tag).
 			self.assertTrue(
-				self.embody_ext.SaveTDN(parent.path, allow_empty=True))
+				self.embody_ext.saveTDN(parent.path, allow_empty=True))
 
 			child_rel = self.embody_ext._getStrategyFilePath(
 				child.path, 'tdn')
@@ -913,7 +913,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			# revert the file so disk differs from the baseline.
 			child.create(levelTOP, 'extra')
 			self.assertTrue(
-				self.embody_ext.SaveTDN(child.path, allow_empty=True))
+				self.embody_ext.saveTDN(child.path, allow_empty=True))
 			with open(child_abs, 'w', encoding='utf-8', newline='\n') as f:
 				f.write(disk_before_edit)
 
@@ -952,14 +952,14 @@ class TestTDNReconstruction(EmbodyTestCase):
 			for c in list(comp.children):
 				c.destroy()
 			self.assertFalse(
-				self.embody_ext.Checkpoint(comp.path),
+				self.embody_ext.checkpoint(comp.path),
 				'checkpoint of an emptied tracked COMP must refuse')
 			self.assertEqual(
 				os.path.getsize(abs_path), size_before,
 				'the .tdn on disk must be byte-identical after the '
 				'refusal')
 			self.assertTrue(
-				self.embody_ext.SaveTDN(comp.path, allow_empty=True),
+				self.embody_ext.saveTDN(comp.path, allow_empty=True),
 				'an explicit allow_empty save must return True')
 			self.assertNotEqual(
 				os.path.getsize(abs_path), size_before,
@@ -2281,7 +2281,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 			# Run the continuity check - this is what caused file deletion
 			self.embody_ext.checkOpsForContinuity(
-				self.embody_ext.ExternalizationsFolder)
+				self.embody_ext.externalizationsFolder)
 
 			# The child's row must still exist (no own strategy -> skipped)
 			self.assertTrue(self._tableHasRow(child_path),
@@ -2316,7 +2316,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 			# Run continuity check - should detect the deletion
 			self.embody_ext.checkOpsForContinuity(
-				self.embody_ext.ExternalizationsFolder)
+				self.embody_ext.externalizationsFolder)
 
 			# Row must be REMOVED (child had its own strategy)
 			self.assertFalse(self._tableHasRow(child_path),
@@ -2342,7 +2342,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 			# Run continuity check - should detect it as missing
 			self.embody_ext.checkOpsForContinuity(
-				self.embody_ext.ExternalizationsFolder)
+				self.embody_ext.externalizationsFolder)
 
 			# The row should be removed (operator is genuinely missing)
 			self.assertFalse(self._tableHasRow(orphan_path),
@@ -2369,7 +2369,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				c.destroy()
 
 			self.embody_ext.checkOpsForContinuity(
-				self.embody_ext.ExternalizationsFolder)
+				self.embody_ext.externalizationsFolder)
 
 			self.assertTrue(self._tableHasRow(deep_path),
 				'Deeply nested pure TDN-managed children must be skipped')
@@ -2395,7 +2395,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		tdn_doc = export_result['tdn']
 
 		# Strip (like onProjectPreSave)
-		self.embody_ext.StripCompChildren(tdn_comp)
+		self.embody_ext.stripCompChildren(tdn_comp)
 		self.assertEqual(len(tdn_comp.children), 0, 'Strip should remove all children')
 
 		# Restore (like onProjectPostSave)
@@ -2439,7 +2439,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			tdn_doc = export_result['tdn']
 
 			# Phase 2: Strip (like onProjectPreSave)
-			self.embody_ext.StripCompChildren(tdn_comp)
+			self.embody_ext.stripCompChildren(tdn_comp)
 			self.assertEqual(len(tdn_comp.children), 0)
 
 			# Phase 3: Restore (like onProjectPostSave)
@@ -2449,7 +2449,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 			# Phase 4: Continuity check (like the delayed Refresh)
 			self.embody_ext.checkOpsForContinuity(
-				self.embody_ext.ExternalizationsFolder)
+				self.embody_ext.externalizationsFolder)
 
 			# Verify: table entry must survive
 			self.assertTrue(self._tableHasRow(child_path),
@@ -2494,12 +2494,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 		try:
 			# Strip the COMP (children destroyed)
-			self.embody_ext.StripCompChildren(tdn_comp)
+			self.embody_ext.stripCompChildren(tdn_comp)
 			self.assertIsNone(op(child_path), 'Child must be destroyed by strip')
 
 			# Run continuity check BEFORE restore (the dangerous window)
 			self.embody_ext.checkOpsForContinuity(
-				self.embody_ext.ExternalizationsFolder)
+				self.embody_ext.externalizationsFolder)
 
 			# The child's table entry MUST survive
 			self.assertTrue(self._tableHasRow(child_path),

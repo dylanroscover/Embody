@@ -502,7 +502,7 @@ def onSelect(comp, startRow, startCol, startCoords,
 			_active_strategy_row = row
 			parent.Embody.ext.Embody.rolloverOp = oper
 			parent.Embody.op('tagger/switch_family').par.index = 2
-			run(lambda: parent.Embody.ext.Embody.SetupTaggerTagMode(oper), delayFrames=1)
+			run(lambda: parent.Embody.ext.Embody.setupTaggerTagMode(oper), delayFrames=1)
 			run(f"op('{parent.Embody.op('window_tagging_menu')}').par.winopen.pulse()",
 				delayFrames=2)
 		elif (st.startswith('TOX_') or st.startswith('TDN_')) and oper:
@@ -510,7 +510,7 @@ def onSelect(comp, startRow, startCol, startCoords,
 			_active_strategy_row = row
 			parent.Embody.ext.Embody.rolloverOp = oper
 			parent.Embody.op('tagger/switch_family').par.index = 2
-			run(lambda s=st: parent.Embody.ext.Embody.SetupTaggerManageMode(oper, s),
+			run(lambda s=st: parent.Embody.ext.Embody.setupTaggerManageMode(oper, s),
 				delayFrames=1)
 			run(f"op('{parent.Embody.op('window_tagging_menu')}').par.winopen.pulse()",
 				delayFrames=2)
@@ -531,9 +531,9 @@ def onSelect(comp, startRow, startCol, startCoords,
 			buttons=['Cancel', 'Remove'])
 		if result == 1:
 			if st.startswith('TDN'):
-				parent.Embody.RemoveTDNEntry(path)
+				parent.Embody.removeTDNEntry(path)
 			else:
-				parent.Embody.RemoveListerRow(path, rel_fp)
+				parent.Embody.removeListerRow(path, rel_fp)
 
 
 def onRadio(comp, row, col, prevRow, prevCol):

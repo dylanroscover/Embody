@@ -59,7 +59,7 @@ class TestTDXNExternalConnections(EmbodyTestCase):
 		self.assertTrue(result.get('success'))
 		tdn_doc = result['tdn']
 
-		self.embody.ext.Embody.StripCompChildren(base)
+		self.embody.ext.Embody.stripCompChildren(base)
 		self.assertEqual(len(base.children), 0)
 		# External capture should have been stashed on the COMP itself.
 		stashed = base.fetch('_tdn_external_wires', [], search=False)
@@ -88,7 +88,7 @@ class TestTDXNExternalConnections(EmbodyTestCase):
 		result = self.tdn.ExportNetwork(root_path=base.path)
 		tdn_doc = result['tdn']
 
-		self.embody.ext.Embody.StripCompChildren(base)
+		self.embody.ext.Embody.stripCompChildren(base)
 		imp = self.tdn.ImportNetwork(
 			target_path=base.path, tdn=tdn_doc, clear_first=True)
 		self.assertTrue(imp.get('success'))
@@ -107,7 +107,7 @@ class TestTDXNExternalConnections(EmbodyTestCase):
 		result = self.tdn.ExportNetwork(root_path=base.path)
 		tdn_doc = result['tdn']
 
-		self.embody.ext.Embody.StripCompChildren(base)
+		self.embody.ext.Embody.stripCompChildren(base)
 		imp = self.tdn.ImportNetwork(
 			target_path=base.path, tdn=tdn_doc, clear_first=True)
 		self.assertTrue(imp.get('success'))
@@ -156,7 +156,7 @@ class TestTDXNExternalConnections(EmbodyTestCase):
 		result = self.tdn.ExportNetwork(root_path=base.path)
 		tdn_doc = result['tdn']
 
-		self.embody.ext.Embody.StripCompChildren(base)
+		self.embody.ext.Embody.stripCompChildren(base)
 		# Delete one remote between capture and restore.
 		src.destroy()
 
@@ -170,6 +170,6 @@ class TestTDXNExternalConnections(EmbodyTestCase):
 	def test_empty_comp_capture_is_noop(self):
 		"""BaseCOMP with no inputs/outputs: capture returns [], no store."""
 		base = self.sandbox.create(baseCOMP, 'lonely')
-		self.embody.ext.Embody.StripCompChildren(base)
+		self.embody.ext.Embody.stripCompChildren(base)
 		self.assertEqual(
 			base.fetch('_tdn_external_wires', [], search=False), [])

@@ -21,11 +21,11 @@ def onValueChange(par, prev):
 	# use par.eval() to get current value
 	if par.name == 'Folder':
 		parent.Embody.Disable(prev, removeTags=False)
-		run(f"op('{parent.Embody}').UpdateHandler()", delayFrames = 60)
+		run(f"op('{parent.Embody}').ext.Embody.updateHandler()", delayFrames = 60)
 
 	elif par.name == 'Externalizations':
 		if not par:
-			parent.Embody.MissingExternalizationsPar()
+			parent.Embody.missingExternalizationsPar()
 
 	elif par.name == 'Configclient':
 		# Whose files to write changed. InitEnvoy, not just
@@ -269,13 +269,13 @@ def onValueChange(par, prev):
 
 def onPulse(par):
 	if par.name == 'Disable':
-		parent.Embody.DisableHandler()
+		parent.Embody.disableHandler()
 
 	elif par.name == 'Uninstall':
-		parent.Embody.UninstallHandler()
+		parent.Embody.uninstallHandler()
 
 	elif par.name == 'Update':
-		parent.Embody.UpdateHandler()
+		parent.Embody.updateHandler()
 
 	elif par.name == 'Releaseall':
 		# Batch portable export (issue #74 follow-up): every component
@@ -347,13 +347,13 @@ def onPulse(par):
 		parent.Embody.ext.Embody._openSetupWizard()
 
 	elif par.name == 'Openmanager':
-		parent.Embody.Manager('open')
+		parent.Embody.manager('open')
 
 	elif par.name == 'Closemanager':
-		parent.Embody.Manager('close')
+		parent.Embody.manager('close')
 				
 	elif par.name == 'Launchaiclient':
-		parent.Embody.LaunchAIClient()
+		parent.Embody.launchAIClient()
 
 	elif par.name == 'Github':
 		webbrowser.open('https://github.com/dylanroscover/Embody')
@@ -379,13 +379,13 @@ def onPulse(par):
 		op('help').openViewer()
 
 	elif par.name == 'Openexternalizationstable':
-		parent.Embody.OpenTable()
+		parent.Embody.openTable()
 
 	elif par.name == 'Createexternalizationstable':
-		parent.Embody.ext.Embody.CreateExternalizationsTable()
+		parent.Embody.ext.Embody.createExternalizationsTable()
 
 	elif par.name == 'Externalizeproject':
-		parent.Embody.ExternalizeProject()
+		parent.Embody.externalizeProject()
 
 	elif par.name in mod.shortcuts.RECORD_PARS:
 		mod.shortcuts.arm(parent.Embody, mod.shortcuts.RECORD_PARS[par.name])
@@ -402,7 +402,7 @@ def onPulse(par):
 		parent.Embody.ext.Embody._import_clear_first = False
 
 	elif par.name == 'Migratetotdxn':
-		parent.Embody.ext.Embody.MigrateToTDXN()
+		parent.Embody.ext.Embody.migrateToTDXN()
 
 	return
 

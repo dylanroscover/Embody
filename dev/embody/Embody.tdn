@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
-build: 1217
-generator: Embody/6.1.18
+build: 1218
+generator: Embody/6.1.19
 td_build: 099.2025.33070
-source_file: Embody-6.300.toe
-exported_at: '2026-08-29T20:59:21Z'
+source_file: Embody-6.301.toe
+exported_at: '2026-08-29T22:54:23Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -849,7 +849,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.1.18
+    value: 6.1.19
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -1587,7 +1587,7 @@ operators:
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
     dock: list_omits
-    dat_content: "# Omit-panel exclusions list. Rows come from the panel's storage\n# ('omit_rows': [[op_path, label, par_name], ...] written by\n# EmbodyExt.RefreshOmitPanel); col 0 = label, col 1 = remove (×).\n# Clicking × removes that tdn_omit tag via OmitPanelRemove.\n\nTEXT = (0.92, 0.92, 0.92, 1)\nMUTED = (0.60, 0.61, 0.60, 1)\nBG = (0.11, 0.12, 0.115, 1)\n\ndef _rows():\n\treturn parent().fetch('omit_rows', [], search=False)\n\ndef onInitTable(comp, attribs):\n\tattribs.bgColor = BG\n\tattribs.textColor = TEXT\n\tattribs.fontSizeX = 12\n\tattribs.rowHeight = 24\n\tattribs.textOffsetX = 4\n\tattribs.textJustify = JustifyType.CENTERLEFT\n\treturn\n\ndef onInitCol(comp, col, attribs):\n\tif col == 1:\n\t\tattribs.colWidth = 28\n\t\tattribs.textJustify = JustifyType.CENTER\n\telse:\n\t\tattribs.colWidth = 100\n\t\tattribs.colStretch = True\n\treturn\n\ndef onInitCell(comp, row, col, attribs):\n\trows = _rows()\n\tif not rows:\n\t\tif row == 0 and col == 0:\n\t\t\tattribs.text = '(none yet)'\n\t\t\tattribs.textColor = MUTED\n\t\treturn\n\tif row >= len(rows):\n\t\treturn\n\tif col == 0:\n\t\tattribs.text = rows[row][1]\n\telse:\n\t\tattribs.text = '×'\n\t\tattribs.textColor = MUTED\n\treturn\n\ndef onSelect(comp, startRow, startCol, startCoords, endRow, endCol, endCoords, start, end):\n\tif not end:\n\t\treturn\n\trows = _rows()\n\tif endRow is None or endRow < 0 or endRow >= len(rows):\n\t\treturn\n\tif endCol == 1:\n\t\tr = rows[endRow]\n\t\tkind = r[3] if len(r) > 3 else 'par'\n\t\tparent.Embody.OmitPanelRemove(r[0], r[2], kind)\n\treturn\n"
+    dat_content: "# Omit-panel exclusions list. Rows come from the panel's storage\n# ('omit_rows': [[op_path, label, par_name], ...] written by\n# EmbodyExt.refreshOmitPanel); col 0 = label, col 1 = remove (×).\n# Clicking × removes that tdn_omit tag via OmitPanelRemove.\n\nTEXT = (0.92, 0.92, 0.92, 1)\nMUTED = (0.60, 0.61, 0.60, 1)\nBG = (0.11, 0.12, 0.115, 1)\n\ndef _rows():\n\treturn parent().fetch('omit_rows', [], search=False)\n\ndef onInitTable(comp, attribs):\n\tattribs.bgColor = BG\n\tattribs.textColor = TEXT\n\tattribs.fontSizeX = 12\n\tattribs.rowHeight = 24\n\tattribs.textOffsetX = 4\n\tattribs.textJustify = JustifyType.CENTERLEFT\n\treturn\n\ndef onInitCol(comp, col, attribs):\n\tif col == 1:\n\t\tattribs.colWidth = 28\n\t\tattribs.textJustify = JustifyType.CENTER\n\telse:\n\t\tattribs.colWidth = 100\n\t\tattribs.colStretch = True\n\treturn\n\ndef onInitCell(comp, row, col, attribs):\n\trows = _rows()\n\tif not rows:\n\t\tif row == 0 and col == 0:\n\t\t\tattribs.text = '(none yet)'\n\t\t\tattribs.textColor = MUTED\n\t\treturn\n\tif row >= len(rows):\n\t\treturn\n\tif col == 0:\n\t\tattribs.text = rows[row][1]\n\telse:\n\t\tattribs.text = '×'\n\t\tattribs.textColor = MUTED\n\treturn\n\ndef onSelect(comp, startRow, startCol, startCoords, endRow, endCol, endCoords, start, end):\n\tif not end:\n\t\treturn\n\trows = _rows()\n\tif endRow is None or endRow < 0 or endRow >= len(rows):\n\t\treturn\n\tif endCol == 1:\n\t\tr = rows[endRow]\n\t\tkind = r[3] if len(r) > 3 else 'par'\n\t\tparent.Embody.OmitPanelRemove(r[0], r[2], kind)\n\treturn\n"
     dat_content_format: text
   - name: list_header_callbacks
     type: textDAT

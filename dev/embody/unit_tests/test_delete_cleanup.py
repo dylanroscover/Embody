@@ -127,21 +127,21 @@ class TestDeleteCleanup(EmbodyTestCase):
         comp, old_path, old_rel = self._externalize_comp(self.workspace, 'rm_tag')
         tox_tag = self.embody.par.Toxtag.val
 
-        self.embody_ext.RemoveListerRow(old_path, old_rel)
+        self.embody_ext.removeListerRow(old_path, old_rel)
         self.assertNotIn(tox_tag, comp.tags)
 
     def test_removeListerRow_comp_clears_externaltox(self):
         """RemoveListerRow should clear the externaltox parameter."""
         comp, old_path, old_rel = self._externalize_comp(self.workspace, 'rm_ext')
 
-        self.embody_ext.RemoveListerRow(old_path, old_rel)
+        self.embody_ext.removeListerRow(old_path, old_rel)
         self.assertEqual(comp.par.externaltox.eval(), '')
 
     def test_removeListerRow_comp_resets_color(self):
         """RemoveListerRow should reset the operator color to default."""
         comp, old_path, old_rel = self._externalize_comp(self.workspace, 'rm_color')
 
-        self.embody_ext.RemoveListerRow(old_path, old_rel)
+        self.embody_ext.removeListerRow(old_path, old_rel)
 
         default_color = (0.55, 0.55, 0.55)
         color = comp.color
@@ -152,7 +152,7 @@ class TestDeleteCleanup(EmbodyTestCase):
         """RemoveListerRow should remove the row from the Externalizations table."""
         comp, old_path, old_rel = self._externalize_comp(self.workspace, 'rm_row')
 
-        self.embody_ext.RemoveListerRow(old_path, old_rel)
+        self.embody_ext.removeListerRow(old_path, old_rel)
 
         found = False
         for i in range(1, self.embody_ext.Externalizations.numRows):
@@ -165,7 +165,7 @@ class TestDeleteCleanup(EmbodyTestCase):
         """RemoveListerRow should unlock the readOnly flag on externaltox."""
         comp, old_path, old_rel = self._externalize_comp(self.workspace, 'rm_ro')
 
-        self.embody_ext.RemoveListerRow(old_path, old_rel)
+        self.embody_ext.removeListerRow(old_path, old_rel)
         self.assertFalse(comp.par.externaltox.readOnly)
 
     # =========================================================================
@@ -177,14 +177,14 @@ class TestDeleteCleanup(EmbodyTestCase):
         dat, old_path, old_rel = self._externalize_dat(self.workspace, 'rm_dat_tag')
         py_tag = self.embody.par.Pytag.val
 
-        self.embody_ext.RemoveListerRow(old_path, old_rel)
+        self.embody_ext.removeListerRow(old_path, old_rel)
         self.assertNotIn(py_tag, dat.tags)
 
     def test_removeListerRow_dat_clears_file(self):
         """RemoveListerRow should clear the file parameter on a DAT."""
         dat, old_path, old_rel = self._externalize_dat(self.workspace, 'rm_dat_file')
 
-        self.embody_ext.RemoveListerRow(old_path, old_rel)
+        self.embody_ext.removeListerRow(old_path, old_rel)
         self.assertEqual(dat.par.file.eval(), '')
 
     def test_removeListerRow_non_file_dat_completes_cleanup(self):
@@ -197,7 +197,7 @@ class TestDeleteCleanup(EmbodyTestCase):
         swapped = dat.changeType(selectDAT)
         self.assertIn(py_tag, swapped.tags, 'tag should survive the type swap')
 
-        self.embody_ext.RemoveListerRow(old_path, old_rel, delete_file=False)
+        self.embody_ext.removeListerRow(old_path, old_rel, delete_file=False)
 
         self.assertNotIn(py_tag, swapped.tags, 'tag must be removed')
         # Color reset runs AFTER the par-clearing that used to raise --
@@ -212,7 +212,7 @@ class TestDeleteCleanup(EmbodyTestCase):
         """RemoveListerRow should remove the DAT row from the table."""
         dat, old_path, old_rel = self._externalize_dat(self.workspace, 'rm_dat_row')
 
-        self.embody_ext.RemoveListerRow(old_path, old_rel)
+        self.embody_ext.removeListerRow(old_path, old_rel)
 
         found = False
         for i in range(1, self.embody_ext.Externalizations.numRows):
@@ -231,12 +231,12 @@ class TestDeleteCleanup(EmbodyTestCase):
         comp.destroy()
 
         # Should not raise
-        self.embody_ext.RemoveListerRow(old_path, old_rel)
+        self.embody_ext.removeListerRow(old_path, old_rel)
 
     def test_removeListerRow_nonexistent_path_no_crash(self):
         """RemoveListerRow with a path not in the table should not crash."""
         # Should not raise
-        self.embody_ext.RemoveListerRow('/nonexistent/path', 'fake/file.tox')
+        self.embody_ext.removeListerRow('/nonexistent/path', 'fake/file.tox')
 
     # =========================================================================
     # _checkFileReferences
