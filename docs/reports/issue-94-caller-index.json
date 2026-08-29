@@ -1,0 +1,3207 @@
+{
+ "generated_by": "execute_python walk of root.findChildren(type=DAT, includeUtility=True)",
+ "td_build": "2025.33070",
+ "dats_scanned": 840,
+ "dats_unbacked": 594,
+ "distinct_names": 410,
+ "names_with_toe_only_callers": 43,
+ "invisible_call_sites": {
+  "AbsoluteTween": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/extTweener"
+   ]
+  },
+  "CancelExport": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tdn_export_progress/panelexec_cancel"
+   ]
+  },
+  "Clear_Stack": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/pre_release"
+   ]
+  },
+  "CopyNetworkToClipboard": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_copy_tdn/parexec1"
+   ]
+  },
+  "CreateCallbacks": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/callbackManager/create_callbacks"
+   ]
+  },
+  "CreateTween": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/extTweener"
+   ]
+  },
+  "Create_Repo": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/curves_repo/create_execute",
+    "/utils/remote/tweener/curves_repo/repositoryMaker"
+   ]
+  },
+  "Delay": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/extTweener"
+   ]
+  },
+  "Do_Callback": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/callbackManager/in1",
+    "/utils/remote/tweener/callbackManager/internal_default_callbacks"
+   ]
+  },
+  "Execute": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/callbackManager/extCallbackManager"
+   ]
+  },
+  "ExternalizeImmediate": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1"
+   ]
+  },
+  "FadeStep": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/execute1"
+   ]
+  },
+  "Finish": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/fade"
+   ]
+  },
+  "GetValue": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/fade"
+   ]
+  },
+  "Get_Curve": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/curves/extCurve"
+   ]
+  },
+  "HandleEmbed": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_embed/parexec1"
+   ]
+  },
+  "HandleEmbedStorage": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_embed_storage/parexec1"
+   ]
+  },
+  "HandlePortableExport": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_portable/parexec1"
+   ]
+  },
+  "HandleReload": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_reload/parexec1"
+   ]
+  },
+  "HandleStrategyRemove": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_remove/parexec1"
+   ]
+  },
+  "HandleStrategyRestore": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_restore/parexec1"
+   ]
+  },
+  "HandleStrategySave": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_save/parexec1"
+   ]
+  },
+  "InitEnvoy": {
+   "files": [
+    "/embody/Embody/help/text_help",
+    "/embody/Embody/parexec",
+    "/embody/Embody/EnvoyExt",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/embody_git",
+    "/embody/unit_tests/TestRunnerExt"
+   ],
+   "toe_only": [
+    "/embody/Embody/help/text_help_display"
+   ]
+  },
+  "InitGit": {
+   "files": [
+    "/embody/Embody/help/text_help",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/envoy_setup"
+   ],
+   "toe_only": [
+    "/embody/Embody/help/text_help_display"
+   ]
+  },
+  "InitOwner": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/callbackManager/parexec1"
+   ]
+  },
+  "Init_Owner": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/curves_repo/parexec1"
+   ]
+  },
+  "Log": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt",
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/execute",
+    "/embody/Embody/parexec",
+    "/embody/Embody/updater/UpdaterExt",
+    "/embody/Embody/EnvoyExt",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/shortcuts",
+    "/embody/Embody/templates/text_skill_td_api_reference",
+    "/embody/Embody/embody_git",
+    "/embody/Embody/embody_admin",
+    "/embody/Embody/embody_launch",
+    "/embody/Embody/CatalogManagerExt",
+    "/embody/unit_tests/test_logging",
+    "/embody/unit_tests/TestRunnerExt",
+    "/embody/unit_tests/test_envoy_sessions",
+    "/embody/unit_tests/test_mcp_diagnostics",
+    "/embody/unit_tests/test_envoy_thread_comm",
+    "/embody/execute_src_ctrl",
+    "/specimen_publish"
+   ],
+   "toe_only": [
+    "/utils/remote/tweener/callbackManager/extCallbackManager"
+   ]
+  },
+  "OmitPanelDrop": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/omit_panel/dragdrop_callbacks"
+   ]
+  },
+  "OmitPanelRemove": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/omit_panel/list_omits_callbacks"
+   ]
+  },
+  "OpenOmitPanel": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_omit/parexec1"
+   ]
+  },
+  "OpenSaveFile": {
+   "files": [
+    "/embody/Embody/list/list_callbacks"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_openfile/parexec1"
+   ]
+  },
+  "PasteNetworkFromClipboard": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_paste_tdn/parexec1"
+   ]
+  },
+  "Reevaluate": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/curves_repo/datexec1"
+   ]
+  },
+  "Refresh": {
+   "files": [
+    "/embody/Embody/list/list_callbacks",
+    "/embody/Embody/parexec",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/viz_status/status_publish",
+    "/embody/Embody/windowHeader/WindowHeaderExt",
+    "/embody/Embody/CatalogManagerExt",
+    "/embody/Embody/keyboardin_callbacks",
+    "/embody/unit_tests/test_custom_parameters"
+   ],
+   "toe_only": [
+    "/utils/remote/tweener/callbackManager/opexec2",
+    "/utils/remote/tweener/callbackManager/datexec2",
+    "/utils/remote/tweener/callbackManager/load_callbacks",
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1",
+    "/embody/Embody/viz_status/parexec_status"
+   ]
+  },
+  "RelativeTween": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/extTweener"
+   ]
+  },
+  "Reset": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/pre_release",
+    "/utils/remote/tweener/callbackManager/text1",
+    "/utils/remote/tweener/callbackManager/opexec2"
+   ]
+  },
+  "Step": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/extTweener"
+   ]
+  },
+  "TagExiter": {
+   "files": [
+    "/embody/Embody/chopexec_exit_tagger"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/header/button_close/parexec1",
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1",
+    "/embody/Embody/tagger/btn_omit/parexec1",
+    "/embody/Embody/tagger/btn_save/parexec1",
+    "/embody/Embody/tagger/btn_embed/parexec1",
+    "/embody/Embody/tagger/btn_reload/parexec1",
+    "/embody/Embody/tagger/btn_remove/parexec1",
+    "/embody/Embody/tagger/btn_restore/parexec1",
+    "/embody/Embody/tagger/btn_copy_tdn/parexec1",
+    "/embody/Embody/tagger/btn_openfile/parexec1",
+    "/embody/Embody/tagger/btn_portable/parexec1",
+    "/embody/Embody/tagger/btn_paste_tdn/parexec1",
+    "/embody/Embody/tagger/btn_embed_storage/parexec1"
+   ]
+  },
+  "TagSetter": {
+   "files": [
+    "/embody/unit_tests/test_tag_lifecycle"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1"
+   ]
+  },
+  "TargetIsNotParameter": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/extTweener"
+   ]
+  },
+  "_dispatchTaggerButton": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1"
+   ]
+  },
+  "_tagger_mode": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1"
+   ]
+  },
+  "rolloverOp": {
+   "files": [
+    "/embody/Embody/list/list_callbacks"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1",
+    "/embody/Embody/tagger/btn_omit/parexec1",
+    "/embody/Embody/tagger/btn_save/parexec1",
+    "/embody/Embody/tagger/btn_embed/parexec1",
+    "/embody/Embody/tagger/btn_reload/parexec1",
+    "/embody/Embody/tagger/btn_remove/parexec1",
+    "/embody/Embody/tagger/btn_restore/parexec1",
+    "/embody/Embody/tagger/btn_copy_tdn/parexec1",
+    "/embody/Embody/tagger/btn_openfile/parexec1",
+    "/embody/Embody/tagger/btn_portable/parexec1",
+    "/embody/Embody/tagger/btn_paste_tdn/parexec1",
+    "/embody/Embody/tagger/btn_embed_storage/parexec1"
+   ]
+  }
+ },
+ "full_index": {
+  "AbsoluteTween": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/extTweener"
+   ]
+  },
+  "ApplyDeclaredExtras": {
+   "files": [
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/templates/text_claude",
+    "/embody/Embody/templates/text_agents_md"
+   ],
+   "toe_only": []
+  },
+  "ApplyUpdate": {
+   "files": [
+    "/embody/Embody/updater/UpdaterExt"
+   ],
+   "toe_only": []
+  },
+  "ArgumentParser": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "ArmRejoinOffer": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "ArtifactStore": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "AssignProcessToJobObject": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostops"
+   ],
+   "toe_only": []
+  },
+  "AutoExternalizeCopiedOp": {
+   "files": [
+    "/embody/Embody/envoy_ops",
+    "/embody/unit_tests/test_auto_externalize"
+   ],
+   "toe_only": []
+  },
+  "AutoExternalizeNewOp": {
+   "files": [
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/envoy_ops"
+   ],
+   "toe_only": []
+  },
+  "BACKUP_DIR": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "BOOL": {
+   "files": [
+    "/embody/Embody/convoy/convoy_install"
+   ],
+   "toe_only": []
+  },
+  "BasicConstraints": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostkeys"
+   ],
+   "toe_only": []
+  },
+  "BeginLockedWarnBatch": {
+   "files": [
+    "/embody/Embody/EmbodyExt",
+    "/embody/unit_tests/test_tdn_helpers"
+   ],
+   "toe_only": []
+  },
+  "BoundedSemaphore": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_ws",
+    "/embody/Embody/convoy/host/convoy_hostapp",
+    "/embody/Embody/convoy/host/convoy_hostops",
+    "/embody/Embody/convoy/host/convoy_sessions",
+    "/embody/Embody/convoy/host/convoy_peerserver"
+   ],
+   "toe_only": []
+  },
+  "BridgeState": {
+   "files": [
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "BytesIO": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_artifacts",
+    "/embody/Embody/convoy/host/convoy_peerclient",
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "CDLL": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle",
+    "/embody/Embody/convoy/convoy_client"
+   ],
+   "toe_only": []
+  },
+  "CancelExport": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tdn_export_progress/panelexec_cancel"
+   ]
+  },
+  "CapabilityManifest": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "CertificateBuilder": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostkeys"
+   ],
+   "toe_only": []
+  },
+  "CheckForUpdate": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/Embody/updater/UpdaterExt",
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "Checkpoint": {
+   "files": [
+    "/embody/Embody/EmbodyExt",
+    "/embody/unit_tests/test_tdn_reconstruction"
+   ],
+   "toe_only": []
+  },
+  "Clear_Stack": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/pre_release"
+   ]
+  },
+  "CloseHandle": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostops",
+    "/embody/Embody/convoy/host/convoy_platform",
+    "/embody/Embody/convoy/host/convoy_lifecycle",
+    "/embody/Embody/convoy/convoy_client",
+    "/embody/Embody/templates/text_envoy_bridge",
+    "/embody/Embody/envoy_setup",
+    "/embody/Embody/embody_pyenv"
+   ],
+   "toe_only": []
+  },
+  "Collection": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": []
+  },
+  "Condition": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_sessions"
+   ],
+   "toe_only": []
+  },
+  "Config": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "ContextVar": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "ConvertSidToStringSidW": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "ConvoyStatus": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt",
+    "/embody/unit_tests/test_convoy_ext"
+   ],
+   "toe_only": []
+  },
+  "CopyNetworkToClipboard": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_copy_tdn/parexec1"
+   ]
+  },
+  "CopySelectedToClipboard": {
+   "files": [
+    "/embody/Embody/keyboardin_callbacks"
+   ],
+   "toe_only": []
+  },
+  "CreateCallbacks": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/callbackManager/create_callbacks"
+   ]
+  },
+  "CreateExternalizationsTable": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "CreateJobObjectW": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostops"
+   ],
+   "toe_only": []
+  },
+  "CreateTween": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/extTweener"
+   ]
+  },
+  "Create_Repo": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/curves_repo/create_execute",
+    "/utils/remote/tweener/curves_repo/repositoryMaker"
+   ]
+  },
+  "CryptographyMissing": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "DNSName": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostkeys"
+   ],
+   "toe_only": []
+  },
+  "DWORD": {
+   "files": [
+    "/embody/Embody/convoy/convoy_install",
+    "/embody/Embody/embody_pyenv"
+   ],
+   "toe_only": []
+  },
+  "Debug": {
+   "files": [
+    "/embody/Embody/EmbodyExt",
+    "/embody/unit_tests/test_logging",
+    "/embody/unit_tests/test_custom_parameters"
+   ],
+   "toe_only": []
+  },
+  "Delay": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/extTweener"
+   ]
+  },
+  "Dependency": {
+   "files": [
+    "/embody/Embody/templates/text_skill_td_api_reference"
+   ],
+   "toe_only": []
+  },
+  "DiffAllLiveVsDisk": {
+   "files": [
+    "/embody/Embody/envoy_read",
+    "/embody/unit_tests/test_tdn_diff"
+   ],
+   "toe_only": []
+  },
+  "DiffLiveVsDisk": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/envoy_read"
+   ],
+   "toe_only": []
+  },
+  "DirtyCount": {
+   "files": [
+    "/embody/Embody/toolbar/toolbar_config"
+   ],
+   "toe_only": []
+  },
+  "DirtyState": {
+   "files": [
+    "/embody/Embody/list/inject_parents_callbacks",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/envoy_read",
+    "/embody/unit_tests/test_save_path_contracts"
+   ],
+   "toe_only": []
+  },
+  "Disable": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/embody_git",
+    "/embody/unit_tests/test_custom_parameters"
+   ],
+   "toe_only": []
+  },
+  "DisableHandler": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/Embody/toolbar/ToolbarExt"
+   ],
+   "toe_only": []
+  },
+  "DiscoveryCoordinator": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "DiscoveryService": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "DoSomething": {
+   "files": [
+    "/embody/Embody/templates/text_claude",
+    "/embody/Embody/templates/text_skill_create_extension"
+   ],
+   "toe_only": []
+  },
+  "Do_Callback": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/callbackManager/in1",
+    "/utils/remote/tweener/callbackManager/internal_default_callbacks"
+   ]
+  },
+  "EnqueueTask": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt",
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/EnvoyExt",
+    "/embody/Embody/templates/text_skill_td_api_reference",
+    "/embody/Embody/embody_git",
+    "/embody/unit_tests/test_convoy_ext"
+   ],
+   "toe_only": []
+  },
+  "EnsureCatalogs": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "EnumWindows": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "Error": {
+   "files": [
+    "/embody/unit_tests/test_logging"
+   ],
+   "toe_only": []
+  },
+  "Event": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_ws",
+    "/embody/Embody/convoy/host/convoy_hostapp",
+    "/embody/Embody/convoy/host/convoy_sessions",
+    "/embody/Embody/convoy/host/convoy_discovery",
+    "/embody/Embody/CatalogManagerExt",
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "Execute": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/callbackManager/extCallbackManager"
+   ]
+  },
+  "ExportNetwork": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/execute",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/envoy_read",
+    "/embody/unit_tests/test_tdn_file_io",
+    "/embody/unit_tests/test_tdn_sequences",
+    "/embody/unit_tests/test_tdn_crash_safety",
+    "/embody/unit_tests/test_tdn_export_import",
+    "/embody/unit_tests/test_tdn_reconstruction",
+    "/embody/unit_tests/test_tdn_palette_catalog",
+    "/specimen_publish"
+   ],
+   "toe_only": []
+  },
+  "ExportNetworkAsync": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/toolbar/ToolbarExt",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/keyboardin_callbacks"
+   ],
+   "toe_only": []
+  },
+  "ExportPaletteCatalog": {
+   "files": [
+    "/embody/unit_tests/test_catalog_bootstrap_palette"
+   ],
+   "toe_only": []
+  },
+  "ExportPortableTox": {
+   "files": [
+    "/embody/Embody/updater/UpdaterExt",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/templates/text_skill_externalize",
+    "/embody/unit_tests/test_release_hooks",
+    "/embody/execute_src_ctrl"
+   ],
+   "toe_only": []
+  },
+  "ExportProjectTDNInteractive": {
+   "files": [
+    "/embody/Embody/toolbar/ToolbarExt",
+    "/embody/Embody/keyboardin_callbacks"
+   ],
+   "toe_only": []
+  },
+  "ExtendedKeyUsage": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostkeys"
+   ],
+   "toe_only": []
+  },
+  "Externalizations": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/execute",
+    "/embody/Embody/EnvoyExt",
+    "/embody/Embody/envoy_read",
+    "/embody/execute_src_ctrl"
+   ],
+   "toe_only": []
+  },
+  "ExternalizationsFolder": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": []
+  },
+  "ExternalizeImmediate": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1"
+   ]
+  },
+  "ExternalizeProject": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "FILE_SUFFIX": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/EmbodyExt",
+    "/embody/unit_tests/test_tdn_file_io",
+    "/embody/unit_tests/test_rename_move_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "FILE_SUFFIXES": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "FadeStep": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/execute1"
+   ]
+  },
+  "Finish": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/fade"
+   ]
+  },
+  "FlushLockedWarnBatch": {
+   "files": [
+    "/embody/Embody/EmbodyExt",
+    "/embody/unit_tests/test_tdn_helpers"
+   ],
+   "toe_only": []
+  },
+  "FlushPendingCheckpoints": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "ForgetOfflineNodes": {
+   "files": [
+    "/embody/unit_tests/test_convoy_host_install"
+   ],
+   "toe_only": []
+  },
+  "GetConsoleWindow": {
+   "files": [
+    "/embody/Embody/convoy/convoy_install"
+   ],
+   "toe_only": []
+  },
+  "GetCurrentProcess": {
+   "files": [
+    "/embody/Embody/convoy/convoy_install"
+   ],
+   "toe_only": []
+  },
+  "GetCurrentProcessId": {
+   "files": [
+    "/embody/Embody/convoy/convoy_install"
+   ],
+   "toe_only": []
+  },
+  "GetExitCodeProcess": {
+   "files": [
+    "/embody/Embody/embody_pyenv"
+   ],
+   "toe_only": []
+  },
+  "GetForegroundWindow": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": []
+  },
+  "GetLastError": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_platform",
+    "/embody/Embody/convoy/host/convoy_lifecycle",
+    "/embody/Embody/convoy/convoy_client"
+   ],
+   "toe_only": []
+  },
+  "GetModuleFileNameW": {
+   "files": [
+    "/embody/Embody/convoy/convoy_client"
+   ],
+   "toe_only": []
+  },
+  "GetProcessTimes": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "GetProcessWindowStation": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "GetResults": {
+   "files": [
+    "/embody/unit_tests/TestRunnerExt"
+   ],
+   "toe_only": []
+  },
+  "GetSystemDirectoryW": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostops"
+   ],
+   "toe_only": []
+  },
+  "GetTokenInformation": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "GetUserObjectInformationW": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "GetValue": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/fade"
+   ]
+  },
+  "GetWindowThreadProcessId": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle",
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": []
+  },
+  "Get_Curve": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/curves/extCurve"
+   ]
+  },
+  "HTTPConnection": {
+   "files": [
+    "/embody/Embody/templates/text_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "HTTPError": {
+   "files": [
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "HTTPSConnection": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_peerclient"
+   ],
+   "toe_only": []
+  },
+  "HandleDATConvert": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "HandleEmbed": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_embed/parexec1"
+   ]
+  },
+  "HandleEmbedStorage": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_embed_storage/parexec1"
+   ]
+  },
+  "HandlePortableExport": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_portable/parexec1"
+   ]
+  },
+  "HandleReload": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_reload/parexec1"
+   ]
+  },
+  "HandleStrategyRemove": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_remove/parexec1"
+   ]
+  },
+  "HandleStrategyRestore": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_restore/parexec1"
+   ]
+  },
+  "HandleStrategySave": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_save/parexec1"
+   ]
+  },
+  "HandleStrategySwitch": {
+   "files": [
+    "/embody/Embody/EmbodyExt",
+    "/embody/unit_tests/test_strategy_handlers"
+   ],
+   "toe_only": []
+  },
+  "HelloProfile": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "HmacSigner": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "HostHandle": {
+   "files": [
+    "/embody/unit_tests/test_convoy_ext",
+    "/embody/unit_tests/test_convoy_host_install"
+   ],
+   "toe_only": []
+  },
+  "HostOperations": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "HostPairSessionManager": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "HostStatus": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/unit_tests/test_convoy_host_install"
+   ],
+   "toe_only": []
+  },
+  "HostStore": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "IdentityError": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp",
+    "/embody/Embody/convoy/host/convoy_hoststore"
+   ],
+   "toe_only": []
+  },
+  "ImportNetwork": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/execute",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/envoy_ops",
+    "/embody/unit_tests/test_tdn_file_io",
+    "/embody/unit_tests/test_tdn_sequences",
+    "/embody/unit_tests/test_tdxn_migration",
+    "/embody/unit_tests/test_tdn_crash_safety",
+    "/embody/unit_tests/test_tdn_export_import",
+    "/embody/unit_tests/test_tdn_reconstruction",
+    "/embody/unit_tests/test_tdn_palette_catalog"
+   ],
+   "toe_only": []
+  },
+  "ImportNetworkFromFile": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/unit_tests/test_tdn_file_io",
+    "/embody/unit_tests/test_custom_parameters"
+   ],
+   "toe_only": []
+  },
+  "IncompleteRead": {
+   "files": [
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "Info": {
+   "files": [
+    "/embody/unit_tests/test_logging"
+   ],
+   "toe_only": []
+  },
+  "InitEnvoy": {
+   "files": [
+    "/embody/Embody/help/text_help",
+    "/embody/Embody/parexec",
+    "/embody/Embody/EnvoyExt",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/embody_git",
+    "/embody/unit_tests/TestRunnerExt"
+   ],
+   "toe_only": [
+    "/embody/Embody/help/text_help_display"
+   ]
+  },
+  "InitGit": {
+   "files": [
+    "/embody/Embody/help/text_help",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/envoy_setup"
+   ],
+   "toe_only": [
+    "/embody/Embody/help/text_help_display"
+   ]
+  },
+  "InitOwner": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/callbackManager/parexec1"
+   ]
+  },
+  "Init_Owner": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/curves_repo/parexec1"
+   ]
+  },
+  "InstallHost": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt",
+    "/embody/unit_tests/test_convoy_host_install"
+   ],
+   "toe_only": []
+  },
+  "InstallPackages": {
+   "files": [
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/templates/text_claude",
+    "/embody/Embody/templates/text_agents_md",
+    "/embody/Embody/embody_pyenv"
+   ],
+   "toe_only": []
+  },
+  "IsProcessInJob": {
+   "files": [
+    "/embody/Embody/convoy/convoy_install"
+   ],
+   "toe_only": []
+  },
+  "KeyUsage": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostkeys"
+   ],
+   "toe_only": []
+  },
+  "LanConfig": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "LanConfigError": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "LaunchAIClient": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/unit_tests/test_launch_aiclient"
+   ],
+   "toe_only": []
+  },
+  "LaunchProfileStore": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "LeaseRegistry": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "LifecycleManager": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "LimitedReader": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp",
+    "/embody/Embody/convoy/host/convoy_peerserver"
+   ],
+   "toe_only": []
+  },
+  "LoadLibrary": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": []
+  },
+  "LocalArtifactQuotaChanged": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "LocalDangerGateChanged": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "LocalFree": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "Lock": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_ws",
+    "/embody/Embody/convoy/host/convoy_hostapp",
+    "/embody/Embody/convoy/host/convoy_hostops",
+    "/embody/Embody/convoy/host/convoy_discovery",
+    "/embody/Embody/convoy/host/convoy_lifecycle",
+    "/embody/Embody/convoy/host/convoy_peerclient",
+    "/embody/Embody/convoy/host/convoy_peerserver",
+    "/embody/Embody/templates/text_envoy_bridge",
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "Log": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt",
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/execute",
+    "/embody/Embody/parexec",
+    "/embody/Embody/updater/UpdaterExt",
+    "/embody/Embody/EnvoyExt",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/shortcuts",
+    "/embody/Embody/templates/text_skill_td_api_reference",
+    "/embody/Embody/embody_git",
+    "/embody/Embody/embody_admin",
+    "/embody/Embody/embody_launch",
+    "/embody/Embody/CatalogManagerExt",
+    "/embody/unit_tests/test_logging",
+    "/embody/unit_tests/TestRunnerExt",
+    "/embody/unit_tests/test_envoy_sessions",
+    "/embody/unit_tests/test_mcp_diagnostics",
+    "/embody/unit_tests/test_envoy_thread_comm",
+    "/embody/execute_src_ctrl",
+    "/specimen_publish"
+   ],
+   "toe_only": [
+    "/utils/remote/tweener/callbackManager/extCallbackManager"
+   ]
+  },
+  "Manager": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/Embody/keyboardin_callbacks"
+   ],
+   "toe_only": []
+  },
+  "ManagerCondition": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "MaxNumberOfThreads": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "Method": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "MigrateToTDXN": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/unit_tests/test_tdxn_migration"
+   ],
+   "toe_only": []
+  },
+  "MissingExternalizationsPar": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "Mock": {
+   "files": [
+    "/embody/unit_tests/test_launch_aiclient"
+   ],
+   "toe_only": []
+  },
+  "Name": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostkeys"
+   ],
+   "toe_only": []
+  },
+  "NameAttribute": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostkeys"
+   ],
+   "toe_only": []
+  },
+  "NamedTemporaryFile": {
+   "files": [
+    "/embody/unit_tests/TestRunnerExt",
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "NoEncryption": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostkeys",
+    "/embody/Embody/convoy/convoy_install"
+   ],
+   "toe_only": []
+  },
+  "NodeDirectory": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hoststore"
+   ],
+   "toe_only": []
+  },
+  "NoteCheckpointTouch": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "NoteCoarseCheckpointTouch": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "OmitPanelDrop": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/omit_panel/dragdrop_callbacks"
+   ]
+  },
+  "OmitPanelRemove": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/omit_panel/list_omits_callbacks"
+   ]
+  },
+  "OnClick": {
+   "files": [
+    "/embody/Embody/windowHeader/panelexec1"
+   ],
+   "toe_only": []
+  },
+  "OnContainerClick": {
+   "files": [
+    "/embody/Embody/toolbar/panelexec_left",
+    "/embody/Embody/toolbar/panelexec_right"
+   ],
+   "toe_only": []
+  },
+  "OnContainerPress": {
+   "files": [
+    "/embody/Embody/toolbar/panelexec_left",
+    "/embody/Embody/toolbar/panelexec_right"
+   ],
+   "toe_only": []
+  },
+  "OnContainerRelease": {
+   "files": [
+    "/embody/Embody/toolbar/panelexec_left",
+    "/embody/Embody/toolbar/panelexec_right"
+   ],
+   "toe_only": []
+  },
+  "OnContainerRollover": {
+   "files": [
+    "/embody/Embody/toolbar/panelexec_left",
+    "/embody/Embody/toolbar/panelexec_right"
+   ],
+   "toe_only": []
+  },
+  "OnFilterChanged": {
+   "files": [
+    "/embody/Embody/toolbar/ToolbarExt",
+    "/embody/Embody/toolbar/parexec_filter"
+   ],
+   "toe_only": []
+  },
+  "OnPress": {
+   "files": [
+    "/embody/Embody/windowHeader/panelexec1"
+   ],
+   "toe_only": []
+  },
+  "OnRelease": {
+   "files": [
+    "/embody/Embody/windowHeader/panelexec1"
+   ],
+   "toe_only": []
+  },
+  "OnRollover": {
+   "files": [
+    "/embody/Embody/windowHeader/panelexec1"
+   ],
+   "toe_only": []
+  },
+  "OpenOmitPanel": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_omit/parexec1"
+   ]
+  },
+  "OpenProcess": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_platform",
+    "/embody/Embody/convoy/host/convoy_lifecycle",
+    "/embody/Embody/convoy/convoy_client",
+    "/embody/Embody/templates/text_envoy_bridge",
+    "/embody/Embody/envoy_setup",
+    "/embody/Embody/embody_pyenv"
+   ],
+   "toe_only": []
+  },
+  "OpenProcessToken": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "OpenSaveFile": {
+   "files": [
+    "/embody/Embody/list/list_callbacks"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_openfile/parexec1"
+   ]
+  },
+  "OpenTable": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "OrderedDict": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "PEM_cert_to_DER_cert": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp",
+    "/embody/Embody/convoy/host/convoy_discovery"
+   ],
+   "toe_only": []
+  },
+  "POINTER": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle",
+    "/embody/Embody/convoy/convoy_install",
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/embody_pyenv"
+   ],
+   "toe_only": []
+  },
+  "PasteNetworkAsNewComp": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": []
+  },
+  "PasteNetworkFromClipboard": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_paste_tdn/parexec1"
+   ]
+  },
+  "PeekNamedPipe": {
+   "files": [
+    "/embody/Embody/templates/text_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "PeerConnectionPool": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "PeerEndpoint": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "PeerRevoked": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "PeerSocketUnavailable": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "PeerStore": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "PeerTarget": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "PeerUnavailable": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "PlanCommunityPaste": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": []
+  },
+  "PolicyStore": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "PolicyValidationError": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "Popen": {
+   "files": [
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/embody_launch",
+    "/embody/unit_tests/TestRunnerExt"
+   ],
+   "toe_only": []
+  },
+  "PostMessageW": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "PreviewHostUninstall": {
+   "files": [
+    "/embody/unit_tests/test_convoy_host_install"
+   ],
+   "toe_only": []
+  },
+  "ProbeResult": {
+   "files": [
+    "/embody/unit_tests/test_convoy_ext",
+    "/embody/unit_tests/test_convoy_host_install"
+   ],
+   "toe_only": []
+  },
+  "ProcessIdToSessionId": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle",
+    "/embody/Embody/convoy/convoy_install"
+   ],
+   "toe_only": []
+  },
+  "ProtocolError": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_sessions"
+   ],
+   "toe_only": []
+  },
+  "QueryFullProcessImageNameW": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "QueryInformationJobObject": {
+   "files": [
+    "/embody/Embody/convoy/convoy_install"
+   ],
+   "toe_only": []
+  },
+  "Queue": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_ws",
+    "/embody/Embody/convoy/host/convoy_sessions",
+    "/embody/Embody/templates/text_skill_td_api_reference",
+    "/embody/Embody/CatalogManagerExt"
+   ],
+   "toe_only": []
+  },
+  "RLock": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_ws",
+    "/embody/Embody/convoy/host/convoy_realm",
+    "/embody/Embody/convoy/host/convoy_policy",
+    "/embody/Embody/convoy/host/convoy_hostops",
+    "/embody/Embody/convoy/host/convoy_sessions",
+    "/embody/Embody/convoy/host/convoy_artifacts",
+    "/embody/Embody/convoy/host/convoy_lifecycle",
+    "/embody/Embody/convoy/convoy_install",
+    "/embody/Embody/templates/text_envoy_bridge",
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "RealmStore": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp"
+   ],
+   "toe_only": []
+  },
+  "ReconcileMetadata": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "ReconstructTDNComps": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "RecordInstallConsent": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt",
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "RecoverOrphanShells": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "Reevaluate": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/curves_repo/datexec1"
+   ]
+  },
+  "ReexportAllTDNs": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/unit_tests/test_custom_parameters"
+   ],
+   "toe_only": []
+  },
+  "Refresh": {
+   "files": [
+    "/embody/Embody/list/list_callbacks",
+    "/embody/Embody/parexec",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/viz_status/status_publish",
+    "/embody/Embody/windowHeader/WindowHeaderExt",
+    "/embody/Embody/CatalogManagerExt",
+    "/embody/Embody/keyboardin_callbacks",
+    "/embody/unit_tests/test_custom_parameters"
+   ],
+   "toe_only": [
+    "/utils/remote/tweener/callbackManager/opexec2",
+    "/utils/remote/tweener/callbackManager/datexec2",
+    "/utils/remote/tweener/callbackManager/load_callbacks",
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1",
+    "/embody/Embody/viz_status/parexec_status"
+   ]
+  },
+  "RefreshOmitPanel": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "RefreshRegistry": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "Register": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/unit_tests/test_convoy_ext"
+   ],
+   "toe_only": []
+  },
+  "RelativeTween": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/extTweener"
+   ]
+  },
+  "ReleaseAll": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/Embody/templates/text_skill_externalize",
+    "/embody/unit_tests/test_release_hooks"
+   ],
+   "toe_only": []
+  },
+  "RemoteError": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp",
+    "/embody/Embody/convoy/host/convoy_sessions"
+   ],
+   "toe_only": []
+  },
+  "RemoveListerRow": {
+   "files": [
+    "/embody/Embody/list/list_callbacks",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/envoy_ops",
+    "/embody/unit_tests/test_tdn_diff",
+    "/embody/unit_tests/test_delete_cleanup",
+    "/embody/unit_tests/test_tdn_reconstruction"
+   ],
+   "toe_only": []
+  },
+  "RemoveTDNEntry": {
+   "files": [
+    "/embody/Embody/list/list_callbacks",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/envoy_ops",
+    "/embody/unit_tests/test_strategy_handlers"
+   ],
+   "toe_only": []
+  },
+  "Request": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostprobe",
+    "/embody/Embody/convoy/host/convoy_mcpclient",
+    "/embody/Embody/convoy/convoy_client",
+    "/embody/Embody/updater/UpdaterExt",
+    "/embody/Embody/EnvoyExt",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/templates/text_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "RequestHandlerClass": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_peerserver"
+   ],
+   "toe_only": []
+  },
+  "Reset": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/pre_release",
+    "/utils/remote/tweener/callbackManager/text1",
+    "/utils/remote/tweener/callbackManager/opexec2"
+   ]
+  },
+  "ResetWakeLeases": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt",
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "RestoreDATs": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "RestoreTOXComps": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "RunAgentTests": {
+   "files": [
+    "/embody/unit_tests/TestRunnerExt"
+   ],
+   "toe_only": []
+  },
+  "RunTests": {
+   "files": [
+    "/embody/Embody/templates/text_skill_td_api_reference",
+    "/embody/unit_tests/TestRunnerExt"
+   ],
+   "toe_only": []
+  },
+  "RunTestsDeferred": {
+   "files": [
+    "/embody/unit_tests/TestRunnerExt"
+   ],
+   "toe_only": []
+  },
+  "RunTestsDeferredPerTest": {
+   "files": [
+    "/embody/Embody/EnvoyExt",
+    "/embody/unit_tests/TestRunnerExt"
+   ],
+   "toe_only": []
+  },
+  "RunTestsSync": {
+   "files": [
+    "/embody/unit_tests/TestRunnerExt"
+   ],
+   "toe_only": []
+  },
+  "RuntimePort": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt",
+    "/embody/unit_tests/test_convoy_ext"
+   ],
+   "toe_only": []
+  },
+  "SKIP_STORAGE_KEYS": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "SSLContext": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_peerclient",
+    "/embody/Embody/convoy/host/convoy_peerserver"
+   ],
+   "toe_only": []
+  },
+  "S_ISDIR": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_artifacts"
+   ],
+   "toe_only": []
+  },
+  "S_ISLNK": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_artifacts",
+    "/embody/Embody/convoy/convoy_install"
+   ],
+   "toe_only": []
+  },
+  "S_ISREG": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp",
+    "/embody/Embody/convoy/host/convoy_artifacts",
+    "/embody/Embody/convoy/host/convoy_lifecycle",
+    "/embody/Embody/convoy/convoy_install"
+   ],
+   "toe_only": []
+  },
+  "Save": {
+   "files": [
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/envoy_ops",
+    "/embody/Embody/templates/text_agents_md"
+   ],
+   "toe_only": []
+  },
+  "SaveCurrentComp": {
+   "files": [
+    "/embody/Embody/keyboardin_callbacks"
+   ],
+   "toe_only": []
+  },
+  "SaveTDN": {
+   "files": [
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/envoy_ops",
+    "/embody/unit_tests/test_tdxn_migration",
+    "/embody/unit_tests/test_tdn_reconstruction",
+    "/embody/execute_src_ctrl"
+   ],
+   "toe_only": []
+  },
+  "ScanTdn": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": []
+  },
+  "SeedAutosaveStatus": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "Server": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "Session": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_sessions"
+   ],
+   "toe_only": []
+  },
+  "SessionBusy": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_sessions"
+   ],
+   "toe_only": []
+  },
+  "SetInformationJobObject": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostops"
+   ],
+   "toe_only": []
+  },
+  "SetupTagger": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "SetupTaggerDATManageMode": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "SetupTaggerManageMode": {
+   "files": [
+    "/embody/Embody/list/list_callbacks",
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "SetupTaggerTagMode": {
+   "files": [
+    "/embody/Embody/list/list_callbacks",
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "SimpleNamespace": {
+   "files": [
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "Start": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/Embody/parexec",
+    "/embody/Embody/EnvoyExt",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/templates/text_agents_md",
+    "/embody/Embody/embody_admin"
+   ],
+   "toe_only": []
+  },
+  "StartHost": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt",
+    "/embody/unit_tests/test_convoy_host_install"
+   ],
+   "toe_only": []
+  },
+  "StartupCheck": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/unit_tests/test_updater"
+   ],
+   "toe_only": []
+  },
+  "Step": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/extTweener"
+   ]
+  },
+  "Stop": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/Embody/updater/UpdaterExt",
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "StopHost": {
+   "files": [
+    "/embody/unit_tests/test_convoy_host_install"
+   ],
+   "toe_only": []
+  },
+  "StringIO": {
+   "files": [
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "StripCompChildren": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/unit_tests/test_tdn_reconstruction"
+   ],
+   "toe_only": []
+  },
+  "SubjectAlternativeName": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostkeys"
+   ],
+   "toe_only": []
+  },
+  "SystemRandom": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_sessions"
+   ],
+   "toe_only": []
+  },
+  "TDTask": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt",
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/EnvoyExt",
+    "/embody/Embody/templates/text_skill_td_api_reference",
+    "/embody/Embody/embody_git",
+    "/embody/unit_tests/test_convoy_ext"
+   ],
+   "toe_only": []
+  },
+  "TagExiter": {
+   "files": [
+    "/embody/Embody/chopexec_exit_tagger"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/header/button_close/parexec1",
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1",
+    "/embody/Embody/tagger/btn_omit/parexec1",
+    "/embody/Embody/tagger/btn_save/parexec1",
+    "/embody/Embody/tagger/btn_embed/parexec1",
+    "/embody/Embody/tagger/btn_reload/parexec1",
+    "/embody/Embody/tagger/btn_remove/parexec1",
+    "/embody/Embody/tagger/btn_restore/parexec1",
+    "/embody/Embody/tagger/btn_copy_tdn/parexec1",
+    "/embody/Embody/tagger/btn_openfile/parexec1",
+    "/embody/Embody/tagger/btn_portable/parexec1",
+    "/embody/Embody/tagger/btn_paste_tdn/parexec1",
+    "/embody/Embody/tagger/btn_embed_storage/parexec1"
+   ]
+  },
+  "TagGetter": {
+   "files": [
+    "/embody/Embody/keyboardin_callbacks"
+   ],
+   "toe_only": []
+  },
+  "TagSetter": {
+   "files": [
+    "/embody/unit_tests/test_tag_lifecycle"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1"
+   ]
+  },
+  "TargetIsNotParameter": {
+   "files": [],
+   "toe_only": [
+    "/utils/remote/tweener/extTweener"
+   ]
+  },
+  "Tasks": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "TemporaryDirectory": {
+   "files": [
+    "/embody/unit_tests/test_envoy_bridge",
+    "/embody/unit_tests/test_envoy_sessions"
+   ],
+   "toe_only": []
+  },
+  "TerminateJobObject": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostops"
+   ],
+   "toe_only": []
+  },
+  "TerminateProcess": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "Thread": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_ws",
+    "/embody/Embody/convoy/host/convoy_hostapp",
+    "/embody/Embody/convoy/host/convoy_hostops",
+    "/embody/Embody/convoy/host/convoy_sessions",
+    "/embody/Embody/convoy/host/convoy_discovery",
+    "/embody/Embody/updater/UpdaterExt",
+    "/embody/Embody/EnvoyExt",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/templates/text_envoy_bridge",
+    "/embody/Embody/CatalogManagerExt",
+    "/embody/unit_tests/test_convoy_ext",
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "ThreadPoolExecutor": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostapp",
+    "/embody/Embody/templates/text_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "ThreadingHTTPServer": {
+   "files": [
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "Threads": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "TimeoutExpired": {
+   "files": [
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "Timer": {
+   "files": [
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "URLError": {
+   "files": [
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "UninstallHandler": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "UninstallHost": {
+   "files": [
+    "/embody/unit_tests/test_convoy_host_install"
+   ],
+   "toe_only": []
+  },
+  "Unregister": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/Embody/parexec",
+    "/embody/unit_tests/test_convoy_ext"
+   ],
+   "toe_only": []
+  },
+  "Update": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/envoy_ops",
+    "/embody/Embody/templates/text_agents_md",
+    "/embody/Embody/templates/text_skill_td_api_reference",
+    "/embody/unit_tests/test_custom_parameters",
+    "/embody/unit_tests/test_tdn_reconstruction"
+   ],
+   "toe_only": []
+  },
+  "UpdateDeferred": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "UpdateHandler": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/Embody/toolbar/ToolbarExt",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/embody_git",
+    "/embody/Embody/keyboardin_callbacks",
+    "/embody/unit_tests/test_custom_parameters"
+   ],
+   "toe_only": []
+  },
+  "Verify": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "VerifyRollback": {
+   "files": [
+    "/embody/Embody/updater/UpdaterExt"
+   ],
+   "toe_only": []
+  },
+  "VerifyUpdate": {
+   "files": [
+    "/embody/Embody/updater/UpdaterExt"
+   ],
+   "toe_only": []
+  },
+  "WaitForSingleObject": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_platform",
+    "/embody/Embody/convoy/host/convoy_lifecycle",
+    "/embody/Embody/convoy/convoy_client",
+    "/embody/Embody/templates/text_envoy_bridge",
+    "/embody/Embody/envoy_setup"
+   ],
+   "toe_only": []
+  },
+  "WakeSettingsChanged": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "Warn": {
+   "files": [
+    "/embody/unit_tests/test_logging",
+    "/embody/execute_src_ctrl"
+   ],
+   "toe_only": []
+  },
+  "WebSocketConnection": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_sessions",
+    "/embody/Embody/convoy/host/convoy_peerserver"
+   ],
+   "toe_only": []
+  },
+  "WebSocketTimeout": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_sessions"
+   ],
+   "toe_only": []
+  },
+  "WinDLL": {
+   "files": [
+    "/embody/Embody/convoy/host/convoy_hostops",
+    "/embody/Embody/convoy/host/convoy_platform",
+    "/embody/Embody/convoy/convoy_client",
+    "/embody/Embody/convoy/convoy_install",
+    "/embody/Embody/templates/text_envoy_bridge",
+    "/embody/Embody/envoy_setup",
+    "/embody/Embody/embody_pyenv",
+    "/embody/unit_tests/test_envoy_bridge"
+   ],
+   "toe_only": []
+  },
+  "WindowsSelectorEventLoopPolicy": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "ZipFile": {
+   "files": [
+    "/embody/Embody/convoy/convoy_install"
+   ],
+   "toe_only": []
+  },
+  "_DIFF_SCHEMA_VERSION": {
+   "files": [
+    "/embody/unit_tests/test_tdn_diff_engine"
+   ],
+   "toe_only": []
+  },
+  "_PERSISTED_PARAMS": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "_adoptConvoyId": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_agentTick": {
+   "files": [
+    "/embody/unit_tests/TestRunnerExt"
+   ],
+   "toe_only": []
+  },
+  "_applyWizardSetup": {
+   "files": [
+    "/embody/Embody/wizard/logic"
+   ],
+   "toe_only": []
+  },
+  "_autoExternalizeFlush": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_autosaveClock": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "_autosaveDrain": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_beginConvoyWake": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_captureExternalConnections": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_checkOrInitGitRepo": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_checkTDNContentSafety": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "_cleanupStaleTDNFiles": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/unit_tests/test_tdn_file_io"
+   ],
+   "toe_only": []
+  },
+  "_clipboardWatchTick": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": []
+  },
+  "_collectExistingTDNFiles": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/unit_tests/test_tdn_file_io"
+   ],
+   "toe_only": []
+  },
+  "_compact_json_dumps": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "_consent_bulk": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_convoyTick": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_convoyWakeActive": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_convoy_lifecycle_commit_quit": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_createOps": {
+   "files": [
+    "/embody/unit_tests/test_tdn_file_io"
+   ],
+   "toe_only": []
+  },
+  "_datContentExcluded": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_deferSaveSettings": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "_diff_normalized": {
+   "files": [
+    "/embody/unit_tests/test_tdn_diff_engine"
+   ],
+   "toe_only": []
+  },
+  "_diff_tdn": {
+   "files": [
+    "/embody/unit_tests/test_tdn_diff"
+   ],
+   "toe_only": []
+  },
+  "_dispatchTaggerButton": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1"
+   ]
+  },
+  "_endConvoyWake": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_ensureNodeName": {
+   "files": [
+    "/embody/Embody/wizard/logic"
+   ],
+   "toe_only": []
+  },
+  "_enterPerformMode": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "_envoyPerformMode": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_exitPerformMode": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "_exportBuiltinSequences": {
+   "files": [
+    "/embody/unit_tests/test_release_hooks"
+   ],
+   "toe_only": []
+  },
+  "_exportCustomPars": {
+   "files": [
+    "/embody/unit_tests/test_release_hooks"
+   ],
+   "toe_only": []
+  },
+  "_findGitRootSync": {
+   "files": [
+    "/embody/Embody/wizard/logic"
+   ],
+   "toe_only": []
+  },
+  "_findProjectRoot": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt",
+    "/embody/Embody/wizard/logic",
+    "/embody/Embody/updater/UpdaterExt",
+    "/embody/Embody/envoy_setup",
+    "/embody/Embody/CatalogManagerExt"
+   ],
+   "toe_only": []
+  },
+  "_find_existing_backup_instance": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_flushDeferredCatalog": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "_getAllTrackedTDNFiles": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/execute",
+    "/embody/Embody/envoy_read"
+   ],
+   "toe_only": []
+  },
+  "_getCompStrategy": {
+   "files": [
+    "/embody/Embody/envoy_ops"
+   ],
+   "toe_only": []
+  },
+  "_getStrategyFilePath": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/execute",
+    "/embody/Embody/envoy_ops"
+   ],
+   "toe_only": []
+  },
+  "_getTDNPaths": {
+   "files": [
+    "/embody/Embody/envoy_viz"
+   ],
+   "toe_only": []
+  },
+  "_getTDNStrategyComps": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/Embody/CatalogManagerExt"
+   ],
+   "toe_only": []
+  },
+  "_getTOXExternalizedPaths": {
+   "files": [
+    "/embody/unit_tests/test_tdn_file_io"
+   ],
+   "toe_only": []
+  },
+  "_get_externalization_status": {
+   "files": [
+    "/embody/unit_tests/test_tdn_diff"
+   ],
+   "toe_only": []
+  },
+  "_guardFileWrite": {
+   "files": [
+    "/embody/Embody/envoy_setup"
+   ],
+   "toe_only": []
+  },
+  "_hasExcludeTag": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_importGateFailureMessage": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_import_clear_first": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "_inferDATTagValue": {
+   "files": [
+    "/embody/Embody/envoy_ops"
+   ],
+   "toe_only": []
+  },
+  "_isInsideAnnotate": {
+   "files": [
+    "/embody/Embody/envoy_ops"
+   ],
+   "toe_only": []
+  },
+  "_isPaletteClone": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_manifestRecordGitConfig": {
+   "files": [
+    "/embody/Embody/envoy_setup"
+   ],
+   "toe_only": []
+  },
+  "_mapChangedToOps": {
+   "files": [
+    "/embody/unit_tests/test_git_status"
+   ],
+   "toe_only": []
+  },
+  "_messageBox": {
+   "files": [
+    "/embody/Embody/list/list_callbacks",
+    "/embody/Embody/convoy/ConvoyExt",
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/updater/UpdaterExt",
+    "/embody/Embody/shortcuts",
+    "/embody/Embody/envoy_setup",
+    "/embody/Embody/CatalogManagerExt"
+   ],
+   "toe_only": []
+  },
+  "_migrateRootFiles": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "_normalize_tdn_for_compare": {
+   "files": [
+    "/embody/unit_tests/test_tdn_diff_engine"
+   ],
+   "toe_only": []
+  },
+  "_onTdnModeChanged": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "_openSetupWizard": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_osLabel": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/Embody/envoy_read"
+   ],
+   "toe_only": []
+  },
+  "_palette_catalog": {
+   "files": [
+    "/embody/Embody/CatalogManagerExt"
+   ],
+   "toe_only": []
+  },
+  "_parseGitPorcelain": {
+   "files": [
+    "/embody/unit_tests/test_git_status"
+   ],
+   "toe_only": []
+  },
+  "_performMode": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt",
+    "/embody/Embody/execute",
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_pollStartup": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_pollTestCompletion": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_pollTestCompletionJob": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_postInit": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_preRiskyCheckpoint": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_projectLooksExternalized": {
+   "files": [
+    "/embody/Embody/wizard/logic"
+   ],
+   "toe_only": []
+  },
+  "_projectSavedOnDisk": {
+   "files": [
+    "/embody/Embody/wizard/logic",
+    "/embody/Embody/envoy_ops",
+    "/embody/Embody/CatalogManagerExt"
+   ],
+   "toe_only": []
+  },
+  "_purgeExternalizationTracking": {
+   "files": [
+    "/embody/Embody/envoy_ops"
+   ],
+   "toe_only": []
+  },
+  "_reBaselineCheckpoint": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_readConvoyEntry": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_readConvoyId": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_read_existing_tdn": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "_rebindConvoyToCandidate": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_resolveOutputPath": {
+   "files": [
+    "/embody/unit_tests/test_tdn_file_io"
+   ],
+   "toe_only": []
+  },
+  "_resolveShortcutTokens": {
+   "files": [
+    "/embody/unit_tests/test_shortcuts"
+   ],
+   "toe_only": []
+  },
+  "_resolveUv": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_restartFire": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_restoreSettings": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "_restrictToTrackedTDN": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "_rowHasChanges": {
+   "files": [
+    "/embody/Embody/list/inject_parents_callbacks",
+    "/embody/unit_tests/test_git_status"
+   ],
+   "toe_only": []
+  },
+  "_rowIsUnsaved": {
+   "files": [
+    "/embody/Embody/list/inject_parents_callbacks",
+    "/embody/unit_tests/test_git_status"
+   ],
+   "toe_only": []
+  },
+  "_runSaveJob": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_safe_write_tdn": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_saveSettings": {
+   "files": [
+    "/embody/Embody/embody_admin"
+   ],
+   "toe_only": []
+  },
+  "_setAutosaveStatus": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "_setupEnvironment": {
+   "files": [
+    "/embody/Embody/envoy_setup",
+    "/embody/unit_tests/test_server_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "_showTDNMigrationNudge": {
+   "files": [
+    "/embody/Embody/embody_admin"
+   ],
+   "toe_only": []
+  },
+  "_splitPerComp": {
+   "files": [
+    "/embody/unit_tests/test_tdn_file_io"
+   ],
+   "toe_only": []
+  },
+  "_status": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "_storeTDNFingerprint": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "_stripBuildSuffix": {
+   "files": [
+    "/embody/Embody/EmbodyExt",
+    "/embody/unit_tests/test_tdn_file_io"
+   ],
+   "toe_only": []
+  },
+  "_stripNestedTOXChildren": {
+   "files": [
+    "/embody/unit_tests/test_tdn_file_io"
+   ],
+   "toe_only": []
+  },
+  "_submitSiblingApi": {
+   "files": [
+    "/embody/unit_tests/test_convoy_ext"
+   ],
+   "toe_only": []
+  },
+  "_sweepTDNDirtyChunk": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_tagger_mode": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1"
+   ]
+  },
+  "_tdnEnabled": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "_tdnMode": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "_tdn_content_equal": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "_testRunnerActive": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_trackTDNExport": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_trackedTDNSuffix": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/unit_tests/test_tdn_file_io"
+   ],
+   "toe_only": []
+  },
+  "_transientParNames": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": []
+  },
+  "_updateChunk": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "_updateRowCells": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": []
+  },
+  "_upgradeEnvoy": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "_validateTDNRefs": {
+   "files": [
+    "/embody/unit_tests/test_tdn_file_io"
+   ],
+   "toe_only": []
+  },
+  "_venvPaths": {
+   "files": [
+    "/embody/Embody/convoy/ConvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_verifyReconstructedComp": {
+   "files": [
+    "/embody/unit_tests/test_tdn_reconstruction"
+   ],
+   "toe_only": []
+  },
+  "_warnLargeTDN": {
+   "files": [
+    "/embody/unit_tests/test_tdn_file_io"
+   ],
+   "toe_only": []
+  },
+  "_watchdogTick": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "_workerLoop": {
+   "files": [
+    "/embody/unit_tests/test_convoy_ext"
+   ],
+   "toe_only": []
+  },
+  "_writeProjectJson": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "applyTagToOperator": {
+   "files": [
+    "/embody/Embody/envoy_ops"
+   ],
+   "toe_only": []
+  },
+  "buildAbsolutePath": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/execute",
+    "/embody/Embody/envoy_read",
+    "/embody/Embody/CatalogManagerExt",
+    "/embody/execute_src_ctrl"
+   ],
+   "toe_only": []
+  },
+  "getExternalizedOps": {
+   "files": [
+    "/embody/Embody/templates/text_agents_md"
+   ],
+   "toe_only": []
+  },
+  "getTags": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": []
+  },
+  "helperMethod": {
+   "files": [
+    "/embody/Embody/templates/text_claude",
+    "/embody/Embody/templates/text_skill_create_extension",
+    "/embody/Embody/templates/text_skill_td_api_reference"
+   ],
+   "toe_only": []
+  },
+  "is_tdn_network_file": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "method": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "normalizePath": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/envoy_read"
+   ],
+   "toe_only": []
+  },
+  "pop": {
+   "files": [
+    "/embody/unit_tests/test_envoy_sessions"
+   ],
+   "toe_only": []
+  },
+  "rolloverOp": {
+   "files": [
+    "/embody/Embody/list/list_callbacks"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1",
+    "/embody/Embody/tagger/btn_omit/parexec1",
+    "/embody/Embody/tagger/btn_save/parexec1",
+    "/embody/Embody/tagger/btn_embed/parexec1",
+    "/embody/Embody/tagger/btn_reload/parexec1",
+    "/embody/Embody/tagger/btn_remove/parexec1",
+    "/embody/Embody/tagger/btn_restore/parexec1",
+    "/embody/Embody/tagger/btn_copy_tdn/parexec1",
+    "/embody/Embody/tagger/btn_openfile/parexec1",
+    "/embody/Embody/tagger/btn_portable/parexec1",
+    "/embody/Embody/tagger/btn_paste_tdn/parexec1",
+    "/embody/Embody/tagger/btn_embed_storage/parexec1"
+   ]
+  },
+  "root": {
+   "files": [
+    "/embody/Embody/envoy_viz"
+   ],
+   "toe_only": []
+  },
+  "tdn_dump": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "tdn_load": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/execute",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/CatalogManagerExt",
+    "/embody/unit_tests/test_tdxn_migration"
+   ],
+   "toe_only": []
+  }
+ }
+}
