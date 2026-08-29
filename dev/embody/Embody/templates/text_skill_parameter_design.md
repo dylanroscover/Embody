@@ -72,15 +72,31 @@ def _onResetPulse(self, par):
 
 Custom parameters are one of three ways to hold state on a COMP, and the choice is about lifetime, not taste:
 
-| The state is | Use | Survives extension reinit |
+| The state is | Use | Lives on |
 |---|---|---|
-| User-facing, persisted in the `.toe`/`.tox`, part of the interface | **custom parameter** | **yes** |
-| Durable per-COMP bookkeeping the user should not see | **`storage`** | **no** |
-| A derived value that must recook whatever reads it | **`tdu.Dependency`** | no -- rebuild in `__init__` |
+| User-facing, persisted, part of the COMP's interface | **custom parameter** | the COMP |
+| Durable bookkeeping the user should not see | **`storage`** | the COMP |
+| A derived value that must recook whatever reads it | **`tdu.Dependency`** | usually the extension instance |
 
-**The reinit rule:** editing an extension's `.py` reinitializes it and clears `storage`, while a custom parameter survives untouched. State that must outlive a hot-sync save belongs in a parameter. A read-only status par is the right home for a state machine; storage is not.
+**What survives what.** Probed on TD 2025.33070; undocumented, so re-verify on another build.
 
-Do not reach for a `Dependency` where a parameter works -- a par is inspectable, persisted, exportable and free. Reach for one when a computed value has no business on the user's parameter dialog but still has to invalidate whatever reads it.
+| Event | Custom par | `storage` | Dependency on the extension |
+|---|---|---|---|
+| Extension reinit -- source `.py` edit, `initializeExtensions()` | survives | **survives** | **destroyed** |
+| External-tox reload -- `enableexternaltoxpulse`, COMP restore | survives | **wiped** | destroyed |
+| `.toe` / `.tox` save and load | survives | survives | survives only if stored |
+
+`storage` lives on the COMP, not on the extension instance, so a hot-sync reinit does **not** clear it -- the common belief that it does is wrong. What clears it is the COMP's contents being replaced: a tox reload, a TDXN reconstruction, a restore. Embody hits that case, which is why Envoy's state machine trusts the `Envoystatus` parameter rather than its `envoy_running` store.
+
+Do not reach for a `Dependency` where a parameter works -- a par is inspectable, persisted, exportable and free. Reach for one when a computed value has no business on the user's parameter dialog but still has to invalidate whatever reads it. A Dependency assigned to `self` in `__init__` dies with the instance on every source save; rebuild it there, never treat it as persistent.
+
+### Mechanics worth knowing
+
+- **`storage` already has dependency built in for immutable values.** TD documents that changing an immutable stored element makes dependent expressions and operators re-cook, with no `tdu.Dependency` involved. **Mutating a stored list, dict or set in place does not.** That is what `TDStoreTools.DependList` / `DependDict` / `DependSet` are for -- not `tdu`, which has no such names (verified 2026-08-29 on 2025.33070: `TDStoreTools` exports `DependDict`, `DependList`, `DependSet`, `DependMixin`, `makeDependable`, `isImmutable`, `StorageManager`).
+- **`fetch(key)` with no default RAISES**, it does not return `None` -- `tdError: The fetched item was not found and no default was specified`. Always pass a default, or use `fetchOwner(key)` (returns `None`) to test for presence. Derivative's stated reason: a stored object could legitimately BE `None`, so a `None` return would be ambiguous.
+- **`fetch()` searches UP the parent chain by default.** A missing local key silently resolves to an ancestor's value of the same name. Pass `search=False` for local-only lookup; `fetchOwner()` tells you which operator actually answered.
+- **"You cannot store operator references" is a `StorageManager` rule, not a storage rule.** Raw `store()` takes any Python object, and TD's own docs demonstrate storing an OP. Verified: an OP stored and fetched comes back a live operator, and survives a `.tox` round-trip re-resolved to its path. `StorageManager` is stricter because it must pickle; store a path string there.
+- **`storeStartupValue()` writes a separate startup dictionary** that overrides the saved value on file load. Use it to force a known state on open, and to keep session-specific junk out of the saved file.
 
 ## Help Text
 

@@ -219,15 +219,25 @@ This applies to:
 
 Three mechanisms hold state on a COMP. The choice is about lifetime and audience, not taste:
 
-| The state is | Use | Survives extension reinit |
+| The state is | Use | Lives on |
 |---|---|---|
-| User-facing, persisted in the `.toe`/`.tox`, part of the COMP's interface | **custom parameter** | **yes** |
-| Durable per-COMP bookkeeping the user should not see | **`storage`** | **no** |
-| A derived value that must recook whatever reads it | **`tdu.Dependency`** | no -- rebuild in `__init__` |
+| User-facing, persisted, part of the COMP's interface | **custom parameter** | the COMP |
+| Durable bookkeeping the user should not see | **`storage`** | the COMP |
+| A derived value that must recook whatever reads it | **`tdu.Dependency`** | usually the extension instance |
 
-**The reinit rule:** editing an extension's `.py` reinitializes the extension and clears its `storage`, while a custom parameter survives untouched. Any state that must outlive a hot-sync save belongs in a parameter -- which is why a read-only status par, not storage, is the right home for a state machine.
+**What survives what.** Probed on TD 2025.33070 -- TD does not document this, so re-verify on another build before relying on it.
 
-Prefer a parameter wherever one works: it is inspectable, persisted, exportable and free. Reach for a `Dependency` when a computed value has no business on the user's parameter dialog but still has to invalidate whatever reads it.
+| Event | Custom par | `storage` | Dependency on the extension |
+|---|---|---|---|
+| Extension reinit -- source `.py` edit, `initializeExtensions()` | survives | **survives** | **destroyed** |
+| External-tox reload -- `enableexternaltoxpulse`, COMP restore | survives | **wiped** | destroyed |
+| `.toe` / `.tox` save and load | survives | survives | survives only if stored |
+
+`storage` lives on the COMP, not on the extension instance, so a hot-sync reinit does **not** clear it -- the widespread belief that it does is wrong. What clears it is the COMP's contents being replaced: a tox reload, a TDXN reconstruction, a restore. Embody hits that case, which is why Envoy's state machine trusts the `Envoystatus` parameter rather than its own `envoy_running` store.
+
+Prefer a parameter wherever one works: it is inspectable, persisted, exportable and free. Reach for a `Dependency` when a computed value has no business on the user's parameter dialog but still has to invalidate whatever reads it -- and rebuild it in `__init__`, because it dies with the instance on every source save.
+
+Storage round-trips more than folklore suggests: probed on 2025.33070, a `.tox` save/load preserved a plain dict, an **operator reference** (re-resolved to its path), a `Dependency` object, and a builtin callable. Cross-session behaviour, and what happens when a stored op reference's target no longer exists, is untested -- do not assume.
 
 ## Operator Storage
 
@@ -238,8 +248,15 @@ op('base1').unstore('count')
 op('base1').storeStartupValue('version', 1)  # Restored on project load
 ```
 
-**Gotchas:** `fetch()` searches UP hierarchy by default -- use `search=False` for local-only. `store()` triggers recooks. Cannot store TD operator references -- use path strings.
-- Docs: https://docs.derivative.ca/Storage
+**Gotchas** (verified 2026-08-29 on 2025.33070):
+
+- `fetch()` searches UP the parent hierarchy by default -- a missing local key silently resolves to an ancestor's. Use `search=False` for local-only; `fetchOwner(key)` reports which operator answered (and returns `None` rather than raising).
+- **`fetch(key)` with no default RAISES** `tdError: The fetched item was not found and no default was specified` -- it does not return `None`. Derivative's reason: a stored value could legitimately be `None`.
+- `store()` of an **immutable** value makes dependent expressions and operators re-cook automatically -- storage has dependency built in, no `tdu.Dependency` needed. **In-place mutation of a stored list/dict/set does not notify anything**; use `TDStoreTools.DependList` / `DependDict` / `DependSet` for that. Those names live in `TDStoreTools`, NOT `tdu` (`tdu.DependableDict` does not exist).
+- **You CAN store an operator reference.** The "store a path string instead" rule belongs to `TDStoreTools.StorageManager`, which must pickle; raw `store()` takes any Python object and TD's docs demonstrate storing an OP.
+- `storeStartupValue()` writes a separate startup dictionary that overrides the saved value on load -- use it to force a known state on open.
+
+- Docs: https://docs.derivative.ca/Storage , https://docs.derivative.ca/StorageManager_Class
 
 ## `tdu.Dependency` for Reactive Values
 

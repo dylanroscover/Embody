@@ -5042,9 +5042,11 @@ class EnvoyExt:
             self._log('Server already running/starting (duplicate Start ignored)',
                       'DEBUG')
             return
-        # The envoy_running store can be lost on extension reinit (file sync
-        # replaces baked-in code -> extension reinitializes -> storage cleared).
-        # Check the status parameter as a backup -- it survives reinit.
+        # The envoy_running store can be lost when this COMP's contents are
+        # REPLACED -- a tox reload/restore wipes storage (probed 2026-08-29:
+        # enableexternaltoxpulse -> storage keys go to []). Extension reinit
+        # alone does NOT clear storage; it lives on the COMP, not the instance,
+        # and survives a source-file edit. The status parameter survives both.
         # Only 'Running' means the server thread is actually active.
         # 'Starting...' is just a UI hint -- not proof of an active thread.
         status = str(self.ownerComp.par.Envoystatus.eval())

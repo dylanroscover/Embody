@@ -8,7 +8,7 @@ Creating or designing custom parameters -> MUST load /parameter-design FIRST.
 
 **Route parameter callbacks through one dispatcher, not one promoted method per parameter.** An `elif par.name == ...` chain in a parexec DAT adds a public-tier method to the COMP for every branch. Name handlers `_on<Par>ValueChange(par, prev)` / `_on<Par>Pulse(par)` on the extension and `getattr` them from the DAT -- see `/parameter-design` (Parameter Callbacks) and the three tiers in `td-python.md`.
 
-**A custom parameter is one of three state mechanisms**, and the only one that survives an extension reinit (`storage` is cleared; a `tdu.Dependency` is rebuilt). Picking between them: `/parameter-design` (Parameter, Storage, or Dependency?).
+**A custom parameter is one of three state mechanisms.** It survives an extension reinit -- but so does `storage`, which lives on the COMP and not on the extension instance (probed 2026-08-29, and TD's own docs say stored items "retain their values when your extension is reinitialized"). What loses storage is the COMP's contents being *replaced*: a tox reload, a TDXN reconstruction. A `tdu.Dependency` held on `self` dies with the instance on every source save. Picking between them: `/parameter-design` (Parameter, Storage, or Dependency?).
 
 ## Reading and Writing Values
 

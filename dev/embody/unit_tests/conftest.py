@@ -183,6 +183,36 @@ def _runner_stub():
     return _Op('op')
 
 
+# --- Runtime cage: the sandbox covers WHICH module is imported, not what
+# that module reaches at runtime. envoy_bridge._init_file_logging falls back
+# to os.getcwd()/dev/logs when no --config is passed, so a pytest run started
+# from the repo root appends to the LIVE dev/logs/envoy-bridge.log, and the
+# bridge's port resolution still finds the real registry on 9870. Proven
+# 2026-08-29: bridge lines under dev/.venv-tests/python.exe (3.11.15, an
+# interpreter only pytest uses) recorded "Connected to Envoy" and four
+# "Launching TouchDesigner" calls against the live install; the dev TD exited
+# five seconds later. That is the same signature as the 2026-07-30 incident
+# this file's header records as cause-unproven.
+_LIVE_BRIDGE_LOG = os.path.join(_DEV_DIR, 'logs', 'envoy-bridge.log')
+_live_log_size_at_start = None
+
+
+def _cage_bridge_runtime():
+    """Neutralize file logging in every imported bridge copy."""
+    for name in ('envoy_bridge', 'text_envoy_bridge'):
+        mod = sys.modules.get(name)
+        if mod is None:
+            continue
+        handle = getattr(mod, '_log_file', None)
+        if handle is not None:
+            try:
+                handle.close()
+            except Exception:
+                pass
+        mod._log_file = None
+        mod._init_file_logging = lambda *a, **k: None
+
+
 def pytest_configure(config):
     # Inject only when TD is genuinely absent -- inside TD these names
     # are real builtins and must never be shadowed. project.folder points
@@ -191,3 +221,37 @@ def pytest_configure(config):
         builtins.project = types.SimpleNamespace(folder=_sandbox_dev_dir())
     if not hasattr(builtins, 'op'):
         builtins.op = _runner_stub()
+    global _live_log_size_at_start
+    try:
+        _live_log_size_at_start = os.path.getsize(_LIVE_BRIDGE_LOG)
+    except OSError:
+        _live_log_size_at_start = None
+
+
+def pytest_collection_finish(session):
+    """Cage after collection -- test modules import the bridge at import time."""
+    _cage_bridge_runtime()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Tripwire: the suite must not have written to the live install.
+
+    Fails the run rather than warning. A suite that can append to the live
+    bridge log can also reach the live Envoy port, and that has taken the
+    developer's TouchDesigner down.
+    """
+    if _live_log_size_at_start is None:
+        return
+    try:
+        grew = os.path.getsize(_LIVE_BRIDGE_LOG) - _live_log_size_at_start
+    except OSError:
+        return
+    if grew > 0:
+        session.exitstatus = 1
+        print(
+            '\nISOLATION FAILURE: the test run appended %d bytes to the live\n'
+            '%s\n'
+            'The bridge under test reached the real install instead of the\n'
+            'sandbox. Do not trust this run, and do not run it again against a\n'
+            'live TouchDesigner until the leak is closed.'
+            % (grew, _LIVE_BRIDGE_LOG))

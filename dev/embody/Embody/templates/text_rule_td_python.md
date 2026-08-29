@@ -113,16 +113,26 @@ any background/long-running/blocking/HTTP work -> MUST load /td-api-reference (B
 
 Three mechanisms hold state on a COMP and they are not interchangeable. Choose by lifetime and audience:
 
-| The state is | Use | Survives extension reinit |
+| The state is | Use | Lives on |
 |---|---|---|
-| User-facing, persisted in the `.toe`/`.tox`, part of the COMP's interface | a **custom parameter** | **yes** |
-| Durable per-COMP data that is not the user's business (caches, handles, bookkeeping) | **`storage`** | **no** |
-| A derived value that must recook whatever reads it | **`tdu.Dependency`** | no -- rebuild it in `__init__` |
+| User-facing, persisted, part of the COMP's interface | a **custom parameter** | the COMP |
+| Durable bookkeeping the user should not see (caches, handles, flags) | **`storage`** | the COMP |
+| A derived value that must recook whatever reads it | **`tdu.Dependency`** | usually the extension instance |
 
-**The reinit rule, learned the hard way:** editing an extension's `.py` reinitializes the extension and clears its `storage`, while a custom parameter survives untouched. Any state that must outlive a hot-sync save belongs in a parameter, not storage. That is why Embody's Envoy state machine lives in a par.
+**What survives what.** Probed on TD 2025.33070; TD does not document this, so verify before relying on it in another build.
+
+| Event | Custom par | `storage` | Dependency held on the extension |
+|---|---|---|---|
+| Extension reinit -- editing the source `.py`, `initializeExtensions()` | survives | **survives** | **destroyed** (a new instance is built) |
+| External-tox reload -- `enableexternaltoxpulse`, COMP restore | survives | **wiped** | destroyed |
+| `.toe` / `.tox` save and load | survives | survives | survives only if it was put in storage |
+
+The distinction that matters: **`storage` lives on the COMP, not on the extension instance**, so a hot-sync reinit does NOT clear it -- the widespread belief that it does is wrong. What clears it is the COMP's contents being *replaced*: a tox reload, a TDXN reconstruction, a restore. Embody hits exactly that case, which is why Envoy's state machine trusts the `Envoystatus` **parameter** rather than its own `envoy_running` store.
+
+A `tdu.Dependency` assigned to `self` in `__init__` is a different lifetime again: it dies with the instance on every source save. Rebuild it in `__init__`, never treat it as persistent.
 
 - **`fetch()` searches UP the parent hierarchy** by default -- pass `search=False` for local-only lookup.
-- **`store()` triggers recooks** -- not a passive dict assignment. Keep it out of hot paths.
+- **`store()` is not a passive dict assignment** -- it participates in the cook model and belongs out of hot paths. (Probed 2026-08-29: a single `store()` did not increment the owner COMP's `totalCooks` in the same frame, so treat "store triggers a recook" as dirtying dependents, not as an immediate self-cook.)
 - **Cannot store operator references** -- store path strings and re-resolve.
 - **`tdu.Dependency`**: assign to `.val` (`dep.val = 5`); `dep = 5` destroys the object. Call `.modified()` after mutating contents in place. Read without subscribing via `.peekVal`.
 - **A Dependency is main-thread-only** -- setting `.val` recooks. Never touch one from a worker (see Threading below).
