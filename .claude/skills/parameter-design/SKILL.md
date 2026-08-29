@@ -90,13 +90,51 @@ Custom parameters are one of three ways to hold state on a COMP, and the choice 
 
 Do not reach for a `Dependency` where a parameter works -- a par is inspectable, persisted, exportable and free. Reach for one when a computed value has no business on the user's parameter dialog but still has to invalidate whatever reads it. A Dependency assigned to `self` in `__init__` dies with the instance on every source save; rebuild it there, never treat it as persistent.
 
+### What actually notifies dependents
+
+The whole point of choosing between these is whether a change *reaches* the expressions that read it. Measured on 2025.33070 with a CHOP parameter expression as the dependent:
+
+| Change | Dependent expression | Cooked |
+|---|---|---|
+| `comp.store('k', 99)` -- immutable | 11 -> **99** | **yes**, same frame |
+| `comp.storage['k'] = 55` -- direct dict write | still reads **1** (value really is 55) | **no** |
+| `comp.fetch('lst').append(4)` -- in-place mutation | still reads **3** (list really is 4 long) | **no** |
+| `self.Scale = 42` -- plain extension attribute | still reads **5** (attribute really is 42) | **no** |
+| `self.DepScale.val = 77` -- `tdu.Dependency` | -> **77** | **yes** |
+
+Three of those five are silent: the value is genuinely updated and every `print` looks right, but nothing downstream hears about it. That is the entire failure mode.
+
+- **Always write through `store()`, never `comp.storage[k] = v`.** Re-storing an unchanged value still notifies, so `store(k, fetch(k))` is the documented way to publish an in-place mutation.
+- **A plain extension attribute is not dependable.** This is exactly what `tdu.Dependency` exists to fix -- not storage, which is already dependable for immutable values.
+
 ### Mechanics worth knowing
 
-- **`storage` already has dependency built in for immutable values.** TD documents that changing an immutable stored element makes dependent expressions and operators re-cook, with no `tdu.Dependency` involved. **Mutating a stored list, dict or set in place does not.** That is what `TDStoreTools.DependList` / `DependDict` / `DependSet` are for -- not `tdu`, which has no such names (verified 2026-08-29 on 2025.33070: `TDStoreTools` exports `DependDict`, `DependList`, `DependSet`, `DependMixin`, `makeDependable`, `isImmutable`, `StorageManager`).
-- **`fetch(key)` with no default RAISES**, it does not return `None` -- `tdError: The fetched item was not found and no default was specified`. Always pass a default, or use `fetchOwner(key)` (returns `None`) to test for presence. Derivative's stated reason: a stored object could legitimately BE `None`, so a `None` return would be ambiguous.
-- **`fetch()` searches UP the parent chain by default.** A missing local key silently resolves to an ancestor's value of the same name. Pass `search=False` for local-only lookup; `fetchOwner()` tells you which operator actually answered.
-- **"You cannot store operator references" is a `StorageManager` rule, not a storage rule.** Raw `store()` takes any Python object, and TD's own docs demonstrate storing an OP. Verified: an OP stored and fetched comes back a live operator, and survives a `.tox` round-trip re-resolved to its path. `StorageManager` is stricter because it must pickle; store a path string there.
-- **`storeStartupValue()` writes a separate startup dictionary** that overrides the saved value on file load. Use it to force a known state on open, and to keep session-specific junk out of the saved file.
+- **`fetch(key)` with no default RAISES**, it does not return `None` -- `tdError: The fetched item was not found and no default was specified`. Pass a default, or use `fetchOwner(key)` (returns `None`) to test presence. Derivative's reason: a stored value could legitimately BE `None`.
+- **`fetch()` searches UP the parent chain by default.** A missing local key silently resolves to an ancestor's value of the same name. `search=False` for local-only; `fetchOwner()` names the operator that answered.
+- **`unstore()` is glob-matched, not a literal key delete.** Verified: `unstore('sales*')` removed `sales_a` and `sales_b` and left `keep`. Never pass a computed or user-derived key -- one containing `*`, `?` or `[` will take its siblings with it.
+- **"You cannot store operator references" is a `StorageManager` rule, not a storage rule.** Raw `store()` takes any Python object and TD's docs demonstrate storing an OP; verified round-tripping one through a `.tox`. `StorageManager` is stricter because it pickles -- store a `.path` string there.
+- **Storage is pickled into the `.toe`/`.tox` at save.** An unpicklable value logs a *warning* and vanishes on reload while the save itself succeeds, so it is easy to miss. Locks, `threading.Event`, sockets and file handles are out -- and so is an instance of a class defined in a DAT, which stops pickling the moment that DAT recompiles. A file-synced `.py` edit does that routinely, which makes it an Embody-shaped hazard specifically.
+- **`storeStartupValue()` writes a separate startup dictionary** that overrides the saved value on load. Use it to force a known state on open and to keep session state out of the file.
+
+### Dependency: the two idioms, and the trap
+
+```python
+import TDFunctions as TDF
+
+class MyExt:
+    def __init__(self, ownerComp):
+        self.ownerComp = ownerComp
+        TDF.createProperty(self, 'Scale', value=1.0, dependable=True)  # expression: op('c').Scale
+        self.Raw = tdu.Dependency(5)                                   # expression: op('c').Raw.val
+```
+
+The two idioms need **different expressions**, and swapping them fails quietly: the raw form read as `op('c').Raw` evaluates the Dependency *object*, which is always truthy and never changes.
+
+- **`self.Raw = 5` destroys the Dependency** -- it rebinds the attribute to a plain int and removes the cook dependency. Nothing raises, and a Dependency reads as its underlying value, so every `print` and comparison still looks correct. Write `self.Raw.val = 5`.
+- **`.peekVal` reads without creating a dependency**; reading `.val` inside an evaluating expression is what forms it. `dep.ops` lists the operators currently dependent on it -- the right tool for "why is this cooking".
+- **Mutating a container inside a Dependency notifies nothing.** Call `.modified()`, or hold it in `TDStoreTools.DependDict` / `DependList` / `DependSet` (those names live in `TDStoreTools`; `tdu.DependableDict` does not exist on any build). Note `DependDict` subclasses `MutableMapping`, not `dict`, so `isinstance(x, dict)` is `False` and `json.dumps` raises -- use `getRaw()` for plain data.
+- **`dep.callbacks` leaks across a hot reload.** Appending a bound method holds a strong reference to the extension instance, so every source save adds another live subscriber and one change fires N callbacks against dead state. It reads like a race, not a leak. Remove it in `onDestroyTD` by copying the list, mutating, and reassigning -- an in-place `.append`/`.remove` is documented as insufficient.
+- **Both are main-thread only.** Setting `.val` dirties dependents and runs callbacks synchronously; `store()` participates in the cook model. Resolve values on the main thread and hand plain data to a worker.
 
 ## Help Text
 

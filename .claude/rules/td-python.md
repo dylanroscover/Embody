@@ -128,7 +128,9 @@ The distinction that matters: **`storage` lives on the COMP, not on the extensio
 A `tdu.Dependency` assigned to `self` in `__init__` is a different lifetime again: it dies with the instance on every source save. Rebuild it in `__init__`, never treat it as persistent.
 
 - **`fetch()` searches UP the parent hierarchy** by default -- pass `search=False` for local-only lookup.
-- **`store()` is not a passive dict assignment** -- it participates in the cook model and belongs out of hot paths. (Probed 2026-08-29: a single `store()` did not increment the owner COMP's `totalCooks` in the same frame, so treat "store triggers a recook" as dirtying dependents, not as an immediate self-cook.)
+- **`store()` of an immutable value recooks its dependents** -- storage is already dependable, so a scalar in storage does NOT need a `tdu.Dependency` wrapper. It dirties dependents, not the owner (the owner's `totalCooks` stays flat -- that is expected, not a bug).
+- **Three ways to change state silently**, all measured 2026-08-29 with a dependent parameter expression that never cooked: `comp.storage['k'] = v` (direct dict write), `comp.fetch('lst').append(x)` (in-place mutation), and a plain extension attribute `self.Scale = 42`. The value really changes; the expression keeps reading the old one. **Always write through `store()`** -- re-storing an unchanged value still notifies. A plain extension attribute is not dependable at all: that is precisely what `tdu.Dependency` is for.
+- **`fetch(key)` with no default RAISES** `tdError` -- it does not return `None`, because a stored value could legitimately BE `None`. `unstore()` is glob-matched, so never hand it a computed key.
 - **Cannot store operator references** -- store path strings and re-resolve.
 - **`tdu.Dependency`**: assign to `.val` (`dep.val = 5`); `dep = 5` destroys the object. Call `.modified()` after mutating contents in place. Read without subscribing via `.peekVal`.
 - **A Dependency is main-thread-only** -- setting `.val` recooks. Never touch one from a worker (see Threading below).
