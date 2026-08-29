@@ -829,7 +829,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertIn('another', entry['tags'])
 
 	# =================================================================
-	# ImportNetworkFromFile
+	# importNetworkFromFile
 	# =================================================================
 
 	def test_importFromFile_basic(self):
@@ -838,13 +838,13 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDXN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		target = self.sandbox.create(baseCOMP, 'fit')
-		result = self.embody.ext.TDXN.ImportNetworkFromFile(
+		result = self.embody.ext.TDXN.importNetworkFromFile(
 			file_path=fp, target_path=target.path)
 		self.assertTrue(result.get('success'))
 		self.assertIn('fic', [c.name for c in target.children])
 
 	def test_importFromFile_nonexistent(self):
-		result = self.embody.ext.TDXN.ImportNetworkFromFile(
+		result = self.embody.ext.TDXN.importNetworkFromFile(
 			file_path='/nonexistent/xyz.tdn',
 			target_path=self.sandbox.path)
 		self.assertIn('error', result)
@@ -853,13 +853,13 @@ class TestTDNFileIO(EmbodyTestCase):
 	def test_importFromFile_invalid_tdn(self):
 		bad = str(Path(self._temp_dir) / 'bad.tdn')
 		Path(bad).write_text('{{{invalid')
-		result = self.embody.ext.TDXN.ImportNetworkFromFile(
+		result = self.embody.ext.TDXN.importNetworkFromFile(
 			file_path=bad, target_path=self.sandbox.path)
 		self.assertIn('error', result)
 		self.assertIn('Invalid TDXN', result['error'])
 
 	def test_importFromFile_empty_string_path(self):
-		result = self.embody.ext.TDXN.ImportNetworkFromFile(
+		result = self.embody.ext.TDXN.importNetworkFromFile(
 			file_path='', target_path=self.sandbox.path)
 		self.assertIn('error', result)
 		self.assertIn('No TDXN file specified', result['error'])
@@ -873,7 +873,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDXN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		target = self.sandbox.create(baseCOMP, 'wire_target')
-		self.embody.ext.TDXN.ImportNetworkFromFile(
+		self.embody.ext.TDXN.importNetworkFromFile(
 			file_path=fp, target_path=target.path)
 		imported_dst = target.op('wire_dst')
 		self.assertIsNotNone(imported_dst)

@@ -180,7 +180,7 @@ class TestTDNBlockScalarFileIO(EmbodyTestCase):
             'single trailing newline must use clip chomp, not keep (|+)')
 
         target = self.sandbox.create(baseCOMP, 'one_nl_target')
-        result = self.tdn.ImportNetworkFromFile(
+        result = self.tdn.importNetworkFromFile(
             file_path=fp, target_path=target.path)
         self.assertTrue(result.get('success'), f'import failed: {result}')
         imported = target.op('one_nl')
@@ -206,7 +206,7 @@ class TestTDNBlockScalarFileIO(EmbodyTestCase):
             'two trailing newlines must use keep chomp (|+)')
 
         target = self.sandbox.create(baseCOMP, 'two_nl_target')
-        result = self.tdn.ImportNetworkFromFile(
+        result = self.tdn.importNetworkFromFile(
             file_path=fp, target_path=target.path)
         self.assertTrue(result.get('success'), f'import failed: {result}')
         imported = target.op('two_nl')

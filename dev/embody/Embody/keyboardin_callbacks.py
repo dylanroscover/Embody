@@ -18,14 +18,14 @@ def _runAction(par_name):
 	elif par_name == 'Shortcutrefresh':
 		e.Refresh()
 	elif par_name == 'Shortcutexportproject':
-		e.ext.TDXN.ExportProjectTDNInteractive()
+		e.ext.TDXN.exportProjectTDNInteractive()
 	elif par_name == 'Shortcutexportcomp':
 		pane = ui.panes.current
 		if pane and pane.owner:
 			e.ext.TDXN.ExportNetworkAsync(
 				root_path=pane.owner.path, output_file='auto')
 	elif par_name == 'Shortcutcopytdn':
-		e.ext.TDXN.CopySelectedToClipboard()
+		e.ext.TDXN.copySelectedToClipboard()
 
 
 def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShift, rShift, state, time, cmd, lCmd, rCmd):

@@ -120,7 +120,7 @@ class EmbodyTestCase(TestCase):
 
         `reseed` (optional) is re-invoked between attempts to redo the write
         under test -- use it when the value is produced by product code
-        (e.g. CopyNetworkToClipboard) rather than a literal string.
+        (e.g. copyNetworkToClipboard) rather than a literal string.
         """
         import time
         for attempt in range(self.CLIPBOARD_ATTEMPTS):

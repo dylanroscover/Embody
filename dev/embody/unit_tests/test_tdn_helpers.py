@@ -404,7 +404,7 @@ class TestTDNHelpers(EmbodyTestCase):
         self._lockedTop(root, 'locked1')
         captured, restore = self._interceptLockedDialog()
         try:
-            self.tdn.BeginLockedWarnBatch()
+            self.tdn.beginLockedWarnBatch()
             self.tdn._warnLockedNonDATs(root, context='export')
             self.assertEqual(len(captured), 0)
             self.assertEqual(len(self.tdn._locked_warn_batch), 1)
@@ -421,10 +421,10 @@ class TestTDNHelpers(EmbodyTestCase):
         self._lockedTop(root_b, 'locked_b')
         captured, restore = self._interceptLockedDialog()
         try:
-            self.tdn.BeginLockedWarnBatch()
+            self.tdn.beginLockedWarnBatch()
             self.tdn._warnLockedNonDATs(root_a, context='export')
             self.tdn._warnLockedNonDATs(root_b, context='export')
-            self.tdn.FlushLockedWarnBatch()
+            self.tdn.flushLockedWarnBatch()
             self.assertEqual(len(captured), 1)
             self.assertIn(root_a.path, captured[0])
             self.assertIn(root_b.path, captured[0])
@@ -439,8 +439,8 @@ class TestTDNHelpers(EmbodyTestCase):
     def test_lockedwarn_flush_empty_no_dialog(self):
         captured, restore = self._interceptLockedDialog()
         try:
-            self.tdn.BeginLockedWarnBatch()
-            self.tdn.FlushLockedWarnBatch()
+            self.tdn.beginLockedWarnBatch()
+            self.tdn.flushLockedWarnBatch()
             self.assertEqual(len(captured), 0)
             self.assertIsNone(self.tdn._locked_warn_batch)
         finally:
@@ -469,10 +469,10 @@ class TestTDNHelpers(EmbodyTestCase):
             self.tdn._warnLockedNonDATs(root, context='export')
             self.assertEqual(len(captured), 0)
             # Batched: nothing collected either.
-            self.tdn.BeginLockedWarnBatch()
+            self.tdn.beginLockedWarnBatch()
             self.tdn._warnLockedNonDATs(root, context='export')
             self.assertEqual(self.tdn._locked_warn_batch, [])
-            self.tdn.FlushLockedWarnBatch()
+            self.tdn.flushLockedWarnBatch()
             self.assertEqual(len(captured), 0)
         finally:
             restore()
@@ -501,7 +501,7 @@ class TestTDNHelpers(EmbodyTestCase):
         self._lockedTop(root, 'locked1')
         captured, restore = self._interceptLockedDialog()
         try:
-            self.tdn.BeginLockedWarnBatch()
+            self.tdn.beginLockedWarnBatch()
             self.tdn._warnLockedNonDATs(root, context='import')
             self.assertEqual(len(captured), 0)
             self.assertEqual(self.tdn._locked_warn_batch, [])

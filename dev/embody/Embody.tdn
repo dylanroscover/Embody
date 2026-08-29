@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
 build: 1217
-generator: Embody/6.1.17
+generator: Embody/6.1.18
 td_build: 099.2025.33070
-source_file: Embody-6.299.toe
-exported_at: '2026-08-29T18:39:14Z'
+source_file: Embody-6.300.toe
+exported_at: '2026-08-29T20:59:21Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -849,7 +849,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.1.17
+    value: 6.1.18
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -2384,7 +2384,7 @@ operators:
     position: [200, -200]
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
-    dat_content: "# Cancel button for the chunked TDN export progress dialog.\n\ndef onOffToOn(panelValue):\n\tparent.Embody.ext.TDXN.CancelExport()\n\treturn\n"
+    dat_content: "# Cancel button for the chunked TDN export progress dialog.\n\ndef onOffToOn(panelValue):\n\tparent.Embody.ext.TDXN.cancelExport()\n\treturn\n"
     dat_content_format: text
 - name: window_tagging_menu
   type: windowCOMP

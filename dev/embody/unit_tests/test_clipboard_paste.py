@@ -8,9 +8,9 @@ Covers TWO layers:
                unwrap_clipboard / is_embody_tdn_envelope / verify_envelope_integrity /
                resolve_tdn_name). Pure Python, no TD state, no clipboard.
 
-  LIVE      -- CopyNetworkToClipboard / CopySelectedToClipboard /
-               _planPasteFromClipboard / PasteNetworkFromClipboard /
-               PasteNetworkAsNewComp / ClipboardHasNetwork, which round-trip
+  LIVE      -- copyNetworkToClipboard / copySelectedToClipboard /
+               _planPasteFromClipboard / pasteNetworkFromClipboard /
+               pasteNetworkAsNewComp / clipboardHasNetwork, which round-trip
                a small COMP through the OS clipboard (ui.clipboard).
 
 The module-level funcs are reached via the TDXNExt DAT module; the class methods
@@ -264,7 +264,7 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
 
     def test_copy_places_valid_envelope(self):
         host = self._build_small_network('copy_src')
-        res = self.tdn_ext.CopyNetworkToClipboard(host)
+        res = self.tdn_ext.copyNetworkToClipboard(host)
         self.assertTrue(res.get('ok'), msg=repr(res))
         self.assertEqual(res['name'], 'copy_src')
         self.assertGreaterEqual(res['op_count'], 2)
@@ -275,7 +275,7 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
         self.requireClipboardHolds(
             lambda raw: m.unwrap_clipboard(raw) is not None,
             what='the envelope just copied',
-            reseed=lambda: self.tdn_ext.CopyNetworkToClipboard(host))
+            reseed=lambda: self.tdn_ext.copyNetworkToClipboard(host))
         env = m.unwrap_clipboard(ui.clipboard)
         self.assertIsNotNone(env)
         self.assertEqual(env['source'], 'embody')
@@ -286,45 +286,45 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
 
     def test_copy_rejects_non_comp(self):
         top = self.sandbox.create(noiseTOP, 'lonely_top')
-        res = self.tdn_ext.CopyNetworkToClipboard(top)
+        res = self.tdn_ext.copyNetworkToClipboard(top)
         self.assertFalse(res.get('ok'))
         self.assertEqual(res.get('reason'), 'not_a_comp')
 
     def _copy_verified(self, host):
-        """CopyNetworkToClipboard, confirming the envelope actually landed.
+        """copyNetworkToClipboard, confirming the envelope actually landed.
 
         The OS clipboard is machine-wide and contended (see seedClipboard);
         a copy can report ok while another process wins the clipboard, so
         every test that copies-then-depends-on-the-clipboard funnels
         through here. Checks the RAW envelope marker, never
-        ClipboardHasNetwork/unwrap -- those are product code under test in
+        clipboardHasNetwork/unwrap -- those are product code under test in
         this very suite.
         """
-        res = self.tdn_ext.CopyNetworkToClipboard(host)
+        res = self.tdn_ext.copyNetworkToClipboard(host)
         marker = _tdn_module().EMBODY_TDN_MARKER
         self.requireClipboardHolds(
             lambda raw: marker in raw,
             what='the envelope just copied',
-            reseed=lambda: self.tdn_ext.CopyNetworkToClipboard(host))
+            reseed=lambda: self.tdn_ext.copyNetworkToClipboard(host))
         return res
 
     def test_clipboard_has_network_true_after_copy(self):
         host = self._build_small_network('has_net_src')
         self._copy_verified(host)
-        self.assertTrue(self.tdn_ext.ClipboardHasNetwork())
+        self.assertTrue(self.tdn_ext.clipboardHasNetwork())
 
     def test_clipboard_has_network_false_for_garbage(self):
         # Must be seeded verifiably: if the write silently failed the
         # clipboard would still hold a PREVIOUS envelope and this would
-        # fail as though ClipboardHasNetwork were broken.
+        # fail as though clipboardHasNetwork were broken.
         self.seedClipboard('not an envelope at all')
-        self.assertFalse(self.tdn_ext.ClipboardHasNetwork())
+        self.assertFalse(self.tdn_ext.clipboardHasNetwork())
 
     def test_paste_into_target_reconstructs_children_and_connection(self):
         host = self._build_small_network('rt_src')
         self._copy_verified(host)
         target = self.sandbox.create(baseCOMP, 'rt_target')
-        res = self.tdn_ext.PasteNetworkFromClipboard(target)
+        res = self.tdn_ext.pasteNetworkFromClipboard(target)
         self.assertTrue(res.get('ok'), msg=repr(res))
         self.assertEqual(res['mode'], 'direct')
         self.assertEqual(res['source'], 'embody')
@@ -343,7 +343,7 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
     def test_paste_as_new_comp_names_from_basename(self):
         host = self._build_small_network('newcomp_src')
         self._copy_verified(host)
-        # PasteNetworkAsNewComp creates a COMP at the CURRENT network. Point the
+        # pasteNetworkAsNewComp creates a COMP at the CURRENT network. Point the
         # current pane at the sandbox so the new COMP lands (and is auto-cleaned)
         # there, then assert it is named from the network_path basename.
         pane = ui.panes.current
@@ -353,7 +353,7 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
                 pane.owner = self.sandbox
             except Exception:
                 raise SkipTest('cannot retarget current pane to sandbox')
-            res = self.tdn_ext.PasteNetworkAsNewComp()
+            res = self.tdn_ext.pasteNetworkAsNewComp()
             self.assertTrue(res.get('ok'), msg=repr(res))
             self.assertEqual(res['mode'], 'direct')
             new_comp = op(res['comp'])
@@ -373,7 +373,7 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
     def test_paste_into_non_comp_returns_not_a_comp(self):
         host = self._build_small_network('badtarget_src')
         self._copy_verified(host)
-        res = self.tdn_ext.PasteNetworkFromClipboard('/nonexistent/path/xyz')
+        res = self.tdn_ext.pasteNetworkFromClipboard('/nonexistent/path/xyz')
         self.assertFalse(res.get('ok'))
         self.assertEqual(res.get('reason'), 'not_a_comp')
 
@@ -521,7 +521,7 @@ class TestClipboardPasteRouting(EmbodyTestCase):
 
 
 class TestClipboardCopySelectedAndIntegrity(EmbodyTestCase):
-    """(4) CopySelectedToClipboard edge cases + integrity-mismatch behavior."""
+    """(4) copySelectedToClipboard edge cases + integrity-mismatch behavior."""
 
     def setUp(self):
         super().setUp()
@@ -555,7 +555,7 @@ class TestClipboardCopySelectedAndIntegrity(EmbodyTestCase):
                     c.selected = False
                 except Exception:
                     pass
-            res = self.tdn_ext.CopySelectedToClipboard()
+            res = self.tdn_ext.copySelectedToClipboard()
             self.assertFalse(res.get('ok'))
             self.assertEqual(res.get('reason'), 'no_comp_selected')
         finally:
@@ -585,7 +585,7 @@ class TestClipboardCopySelectedAndIntegrity(EmbodyTestCase):
             if len(sel) < 2:
                 raise SkipTest('multi-select not reflected in selectedChildren')
             expected_first = sel[0].name
-            res = self.tdn_ext.CopySelectedToClipboard()
+            res = self.tdn_ext.copySelectedToClipboard()
             self.assertTrue(res.get('ok'), msg=repr(res))
             self.assertEqual(res.get('name'), expected_first)
         finally:
@@ -617,7 +617,7 @@ class TestClipboardCopySelectedAndIntegrity(EmbodyTestCase):
         # And a live paste of that plan succeeds and reconstructs the children,
         # confirming the integrity flag is advisory, not a gate.
         target = self.sandbox.create(baseCOMP, 'mut_target')
-        res = self.tdn_ext.PasteNetworkFromClipboard(target)
+        res = self.tdn_ext.pasteNetworkFromClipboard(target)
         self.assertTrue(res.get('ok'), msg=repr(res))
         child_names = sorted(c.name for c in target.children)
         self.assertIn('injected', child_names)

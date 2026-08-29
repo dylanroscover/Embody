@@ -71,7 +71,7 @@ class TestClipboardWatch(EmbodyTestCase):
     def _put_envelope(self):
         """Copy a probe COMP's TDN to the clipboard, VERIFYING it stuck.
 
-        CopyNetworkToClipboard writes the real OS clipboard, which every
+        copyNetworkToClipboard writes the real OS clipboard, which every
         process on the machine shares -- another app, clipboard history, or
         a developer's own tooling can clobber it between this write and the
         `ui.clipboard` read inside _clipboardWatchPoll. That race made this
@@ -85,7 +85,7 @@ class TestClipboardWatch(EmbodyTestCase):
         fires, trust this message over the assertion that follows.
 
         The check is a RAW marker substring, deliberately not
-        ClipboardHasNetwork() -- that is the function under test in
+        clipboardHasNetwork() -- that is the function under test in
         test_detects_envelope, and verifying with it would report a genuine
         parser bug as an "environment problem".
         """
@@ -94,11 +94,11 @@ class TestClipboardWatch(EmbodyTestCase):
             probe = self.sandbox.create(baseCOMP, 'cw_probe')
             probe.create(constantCHOP, 'c1')
         marker = op.Embody.op('TDXNExt').module.EMBODY_TDN_MARKER
-        op.Embody.ext.TDXN.CopyNetworkToClipboard(probe)
+        op.Embody.ext.TDXN.copyNetworkToClipboard(probe)
         self.requireClipboardHolds(
             lambda raw: marker in raw,
             what='a TDN envelope',
-            reseed=lambda: op.Embody.ext.TDXN.CopyNetworkToClipboard(probe))
+            reseed=lambda: op.Embody.ext.TDXN.copyNetworkToClipboard(probe))
 
     def _set_clipboard(self, text):
         """Write the system clipboard and VERIFY the write stuck.
@@ -149,7 +149,7 @@ class TestClipboardWatch(EmbodyTestCase):
 
     def test_detects_envelope(self):
         self._put_envelope()
-        self.assertTrue(op.Embody.ext.TDXN.ClipboardHasNetwork())
+        self.assertTrue(op.Embody.ext.TDXN.clipboardHasNetwork())
 
     def test_offswitch_no_prompt(self):
         self._put_envelope()
@@ -219,7 +219,7 @@ class TestClipboardWatch(EmbodyTestCase):
     def test_outbound_copy_does_not_prompt(self):
         # Ctrl+Shift+C copies a COMP's TDN to the clipboard (OUTBOUND -- to share or
         # paste elsewhere). The watcher must NOT turn around and offer to paste our
-        # own export back in: CopyNetworkToClipboard seeds _clip_last_sig with what it
+        # own export back in: copyNetworkToClipboard seeds _clip_last_sig with what it
         # just wrote, so the next poll sees no NEW (inbound) content. This is the
         # outbound-vs-inbound fix -- note the sig is left exactly as the copy set it.
         op.Embody.ext.TDXN._clip_last_sig = None

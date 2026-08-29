@@ -192,12 +192,12 @@ def onValueChange(par, prev):
 	elif par.name == 'Embeddatsintdns':
 		# No-op when the TDXN subsystem is disabled -- nothing to re-export.
 		if parent.Embody.ext.Embody._tdnEnabled():
-			parent.Embody.ext.TDXN.ReexportAllTDNs()
+			parent.Embody.ext.TDXN.reexportAllTDNs()
 
 	elif par.name == 'Embedstorageintdns':
 		# No-op when the TDXN subsystem is disabled -- nothing to re-export.
 		if parent.Embody.ext.Embody._tdnEnabled():
-			parent.Embody.ext.TDXN.ReexportAllTDNs()
+			parent.Embody.ext.TDXN.reexportAllTDNs()
 
 	elif par.name == 'Tdncascade':
 		state = 'enabled' if par.eval() else 'disabled'
@@ -398,7 +398,7 @@ def onPulse(par):
 		target = parent.Embody.par.Networkpath.eval()
 		target_path = str(target) if target else '/'
 		clear_first = getattr(parent.Embody.ext.Embody, '_import_clear_first', False)
-		parent.Embody.ext.TDXN.ImportNetworkFromFile(file_path, target_path, clear_first=clear_first)
+		parent.Embody.ext.TDXN.importNetworkFromFile(file_path, target_path, clear_first=clear_first)
 		parent.Embody.ext.Embody._import_clear_first = False
 
 	elif par.name == 'Migratetotdxn':

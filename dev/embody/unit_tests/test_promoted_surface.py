@@ -41,7 +41,10 @@ PROMOTED_CEILING = {
     # side would split a parity contract that exists on purpose.
     # WP4 wave 4c: all 17 promoted methods demoted to lowerCamel wiring.
     "ConvoyExt": 5,
-    "TDXNExt": 16,
+    # WP4 wave 4d: 11 wiring methods demoted. The 5 kept are the
+    # documented, user-facing surface: ExportNetwork, ImportNetwork,
+    # ExportNetworkAsync, DiffLiveVsDisk, DiffAllLiveVsDisk.
+    "TDXNExt": 5,
     "UpdaterExt": 5,
     "CatalogManagerExt": 2,
     # WP4 wave 4a: both UI extensions demoted to zero promoted members. Every

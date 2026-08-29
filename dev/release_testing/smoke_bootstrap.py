@@ -653,7 +653,7 @@ def _exercise_features(attempt=0):
         assert '9.25' in text, 'SaveTDN did not persist the change'
         # disk -> network: rebuild from the file, verify the value returns
         n.par.period = 1.0
-        r = embody.ext.TDXN.ImportNetworkFromFile(path, comp.path,
+        r = embody.ext.TDXN.importNetworkFromFile(path, comp.path,
                                                  clear_first=True)
         assert isinstance(r, dict), 'import returned %r' % (r,)
         back = comp.op('noise_src')

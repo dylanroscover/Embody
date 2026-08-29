@@ -3648,7 +3648,7 @@ class EmbodyExt:
         # locked TOP/CHOP/SOPs popped its own modal (field report: endless
         # popup loop). Flush in finally so a mid-sweep exception can never
         # leave the batch active and silently swallow later warnings.
-        self.my.ext.TDXN.BeginLockedWarnBatch()
+        self.my.ext.TDXN.beginLockedWarnBatch()
         try:
             for oper in additions:
                 self.handleAddition(oper)
@@ -3658,7 +3658,7 @@ class EmbodyExt:
             # Handle dirty COMPs (TOX + TDXN)
             dirties = self.dirtyHandler(save_dirty)
         finally:
-            self.my.ext.TDXN.FlushLockedWarnBatch()
+            self.my.ext.TDXN.flushLockedWarnBatch()
 
         # Report results
         self._reportResults(dirties, additions, subtractions)
@@ -3813,14 +3813,14 @@ class EmbodyExt:
                 st['additions'] = adds
                 st['subtractions'] = subs
                 if adds or subs:
-                    self.my.ext.TDXN.BeginLockedWarnBatch()
+                    self.my.ext.TDXN.beginLockedWarnBatch()
                     try:
                         for oper in adds:
                             self.handleAddition(oper)
                         for oper in subs:
                             self.handleSubtraction(oper)
                     finally:
-                        self.my.ext.TDXN.FlushLockedWarnBatch()
+                        self.my.ext.TDXN.flushLockedWarnBatch()
                 st['phase'] = 'tox'
             elif phase == 'tox':
                 self._updTOXPhase(st)
@@ -3835,7 +3835,7 @@ class EmbodyExt:
         except Exception as e:
             if st.get('batch_open'):
                 try:
-                    self.my.ext.TDXN.FlushLockedWarnBatch()
+                    self.my.ext.TDXN.flushLockedWarnBatch()
                 except Exception:
                     pass
             self._updd_state = None
@@ -3905,12 +3905,12 @@ class EmbodyExt:
         them while this chain was in flight."""
         if not st['exports']:
             if st['batch_open']:
-                self.my.ext.TDXN.FlushLockedWarnBatch()
+                self.my.ext.TDXN.flushLockedWarnBatch()
                 st['batch_open'] = False
             st['phase'] = 'report'
             return
         if not st['batch_open']:
-            self.my.ext.TDXN.BeginLockedWarnBatch()
+            self.my.ext.TDXN.beginLockedWarnBatch()
             st['batch_open'] = True
         kind, path = st['exports'].pop(0)
         oper = op(path)

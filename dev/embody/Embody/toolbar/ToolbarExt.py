@@ -233,7 +233,7 @@ class ToolbarExt:
 		emb.par.Performmode = not current
 
 	def _action_export_tdn(self):
-		self.ownerComp.parent.Embody.ext.TDXN.ExportProjectTDNInteractive()
+		self.ownerComp.parent.Embody.ext.TDXN.exportProjectTDNInteractive()
 
 	def _action_export_comp_tdn(self):
 		comp = None

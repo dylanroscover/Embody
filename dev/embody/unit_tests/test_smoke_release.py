@@ -413,11 +413,11 @@ class TestSmokeRelease(EmbodyTestCase):
         """All five clipboard methods are present and callable on the TDN ext."""
         tdn = self._tdn()
         for name in (
-            'CopyNetworkToClipboard',
-            'CopySelectedToClipboard',
-            'PasteNetworkFromClipboard',
-            'PasteNetworkAsNewComp',
-            'ClipboardHasNetwork',
+            'copyNetworkToClipboard',
+            'copySelectedToClipboard',
+            'pasteNetworkFromClipboard',
+            'pasteNetworkAsNewComp',
+            'clipboardHasNetwork',
         ):
             method = getattr(tdn, name, None)
             self.assertIsNotNone(method,

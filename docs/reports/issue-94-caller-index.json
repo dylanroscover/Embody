@@ -1,6 +1,6 @@
 {
  "generated_by": "execute_python walk of root.findChildren(type=DAT, includeUtility=True)",
- "regenerated": "2026-08-29 -- dead tagger/btn_restore deleted; scan limited to code-bearing DAT types",
+ "regenerated": "2026-08-29 after WP4 waves 4a-4d; scan limited to code-bearing DAT types",
  "code_dat_types_scanned": [
   "chopexec",
   "datexec",
@@ -20,7 +20,7 @@
  "dats_scanned": 781,
  "dats_skipped_non_code": 60,
  "dats_unbacked": 535,
- "distinct_names": 411,
+ "distinct_names": 403,
  "names_with_toe_only_callers": 42,
  "invisible_call_sites": {
   "AbsoluteTween": {
@@ -29,24 +29,10 @@
     "/utils/remote/tweener/extTweener"
    ]
   },
-  "CancelExport": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tdn_export_progress/panelexec_cancel"
-   ]
-  },
   "Clear_Stack": {
    "files": [],
    "toe_only": [
     "/utils/remote/tweener/pre_release"
-   ]
-  },
-  "CopyNetworkToClipboard": {
-   "files": [
-    "/embody/Embody/TDXNExt"
-   ],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_copy_tdn/parexec1"
    ]
   },
   "CreateCallbacks": {
@@ -246,12 +232,6 @@
     "/embody/Embody/tagger/btn_openfile/parexec1"
    ]
   },
-  "PasteNetworkFromClipboard": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_paste_tdn/parexec1"
-   ]
-  },
   "Reevaluate": {
    "files": [],
    "toe_only": [
@@ -353,6 +333,24 @@
     "/embody/Embody/tagger/button2/parexec1"
    ]
   },
+  "cancelExport": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tdn_export_progress/panelexec_cancel"
+   ]
+  },
+  "copyNetworkToClipboard": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_copy_tdn/parexec1"
+   ]
+  },
+  "pasteNetworkFromClipboard": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_paste_tdn/parexec1"
+   ]
+  },
   "rolloverOp": {
    "files": [
     "/embody/Embody/list/list_callbacks"
@@ -401,12 +399,6 @@
    ],
    "toe_only": []
   },
-  "ArmRejoinOffer": {
-   "files": [
-    "/embody/Embody/parexec"
-   ],
-   "toe_only": []
-  },
   "ArtifactStore": {
    "files": [
     "/embody/Embody/convoy/host/convoy_hostapp"
@@ -433,12 +425,6 @@
    ],
    "toe_only": []
   },
-  "BACKUP_DIR": {
-   "files": [
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": []
-  },
   "BOOL": {
    "files": [
     "/embody/Embody/convoy/convoy_install"
@@ -448,13 +434,6 @@
   "BasicConstraints": {
    "files": [
     "/embody/Embody/convoy/host/convoy_hostkeys"
-   ],
-   "toe_only": []
-  },
-  "BeginLockedWarnBatch": {
-   "files": [
-    "/embody/Embody/EmbodyExt",
-    "/embody/unit_tests/test_tdn_helpers"
    ],
    "toe_only": []
   },
@@ -488,12 +467,6 @@
     "/embody/Embody/convoy/convoy_client"
    ],
    "toe_only": []
-  },
-  "CancelExport": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tdn_export_progress/panelexec_cancel"
-   ]
   },
   "CapabilityManifest": {
    "files": [
@@ -567,27 +540,6 @@
   "ConvertSidToStringSidW": {
    "files": [
     "/embody/Embody/convoy/host/convoy_lifecycle"
-   ],
-   "toe_only": []
-  },
-  "ConvoyStatus": {
-   "files": [
-    "/embody/Embody/convoy/ConvoyExt",
-    "/embody/unit_tests/test_convoy_ext"
-   ],
-   "toe_only": []
-  },
-  "CopyNetworkToClipboard": {
-   "files": [
-    "/embody/Embody/TDXNExt"
-   ],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_copy_tdn/parexec1"
-   ]
-  },
-  "CopySelectedToClipboard": {
-   "files": [
-    "/embody/Embody/keyboardin_callbacks"
    ],
    "toe_only": []
   },
@@ -759,6 +711,7 @@
   },
   "Error": {
    "files": [
+    "/embody/Embody/toolbar/ToolbarExt",
     "/embody/Embody/templates/text_skill_parameter_design",
     "/embody/unit_tests/test_logging"
    ],
@@ -823,13 +776,6 @@
    ],
    "toe_only": []
   },
-  "ExportProjectTDNInteractive": {
-   "files": [
-    "/embody/Embody/toolbar/ToolbarExt",
-    "/embody/Embody/keyboardin_callbacks"
-   ],
-   "toe_only": []
-  },
   "ExtendedKeyUsage": {
    "files": [
     "/embody/Embody/convoy/host/convoy_hostkeys"
@@ -869,21 +815,6 @@
    ],
    "toe_only": []
   },
-  "FILE_SUFFIX": {
-   "files": [
-    "/embody/Embody/TDXNExt",
-    "/embody/Embody/EmbodyExt",
-    "/embody/unit_tests/test_tdn_file_io",
-    "/embody/unit_tests/test_rename_move_lifecycle"
-   ],
-   "toe_only": []
-  },
-  "FILE_SUFFIXES": {
-   "files": [
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": []
-  },
   "FadeStep": {
    "files": [],
    "toe_only": [
@@ -896,22 +827,9 @@
     "/utils/remote/tweener/fade"
    ]
   },
-  "FlushLockedWarnBatch": {
-   "files": [
-    "/embody/Embody/EmbodyExt",
-    "/embody/unit_tests/test_tdn_helpers"
-   ],
-   "toe_only": []
-  },
   "FlushPendingCheckpoints": {
    "files": [
     "/embody/Embody/EnvoyExt"
-   ],
-   "toe_only": []
-  },
-  "ForgetOfflineNodes": {
-   "files": [
-    "/embody/unit_tests/test_convoy_host_install"
    ],
    "toe_only": []
   },
@@ -1114,13 +1032,6 @@
    ],
    "toe_only": []
   },
-  "HostStatus": {
-   "files": [
-    "/embody/Embody/parexec",
-    "/embody/unit_tests/test_convoy_host_install"
-   ],
-   "toe_only": []
-  },
   "HostStore": {
    "files": [
     "/embody/Embody/convoy/host/convoy_hostapp"
@@ -1147,14 +1058,6 @@
     "/embody/unit_tests/test_tdn_export_import",
     "/embody/unit_tests/test_tdn_reconstruction",
     "/embody/unit_tests/test_tdn_palette_catalog"
-   ],
-   "toe_only": []
-  },
-  "ImportNetworkFromFile": {
-   "files": [
-    "/embody/Embody/parexec",
-    "/embody/unit_tests/test_tdn_file_io",
-    "/embody/unit_tests/test_custom_parameters"
    ],
    "toe_only": []
   },
@@ -1204,13 +1107,6 @@
    "toe_only": [
     "/utils/remote/tweener/curves_repo/parexec1"
    ]
-  },
-  "InstallHost": {
-   "files": [
-    "/embody/Embody/convoy/ConvoyExt",
-    "/embody/unit_tests/test_convoy_host_install"
-   ],
-   "toe_only": []
   },
   "InstallPackages": {
    "files": [
@@ -1280,18 +1176,6 @@
   "LoadLibrary": {
    "files": [
     "/embody/Embody/TDXNExt"
-   ],
-   "toe_only": []
-  },
-  "LocalArtifactQuotaChanged": {
-   "files": [
-    "/embody/Embody/parexec"
-   ],
-   "toe_only": []
-  },
-  "LocalDangerGateChanged": {
-   "files": [
-    "/embody/Embody/parexec"
    ],
    "toe_only": []
   },
@@ -1443,65 +1327,6 @@
     "/embody/Embody/omit_panel/list_omits_callbacks"
    ]
   },
-  "OnClick": {
-   "files": [
-    "/embody/Embody/windowHeader/panelexec1"
-   ],
-   "toe_only": []
-  },
-  "OnContainerClick": {
-   "files": [
-    "/embody/Embody/toolbar/panelexec_left",
-    "/embody/Embody/toolbar/panelexec_right"
-   ],
-   "toe_only": []
-  },
-  "OnContainerPress": {
-   "files": [
-    "/embody/Embody/toolbar/panelexec_left",
-    "/embody/Embody/toolbar/panelexec_right"
-   ],
-   "toe_only": []
-  },
-  "OnContainerRelease": {
-   "files": [
-    "/embody/Embody/toolbar/panelexec_left",
-    "/embody/Embody/toolbar/panelexec_right"
-   ],
-   "toe_only": []
-  },
-  "OnContainerRollover": {
-   "files": [
-    "/embody/Embody/toolbar/panelexec_left",
-    "/embody/Embody/toolbar/panelexec_right"
-   ],
-   "toe_only": []
-  },
-  "OnFilterChanged": {
-   "files": [
-    "/embody/Embody/toolbar/ToolbarExt",
-    "/embody/Embody/toolbar/parexec_filter"
-   ],
-   "toe_only": []
-  },
-  "OnPress": {
-   "files": [
-    "/embody/Embody/windowHeader/panelexec1"
-   ],
-   "toe_only": []
-  },
-  "OnRelease": {
-   "files": [
-    "/embody/Embody/windowHeader/panelexec1"
-   ],
-   "toe_only": []
-  },
-  "OnRollover": {
-   "files": [
-    "/embody/Embody/windowHeader/panelexec1"
-   ],
-   "toe_only": []
-  },
   "OpenOmitPanel": {
    "files": [],
    "toe_only": [
@@ -1560,18 +1385,6 @@
     "/embody/Embody/embody_pyenv"
    ],
    "toe_only": []
-  },
-  "PasteNetworkAsNewComp": {
-   "files": [
-    "/embody/Embody/TDXNExt"
-   ],
-   "toe_only": []
-  },
-  "PasteNetworkFromClipboard": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_paste_tdn/parexec1"
-   ]
   },
   "PeekNamedPipe": {
    "files": [
@@ -1653,12 +1466,6 @@
    ],
    "toe_only": []
   },
-  "PreviewHostUninstall": {
-   "files": [
-    "/embody/unit_tests/test_convoy_host_install"
-   ],
-   "toe_only": []
-  },
   "ProbeResult": {
    "files": [
     "/embody/unit_tests/test_convoy_ext",
@@ -1733,13 +1540,6 @@
    ],
    "toe_only": []
   },
-  "RecordInstallConsent": {
-   "files": [
-    "/embody/Embody/convoy/ConvoyExt",
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": []
-  },
   "RecoverOrphanShells": {
    "files": [
     "/embody/Embody/execute"
@@ -1751,13 +1551,6 @@
    "toe_only": [
     "/utils/remote/tweener/curves_repo/datexec1"
    ]
-  },
-  "ReexportAllTDNs": {
-   "files": [
-    "/embody/Embody/parexec",
-    "/embody/unit_tests/test_custom_parameters"
-   ],
-   "toe_only": []
   },
   "Refresh": {
    "files": [
@@ -1791,13 +1584,6 @@
    "files": [
     "/embody/Embody/execute",
     "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": []
-  },
-  "Register": {
-   "files": [
-    "/embody/Embody/parexec",
-    "/embody/unit_tests/test_convoy_ext"
    ],
    "toe_only": []
   },
@@ -1867,13 +1653,6 @@
     "/utils/remote/tweener/callbackManager/text1",
     "/utils/remote/tweener/callbackManager/opexec2"
    ]
-  },
-  "ResetWakeLeases": {
-   "files": [
-    "/embody/Embody/convoy/ConvoyExt",
-    "/embody/Embody/parexec"
-   ],
-   "toe_only": []
   },
   "RestoreDATs": {
    "files": [
@@ -2063,13 +1842,6 @@
    ],
    "toe_only": []
   },
-  "StartHost": {
-   "files": [
-    "/embody/Embody/convoy/ConvoyExt",
-    "/embody/unit_tests/test_convoy_host_install"
-   ],
-   "toe_only": []
-  },
   "StartupCheck": {
    "files": [
     "/embody/Embody/execute",
@@ -2088,12 +1860,6 @@
     "/embody/Embody/parexec",
     "/embody/Embody/updater/UpdaterExt",
     "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": []
-  },
-  "StopHost": {
-   "files": [
-    "/embody/unit_tests/test_convoy_host_install"
    ],
    "toe_only": []
   },
@@ -2261,20 +2027,6 @@
    ],
    "toe_only": []
   },
-  "UninstallHost": {
-   "files": [
-    "/embody/unit_tests/test_convoy_host_install"
-   ],
-   "toe_only": []
-  },
-  "Unregister": {
-   "files": [
-    "/embody/Embody/execute",
-    "/embody/Embody/parexec",
-    "/embody/unit_tests/test_convoy_ext"
-   ],
-   "toe_only": []
-  },
   "Update": {
    "files": [
     "/embody/Embody/execute",
@@ -2332,14 +2084,9 @@
    ],
    "toe_only": []
   },
-  "WakeSettingsChanged": {
-   "files": [
-    "/embody/Embody/parexec"
-   ],
-   "toe_only": []
-  },
   "Warn": {
    "files": [
+    "/embody/Embody/toolbar/ToolbarExt",
     "/embody/unit_tests/test_logging",
     "/embody/execute_src_ctrl"
    ],
@@ -2383,9 +2130,30 @@
    ],
    "toe_only": []
   },
+  "_BACKUP_DIR": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
   "_DIFF_SCHEMA_VERSION": {
    "files": [
     "/embody/unit_tests/test_tdn_diff_engine"
+   ],
+   "toe_only": []
+  },
+  "_FILE_SUFFIX": {
+   "files": [
+    "/embody/Embody/TDXNExt",
+    "/embody/Embody/EmbodyExt",
+    "/embody/unit_tests/test_tdn_file_io",
+    "/embody/unit_tests/test_rename_move_lifecycle"
+   ],
+   "toe_only": []
+  },
+  "_FILE_SUFFIXES": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
    ],
    "toe_only": []
   },
@@ -3109,6 +2877,18 @@
    ],
    "toe_only": []
   },
+  "armRejoinOffer": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "beginLockedWarnBatch": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
   "buildAbsolutePath": {
    "files": [
     "/embody/Embody/TDXNExt",
@@ -3116,6 +2896,37 @@
     "/embody/Embody/envoy_read",
     "/embody/Embody/CatalogManagerExt",
     "/embody/execute_src_ctrl"
+   ],
+   "toe_only": []
+  },
+  "cancelExport": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tdn_export_progress/panelexec_cancel"
+   ]
+  },
+  "copyNetworkToClipboard": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_copy_tdn/parexec1"
+   ]
+  },
+  "copySelectedToClipboard": {
+   "files": [
+    "/embody/Embody/keyboardin_callbacks"
+   ],
+   "toe_only": []
+  },
+  "exportProjectTDNInteractive": {
+   "files": [
+    "/embody/Embody/toolbar/ToolbarExt",
+    "/embody/Embody/keyboardin_callbacks"
+   ],
+   "toe_only": []
+  },
+  "flushLockedWarnBatch": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
    ],
    "toe_only": []
   },
@@ -3138,9 +2949,29 @@
    ],
    "toe_only": []
   },
+  "importNetworkFromFile": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/unit_tests/test_tdn_file_io",
+    "/embody/unit_tests/test_custom_parameters"
+   ],
+   "toe_only": []
+  },
   "is_tdn_network_file": {
    "files": [
     "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "localArtifactQuotaChanged": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "localDangerGateChanged": {
+   "files": [
+    "/embody/Embody/parexec"
    ],
    "toe_only": []
   },
@@ -3158,15 +2989,110 @@
    ],
    "toe_only": []
   },
+  "onClick": {
+   "files": [
+    "/embody/Embody/windowHeader/panelexec1"
+   ],
+   "toe_only": []
+  },
+  "onContainerClick": {
+   "files": [
+    "/embody/Embody/toolbar/panelexec_left",
+    "/embody/Embody/toolbar/panelexec_right"
+   ],
+   "toe_only": []
+  },
+  "onContainerPress": {
+   "files": [
+    "/embody/Embody/toolbar/panelexec_left",
+    "/embody/Embody/toolbar/panelexec_right"
+   ],
+   "toe_only": []
+  },
+  "onContainerRelease": {
+   "files": [
+    "/embody/Embody/toolbar/panelexec_left",
+    "/embody/Embody/toolbar/panelexec_right"
+   ],
+   "toe_only": []
+  },
+  "onContainerRollover": {
+   "files": [
+    "/embody/Embody/toolbar/panelexec_left",
+    "/embody/Embody/toolbar/panelexec_right"
+   ],
+   "toe_only": []
+  },
+  "onFilterChanged": {
+   "files": [
+    "/embody/Embody/toolbar/parexec_filter"
+   ],
+   "toe_only": []
+  },
   "onFrame": {
    "files": [
     "/embody/Embody/templates/text_skill_create_extension"
    ],
    "toe_only": []
   },
+  "onPress": {
+   "files": [
+    "/embody/Embody/windowHeader/panelexec1"
+   ],
+   "toe_only": []
+  },
+  "onRelease": {
+   "files": [
+    "/embody/Embody/windowHeader/panelexec1"
+   ],
+   "toe_only": []
+  },
+  "onRollover": {
+   "files": [
+    "/embody/Embody/windowHeader/panelexec1"
+   ],
+   "toe_only": []
+  },
+  "pasteNetworkFromClipboard": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_paste_tdn/parexec1"
+   ]
+  },
   "pop": {
    "files": [
     "/embody/unit_tests/test_envoy_sessions"
+   ],
+   "toe_only": []
+  },
+  "recordInstallConsent": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "reexportAllTDNs": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/unit_tests/test_custom_parameters"
+   ],
+   "toe_only": []
+  },
+  "refreshHostStatus": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "register": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "resetWakeLeases": {
+   "files": [
+    "/embody/Embody/parexec"
    ],
    "toe_only": []
   },
@@ -3210,6 +3136,19 @@
     "/embody/Embody/EmbodyExt",
     "/embody/Embody/CatalogManagerExt",
     "/embody/unit_tests/test_tdxn_migration"
+   ],
+   "toe_only": []
+  },
+  "unregister": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "wakeSettingsChanged": {
+   "files": [
+    "/embody/Embody/parexec"
    ],
    "toe_only": []
   },

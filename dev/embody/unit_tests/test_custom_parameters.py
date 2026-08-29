@@ -396,7 +396,7 @@ class TestCustomParameters(EmbodyTestCase):
         new_val = 0 if original else 1
         self._set_and_track('Embeddatsintdns', new_val)
         # parexec fires async at end-of-frame; call directly to test synchronously
-        self.embody.ext.TDXN.ReexportAllTDNs()
+        self.embody.ext.TDXN.reexportAllTDNs()
         # Check logs for reexport message
         has_reexport = self._has_log_message(log_id, 'Re-exporting')
         has_no_tdn = self._has_log_message(log_id, 'No TDN exports')
@@ -431,11 +431,11 @@ class TestCustomParameters(EmbodyTestCase):
         finally:
             parexec.par.active = True
 
-        # Directly call ImportNetworkFromFile
-        result = self.embody.ext.TDXN.ImportNetworkFromFile(
+        # Directly call importNetworkFromFile
+        result = self.embody.ext.TDXN.importNetworkFromFile(
             '/nonexistent/path/fake.tdn', self.sandbox.path)
         # Should return an error dict, not crash
-        self.assertIsNotNone(result, 'ImportNetworkFromFile should return a result')
+        self.assertIsNotNone(result, 'importNetworkFromFile should return a result')
         self.assertTrue(bool(result.get('error')),
                         'Expected error in result for nonexistent TDN file')
 

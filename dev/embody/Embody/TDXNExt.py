@@ -425,8 +425,8 @@ class TDXNExt:
 		self._default_compute_text: Optional[str] = None
 		# Locked-content warning batching: None = inactive (each export
 		# shows its own dialog); a list = a batch sweep is collecting
-		# findings for ONE combined dialog (see BeginLockedWarnBatch /
-		# FlushLockedWarnBatch). Prevents one-modal-per-COMP popup storms
+		# findings for ONE combined dialog (see beginLockedWarnBatch /
+		# flushLockedWarnBatch). Prevents one-modal-per-COMP popup storms
 		# during full-project externalization.
 		self._locked_warn_batch: Optional[list] = None
 		# Session-scoped "Don't show again" fallback for .toes saved
@@ -1908,7 +1908,7 @@ class TDXNExt:
 		except Exception as e:
 			self._log(f'Progress dialog close failed: {e}', 'WARNING')
 
-	def CancelExport(self) -> None:
+	def cancelExport(self) -> None:
 		"""Request cancellation of a running chunked export.
 
 		Consumed by _onExportRefresh on the next batch boundary: no file
@@ -1919,7 +1919,7 @@ class TDXNExt:
 		if state and not state.get('done'):
 			state['cancel'] = True
 
-	def ExportProjectTDNInteractive(self):
+	def exportProjectTDNInteractive(self):
 		"""Export project TDXN with a dialog if TDXN-tagged COMPs exist.
 
 		Shows a ui.messageBox letting the user choose between a full
@@ -2108,7 +2108,7 @@ class TDXNExt:
 		if lister:
 			lister.reset()
 
-	def ReexportAllTDNs(self) -> None:
+	def reexportAllTDNs(self) -> None:
 		"""Re-export all tracked TDXN files with current toggle setting."""
 		try:
 			table = self.ownerComp.ext.Embody.Externalizations
@@ -2703,7 +2703,7 @@ class TDXNExt:
 				pass
 			return {'error': f'Import failed: {e}'}
 
-	def ImportNetworkFromFile(self, file_path: str, target_path: str = '/',
+	def importNetworkFromFile(self, file_path: str, target_path: str = '/',
 							   clear_first: bool = False) -> dict[str, Any]:
 		"""
 		Load a .tdn JSON file from disk and import it into a COMP.
@@ -7149,8 +7149,8 @@ class TDXNExt:
 
 		The export dialog honors the Tdnlockedwarn preference (ask/quiet,
 		set by the dialog's "Don't show again" button). While a batch
-		sweep is active (BeginLockedWarnBatch), findings are collected
-		and shown as ONE combined dialog at FlushLockedWarnBatch -- a
+		sweep is active (beginLockedWarnBatch), findings are collected
+		and shown as ONE combined dialog at flushLockedWarnBatch -- a
 		full-project externalization must never pop one modal per COMP.
 		The log WARNING always fires regardless of dialog preference.
 
@@ -7208,16 +7208,16 @@ class TDXNExt:
 		pref = getattr(self.ownerComp.par, 'Tdnlockedwarn', None)
 		return pref is None or pref.eval() == 'ask'
 
-	def BeginLockedWarnBatch(self):
+	def beginLockedWarnBatch(self):
 		"""Collect locked-content warnings instead of showing per-export
-		modals, until FlushLockedWarnBatch shows one combined dialog.
+		modals, until flushLockedWarnBatch shows one combined dialog.
 		Idempotent: re-entering keeps the findings already collected."""
 		if self._locked_warn_batch is None:
 			self._locked_warn_batch = []
 
-	def FlushLockedWarnBatch(self):
+	def flushLockedWarnBatch(self):
 		"""End a warning batch and show ONE combined dialog for every
-		finding collected since BeginLockedWarnBatch. No-op when the
+		finding collected since beginLockedWarnBatch. No-op when the
 		batch is empty or inactive. Always deactivates the batch, so a
 		caller can flush from a finally block without leaking state."""
 		batch = getattr(self, '_locked_warn_batch', None)
@@ -7342,7 +7342,7 @@ class TDXNExt:
 	# the untrusted sandbox lives in the Collection sub-COMP.
 	# =========================================================================
 
-	def CopyNetworkToClipboard(self, comp: 'OP') -> dict:
+	def copyNetworkToClipboard(self, comp: 'OP') -> dict:
 		"""Export a COMP's network and write it to the OS clipboard as an
 		_embody_tdn envelope (source 'embody' -- a trusted own-network copy).
 		"""
@@ -7367,11 +7367,11 @@ class TDXNExt:
 		self._log("Copied %s TDXN to clipboard (%d ops)" % (comp.name, op_count), 'SUCCESS')
 		return {'ok': True, 'name': comp.name, 'op_count': op_count, 'sha256': env['sha256']}
 
-	def CopySelectedToClipboard(self) -> dict:
+	def copySelectedToClipboard(self) -> dict:
 		"""Copy-TDXN shortcut handler (Shortcutcopytdn binding, default
 		ctrl+shift+c / cmd+shift+c): copy the COMP selected in the current
 		network to the OS clipboard as a portable _embody_tdn envelope.
-		Mirror of PasteNetworkAsNewComp (clipboard auto-paste). No-op
+		Mirror of pasteNetworkAsNewComp (clipboard auto-paste). No-op
 		(logged) when the current network has no single COMP selected.
 		"""
 		pane = ui.panes.current
@@ -7385,7 +7385,7 @@ class TDXNExt:
 		if len(comps) > 1:
 			self._log('Copy TDXN: %d COMPs selected; copying the first (%s)'
 					  % (len(comps), comps[0].name), 'INFO')
-		return self.CopyNetworkToClipboard(comps[0])
+		return self.copyNetworkToClipboard(comps[0])
 
 	def _planPasteFromClipboard(self) -> dict:
 		"""Turn the clipboard into an import plan. Never executes anything.
@@ -7394,7 +7394,7 @@ class TDXNExt:
 		the inner tdn to ext.Collection (scan + default-inert) so nothing runs
 		on paste. A bare .tdn document with no envelope -- e.g. a .tdn file's
 		text copied from an editor -- carries NO provenance, so it is sandboxed
-		(inert) like community content; use ImportNetworkFromFile for a trusted
+		(inert) like community content; use importNetworkFromFile for a trusted
 		local file. Returns {'ok': False, ...} with no usable TDXN.
 		"""
 		raw = ui.clipboard or ''
@@ -7405,7 +7405,7 @@ class TDXNExt:
 			# NO provenance, so treat it as untrusted: route through the
 			# Collection sandbox (scan + default-inert) exactly like community
 			# content, so pasting a stranger's .tdn can't run code on paste.
-			# (A trusted local file should use ImportNetworkFromFile.)
+			# (A trusted local file should use importNetworkFromFile.)
 			doc = None
 			if raw.strip():
 				try:
@@ -7458,7 +7458,7 @@ class TDXNExt:
 		finally:
 			target.allowCooking = prev
 
-	def PasteNetworkFromClipboard(self, target: 'OP') -> dict:
+	def pasteNetworkFromClipboard(self, target: 'OP') -> dict:
 		"""Import a clipboard _embody_tdn envelope INTO the target COMP."""
 		target = op(target) if isinstance(target, str) else target
 		if target is None or not target.isCOMP:
@@ -7507,7 +7507,7 @@ class TDXNExt:
 		except Exception:
 			pass
 
-	def PasteNetworkAsNewComp(self) -> dict:
+	def pasteNetworkAsNewComp(self) -> dict:
 		"""Clipboard auto-paste handler (no key binding -- the watcher prompts
 		on inbound TDXN): create a new COMP at the current network and
 		paste the clipboard TDXN into it, named after the TDXN (its network_path
@@ -7536,7 +7536,7 @@ class TDXNExt:
 				'source': plan.get('source'), 'verdict': verdict,
 				'summary': plan.get('summary'), 'import': res}
 
-	def ClipboardHasNetwork(self) -> bool:
+	def clipboardHasNetwork(self) -> bool:
 		"""True if the OS clipboard holds a valid _embody_tdn envelope."""
 		try:
 			return unwrap_clipboard(ui.clipboard or '') is not None
@@ -7660,7 +7660,7 @@ class TDXNExt:
 			'Embody it into %s as a new COMP?' % (name, note, owner.path),
 			buttons=['Embody it', 'Dismiss'])
 		if choice == 0:
-			self.PasteNetworkAsNewComp()
+			self.pasteNetworkAsNewComp()
 
 	def _clipboardSafetyNote(self, env: dict) -> str:
 		"""One-line provenance/safety note for the paste prompt.
