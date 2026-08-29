@@ -1555,3 +1555,64 @@ class TestGeneratedFilesCarryTheirOwnProof(EmbodyTestCase):
 				self._git.embody_owns_unmodified(
 					self.embody_ext, body, {}, 'x'),
 				f'{path.name} should verify against its own stamp')
+
+
+class TestEmbodySourceTreeGuard(EmbodyTestCase):
+	"""Dogfooding: Embody must not merge the USER-PROJECT template into its own
+	repo's hand-written CLAUDE.md.
+
+	That file is the DEVELOPER's instructions for working ON Embody; the block
+	carries the template for projects that USE it. Merging one into the other
+	gives a single file two contradictory rule lists, loaded into every dev
+	session.
+	"""
+
+	def _git(self):
+		return op.Embody.op('embody_git').module
+
+	def test_the_repo_root_is_recognised_as_the_source_tree(self):
+		root = Path(project.folder).parent
+		self.assertTrue(
+			self._git().is_embody_source_tree(self.embody_ext, root),
+			'the repo that holds EmbodyExt.py must be recognised as the source tree')
+
+	def test_an_ordinary_target_is_not_the_source_tree(self):
+		"""Load-bearing. Keying this to isDevCheckout alone would fire for EVERY
+		target while developing -- including the temp dirs the merge suite writes
+		to -- so the tested behaviour would stop matching the shipped one."""
+		d = Path(tempfile.mkdtemp(prefix='notsrc_'))
+		try:
+			self.assertFalse(
+				self._git().is_embody_source_tree(self.embody_ext, d),
+				'an ordinary project dir must merge normally')
+		finally:
+			shutil.rmtree(d, ignore_errors=True)
+
+	def test_an_ordinary_target_still_merges(self):
+		"""The guard must not have disabled the feature it is narrowing."""
+		g = self._git()
+		d = Path(tempfile.mkdtemp(prefix='stillmerges_'))
+		try:
+			(d / 'CLAUDE.md').write_text('# Mine\nkeep me\n', encoding='utf-8')
+			g.write_claude_md(self.embody_ext, d)
+			body = (d / 'CLAUDE.md').read_text(encoding='utf-8')
+			self.assertIn(g.AGENTS_BEGIN, body)
+			self.assertIn('keep me', body)
+		finally:
+			shutil.rmtree(d, ignore_errors=True)
+
+	def test_the_repos_own_claude_md_is_left_alone(self):
+		"""The end-to-end assertion, against the real repo root: a deploy into
+		Embody's own tree must leave its CLAUDE.md byte-identical."""
+		root = Path(project.folder).parent
+		p = root / 'CLAUDE.md'
+		if not p.exists():
+			raise SkipTest('no CLAUDE.md at the repo root')
+		before = p.read_text(encoding='utf-8')
+		self._git().write_claude_md(self.embody_ext, root)
+		self.assertEqual(
+			p.read_text(encoding='utf-8'), before,
+			"Embody's own repo CLAUDE.md must come through untouched")
+		self.assertNotIn(
+			self._git().AGENTS_BEGIN, before,
+			'and it must never have gained a block')

@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.1.10-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.1.11-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-65-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -176,7 +176,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **136 test suites** (4,380 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **136 test suites** (4,384 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -207,6 +207,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.1.11**: **Embody stops merging the user-project template into its own repo's `CLAUDE.md`** -- making `CLAUDE.md` mergeable is right for a project that *uses* Embody and wrong for the repo that *builds* it, where that file is the developer's own instructions; the first deploy after 6.1.10 left it carrying two contradictory rule lists. A first merge into a hand-written top-level doc is now refused when the target is the tree Embody's own source lives in, narrowly enough that ordinary projects -- and the merge suite's own temp dirs -- still merge exactly as before.
 - **6.1.10**: **Your own `CLAUDE.md` is merged into now, instead of being handed a sidecar nothing reads** -- if you already had one, Embody left it alone and wrote its guidance to `ENVOY.md`, which preserved your file but delivered the instructions nowhere: nothing imports `ENVOY.md` and Claude Code does not auto-load it. `CLAUDE.md` now gets the same delimited block `AGENTS.md` has had -- your content untouched, Embody's block refreshed in place, Uninstall removing only the block -- and that block now opens with a visible heading saying which half is which and where your own edits belong.
 - **6.1.9**: **An update check that finds nothing no longer opens a window to say so** -- the line directly above the dialog already wrote the same sentence to the **Update Status** parameter, so every clean check reported itself twice: once in the readout, once in a modal that interrupted to announce nothing had happened. The status par is now the single report. The confirmation after a successful *install* is untouched -- that one reports a change you cannot otherwise see.
 - **6.1.8**: **The idle checkpoint sweep stalled a frame for 184ms after every agent burst** -- the dirty-detection fingerprint took its recursion boundary from a set that deliberately omits Embody and everything under it, so `/embody` re-walked the whole Embody subtree its own file merely references: 184ms in one blocked frame, plus a byte-identical re-export of `embody.tdn` every time an agent touched anything. The boundary is now the tag the exporter itself stops on (197.7ms -> 59.0ms across 65 roots), and the sweep runs in per-frame slices instead of one stall, so the worst frame per burst drops from 184-211ms to 51ms. The first sweep after upgrading checkpoints every tracked root once, on purpose -- a checkpoint writes current state, while re-baselining would silently drop real unsaved work.

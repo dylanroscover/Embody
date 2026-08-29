@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.1.11
+
+Embody stops merging the user-project template into its own repo's `CLAUDE.md`.
+
+- **The dogfooding guard.** Making `CLAUDE.md` mergeable is right for a project that *uses* Embody and wrong for the repo that *builds* it, where `CLAUDE.md` is the developer's own instructions. The first deploy after v6.1.10 appended the user-project template into it, leaving one file carrying two contradictory "Critical Rules" lists -- loaded into every session working on Embody. A first merge into a hand-written top-level doc is now refused when the target directory is the tree Embody's own source lives in. Deliberately narrower than `isDevCheckout`, which asks only whether Embody's DATs are file-synced: keying the guard to that would fire for *every* target while developing, including the temp dirs the merge suite writes to, so the tested behaviour would quietly stop matching the shipped one. A block already present still refreshes -- removing it stays the developer's call.
+
+Four tests, one of them deploying into the real repo root and asserting its `CLAUDE.md` comes back byte-identical (**4,384 tests**, 136 suites).
+
 ## v6.1.10
 
 Your own `CLAUDE.md` is merged into now, instead of being handed a sidecar nothing reads.

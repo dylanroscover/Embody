@@ -271,6 +271,33 @@ BLOCK_LABEL = (
 )
 
 
+def is_embody_source_tree(ext, target_dir):
+    """True when target_dir is the repo holding Embody's OWN source.
+
+    Deliberately narrower than UpdaterExt.isDevCheckout, which asks only
+    whether Embody's DATs are file-synced. Keying the merge guard to that
+    alone would fire for EVERY target while developing -- including the temp
+    dirs the merge suite writes to -- so the tested behaviour would stop
+    matching the shipped behaviour. This asks the precise question instead:
+    is the directory we are deploying INTO the tree Embody's own source
+    lives in?
+
+    ExportPortableTox strips relative file references, so an empty file par
+    (a release tox) answers False immediately.
+    """
+    try:
+        dat = ext.my.op('EmbodyExt')
+        ref = dat.par.file.eval() if dat is not None else ''
+        if not ref:
+            return False
+        source = Path(ref)
+        if not source.is_absolute():
+            source = Path(project.folder) / ref
+        return Path(target_dir).resolve() in source.resolve().parents
+    except Exception:
+        return False
+
+
 def agents_block(content):
     """Embody's instructions wrapped in the merge delimiters."""
     return (f'{AGENTS_BEGIN}\n{BLOCK_LABEL}\n\n'
@@ -334,6 +361,17 @@ def write_or_merge(ext, target_dir, rel_path, content):
                     'WARNING')
             return False
         had_block = AGENTS_BEGIN in existing
+        if not had_block and is_embody_source_tree(ext, target_dir):
+            # Dogfooding guard. In Embody's OWN repo a hand-written top-level
+            # doc is the DEVELOPER's instructions for working on Embody, while
+            # the block carries the USER-PROJECT template -- merging gives one
+            # file two contradictory rule lists, loaded into every dev session.
+            # Only the first merge is refused; a block already there keeps
+            # being refreshed, so removing it stays the developer's call.
+            ext.Log(
+                f'Embody dev checkout: leaving your {rel_path} alone rather '
+                f'than merging the user-project template into it.', 'DEBUG')
+            return False
         if had_block or not is_generated_by_embody(ext, existing):
             merged = merge_agents_section(existing, agents_block(content))
             if merged == existing:
