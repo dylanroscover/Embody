@@ -50,6 +50,8 @@ Discoverable with `ls`; the non-obvious locations:
 
 Embody externalizes tagged operators to files under `dev/embody/` -- `.py` for DATs, `.tox` for COMPs (TOX strategy), `.tdn` for COMPs (TDN strategy). Edits to externalized files are read by TD on load/sync; changes inside TD are written out on save. Externalized files on disk are the source of truth.
 
+**One carve-out: Embody's OWN COMP.** `_getTDNStrategyComps` deliberately omits Embody, its ancestors and its descendants -- "reconstructing inside Embody is self-destruction" -- so nothing ever rebuilds `/embody/Embody` from `dev/embody/Embody.tdn`. **Editing that file by hand is inert**: no reload reads it, the next save overwrites it from the live COMP, and `git status` goes clean, so the edit looks applied and never was. Change Embody's own network **live in TD** (MCP, or by hand in the UI) and let the save write the `.tdn` as a receipt. The same holds for its descendants -- `tagger.tdn`, `toolbar.tdn`, `list.tdn`, `manager.tdn`. Externalized `.py` DATs are unaffected: those are file-synced and editing them on disk is the normal path.
+
 ### Automatic Restoration
 
 On project open, Embody runs a three-phase startup:

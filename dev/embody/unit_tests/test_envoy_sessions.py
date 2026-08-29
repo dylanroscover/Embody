@@ -325,6 +325,29 @@ class TestScopeHelpers(EmbodyTestCase):
         self.assertIn('/a/old', scopes)
         self.assertIn('/a/new', scopes)
 
+    def test_scopes_copy_op_records_the_copy_not_just_the_container(self):
+        """A peer must see the op that was MADE, not only where it landed.
+
+        copy_op takes dest_parent (not dest_path) and returns new_path (not
+        path), so both halves were invisible: the touch map recorded neither
+        the destination container nor the copy itself, and a peer editing the
+        new operator saw no overlap at all.
+        """
+        scopes = _envoy_mod._scopes_for_operation(
+            'copy_op',
+            {'source_path': '/a/src', 'dest_parent': '/b'},
+            {'new_path': '/b/src1'})
+        self.assertIn('/a/src', scopes)
+        self.assertIn('/b', scopes, 'dest_parent must register as territory')
+        self.assertIn('/b/src1', scopes, 'the copy itself must register')
+
+    def test_scopes_create_extension_records_comp_and_dat(self):
+        scopes = _envoy_mod._scopes_for_operation(
+            'create_extension', {'parent_path': '/a'},
+            {'comp_path': '/a/Feat', 'dat_path': '/a/Feat/FeatExt'})
+        self.assertIn('/a/Feat', scopes)
+        self.assertIn('/a/Feat/FeatExt', scopes)
+
     def test_scopes_batch_unions_sub_operations(self):
         scopes = _envoy_mod._scopes_for_operation('batch_operations', {
             'operations': [

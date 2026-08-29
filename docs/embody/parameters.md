@@ -5,7 +5,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 <!-- GENERATED FILE - do not edit by hand. Regenerate with: python dev/embody/tools/generate_parameters_doc.py -->
 
 !!! info "Auto-generated from `Embody.tdn`"
-    This page is generated from the externalized Embody COMP (`dev/embody/Embody.tdn`), the source of truth for its parameters, so it stays in sync with the actual component. **139 parameters** across 9 pages.
+    This page is generated from the externalized Embody COMP (`dev/embody/Embody.tdn`), so it stays in sync with the actual component. That file is a **receipt written by the save**, not an editable source: nothing reconstructs Embody from it, and a hand edit is overwritten by the next save. **139 parameters** across 9 pages.
 
 ## Embody
 

@@ -77,7 +77,14 @@ _TOUCH_RING_CAP = 8       # touches kept per scope
 _TOUCH_SCOPE_CAP = 200    # scopes kept (evict oldest-touched beyond this)
 
 _PATH_PARAM_KEYS = ('op_path', 'parent_path', 'source_path', 'dest_path',
-                    'target_path', 'comp_path', 'root_path')
+                    'dest_parent', 'target_path', 'comp_path', 'root_path')
+
+# Result keys that name an operator this call CREATED. Recording only 'path'
+# left copy_op, rename_op and create_extension registering their container
+# instead of the thing they made, so a peer editing the new op saw no overlap
+# (issue #94 audit). copy_op/rename_op return 'new_path'; create_extension
+# returns 'comp_path' + 'dat_path'.
+_RESULT_PATH_KEYS = ('path', 'new_path', 'comp_path', 'dat_path')
 
 
 # --- Recovery hints: reactive guidance on error envelopes ---
@@ -781,9 +788,10 @@ def _scopes_for_operation(operation: str, params: dict, result=None) -> list:
                     and '/' in base):
                 scopes.append(base.rsplit('/', 1)[0] + '/' + new_name)
         if isinstance(result, dict):
-            created = result.get('path')
-            if isinstance(created, str) and created.startswith('/'):
-                scopes.append(created)
+            for key in _RESULT_PATH_KEYS:
+                created = result.get(key)
+                if isinstance(created, str) and created.startswith('/'):
+                    scopes.append(created)
     seen = set()
     deduped = []
     for s in scopes:

@@ -45,6 +45,58 @@ Use `op.Embody.Log(message, level)` from anywhere. Levels: `'DEBUG'`, `'INFO'`, 
 | `parexec.py` | MEDIUM | Every parameter change. Performance-sensitive. |
 | `externalizations.tsv` | NEVER EDIT | Managed exclusively by Embody. |
 
+## Frozen Surfaces -- names that may never be renamed
+
+These are load-bearing across a version boundary or across a process boundary,
+so a rename does not break a build, it breaks something already shipped. The
+promoted-surface census (`test_promoted_surface.py`) guards the third and
+fourth; the rest are on you.
+
+- **The cross-version update rendezvous.** An ALREADY-INSTALLED version composes
+  `run()` strings naming the `updater` COMP, `UpdaterExt`, and
+  `VerifyUpdate`/`VerifyRollback`/`StartupCheck` -- and executes them against
+  the NEW tox. Rename one and every user updating *from* an older build lands
+  on a missing name. `UpdaterExt` additionally gates a boot check on the
+  `EmbodyExt` and `execute` DAT names existing, and **rolls a healthy update
+  back** when they do not.
+- **All MCP tool names and their parameter names.** They are persisted in
+  `.embody/envoy-tools-cache.json` (served to already-running sessions before
+  TD answers), relayed on the Convoy wire, and written into users'
+  `settings.local.json` permission rules. A rename silently revokes a
+  permission the user granted.
+- **The documented `op.Embody` methods.** A user who ever read the docs -- or
+  who has a generated rule file sitting in their own project -- still holds the
+  old name. `test_promoted_surface.py::TestDocumentedApiIsPromoted` fails if one
+  stops resolving.
+- **Every custom parameter name.** There is no rename-migration map, and
+  `_PERSISTED_PARAMS` keys `.embody/config.json` by name, so a renamed par
+  silently loses the user's stored setting.
+- **`Par.destroy()` is unrecoverable** -- it takes the value, expressions and
+  exports. `_pruneRetiredPars` carries a proportional floor for exactly this
+  reason; do not add a second par-removing path without one.
+- **Two frozen cross-language contracts name a Python file as their mirror.**
+  `platform/packages/contracts/envelope.ts` (C1, the `_embody_tdn` clipboard
+  wire format) mirrors `dev/embody/Embody/TDXNExt.py`;
+  `platform/packages/contracts/capability.ts` (C2, the TDXN capability scan
+  output) mirrors `dev/embody/Embody/Collection/scanner.py`. Editing either
+  Python side is a contract change: bump it and notify the dependents, which
+  include the web submit gate and D1 `scans.capability_json`.
+  **Known gap (2026-08-29):** `platform/SCANNER-SPEC.md` requires both scanners
+  to agree on shared fixtures in `platform/packages/scanner-ts/fixtures/`,
+  mirrored to `dev/embody/unit_tests/fixtures/`. **Neither directory exists**,
+  so two independent implementations of a security scanner have never been
+  checked against each other. Build the corpus before touching either scanner.
+
+## Embody's Own COMP Is Edited Live, Never Through Its `.tdn`
+
+`_getTDNStrategyComps` omits Embody, its ancestors and its descendants, so
+nothing reconstructs `/embody/Embody` from `dev/embody/Embody.tdn`. A hand edit
+to that file (or to `tagger.tdn`, `toolbar.tdn`, `list.tdn`, `manager.tdn`) is
+**inert** -- no reload reads it, the next save overwrites it from the live COMP,
+and `git status` goes clean, so it looks applied and never was. Change the live
+network; treat the `.tdn` as the receipt. Externalized `.py` DATs are the
+opposite and are edited on disk as normal.
+
 ## Project Save
 
 - **`project.save()`** is the Python equivalent of Ctrl+S. It saves the .toe and automatically exports the release .tox to `release/`. No separate `ExportPortableTox` call is needed.

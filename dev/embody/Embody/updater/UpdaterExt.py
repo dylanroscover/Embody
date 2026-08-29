@@ -1295,9 +1295,25 @@ class UpdaterExt:
         declared = set(declared)
         # Names first: destroying a Par invalidates the OTHER Par objects held
         # in a snapshot, so each removal is re-looked-up by name.
-        candidates = [p.name for p in embody.customPars
-                      if p.name not in declared
-                      and not self._isSequenceBlockPar(p)]
+        prunable = [p for p in embody.customPars
+                    if not self._isSequenceBlockPar(p)]
+        candidates = [p.name for p in prunable if p.name not in declared]
+        # PROPORTIONAL FLOOR. Everything above trusts the manifest to be an
+        # honest declaration of this build's pars; nothing checks that it is.
+        # A truncated or malformed custom_pars list would destroy every par it
+        # omits, and Par.destroy() takes the user's value, expressions and
+        # exports with it. v6.0.245/246 already shipped manifests that named
+        # the developer's own machine state -- so a bad manifest is a
+        # demonstrated failure mode, not a hypothetical, and the consumer is
+        # the only place left to catch it once one is published.
+        ceiling = max(5, int(len(prunable) * 0.15))
+        if len(candidates) > ceiling:
+            self._log(
+                f'REFUSED to prune {len(candidates)} of {len(prunable)} custom '
+                f'pars (ceiling {ceiling}) -- a manifest that retires this much '
+                f'at once is malformed, not a real migration. Nothing removed; '
+                f'settings are intact.', 'WARNING')
+            return []
         # Pages that were ALREADY empty before this prune. Anything in here is
         # not ours to remove -- see the sweep below.
         try:

@@ -528,6 +528,48 @@ class TestUpdateParReconciliation(EmbodyTestCase):
         self.assertEqual([], stub.dialogs,
                          'no removals means no dialog')
 
+    def test_a_manifest_that_retires_almost_everything_is_refused(self):
+        """A proportional floor, because a bad manifest is not hypothetical.
+
+        Everything above this guard trusts custom_pars to be an honest
+        declaration; nothing verifies it. v6.0.245 and v6.0.246 both shipped
+        manifests naming the developer's own machine state, and a published
+        manifest cannot be un-shipped -- so the consumer is the only place a
+        malformed one can still be caught. Par.destroy() takes the user's
+        value, expressions and exports, so the failure is unrecoverable.
+        """
+        settings = {'Keep%d' % i: 'v%d' % i for i in range(20)}
+        comp = self._settings(self._comp(), settings)
+        stub = _StubUpdater(comp)
+        # A manifest that declares only one of the twenty pars.
+        retired = _updater_cls()._pruneRetiredPars(
+            stub, {'custom_pars': ['Keep0']})
+        self.assertEqual([], retired,
+                         'a manifest retiring 19 of 20 pars must be refused '
+                         'wholesale, not applied par by par')
+        for name in settings:
+            self.assertIsNotNone(
+                getattr(comp.par, name, None),
+                '%s was destroyed by a manifest that should have been '
+                'refused' % name)
+        self.assertTrue(
+            any('REFUSED' in message
+                for lvl, message in stub.logs if lvl == 'WARNING'),
+            'the refusal must be logged -- a silent no-op looks like a '
+            'manifest with nothing to retire')
+
+    def test_a_normal_migration_still_prunes_under_the_floor(self):
+        """The floor must not block real retirements."""
+        settings = {'Keep%d' % i: 'v%d' % i for i in range(20)}
+        settings['Goneme'] = 'x'
+        comp = self._settings(self._comp(), settings)
+        stub = _StubUpdater(comp)
+        declared = [n for n in settings if n != 'Goneme']
+        retired = _updater_cls()._pruneRetiredPars(
+            stub, {'custom_pars': declared})
+        self.assertEqual(['Goneme'], retired)
+        self.assertIsNone(getattr(comp.par, 'Goneme', None))
+
     def test_a_manifest_without_custom_pars_prunes_nothing(self):
         """Older releases carry no declaration -- with no source of truth the
         updater must not guess, or it would delete every live setting."""
