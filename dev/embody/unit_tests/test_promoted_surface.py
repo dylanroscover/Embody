@@ -33,11 +33,15 @@ CALLER_INDEX = REPO / "docs" / "reports" / "issue-94-caller-index.json"
 # fails. Lower a number when you demote; raising one is a deliberate decision
 # to widen the public API and belongs in review, not in a drive-by.
 PROMOTED_CEILING = {
-    "EmbodyExt": 79,
-    "ConvoyExt": 67,
-    "TDXNExt": 24,
-    "UpdaterExt": 18,
-    "CatalogManagerExt": 7,
+    "EmbodyExt": 78,
+    # WP4 wave 4b: 50 internal-only class constants renamed _UPPER and 2 dead
+    # ones deleted, taking promoted constants 79 -> 29. The 29 that remain have
+    # cross-file callers (tests, sibling modules, an iteration-order contract)
+    # and move individually in a later wave, not by bulk rename.
+    "ConvoyExt": 35,
+    "TDXNExt": 20,
+    "UpdaterExt": 10,
+    "CatalogManagerExt": 2,
     # WP4 wave 4a: both UI extensions demoted to zero promoted members. Every
     # caller was already a file-backed .py using .ext.<Class>., so nothing had
     # to change but the names -- which is exactly why this wave went first.

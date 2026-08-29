@@ -463,8 +463,6 @@ class TDXNExt:
 	# `X = X` class-body idiom, which reads like a typo.
 	FILE_SUFFIX = TDN_FILE_SUFFIX
 	FILE_SUFFIXES = TDN_FILE_SUFFIXES
-	FORMAT = TDN_FORMAT
-	ACCEPTED_FORMATS = TDN_ACCEPTED_FORMATS
 
 	# =========================================================================
 	# CRASH SAFETY -- atomic writes, backup rotation, validation
@@ -487,7 +485,7 @@ class TDXNExt:
 	# on a missing custom drive -- a recovery store whose location a
 	# preference can move is not a recovery store.
 	BACKUP_DIR = '.embody_backup'
-	LEGACY_BACKUP_DIR = '.tdn_backup'
+	_LEGACY_BACKUP_DIR = '.tdn_backup'
 
 	@staticmethod
 	def _get_backup_path(tdn_path: str, backup_root: str,
@@ -516,7 +514,7 @@ class TDXNExt:
 		except ValueError:
 			# tdn_path not under backup_root -- fall back to flat name
 			rel = Path(tdn.name)
-		backup_dir = proj / (TDXNExt.LEGACY_BACKUP_DIR if legacy
+		backup_dir = proj / (TDXNExt._LEGACY_BACKUP_DIR if legacy
 							 else TDXNExt.BACKUP_DIR)
 		return backup_dir / (str(rel) + suffix)
 
@@ -3224,7 +3222,7 @@ class TDXNExt:
 	# (the log FIFO, a status readout): the "content exists nowhere else on
 	# disk" safety net below would otherwise capture them on every export, and
 	# a ring buffer rewrites the .tdn on every save.
-	DAT_CONTENT_EXCLUDE = 'dat_content'
+	_DAT_CONTENT_EXCLUDE = 'dat_content'
 
 	def _datContentExcluded(self, target) -> bool:
 		"""Is this DAT's content opted out via tdn_exclude:dat_content?"""
@@ -3232,7 +3230,7 @@ class TDXNExt:
 			prefix = str(self.ownerComp.par.Tdnexcludetag.eval()).strip()
 			if not prefix:
 				return False
-			return f'{prefix}:{TDXNExt.DAT_CONTENT_EXCLUDE}' in target.tags
+			return f'{prefix}:{TDXNExt._DAT_CONTENT_EXCLUDE}' in target.tags
 		except Exception:
 			return False
 
@@ -3262,7 +3260,7 @@ class TDXNExt:
 				name = t[len(marker):].strip()
 				if not name:
 					continue
-				if name == TDXNExt.DAT_CONTENT_EXCLUDE:
+				if name == TDXNExt._DAT_CONTENT_EXCLUDE:
 					# Reserved: handled by _datContentExcluded, not a par.
 					continue
 				warn_key = (target.path, name)

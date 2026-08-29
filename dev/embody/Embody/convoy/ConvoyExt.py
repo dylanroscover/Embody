@@ -76,9 +76,9 @@ class ConvoyExt:
 
     # Cadences, in seconds, for the NEXT call. The tick wakes just often
     # enough to serve whichever one is pending (see _scheduleFrom).
-    CONVERGING_S = 4.0    # something is still settling (Envoy port pending)
-    HEARTBEAT_S = 30.0    # steady state: re-assert port + runtime_id
-    ABSENT_S = 60.0       # no host app, or a policy refusal: stay quiet
+    _CONVERGING_S = 4.0    # something is still settling (Envoy port pending)
+    _HEARTBEAT_S = 30.0    # steady state: re-assert port + runtime_id
+    _ABSENT_S = 60.0       # no host app, or a policy refusal: stay quiet
 
     # Tick bounds, in milliseconds.
     TICK_MIN_MS = 4000
@@ -94,7 +94,7 @@ class ConvoyExt:
     # Worker poll chain. Worst case in the worker is a 3 s /health plus a
     # 10 s /register; the budget is >= 3x that (160 x 15 frames ~= 40 s at
     # 60 fps), matching UpdaterExt's sizing rule.
-    POLL_FRAMES = 15
+    _POLL_FRAMES = 15
     POLL_ATTEMPTS = 160
 
     # Host-app poll cap: the worst-case legitimate install (supervisor
@@ -110,8 +110,8 @@ class ConvoyExt:
     # At most one node call and one host-lifecycle call can be outstanding.
     # The long-lived worker serializes them, so two slots are sufficient and
     # a programming error cannot grow an unbounded queue inside TD.
-    WORKER_QUEUE_MAX = 2
-    WORKER_IDLE_S = 0.25
+    _WORKER_QUEUE_MAX = 2
+    _WORKER_IDLE_S = 0.25
 
     # TouchDesigner-originated sibling requests use the SAME long-lived
     # ThreadManager worker as registration and host lifecycle work; a batch
@@ -124,18 +124,18 @@ class ConvoyExt:
     API_REQUEST_MAX = 64
     API_COMPLETION_MAX = 64
     API_PROGRESS_MAX = 128
-    API_PROGRESS_PER_REQUEST_MAX = 32
-    API_EVENT_DRAIN_MAX = 128
-    API_POLL_FRAMES = 4
+    _API_PROGRESS_PER_REQUEST_MAX = 32
+    _API_EVENT_DRAIN_MAX = 128
+    _API_POLL_FRAMES = 4
     # The loopback host accepts a 1 MiB HTTP body. Reserve 64 KiB for routing
     # identities and JSON envelope overhead instead of accepting a payload
     # here that the next hop must deterministically refuse.
-    API_REQUEST_MAX_BYTES = 960 * 1024
+    _API_REQUEST_MAX_BYTES = 960 * 1024
     API_RESULT_MAX_BYTES = 2 * 1024 * 1024
-    API_SNAPSHOT_MAX_BYTES = API_RESULT_MAX_BYTES + 64 * 1024
-    API_PROGRESS_VALUE_MAX_BYTES = 128 * 1024
-    API_BATCH_TARGET_MAX = 64
-    API_BATCH_OPERATION_MAX = 512
+    _API_SNAPSHOT_MAX_BYTES = API_RESULT_MAX_BYTES + 64 * 1024
+    _API_PROGRESS_VALUE_MAX_BYTES = 128 * 1024
+    _API_BATCH_TARGET_MAX = 64
+    _API_BATCH_OPERATION_MAX = 512
     # A batch fans out through short-lived ThreadManager TDTasks, never raw
     # Python threads.  Eight simultaneous target submissions are enough to
     # keep a few-dozen-node LAN busy without letting one TD session create a
@@ -145,8 +145,8 @@ class ConvoyExt:
     # A wait occupies the same serial worker that heals registration. Keep
     # every public turn below two heartbeat windows; longer operations return
     # a durable delivery id and are reconciled through getJob() instead.
-    API_TIMEOUT_MAX_S = 60.0
-    API_TERMINAL_REQUEST_STATES = ('completed', 'failed')
+    _API_TIMEOUT_MAX_S = 60.0
+    _API_TERMINAL_REQUEST_STATES = ('completed', 'failed')
 
     # The wake listener is intentionally tiny and loopback-only.  It is a
     # separate standalone TDTask so Perform Mode can stop Envoy and every
@@ -154,30 +154,30 @@ class ConvoyExt:
     # in recvfrom().  Commands are bearer-authenticated, schema-closed and
     # handed to the TD main thread through a bounded Queue; the listener never
     # imports or touches TD.
-    WAKE_PROTOCOL = 1
+    _WAKE_PROTOCOL = 1
     WAKE_PACKET_MAX = 1024
-    WAKE_QUEUE_MAX = 128
-    WAKE_SOCKET_TIMEOUT_S = 0.25
-    WAKE_POLL_MS = 250
-    WAKE_DRAIN_MAX = 32
-    WAKE_LEASE_MAX_CHARS = 128
-    WAKE_TTL_DEFAULT_S = 120
-    WAKE_TTL_MAX_S = 600
+    _WAKE_QUEUE_MAX = 128
+    _WAKE_SOCKET_TIMEOUT_S = 0.25
+    _WAKE_POLL_MS = 250
+    _WAKE_DRAIN_MAX = 32
+    _WAKE_LEASE_MAX_CHARS = 128
+    _WAKE_TTL_DEFAULT_S = 120
+    _WAKE_TTL_MAX_S = 600
 
     # How long the install/start tail waits for the daemon to answer
     # /health before reporting what it actually sees. Without this the
     # readout would say 'Installed -- not running' for up to a minute
     # after a successful install, which reads exactly like a failure.
-    HEALTH_WAIT_S = 20.0
-    HEALTH_POLL_S = 1.0
+    _HEALTH_WAIT_S = 20.0
+    _HEALTH_POLL_S = 1.0
 
     # Wait for the restarted daemon to report the just-written version:
     # a supervisor respawn answers as the OUTGOING payload for ~1 s, and
     # one immediate read turned that into a permanent 'stale payload'
     # verdict (3 field logs). 4 x 2 s covers it; carried in ctx so tests
     # zero them.
-    VERSION_SETTLE_ATTEMPTS = 5
-    VERSION_SETTLE_S = 2.0
+    _VERSION_SETTLE_ATTEMPTS = 5
+    _VERSION_SETTLE_S = 2.0
 
     # Mirrors convoy_client.HOST_* -- that module owns the vocabulary and
     # a test pins these five against it. They are the TRANSIENT states,
@@ -188,7 +188,7 @@ class ConvoyExt:
     HOST_REPAIRING = 'repairing'
     HOST_STARTING = 'starting'
     HOST_INSTALL_FAILED = 'install_failed'
-    RUNTIME_CATALOG_FILENAME = 'convoy_runtime_catalog.json'
+    _RUNTIME_CATALOG_FILENAME = 'convoy_runtime_catalog.json'
 
     # Status classes that deserve a WARNING on the transition INTO them.
     # 'unreachable' is here and 'absent'/'stale' are NOT, and the difference
@@ -462,7 +462,7 @@ class ConvoyExt:
         release_root = external_tox_root()
         if release_root:
             catalog_path = os.path.join(
-                release_root, self.RUNTIME_CATALOG_FILENAME)
+                release_root, self._RUNTIME_CATALOG_FILENAME)
             if os.path.isfile(catalog_path):
                 return {'catalog': catalog_path,
                         'asset_root': release_root,
@@ -481,7 +481,7 @@ class ConvoyExt:
         if source_path:
             catalog_path = os.path.abspath(os.path.join(
                 os.path.dirname(source_path), '..', '..', 'convoy',
-                self.RUNTIME_CATALOG_FILENAME))
+                self._RUNTIME_CATALOG_FILENAME))
             if os.path.isfile(catalog_path):
                 return {'catalog': catalog_path,
                         'asset_root': os.path.dirname(catalog_path),
@@ -1261,7 +1261,7 @@ class ConvoyExt:
             allowed = {'v', 'auth', 'action', 'lease_id', 'ttl_s'}
             if set(body) - allowed:
                 return None
-            if body.get('v') != cls.WAKE_PROTOCOL:
+            if body.get('v') != cls._WAKE_PROTOCOL:
                 return None
             supplied = body.get('auth')
             if (not isinstance(supplied, str)
@@ -1272,13 +1272,13 @@ class ConvoyExt:
                 return None
             lease_id = body.get('lease_id')
             if (not isinstance(lease_id, str) or not lease_id
-                    or len(lease_id) > cls.WAKE_LEASE_MAX_CHARS
+                    or len(lease_id) > cls._WAKE_LEASE_MAX_CHARS
                     or any(ord(ch) < 33 or ord(ch) > 126
                            for ch in lease_id)):
                 return None
-            ttl_s = body.get('ttl_s', cls.WAKE_TTL_DEFAULT_S)
+            ttl_s = body.get('ttl_s', cls._WAKE_TTL_DEFAULT_S)
             if (isinstance(ttl_s, bool) or not isinstance(ttl_s, int)
-                    or ttl_s < 1 or ttl_s > cls.WAKE_TTL_MAX_S):
+                    or ttl_s < 1 or ttl_s > cls._WAKE_TTL_MAX_S):
                 return None
             return {'action': action, 'lease_id': lease_id,
                     'ttl_s': ttl_s}
@@ -1361,7 +1361,7 @@ class ConvoyExt:
                     self._armWakePoll()
                 return True
 
-        command_queue = Queue(maxsize=self.WAKE_QUEUE_MAX)
+        command_queue = Queue(maxsize=self._WAKE_QUEUE_MAX)
         shutdown = Event()
         ready = Event()
         token = secrets.token_urlsafe(32)
@@ -1373,7 +1373,7 @@ class ConvoyExt:
         task = self.ThreadManager.TDTask(
             target=ConvoyExt._wakeListenerLoop,
             args=(command_queue, shutdown, ready, token, state,
-                  self.WAKE_PACKET_MAX, self.WAKE_SOCKET_TIMEOUT_S))
+                  self.WAKE_PACKET_MAX, self._WAKE_SOCKET_TIMEOUT_S))
         thread = self.ThreadManager.EnqueueTask(task, standalone=True)
         if thread is None:
             shutdown.set()
@@ -1423,7 +1423,7 @@ class ConvoyExt:
         self._wake_poll_gen += 1
         generation = self._wake_poll_gen
         run('args[0]._pollWakeCommands(args[1])', self, generation,
-            delayMilliSeconds=self.WAKE_POLL_MS)
+            delayMilliSeconds=self._WAKE_POLL_MS)
 
     def _pollWakeCommands(self, generation):
         """Apply wake leases on TD's main thread and expire abandoned ones."""
@@ -1436,7 +1436,7 @@ class ConvoyExt:
         leases = session.setdefault('wake_leases', {})
         now = time.monotonic()
         queue = record.get('queue')
-        for _ in range(self.WAKE_DRAIN_MAX):
+        for _ in range(self._WAKE_DRAIN_MAX):
             try:
                 command = queue.get_nowait()
             except Empty:
@@ -1476,7 +1476,7 @@ class ConvoyExt:
             session['next_call_at'] = None
             self._reconcile(force=True)
         run('args[0]._pollWakeCommands(args[1])', self, generation,
-            delayMilliSeconds=self.WAKE_POLL_MS)
+            delayMilliSeconds=self._WAKE_POLL_MS)
 
     def ResetWakeLeases(self, close_override=True):
         """Drop process-local leases after a local mode/membership change."""
@@ -1881,7 +1881,7 @@ class ConvoyExt:
         Event on the COMP.
         """
         self._worker_generation = int(generation)
-        self._worker_queue = Queue(maxsize=self.WORKER_QUEUE_MAX)
+        self._worker_queue = Queue(maxsize=self._WORKER_QUEUE_MAX)
         self._worker_shutdown = Event()
         self._worker_task = None
         self._worker_thread = None
@@ -1983,7 +1983,7 @@ class ConvoyExt:
         task = self.ThreadManager.TDTask(
             target=ConvoyExt._workerLoop,
             args=(self._worker_queue, self._worker_shutdown,
-                  self._worker_generation, self.WORKER_IDLE_S))
+                  self._worker_generation, self._WORKER_IDLE_S))
         thread = self.ThreadManager.EnqueueTask(task, standalone=True)
         if thread is None:
             return False
@@ -2141,9 +2141,9 @@ class ConvoyExt:
     @classmethod
     def _apiTimeout(cls, value):
         if (isinstance(value, bool) or not isinstance(value, (int, float))
-                or not 0.1 <= float(value) <= cls.API_TIMEOUT_MAX_S):
+                or not 0.1 <= float(value) <= cls._API_TIMEOUT_MAX_S):
             raise ValueError('timeout_s must be within [0.1, %d]'
-                             % int(cls.API_TIMEOUT_MAX_S))
+                             % int(cls._API_TIMEOUT_MAX_S))
         return float(value)
 
     @staticmethod
@@ -2184,7 +2184,7 @@ class ConvoyExt:
         while len(self._api_requests) >= self.API_REQUEST_MAX:
             evicted = False
             for old_id, old in tuple(self._api_requests.items()):
-                if old.get('state') in self.API_TERMINAL_REQUEST_STATES:
+                if old.get('state') in self._API_TERMINAL_REQUEST_STATES:
                     self._api_requests.pop(old_id, None)
                     self._api_callbacks.pop(old_id, None)
                     evicted = True
@@ -2248,7 +2248,7 @@ class ConvoyExt:
             out['event'] = event
         try:
             return self._apiPlain(
-                out, self.API_SNAPSHOT_MAX_BYTES, 'request snapshot')
+                out, self._API_SNAPSHOT_MAX_BYTES, 'request snapshot')
         except ValueError as e:
             return self._apiError('invalid_request_snapshot', str(e))
 
@@ -2370,7 +2370,7 @@ class ConvoyExt:
                 'operation': self._apiText(
                     operation, 'operation', 128),
                 'arguments': self._apiPlain(
-                    arguments, self.API_REQUEST_MAX_BYTES, 'arguments'),
+                    arguments, self._API_REQUEST_MAX_BYTES, 'arguments'),
                 'timeout_s': self._apiTimeout(timeout_s),
                 'wait': wait,
             }
@@ -2400,14 +2400,14 @@ class ConvoyExt:
                 raise ValueError('wait must be a boolean')
             if not isinstance(targets, (list, tuple)) or not targets:
                 raise ValueError('targets must be a non-empty list')
-            if len(targets) > self.API_BATCH_TARGET_MAX:
+            if len(targets) > self._API_BATCH_TARGET_MAX:
                 raise ValueError('too many batch targets (maximum %d)'
-                                 % self.API_BATCH_TARGET_MAX)
+                                 % self._API_BATCH_TARGET_MAX)
             if not isinstance(operations, (list, tuple)):
                 raise ValueError('operations must be a list')
-            if len(operations) > self.API_BATCH_OPERATION_MAX:
+            if len(operations) > self._API_BATCH_OPERATION_MAX:
                 raise ValueError('too many batch operations (maximum %d)'
-                                 % self.API_BATCH_OPERATION_MAX)
+                                 % self._API_BATCH_OPERATION_MAX)
             clean_targets = []
             for index, target in enumerate(targets):
                 if not isinstance(target, dict):
@@ -2447,7 +2447,7 @@ class ConvoyExt:
                 'operations': clean_operations,
                 'timeout_s': self._apiTimeout(timeout_s),
                 'wait': wait,
-            }, self.API_REQUEST_MAX_BYTES, 'batch request')
+            }, self._API_REQUEST_MAX_BYTES, 'batch request')
         except (TypeError, ValueError) as e:
             error = self._apiError('invalid_arguments', str(e))
         return self._submitSiblingApi(
@@ -2503,7 +2503,7 @@ class ConvoyExt:
         if record is None:
             return None
         out = self._apiRecordSnapshot(record)
-        if consume and record.get('state') in self.API_TERMINAL_REQUEST_STATES:
+        if consume and record.get('state') in self._API_TERMINAL_REQUEST_STATES:
             self._api_requests.pop(request_id, None)
             self._api_callbacks.pop(request_id, None)
         return out
@@ -2606,16 +2606,16 @@ class ConvoyExt:
         # the callback table and this extension object are NOT captured.
         try:
             plain_context = self._apiPlain(
-                context, self.API_REQUEST_MAX_BYTES, 'source context')
+                context, self._API_REQUEST_MAX_BYTES, 'source context')
             plain_request = self._apiPlain(
-                request, self.API_REQUEST_MAX_BYTES, 'request')
+                request, self._API_REQUEST_MAX_BYTES, 'request')
         except ValueError as e:
             _complete(self._apiError('invalid_arguments', str(e)))
             self._armApiPoll()
             return handle
         gate_event = self._api_gate_event
-        progress_limit = int(self.API_PROGRESS_PER_REQUEST_MAX)
-        progress_value_limit = int(self.API_PROGRESS_VALUE_MAX_BYTES)
+        progress_limit = int(self._API_PROGRESS_PER_REQUEST_MAX)
+        progress_value_limit = int(self._API_PROGRESS_VALUE_MAX_BYTES)
         progress_tokens = Queue(maxsize=progress_limit)
         for _token_index in range(progress_limit):
             progress_tokens.put_nowait(None)
@@ -2675,7 +2675,7 @@ class ConvoyExt:
         try:
             run('args[0]._pollApiEvents(args[1])',
                 self, self._api_generation,
-                delayFrames=self.API_POLL_FRAMES)
+                delayFrames=self._API_POLL_FRAMES)
         except Exception as e:
             self._api_poll_armed = False
             self._log('could not arm sibling API result poll: %s' % (e,),
@@ -2683,7 +2683,7 @@ class ConvoyExt:
 
     def _apiHasPending(self):
         return any(record.get('state') not in
-                   self.API_TERMINAL_REQUEST_STATES
+                   self._API_TERMINAL_REQUEST_STATES
                    for record in self._api_requests.values())
 
     @staticmethod
@@ -2709,7 +2709,7 @@ class ConvoyExt:
         request_id = event.get('request_id')
         record = self._api_requests.get(request_id)
         if (record is None or record.get('state') in
-                self.API_TERMINAL_REQUEST_STATES):
+                self._API_TERMINAL_REQUEST_STATES):
             return
         record['state'] = 'running'
         record['updated'] = time.time()
@@ -2720,7 +2720,7 @@ class ConvoyExt:
         request_id = event.get('request_id')
         record = self._api_requests.get(request_id)
         if (record is None or record.get('state') in
-                self.API_TERMINAL_REQUEST_STATES):
+                self._API_TERMINAL_REQUEST_STATES):
             return
         result = self._apiBoundResult(event.get('result'))
         record['result'] = result
@@ -2742,7 +2742,7 @@ class ConvoyExt:
         # Progress was published before completion. Drain its dedicated queue
         # first so a callback never observes "complete" and then "running".
         drained = 0
-        while drained < self.API_EVENT_DRAIN_MAX:
+        while drained < self._API_EVENT_DRAIN_MAX:
             try:
                 event = self._api_progress_events.get_nowait()
             except Empty:
@@ -2752,7 +2752,7 @@ class ConvoyExt:
                 self._applyApiProgress(event)
 
         drained = 0
-        while drained < self.API_EVENT_DRAIN_MAX:
+        while drained < self._API_EVENT_DRAIN_MAX:
             try:
                 event = self._api_completion_events.get_nowait()
             except Empty:
@@ -2850,7 +2850,7 @@ class ConvoyExt:
                 },
             }
         run('args[0]._pollPolicyCall(args[1], args[2])',
-            self, gen, 0, delayFrames=self.POLL_FRAMES)
+            self, gen, 0, delayFrames=self._POLL_FRAMES)
         return True
 
     def _pollPolicyCall(self, gen, attempts):
@@ -2870,7 +2870,7 @@ class ConvoyExt:
                 if attempts < self.POLL_ATTEMPTS:
                     run('args[0]._pollPolicyCall(args[1], args[2])',
                         self, gen, attempts + 1,
-                        delayFrames=self.POLL_FRAMES)
+                        delayFrames=self._POLL_FRAMES)
                 else:
                     self._policy_busy = False
                     self._finishPolicyCall(
@@ -2918,11 +2918,11 @@ class ConvoyExt:
             return getattr(self, '_policy_busy', False)
         age = time.time() - getattr(self, '_policy_busy_since',
                                     time.time())
-        if age > self.SLOT_BUSY_MAX_S:
+        if age > self._SLOT_BUSY_MAX_S:
             self._policy_busy = False
             self._log('a Convoy policy call exceeded its %ds budget with '
                       'no result; the slot was recovered'
-                      % (int(self.SLOT_BUSY_MAX_S),), 'WARNING')
+                      % (int(self._SLOT_BUSY_MAX_S),), 'WARNING')
             return False
         return True
 
@@ -3117,7 +3117,7 @@ class ConvoyExt:
             }
         self._tick_ms = self.TICK_MIN_MS
         run('args[0]._pollCall(args[1], args[2], args[3])',
-            self, action, gen, 0, delayFrames=self.POLL_FRAMES)
+            self, action, gen, 0, delayFrames=self._POLL_FRAMES)
 
     def _staleInstance(self):
         try:
@@ -3140,7 +3140,7 @@ class ConvoyExt:
                 if attempts < self.POLL_ATTEMPTS:
                     run('args[0]._pollCall(args[1], args[2], args[3])',
                         self, action, gen, attempts + 1,
-                        delayFrames=self.POLL_FRAMES)
+                        delayFrames=self._POLL_FRAMES)
                 else:
                     self._busy = False
                     self._finish(action, {
@@ -3239,10 +3239,10 @@ class ConvoyExt:
             # after open, and the host cannot dispatch back until it knows
             # the port. Keep converging until it does.
             session['next_call_at'] = (now if realm_changed else now + (
-                self.HEARTBEAT_S
+                self._HEARTBEAT_S
                 if (result.get('envoy_port')
                     or result.get('perform_mode'))
-                else self.CONVERGING_S))
+                else self._CONVERGING_S))
             self._applyPolicyProjection(result)
             self._applyNetworkNodes(result.get('_network_nodes'))
             # Same proof fixes the READOUT: this call ran through the
@@ -3287,7 +3287,7 @@ class ConvoyExt:
                 # Absence is normal and a policy refusal is a decision:
                 # neither is retried hard.
                 session['fails'] = 0
-                session['next_call_at'] = now + self.ABSENT_S
+                session['next_call_at'] = now + self._ABSENT_S
             else:
                 # unreachable / host_error / error: a transport or host-side
                 # fault, jittered 5 s -> 60 s so a fleet recovering from one
@@ -3297,7 +3297,7 @@ class ConvoyExt:
                 try:
                     delay = float(client.backoff_delay(fails))
                 except Exception:
-                    delay = self.ABSENT_S
+                    delay = self._ABSENT_S
                 session['next_call_at'] = now + delay
         session['pending_sent'] = None
         self._tick_ms = self._scheduleFrom(session)
@@ -3398,10 +3398,10 @@ class ConvoyExt:
             'home': os.path.expanduser('~'),
             'uid': (os.getuid() if hasattr(os, 'getuid') else None),
             'installed_by': '%s (%s)' % (project_root, self._embody.path),
-            'health_wait_s': self.HEALTH_WAIT_S,
-            'health_poll_s': self.HEALTH_POLL_S,
-            'version_settle_attempts': self.VERSION_SETTLE_ATTEMPTS,
-            'version_settle_s': self.VERSION_SETTLE_S,
+            'health_wait_s': self._HEALTH_WAIT_S,
+            'health_poll_s': self._HEALTH_POLL_S,
+            'version_settle_attempts': self._VERSION_SETTLE_ATTEMPTS,
+            'version_settle_s': self._VERSION_SETTLE_S,
             # Embody's own uv-managed venv python -- the interpreter the rest
             # of Embody's Python runs under. It already carries the Convoy
             # crypto floor (Ed25519/X.509/TLS 1.3), so the host app runs under
@@ -3643,7 +3643,7 @@ class ConvoyExt:
                 },
             }
         run('args[0]._pollHostCall(args[1], args[2], args[3])',
-            self, action, gen, 0, delayFrames=self.POLL_FRAMES)
+            self, action, gen, 0, delayFrames=self._POLL_FRAMES)
 
     def _pollHostCall(self, action, gen, attempts):
         """Drain the host worker slot. MAIN THREAD ONLY."""
@@ -3660,7 +3660,7 @@ class ConvoyExt:
                 if attempts < self.HOST_POLL_ATTEMPTS:
                     run('args[0]._pollHostCall(args[1], args[2], args[3])',
                         self, action, gen, attempts + 1,
-                        delayFrames=self.POLL_FRAMES)
+                        delayFrames=self._POLL_FRAMES)
                 else:
                     self._host_busy = False
                     self._finishHost(action, {
@@ -4253,7 +4253,7 @@ class ConvoyExt:
     # Independent of frame rate on purpose: the frame-based poll caps
     # stretch arbitrarily on a throttled/background TD, and a wedged
     # worker must not turn into a permanent refusal.
-    SLOT_BUSY_MAX_S = 900.0
+    _SLOT_BUSY_MAX_S = 900.0
 
     def _recoverWedgedHostSlot(self):
         """Recover a DEAD host slot; True when the flag is now clear.
@@ -4275,11 +4275,11 @@ class ConvoyExt:
                              parked.get('result'))
             return not self._host_busy
         age = time.time() - getattr(self, '_host_busy_since', time.time())
-        if age > self.SLOT_BUSY_MAX_S:
+        if age > self._SLOT_BUSY_MAX_S:
             self._host_busy = False
             self._log('a Convoy host call exceeded its %ds budget with no '
                       'result; the slot was recovered'
-                      % (int(self.SLOT_BUSY_MAX_S),), 'WARNING')
+                      % (int(self._SLOT_BUSY_MAX_S),), 'WARNING')
             return True
         return False
 
@@ -4688,7 +4688,7 @@ class ConvoyExt:
     # enough that a much-later realm change cannot pop a modal with no
     # gesture behind it (review finding: the un-expiring flag let a
     # tick raise the dialog arbitrarily long after the toggle).
-    REJOIN_OFFER_WINDOW_S = 120.0
+    _REJOIN_OFFER_WINDOW_S = 120.0
 
     def ArmRejoinOffer(self):
         """Arm the one-shot rejoin offer. Called ONLY from the explicit
@@ -4699,7 +4699,7 @@ class ConvoyExt:
         the original arming was unreachable for the exact clone
         scenario the feature exists for)."""
         self._session()['offer_rejoin_until'] = (
-            time.monotonic() + self.REJOIN_OFFER_WINDOW_S)
+            time.monotonic() + self._REJOIN_OFFER_WINDOW_S)
 
     def _offerRejoinLocalConvoy(self):
         """Fetch the machine realm, then offer the rejoin. MAIN THREAD."""
@@ -4978,7 +4978,7 @@ class ConvoyExt:
     # trusted-LAN explanation is answered ONCE per install -- not once per
     # project -- because it describes what Convoy does on THIS MACHINE, and
     # re-asking on every new project is noise the user has already read.
-    CONSENT_MARKER = 'consent.json'
+    _CONSENT_MARKER = 'consent.json'
 
     def _convoyRuntimeCandidates(self, venv_python=_UNSET):
         """Interpreters worth PROVING, best first. MAIN THREAD.
@@ -5037,7 +5037,7 @@ class ConvoyExt:
 
     def _installConsentPath(self):
         try:
-            return os.path.join(self._client().data_dir(), self.CONSENT_MARKER)
+            return os.path.join(self._client().data_dir(), self._CONSENT_MARKER)
         except Exception:
             return None
 
@@ -5503,7 +5503,7 @@ class ConvoyExt:
                 'api_pending': sum(
                     1 for record in self._api_requests.values()
                     if record.get('state') not in
-                    self.API_TERMINAL_REQUEST_STATES),
+                    self._API_TERMINAL_REQUEST_STATES),
                 'api_results': len(self._api_requests),
             })
             par = getattr(self._embody.par, 'Convoystatus', None)

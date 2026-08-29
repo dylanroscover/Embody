@@ -56,7 +56,9 @@ TD promotes **every capitalized member** -- methods and class constants alike. T
 | 2. Wiring | `lowerCamelCase` | `op.MyFeature.ext.MyFeature.onFrame()` | The COMP's own exec / callback / parexec DATs |
 | 3. Private | `_lowerCamelCase` | inside the class only | The class itself |
 
-**Acceptance test: a user autocompleting on the COMP must see nothing but tier 1.** Promoting a frame hook is a design flaw, not a shortcut.
+**Test: could a user or an agent reasonably call this ON the COMP?** If not, it is not tier 1. Promoting a frame hook is a design flaw, not a shortcut.
+
+What makes an over-wide tier 1 harmful is concrete, not cosmetic: co-mounted extensions share one namespace and TD documents no precedence for a duplicate, so one name silently wins; and every promoted name -- constants included -- is reachable by any `getattr(comp, name)` dispatcher. Promoted members do NOT appear in `dir()`, so this is not an autocomplete argument.
 
 Two traps:
 

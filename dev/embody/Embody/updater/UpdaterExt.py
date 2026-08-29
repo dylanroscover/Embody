@@ -113,16 +113,16 @@ def _verified_tls_context():
 class UpdaterExt:
     """Self-updater for the Embody component (check / download / apply)."""
 
-    GITHUB_OWNER = 'dylanroscover'
-    GITHUB_REPO = 'Embody'
-    USER_AGENT = 'Embody-Updater'
-    MANIFEST_ASSET = 'embody-release.json'
+    _GITHUB_OWNER = 'dylanroscover'
+    _GITHUB_REPO = 'Embody'
+    _USER_AGENT = 'Embody-Updater'
+    _MANIFEST_ASSET = 'embody-release.json'
     # A release tox is ~700KB; cap well above that but below anything that
     # could exhaust memory when buffered (GitHub allows 2GB assets).
     MAX_ASSET_BYTES = 50_000_000
     # A backup must look like a plausible portable tox, not a truncated stub.
-    MIN_BACKUP_BYTES = 100_000
-    ASSET_RE = re.compile(r'^[A-Za-z0-9._-]+\.tox$')
+    _MIN_BACKUP_BYTES = 100_000
+    _ASSET_RE = re.compile(r'^[A-Za-z0-9._-]+\.tox$')
 
     # Stall budgets, all wall clock (see the module docstring). The poll
     # deadlines are what a phase is allowed to take; BUSY_CEILING_S is the
@@ -131,8 +131,8 @@ class UpdaterExt:
     DOWNLOAD_DEADLINE_S = 300    # a ~1MB asset on a bad line, then give up
     BUSY_CEILING_S = {'check': 120, 'download': 420, 'install': 1800}
     MAX_NET_ATTEMPTS = 3         # tries per user-visible operation
-    RETRY_DELAY_MS = 3000
-    POLL_INTERVAL_MS = 250
+    _RETRY_DELAY_MS = 3000
+    _POLL_INTERVAL_MS = 250
 
     def __init__(self, ownerComp):
         self.ownerComp = ownerComp
@@ -231,7 +231,7 @@ class UpdaterExt:
                     f'{UpdaterExt.MAX_ASSET_BYTES}-byte cap')
         if not re.match(r'^[0-9a-f]{64}$', str(data['sha256'])):
             return 'manifest sha256 is not a 64-char lowercase hex digest'
-        if not UpdaterExt.ASSET_RE.match(str(data['asset'])):
+        if not UpdaterExt._ASSET_RE.match(str(data['asset'])):
             return (f'manifest asset must be a bare .tox filename, got '
                     f'{data["asset"]!r}')
         # The two OPTIONAL keys with the largest blast radius, type-checked
@@ -515,7 +515,7 @@ class UpdaterExt:
                          f'({nth}/{self.MAX_NET_ATTEMPTS})...')
             self._retry_spec = dict(retry_spec)
             self._schedule('args[0]._retryNetworkPhase()', self,
-                           delayMilliSeconds=self.RETRY_DELAY_MS)
+                           delayMilliSeconds=self._RETRY_DELAY_MS)
             return {'status': 'retrying', 'attempt': nth}
         tries = self._net_attempt
         self._abandonInFlight()
@@ -622,13 +622,13 @@ class UpdaterExt:
         self._check_gen += 1
         gen = self._check_gen
         self._status('Checking for updates...')
-        self._log(f'checking {self.GITHUB_OWNER}/{self.GITHUB_REPO} '
+        self._log(f'checking {self._GITHUB_OWNER}/{self._GITHUB_REPO} '
                   f'(local v{".".join(map(str, local)) if local else "?"})')
 
         # Resolve EVERYTHING the worker needs on the main thread first.
-        url = self.apiLatestUrl(self.GITHUB_OWNER, self.GITHUB_REPO)
-        ua = self.USER_AGENT
-        manifest_name = self.MANIFEST_ASSET
+        url = self.apiLatestUrl(self._GITHUB_OWNER, self._GITHUB_REPO)
+        ua = self._USER_AGENT
+        manifest_name = self._MANIFEST_ASSET
 
         def _worker():
             # ZERO TD access in here -- pure Python only.
@@ -673,7 +673,7 @@ class UpdaterExt:
         self._schedule('args[0]._pollCheck(args[1], args[2], args[3], args[4])',
                        self, interactive, auto_install, gen,
                        self._clock() + self.CHECK_DEADLINE_S,
-                       delayMilliSeconds=self.POLL_INTERVAL_MS)
+                       delayMilliSeconds=self._POLL_INTERVAL_MS)
         return {'status': 'checking'}
 
     def _staleInstance(self):
@@ -696,7 +696,7 @@ class UpdaterExt:
                 self._schedule(
                     'args[0]._pollCheck(args[1], args[2], args[3], args[4])',
                     self, interactive, auto_install, gen, deadline,
-                    delayMilliSeconds=self.POLL_INTERVAL_MS)
+                    delayMilliSeconds=self._POLL_INTERVAL_MS)
             else:
                 self._networkFailed('update check', 'GitHub did not answer '
                                     'in time', interactive, spec)
@@ -777,8 +777,8 @@ class UpdaterExt:
                 'Embody Update',
                 f'Update available: {tag} (installed: '
                 f'v{".".join(map(str, local))}).\n\n'
-                f'Release notes: https://github.com/{self.GITHUB_OWNER}/'
-                f'{self.GITHUB_REPO}/releases/tag/{tag}\n\n'
+                f'Release notes: https://github.com/{self._GITHUB_OWNER}/'
+                f'{self._GITHUB_REPO}/releases/tag/{tag}\n\n'
                 'Download and install now?',
                 ['Install', 'Not Now'])
             if choice == 0:  # affirmative only; -1/1/None => do nothing
@@ -810,7 +810,7 @@ class UpdaterExt:
         self._status(f'Downloading {pending["tag"]}...')
 
         url = pending['asset_url']
-        ua = self.USER_AGENT
+        ua = self._USER_AGENT
         expect_size = pending['manifest']['size']
         expect_sha = pending['manifest']['sha256']
         # asset is validated as a bare .tox filename -> safe to join.
@@ -857,7 +857,7 @@ class UpdaterExt:
             'args[0]._pollDownload(args[1], args[2], args[3], args[4])',
             self, interactive, apply_after, gen,
             self._clock() + self.DOWNLOAD_DEADLINE_S + 15,
-            delayMilliSeconds=self.POLL_INTERVAL_MS)
+            delayMilliSeconds=self._POLL_INTERVAL_MS)
         return {'status': 'downloading'}
 
     def _pollDownload(self, interactive, apply_after, gen, deadline):
@@ -873,7 +873,7 @@ class UpdaterExt:
                 self._schedule(
                     'args[0]._pollDownload(args[1], args[2], args[3], args[4])',
                     self, interactive, apply_after, gen, deadline,
-                    delayMilliSeconds=self.POLL_INTERVAL_MS)
+                    delayMilliSeconds=self._POLL_INTERVAL_MS)
             else:
                 self._networkFailed('download', 'the transfer stalled',
                                     interactive, spec)
@@ -989,7 +989,7 @@ class UpdaterExt:
             self._fail('Backup export reported failure -- update aborted.')
             return
         if (not os.path.isfile(backup)
-                or os.path.getsize(backup) < self.MIN_BACKUP_BYTES):
+                or os.path.getsize(backup) < self._MIN_BACKUP_BYTES):
             self._clearBusy()
             self._fail('Backup tox missing or implausibly small -- '
                        'update aborted.')

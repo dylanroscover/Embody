@@ -12856,13 +12856,13 @@ class EmbodyExt:
 
     # --- File Logging Helpers ---
 
-    LOG_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+    _LOG_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
     def _get_log_file_path(self):
         """
         Build the current log file path.
         Format: <Logfolder>/<project.name>_YYMMDD.log
-        Rotates to _001, _002, etc. when file exceeds LOG_MAX_FILE_SIZE.
+        Rotates to _001, _002, etc. when file exceeds _LOG_MAX_FILE_SIZE.
         """
         log_folder = self.my.par.Logfolder.eval()
         if not log_folder:
@@ -12885,14 +12885,14 @@ class EmbodyExt:
 
         # Check base file first
         base_path = os.path.join(log_folder, f'{base_name}.log')
-        if not os.path.exists(base_path) or os.path.getsize(base_path) < self.LOG_MAX_FILE_SIZE:
+        if not os.path.exists(base_path) or os.path.getsize(base_path) < self._LOG_MAX_FILE_SIZE:
             return base_path
 
         # Find next rotation index
         idx = 1
         while True:
             rotated_path = os.path.join(log_folder, f'{base_name}_{idx:03d}.log')
-            if not os.path.exists(rotated_path) or os.path.getsize(rotated_path) < self.LOG_MAX_FILE_SIZE:
+            if not os.path.exists(rotated_path) or os.path.getsize(rotated_path) < self._LOG_MAX_FILE_SIZE:
                 return rotated_path
             idx += 1
 

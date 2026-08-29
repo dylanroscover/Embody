@@ -35,14 +35,22 @@ TD promotes **every capitalized member** of a promoted extension to the COMP -- 
 | 2. Wiring | `lowerCamelCase` | `op.Comp.ext.Name.method()` | The COMP's own exec / callback / parexec DATs |
 | 3. Private | `_lowerCamelCase` | inside the class only | The class itself |
 
-**The acceptance test: a user autocompleting on the COMP must see nothing but tier 1.** A name that would confuse someone reading that list is not tier 1. Frame hooks, contact routers, verb dispatchers, and `ensurePars` are tier 2 -- always.
+**The test: could a user or an agent reasonably call this ON the COMP?** If not, it is not tier 1. Frame hooks, contact routers, verb dispatchers, and `ensurePars` are tier 2 -- always.
 
-(Tier model contributed by Function Store in [issue #94](https://github.com/dylanroscover/Embody/issues/94).)
+Three things make an over-wide tier 1 concretely harmful, all verifiable:
+
+- **Co-mounted extensions share one namespace.** Four extensions mount on Embody's COMP; TD documents no precedence for a duplicate promoted name, so one of the two becomes silently unreachable.
+- **Every promoted name is a `getattr` dispatch target.** Code that dispatches by name -- `getattr(comp, action)` in a toolbar, a config cell, a `run()` string -- can reach a promoted *constant* and "call" it. Dispatchers must therefore check `callable()` and fail loudly.
+- **It is a published API.** A user who read the docs, or has a generated rule file in their own project, still holds the name; renaming later breaks them.
+
+Note what this is NOT: promoted members do **not** appear in `dir()` (verified 2026-08-29 on 2025.33070 -- `dir(op.Embody)` returns 253 names with exactly one capitalized, and neither `Update` nor `FILE_SUFFIX` is among them). They resolve through TD's `__getattr__`, so a `dir()`-based completer never lists them. Argue the surface from collisions, dispatch and API contract -- not from autocomplete.
+
+(Three-tier model contributed by Function Store in [issue #94](https://github.com/dylanroscover/Embody/issues/94).)
 
 Four things that decide the tier for you:
 
 - **`.ext.<Name>` resolves by the Extension Name parameter, not the class name.** Embody's extensions are named `Embody`/`Envoy`/`TDXN` against classes `EmbodyExt`/`EnvoyExt`/`TDXNExt`, so `op.Embody.ext.Embody.x()` works and `op.Embody.ext.EmbodyExt.x()` raises.
-- **A capitalized class constant is promoted too.** `FILE_SUFFIX = '.tdxn'` on the class lands in the COMP's autocomplete beside your methods. Constants belong at module level, or renamed `_UPPER`.
+- **A capitalized class constant is promoted too.** `FILE_SUFFIX = '.tdxn'` on the class is reachable as `op.Comp.FILE_SUFFIX` and is a live `getattr` dispatch target beside your methods (verified on 2025.33070). Constants belong at module level, or renamed `_UPPER`.
 - **A name reachable only from a `run()` string, a parameter expression, or Python inside a `.tdxn` `dat_content` stays tier 1 until its call site is rewritten.** No static scan sees those callers, so renaming one is a silent runtime break, not a traceback.
 - **Demote behind a fail-loud call site.** `getattr(ext, name, None)` and `hasattr` guards turn a missed rename into a no-op button; log the miss instead of falling back.
 

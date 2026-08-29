@@ -205,7 +205,7 @@ class CatalogManagerExt:
 	# Background Scan
 	# =================================================================
 
-	CHUNK_SIZE = 2  # ops per frame - keeps frame time well under 16ms
+	_CHUNK_SIZE = 2  # ops per frame - keeps frame time well under 16ms
 
 	def _startBackgroundScan(self):
 		"""Begin async scan of all creatable op types."""
@@ -296,8 +296,8 @@ class CatalogManagerExt:
 			self._finalizeScan()
 			return
 
-		chunk = self._scan_queue[:self.CHUNK_SIZE]
-		self._scan_queue = self._scan_queue[self.CHUNK_SIZE:]
+		chunk = self._scan_queue[:self._CHUNK_SIZE]
+		self._scan_queue = self._scan_queue[self._CHUNK_SIZE:]
 
 		import td as _td
 
@@ -425,8 +425,8 @@ class CatalogManagerExt:
 	# Palette Component Scan - toeexpand (primary, off-main-thread)
 	# =================================================================
 
-	TOEEXPAND_TIMEOUT = 60      # seconds per .tox expansion subprocess
-	TOEEXPAND_POLL_FRAMES = 30  # main-thread drain cadence (~0.5s at 60fps)
+	_TOEEXPAND_TIMEOUT = 60      # seconds per .tox expansion subprocess
+	_TOEEXPAND_POLL_FRAMES = 30  # main-thread drain cadence (~0.5s at 60fps)
 
 	def _toeexpandExe(self):
 		"""Absolute path to TD's bundled toeexpand, or None if absent."""
@@ -523,11 +523,11 @@ class CatalogManagerExt:
 			target=self._toeexpandWorker,
 			args=(exe, palette_dir, sorted(rel_paths),
 				  self._tox_scan_queue, self._tox_scan_done,
-				  self._tox_scan_stop, self.TOEEXPAND_TIMEOUT),
+				  self._tox_scan_stop, self._TOEEXPAND_TIMEOUT),
 			name='EmbodyPaletteScan', daemon=True)
 		worker.start()
 		run('args[0]._pollToeexpandScan()', self,
-			delayFrames=self.TOEEXPAND_POLL_FRAMES)
+			delayFrames=self._TOEEXPAND_POLL_FRAMES)
 		return True
 
 	@staticmethod
@@ -701,7 +701,7 @@ class CatalogManagerExt:
 					fatal = item[2]
 
 			if (len(self._palette_results) - self._palette_checkpointed
-					>= self.PALETTE_CHECKPOINT_EVERY):
+					>= self._PALETTE_CHECKPOINT_EVERY):
 				self._checkpointPaletteScan()
 			done = len(self._palette_results)
 			self._setScanStatus(
@@ -731,7 +731,7 @@ class CatalogManagerExt:
 				self._finalizePaletteScan()
 				return
 			run('args[0]._pollToeexpandScan()', self,
-				delayFrames=self.TOEEXPAND_POLL_FRAMES)
+				delayFrames=self._TOEEXPAND_POLL_FRAMES)
 		except Exception as e:
 			self._log(f'Background palette scan aborted: {e}', 'ERROR')
 			self._setScanAborted('Scanning palette')
@@ -747,8 +747,8 @@ class CatalogManagerExt:
 	# Palette Component Scan - legacy in-TD loadTox (fallback only)
 	# =================================================================
 
-	PALETTE_CHUNK_SIZE = 1  # .tox files per frame - some palette .tox are heavy
-	PALETTE_CHECKPOINT_EVERY = 25  # partial-catalog write cadence (components)
+	_PALETTE_CHUNK_SIZE = 1  # .tox files per frame - some palette .tox are heavy
+	_PALETTE_CHECKPOINT_EVERY = 25  # partial-catalog write cadence (components)
 
 	def _startPaletteScan(self, op_catalog, resume_results=None):
 		"""Begin async scan of all shipped palette .tox components.
@@ -888,8 +888,8 @@ class CatalogManagerExt:
 			self._finalizePaletteScan()
 			return
 
-		chunk = self._palette_queue[:self.PALETTE_CHUNK_SIZE]
-		self._palette_queue = self._palette_queue[self.PALETTE_CHUNK_SIZE:]
+		chunk = self._palette_queue[:self._PALETTE_CHUNK_SIZE]
+		self._palette_queue = self._palette_queue[self._PALETTE_CHUNK_SIZE:]
 
 		palette_dir = self._getPaletteDir()
 		total = len(self._palette_results) + len(self._palette_queue) + len(chunk)
@@ -968,7 +968,7 @@ class CatalogManagerExt:
 		# a struggling TD mid-first-launch) resumes on the next open
 		# instead of restarting from zero (issue #60).
 		if (len(self._palette_results) - self._palette_checkpointed
-				>= self.PALETTE_CHECKPOINT_EVERY):
+				>= self._PALETTE_CHECKPOINT_EVERY):
 			self._checkpointPaletteScan()
 
 		done = len(self._palette_results)

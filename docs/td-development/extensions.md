@@ -36,7 +36,9 @@ class MyExtension:
         pass
 ```
 
-**The acceptance test: a user autocompleting on the COMP should see nothing but tier 1.** If a name in that list would confuse them, it belongs in tier 2 or 3.
+**The test: could a user or an agent reasonably call this on the COMP?** If not, it belongs in tier 2 or 3.
+
+The harm from an over-wide tier 1 is concrete. Extensions co-mounted on one COMP share a single namespace, and TouchDesigner documents no precedence for a duplicate promoted name, so one of the two becomes silently unreachable. Every promoted name is also a live `getattr` target for any code that dispatches by name. Note that promoted members do *not* appear in `dir()` -- they resolve through TD's `__getattr__` -- so this is an API-surface argument, not an autocomplete one.
 
 !!! warning "`ext.<Name>` uses the Extension Name parameter, not the class name"
     If the COMP's `Extension Name` is `MyFeature` and the class is `MyFeatureExt`, then `op.myComp.ext.MyFeature.helperMethod()` works and `op.myComp.ext.MyFeatureExt.helperMethod()` raises. Embody's own extensions are named `Embody`, `Envoy`, `TDXN` and `CatalogManager` against classes suffixed `Ext`.
