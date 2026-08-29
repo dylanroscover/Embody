@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.1.10
+
+Your own `CLAUDE.md` is merged into now, instead of being handed a sidecar nothing reads.
+
+- **`CLAUDE.md` joins the mergeable docs.** If you already had one, Embody used to leave it alone and write its guidance to `ENVOY.md` instead -- which preserved your file but delivered the instructions nowhere, because nothing imports `ENVOY.md` and Claude Code does not auto-load it (contrast `GEMINI.md`, which `@`-imports `AGENTS.md` so Gemini actually reads it). Your `CLAUDE.md` now gets the same delimited block `AGENTS.md` has had: your content untouched, Embody's block refreshed in place on later deploys, and Uninstall removing only the block. A `CLAUDE.md` Embody owns is unaffected -- still hash-tracked and edit-protected. `ENVOY.md` is no longer written; one left over from an older version is not touched, and can be deleted once the block is present.
+- **The merged section says which half is which.** The `BEGIN`/`END` delimiters are HTML comments, invisible in every rendered view, so a merged file gave the reader no on-page clue where their own edits belonged. The block now opens with a visible `## Embody / Envoy -- auto-generated section` heading and a line saying edits inside are replaced and your own instructions go outside it. The label rides inside the block, so Uninstall takes it back with everything else.
+
+Four tests updated and one added (**4,380 tests**, 136 suites).
+
 ## v6.1.9
 
 An update check that finds nothing no longer opens a window to say so.

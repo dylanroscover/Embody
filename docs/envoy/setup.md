@@ -103,10 +103,31 @@ Two clients need a manual step:
 Embody never overwrites a file you wrote. Which of two things it does depends
 on the file:
 
-- **`AGENTS.md`, `GEMINI.md`, `ENVOY.md` and `.github/copilot-instructions.md`
+- **`CLAUDE.md`, `AGENTS.md`, `GEMINI.md` and `.github/copilot-instructions.md`
   are merged into.** Your content is left exactly as it is and Embody
   maintains one delimited block inside the file, refreshed in place on later
   deploys. Uninstall removes only that block and leaves the file.
+
+  The block opens with a visible heading saying which half is which, so you
+  can tell at a glance where your own edits belong:
+
+  ```markdown
+  # My Project
+  Always run the linter before committing.
+
+  <!-- BEGIN Embody/Envoy -- auto-managed, do not edit inside -->
+  ## Embody / Envoy -- auto-generated section
+
+  *Everything from this heading down to the END marker is rewritten by
+  Embody on each deploy, so edits inside it are replaced. Put your own
+  instructions OUTSIDE this section -- above or below, wherever you like.
+  Embody never touches those, and Uninstall removes only this block.*
+  ...
+  <!-- END Embody/Envoy -->
+  ```
+
+  Put your own instructions anywhere outside the block. If you move the block,
+  later deploys refresh it where you put it rather than moving it back.
 - **Per-rule and per-skill files are skipped.** `.claude/rules/td-python.md`,
   `.cursor/rules/*.mdc` and their siblings have Embody-specific names, so a
   file of yours at one of those paths is left completely alone -- the other
@@ -123,7 +144,7 @@ are written whenever any client config is generated -- that is, unless
 
 | Configure For | Also writes |
 |---|---|
-| Claude Code | `CLAUDE.md` (or `ENVOY.md` if you already have your own), `.claude/rules/`, `.claude/skills/` |
+| Claude Code | `CLAUDE.md` (merged into if you already have your own), `.claude/rules/`, `.claude/skills/` |
 | OpenCode | `opencode.json`, and shares Claude Code's `.claude/rules/` + `.claude/skills/` |
 | Codex | `.codex/config.toml` (Codex reads `AGENTS.md` natively, so it needs no rules files of its own) |
 | Gemini | `GEMINI.md` (a thin `@AGENTS.md` import), `.gemini/settings.json` |

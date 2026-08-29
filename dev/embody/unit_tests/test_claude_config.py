@@ -332,25 +332,51 @@ class TestClaudeConfig(EmbodyTestCase):
 		expected = self.embody_ext.my.op('templates/text_claude').text
 		self.assertEqual(self.unstamped(updated), expected)
 
-	def test_C04_falls_back_to_envoy_md_without_marker(self):
-		"""_writeClaudeMd should write to ENVOY.md if CLAUDE.md lacks marker."""
-		user_claude = self._temp_dir / 'CLAUDE.md'
-		user_claude.write_text('My own claude config', encoding='utf-8')
-		result = self.embody_ext._writeClaudeMd(self._temp_dir)
-		expected_fallback = self._temp_dir / 'ENVOY.md'
-		self.assertEqual(result, expected_fallback)
-		self.assertTrue(expected_fallback.exists())
-		self.assertEqual(
-			user_claude.read_text(encoding='utf-8'),
-			'My own claude config')
+	def test_C04_merges_into_a_user_authored_claude_md(self):
+		"""A CLAUDE.md the user wrote gets Embody's block merged in.
 
-	def test_C05_envoy_md_has_template_content(self):
-		"""ENVOY.md fallback should contain the text_claude DAT content."""
-		(self._temp_dir / 'CLAUDE.md').write_text('user content', encoding='utf-8')
+		It used to divert to an ENVOY.md sidecar, which preserved the file but
+		delivered the guidance nowhere -- nothing imports ENVOY.md and Claude
+		Code does not auto-load it."""
+		user_claude = self._temp_dir / 'CLAUDE.md'
+		user_claude.write_text('My own claude config\n', encoding='utf-8')
+		result = self.embody_ext._writeClaudeMd(self._temp_dir)
+		self.assertEqual(result, user_claude,
+			'the guidance belongs in the file Claude Code actually loads')
+		body = user_claude.read_text(encoding='utf-8')
+		self.assertIn('My own claude config', body,
+			'their content must survive the merge')
+		git = op.Embody.op('embody_git').module
+		self.assertIn(git.AGENTS_BEGIN, body)
+		self.assertEqual(body.count(git.AGENTS_BEGIN), 1)
+		self.assertFalse((self._temp_dir / 'ENVOY.md').exists(),
+			'the dead-end sidecar must no longer be written')
+
+	def test_C05_the_merged_block_carries_the_template(self):
+		"""Merging must deliver the same content the whole-file path does."""
+		(self._temp_dir / 'CLAUDE.md').write_text('user content\n', encoding='utf-8')
 		self.embody_ext._writeClaudeMd(self._temp_dir)
+		body = (self._temp_dir / 'CLAUDE.md').read_text(encoding='utf-8')
 		expected = self.embody_ext.my.op('templates/text_claude').text
-		actual = (self._temp_dir / 'ENVOY.md').read_text(encoding='utf-8')
-		self.assertEqual(self.unstamped(actual), expected)
+		self.assertIn(expected.strip().split('\n')[-1].strip(), body,
+			'the tail of the template must be inside the merged block')
+
+	def test_C05b_merged_file_carries_a_human_readable_label(self):
+		"""The BEGIN/END delimiters are HTML comments -- invisible in every
+		rendered view. A reader needs prose telling them which half is theirs
+		and where their own edits belong."""
+		(self._temp_dir / 'CLAUDE.md').write_text('mine\n', encoding='utf-8')
+		self.embody_ext._writeClaudeMd(self._temp_dir)
+		body = (self._temp_dir / 'CLAUDE.md').read_text(encoding='utf-8')
+		self.assertIn('## Embody / Envoy', body,
+			'the section needs a VISIBLE heading, not just a comment')
+		self.assertIn('OUTSIDE this section', body,
+			'it must say where the user should put their own edits')
+		admin = op.Embody.op('embody_admin').module
+		self.assertEqual(
+			admin.strip_md_section(self.embody_ext, body).strip(),
+			'mine',
+			'the label rides INSIDE the block, so uninstall takes it back too')
 
 	def test_C06_returns_claude_md_path_on_create(self):
 		"""_writeClaudeMd should return the CLAUDE.md path on fresh create."""
@@ -1005,16 +1031,22 @@ class TestMergeableDocsCoverage(EmbodyTestCase):
 		self._assert_merged(p)
 
 	def test_C03_user_envoy_md_is_never_clobbered(self):
-		"""The sharpest one: a hand-written ENVOY.md used to be destroyed
-		outright by the CLAUDE.md fallback."""
+		"""A hand-written ENVOY.md used to be destroyed outright by the
+		CLAUDE.md fallback. Now nothing writes ENVOY.md at all, so a user's
+		own copy must come through completely untouched -- while their
+		CLAUDE.md is the one that gains the block."""
 		(self._temp_dir / 'CLAUDE.md').write_text(
 			'# their CLAUDE.md\nkeep\n', encoding='utf-8')
 		p = self._seed('ENVOY.md')
+		before = p.read_text(encoding='utf-8')
 		self._git.write_claude_md(self.embody_ext, self._temp_dir)
-		self._assert_merged(p)
-		self.assertIn('keep',
-			(self._temp_dir / 'CLAUDE.md').read_text(encoding='utf-8'),
-			'their CLAUDE.md must still be untouched')
+		self.assertEqual(p.read_text(encoding='utf-8'), before,
+			'ENVOY.md is no longer written -- theirs must be byte-identical')
+		claude = (self._temp_dir / 'CLAUDE.md').read_text(encoding='utf-8')
+		self.assertIn('keep', claude,
+			'their CLAUDE.md content must survive')
+		self.assertIn(self._git.AGENTS_BEGIN, claude,
+			'and it is the file that now carries the block')
 
 	def test_C04_every_mergeable_doc_is_actually_wired(self):
 		"""The registry of mergeable docs must not drift from the writers.
@@ -1027,7 +1059,7 @@ class TestMergeableDocsCoverage(EmbodyTestCase):
 			'GEMINI.md': lambda d: self._git.write_gemini_doc(self.embody_ext, d),
 			'.github/copilot-instructions.md':
 				lambda d: self._git.write_copilot_combined(self.embody_ext, d),
-			'ENVOY.md': lambda d: self._git.write_claude_md(self.embody_ext, d),
+			'CLAUDE.md': lambda d: self._git.write_claude_md(self.embody_ext, d),
 		}
 		for rel in self._git.MERGEABLE_DOCS:
 			self.assertIn(rel, writers,
