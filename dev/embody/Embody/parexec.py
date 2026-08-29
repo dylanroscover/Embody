@@ -25,7 +25,7 @@ def onValueChange(par, prev):
 
 	elif par.name == 'Externalizations':
 		if not par:
-			parent.Embody.missingExternalizationsPar()
+			parent.Embody.ext.Embody.missingExternalizationsPar()
 
 	elif par.name == 'Configclient':
 		# Whose files to write changed. InitEnvoy, not just
@@ -269,13 +269,13 @@ def onValueChange(par, prev):
 
 def onPulse(par):
 	if par.name == 'Disable':
-		parent.Embody.disableHandler()
+		parent.Embody.ext.Embody.disableHandler()
 
 	elif par.name == 'Uninstall':
-		parent.Embody.uninstallHandler()
+		parent.Embody.ext.Embody.uninstallHandler()
 
 	elif par.name == 'Update':
-		parent.Embody.updateHandler()
+		parent.Embody.ext.Embody.updateHandler()
 
 	elif par.name == 'Releaseall':
 		# Batch portable export (issue #74 follow-up): every component
@@ -347,13 +347,13 @@ def onPulse(par):
 		parent.Embody.ext.Embody._openSetupWizard()
 
 	elif par.name == 'Openmanager':
-		parent.Embody.manager('open')
+		parent.Embody.ext.Embody.manager('open')
 
 	elif par.name == 'Closemanager':
-		parent.Embody.manager('close')
+		parent.Embody.ext.Embody.manager('close')
 				
 	elif par.name == 'Launchaiclient':
-		parent.Embody.launchAIClient()
+		parent.Embody.ext.Embody.launchAIClient()
 
 	elif par.name == 'Github':
 		webbrowser.open('https://github.com/dylanroscover/Embody')
@@ -379,13 +379,13 @@ def onPulse(par):
 		op('help').openViewer()
 
 	elif par.name == 'Openexternalizationstable':
-		parent.Embody.openTable()
+		parent.Embody.ext.Embody.openTable()
 
 	elif par.name == 'Createexternalizationstable':
 		parent.Embody.ext.Embody.createExternalizationsTable()
 
 	elif par.name == 'Externalizeproject':
-		parent.Embody.externalizeProject()
+		parent.Embody.ext.Embody.externalizeProject()
 
 	elif par.name in mod.shortcuts.RECORD_PARS:
 		mod.shortcuts.arm(parent.Embody, mod.shortcuts.RECORD_PARS[par.name])

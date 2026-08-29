@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
 build: 34
-generator: Embody/6.1.18
+generator: Embody/6.1.19
 td_build: 099.2025.33070
-source_file: Embody-6.300.toe
-exported_at: '2026-08-29T21:00:11Z'
+source_file: Embody-6.301.toe
+exported_at: '2026-08-29T22:55:39Z'
 network_path: /embody/Embody/tagger
 options:
   include_dat_content: false
@@ -186,7 +186,7 @@ operators:
     parameters:
       op: ..
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\ttag = op('../tags')[parent().digits, 'value'].val\n\n\t\tif parent.Embody.ext.Embody._tagger_mode == 'manage':\n\t\t\tlabel = parent().par.label.eval()\n\t\t\tif 'Remove' in label:\n\t\t\t\t# Close window first, then show confirmation dialog\n\t\t\t\tparent.Embody.TagExiter()\n\t\t\t\trun(lambda o=oper, t=tag, l=label: parent.Embody.ext.Embody._dispatchTaggerButton(o, t, l),\n\t\t\t\t\tdelayFrames=2)\n\t\t\telse:\n\t\t\t\tparent.Embody.ext.Embody._dispatchTaggerButton(oper, tag, label)\n\t\t\t\tparent.Embody.TagExiter()\n\t\telse:\n\t\t\t# Tag mode: toggle + immediate externalize if added\n\t\t\tparent.Embody.TagSetter(oper, tag)\n\t\t\tif tag in oper.tags:\n\t\t\t\tparent.Embody.ext.Embody.ExternalizeImmediate(oper)\n\t\t\tparent.Embody.Refresh()\n\t\t\tparent.Embody.TagExiter()\n\n\treturn\n"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\ttag = op('../tags')[parent().digits, 'value'].val\n\n\t\tif parent.Embody.ext.Embody._tagger_mode == 'manage':\n\t\t\tlabel = parent().par.label.eval()\n\t\t\tif 'Remove' in label:\n\t\t\t\t# Close window first, then show confirmation dialog\n\t\t\t\tparent.Embody.ext.Embody.tagExiter()\n\t\t\t\trun(lambda o=oper, t=tag, l=label: parent.Embody.ext.Embody._dispatchTaggerButton(o, t, l),\n\t\t\t\t\tdelayFrames=2)\n\t\t\telse:\n\t\t\t\tparent.Embody.ext.Embody._dispatchTaggerButton(oper, tag, label)\n\t\t\t\tparent.Embody.ext.Embody.tagExiter()\n\t\telse:\n\t\t\t# Tag mode: toggle + immediate externalize if added\n\t\t\tparent.Embody.ext.Embody.tagSetter(oper, tag)\n\t\t\tif tag in oper.tags:\n\t\t\t\tparent.Embody.ext.Embody.externalizeImmediate(oper)\n\t\t\tparent.Embody.Refresh()\n\t\t\tparent.Embody.ext.Embody.tagExiter()\n\n\treturn\n"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
@@ -236,7 +236,7 @@ operators:
     parameters:
       op: ..
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\ttag = op('../tags')[parent().digits, 'value'].val\n\n\t\tif parent.Embody.ext.Embody._tagger_mode == 'manage':\n\t\t\tlabel = parent().par.label.eval()\n\t\t\tif 'Remove' in label:\n\t\t\t\t# Close window first, then show confirmation dialog\n\t\t\t\tparent.Embody.TagExiter()\n\t\t\t\trun(lambda o=oper, t=tag, l=label: parent.Embody.ext.Embody._dispatchTaggerButton(o, t, l),\n\t\t\t\t\tdelayFrames=2)\n\t\t\telse:\n\t\t\t\tparent.Embody.ext.Embody._dispatchTaggerButton(oper, tag, label)\n\t\t\t\tparent.Embody.TagExiter()\n\t\telse:\n\t\t\t# Tag mode: toggle + immediate externalize if added\n\t\t\tparent.Embody.TagSetter(oper, tag)\n\t\t\tif tag in oper.tags:\n\t\t\t\tparent.Embody.ext.Embody.ExternalizeImmediate(oper)\n\t\t\tparent.Embody.Refresh()\n\t\t\tparent.Embody.TagExiter()\n\n\treturn\n"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\ttag = op('../tags')[parent().digits, 'value'].val\n\n\t\tif parent.Embody.ext.Embody._tagger_mode == 'manage':\n\t\t\tlabel = parent().par.label.eval()\n\t\t\tif 'Remove' in label:\n\t\t\t\t# Close window first, then show confirmation dialog\n\t\t\t\tparent.Embody.ext.Embody.tagExiter()\n\t\t\t\trun(lambda o=oper, t=tag, l=label: parent.Embody.ext.Embody._dispatchTaggerButton(o, t, l),\n\t\t\t\t\tdelayFrames=2)\n\t\t\telse:\n\t\t\t\tparent.Embody.ext.Embody._dispatchTaggerButton(oper, tag, label)\n\t\t\t\tparent.Embody.ext.Embody.tagExiter()\n\t\telse:\n\t\t\t# Tag mode: toggle + immediate externalize if added\n\t\t\tparent.Embody.ext.Embody.tagSetter(oper, tag)\n\t\t\tif tag in oper.tags:\n\t\t\t\tparent.Embody.ext.Embody.externalizeImmediate(oper)\n\t\t\tparent.Embody.Refresh()\n\t\t\tparent.Embody.ext.Embody.tagExiter()\n\n\treturn\n"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
@@ -286,7 +286,7 @@ operators:
     parameters:
       op: ..
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\ttag = op('../tags')[parent().digits, 'value'].val\n\n\t\tif parent.Embody.ext.Embody._tagger_mode == 'manage':\n\t\t\tlabel = parent().par.label.eval()\n\t\t\tif 'Remove' in label:\n\t\t\t\t# Close window first, then show confirmation dialog\n\t\t\t\tparent.Embody.TagExiter()\n\t\t\t\trun(lambda o=oper, t=tag, l=label: parent.Embody.ext.Embody._dispatchTaggerButton(o, t, l),\n\t\t\t\t\tdelayFrames=2)\n\t\t\telse:\n\t\t\t\tparent.Embody.ext.Embody._dispatchTaggerButton(oper, tag, label)\n\t\t\t\tparent.Embody.TagExiter()\n\t\telse:\n\t\t\t# Tag mode: toggle + immediate externalize if added\n\t\t\tparent.Embody.TagSetter(oper, tag)\n\t\t\tif tag in oper.tags:\n\t\t\t\tparent.Embody.ext.Embody.ExternalizeImmediate(oper)\n\t\t\tparent.Embody.Refresh()\n\t\t\tparent.Embody.TagExiter()\n\n\treturn\n"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\ttag = op('../tags')[parent().digits, 'value'].val\n\n\t\tif parent.Embody.ext.Embody._tagger_mode == 'manage':\n\t\t\tlabel = parent().par.label.eval()\n\t\t\tif 'Remove' in label:\n\t\t\t\t# Close window first, then show confirmation dialog\n\t\t\t\tparent.Embody.ext.Embody.tagExiter()\n\t\t\t\trun(lambda o=oper, t=tag, l=label: parent.Embody.ext.Embody._dispatchTaggerButton(o, t, l),\n\t\t\t\t\tdelayFrames=2)\n\t\t\telse:\n\t\t\t\tparent.Embody.ext.Embody._dispatchTaggerButton(oper, tag, label)\n\t\t\t\tparent.Embody.ext.Embody.tagExiter()\n\t\telse:\n\t\t\t# Tag mode: toggle + immediate externalize if added\n\t\t\tparent.Embody.ext.Embody.tagSetter(oper, tag)\n\t\t\tif tag in oper.tags:\n\t\t\t\tparent.Embody.ext.Embody.externalizeImmediate(oper)\n\t\t\tparent.Embody.Refresh()\n\t\t\tparent.Embody.ext.Embody.tagExiter()\n\n\treturn\n"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
@@ -331,7 +331,7 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.OpenOmitPanel(oper)\n\treturn"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.openOmitPanel(oper)\n\treturn"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
@@ -380,7 +380,7 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.HandleStrategySave(oper)\n\treturn"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.handleStrategySave(oper)\n\treturn"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
@@ -429,7 +429,7 @@ operators:
       op: /embody/Embody/tagger/btn_embed
       loadonstart: true
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.HandleEmbed(oper)\n\treturn"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.handleEmbed(oper)\n\treturn"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
@@ -476,7 +476,7 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.HandleReload(oper)\n\treturn"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.handleReload(oper)\n\treturn"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
@@ -524,7 +524,7 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\t# Defer to allow window to close before showing confirmation dialog\n\t\t\trun(lambda o=oper: parent.Embody.ext.Embody.HandleStrategyRemove(o),\n\t\t\t\tdelayFrames=2)\n\treturn"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\t# Defer to allow window to close before showing confirmation dialog\n\t\t\trun(lambda o=oper: parent.Embody.ext.Embody.handleStrategyRemove(o),\n\t\t\t\tdelayFrames=2)\n\treturn"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
@@ -610,7 +610,7 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDXN.copyNetworkToClipboard(oper)\n\treturn\n"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDXN.copyNetworkToClipboard(oper)\n\treturn\n"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
@@ -657,7 +657,7 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\trel_fp = parent.Embody.op('tagger').fetch('manage_file_path', '')\n\t\t\tif rel_fp:\n\t\t\t\tparent.Embody.OpenSaveFile(rel_fp)\n\treturn"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\trel_fp = parent.Embody.op('tagger').fetch('manage_file_path', '')\n\t\t\tif rel_fp:\n\t\t\t\tparent.Embody.ext.Embody.openSaveFile(rel_fp)\n\treturn"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
@@ -704,7 +704,7 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.HandlePortableExport(oper)\n\treturn"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.handlePortableExport(oper)\n\treturn"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
@@ -760,7 +760,7 @@ operators:
       op: ..
       loadonstart: true
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDXN.pasteNetworkFromClipboard(oper)\n\treturn\n"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.TDXN.pasteNetworkFromClipboard(oper)\n\treturn\n"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT
@@ -820,7 +820,7 @@ operators:
       op: /embody/Embody/tagger/btn_embed
       loadonstart: true
     position: [66, -83]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.TagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.HandleEmbedStorage(oper)\n\treturn"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select:\n\t\tparent().panel.state = par.eval()\n\n\tif par:\n\t\toper = parent.Embody.ext.Embody.rolloverOp\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\tif oper:\n\t\t\tparent.Embody.ext.Embody.handleEmbedStorage(oper)\n\treturn"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT

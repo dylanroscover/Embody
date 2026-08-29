@@ -40,7 +40,7 @@ class TestTagLifecycle(EmbodyTestCase):
         """TagSetter should add a tox tag to a COMP."""
         comp = self.workspace.create(baseCOMP, 'toggle_on')
         tox_tag = self.embody.par.Toxtag.val
-        result = self.embody_ext.TagSetter(comp, tox_tag)
+        result = self.embody_ext.tagSetter(comp, tox_tag)
         self.assertTrue(result)
         self.assertIn(tox_tag, comp.tags)
 
@@ -48,7 +48,7 @@ class TestTagLifecycle(EmbodyTestCase):
         """TagSetter should add a py tag to a textDAT."""
         dat = self.workspace.create(textDAT, 'toggle_on_dat')
         py_tag = self.embody.par.Pytag.val
-        result = self.embody_ext.TagSetter(dat, py_tag)
+        result = self.embody_ext.tagSetter(dat, py_tag)
         self.assertTrue(result)
         self.assertIn(py_tag, dat.tags)
 
@@ -60,28 +60,28 @@ class TestTagLifecycle(EmbodyTestCase):
         """TagSetter should remove tag when it's already present."""
         comp = self.workspace.create(baseCOMP, 'toggle_off')
         tox_tag = self.embody.par.Toxtag.val
-        self.embody_ext.TagSetter(comp, tox_tag)
+        self.embody_ext.tagSetter(comp, tox_tag)
         self.assertIn(tox_tag, comp.tags)
 
-        self.embody_ext.TagSetter(comp, tox_tag)
+        self.embody_ext.tagSetter(comp, tox_tag)
         self.assertNotIn(tox_tag, comp.tags)
 
     def test_tagSetter_toggle_off_dat(self):
         """TagSetter should remove tag from a DAT when toggled off."""
         dat = self.workspace.create(textDAT, 'toggle_off_dat')
         py_tag = self.embody.par.Pytag.val
-        self.embody_ext.TagSetter(dat, py_tag)
+        self.embody_ext.tagSetter(dat, py_tag)
         self.assertIn(py_tag, dat.tags)
 
-        self.embody_ext.TagSetter(dat, py_tag)
+        self.embody_ext.tagSetter(dat, py_tag)
         self.assertNotIn(py_tag, dat.tags)
 
     def test_tagSetter_toggle_off_resets_color(self):
         """TagSetter toggle off should reset the operator to default color."""
         comp = self.workspace.create(baseCOMP, 'color_reset')
         tox_tag = self.embody.par.Toxtag.val
-        self.embody_ext.TagSetter(comp, tox_tag)
-        self.embody_ext.TagSetter(comp, tox_tag)
+        self.embody_ext.tagSetter(comp, tox_tag)
+        self.embody_ext.tagSetter(comp, tox_tag)
 
         default_color = (0.55, 0.55, 0.55)
         color = comp.color
@@ -92,12 +92,12 @@ class TestTagLifecycle(EmbodyTestCase):
         """TagSetter toggle off should clear the externaltox parameter."""
         comp = self.workspace.create(baseCOMP, 'clear_ext')
         tox_tag = self.embody.par.Toxtag.val
-        self.embody_ext.TagSetter(comp, tox_tag)
+        self.embody_ext.tagSetter(comp, tox_tag)
         # Manually set externaltox to simulate externalization
         comp.par.externaltox.readOnly = False
         comp.par.externaltox = 'test/path.tox'
 
-        self.embody_ext.TagSetter(comp, tox_tag)
+        self.embody_ext.tagSetter(comp, tox_tag)
         self.assertEqual(comp.par.externaltox.eval(), '',
                          'externaltox should be cleared after toggle off')
 
@@ -105,12 +105,12 @@ class TestTagLifecycle(EmbodyTestCase):
         """TagSetter toggle off should clear the file parameter on a DAT."""
         dat = self.workspace.create(textDAT, 'clear_file')
         py_tag = self.embody.par.Pytag.val
-        self.embody_ext.TagSetter(dat, py_tag)
+        self.embody_ext.tagSetter(dat, py_tag)
         # Manually set file to simulate externalization
         dat.par.file.readOnly = False
         dat.par.file = 'test/path.py'
 
-        self.embody_ext.TagSetter(dat, py_tag)
+        self.embody_ext.tagSetter(dat, py_tag)
         self.assertEqual(dat.par.file.eval(), '',
                          'file should be cleared after toggle off')
 
@@ -118,10 +118,10 @@ class TestTagLifecycle(EmbodyTestCase):
         """TagSetter toggle off should unlock the readOnly flag."""
         comp = self.workspace.create(baseCOMP, 'unlock')
         tox_tag = self.embody.par.Toxtag.val
-        self.embody_ext.TagSetter(comp, tox_tag)
+        self.embody_ext.tagSetter(comp, tox_tag)
         comp.par.externaltox.readOnly = True
 
-        self.embody_ext.TagSetter(comp, tox_tag)
+        self.embody_ext.tagSetter(comp, tox_tag)
         self.assertFalse(comp.par.externaltox.readOnly)
 
     # =========================================================================
@@ -132,14 +132,14 @@ class TestTagLifecycle(EmbodyTestCase):
         """TagSetter should return False for tox tag on DAT."""
         dat = self.workspace.create(textDAT, 'wrong_family')
         tox_tag = self.embody.par.Toxtag.val
-        result = self.embody_ext.TagSetter(dat, tox_tag)
+        result = self.embody_ext.tagSetter(dat, tox_tag)
         self.assertFalse(result)
 
     def test_tagSetter_dat_tag_on_comp_returns_false(self):
         """TagSetter should return False for DAT tag on COMP."""
         comp = self.workspace.create(baseCOMP, 'wrong_tag')
         py_tag = self.embody.par.Pytag.val
-        result = self.embody_ext.TagSetter(comp, py_tag)
+        result = self.embody_ext.tagSetter(comp, py_tag)
         self.assertFalse(result)
 
     # =========================================================================

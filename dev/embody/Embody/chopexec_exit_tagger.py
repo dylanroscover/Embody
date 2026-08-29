@@ -9,7 +9,7 @@
 
 def onOffToOn(channel, sampleIndex, val, prev):
 	if not ui.performMode and not parent.Embody.par.Performmode.eval():
-		run(f"parent.Embody.TagExiter()", delayFrames = 5)
+		run(f"parent.Embody.ext.Embody.tagExiter()", delayFrames = 5)
 
 	return
 

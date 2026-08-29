@@ -487,7 +487,7 @@ def onSelect(comp, startRow, startCol, startCoords,
 	elif col == COL_FILE:
 		rel_fp = data[row, 'rel_file_path'].val
 		if rel_fp:
-			parent.Embody.OpenSaveFile(rel_fp)
+			parent.Embody.ext.Embody.openSaveFile(rel_fp)
 
 	elif col == COL_STRATEGY:
 		global _active_strategy_row
@@ -531,9 +531,9 @@ def onSelect(comp, startRow, startCol, startCoords,
 			buttons=['Cancel', 'Remove'])
 		if result == 1:
 			if st.startswith('TDN'):
-				parent.Embody.removeTDNEntry(path)
+				parent.Embody.ext.Embody.removeTDNEntry(path)
 			else:
-				parent.Embody.removeListerRow(path, rel_fp)
+				parent.Embody.ext.Embody.removeListerRow(path, rel_fp)
 
 
 def onRadio(comp, row, col, prevRow, prevCol):

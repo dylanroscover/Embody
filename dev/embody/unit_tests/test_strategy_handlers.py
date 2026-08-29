@@ -277,17 +277,17 @@ class TestDispatchTaggerButton(EmbodyTestCase):
         self.workspace = self.sandbox.create(baseCOMP, 'workspace')
         # Track whether handlers were called
         self._called = None
-        self._original_remove = self.embody_ext.HandleStrategyRemove
+        self._original_remove = self.embody_ext.handleStrategyRemove
         self._original_switch = self.embody_ext.handleStrategySwitch
         self._original_convert = self.embody_ext.handleDATConvert
-        self._original_exiter = self.embody_ext.TagExiter
+        self._original_exiter = self.embody_ext.tagExiter
 
     def tearDown(self):
         # Restore original methods
-        self.embody_ext.HandleStrategyRemove = self._original_remove
+        self.embody_ext.handleStrategyRemove = self._original_remove
         self.embody_ext.handleStrategySwitch = self._original_switch
         self.embody_ext.handleDATConvert = self._original_convert
-        self.embody_ext.TagExiter = self._original_exiter
+        self.embody_ext.tagExiter = self._original_exiter
         for i in range(self.embody_ext.Externalizations.numRows - 1, 0, -1):
             path = self.embody_ext.Externalizations[i, 'path'].val
             if path.startswith(self.sandbox.path):
@@ -296,10 +296,10 @@ class TestDispatchTaggerButton(EmbodyTestCase):
 
     def _mock_handlers(self):
         """Replace handlers with tracking stubs."""
-        self.embody_ext.HandleStrategyRemove = lambda oper: setattr(self, '_called', 'remove')
+        self.embody_ext.handleStrategyRemove = lambda oper: setattr(self, '_called', 'remove')
         self.embody_ext.handleStrategySwitch = lambda oper: setattr(self, '_called', 'switch')
         self.embody_ext.handleDATConvert = lambda oper, tag: setattr(self, '_called', 'convert')
-        self.embody_ext.TagExiter = lambda: None
+        self.embody_ext.tagExiter = lambda: None
 
     def test_dispatch_remove_tox_label(self):
         """Label 'x  Remove tox' should route to HandleStrategyRemove."""

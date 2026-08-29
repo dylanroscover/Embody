@@ -93,7 +93,7 @@ class TestAutosave(EmbodyTestCase):
         comp = self.sandbox.create(baseCOMP, name)
         comp.create(noiseTOP, 'n1')
         ext.applyTagToOperator(comp, 'tdn')
-        ext.ExternalizeImmediate(comp)
+        ext.externalizeImmediate(comp)
         rel = ext._getStrategyFilePath(comp.path, 'tdn')
         abs_tdn = str(ext.buildAbsolutePath(rel)) if rel else None
         self._tdn_cleanup.append((comp.path, abs_tdn))
@@ -112,7 +112,7 @@ class TestAutosave(EmbodyTestCase):
         child.create(noiseTOP, 'inner')
         for comp in (child, parent):     # child first: parent refs it
             ext.applyTagToOperator(comp, 'tdn')
-            ext.ExternalizeImmediate(comp)
+            ext.externalizeImmediate(comp)
             rel = ext._getStrategyFilePath(comp.path, 'tdn')
             self._tdn_cleanup.append(
                 (comp.path, str(ext.buildAbsolutePath(rel)) if rel else None))
@@ -508,7 +508,7 @@ class TestAutosave(EmbodyTestCase):
         dat.text = '# purge me'
         ext = self.embody_ext
         ext.applyTagToOperator(dat, self.embody.par.Pytag.eval())
-        ext.ExternalizeImmediate(dat)
+        ext.externalizeImmediate(dat)
         dat_path = dat.path
         table = ext.Externalizations
         rows = [i for i in range(1, table.numRows)
@@ -580,7 +580,7 @@ class TestAutosave(EmbodyTestCase):
         child.create(rampTOP, 'cn')
         for c in (parent, child):
             ext.applyTagToOperator(c, 'tdn')
-            ext.ExternalizeImmediate(c)
+            ext.externalizeImmediate(c)
             rel = ext._getStrategyFilePath(c.path, 'tdn')
             self._tdn_cleanup.append((c.path, str(ext.buildAbsolutePath(rel)) if rel else None))
         ext.checkpoint(parent.path)

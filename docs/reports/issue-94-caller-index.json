@@ -1,6 +1,6 @@
 {
  "generated_by": "execute_python walk of root.findChildren(type=DAT, includeUtility=True)",
- "regenerated": "2026-08-29 after WP4 waves 4a-4d; scan limited to code-bearing DAT types",
+ "regenerated": "2026-08-29 after WP4 waves 4a-4f complete",
  "code_dat_types_scanned": [
   "chopexec",
   "datexec",
@@ -20,7 +20,7 @@
  "dats_scanned": 781,
  "dats_skipped_non_code": 60,
  "dats_unbacked": 535,
- "distinct_names": 403,
+ "distinct_names": 396,
  "names_with_toe_only_callers": 42,
  "invisible_call_sites": {
   "AbsoluteTween": {
@@ -72,16 +72,6 @@
     "/utils/remote/tweener/callbackManager/extCallbackManager"
    ]
   },
-  "ExternalizeImmediate": {
-   "files": [
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": [
-    "/embody/Embody/tagger/button0/parexec1",
-    "/embody/Embody/tagger/button1/parexec1",
-    "/embody/Embody/tagger/button2/parexec1"
-   ]
-  },
   "FadeStep": {
    "files": [],
    "toe_only": [
@@ -104,44 +94,6 @@
    "files": [],
    "toe_only": [
     "/utils/remote/tweener/curves/extCurve"
-   ]
-  },
-  "HandleEmbed": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_embed/parexec1"
-   ]
-  },
-  "HandleEmbedStorage": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_embed_storage/parexec1"
-   ]
-  },
-  "HandlePortableExport": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_portable/parexec1"
-   ]
-  },
-  "HandleReload": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_reload/parexec1"
-   ]
-  },
-  "HandleStrategyRemove": {
-   "files": [
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_remove/parexec1"
-   ]
-  },
-  "HandleStrategySave": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_save/parexec1"
    ]
   },
   "InitEnvoy": {
@@ -206,32 +158,6 @@
     "/utils/remote/tweener/callbackManager/extCallbackManager"
    ]
   },
-  "OmitPanelDrop": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/omit_panel/dragdrop_callbacks"
-   ]
-  },
-  "OmitPanelRemove": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/omit_panel/list_omits_callbacks"
-   ]
-  },
-  "OpenOmitPanel": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_omit/parexec1"
-   ]
-  },
-  "OpenSaveFile": {
-   "files": [
-    "/embody/Embody/list/list_callbacks"
-   ],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_openfile/parexec1"
-   ]
-  },
   "Reevaluate": {
    "files": [],
    "toe_only": [
@@ -280,37 +206,6 @@
     "/utils/remote/tweener/extTweener"
    ]
   },
-  "TagExiter": {
-   "files": [
-    "/embody/Embody/chopexec_exit_tagger"
-   ],
-   "toe_only": [
-    "/embody/Embody/tagger/header/button_close/parexec1",
-    "/embody/Embody/tagger/button0/parexec1",
-    "/embody/Embody/tagger/button1/parexec1",
-    "/embody/Embody/tagger/button2/parexec1",
-    "/embody/Embody/tagger/btn_omit/parexec1",
-    "/embody/Embody/tagger/btn_save/parexec1",
-    "/embody/Embody/tagger/btn_embed/parexec1",
-    "/embody/Embody/tagger/btn_reload/parexec1",
-    "/embody/Embody/tagger/btn_remove/parexec1",
-    "/embody/Embody/tagger/btn_copy_tdn/parexec1",
-    "/embody/Embody/tagger/btn_openfile/parexec1",
-    "/embody/Embody/tagger/btn_portable/parexec1",
-    "/embody/Embody/tagger/btn_paste_tdn/parexec1",
-    "/embody/Embody/tagger/btn_embed_storage/parexec1"
-   ]
-  },
-  "TagSetter": {
-   "files": [
-    "/embody/unit_tests/test_tag_lifecycle"
-   ],
-   "toe_only": [
-    "/embody/Embody/tagger/button0/parexec1",
-    "/embody/Embody/tagger/button1/parexec1",
-    "/embody/Embody/tagger/button2/parexec1"
-   ]
-  },
   "TargetIsNotParameter": {
    "files": [],
    "toe_only": [
@@ -345,6 +240,76 @@
     "/embody/Embody/tagger/btn_copy_tdn/parexec1"
    ]
   },
+  "externalizeImmediate": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1"
+   ]
+  },
+  "handleEmbed": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_embed/parexec1"
+   ]
+  },
+  "handleEmbedStorage": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_embed_storage/parexec1"
+   ]
+  },
+  "handlePortableExport": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_portable/parexec1"
+   ]
+  },
+  "handleReload": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_reload/parexec1"
+   ]
+  },
+  "handleStrategyRemove": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_remove/parexec1"
+   ]
+  },
+  "handleStrategySave": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_save/parexec1"
+   ]
+  },
+  "omitPanelDrop": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/omit_panel/dragdrop_callbacks"
+   ]
+  },
+  "omitPanelRemove": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/omit_panel/list_omits_callbacks"
+   ]
+  },
+  "openOmitPanel": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_omit/parexec1"
+   ]
+  },
+  "openSaveFile": {
+   "files": [
+    "/embody/Embody/list/list_callbacks"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_openfile/parexec1"
+   ]
+  },
   "pasteNetworkFromClipboard": {
    "files": [],
    "toe_only": [
@@ -369,6 +334,35 @@
     "/embody/Embody/tagger/btn_portable/parexec1",
     "/embody/Embody/tagger/btn_paste_tdn/parexec1",
     "/embody/Embody/tagger/btn_embed_storage/parexec1"
+   ]
+  },
+  "tagExiter": {
+   "files": [
+    "/embody/Embody/chopexec_exit_tagger"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/header/button_close/parexec1",
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1",
+    "/embody/Embody/tagger/btn_omit/parexec1",
+    "/embody/Embody/tagger/btn_save/parexec1",
+    "/embody/Embody/tagger/btn_embed/parexec1",
+    "/embody/Embody/tagger/btn_reload/parexec1",
+    "/embody/Embody/tagger/btn_remove/parexec1",
+    "/embody/Embody/tagger/btn_copy_tdn/parexec1",
+    "/embody/Embody/tagger/btn_openfile/parexec1",
+    "/embody/Embody/tagger/btn_portable/parexec1",
+    "/embody/Embody/tagger/btn_paste_tdn/parexec1",
+    "/embody/Embody/tagger/btn_embed_storage/parexec1"
+   ]
+  },
+  "tagSetter": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1"
    ]
   }
  },
@@ -408,20 +402,6 @@
   "AssignProcessToJobObject": {
    "files": [
     "/embody/Embody/convoy/host/convoy_hostops"
-   ],
-   "toe_only": []
-  },
-  "AutoExternalizeCopiedOp": {
-   "files": [
-    "/embody/Embody/envoy_ops",
-    "/embody/unit_tests/test_auto_externalize"
-   ],
-   "toe_only": []
-  },
-  "AutoExternalizeNewOp": {
-   "files": [
-    "/embody/Embody/EmbodyExt",
-    "/embody/Embody/envoy_ops"
    ],
    "toe_only": []
   },
@@ -488,13 +468,6 @@
    ],
    "toe_only": []
   },
-  "Checkpoint": {
-   "files": [
-    "/embody/Embody/EmbodyExt",
-    "/embody/unit_tests/test_tdn_reconstruction"
-   ],
-   "toe_only": []
-  },
   "Clear_Stack": {
    "files": [],
    "toe_only": [
@@ -548,13 +521,6 @@
    "toe_only": [
     "/utils/remote/tweener/callbackManager/create_callbacks"
    ]
-  },
-  "CreateExternalizationsTable": {
-   "files": [
-    "/embody/Embody/execute",
-    "/embody/Embody/parexec"
-   ],
-   "toe_only": []
   },
   "CreateJobObjectW": {
    "files": [
@@ -629,34 +595,12 @@
    ],
    "toe_only": []
   },
-  "DirtyCount": {
-   "files": [
-    "/embody/Embody/toolbar/toolbar_config"
-   ],
-   "toe_only": []
-  },
-  "DirtyState": {
-   "files": [
-    "/embody/Embody/list/inject_parents_callbacks",
-    "/embody/Embody/EmbodyExt",
-    "/embody/Embody/envoy_read",
-    "/embody/unit_tests/test_save_path_contracts"
-   ],
-   "toe_only": []
-  },
   "Disable": {
    "files": [
     "/embody/Embody/parexec",
     "/embody/Embody/EmbodyExt",
     "/embody/Embody/embody_git",
     "/embody/unit_tests/test_custom_parameters"
-   ],
-   "toe_only": []
-  },
-  "DisableHandler": {
-   "files": [
-    "/embody/Embody/parexec",
-    "/embody/Embody/toolbar/ToolbarExt"
    ],
    "toe_only": []
   },
@@ -792,29 +736,6 @@
    ],
    "toe_only": []
   },
-  "ExternalizationsFolder": {
-   "files": [
-    "/embody/Embody/TDXNExt"
-   ],
-   "toe_only": []
-  },
-  "ExternalizeImmediate": {
-   "files": [
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": [
-    "/embody/Embody/tagger/button0/parexec1",
-    "/embody/Embody/tagger/button1/parexec1",
-    "/embody/Embody/tagger/button2/parexec1"
-   ]
-  },
-  "ExternalizeProject": {
-   "files": [
-    "/embody/Embody/parexec",
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": []
-  },
   "FadeStep": {
    "files": [],
    "toe_only": [
@@ -826,12 +747,6 @@
    "toe_only": [
     "/utils/remote/tweener/fade"
    ]
-  },
-  "FlushPendingCheckpoints": {
-   "files": [
-    "/embody/Embody/EnvoyExt"
-   ],
-   "toe_only": []
   },
   "GetConsoleWindow": {
    "files": [
@@ -947,57 +862,6 @@
   "HTTPSConnection": {
    "files": [
     "/embody/Embody/convoy/host/convoy_peerclient"
-   ],
-   "toe_only": []
-  },
-  "HandleDATConvert": {
-   "files": [
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": []
-  },
-  "HandleEmbed": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_embed/parexec1"
-   ]
-  },
-  "HandleEmbedStorage": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_embed_storage/parexec1"
-   ]
-  },
-  "HandlePortableExport": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_portable/parexec1"
-   ]
-  },
-  "HandleReload": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_reload/parexec1"
-   ]
-  },
-  "HandleStrategyRemove": {
-   "files": [
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_remove/parexec1"
-   ]
-  },
-  "HandleStrategySave": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_save/parexec1"
-   ]
-  },
-  "HandleStrategySwitch": {
-   "files": [
-    "/embody/Embody/EmbodyExt",
-    "/embody/unit_tests/test_strategy_handlers"
    ],
    "toe_only": []
   },
@@ -1141,13 +1005,6 @@
    ],
    "toe_only": []
   },
-  "LaunchAIClient": {
-   "files": [
-    "/embody/Embody/parexec",
-    "/embody/unit_tests/test_launch_aiclient"
-   ],
-   "toe_only": []
-  },
   "LaunchProfileStore": {
    "files": [
     "/embody/Embody/convoy/host/convoy_hostapp"
@@ -1226,13 +1083,6 @@
     "/utils/remote/tweener/callbackManager/extCallbackManager"
    ]
   },
-  "Manager": {
-   "files": [
-    "/embody/Embody/parexec",
-    "/embody/Embody/keyboardin_callbacks"
-   ],
-   "toe_only": []
-  },
   "ManagerCondition": {
    "files": [
     "/embody/Embody/EnvoyExt"
@@ -1249,19 +1099,6 @@
    "files": [
     "/embody/Embody/EnvoyExt",
     "/embody/Embody/templates/text_rule_td_python"
-   ],
-   "toe_only": []
-  },
-  "MigrateToTDXN": {
-   "files": [
-    "/embody/Embody/parexec",
-    "/embody/unit_tests/test_tdxn_migration"
-   ],
-   "toe_only": []
-  },
-  "MissingExternalizationsPar": {
-   "files": [
-    "/embody/Embody/parexec"
    ],
    "toe_only": []
   },
@@ -1303,36 +1140,6 @@
    ],
    "toe_only": []
   },
-  "NoteCheckpointTouch": {
-   "files": [
-    "/embody/Embody/EnvoyExt"
-   ],
-   "toe_only": []
-  },
-  "NoteCoarseCheckpointTouch": {
-   "files": [
-    "/embody/Embody/EnvoyExt"
-   ],
-   "toe_only": []
-  },
-  "OmitPanelDrop": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/omit_panel/dragdrop_callbacks"
-   ]
-  },
-  "OmitPanelRemove": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/omit_panel/list_omits_callbacks"
-   ]
-  },
-  "OpenOmitPanel": {
-   "files": [],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_omit/parexec1"
-   ]
-  },
   "OpenProcess": {
    "files": [
     "/embody/Embody/convoy/host/convoy_platform",
@@ -1347,20 +1154,6 @@
   "OpenProcessToken": {
    "files": [
     "/embody/Embody/convoy/host/convoy_lifecycle"
-   ],
-   "toe_only": []
-  },
-  "OpenSaveFile": {
-   "files": [
-    "/embody/Embody/list/list_callbacks"
-   ],
-   "toe_only": [
-    "/embody/Embody/tagger/btn_openfile/parexec1"
-   ]
-  },
-  "OpenTable": {
-   "files": [
-    "/embody/Embody/parexec"
    ],
    "toe_only": []
   },
@@ -1528,24 +1321,6 @@
    ],
    "toe_only": []
   },
-  "ReconcileMetadata": {
-   "files": [
-    "/embody/Embody/execute"
-   ],
-   "toe_only": []
-  },
-  "ReconstructTDNComps": {
-   "files": [
-    "/embody/Embody/execute"
-   ],
-   "toe_only": []
-  },
-  "RecoverOrphanShells": {
-   "files": [
-    "/embody/Embody/execute"
-   ],
-   "toe_only": []
-  },
   "Reevaluate": {
    "files": [],
    "toe_only": [
@@ -1573,12 +1348,6 @@
     "/embody/Embody/tagger/button2/parexec1",
     "/embody/Embody/viz_status/parexec_status"
    ]
-  },
-  "RefreshOmitPanel": {
-   "files": [
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": []
   },
   "RefreshRegistry": {
    "files": [
@@ -1608,26 +1377,6 @@
    ],
    "toe_only": []
   },
-  "RemoveListerRow": {
-   "files": [
-    "/embody/Embody/list/list_callbacks",
-    "/embody/Embody/EmbodyExt",
-    "/embody/Embody/envoy_ops",
-    "/embody/unit_tests/test_tdn_diff",
-    "/embody/unit_tests/test_delete_cleanup",
-    "/embody/unit_tests/test_tdn_reconstruction"
-   ],
-   "toe_only": []
-  },
-  "RemoveTDNEntry": {
-   "files": [
-    "/embody/Embody/list/list_callbacks",
-    "/embody/Embody/EmbodyExt",
-    "/embody/Embody/envoy_ops",
-    "/embody/unit_tests/test_strategy_handlers"
-   ],
-   "toe_only": []
-  },
   "Request": {
    "files": [
     "/embody/Embody/convoy/host/convoy_hostprobe",
@@ -1653,18 +1402,6 @@
     "/utils/remote/tweener/callbackManager/text1",
     "/utils/remote/tweener/callbackManager/opexec2"
    ]
-  },
-  "RestoreDATs": {
-   "files": [
-    "/embody/Embody/execute"
-   ],
-   "toe_only": []
-  },
-  "RestoreTOXComps": {
-   "files": [
-    "/embody/Embody/execute"
-   ],
-   "toe_only": []
   },
   "RunAgentTests": {
    "files": [
@@ -1748,31 +1485,9 @@
    ],
    "toe_only": []
   },
-  "SaveCurrentComp": {
-   "files": [
-    "/embody/Embody/keyboardin_callbacks"
-   ],
-   "toe_only": []
-  },
-  "SaveTDN": {
-   "files": [
-    "/embody/Embody/EmbodyExt",
-    "/embody/Embody/envoy_ops",
-    "/embody/unit_tests/test_tdxn_migration",
-    "/embody/unit_tests/test_tdn_reconstruction",
-    "/embody/execute_src_ctrl"
-   ],
-   "toe_only": []
-  },
   "ScanTdn": {
    "files": [
     "/embody/Embody/TDXNExt"
-   ],
-   "toe_only": []
-  },
-  "SeedAutosaveStatus": {
-   "files": [
-    "/embody/Embody/execute"
    ],
    "toe_only": []
   },
@@ -1797,32 +1512,6 @@
   "SetInformationJobObject": {
    "files": [
     "/embody/Embody/convoy/host/convoy_hostops"
-   ],
-   "toe_only": []
-  },
-  "SetupTagger": {
-   "files": [
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": []
-  },
-  "SetupTaggerDATManageMode": {
-   "files": [
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": []
-  },
-  "SetupTaggerManageMode": {
-   "files": [
-    "/embody/Embody/list/list_callbacks",
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": []
-  },
-  "SetupTaggerTagMode": {
-   "files": [
-    "/embody/Embody/list/list_callbacks",
-    "/embody/Embody/EmbodyExt"
    ],
    "toe_only": []
   },
@@ -1869,13 +1558,6 @@
    ],
    "toe_only": []
   },
-  "StripCompChildren": {
-   "files": [
-    "/embody/Embody/execute",
-    "/embody/unit_tests/test_tdn_reconstruction"
-   ],
-   "toe_only": []
-  },
   "SubjectAlternativeName": {
    "files": [
     "/embody/Embody/convoy/host/convoy_hostkeys"
@@ -1898,43 +1580,6 @@
     "/embody/unit_tests/test_convoy_ext"
    ],
    "toe_only": []
-  },
-  "TagExiter": {
-   "files": [
-    "/embody/Embody/chopexec_exit_tagger"
-   ],
-   "toe_only": [
-    "/embody/Embody/tagger/header/button_close/parexec1",
-    "/embody/Embody/tagger/button0/parexec1",
-    "/embody/Embody/tagger/button1/parexec1",
-    "/embody/Embody/tagger/button2/parexec1",
-    "/embody/Embody/tagger/btn_omit/parexec1",
-    "/embody/Embody/tagger/btn_save/parexec1",
-    "/embody/Embody/tagger/btn_embed/parexec1",
-    "/embody/Embody/tagger/btn_reload/parexec1",
-    "/embody/Embody/tagger/btn_remove/parexec1",
-    "/embody/Embody/tagger/btn_copy_tdn/parexec1",
-    "/embody/Embody/tagger/btn_openfile/parexec1",
-    "/embody/Embody/tagger/btn_portable/parexec1",
-    "/embody/Embody/tagger/btn_paste_tdn/parexec1",
-    "/embody/Embody/tagger/btn_embed_storage/parexec1"
-   ]
-  },
-  "TagGetter": {
-   "files": [
-    "/embody/Embody/keyboardin_callbacks"
-   ],
-   "toe_only": []
-  },
-  "TagSetter": {
-   "files": [
-    "/embody/unit_tests/test_tag_lifecycle"
-   ],
-   "toe_only": [
-    "/embody/Embody/tagger/button0/parexec1",
-    "/embody/Embody/tagger/button1/parexec1",
-    "/embody/Embody/tagger/button2/parexec1"
-   ]
   },
   "TargetIsNotParameter": {
    "files": [],
@@ -2021,12 +1666,6 @@
    ],
    "toe_only": []
   },
-  "UninstallHandler": {
-   "files": [
-    "/embody/Embody/parexec"
-   ],
-   "toe_only": []
-  },
   "Update": {
    "files": [
     "/embody/Embody/execute",
@@ -2036,29 +1675,6 @@
     "/embody/Embody/templates/text_skill_td_api_reference",
     "/embody/unit_tests/test_custom_parameters",
     "/embody/unit_tests/test_tdn_reconstruction"
-   ],
-   "toe_only": []
-  },
-  "UpdateDeferred": {
-   "files": [
-    "/embody/Embody/EmbodyExt"
-   ],
-   "toe_only": []
-  },
-  "UpdateHandler": {
-   "files": [
-    "/embody/Embody/parexec",
-    "/embody/Embody/toolbar/ToolbarExt",
-    "/embody/Embody/EmbodyExt",
-    "/embody/Embody/embody_git",
-    "/embody/Embody/keyboardin_callbacks",
-    "/embody/unit_tests/test_custom_parameters"
-   ],
-   "toe_only": []
-  },
-  "Verify": {
-   "files": [
-    "/embody/Embody/execute"
    ],
    "toe_only": []
   },
@@ -2883,6 +2499,18 @@
    ],
    "toe_only": []
   },
+  "autoExternalizeCopiedOp": {
+   "files": [
+    "/embody/Embody/envoy_ops"
+   ],
+   "toe_only": []
+  },
+  "autoExternalizeNewOp": {
+   "files": [
+    "/embody/Embody/envoy_ops"
+   ],
+   "toe_only": []
+  },
   "beginLockedWarnBatch": {
    "files": [
     "/embody/Embody/EmbodyExt"
@@ -2917,6 +2545,31 @@
    ],
    "toe_only": []
   },
+  "createExternalizationsTable": {
+   "files": [
+    "/embody/Embody/execute",
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "dirtyCount": {
+   "files": [
+    "/embody/Embody/toolbar/toolbar_config"
+   ],
+   "toe_only": []
+  },
+  "dirtyState": {
+   "files": [
+    "/embody/Embody/envoy_read"
+   ],
+   "toe_only": []
+  },
+  "disableHandler": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
   "exportProjectTDNInteractive": {
    "files": [
     "/embody/Embody/toolbar/ToolbarExt",
@@ -2924,9 +2577,36 @@
    ],
    "toe_only": []
   },
+  "externalizationsFolder": {
+   "files": [
+    "/embody/Embody/TDXNExt"
+   ],
+   "toe_only": []
+  },
+  "externalizeImmediate": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1"
+   ]
+  },
+  "externalizeProject": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
   "flushLockedWarnBatch": {
    "files": [
     "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "flushPendingCheckpoints": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
    ],
    "toe_only": []
   },
@@ -2941,6 +2621,42 @@
     "/embody/Embody/TDXNExt"
    ],
    "toe_only": []
+  },
+  "handleEmbed": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_embed/parexec1"
+   ]
+  },
+  "handleEmbedStorage": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_embed_storage/parexec1"
+   ]
+  },
+  "handlePortableExport": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_portable/parexec1"
+   ]
+  },
+  "handleReload": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_reload/parexec1"
+   ]
+  },
+  "handleStrategyRemove": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_remove/parexec1"
+   ]
+  },
+  "handleStrategySave": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_save/parexec1"
+   ]
   },
   "helperMethod": {
    "files": [
@@ -2963,6 +2679,12 @@
    ],
    "toe_only": []
   },
+  "launchAIClient": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
   "localArtifactQuotaChanged": {
    "files": [
     "/embody/Embody/parexec"
@@ -2975,10 +2697,28 @@
    ],
    "toe_only": []
   },
+  "manager": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
   "method": {
    "files": [
     "/embody/Embody/EnvoyExt",
     "/embody/Embody/templates/text_rule_td_python"
+   ],
+   "toe_only": []
+  },
+  "migrateToTDXN": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "missingExternalizationsPar": {
+   "files": [
+    "/embody/Embody/parexec"
    ],
    "toe_only": []
   },
@@ -2988,6 +2728,30 @@
     "/embody/Embody/envoy_read"
    ],
    "toe_only": []
+  },
+  "noteCheckpointTouch": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "noteCoarseCheckpointTouch": {
+   "files": [
+    "/embody/Embody/EnvoyExt"
+   ],
+   "toe_only": []
+  },
+  "omitPanelDrop": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/omit_panel/dragdrop_callbacks"
+   ]
+  },
+  "omitPanelRemove": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/omit_panel/list_omits_callbacks"
+   ]
   },
   "onClick": {
    "files": [
@@ -3053,6 +2817,26 @@
    ],
    "toe_only": []
   },
+  "openOmitPanel": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_omit/parexec1"
+   ]
+  },
+  "openSaveFile": {
+   "files": [
+    "/embody/Embody/list/list_callbacks"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/btn_openfile/parexec1"
+   ]
+  },
+  "openTable": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
   "pasteNetworkFromClipboard": {
    "files": [],
    "toe_only": [
@@ -3065,9 +2849,27 @@
    ],
    "toe_only": []
   },
+  "reconcileMetadata": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "reconstructTDNComps": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
   "recordInstallConsent": {
    "files": [
     "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "recoverOrphanShells": {
+   "files": [
+    "/embody/Embody/execute"
    ],
    "toe_only": []
   },
@@ -3090,9 +2892,33 @@
    ],
    "toe_only": []
   },
+  "removeListerRow": {
+   "files": [
+    "/embody/Embody/list/list_callbacks"
+   ],
+   "toe_only": []
+  },
+  "removeTDNEntry": {
+   "files": [
+    "/embody/Embody/list/list_callbacks"
+   ],
+   "toe_only": []
+  },
   "resetWakeLeases": {
    "files": [
     "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "restoreDATs": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "restoreTOXComps": {
+   "files": [
+    "/embody/Embody/execute"
    ],
    "toe_only": []
   },
@@ -3122,6 +2948,72 @@
    ],
    "toe_only": []
   },
+  "saveTDN": {
+   "files": [
+    "/embody/Embody/envoy_ops",
+    "/embody/execute_src_ctrl"
+   ],
+   "toe_only": []
+  },
+  "seedAutosaveStatus": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "setupTaggerManageMode": {
+   "files": [
+    "/embody/Embody/list/list_callbacks"
+   ],
+   "toe_only": []
+  },
+  "setupTaggerTagMode": {
+   "files": [
+    "/embody/Embody/list/list_callbacks"
+   ],
+   "toe_only": []
+  },
+  "stripCompChildren": {
+   "files": [
+    "/embody/Embody/execute"
+   ],
+   "toe_only": []
+  },
+  "tagExiter": {
+   "files": [
+    "/embody/Embody/chopexec_exit_tagger"
+   ],
+   "toe_only": [
+    "/embody/Embody/tagger/header/button_close/parexec1",
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1",
+    "/embody/Embody/tagger/btn_omit/parexec1",
+    "/embody/Embody/tagger/btn_save/parexec1",
+    "/embody/Embody/tagger/btn_embed/parexec1",
+    "/embody/Embody/tagger/btn_reload/parexec1",
+    "/embody/Embody/tagger/btn_remove/parexec1",
+    "/embody/Embody/tagger/btn_copy_tdn/parexec1",
+    "/embody/Embody/tagger/btn_openfile/parexec1",
+    "/embody/Embody/tagger/btn_portable/parexec1",
+    "/embody/Embody/tagger/btn_paste_tdn/parexec1",
+    "/embody/Embody/tagger/btn_embed_storage/parexec1"
+   ]
+  },
+  "tagGetter": {
+   "files": [
+    "/embody/Embody/keyboardin_callbacks"
+   ],
+   "toe_only": []
+  },
+  "tagSetter": {
+   "files": [],
+   "toe_only": [
+    "/embody/Embody/tagger/button0/parexec1",
+    "/embody/Embody/tagger/button1/parexec1",
+    "/embody/Embody/tagger/button2/parexec1"
+   ]
+  },
   "tdn_dump": {
    "files": [
     "/embody/Embody/TDXNExt",
@@ -3139,10 +3031,37 @@
    ],
    "toe_only": []
   },
+  "uninstallHandler": {
+   "files": [
+    "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
   "unregister": {
    "files": [
     "/embody/Embody/execute",
     "/embody/Embody/parexec"
+   ],
+   "toe_only": []
+  },
+  "updateDeferred": {
+   "files": [
+    "/embody/Embody/EmbodyExt"
+   ],
+   "toe_only": []
+  },
+  "updateHandler": {
+   "files": [
+    "/embody/Embody/parexec",
+    "/embody/Embody/EmbodyExt",
+    "/embody/Embody/embody_git",
+    "/embody/unit_tests/test_custom_parameters"
+   ],
+   "toe_only": []
+  },
+  "verify": {
+   "files": [
+    "/embody/Embody/execute"
    ],
    "toe_only": []
   },

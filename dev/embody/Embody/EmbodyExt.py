@@ -8769,7 +8769,7 @@ class EmbodyExt:
 
     # -- Exclude-from-tdn panel (tdn_exclude / tdn_exclude:<par>) -------
 
-    def OpenOmitPanel(self, oper: OP) -> None:
+    def openOmitPanel(self, oper: OP) -> None:
         """Open the TDXN par-exclusion panel scoped to `oper` (a TDXN
         COMP). Lists every exclusion in the subtree;
         pars dragged onto the drop zone toggle their omit tag.
@@ -8788,7 +8788,7 @@ class EmbodyExt:
 
         Rows land in panel storage as [op_path, label, par_name]; the
         list_omits callbacks render them and route x-clicks to
-        OmitPanelRemove.
+        omitPanelRemove.
         """
         panel = self.my.op('omit_panel')
         if panel is None:
@@ -8830,7 +8830,7 @@ class EmbodyExt:
             listing.par.rows = max(len(rows), 1)
             listing.reset()
 
-    def OmitPanelRemove(self, op_path: str, par_name: str,
+    def omitPanelRemove(self, op_path: str, par_name: str,
                         kind: str = 'par') -> None:
         """Remove one exclusion (the list's x button): kind 'par'
         drops a tdn_exclude:<par> tag, kind 'comp' drops the bare
@@ -8848,7 +8848,7 @@ class EmbodyExt:
             self.Log(f'{o.path}: removed {self._tagLabel(tag)}', 'INFO')
         self.refreshOmitPanel()
 
-    def OmitPanelDrop(self, items) -> None:
+    def omitPanelDrop(self, items) -> None:
         """Toggle exclusion tags for items dropped on the panel's drop
         zone: a Par toggles tdn_exclude:<name> on its owner, a COMP
         toggles the whole-COMP tdn_exclude tag. Items outside the
@@ -8994,7 +8994,7 @@ class EmbodyExt:
         # Delegate to existing color setup
         self.setupTagger(oper)
 
-    def TagSetter(self, oper: OP, tag: str) -> bool:
+    def tagSetter(self, oper: OP, tag: str) -> bool:
         """Toggle a tag on an operator. Enforces mutual exclusivity."""
         color = self._getTagColor(oper, tag)
         if color is None:
@@ -9611,7 +9611,7 @@ class EmbodyExt:
                 if child.family in ('COMP', 'DAT'):
                     clear(child)
 
-    def TagExiter(self) -> None:
+    def tagExiter(self) -> None:
         """Close tagging menu and reset mode."""
         self._tagger_mode = 'tag'
         self.tagging_menu_window.par.winclose.pulse()
@@ -9624,7 +9624,7 @@ class EmbodyExt:
         tdn_tag = self.my.par.Tdntag.val
 
         # A refused switch (e.g. the annotate guard) keeps the OLD tag --
-        # bail out entirely so ExternalizeImmediate does not re-export the
+        # bail out entirely so externalizeImmediate does not re-export the
         # file under the old strategy that the refusal meant to keep inert.
         if tox_tag in oper.tags:
             if not self.applyTagToOperator(oper, tdn_tag):
@@ -9633,10 +9633,10 @@ class EmbodyExt:
             if not self.applyTagToOperator(oper, tox_tag):
                 return
 
-        self.ExternalizeImmediate(oper)
+        self.externalizeImmediate(oper)
         self.Refresh()
 
-    def HandleStrategySave(self, oper: OP) -> None:
+    def handleStrategySave(self, oper: OP) -> None:
         """Save the current strategy for a COMP."""
         tox_tag = self.my.par.Toxtag.val
         tdn_tag = self.my.par.Tdntag.val
@@ -9658,7 +9658,7 @@ class EmbodyExt:
 
         self.Refresh()
 
-    def HandleReload(self, oper: OP) -> None:
+    def handleReload(self, oper: OP) -> None:
         """Reload a COMP from its external tdn/tox file on disk."""
         tox_tag = self.my.par.Toxtag.val
         tdn_tag = self.my.par.Tdntag.val
@@ -9766,7 +9766,7 @@ class EmbodyExt:
         oper.par.enableexternaltoxpulse.pulse()
         self.Log(f'Reloaded {oper.path} from disk ({rel_tox_path})', 'SUCCESS')
 
-    def HandleEmbed(self, oper: OP) -> None:
+    def handleEmbed(self, oper: OP) -> None:
         """Toggle per-COMP 'embed DATs' setting and re-export the .tdn."""
         # Read current effective value
         per_comp = oper.fetch('embed_dats_in_tdn', None, search=False)
@@ -9792,7 +9792,7 @@ class EmbodyExt:
         self.Log(f"Embed DATs set to {state} for {oper.path}", 'SUCCESS')
         self.Refresh()
 
-    def HandleEmbedStorage(self, oper: OP) -> None:
+    def handleEmbedStorage(self, oper: OP) -> None:
         """Toggle per-COMP 'embed storage' setting and re-export the .tdn."""
         # Read current effective value
         per_comp = oper.fetch('embed_storage_in_tdn', None, search=False)
@@ -9818,7 +9818,7 @@ class EmbodyExt:
         self.Log(f"Embed storage set to {state} for {oper.path}", 'SUCCESS')
         self.Refresh()
 
-    def HandlePortableExport(self, oper: OP) -> None:
+    def handlePortableExport(self, oper: OP) -> None:
         """Show a file dialog and export a portable .tox for the given COMP."""
         default_name = f"{oper.name}.tox"
         start_dir = str(Path(project.folder).parents[0])
@@ -9840,7 +9840,7 @@ class EmbodyExt:
                 'failure (the .tox may still exist on disk).',
                 buttons=['OK'])
 
-    def HandleStrategyRemove(self, oper: OP) -> None:
+    def handleStrategyRemove(self, oper: OP) -> None:
         """Remove externalization from a COMP or DAT with confirmation dialog."""
         result = self._messageBox(
             'Remove',
@@ -9901,7 +9901,7 @@ class EmbodyExt:
         the window close before showing a confirmation dialog).
         """
         if 'Remove' in label:
-            self.HandleStrategyRemove(oper)
+            self.handleStrategyRemove(oper)
         elif 'Convert to' in label:
             self.handleDATConvert(oper, tag)
         else:
@@ -9911,10 +9911,10 @@ class EmbodyExt:
         """Convert a DAT's externalization to a different format."""
         self.applyTagToOperator(oper, new_tag)
         if new_tag in oper.tags:
-            self.ExternalizeImmediate(oper)
+            self.externalizeImmediate(oper)
         self.Refresh()
 
-    def ExternalizeImmediate(self, oper: OP) -> None:
+    def externalizeImmediate(self, oper: OP) -> None:
         """Immediately externalize a single tagged operator.
 
         If already tracked with the current strategy, re-saves the file.
@@ -11648,7 +11648,7 @@ class EmbodyExt:
                     continue
 
                 self.applyTagToOperator(dat, tag_value)
-                self.ExternalizeImmediate(dat)
+                self.externalizeImmediate(dat)
                 count += 1
             except Exception as e:
                 self.Log(f'Failed to externalize {dat.path}: {e}', 'WARNING')
@@ -12619,7 +12619,7 @@ class EmbodyExt:
         except Exception as e:
             self.Log(f'Failed to open folder: {e}', 'ERROR')
 
-    def OpenSaveFile(self, rel_file_path: str) -> None:
+    def openSaveFile(self, rel_file_path: str) -> None:
         """Open file location in file browser."""
         filepath = str(self.buildAbsolutePath(self.normalizePath(rel_file_path)).resolve())
 

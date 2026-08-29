@@ -184,7 +184,7 @@ class TestVersionSync(EmbodyTestCase):
         page = comp.appendCustomPage('Test')
         page.appendInt('Build')[0].val = 5
         ext.applyTagToOperator(comp, 'tdn')
-        ext.ExternalizeImmediate(comp)
+        ext.externalizeImmediate(comp)
         rel = ext._getStrategyFilePath(comp.path, 'tdn')
         abs_tdn = str(ext.buildAbsolutePath(rel)) if rel else None
         try:

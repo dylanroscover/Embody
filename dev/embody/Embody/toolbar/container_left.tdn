@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
-build: 18
-generator: Embody/6.1.7
+build: 19
+generator: Embody/6.1.20
 td_build: 099.2025.33070
-source_file: Embody-6.289.toe
-exported_at: '2026-08-28T07:53:20Z'
+source_file: Embody-6.302.toe
+exported_at: '2026-08-29T23:11:06Z'
 network_path: /embody/Embody/toolbar/container_left
 options:
   include_dat_content: false
@@ -62,7 +62,7 @@ operators:
 - name: status
   type: textCOMP
   parameters:
-    text: =str(parent.Embody.DirtyCount()) + ' dirty' if parent.Embody.extensionsReady and parent.Embody.DirtyCount() else ''
+    text: =str(parent.Embody.ext.Embody.dirtyCount()) + ' dirty' if parent.Embody.extensionsReady and parent.Embody.ext.Embody.dirtyCount() else ''
     font: Open Sans
     fontsize: 9
     w: 80

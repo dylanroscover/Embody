@@ -235,13 +235,13 @@ class TestAnnotationGuards(EmbodyTestCase):
         ann = self._annotate()
         inner = ann.create(baseCOMP, 'tagsetter_inner')
         tdn_tag = self.embody.par.Tdntag.val
-        self.assertFalse(self.embody_ext.TagSetter(ann, tdn_tag))
+        self.assertFalse(self.embody_ext.tagSetter(ann, tdn_tag))
         self.assertNotIn(tdn_tag, ann.tags)
-        self.assertFalse(self.embody_ext.TagSetter(inner, tdn_tag))
+        self.assertFalse(self.embody_ext.tagSetter(inner, tdn_tag))
         self.assertNotIn(tdn_tag, inner.tags)
         # REMOVE branch: a legacy-tagged annotate must still untag.
         ann.tags.add(tdn_tag)
-        self.assertTrue(self.embody_ext.TagSetter(ann, tdn_tag))
+        self.assertTrue(self.embody_ext.tagSetter(ann, tdn_tag))
         self.assertNotIn(tdn_tag, ann.tags)
 
     def test_warning_dedup_never_lands_in_persisted_storage(self):

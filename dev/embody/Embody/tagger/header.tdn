@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
-build: 14
-generator: Embody/6.1.0
+build: 15
+generator: Embody/6.1.19
 td_build: 099.2025.33070
-source_file: Embody-6.282.toe
-exported_at: '2026-08-27T05:33:17Z'
+source_file: Embody-6.301.toe
+exported_at: '2026-08-29T22:56:58Z'
 network_path: /embody/Embody/tagger/header
 options:
   include_dat_content: false
@@ -147,7 +147,7 @@ operators:
     - viewer
     position: [66, -83]
     size: [128, 66]
-    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select :\n\t\tparent().panel.state = par.eval()\n\t\t\n\tif par:\n\t\tparent.Embody.TagExiter()\n\t\t\n\treturn"
+    dat_content: "# par - the Par object that has changed\n# prev - the previous value\n\ndef onValueChange(par, prev):\n\tif not parent().panel.select :\n\t\tparent().panel.state = par.eval()\n\t\t\n\tif par:\n\t\tparent.Embody.ext.Embody.tagExiter()\n\t\t\n\treturn"
     dat_content_format: text
   - name: panelexec1
     type: panelexecuteDAT

@@ -39,7 +39,11 @@ PROMOTED_CEILING = {
     # Externalizations -- both collide with same-named CUSTOM PARAMETERS,
     # and Externalizations is a @property, so par.Externalizations and
     # self.Externalizations are indistinguishable to any mechanical rule.
-    "EmbodyExt": 33,
+    # WP4 wave 4f: the last 13 tagger/panel handlers demoted. What remains
+    # is the documented op.Embody API plus Disable and Externalizations,
+    # which collide with same-named CUSTOM PARAMETERS (Externalizations is
+    # a @property, so par.X and self.X are textually identical).
+    "EmbodyExt": 20,
     # WP4 waves 4b/4b-2: promoted class constants went 79 -> 5. The five that
     # remain are ConvoyExt's HOST_* states, which are DELIBERATELY mirrored as
     # module constants in convoy/convoy_client.py -- test_convoy_client reaches
@@ -300,6 +304,65 @@ class TestStringNamedAttributes(unittest.TestCase):
             "String-literal attribute names left behind by a rename: {}. These "
             "patch or probe a key nothing reads, so the test passes the wrong "
             "value silently.".format("; ".join(missing)))
+
+
+class TestReceiverReachability(unittest.TestCase):
+    """A demoted member is unreachable ON THE COMP, only through .ext.
+
+    The other tests here ask whether a name resolves SOMEWHERE. This one asks
+    whether the RECEIVER can reach it, which is a different question and the one
+    that bit us: wave 4e shipped 12 calls shaped `parent.Embody.updateHandler()`
+    -- correct name, wrong receiver -- and 3432 tests passed over them, because
+    every one is a UI callback (parameter pulses, manager rows) that no unit
+    test exercises. It surfaced only when a real save_externalization failed
+    with "'td.containerCOMP' object has no attribute 'saveTDN'".
+    """
+
+    # Genuine COMP/OP API. Reaching these on the COMP is correct.
+    _COMP_API = {
+        "op", "ops", "store", "unstore", "fetch", "fetchOwner", "par", "pars",
+        "cook", "destroy", "copy", "create", "save", "load", "openParameters",
+        "storeStartupValue", "findChildren", "evalExpression", "relativePath",
+        "shortcutPath", "changeType", "resetCustomPages", "ext", "parent",
+    }
+
+    def _embody_members(self):
+        promoted, private = set(), set()
+        for path in _ext_source_files():
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ClassDef) or node.name != "EmbodyExt":
+                    continue
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        (promoted if item.name[:1].isupper() else private).add(item.name)
+        return promoted, private
+
+    def test_H01_no_comp_receiver_call_to_a_demoted_member(self):
+        promoted, private = self._embody_members()
+        unreachable = private - self._COMP_API
+        self.assertTrue(promoted, "found no promoted EmbodyExt members -- scan is broken")
+
+        pattern = re.compile(
+            r"\b(?:parent|op)\.Embody\.(" +
+            "|".join(sorted(map(re.escape, unreachable), key=len, reverse=True)) +
+            r")\s*\(")
+
+        offenders = []
+        for path in sorted((REPO / "dev").rglob("*.py")):
+            if ("worktrees" in path.parts or ".venv" in str(path)
+                    or path.name == Path(__file__).name):
+                continue  # this file QUOTES the pattern in its own docstring
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for match in pattern.finditer(text):
+                offenders.append("{}:{} {}".format(
+                    path.name, text[:match.start()].count("\n") + 1, match.group(1)))
+        self.assertEqual(
+            offenders, [],
+            "Calls to a NON-promoted EmbodyExt member on the COMP: {}. TD only "
+            "promotes capitalized members, so each of these raises "
+            "AttributeError at runtime -- reroute through .ext.Embody."
+            .format("; ".join(offenders)))
 
 
 class TestSourceTextAssertions(unittest.TestCase):

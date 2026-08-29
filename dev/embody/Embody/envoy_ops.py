@@ -926,7 +926,7 @@ def save_externalization(ext, op_path: str) -> dict:
         if target.family == 'COMP':
             strategy = op.Embody.ext.Embody._getCompStrategy(target)
             if strategy == 'tdn':
-                written = op.Embody.saveTDN(op_path)
+                written = op.Embody.ext.Embody.saveTDN(op_path)
             else:
                 written = op.Embody.Save(op_path)
             if not written:

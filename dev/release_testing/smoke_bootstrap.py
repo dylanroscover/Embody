@@ -637,7 +637,7 @@ def _exercise_features(attempt=0):
         out.inputConnectors[0].connect(n)
         n.par.period = 7.5
         ext.applyTagToOperator(comp, 'tdn')
-        ext.ExternalizeImmediate(comp)
+        ext.externalizeImmediate(comp)
         rel = ext._getStrategyFilePath(comp.path, 'tdn')
         assert rel, ('no tracking row after ExternalizeImmediate -- '
                      'the on-disk save gate is closed?')
