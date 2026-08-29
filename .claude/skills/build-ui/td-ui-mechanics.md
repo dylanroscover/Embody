@@ -55,7 +55,7 @@ window per screen of the primary interface. The pattern:
 **Main UI and visual output live in the SAME container + window.** When a project
 has both a control UI and rendered visual output (content on a screen /
 projector / secondary display), do NOT split them across separate windows.
-Compose both inside the ONE main container driven by the ONE Window COMP — the
+Compose both inside the ONE main container driven by the ONE Window COMP - the
 visual output as the background/base layer, the UI as an overlay panel on top,
 and secondary displays as additional views/regions of that same main container.
 One window renders everything.

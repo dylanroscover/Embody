@@ -6,6 +6,82 @@ description: "MUST READ before creating or designing custom parameters on any CO
 
 # Parameter Design
 
+## Ownership and Lifecycle
+
+**Code owns the schema; the user owns the value.** A parameter's name, style, page, range, default and help text are yours to declare and re-assert. Its *value* is the user's, and nothing you write may quietly discard it.
+
+Extensions reinitialize on every source-file save, so **every creation path must be get-or-create**, never create-blindly:
+
+```python
+def ensureCustomPage(comp, name):
+    for page in comp.customPages:
+        if page.name == name:
+            return page
+    return comp.appendCustomPage(name)
+
+def ensureCustomPar(comp, page, name, style):
+    """Get-or-create one custom par. Returns the Par, never a ParGroup."""
+    existing = comp.par[name]          # custom par names are a FLAT per-COMP
+    if existing is not None:           # namespace -- probe the COMP, not the page
+        if existing.style != style:
+            raise ValueError(
+                'par %s exists with style %s, declared %s' % (name, existing.style, style))
+        return existing
+    getattr(page, 'append' + style)(name)
+    return comp.par[name]              # re-read: append*() returns a ParGroup
+```
+
+Four rules that make it safe:
+
+- **Probe the whole COMP, not the page.** Custom parameter names are a flat per-COMP namespace, and `append*()` defaults to `replace=True` -- a page-scoped probe will happily destroy a same-named par living on another page.
+- **Re-read after appending.** `append*()` returns a **ParGroup**; `comp.par[name]` returns the `Par`.
+- **Never `destroy()` on style drift.** `Par.destroy()` takes the user's value, expressions and exports with it. Report the mismatch and refuse; removal is a separate, deliberate act.
+- **Apply declared attributes symmetrically.** If you set `min` when creating, set it when the par already exists too, or a schema change never reaches existing installs.
+
+## Parameter Callbacks
+
+**One dispatcher, not one promoted method per parameter.** A parexec DAT that grows an `elif par.name == ...` chain drags a public-tier method onto the COMP for every branch (see the three tiers in `td-python.md`). Name the handler for its parameter instead and let the DAT find it:
+
+```python
+# the WHOLE onValueChange in the parexec DAT
+def onValueChange(par, prev):
+    ext = parent.MyComp.ext.MyExt
+    handler = getattr(ext, '_on%sValueChange' % par.name, None)
+    if handler is None:
+        return
+    try:
+        handler(par, prev)
+    except Exception as e:
+        parent.MyComp.Error('%s handler failed: %s' % (par.name, e))
+```
+
+```python
+# on the extension -- tier 3, invisible on the COMP
+def _onSpeedValueChange(self, par, prev):
+    self.ownerComp.op('./timer1').par.speed = par.eval()
+
+def _onResetPulse(self, par):
+    self.rebuild()
+```
+
+- **Audit once at init** that every `_on*` handler matches a real parameter. A renamed par turns its handler into dead code that fails no test; the audit turns that into a warning.
+- **Never swallow the exception silently.** A handler that raises into nothing is indistinguishable from a parameter that does nothing.
+- Pulse handlers take `(par)`; value handlers take `(par, prev)`.
+
+## Parameter, Storage, or Dependency?
+
+Custom parameters are one of three ways to hold state on a COMP, and the choice is about lifetime, not taste:
+
+| The state is | Use | Survives extension reinit |
+|---|---|---|
+| User-facing, persisted in the `.toe`/`.tox`, part of the interface | **custom parameter** | **yes** |
+| Durable per-COMP bookkeeping the user should not see | **`storage`** | **no** |
+| A derived value that must recook whatever reads it | **`tdu.Dependency`** | no -- rebuild in `__init__` |
+
+**The reinit rule:** editing an extension's `.py` reinitializes it and clears `storage`, while a custom parameter survives untouched. State that must outlive a hot-sync save belongs in a parameter. A read-only status par is the right home for a state machine; storage is not.
+
+Do not reach for a `Dependency` where a parameter works -- a par is inspectable, persisted, exportable and free. Reach for one when a computed value has no business on the user's parameter dialog but still has to invalidate whatever reads it.
+
 ## Help Text
 
 Every custom parameter MUST have `help` text set via `par.help = "..."`. Help text appears as a tooltip when users hover the parameter name in the dialog. Describe what the parameter controls and what its values mean.

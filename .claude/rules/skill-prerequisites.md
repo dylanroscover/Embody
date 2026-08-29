@@ -18,6 +18,7 @@ Skills are prerequisites, not optional reference. **Load the relevant skill BEFO
 | Fetching data over HTTP, or any background / long-running / blocking task | `/td-api-reference` (Background and Long-Running Work) |
 | Recording, exporting, or batch-encoding any movie or image sequence | `/movie-export` |
 | Creating or designing custom parameters on any COMP | `/parameter-design` |
+| Wiring a parameter callback, or choosing between a custom par, `storage`, and `tdu.Dependency` | `/parameter-design` |
 | Connectivity broken beyond ~15s of self-heal waiting | `/td-recovery` |
 | The moment a `_peers` advisory or a second session appears | `/multi-session-etiquette` |
 | Diagnosing operator errors | `/debug-operator` |

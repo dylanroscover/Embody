@@ -139,12 +139,12 @@ ${ROWS}
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Returns live network as a TDXN dict. ~20-90x fewer tokens than `get_op`+`query_network` walks thanks to default-omission, type_defaults, and par_templates. |
+| `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading >=3 operators.** Returns live network as a TDXN dict. ~20-90x fewer tokens than `get_op`+`query_network` walks thanks to default-omission, type_defaults, and par_templates. |
 | `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write `.tdxn` to disk. **With `output_file` set, returns a compact summary (op/annotation counts + file path), NOT the full document** -- Read the file for details. Without `output_file`, returns the full dict like `read_tdn`. |
 | `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate network from a parsed TDXN document (on-disk `.tdxn` is YAML in v2.0; reads legacy JSON) |
 | `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What's UNSAVED in TDXN networks** (live vs on-disk `.tdxn`) -- the view git can't give. Omit `target` -> whole project (every live TDXN COMP, summarized); `target` = a COMP path OR a `.tdxn` file path/bare filename -> that one COMP in full detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` (Embody's `.tdxn` diff driver keeps those clean). Read-only. |
 
-**When to prefer `read_tdn`:** exploring or auditing ≥3 operators, checking structure and parameters-as-authored, mapping connections, reading annotations. Scope cost with `comp_path`; cap with `max_depth` on large roots.
+**When to prefer `read_tdn`:** exploring or auditing >=3 operators, checking structure and parameters-as-authored, mapping connections, reading annotations. Scope cost with `comp_path`; cap with `max_depth` on large roots.
 
 **When NOT to use `read_tdn`:** evaluated-expression runtime values (`get_parameter`), cook errors (`get_op_errors`), DAT/CHOP/TOP output data (`get_dat_content`, `capture_top`), cook timing (`get_op_performance`), flag state after runtime mutation (`get_op_flags`). `read_tdn` is an authored-state snapshot, not a runtime probe.
 
@@ -183,7 +183,7 @@ For visual work, success is verified by capturing and judging the output TOP, no
 
 ## Bridge Meta-Tools
 
-These run locally on the STDIO bridge — they work even when TD is not running.
+These run locally on the STDIO bridge - they work even when TD is not running.
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
@@ -215,7 +215,7 @@ Seventeen additional meta-tools drive Convoy, relaying work to Convoy-enabled Em
 
 **When to use**: 3+ calls to the same tool type (positioning, connecting, parameter setting, flags). Use `execute_python` instead when you need conditionals, loops, or computed values between operations.
 
-**Example** — position 4 operators + connect them in one call:
+**Example** - position 4 operators + connect them in one call:
 ```json
 {"operations": [
   {"tool": "set_op_position", "params": {"op_path": "/project1/noise1", "x": 400, "y": 0}},

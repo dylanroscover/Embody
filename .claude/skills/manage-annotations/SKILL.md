@@ -43,9 +43,9 @@ To create an annotation that encloses a group of operators:
 
 ## Querying
 
-- `get_annotations` — list all annotations in a COMP with properties and enclosed operators
-- `get_enclosed_ops` — get operators enclosed by an annotation, or annotations enclosing an operator
-- `set_annotation` — modify text, title, color, opacity, position, or size
+- `get_annotations` - list all annotations in a COMP with properties and enclosed operators
+- `get_enclosed_ops` - get operators enclosed by an annotation, or annotations enclosing an operator
+- `set_annotation` - modify text, title, color, opacity, position, or size
 
 ## Deleting Annotations
 

@@ -16,9 +16,9 @@ Claude Code  <-->  STDIO Bridge  <-->  Envoy (TD instance A, port 9870)
 ```
 
 - **One bridge process per SESSION** (spawned by each AI client's MCP client)
-- **Per-session pinning** — each bridge pins to an instance NAME and re-resolves its port from the registry every tick, so a pinned instance restarting on a new port still self-heals. The registry `active` field only seeds NEW bridges without a pin.
-- **Switching is instant and session-local** — `switch_instance` re-pins THIS session's bridge in-memory; peers are untouched unless you pass `all_sessions=True` (writes the registry default and bumps `active_epoch`, which moves every session)
-- **Registration never re-routes running sessions** — a new instance takes the `active` default slot only when it is vacant or names a dead instance
+- **Per-session pinning** - each bridge pins to an instance NAME and re-resolves its port from the registry every tick, so a pinned instance restarting on a new port still self-heals. The registry `active` field only seeds NEW bridges without a pin.
+- **Switching is instant and session-local** - `switch_instance` re-pins THIS session's bridge in-memory; peers are untouched unless you pass `all_sessions=True` (writes the registry default and bumps `active_epoch`, which moves every session)
+- **Registration never re-routes running sessions** - a new instance takes the `active` default slot only when it is vacant or names a dead instance
 
 ## Instance Registry (`.embody/envoy.json`)
 
@@ -104,7 +104,7 @@ An instance is **reachable** only when:
 - Its registered PID is alive (`kill -0` / process table check)
 - Its registered port responds to a TCP connect
 
-Both conditions must be true. A dead PID with an open port means another instance reused that port — the entry is stale.
+Both conditions must be true. A dead PID with an open port means another instance reused that port - the entry is stale.
 
 `get_td_status` includes the full instance registry with reachability in its response.
 
@@ -127,9 +127,9 @@ switch_instance(instance="MySecondProject")   # target the instance
 execute_python(code="project.quit()")         # user gets save prompt in TD
 ```
 
-**Never use `project.quit(force=True)`** unless the user has explicitly asked — it skips the save dialog and risks losing unsaved work.
+**Never use `project.quit(force=True)`** unless the user has explicitly asked - it skips the save dialog and risks losing unsaved work.
 
-**Avoid**: `osascript -e 'quit app "TouchDesigner"'` and similar OS-level approaches are unreliable — they may not target the correct instance and don't guarantee clean Envoy shutdown.
+**Avoid**: `osascript -e 'quit app "TouchDesigner"'` and similar OS-level approaches are unreliable - they may not target the correct instance and don't guarantee clean Envoy shutdown.
 
 ## Common Scenarios
 
@@ -147,8 +147,8 @@ When you open the same `.toe` file in multiple TD instances, Envoy auto-suffixes
 
 ## Limitations
 
-- The bridge connects to **one instance at a time** — no parallel MCP calls to multiple instances
+- The bridge connects to **one instance at a time** - no parallel MCP calls to multiple instances
 - Maximum **10 instances** per base port range
-- `.embody/envoy.json` is per git root — instances in different repos have separate registries
-- `launch_td` always launches the `.toe` configured in `.embody/envoy.json` top-level `toe_path` — use TD directly to open additional files
+- `.embody/envoy.json` is per git root - instances in different repos have separate registries
+- `launch_td` always launches the `.toe` configured in `.embody/envoy.json` top-level `toe_path` - use TD directly to open additional files
 - Opening the same `.toe` file in multiple instances auto-suffixes keys (`MyProject-2`, `-3`, etc.)

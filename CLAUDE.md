@@ -69,18 +69,24 @@ YAML-based on-disk format (v2.0; legacy JSON imports still read) for representin
 
 ## Extension Referencing
 
+Three tiers -- TD promotes every capitalized member, so the capital letter is the access modifier. See `.claude/rules/td-python.md` for the full model.
+
 ```python
-# Promoted methods (uppercase) -- called directly on the component:
+# Tier 1, public API (UpperCamelCase) -- called directly on the COMP:
 op.Embody.Update()
-op.Embody.Save()
-op.Embody.InitEnvoy()    # Regenerate MCP + AI client config files
-op.Embody.InitGit()      # Init/reconnect git repo + .gitignore/.gitattributes
+op.Embody.Refresh()
+op.Embody.Save('/embody/some_op')   # opPath is REQUIRED -- Save() alone raises TypeError
+op.Embody.InitEnvoy()               # Regenerate MCP + AI client config files
+op.Embody.InitGit()                 # Init/reconnect git repo + .gitignore/.gitattributes
 op.Embody.ExportPortableTox(target=some_comp, save_path='/path/to/output.tox')
 
-# Non-promoted (lowercase) -- through ext:
-op.Embody.ext.Embody.getExternalizedOps()
-op.Embody.ext.Envoy.Start()
+# Tier 2, wiring (lowerCamelCase) -- through ext, called by the COMP's own callback DATs:
+op.Embody.ext.Embody.getExternalizedOps(COMP)   # opFamily is REQUIRED
+
+# Tier 3, private (_lowerCamelCase) -- inside the class only.
 ```
+
+`.ext.<Name>` resolves by the **Extension Name parameter, not the class name**: the extensions are named `Embody`/`Envoy`/`TDXN`/`CatalogManager` against classes `EmbodyExt`/`EnvoyExt`/`TDXNExt`/`CatalogManagerExt`. `op.Embody.ext.Embody.x()` works; `op.Embody.ext.EmbodyExt.x()` raises.
 
 **NEVER cache extension references in variables** -- always call inline.
 

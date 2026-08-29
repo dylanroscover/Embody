@@ -70,4 +70,4 @@ Count suites with `ls dev/embody/unit_tests/test_*.py` -- the hand-maintained br
 
 ## After Running Tests
 
-Always read log files at `dev/logs/` — the ring buffer only holds 200 entries. Grep for `ERROR` and `WARNING`.
+Always read log files at `dev/logs/` - the ring buffer only holds 200 entries. Grep for `ERROR` and `WARNING`.

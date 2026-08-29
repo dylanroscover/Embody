@@ -4,21 +4,42 @@ TouchDesigner's extension system attaches Python classes to COMPs, providing org
 
 ## Basics
 
-An extension is a Python class defined in a text DAT, attached to a COMP via the `Extension` parameter. Methods can be "promoted" to be callable directly on the COMP.
+An extension is a Python class defined in a text DAT, attached to a COMP via the `Extension` parameter. TouchDesigner promotes **every capitalized member** of a promoted extension — methods *and* class constants — to the COMP itself. There is no per-member opt-out, so the capital letter is effectively the access modifier.
+
+That gives you three tiers, not two. Choose by who calls the member, never by convenience:
+
+| Tier | Name | Reached as | Who calls it |
+|---|---|---|---|
+| 1. Public API | `UpperCamelCase` | `op.myComp.DoSomething()` | A user or an agent, deliberately |
+| 2. Wiring | `lowerCamelCase` | `op.myComp.ext.MyExtension.onFrame()` | The COMP's own exec / callback / parexec DATs |
+| 3. Private | `_lowerCamelCase` | inside the class only | The class itself |
 
 ```python
 class MyExtension:
+    _CHUNK = 64                     # tier 3 -- a bare CHUNK would be promoted too
+
     def __init__(self, ownerComp):
-        self.ownerComp = ownerComp
+        self.ownerComp = ownerComp  # navigate from here, not from a bare parent()
 
     def DoSomething(self):
-        """Promoted method (uppercase) — callable as op.myComp.DoSomething()"""
+        """Tier 1 -- part of the component's public interface."""
         pass
 
-    def helperMethod(self):
-        """Non-promoted method — callable as op.myComp.ext.MyExtension.helperMethod()"""
+    def onFrame(self):
+        """Tier 2 -- called by this COMP's own Execute DAT, via
+        op.myComp.ext.MyExtension.onFrame(). Promoting a frame hook is a
+        design flaw, not a shortcut."""
+        pass
+
+    def _rebuildIndex(self):
+        """Tier 3 -- called only from inside this class."""
         pass
 ```
+
+**The acceptance test: a user autocompleting on the COMP should see nothing but tier 1.** If a name in that list would confuse them, it belongs in tier 2 or 3.
+
+!!! warning "`ext.<Name>` uses the Extension Name parameter, not the class name"
+    If the COMP's `Extension Name` is `MyFeature` and the class is `MyFeatureExt`, then `op.myComp.ext.MyFeature.helperMethod()` works and `op.myComp.ext.MyFeatureExt.helperMethod()` raises. Embody's own extensions are named `Embody`, `Envoy`, `TDXN` and `CatalogManager` against classes suffixed `Ext`.
 
 ## Lifecycle Methods
 

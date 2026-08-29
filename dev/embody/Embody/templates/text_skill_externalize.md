@@ -20,13 +20,13 @@ description: "MUST READ before calling externalize_op or save_externalization. R
 
 ## Excluding Runtime State from TDXN Exports (`tdn_exclude:<par>` tags)
 
-When a parameter holds **runtime state** (a session file path, a negotiated port, a live readout) rather than configuration, keep its value out of committed `.tdxn` files by tagging the operator itself — one tag per parameter, using the colon-suffixed form of the exclude tag:
+When a parameter holds **runtime state** (a session file path, a negotiated port, a live readout) rather than configuration, keep its value out of committed `.tdxn` files by tagging the operator itself - one tag per parameter, using the colon-suffixed form of the exclude tag:
 
 ```python
 op('deck_a').tags.add('tdn_exclude:file')
 ```
 
-The operator and its other parameters export normally; the named parameter's constant value is omitted (expressions/binds still export — references are configuration). The bare `tdn_exclude` tag on a COMP is different: it makes the whole COMP invisible to TDXN. The suffixed tag round-trips in the `.tdxn`, so the omission is visible and survives reconstruction; it takes effect at the COMP's next export (Save tdn, Update, or project save). A tag naming a nonexistent parameter logs a WARNING at export. Users can manage these visually: the tagger's Actions menu on a TDXN COMP has **Exclude from tdn**, a drop-zone panel that toggles `tdn_exclude:<par>` for dragged parameters and whole-COMP `tdn_exclude` for dragged COMPs, listing every exclusion in the subtree with a per-row **×** to remove it.
+The operator and its other parameters export normally; the named parameter's constant value is omitted (expressions/binds still export - references are configuration). The bare `tdn_exclude` tag on a COMP is different: it makes the whole COMP invisible to TDXN. The suffixed tag round-trips in the `.tdxn`, so the omission is visible and survives reconstruction; it takes effect at the COMP's next export (Save tdn, Update, or project save). A tag naming a nonexistent parameter logs a WARNING at export. Users can manage these visually: the tagger's Actions menu on a TDXN COMP has **Exclude from tdn**, a drop-zone panel that toggles `tdn_exclude:<par>` for dragged parameters and whole-COMP `tdn_exclude` for dragged COMPs, listing every exclusion in the subtree with a per-row **x** to remove it.
 
 A third form targets a DAT's live **contents** instead of a parameter: `tdn_exclude:dat_content` (a reserved name, so it never trips the unknown-parameter warning). Use it for DATs whose rows are runtime state with no authored value -- a log ring buffer, a status readout. Those are normally force-captured even when Embed DATs is OFF, because Embody refuses to drop content that exists nowhere else on disk; this tag is the only sanctioned way past that net, so apply it only where losing the content is the intent. The operator itself still exports in full (parameters, position, wiring, tags) and returns empty on reconstruction, and the at-risk content warning skips it so the check cannot contradict the export.
 
@@ -35,9 +35,9 @@ A third form targets a DAT's live **contents** instead of a parameter: `tdn_excl
 When creating Python files (scripts, extensions, test files, callbacks):
 1. Create the textDAT in TouchDesigner first (via MCP `create_op` or in TD UI)
 2. Write the Python code into the DAT (via MCP `set_dat_content`)
-3. Tag the DAT for externalization (`externalize_op`) — Embody writes the `.py` file to disk
+3. Tag the DAT for externalization (`externalize_op`) - Embody writes the `.py` file to disk
 
-**NEVER** manually set the `file` and `syncfile` parameters — Embody handles all file path management.
+**NEVER** manually set the `file` and `syncfile` parameters - Embody handles all file path management.
 
 ## Exporting a Portable Tox
 
@@ -48,18 +48,18 @@ Export any COMP as a self-contained `.tox` with all Embody metadata stripped:
 
 The exported `.tox` works in any TD project with no missing file errors.
 
-**Release hooks**: a TEXT DAT named `pre_release` that is a DIRECT child of the target runs on a STAGED COPY in `/sys/quiet` — the live comp is never touched, file-sync is disabled on the copy (no write-through to source files), extensions are NOT initialized there and par callbacks don't fire (shape via direct par/DAT/op edits, or use `hook_mode='live'` for extension logic). A raise aborts the export and keeps the copy as `<name>_release_failed` for same-session inspection (`/sys` is not saved; `post_release` skipped). A direct-child Text DAT named `post_release` runs on the ORIGINAL after the save whenever `pre_release` completed — even when the save failed. Both hook DATs are deleted from the copy, so hook code never ships in the artifact. `args[0]` = resolved save path; `post_release` also gets `args[1]` = success. Hooks run synchronously on the main thread — keep them fast, defer uploads. Nested exports from inside a hook run plain (no hooks, no second copy). `hook_mode='live'` restores in-place semantics (mutations persist, hooks ship dormant in the tox); `run_hooks=False` skips hooks and ships them as-is (the self-updater's backup uses it). Exports whose target is — or contains — the live Embody COMP are never copy-staged (Embody-self runs live-mode; hooks on a container holding Embody are skipped with a warning in copy mode). `op.Embody.ReleaseAll(root=None, out_dir=None)` (or the Release All pulse) batch-exports every component that is BOTH Embody-tracked AND hook-bearing — tracked-and-hooked is the opt-in (third-party comps ship with their authors' hook DATs and are never batch-released); per-component failures log and continue.
+**Release hooks**: a TEXT DAT named `pre_release` that is a DIRECT child of the target runs on a STAGED COPY in `/sys/quiet` - the live comp is never touched, file-sync is disabled on the copy (no write-through to source files), extensions are NOT initialized there and par callbacks don't fire (shape via direct par/DAT/op edits, or use `hook_mode='live'` for extension logic). A raise aborts the export and keeps the copy as `<name>_release_failed` for same-session inspection (`/sys` is not saved; `post_release` skipped). A direct-child Text DAT named `post_release` runs on the ORIGINAL after the save whenever `pre_release` completed - even when the save failed. Both hook DATs are deleted from the copy, so hook code never ships in the artifact. `args[0]` = resolved save path; `post_release` also gets `args[1]` = success. Hooks run synchronously on the main thread - keep them fast, defer uploads. Nested exports from inside a hook run plain (no hooks, no second copy). `hook_mode='live'` restores in-place semantics (mutations persist, hooks ship dormant in the tox); `run_hooks=False` skips hooks and ships them as-is (the self-updater's backup uses it). Exports whose target is - or contains - the live Embody COMP are never copy-staged (Embody-self runs live-mode; hooks on a container holding Embody are skipped with a warning in copy mode). `op.Embody.ReleaseAll(root=None, out_dir=None)` (or the Release All pulse) batch-exports every component that is BOTH Embody-tracked AND hook-bearing - tracked-and-hooked is the opt-in (third-party comps ship with their authors' hook DATs and are never batch-released); per-component failures log and continue.
 
 ## Checking Status
 
-- `get_externalizations` — list all externalized operators with status
-- `get_externalization_status` — get dirty state, build number, timestamp, file path for a specific operator
+- `get_externalizations` - list all externalized operators with status
+- `get_externalization_status` - get dirty state, build number, timestamp, file path for a specific operator
 
-## TDXN Export — Palette COMP Handling
+## TDXN Export - Palette COMP Handling
 
 When exporting a TDXN-strategy COMP whose network contains TD palette components (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`), Embody consults the `Tdnpalettehandling` par on the Embody COMP's TDXN page:
 
-- **Ask** (default): On first encounter of each palette COMP, a four-button dialog appears — *Black Box* (this COMP), *Full Export* (this COMP), *Black Box for All*, *Full Export for All*. The per-COMP choice is stored via `comp.store('_tdn_palette_handling', ...)` so repeated exports don't re-prompt.
+- **Ask** (default): On first encounter of each palette COMP, a four-button dialog appears - *Black Box* (this COMP), *Full Export* (this COMP), *Black Box for All*, *Full Export for All*. The per-COMP choice is stored via `comp.store('_tdn_palette_handling', ...)` so repeated exports don't re-prompt.
 - **Black Box**: reference the palette only, emit `"palette_clone": true`, skip internal children. Correct for stock palette COMPs.
 - **Full Export**: export all children as if the COMP were a regular user COMP. Use only when palette internals have been heavily customized.
 

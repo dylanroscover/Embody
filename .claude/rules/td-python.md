@@ -20,10 +20,31 @@ See `parameters.md` for all parameter rules -- reading/writing values, designing
 - **Avoid implementation leakage** -- `ParseJSONAndUpdateTable()` exposes internals that should be free to change. Pick a name describing the *effect*: `RefreshOpList()`.
 - **Don't abbreviate domain terms** -- `CalcTDNFp()` is cryptic; `ComputeTDNFingerprint()` reads instantly. Screen space is cheap; comprehension is not.
 - **Booleans read as questions** -- `isPaletteClone()`, `hasExternalWires()`, `canExportDAT()`. Not `paletteCheck()` or `wiresState()`.
-- **Public vs private** -- TD extension methods promoted to the COMP are UpperCamelCase (`EnsureCatalogs`, `Update`); internal helpers are `_lowerCamelCase` (`_loadBootstrapPalette`). Keep the public surface minimal and obviously-named.
+- **Three namespace tiers, not two** -- see below. Promoting a callback is a design flaw, not a shortcut.
 - **Operator names: `optype_name` for processing ops, role name for the rest.** Prefix data-flow operators (TOP/CHOP/SOP/MAT/POP) with their op type so the network self-documents -- `glsl_colorize`, `noise_terrain`, `feedback_state`, `blur_soften` (the suffix still names the role; `glsl_colorize` > `glsl1`). **Exempt from the prefix:** (a) COMPs reached by a parent/global shortcut or holding an extension -- the shortcut *is* the name (`Embody`, never `comp_embody`); (b) a contract-fixed terminal, e.g. a specimen's output is an Out TOP named `out1`; (c) DATs, which stay role-named (`tdn_exporter`, not `text_tdn_exporter`; a `json`-named DAT also shadows stdlib). The network should still read like prose.
 
 When in doubt: write the one-line docstring *first*. If the name isn't already in that docstring, the name is wrong.
+
+### Extension namespaces -- three tiers
+
+TD promotes **every capitalized member** of a promoted extension to the COMP -- methods AND class constants. There is no per-member opt-out, so the capital letter *is* the access modifier. Pick the tier by who calls it, never by convenience.
+
+| Tier | Name | Reached as | Who calls it |
+|---|---|---|---|
+| 1. Public API | `UpperCamelCase` | `op.Comp.Method()` | A user or an agent, deliberately |
+| 2. Wiring | `lowerCamelCase` | `op.Comp.ext.Name.method()` | The COMP's own exec / callback / parexec DATs |
+| 3. Private | `_lowerCamelCase` | inside the class only | The class itself |
+
+**The acceptance test: a user autocompleting on the COMP must see nothing but tier 1.** A name that would confuse someone reading that list is not tier 1. Frame hooks, contact routers, verb dispatchers, and `ensurePars` are tier 2 -- always.
+
+(Tier model contributed by Function Store in [issue #94](https://github.com/dylanroscover/Embody/issues/94).)
+
+Four things that decide the tier for you:
+
+- **`.ext.<Name>` resolves by the Extension Name parameter, not the class name.** Embody's extensions are named `Embody`/`Envoy`/`TDXN` against classes `EmbodyExt`/`EnvoyExt`/`TDXNExt`, so `op.Embody.ext.Embody.x()` works and `op.Embody.ext.EmbodyExt.x()` raises.
+- **A capitalized class constant is promoted too.** `FILE_SUFFIX = '.tdxn'` on the class lands in the COMP's autocomplete beside your methods. Constants belong at module level, or renamed `_UPPER`.
+- **A name reachable only from a `run()` string, a parameter expression, or Python inside a `.tdxn` `dat_content` stays tier 1 until its call site is rewritten.** No static scan sees those callers, so renaming one is a silent runtime break, not a traceback.
+- **Demote behind a fail-loud call site.** `getattr(ext, name, None)` and `hasattr` guards turn a missed rename into a no-op button; log the miss instead of falling back.
 
 ## Operator Access
 
@@ -35,22 +56,33 @@ When in doubt: write the one-line docstring *first*. If the name isn't already i
 
 **Absolute paths are always wrong -- in code, expressions, AND parameter values.** `op('/embody/Embody/...')` or `op('/project1/...')` hardcodes the entire network hierarchy; the moment anything is renamed, relocated, or instanced, it breaks. If you see a `/` at the start of an operator path anywhere -- an `op()` call, a parameter expression, or a `set_parameter` value -- it's a bug. Always pick the **narrowest, most portable reference** that resolves from where the code runs:
 
-| Relationship | Pattern | Why |
-|---|---|---|
-| Same network (siblings) | `op('name')` | Simplest. No hierarchy traversal. |
-| Inside your own COMP | `op('./child')` | Reaches your children explicitly. |
-| Up one level | `op('../name')` | Reaches parent's siblings. |
-| Anywhere inside a component | `parent.CompName` | Scoped to descendants. Supports instancing. |
-| Anywhere in the project | `op.CompName` | Global singleton access. Use only when parent shortcut can't work. |
+Take the highest rung that resolves from where the code runs:
 
-Prefer `parent.CompName` over `op.CompName` when both would work -- global shortcuts create invisible coupling. Full pattern reference (shortcut resolution rules, key properties, instancing behavior): `/td-api-reference` (Operator Referencing Patterns).
+| Rung | Pattern | Use when | Prerequisite |
+|---|---|---|---|
+| 1 | `self.ownerComp` | Anywhere inside an extension. Capture it once in `__init__`. | none |
+| 2 | `parent.CompName` | Inside the COMP but outside the extension -- callback DATs, parameter expressions | the COMP sets `par.parentshortcut` |
+| 3 | `op('sibling')`, `op('./child')` | The target is in the same network or below you | none |
+| 4 | `op.CompName` | A project-wide singleton no parent shortcut can reach | the COMP sets `par.opshortcut` |
+| -- | `op('/abs/path')` | never | -- |
+
+**`parent.CompName` is the default for reaching a component**, not a `parent()` chain. It searches *up* by shortcut name and so survives renesting, where `parent(2)` encodes the depth and breaks the moment anything moves. **Set `par.parentshortcut` when you create a reusable COMP** -- the shortcut does not exist until something sets it, which is exactly why code falls back to `parent()`.
+
+**Banned: the bare global `parent()` / `parent(N)` in an extension class body.** Use `self.ownerComp`. Three exemptions, all real:
+
+- a COMP's own callback DAT, where `parent()` *is* the owner
+- generic tooling operating inside a COMP it did not author -- it cannot know a shortcut it never set
+- parameter expressions on replicated or cloned widgets
+
+`some_op.parent()` is untouched: that is documented OP-class API, not the global. Full pattern reference (shortcut resolution, instancing behavior): `/td-api-reference` (Operator Referencing Patterns).
 
 **Always verify references resolve correctly.** After writing an expression or script that uses `op()`, `parent.X`, or `op.X`, confirm the target exists and the path resolves from the calling context. A reference that returns `None` silently (or worse, finds the wrong operator) is a latent bug.
 
 ## Extensions
 
-- **`extensionsReady` guard**: Parameter expressions referencing extension-promoted attributes must use: `parent().MyProp if parent().extensionsReady else 0`
+- **`extensionsReady` guard**: Parameter expressions referencing extension-promoted attributes must use: `parent().MyProp if parent().extensionsReady else 0` (a parameter expression is one of the three `parent()` exemptions above).
 - **Auto-reinitializes on source change**: Implement `onDestroyTD(self)` for clean teardown. Use `onInitTD(self)` for post-init setup.
+- **Parameter callbacks: one dispatcher, not N promoted methods.** A parexec DAT that grows an `elif par.name == ...` chain drags a tier-1 method into the public surface per branch. Name the handler for its parameter instead -- `_on<Par>ValueChange(par, prev)`, `_on<Par>Pulse(par)` -- put it on the extension, and let the DAT `getattr` it. Log a miss rather than falling through silently, and audit once at init that every `_on*` handler has a matching parameter, so a typo cannot hide as a dead callback. Full recipe: `/parameter-design`.
 
 ### `onInitTD` and TDXN Import Timing
 
@@ -73,11 +105,23 @@ any background/long-running/blocking/HTTP work -> MUST load /td-api-reference (B
 - **Time-dependent ops cook only when demanded.** An op that references time is *flagged* to cook every frame -- but it still only cooks when something pulls its output (a viewer, a Render/Out TOP, a displayed COMP, or a force-cook). With nothing demanding it, a correctly-built animated network sits frozen on its last cooked frame. This is the #1 cause of "my network isn't animating."
 - **Deep gotchas -- MUST read /td-api-reference (Cook Model Gotchas) before force-cooking, evolving feedback loops, reloading Movie File In content, or animating heavy generators**: `cook(force=True)` does not advance feedback within a frame; a Movie File In reload lands only across a real frame advance (and downstream can still serve the pre-reload texture same-pass); animate the *sampling*, not the source.
 
-## Storage and Dependencies
+## Custom Parameters, Storage, and Dependencies -- picking one
+
+Three mechanisms hold state on a COMP and they are not interchangeable. Choose by lifetime and audience:
+
+| The state is | Use | Survives extension reinit |
+|---|---|---|
+| User-facing, persisted in the `.toe`/`.tox`, part of the COMP's interface | a **custom parameter** | **yes** |
+| Durable per-COMP data that is not the user's business (caches, handles, bookkeeping) | **`storage`** | **no** |
+| A derived value that must recook whatever reads it | **`tdu.Dependency`** | no -- rebuild it in `__init__` |
+
+**The reinit rule, learned the hard way:** editing an extension's `.py` reinitializes the extension and clears its `storage`, while a custom parameter survives untouched. Any state that must outlive a hot-sync save belongs in a parameter, not storage. That is why Embody's Envoy state machine lives in a par.
 
 - **`fetch()` searches UP the parent hierarchy** by default -- pass `search=False` for local-only lookup.
-- **`store()` triggers recooks** -- not a passive dict assignment.
-- **`tdu.Dependency`**: Assign to `.val` (`dep.val = 5`), NOT the object itself (`dep = 5` destroys it). Call `.modified()` after mutating contents.
+- **`store()` triggers recooks** -- not a passive dict assignment. Keep it out of hot paths.
+- **Cannot store operator references** -- store path strings and re-resolve.
+- **`tdu.Dependency`**: assign to `.val` (`dep.val = 5`); `dep = 5` destroys the object. Call `.modified()` after mutating contents in place. Read without subscribing via `.peekVal`.
+- **A Dependency is main-thread-only** -- setting `.val` recooks. Never touch one from a worker (see Threading below).
 
 ## Module Access
 

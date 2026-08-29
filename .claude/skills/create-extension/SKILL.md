@@ -46,21 +46,49 @@ Extension classes and source DATs must follow the `NameExt` convention:
 - Class: `MyFeatureExt`
 - DAT: `MyFeatureExt` (matches class name)
 
-## Referencing Extensions
+## Three Namespace Tiers
+
+TD promotes **every capitalized member** -- methods and class constants alike. There is no per-member opt-out, so the capital letter is the access modifier. Pick the tier by who calls it:
+
+| Tier | Name | Reached as | Who calls it |
+|---|---|---|---|
+| 1. Public API | `UpperCamelCase` | `op.MyFeature.DoSomething()` | A user or an agent, deliberately |
+| 2. Wiring | `lowerCamelCase` | `op.MyFeature.ext.MyFeature.onFrame()` | The COMP's own exec / callback / parexec DATs |
+| 3. Private | `_lowerCamelCase` | inside the class only | The class itself |
+
+**Acceptance test: a user autocompleting on the COMP must see nothing but tier 1.** Promoting a frame hook is a design flaw, not a shortcut.
+
+Two traps:
+
+- **`.ext.<Name>` resolves by the Extension Name parameter, not the class name.** If `ext_name='MyFeature'` and the class is `MyFeatureExt`, then `op.MyFeature.ext.MyFeature.x()` works and `op.MyFeature.ext.MyFeatureExt.x()` raises.
+- **`op.MyFeature` requires a Global OP Shortcut, and `create_extension` does not set one.** Straight out of the tool, `op.MyFeature` raises `AttributeError`. Either reach the COMP by a relative path (`op('./MyFeature')`, `parent.Host.op('MyFeature')`), or set a shortcut deliberately:
 
 ```python
-# Promoted methods (uppercase) — called directly on the component:
-op.MyFeature.DoSomething()
-
-# Non-promoted methods (lowercase) — accessed through ext:
-op.MyFeature.ext.MyFeature.helperMethod()
+comp.par.parentshortcut = 'MyFeature'   # descendants reach it as parent.MyFeature
+comp.par.opshortcut = 'MyFeature'       # project-wide: op.MyFeature -- singletons only
 ```
 
-**NEVER cache extension references** in variables — always call inline. Cached refs go stale on reinit.
+Set `parentshortcut` on any COMP whose descendants need to reach it; that is what makes `parent.MyFeature` work and keeps callback DATs off `parent()` chains. Reserve `opshortcut` for genuine project-wide singletons -- it is globally unique, so assigning a name already in use silently steals it from the previous holder.
+
+**NEVER cache extension references** in variables -- always call inline. Cached refs go stale on reinit.
+
+## Referencing From Inside the Extension
+
+Capture the owner once and navigate from it. `self.ownerComp` is rung 1 of the referencing ladder in `td-python.md`; the bare global `parent()` is banned in an extension class body.
+
+```python
+class MyFeatureExt:
+    def __init__(self, ownerComp):
+        self.ownerComp = ownerComp          # rung 1 -- everything else hangs off this
+
+    def rebuild(self):
+        target = self.ownerComp.op('./render1')     # own children
+        cfg = self.ownerComp.par.Mode.eval()        # own parameters
+```
 
 ## Extensions Inside TDXN COMPs
 
-If the extension lives inside a TDXN-strategy COMP (or the extension's ownerComp is one), `onInitTD` will fire **before** TDXN import reconstructs the network. Any state set up during `onInitTD` — created operators, parameter values, stored data — is overwritten when `ImportNetwork` runs with `clear_first=True`.
+If the extension lives inside a TDXN-strategy COMP (or the extension's ownerComp is one), `onInitTD` will fire **before** TDXN import reconstructs the network. Any state set up during `onInitTD` - created operators, parameter values, stored data - is overwritten when `ImportNetwork` runs with `clear_first=True`.
 
 **Always defer initialization:**
 
@@ -70,9 +98,9 @@ def onInitTD(self):
     run('args[0].postInit()', self, delayFrames=5)
 
 def postInit(self):
-    """Safe to set up state here — TDXN import is complete."""
+    """Safe to set up state here - TDXN import is complete."""
     # Create operators, set parameters, initialize state
     pass
 ```
 
-This applies on project open, after every Ctrl+S (strip/restore cycle), and on manual TDXN reimport. The deferred method must be idempotent — it may run multiple times.
+This applies on project open, after every Ctrl+S (strip/restore cycle), and on manual TDXN reimport. The deferred method must be idempotent - it may run multiple times.

@@ -8,6 +8,12 @@ description: "Parameter rules: reading/writing values safely, designing custom p
 
 Creating or designing custom parameters -> MUST load /parameter-design FIRST.
 
+**Code owns the schema; the user owns the value.** Every parameter-creation path must be get-or-create -- extensions reinitialize on every source save, so a blind `append*()` either raises or (worse, since `replace=True` is the default) destroys a same-named par the user had set. Never `Par.destroy()` on a style mismatch: that takes the value, expressions and exports with it. Recipe in `/parameter-design` (Ownership and Lifecycle).
+
+**Route parameter callbacks through one dispatcher, not one promoted method per parameter.** An `elif par.name == ...` chain in a parexec DAT adds a public-tier method to the COMP for every branch. Name handlers `_on<Par>ValueChange(par, prev)` / `_on<Par>Pulse(par)` on the extension and `getattr` them from the DAT -- see `/parameter-design` (Parameter Callbacks) and the three tiers in `td-python.md`.
+
+**A custom parameter is one of three state mechanisms**, and the only one that survives an extension reinit (`storage` is cleared; a `tdu.Dependency` is rebuilt). Picking between them: `/parameter-design` (Parameter, Storage, or Dependency?).
+
 ## Reading and Writing Values
 
 - **Always use `.eval()`** to get a parameter's current runtime value. `.val` only returns the constant-mode value.

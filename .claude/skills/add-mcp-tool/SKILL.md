@@ -10,7 +10,7 @@ Steps for adding a new MCP tool:
 
 1. **Add the tool function** inside `_register_tools()` in `EnvoyExt.py`
    - Function signature and docstring define the MCP schema (parameter names, types, descriptions)
-   - Treat these as API contracts — changes break client integrations
+   - Treat these as API contracts - changes break client integrations
    - The tool function queues the operation for main-thread execution
 
 2. **Add a handler case** in `_onRefresh()` for the TD operation
