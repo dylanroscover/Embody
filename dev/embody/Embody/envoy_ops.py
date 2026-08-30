@@ -1039,18 +1039,21 @@ def create_extension(ext, parent_path: str, class_name: str,
         # Skeleton follows the three tiers in td-python.md: only UpperCamelCase
         # is promoted to the COMP, so the lifecycle hooks are lowerCamel (tier 2)
         # and reached through .ext -- promoting a frame hook is a design flaw.
+        # Typed (td-python.md, Type Hints): COMP is a real name inside TD, and
+        # the hooks return nothing. The hint is the soft check a checker reads;
+        # asType(checkType=True) is the runtime half.
         text_dat.text = (
             f'class {class_name}:\n'
             f'    """TODO: one line on what this component does."""\n'
             f'\n'
-            f'    def __init__(self, ownerComp):\n'
+            f'    def __init__(self, ownerComp: COMP) -> None:\n'
             f'        self.ownerComp = ownerComp\n'
             f'\n'
-            f'    def onDestroyTD(self):\n'
+            f'    def onDestroyTD(self) -> None:\n'
             f'        """Teardown of the OLD instance before TD reinitializes."""\n'
             f'        pass\n'
             f'\n'
-            f'    def onInitTD(self):\n'
+            f'    def onInitTD(self) -> None:\n'
             f'        """End of the frame after init; the network is cooked."""\n'
             f'        pass\n'
         )

@@ -57,6 +57,32 @@ Four things that decide the tier for you:
     - **A widget's parameter expression is a COPY taken at build time.** Fixing the config table that a builder reads does NOT fix widgets already built from it; the live `par.expr` keeps the old name and the COMP forwards the miss to the extension, so the error names the *extension* and points nowhere near the config. Sweep live `par.expr` values, not just the source of truth they came from.
 - **Demote behind a fail-loud call site.** `getattr(ext, name, None)` and `hasattr` guards turn a missed rename into a no-op button; log the miss instead of falling back.
 
+## Type Hints
+
+Annotate every `def` you write -- arguments AND the return -- and let a checker
+read them. A hint costs nothing at runtime (Python ignores it) and buys the
+swapped-argument, wrong-type and possibly-`None` bugs that otherwise surface as
+a red X on cook. Function Store's issue #94 asked for this alongside `asType`;
+the two are halves of one practice: the hint is the *soft* check (editor and
+pyright, never enforced), `asType(..., checkType=True)` is the runtime assertion.
+
+- **TD's classes are the types.** `COMP`, `DAT`, `OP`, `Par`, `Page`,
+  `constantCHOP`, ... are real names inside TouchDesigner, so annotate with them
+  directly; put `from __future__ import annotations` at the top of a module DAT
+  so the names are not evaluated at import time.
+- **`x: str = None` is wrong -- it declares a `str` that is `None`.** Write
+  `Optional[str] = None` (PEP 484); the checker then flags every `.strip()` on
+  it that forgot the guard, which is the bug the hint exists to catch.
+- **Return types are not optional.** A callback or handler returns `-> None`;
+  a query returns what it returns (`-> Optional[COMP]` when it can miss). Never
+  guess a return type mechanically -- a wrong `-> None` is worse than none.
+- **Extension skeleton:** `def __init__(self, ownerComp: COMP) -> None`,
+  `def onInitTD(self) -> None`, `def onDestroyTD(self) -> None` -- this is what
+  `create_extension` generates.
+- **Check softly, in CI, with a baseline.** `pyright` in `basic` mode over the
+  externalized `.py` files, failing only on NEW errors; a green gate switched on
+  over an unannotated codebase is red on day one and gets ignored.
+
 ## Operator Access
 
 - **Use `opex()` when the operator must exist** -- raises immediately with a clear error. `op()` returns `None` silently.

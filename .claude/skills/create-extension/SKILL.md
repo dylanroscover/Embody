@@ -28,14 +28,14 @@ Always implement these in your extension class:
 
 ```python
 class MyFeatureExt:
-    def __init__(self, ownerComp):
+    def __init__(self, ownerComp: COMP) -> None:
         self.ownerComp = ownerComp
 
-    def onDestroyTD(self):
+    def onDestroyTD(self) -> None:
         """Called on old instance before TD reinitializes. Clean up callbacks, timers, etc."""
         pass
 
-    def onInitTD(self):
+    def onInitTD(self) -> None:
         """Called at end of frame after init. Safe to access other extensions and cooked network."""
         pass
 ```
@@ -90,7 +90,7 @@ Capture the owner once and navigate from it. `self.ownerComp` is rung 1 of the r
 
 ```python
 class MyFeatureExt:
-    def __init__(self, ownerComp):
+    def __init__(self, ownerComp: COMP) -> None:
         self.ownerComp = ownerComp          # rung 1 -- everything else hangs off this
 
     def rebuild(self):

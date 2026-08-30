@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.3-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.4-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-65-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -207,6 +207,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.2.4**: **Type hints are a shipped practice** -- `td-python.md` (deployed into every project) now says to annotate every `def`'s arguments and return, why `x: str = None` must be `Optional[str]`, that TD's own classes are the types, and how to check softly (pyright `basic` behind a baseline); `create_extension` and `/create-extension` generate a typed skeleton. The soft half of what Function Store asked for in issue #94, beside the `opex(...).asType(..., checkType=True)` runtime half. **4,241 tests** (139 suites).
 - **6.2.3**: **The exporter's tracking hook was the third `externalizations.tsv` restamp path** -- `_trackTDNExport` ran after every export, skipped or not, and stamped the row by index, so a skipped autosave checkpoint of Embody's own COMP still dirtied the table. Verified by forcing a dirty fingerprint: drain runs, export skipped, row unchanged. **4,241 tests** (139 suites).
 - **6.2.2**: **`externalizations.tsv` stops dirtying itself** -- an unchanged export (the v6.1.7 no-op write) still restamped the row's timestamp, so every Refresh left a one-line diff; and the test runner's forced `Filecleanup=delete` / `Toxdropexpr=ignore` could be checkpointed into Embody's own receipt mid-run (it reached the committed `embody.tdn` at 6.2.0). Both pars are transient for export now, resting at `keep`/`ask`, restored per user from `config.json`. **4,241 tests** (139 suites).
 - **6.2.1**: **The 6.2.0 review release** -- the Enable/Disable toolbar button, Ctrl+Shift+O/U and Ctrl+Alt+U, and the manager's dirty column all called a demoted member on the COMP (the demotion sweep missed aliased receivers and a string-named `hasattr`); the census now catches all three shapes. Community paste closes two bypasses: a foreign extension declared through the flat `ext0object` parameter scanned clean and imported live, and the palette carve-out trusted any `op.TD<Name>` prefix while a pasted network could register that shortcut itself -- trust is an allowlist of the six shortcuts TD registers, ported to the server scanner, and global shortcuts are stripped on every paste path. The 6.2.0 `.tox` had been exported before the scanner security fix; this one carries it. `ensureCustomPar` handles RGB/XYZ tuplets and is the real caller behind the About-page stamps; the prune floor reports its refusal in the update dialog. **4,239 tests** (139 suites).

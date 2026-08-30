@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.2.4
+
+Type hints become a shipped practice, not just a measurement.
+
+- **`td-python.md` gains a Type Hints section** (shipped into every project): annotate every `def`'s arguments and return; `x: str = None` is `Optional[str]`; TD's own classes (`COMP`, `DAT`, `Par`, ...) are the types; never guess a return type mechanically; check softly with pyright in `basic` mode behind a baseline. The hint is the soft half of the practice Function Store asked for in issue #94 -- `opex(...).asType(Type, checkType=True)` is the runtime half, and the two now sit side by side.
+- **`create_extension` generates a typed skeleton** (`__init__(self, ownerComp: COMP) -> None`, `onInitTD/onDestroyTD -> None`), and `/create-extension` shows the same one. The 6.2.0 notes claimed a typed `__init__`; it was not.
+
+**4,241 tests** (139 suites).
+
 ## v6.2.3
 
 The third restamp path, found by forcing the one the 6.2.2 probe never reached.
