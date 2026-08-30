@@ -33,7 +33,7 @@ BUILD_RE = re.compile(r'\b\d{4}\.\d{3,6}\b')
 # release save and leave it empty the rest of the time -- while armed, ANY
 # project.save() stamps the target, exports release/Embody-v<target>.tox and
 # unlinks the previous release tox.
-VERSION_TARGET = '6.1.0'
+VERSION_TARGET = ''
 
 
 def _versionTuple(value):
@@ -456,7 +456,7 @@ def syncVersionIntoTDN(attempt=0):
             # bump_build=False: the release manifest already recorded
             # par.Build, so a second bump would put the manifest one
             # behind the .tdn -- the same drift, one size smaller.
-            embody.ext.Embody.SaveTDN(row_path, bump_build=False)
+            embody.ext.Embody.saveTDN(row_path, bump_build=False)
     except Exception as e:
         debug(f'[execute_src_ctrl] version sync into .tdn failed: {e!r}')
 
