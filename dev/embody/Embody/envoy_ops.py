@@ -15,9 +15,10 @@ route through the ext keep the `ext.` hop.
 """
 
 from __future__ import annotations
+from typing import Optional
 
 
-def create_op(ext, parent_path: str, op_type: str, name: str = None) -> dict:
+def create_op(ext, parent_path: str, op_type: str, name: Optional[str] = None) -> dict:
     """Create an operator"""
     parent = ext._resolve_op(parent_path)
     if not parent:
@@ -82,8 +83,8 @@ def delete_op(ext, op_path: str) -> dict:
 
 
 def set_parameter(ext, op_path: str, par_name: str, value=None,
-                  mode: str = None, expr: str = None,
-                  bind_expr: str = None) -> dict:
+                  mode: Optional[str] = None, expr: Optional[str] = None,
+                  bind_expr: Optional[str] = None) -> dict:
     """Set a parameter value, expression, bind expression, or mode"""
     target = ext._resolve_op(op_path)
     if not target:
@@ -257,7 +258,7 @@ def disconnect_op(ext, op_path: str, input_index: int = 0,
         return {'error': f'Failed to disconnect: {e}'}
 
 
-def copy_op(ext, source_path: str, dest_parent: str, new_name: str = None) -> dict:
+def copy_op(ext, source_path: str, dest_parent: str, new_name: Optional[str] = None) -> dict:
     """Copy an operator"""
     source = ext._resolve_op(source_path)
     dest = ext._resolve_op(dest_parent)
@@ -299,8 +300,8 @@ def copy_op(ext, source_path: str, dest_parent: str, new_name: str = None) -> di
         return {'error': f'Failed to copy: {e}'}
 
 
-def set_dat_content(ext, op_path: str, text: str = None,
-                    rows: list = None, clear: bool = False,
+def set_dat_content(ext, op_path: str, text: Optional[str] = None,
+                    rows: Optional[list] = None, clear: bool = False,
                     confirm_wipe: bool = False) -> dict:
     """Set DAT content from text or table rows.
 
@@ -472,11 +473,11 @@ def edit_dat_content(ext, op_path: str, old_string: str,
         return {'error': f'Failed to edit DAT content: {e}'}
 
 
-def set_op_flags(ext, op_path: str, bypass: bool = None, lock: bool = None,
-                 display: bool = None, render: bool = None,
-                 viewer: bool = None, current: bool = None,
-                 expose: bool = None, allowCooking: bool = None,
-                 selected: bool = None) -> dict:
+def set_op_flags(ext, op_path: str, bypass: Optional[bool] = None, lock: Optional[bool] = None,
+                 display: Optional[bool] = None, render: Optional[bool] = None,
+                 viewer: Optional[bool] = None, current: Optional[bool] = None,
+                 expose: Optional[bool] = None, allowCooking: Optional[bool] = None,
+                 selected: Optional[bool] = None) -> dict:
     """Set flags on an operator"""
     target = ext._resolve_op(op_path)
     if not target:
@@ -507,9 +508,9 @@ def set_op_flags(ext, op_path: str, bypass: bool = None, lock: bool = None,
         return {'error': f'Failed to set flags: {e}'}
 
 
-def set_op_position(ext, op_path: str, x: int = None, y: int = None,
-                    width: int = None, height: int = None,
-                    color: list = None, comment: str = None) -> dict:
+def set_op_position(ext, op_path: str, x: Optional[int] = None, y: Optional[int] = None,
+                    width: Optional[int] = None, height: Optional[int] = None,
+                    color: Optional[list] = None, comment: Optional[str] = None) -> dict:
     """Set operator position and visual properties"""
     target = ext._resolve_op(op_path)
     if not target:
@@ -567,10 +568,10 @@ def set_op_position(ext, op_path: str, x: int = None, y: int = None,
 
 def create_annotation(ext, parent_path: str, mode: str = "annotate",
                       text: str = "", title: str = "",
-                      x: int = None, y: int = None,
-                      width: int = None, height: int = None,
-                      color: list = None, opacity: float = None,
-                      name: str = None) -> dict:
+                      x: Optional[int] = None, y: Optional[int] = None,
+                      width: Optional[int] = None, height: Optional[int] = None,
+                      color: Optional[list] = None, opacity: Optional[float] = None,
+                      name: Optional[str] = None) -> dict:
     """Create an annotation in the network editor."""
     parent = ext._resolve_op(parent_path)
     if not parent:
@@ -653,10 +654,10 @@ def create_annotation(ext, parent_path: str, mode: str = "annotate",
         return {'error': f'Failed to create annotation: {e}'}
 
 
-def set_annotation(ext, op_path: str, text: str = None, title: str = None,
-                   color: list = None, opacity: float = None,
-                   width: int = None, height: int = None,
-                   x: int = None, y: int = None) -> dict:
+def set_annotation(ext, op_path: str, text: Optional[str] = None, title: Optional[str] = None,
+                   color: Optional[list] = None, opacity: Optional[float] = None,
+                   width: Optional[int] = None, height: Optional[int] = None,
+                   x: Optional[int] = None, y: Optional[int] = None) -> dict:
     """Modify an existing annotation."""
     target = ext._resolve_annotation(op_path)
     if not target:
@@ -737,7 +738,7 @@ def cook_op(ext, op_path: str, force: bool = True,
         return {'error': f'Failed to cook: {e}'}
 
 
-def externalize_op(ext, op_path: str, tag_type: str = None) -> dict:
+def externalize_op(ext, op_path: str, tag_type: Optional[str] = None) -> dict:
     """Tag an operator for Embody externalization and write it to disk"""
     target = ext._resolve_op(op_path)
     if not target:
@@ -956,11 +957,11 @@ def save_externalization(ext, op_path: str) -> dict:
 
 
 def create_extension(ext, parent_path: str, class_name: str,
-                     name: str = None, code: str = None,
-                     promote: bool = True, ext_name: str = None,
-                     ext_index: int = None,
+                     name: Optional[str] = None, code: Optional[str] = None,
+                     promote: bool = True, ext_name: Optional[str] = None,
+                     ext_index: Optional[int] = None,
                      existing_comp: bool = False,
-                     parent_shortcut: str = None) -> dict:
+                     parent_shortcut: Optional[str] = None) -> dict:
     """Create a TD extension: COMP + text DAT + extension wiring"""
 
     # Validate class_name

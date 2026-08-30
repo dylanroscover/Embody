@@ -21,6 +21,7 @@ calls between moved functions are module-local.
 from __future__ import annotations
 
 import math
+from typing import Optional
 
 
 def _op_summary(target, info) -> str:
@@ -153,7 +154,7 @@ def get_op(ext, op_path: str, include_defaults: bool = False) -> dict:
 
 
 def query_network(ext, parent_path: str = "/", recursive: bool = False,
-                  op_type: str = None, include_utility: bool = False) -> dict:
+                  op_type: Optional[str] = None, include_utility: bool = False) -> dict:
     """List operators in a network"""
     parent = resolve_op(ext, parent_path)
     if not parent:
@@ -668,7 +669,7 @@ def get_op_errors(ext, op_path: str, recurse: bool = True,
 
 
 def exec_op_method(ext, op_path: str, method: str,
-                   args: list = None, kwargs: dict = None) -> dict:
+                   args: Optional[list] = None, kwargs: Optional[dict] = None) -> dict:
     """Call a method on a TD operator"""
     target = resolve_op(ext, op_path)
     if not target:
@@ -1290,8 +1291,8 @@ def _reduce_chop(target, channels=None, samples: int = 0) -> dict:
     return out
 
 
-def get_chop_data(ext, op_path: str, channels: str = None, samples: int = 0,
-                  compare_to: str = None) -> dict:
+def get_chop_data(ext, op_path: str, channels: Optional[str] = None, samples: int = 0,
+                  compare_to: Optional[str] = None) -> dict:
     """Reduce a CHOP to per-channel statistics, optionally diffed vs another.
 
     Args:
@@ -1340,7 +1341,7 @@ def get_chop_data(ext, op_path: str, channels: str = None, samples: int = 0,
         return {'error': f'Failed to read CHOP: {e}'}
 
 
-def get_pop_data(ext, op_path: str, attributes: str = None, samples: int = 0,
+def get_pop_data(ext, op_path: str, attributes: Optional[str] = None, samples: int = 0,
                  max_points: int = _POP_READBACK_POINTS) -> dict:
     """Read a POP: attribute metadata always, point values only on request.
 
@@ -1695,9 +1696,9 @@ def get_enclosed_ops(ext, op_path: str) -> dict:
         return {'error': f'Failed to get enclosure info: {e}'}
 
 
-def find_children(ext, op_path: str, name: str = None, type: str = None,
-                  depth: int = None, tags: list = None,
-                  text: str = None, comment: str = None,
+def find_children(ext, op_path: str, name: Optional[str] = None, type: Optional[str] = None,
+                  depth: Optional[int] = None, tags: Optional[list] = None,
+                  text: Optional[str] = None, comment: Optional[str] = None,
                   include_utility: bool = False) -> dict:
     """Search for operators using COMP.findChildren"""
     target = resolve_op(ext, op_path)

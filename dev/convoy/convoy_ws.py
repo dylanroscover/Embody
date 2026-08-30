@@ -112,7 +112,7 @@ class RemoteError(ConvoyWebSocketError):
     code = "remote_error"
 
     def __init__(self, remote_code: str, detail: str = "",
-                 data: Any = None) -> None:
+                 data: Optional[Any] = None) -> None:
         self.remote_code = str(remote_code or "remote_error")
         self.data = data
         super().__init__(detail or self.remote_code)
@@ -966,7 +966,7 @@ class Session:
             self._reader.start()
         return self
 
-    def call(self, method: str, params: Any = None,
+    def call(self, method: str, params: Optional[Any] = None,
              timeout_s: float = 30.0) -> Any:
         if not isinstance(method, str) or not method or len(method) > 256:
             raise ValueError("method must be non-empty text up to 256 characters")
@@ -1205,7 +1205,7 @@ class Session:
                 self._inbound.task_done()
 
     def _send_response(self, request_id: str, *, ok: bool,
-                       result: Any = None,
+                       result: Optional[Any] = None,
                        error: Optional[Mapping[str, Any]] = None) -> None:
         if self._closed.is_set() or self._closing.is_set():
             return

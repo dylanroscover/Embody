@@ -399,7 +399,7 @@ class HostPairSessionManager:
 
     def configure_peer(self, peer_host_id: str,
                        endpoints: Sequence[PeerEndpoint], *,
-                       authentication_context: Any = None) -> None:
+                       authentication_context: Optional[Any] = None) -> None:
         """Authorize/configure a trusted peer without clearing revocation."""
         peer_host_id = self._validate_peer_id(peer_host_id)
         normalized = self._normalize_endpoints(endpoints)
@@ -479,7 +479,7 @@ class HostPairSessionManager:
 
     def restore_peer(self, peer_host_id: str,
                      endpoints: Sequence[PeerEndpoint], *,
-                     authentication_context: Any = None) -> None:
+                     authentication_context: Optional[Any] = None) -> None:
         """Explicitly clear a local revocation after trust is re-established."""
         peer_host_id = self._validate_peer_id(peer_host_id)
         normalized = self._normalize_endpoints(endpoints)
@@ -543,7 +543,7 @@ class HostPairSessionManager:
             self, sock: socket.socket, peer_host_id: str, *,
             expected_host: Optional[str] = None,
             timeout_s: Optional[float] = None,
-            authentication_context: Any = None) -> AcceptedSession:
+            authentication_context: Optional[Any] = None) -> AcceptedSession:
         """Accept one TLS-authenticated inbound peer socket synchronously.
 
         The caller may invoke this from its bounded server connection worker.
@@ -587,7 +587,7 @@ class HostPairSessionManager:
     def accept_authenticated_websocket(
             self, connection: ws.WebSocketConnection, peer_host_id: str, *,
             timeout_s: Optional[float] = None,
-            authentication_context: Any = None) -> AcceptedSession:
+            authentication_context: Optional[Any] = None) -> AcceptedSession:
         """Accept an already-upgraded authenticated server connection.
 
         This is the integration point for ``BaseHTTPRequestHandler``-style
@@ -649,7 +649,7 @@ class HostPairSessionManager:
                 self._condition.wait(remaining)
 
     def call(self, peer_host_id: str, convoy_id: str, method: str,
-             params: Any = None, *, timeout_s: float = 30.0) -> Any:
+             params: Optional[Any] = None, *, timeout_s: float = 30.0) -> Any:
         """Make exactly one namespace-bound RPC using one cumulative deadline."""
         peer_host_id = self._validate_peer_id(peer_host_id)
         convoy_id = _identifier(convoy_id, "convoy_id", 128)
@@ -835,7 +835,7 @@ class HostPairSessionManager:
 
     def _ensure_accept_allowed_locked(
             self, peer_host_id: str,
-            authentication_context: Any = None) -> None:
+            authentication_context: Optional[Any] = None) -> None:
         self._ensure_not_stopped_locked()
         if not self._started:
             raise PeerUnavailable("session manager has not started")

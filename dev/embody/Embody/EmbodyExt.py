@@ -4607,7 +4607,7 @@ class EmbodyExt:
         except Exception:
             pass
 
-    def _queueDirtyTDNRoots(self, budget_ms: float = None) -> int:
+    def _queueDirtyTDNRoots(self, budget_ms: Optional[float] = None) -> int:
         """Expand a coarse arm into the roots that ACTUALLY changed.
 
         Unions the externalizations table's TDXN rows with the fingerprint
@@ -5197,7 +5197,7 @@ class EmbodyExt:
             except Exception:
                 pass
 
-    def ExportPortableTox(self, target: 'OP' = None,
+    def ExportPortableTox(self, target: Optional['OP'] = None,
                           save_path: Optional[str] = None,
                           run_hooks: bool = True,
                           hook_mode: str = 'copy') -> bool:
@@ -5543,7 +5543,7 @@ class EmbodyExt:
         finally:
             self.my.store('_release_hook_active', False)
 
-    def ReleaseAll(self, root: 'OP' = None,
+    def ReleaseAll(self, root: Optional['OP'] = None,
                    out_dir: Optional[str] = None) -> dict:
         """Export every releasable COMP as its own portable .tox.
 
@@ -5627,7 +5627,7 @@ class EmbodyExt:
             f"{len(result['failed'])} failed{failed_note}", level)
         return result
 
-    def _findReleaseTargets(self, root: 'OP' = None) -> list:
+    def _findReleaseTargets(self, root: Optional['OP'] = None) -> list:
         """Discovery half of ReleaseAll: tracked AND hook-bearing COMPs.
 
         Pure scan -- no exports, no hook execution -- so tests can pin
@@ -5918,9 +5918,9 @@ class EmbodyExt:
         return tuple(out)
 
     @staticmethod
-    def _computeTDNFingerprint(comp, tdn_paths: set = None,
-                               exclude_tag: str = None,
-                               ext_tags: frozenset = None) -> tuple:
+    def _computeTDNFingerprint(comp, tdn_paths: Optional[set] = None,
+                               exclude_tag: Optional[str] = None,
+                               ext_tags: Optional[frozenset] = None) -> tuple:
         """Compute a hashable fingerprint of a TDXN COMP's network structure.
 
         Used instead of oper.dirty for TDXN COMPs (which always reads True
@@ -6047,9 +6047,9 @@ class EmbodyExt:
             self.my.store('_tdn_fingerprints', cache)
         return cache
 
-    def _isTDNDirty(self, comp, tdn_paths: set = None,
-                    exclude_tag: str = None,
-                    ext_tags: frozenset = None) -> bool:
+    def _isTDNDirty(self, comp, tdn_paths: Optional[set] = None,
+                    exclude_tag: Optional[str] = None,
+                    ext_tags: Optional[frozenset] = None) -> bool:
         """Check if a TDXN COMP's network has changed since last export.
 
         Callers sweeping many COMPs in one pass (Update/dirtyHandler) should
@@ -6072,9 +6072,9 @@ class EmbodyExt:
             return False
         return current != stored
 
-    def _storeTDNFingerprint(self, comp, tdn_paths: set = None,
-                             exclude_tag: str = None,
-                             ext_tags: frozenset = None) -> None:
+    def _storeTDNFingerprint(self, comp, tdn_paths: Optional[set] = None,
+                             exclude_tag: Optional[str] = None,
+                             ext_tags: Optional[frozenset] = None) -> None:
         """Snapshot the TDXN COMP's network structure after export.
 
         MUST use the same boundary as _isTDNDirty -- a baseline stored with a
@@ -6714,7 +6714,7 @@ class EmbodyExt:
             if tdn_tag not in child.tags:
                 self.applyTagToOperator(child, tdn_tag)
 
-    def _buildTDNRelPath(self, oper: OP, suffix: str = None) -> Path:
+    def _buildTDNRelPath(self, oper: OP, suffix: Optional[str] = None) -> Path:
         """Generate a relative TDXN file path for a COMP.
 
         `suffix` defaults to the current mint suffix (.tdxn) -- correct for
@@ -10625,7 +10625,7 @@ class EmbodyExt:
     _TDN_FULL_ONLY_PARAMS = {'Tdnstriponsave', 'Tdncreateonstart'}
 
     def migrateToTDXN(self, auto: bool = False, dry_run: bool = False,
-                      scope: str = None) -> dict:
+                      scope: Optional[str] = None) -> dict:
         """Opt-in, one-time conversion of tracked .tdn files to .tdxn.
 
         v6.1.0 mints .tdxn for NEW externalizations only; existing files are
@@ -11834,7 +11834,7 @@ class EmbodyExt:
                 'SUCCESS')
 
     def _createMissingCompShell(self, comp_path: str, strategy: str,
-                               comp_type_override: str = None) -> 'OP | None':
+                               comp_type_override: Optional[str] = None) -> 'OP | None':
         """Create a missing COMP that was tagged but not saved in the .toe.
 
         Used by both reconstructTDNComps and restoreTOXComps when a tracked

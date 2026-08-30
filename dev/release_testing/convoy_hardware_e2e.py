@@ -325,7 +325,7 @@ class ResultRecorder:
         self.cases: List[CaseResult] = []
 
     def add(self, name: str, category: str, status: str,
-            duration_s: float, message: str = "", details: Any = None) -> None:
+            duration_s: float, message: str = "", details: Optional[Any] = None) -> None:
         if status not in ("passed", "failed", "skipped", "error"):
             raise ValueError("invalid case status")
         safe_message = redact(message, self.secret_values)

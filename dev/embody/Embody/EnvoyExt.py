@@ -1229,8 +1229,8 @@ class EnvoyMCPServer:
         _root.setLevel(_pre_level)
         self._register_tools()
 
-    def _touch_session(self, sid: str, label: str = None,
-                       operation: str = None) -> None:
+    def _touch_session(self, sid: str, label: Optional[str] = None,
+                       operation: Optional[str] = None) -> None:
         """Register or refresh a session in the presence registry.
 
         Called from the ASGI middleware on every headered HTTP request and
@@ -2008,7 +2008,7 @@ class EnvoyMCPServer:
             del self.pending_requests[request_id]
         return result
 
-    def check_responses(self, first_response: dict = None) -> None:
+    def check_responses(self, first_response: Optional[dict] = None) -> None:
         """Check for responses from main thread"""
         def process_response(response):
             request_id = response['id']
@@ -7957,7 +7957,7 @@ class EnvoyExt:
 
     # --- Operator Management ---
 
-    def _create_op(self, parent_path: str, op_type: str, name: str = None) -> dict:
+    def _create_op(self, parent_path: str, op_type: str, name: Optional[str] = None) -> dict:
         """Create an operator -- see envoy_ops."""
         return mod.envoy_ops.create_op(self, parent_path, op_type, name)
 
@@ -7974,13 +7974,13 @@ class EnvoyExt:
     _SEQ_PAR_RE = re.compile(r'^([A-Za-z]+?)(\d+)([A-Za-z0-9]*)$')
 
     def _set_parameter(self, op_path: str, par_name: str, value=None,
-                      mode: str = None, expr: str = None,
-                      bind_expr: str = None) -> dict:
+                      mode: Optional[str] = None, expr: Optional[str] = None,
+                      bind_expr: Optional[str] = None) -> dict:
         """Set a parameter value, expression, bind expression, or mode -- see envoy_ops."""
         return mod.envoy_ops.set_parameter(self, op_path, par_name, value, mode, expr, bind_expr)
 
-    def _get_parameter(self, op_path: str, par_name: str = None,
-                      search: str = None, search_in: str = 'any',
+    def _get_parameter(self, op_path: str, par_name: Optional[str] = None,
+                      search: Optional[str] = None, search_in: str = 'any',
                       depth: int = 2, max_results: int = 50,
                       details: bool = False) -> dict:
         """Get a parameter value with full details"""
@@ -8163,11 +8163,11 @@ class EnvoyExt:
         return mod.envoy_ops.disconnect_op(self, op_path, input_index, comp)
 
     def _query_network(self, parent_path: str = "/", recursive: bool = False,
-                      op_type: str = None, include_utility: bool = False) -> dict:
+                      op_type: Optional[str] = None, include_utility: bool = False) -> dict:
         """List operators in a network -- see envoy_read."""
         return mod.envoy_read.query_network(self, parent_path, recursive, op_type, include_utility)
 
-    def _copy_op(self, source_path: str, dest_parent: str, new_name: str = None) -> dict:
+    def _copy_op(self, source_path: str, dest_parent: str, new_name: Optional[str] = None) -> dict:
         """Copy an operator -- see envoy_ops."""
         return mod.envoy_ops.copy_op(self, source_path, dest_parent, new_name)
 
@@ -8381,7 +8381,7 @@ class EnvoyExt:
         return mod.envoy_read.get_op_errors(self, op_path, recurse)
 
     def _exec_op_method(self, op_path: str, method: str,
-                          args: list = None, kwargs: dict = None) -> dict:
+                          args: Optional[list] = None, kwargs: Optional[dict] = None) -> dict:
         """Call a method on a TD operator -- see envoy_read."""
         return mod.envoy_read.exec_op_method(self, op_path, method, args, kwargs)
 
@@ -8403,20 +8403,20 @@ class EnvoyExt:
         """Get DAT content as text or table data -- see envoy_read."""
         return mod.envoy_read.get_dat_content(self, op_path, format)
 
-    def _get_chop_data(self, op_path: str, channels: str = None,
-                       samples: int = 0, compare_to: str = None) -> dict:
+    def _get_chop_data(self, op_path: str, channels: Optional[str] = None,
+                       samples: int = 0, compare_to: Optional[str] = None) -> dict:
         """Reduce a CHOP to per-channel stats -- see envoy_read."""
         return mod.envoy_read.get_chop_data(
             self, op_path, channels, samples, compare_to)
 
-    def _get_pop_data(self, op_path: str, attributes: str = None,
+    def _get_pop_data(self, op_path: str, attributes: Optional[str] = None,
                       samples: int = 0, max_points: int = 50000) -> dict:
         """Read POP attribute metadata (+ optional points) -- see envoy_read."""
         return mod.envoy_read.get_pop_data(
             self, op_path, attributes, samples, max_points)
 
-    def _set_dat_content(self, op_path: str, text: str = None,
-                        rows: list = None, clear: bool = False,
+    def _set_dat_content(self, op_path: str, text: Optional[str] = None,
+                        rows: Optional[list] = None, clear: bool = False,
                         confirm_wipe: bool = False) -> dict:
         """Set DAT content from text or table rows -- see envoy_ops."""
         result = mod.envoy_ops.set_dat_content(self, op_path, text, rows, clear, confirm_wipe)
@@ -8463,11 +8463,11 @@ class EnvoyExt:
         """Get all flags for an operator -- see envoy_read."""
         return mod.envoy_read.get_op_flags(self, op_path)
 
-    def _set_op_flags(self, op_path: str, bypass: bool = None, lock: bool = None,
-                     display: bool = None, render: bool = None,
-                     viewer: bool = None, current: bool = None,
-                     expose: bool = None, allowCooking: bool = None,
-                     selected: bool = None) -> dict:
+    def _set_op_flags(self, op_path: str, bypass: Optional[bool] = None, lock: Optional[bool] = None,
+                     display: Optional[bool] = None, render: Optional[bool] = None,
+                     viewer: Optional[bool] = None, current: Optional[bool] = None,
+                     expose: Optional[bool] = None, allowCooking: Optional[bool] = None,
+                     selected: Optional[bool] = None) -> dict:
         """Set flags on an operator -- see envoy_ops."""
         return mod.envoy_ops.set_op_flags(self, op_path, bypass, lock, display, render, viewer, current, expose, allowCooking, selected)
 
@@ -8493,9 +8493,9 @@ class EnvoyExt:
         """Get positions of all operators and annotations in a COMP -- see envoy_read."""
         return mod.envoy_read.get_network_layout(self, comp_path, include_annotations)
 
-    def _set_op_position(self, op_path: str, x: int = None, y: int = None,
-                        width: int = None, height: int = None,
-                        color: list = None, comment: str = None) -> dict:
+    def _set_op_position(self, op_path: str, x: Optional[int] = None, y: Optional[int] = None,
+                        width: Optional[int] = None, height: Optional[int] = None,
+                        color: Optional[list] = None, comment: Optional[str] = None) -> dict:
         """Set operator position and visual properties -- see envoy_ops."""
         return mod.envoy_ops.set_op_position(self, op_path, x, y, width, height, color, comment)
 
@@ -8517,10 +8517,10 @@ class EnvoyExt:
 
     def _create_annotation(self, parent_path: str, mode: str = "annotate",
                            text: str = "", title: str = "",
-                           x: int = None, y: int = None,
-                           width: int = None, height: int = None,
-                           color: list = None, opacity: float = None,
-                           name: str = None) -> dict:
+                           x: Optional[int] = None, y: Optional[int] = None,
+                           width: Optional[int] = None, height: Optional[int] = None,
+                           color: Optional[list] = None, opacity: Optional[float] = None,
+                           name: Optional[str] = None) -> dict:
         """Create an annotation in the network editor -- see envoy_ops."""
         return mod.envoy_ops.create_annotation(self, parent_path, mode, text, title, x, y, width, height, color, opacity, name)
 
@@ -8536,10 +8536,10 @@ class EnvoyExt:
         """Resolve an annotation path, including utility-flagged ones -- see envoy_read."""
         return mod.envoy_read.resolve_annotation(self, op_path)
 
-    def _set_annotation(self, op_path: str, text: str = None, title: str = None,
-                        color: list = None, opacity: float = None,
-                        width: int = None, height: int = None,
-                        x: int = None, y: int = None) -> dict:
+    def _set_annotation(self, op_path: str, text: Optional[str] = None, title: Optional[str] = None,
+                        color: Optional[list] = None, opacity: Optional[float] = None,
+                        width: Optional[int] = None, height: Optional[int] = None,
+                        x: Optional[int] = None, y: Optional[int] = None) -> dict:
         """Modify an existing annotation -- see envoy_ops."""
         return mod.envoy_ops.set_annotation(self, op_path, text, title, color, opacity, width, height, x, y)
 
@@ -8558,9 +8558,9 @@ class EnvoyExt:
         """Cook an operator -- see envoy_ops."""
         return mod.envoy_ops.cook_op(self, op_path, force, recurse)
 
-    def _find_children(self, op_path: str, name: str = None, type: str = None,
-                      depth: int = None, tags: list = None,
-                      text: str = None, comment: str = None,
+    def _find_children(self, op_path: str, name: Optional[str] = None, type: Optional[str] = None,
+                      depth: Optional[int] = None, tags: Optional[list] = None,
+                      text: Optional[str] = None, comment: Optional[str] = None,
                       include_utility: bool = False) -> dict:
         """Search for operators using COMP.findChildren -- see envoy_read."""
         return mod.envoy_read.find_children(self, op_path, name, type, depth, tags, text, comment, include_utility)
@@ -8575,7 +8575,7 @@ class EnvoyExt:
 
     # === Embody Integration ===
 
-    def _externalize_op(self, op_path: str, tag_type: str = None) -> dict:
+    def _externalize_op(self, op_path: str, tag_type: Optional[str] = None) -> dict:
         """Tag an operator for Embody externalization and write it to disk -- see envoy_ops."""
         return mod.envoy_ops.externalize_op(self, op_path, tag_type)
 
@@ -8609,11 +8609,11 @@ class EnvoyExt:
     # === Extension Creation (Main Thread Only) ===
 
     def _create_extension(self, parent_path: str, class_name: str,
-                          name: str = None, code: str = None,
-                          promote: bool = True, ext_name: str = None,
-                          ext_index: int = None,
+                          name: Optional[str] = None, code: Optional[str] = None,
+                          promote: bool = True, ext_name: Optional[str] = None,
+                          ext_index: Optional[int] = None,
                           existing_comp: bool = False,
-                          parent_shortcut: str = None) -> dict:
+                          parent_shortcut: Optional[str] = None) -> dict:
         """Create a TD extension: COMP + text DAT + extension wiring -- see envoy_ops."""
         return mod.envoy_ops.create_extension(self, parent_path, class_name, name, code, promote, ext_name, ext_index, existing_comp, parent_shortcut)
 
