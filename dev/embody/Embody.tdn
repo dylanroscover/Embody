@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
-build: 1223
+build: 1224
 generator: Embody/6.2.5
 td_build: 099.2025.33070
 source_file: Embody-6.308.toe
-exported_at: '2026-08-30T17:24:34Z'
+exported_at: '2026-08-30T17:25:33Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -1341,6 +1341,8 @@ operators:
     file: embody/Embody/ai_clients.py
     syncfile: true
     language: python
+  flags:
+  - viewer
   position: [-500, 300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -2147,6 +2149,8 @@ operators:
     file: embody/Embody/palette_catalog.tsv
     syncfile: true
     rows: 1054
+  flags:
+  - viewer
   position: [-900, 300]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -2169,6 +2173,8 @@ operators:
     file: embody/Embody/startup_progress.py
     syncfile: true
     language: python
+  flags:
+  - viewer
   position: [-700, 300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
