@@ -76,30 +76,37 @@ and asks him to correct anything mischaracterized.
 
 ### W9 -- Function Store's second round (comment of 2026-08-30)
 
-Verbatim points, with an assessment each. **Anything asserting TD API
-behaviour below must be confirmed against docs.derivative.ca before acting**
-(CLAUDE.md rule 6) -- these are his words plus our first read, not verified
-claims.
+His five points, with what was done. `iop`/`ipar` and `asType` were confirmed
+against docs.derivative.ca before anything was written (CLAUDE.md rule 6).
 
-1. **Type hinting arguments / variables / function returns.** Overlaps W6,
-   which so far only covers *parameters* with a `None` default. Return
-   annotations and local/variable annotations are untouched and unmeasured.
-2. **Soft type-checking via `opex` and `asType` as best practices.** `opex`
-   is already in `td-python.md` ("use when the operator must exist"), but only
-   as an operator-access rule -- not framed as a *type-safety* practice, and
-   there is no guidance on `asType` at all. Verify what `asType` is and where
-   it applies before writing a rule.
-3. **`iop` / `ipars`.** He flags these himself as "a bit debatable". Embody's
-   referencing ladder currently does not mention them at all. Decide whether
-   they belong on the ladder, and at which rung, before documenting.
-4. **Dependencies -- he calls this "the big one".** Direct parameter writes
-   and method calls used where a dependency object belongs. Embody already
-   ships a measured storage-vs-Dependency-vs-custom-par section (added in W1),
-   but it explains *what notifies*; it does not tell an author to reach for a
-   dependency instead of writing a par directly. This is the gap he is naming.
-   Highest-value item in W9.
-5. **Building sequence parameters "takes a bit more thinking than it should".**
-   A DX complaint, not a bug. Embody has sequence support in TDXN (`sequences`,
-   spec v1.3) and `/parameter-design` covers custom pars. Candidate: a worked
-   sequence recipe in `/parameter-design`, or a helper in `embody_pardef.py`
-   alongside `ensureCustomPar`.
+1. **Type hinting arguments / variables / function returns.** **PARTIAL.**
+   Parameters are covered by W6 (150 internal fixed, 77 published MCP ones held
+   back). Return annotations are measured and NOT done: **2,402 of 3,367
+   functions in `dev/embody/Embody` (71%) have no return annotation.** Not
+   attempted, deliberately -- inferring a return type mechanically is unsafe, and
+   a sweep that guesses `-> None` wrongly is worse than no annotation. This wants
+   incremental per-module work with a type checker actually running (which is the
+   un-started pyright half of W6), not a scripted pass. Local/variable
+   annotations unmeasured.
+2. **Soft type-checking via `opex` + `asType`.** **DONE.** `td-python.md` and its
+   shipped template now carry the typed one-liner
+   `opex('x').asType(Type, checkType=True)`, why it cannot be `op()` (a checker
+   rejects `.asType` on an `Optional[OP]`), and that `checkType=True` converts a
+   silent wrong-operator bug into an immediate raise.
+3. **`iop` / `ipar`.** **DONE.** Added to the referencing ladder as rung 3b, with
+   the prerequisite (Internal OP / Internal OP Shortcut on the Common page), the
+   inside-only resolution rule, the `op(ipar.X.Operatorpath)` gotcha for
+   operator-valued internal parameters, and his own "debatable" caveat recorded
+   as the real trade-off: a shortcut is configuration on the COMP, so a reader
+   must leave the code to follow the reference.
+4. **Dependencies -- "the big one".** **DONE.** The existing section explained
+   *what notifies*; it never said when to reach for a dependency. Added
+   "Publish the value; do not push it": pushing (`other.par.Value = x` per
+   consumer, or a method call per consumer) has to enumerate its consumers, so it
+   goes stale when a reader is added, fires whether or not the value changed, and
+   inverts TD's cook model. With the one case where push is still correct --
+   handing a value to something that is not dependency-aware.
+5. **Sequence parameters "take more thinking than they should".** **OPEN.** A DX
+   complaint, not a bug. Candidate: a worked recipe in `/parameter-design`, or a
+   `ensureSequenceBlocks`-style helper in `embody_pardef.py` beside
+   `ensureCustomPar`. Not started.

@@ -64,6 +64,20 @@ Four things that decide the tier for you:
 ## Operator Access
 
 - **Use `opex()` when the operator must exist** -- raises immediately with a clear error. `op()` returns `None` silently.
+- **`opex(...).asType(Type, checkType=True)` is the typed one-liner.** `op()` is
+  declared as returning `OP`, so a type checker rejects `op('c').par.value` on a
+  `constantCHOP` and gives you no completions. `asType` narrows it; `checkType=True`
+  makes TD *also* raise at runtime when the operator is not that type, which turns a
+  silent wrong-operator bug into an immediate error. It has to be `opex`, not `op`:
+  `op()` can return `None`, and `None` has no `.asType`, so the checker complains
+  about the fix itself. Prefer it wherever the type is known:
+
+  ```python
+  lvl = opex('level1').asType(levelTOP, checkType=True)   # typed AND asserted
+  a = op('constant1')                                     # when None is acceptable,
+  a = a.asType(constantTOP) if a else None                # narrow after the guard
+  ```
+  (Raised by Function Store, issue #94.)
 - **Never call `op()`, `parent()`, or access TD objects at module level**. Module-level code executes during import, before the network is ready. Defer to methods.
 - **DAT naming conflicts**: TD searches for DATs by name before `sys.path`. A DAT named `json` shadows Python's stdlib `json`. Name DATs carefully.
 
@@ -78,8 +92,24 @@ Take the highest rung that resolves from where the code runs:
 | 1 | `self.ownerComp` | Anywhere inside an extension. Capture it once in `__init__`. | none |
 | 2 | `parent.CompName` | Inside the COMP but outside the extension -- callback DATs, parameter expressions | the COMP sets `par.parentshortcut` |
 | 3 | `op('sibling')`, `op('./child')` | The target is in the same network or below you | none |
+| 3b | `iop.Name` / `ipar.Name` | A specific internal operator or parameter the COMP publishes for its own descendants | the COMP sets Internal OP / Internal OP Shortcut on its Common page |
 | 4 | `op.CompName` | A project-wide singleton no parent shortcut can reach | the COMP sets `par.opshortcut` |
 | -- | `op('/abs/path')` | never | -- |
+
+**`iop`/`ipar` are the same family as `parent.CompName`** -- both search *up* the
+parent hierarchy by a shortcut name set on the Common page, so both survive
+renesting. The difference is granularity: `parent.Comp` hands you the component and
+you navigate down from it; `iop.Name` names one internal operator directly, and
+`ipar.Name` names a parameter-holding COMP. Reach for them when a component wants to
+publish a *stable internal address* to its own descendants without freezing the path
+between them -- a widget reaching `iop.Readout` keeps working when the readout moves.
+Two caveats: they only resolve from INSIDE the component (like `parent.Comp`), and
+an operator-valued internal parameter needs `op(ipar.Effect.Operatorpath)` to resolve
+to the operator rather than the path string. Function Store called these "a bit
+debatable" in issue #94, and the debate is real -- every shortcut is configuration
+that lives on the COMP rather than in the code, so a reader has to look at the
+Common page to follow the reference. Use them for genuinely stable internal
+addresses, not as a default.
 
 **`parent.CompName` is the default for reaching a component**, not a `parent()` chain. It searches *up* by shortcut name and so survives renesting, where `parent(2)` encodes the depth and breaks the moment anything moves. **Set `par.parentshortcut` when you create a reusable COMP** -- the shortcut does not exist until something sets it, which is exactly why code falls back to `parent()`.
 
@@ -129,6 +159,28 @@ Three mechanisms hold state on a COMP and they are not interchangeable. Choose b
 | User-facing, persisted, part of the COMP's interface | a **custom parameter** | the COMP |
 | Durable bookkeeping the user should not see (caches, handles, flags) | **`storage`** | the COMP |
 | A derived value that must recook whatever reads it | **`tdu.Dependency`** | usually the extension instance |
+
+**Publish the value; do not push it.** The common failure (Function Store, issue
+#94) is code that recomputes something and then *pushes* it -- writing
+`other.par.Value = x` on each consumer, or calling a method on each of them --
+where the value should be published ONCE as a dependable and let consumers pull.
+A push has to enumerate its consumers, so it silently goes stale the moment
+someone adds a reader, it fires whether or not the value changed, and it inverts
+the cook model TD already gives you. Publish through `tdu.Dependency` (derived
+runtime state), `store()` (durable bookkeeping), or a custom parameter
+(user-facing) -- then let expressions and `.eval()` read it.
+
+```python
+# push -- every new reader is a new line here, and nobody else knows
+for w in self.widgets: w.par.Scale = value
+
+# publish -- readers subscribe by reading; adding one costs nothing
+self.Scale.val = value          # tdu.Dependency built in __init__
+# reader: parent.Host.Scale.val  (or an expression, which recooks on change)
+```
+
+Push is still right for one case: handing a value to something that is NOT
+dependency-aware -- an external process, a file, a network peer.
 
 **What survives what.** Probed on TD 2025.33070; TD does not document this, so verify before relying on it in another build.
 
