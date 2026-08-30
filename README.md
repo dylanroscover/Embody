@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.1-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.2-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-65-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -176,7 +176,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **139 test suites** (4,239 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **139 test suites** (4,241 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -207,6 +207,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.2.2**: **`externalizations.tsv` stops dirtying itself** -- an unchanged export (the v6.1.7 no-op write) still restamped the row's timestamp, so every Refresh left a one-line diff; and the test runner's forced `Filecleanup=delete` / `Toxdropexpr=ignore` could be checkpointed into Embody's own receipt mid-run (it reached the committed `embody.tdn` at 6.2.0). Both pars are transient for export now, resting at `keep`/`ask`, restored per user from `config.json`. **4,241 tests** (139 suites).
 - **6.2.1**: **The 6.2.0 review release** -- the Enable/Disable toolbar button, Ctrl+Shift+O/U and Ctrl+Alt+U, and the manager's dirty column all called a demoted member on the COMP (the demotion sweep missed aliased receivers and a string-named `hasattr`); the census now catches all three shapes. Community paste closes two bypasses: a foreign extension declared through the flat `ext0object` parameter scanned clean and imported live, and the palette carve-out trusted any `op.TD<Name>` prefix while a pasted network could register that shortcut itself -- trust is an allowlist of the six shortcuts TD registers, ported to the server scanner, and global shortcuts are stripped on every paste path. The 6.2.0 `.tox` had been exported before the scanner security fix; this one carries it. `ensureCustomPar` handles RGB/XYZ tuplets and is the real caller behind the About-page stamps; the prune floor reports its refusal in the update dialog. **4,239 tests** (139 suites).
 - **6.2.0**: **Three namespace tiers, and the promoted surface drops from 214 members to 43** -- filed by Function Store as issue #94: `td-python.md` taught only `Upper` = promoted and `_lower` = private, so every callback anything outside the class had to reach got a capital letter and TouchDesigner published it, and that rule ships into every project Embody touches. Now tier 1 `UpperCamelCase` is the user-callable API, tier 2 `lowerCamelCase` is the component's own wiring reached through `.ext`, tier 3 `_lowerCamelCase` is private. **BREAKING** for code that reached past the documented `op.Embody` API: roughly 170 names now live at `op.Embody.ext.Embody.<lowerCamel>()`; no documented method moved (a census test enforces it). Also: a referencing ladder that starts at `self.ownerComp`, get-or-create parameter ownership with a refusal instead of `Par.destroy()`, a proportional floor under the parameter prune, `create_extension` gains `parent_shortcut`, and 63 untrusted-import security tests that ran on no runner now run on both CI legs. **4,227 tests** (138 suites).
 - **6.1.11**: **Embody stops merging the user-project template into its own repo's `CLAUDE.md`** -- making `CLAUDE.md` mergeable is right for a project that *uses* Embody and wrong for the repo that *builds* it, where that file is the developer's own instructions; the first deploy after 6.1.10 left it carrying two contradictory rule lists. A first merge into a hand-written top-level doc is now refused when the target is the tree Embody's own source lives in, narrowly enough that ordinary projects -- and the merge suite's own temp dirs -- still merge exactly as before.

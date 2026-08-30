@@ -4392,17 +4392,23 @@ class EmbodyExt:
                 # The write was a no-op (identical network), so the build must
                 # NOT advance -- otherwise par + table run one ahead of the
                 # file's header on every unchanged save, and the gap grows.
-                if result.get('skipped') and prior_build is not None:
+                skipped = bool(result.get('skipped'))
+                if skipped and prior_build is not None:
                     oper.par.Build = prior_build
                     self._updateRowCells(opPath, {'build': str(prior_build)},
                                          strategy='tdn')
-                timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
                 self.param_tracker.updateParamStore(oper)
                 # timestamp + position in ONE row write; dirty is runtime.
                 self._setDirtyState(opPath, '')
-                tdn_changes = {'timestamp': timestamp}
+                # A no-op write is a no-op in the table too: the timestamp
+                # column records when the FILE changed, and stamping it on a
+                # skipped export dirtied externalizations.tsv on every
+                # Refresh with a one-line diff (field 2026-08-29).
+                tdn_changes = {} if skipped else {
+                    'timestamp': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")}
                 tdn_changes.update(self._positionCells(oper))
-                self._updateRowCells(opPath, tdn_changes, strategy='tdn')
+                if tdn_changes:
+                    self._updateRowCells(opPath, tdn_changes, strategy='tdn')
                 # Snapshot the network structure so _isTDNDirty returns False
                 self._storeTDNFingerprint(oper)
                 self.Log(f"Exported TDXN for {opPath}", "SUCCESS")
@@ -4457,11 +4463,14 @@ class EmbodyExt:
             # TABLE (not the .tdn) -- a moved or recolored COMP would otherwise
             # come back at stale coordinates.
             self._setDirtyState(opPath, '')
-            cp_changes = {
+            # Same rule as saveTDN: an unchanged (skipped) write does not
+            # stamp the timestamp column -- it records when the FILE changed.
+            cp_changes = {} if result.get('skipped') else {
                 'timestamp': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
             }
             cp_changes.update(self._positionCells(oper))
-            self._updateRowCells(opPath, cp_changes, strategy='tdn')
+            if cp_changes:
+                self._updateRowCells(opPath, cp_changes, strategy='tdn')
             self._setAutosaveStatus('Saved ' + self._autosaveClock())
             # delayFrames=2 staggers the ~40ms re-baseline off F+1, where the
             # drain schedules the NEXT root's checkpoint -- so they never co-fire.
@@ -5044,6 +5053,18 @@ class EmbodyExt:
             # (2026-08-18). reset On; a deliberate user Off persists via
             # the _PERSISTED_PARAMS whitelist.
             'Clipboardautopaste': None,
+            # Test-runner state, not user state. RunTests forces Filecleanup
+            # to 'delete' and Toxdropexpr to 'ignore' for the run, and the
+            # autosave drain checkpointed /embody/Embody MID-RUN because the
+            # flip dirtied its par fingerprint -- so the committed receipt
+            # (and, through the same path, a release tox) carried 'delete',
+            # the value that turns every cleanup into a silent unlink
+            # (embody.tdn at c2476ef; Embody.tdn again 2026-08-29). Both are
+            # in the _PERSISTED_PARAMS whitelist, so the user's own choice
+            # is restored from config.json; the receipt and the shipped tox
+            # rest at the fresh-install values.
+            'Filecleanup': 'keep',
+            'Toxdropexpr': 'ask',
         },
     }
 

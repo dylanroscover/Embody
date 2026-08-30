@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
-build: 1220
-generator: Embody/6.2.1
+build: 1222
+generator: Embody/6.2.2
 td_build: 099.2025.33070
-source_file: Embody-6.304.toe
-exported_at: '2026-08-30T04:03:58Z'
+source_file: Embody-6.305.toe
+exported_at: '2026-08-30T05:17:04Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -801,6 +801,7 @@ custom_pars:
     - Always Clean
     - Always Ignore
     help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
+    value: ask
   - name: Tdndatsafety
     style: Menu
     label: Content Safety
@@ -849,7 +850,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.2.1
+    value: 6.2.2
   - name: Touchbuild
     style: Str
     label: Touch Build

@@ -4028,3 +4028,67 @@ class TestTDNReconstruction(EmbodyTestCase):
 		found = self.embody.ext.Embody._verifyReconstructedComp(host)
 		self.assertTrue(any('VERIFY_PROBE' in e for e in found),
 			'script error missing from the reconstruction report')
+
+	# =================================================================
+	# An unchanged export must not touch the externalizations row
+	# =================================================================
+
+	def test_unchanged_export_leaves_the_timestamp_cell_alone(self):
+		"""v6.1.7 stopped rewriting an unchanged .tdn, but saveTDN and
+		checkpoint still stamped the row's timestamp on the skipped write --
+		so every Refresh left externalizations.tsv with a one-line diff
+		(field 2026-08-29). The column records when the FILE changed.
+		"""
+		tdn_tag = self.embody.par.Tdntag.val
+		comp = self.sandbox.create(baseCOMP, 'ts_stable')
+		comp.create(noiseTOP, 'payload')
+		ext = self.embody_ext
+		# Spy on the row write itself: the stamp has one-second resolution,
+		# so comparing strings proves nothing inside a fast test.
+		stamped = []
+		real = ext._updateRowCells
+		def spy(row_key, changes, strategy=''):
+			if row_key == comp.path:
+				stamped.append('timestamp' in changes)
+			return real(row_key, changes, strategy)
+		ext._updateRowCells = spy
+		try:
+			# Tagging performs the first export itself, so the saveTDN
+			# right after it is already a no-op.
+			ext.applyTagToOperator(comp, tdn_tag)
+			del stamped[:]
+			self.assertTrue(ext.saveTDN(comp.path, allow_empty=True))
+			self.assertNotIn(True, stamped,
+				'an unchanged saveTDN must not restamp the row')
+			del stamped[:]
+			self.assertTrue(ext.checkpoint(comp.path))
+			self.assertNotIn(True, stamped,
+				'an unchanged checkpoint must not restamp the row')
+			del stamped[:]
+			comp.create(levelTOP, 'extra')
+			self.assertTrue(ext.saveTDN(comp.path, allow_empty=True))
+			self.assertIn(True, stamped, 'a REAL change must still stamp the row')
+		finally:
+			if ext.__dict__.get('_updateRowCells') is spy:
+				del ext.__dict__['_updateRowCells']
+			ext.removeTDNEntry(comp.path, delete_file=True)
+
+	def test_runner_forced_pars_are_transient_for_export(self):
+		"""RunTests forces Filecleanup='delete' / Toxdropexpr='ignore', and
+		the autosave drain checkpointed /embody/Embody mid-run because the
+		flip dirtied its fingerprint -- so the committed receipt carried the
+		value that turns every cleanup into a silent unlink (c2476ef, and
+		again 2026-08-29). Registered transient: omitted from the receipt and
+		the release tox, ignored by the fingerprint, restored per user from
+		config.json.
+		"""
+		registry = type(self.embody_ext)._TRANSIENT_STATUS_PARS['Embody']
+		self.assertEqual(registry.get('Filecleanup'), 'keep')
+		self.assertEqual(registry.get('Toxdropexpr'), 'ask',
+			'explicit resting: the registry contract reserves None for '
+			'pars whose default is empty/off')
+		persisted = self.embody_ext._PERSISTED_PARAMS
+		for name in ('Filecleanup', 'Toxdropexpr'):
+			self.assertIn(name, persisted,
+				f'{name} must stay config.json-persisted, or scrubbing it '
+				'would lose the user setting')

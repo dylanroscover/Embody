@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.2.2
+
+`externalizations.tsv` stops dirtying itself, and the test runner can no longer bake its own settings into a receipt or a release.
+
+- **An unchanged export no longer restamps the table row.** v6.1.7 stopped rewriting an unchanged `.tdn`, but `saveTDN` and the autosave `checkpoint` still wrote a fresh `timestamp` into `externalizations.tsv` on the skipped write -- so every Refresh left the file with a one-line diff. The column records when the file changed; a no-op write is now a no-op in the table too. Verified: three consecutive Refreshes leave the row untouched.
+- **`Filecleanup` and `Toxdropexpr` are transient for export.** `RunTests` forces them to `delete`/`ignore` for the run, and because that flip dirtied Embody's own fingerprint, the autosave drain checkpointed `/embody/Embody` mid-run and the committed receipt carried `delete` -- the value that turns every cleanup into a silent unlink (it reached `embody.tdn` at the 6.2.0 save). Both are now in the transient registry with resting values `keep`/`ask`: omitted from receipts and the shipped `.tox`, ignored by dirty detection, and restored per user from `config.json` as before.
+
+**4,241 tests** (139 suites).
+
 ## v6.2.1
 
 The 6.2.0 review release: three UI callbacks the demotion left calling the COMP, two untrusted-import bypasses, and the artifact itself.
