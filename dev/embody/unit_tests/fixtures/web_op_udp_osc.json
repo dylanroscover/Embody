@@ -1,0 +1,57 @@
+{
+  "name": "web_op_udp_osc",
+  "why": "Multiple denylisted transport ops tally per operator.",
+  "surfaces": [
+    "web_ops",
+    "denylisted_types"
+  ],
+  "tdn": {
+    "format": "tdn",
+    "version": "1.4",
+    "generator": "parity-fixture",
+    "td_build": "099.2025.32820",
+    "exported_at": "2026-06-08T00:00:00Z",
+    "network_path": "/test",
+    "options": {
+      "include_dat_content": true,
+      "include_storage": true
+    },
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "u1",
+        "type": "udpinDAT"
+      },
+      {
+        "name": "o1",
+        "type": "oscoutDAT"
+      }
+    ]
+  },
+  "expect_py": {
+    "verdict": "flagged",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 0,
+      "web_ops": 2,
+      "extensions": 0,
+      "storage_payloads": 0,
+      "denylisted_types": 2,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  },
+  "expect_ts": {
+    "verdict": "flagged",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 0,
+      "web_ops": 2,
+      "extensions": 0,
+      "storage_payloads": 0,
+      "denylisted_types": 2,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  }
+}

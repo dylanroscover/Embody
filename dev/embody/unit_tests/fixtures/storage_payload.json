@@ -1,0 +1,59 @@
+{
+  "name": "storage_payload",
+  "why": "Storage is restored on import and can carry callable state.",
+  "surfaces": [
+    "storage_payloads"
+  ],
+  "tdn": {
+    "format": "tdn",
+    "version": "1.4",
+    "generator": "parity-fixture",
+    "td_build": "099.2025.32820",
+    "exported_at": "2026-06-08T00:00:00Z",
+    "network_path": "/test",
+    "options": {
+      "include_dat_content": true,
+      "include_storage": true
+    },
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "s1",
+        "type": "baseCOMP",
+        "storage": {
+          "payload": [
+            1,
+            2,
+            3
+          ]
+        }
+      }
+    ]
+  },
+  "expect_py": {
+    "verdict": "flagged",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 0,
+      "web_ops": 0,
+      "extensions": 0,
+      "storage_payloads": 1,
+      "denylisted_types": 0,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  },
+  "expect_ts": {
+    "verdict": "flagged",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 0,
+      "web_ops": 0,
+      "extensions": 0,
+      "storage_payloads": 1,
+      "denylisted_types": 0,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  }
+}

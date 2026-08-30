@@ -1,0 +1,68 @@
+{
+  "name": "extension_comp",
+  "why": "A COMP declaring a foreign extension auto-runs module-level / onInitTD code. Real TDXN shape: sequences.ext blocks with object/name/promote.",
+  "surfaces": [
+    "extensions"
+  ],
+  "tdn": {
+    "format": "tdn",
+    "version": "1.4",
+    "generator": "parity-fixture",
+    "td_build": "099.2025.32820",
+    "exported_at": "2026-06-08T00:00:00Z",
+    "network_path": "/test",
+    "options": {
+      "include_dat_content": true,
+      "include_storage": true
+    },
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "host",
+        "type": "baseCOMP",
+        "sequences": {
+          "ext": [
+            {
+              "object": "op('./Ext').module.Ext(me)",
+              "name": "Ext",
+              "promote": true
+            }
+          ]
+        },
+        "children": [
+          {
+            "name": "Ext",
+            "type": "textDAT",
+            "dat_content": "class Ext:\n    def __init__(self, o):\n        pass\n"
+          }
+        ]
+      }
+    ]
+  },
+  "expect_py": {
+    "verdict": "flagged",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 0,
+      "web_ops": 0,
+      "extensions": 1,
+      "storage_payloads": 0,
+      "denylisted_types": 0,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  },
+  "expect_ts": {
+    "verdict": "flagged",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 0,
+      "web_ops": 0,
+      "extensions": 1,
+      "storage_payloads": 0,
+      "denylisted_types": 0,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  }
+}

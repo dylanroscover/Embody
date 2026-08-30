@@ -47,6 +47,11 @@ on:
       - 'docs/reports/issue-94-caller-index.json'
       # 63 untrusted-import security tests that ran on no runner at all.
       - 'dev/embody/Embody/Collection/tests/**'
+      # C8 scanner parity: the shared corpus is ONE corpus in two directories,
+      # so an edit to either side has to run the mirror + ledger checks.
+      - 'dev/embody/unit_tests/test_scanner_parity.py'
+      - 'dev/embody/unit_tests/fixtures/**'
+      - 'platform/packages/scanner-ts/fixtures/**'
       - 'pytest.ini'
       - 'dev/embody/unit_tests/test_embody_pyenv.py'
       - 'dev/embody/unit_tests/test_pyenv_context.py'
@@ -85,6 +90,11 @@ on:
       - 'docs/reports/issue-94-caller-index.json'
       # 63 untrusted-import security tests that ran on no runner at all.
       - 'dev/embody/Embody/Collection/tests/**'
+      # C8 scanner parity: the shared corpus is ONE corpus in two directories,
+      # so an edit to either side has to run the mirror + ledger checks.
+      - 'dev/embody/unit_tests/test_scanner_parity.py'
+      - 'dev/embody/unit_tests/fixtures/**'
+      - 'platform/packages/scanner-ts/fixtures/**'
       - 'pytest.ini'
       - 'dev/embody/unit_tests/test_embody_pyenv.py'
       - 'dev/embody/unit_tests/test_pyenv_context.py'

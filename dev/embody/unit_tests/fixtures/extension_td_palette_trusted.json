@@ -1,0 +1,60 @@
+{
+  "name": "extension_td_palette_trusted",
+  "why": "An extension resolving through a TD palette shortcut is TD's own code, not a danger surface -- it must not be counted.",
+  "surfaces": [],
+  "tdn": {
+    "format": "tdn",
+    "version": "1.4",
+    "generator": "parity-fixture",
+    "td_build": "099.2025.32820",
+    "exported_at": "2026-06-08T00:00:00Z",
+    "network_path": "/test",
+    "options": {
+      "include_dat_content": true,
+      "include_storage": true
+    },
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "host",
+        "type": "baseCOMP",
+        "sequences": {
+          "ext": [
+            {
+              "object": "op.TDModules.mod.TDFunctions",
+              "name": "TDF",
+              "promote": true
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "expect_py": {
+    "verdict": "clean",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 0,
+      "web_ops": 0,
+      "extensions": 0,
+      "storage_payloads": 0,
+      "denylisted_types": 0,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  },
+  "expect_ts": {
+    "verdict": "flagged",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 0,
+      "web_ops": 0,
+      "extensions": 1,
+      "storage_payloads": 0,
+      "denylisted_types": 0,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  },
+  "divergence": "POLICY. scanner.py exempts extensions resolving through a TD palette shortcut (_is_td_palette_ref: 'TD's own trusted code'); scanner-ts has no such carve-out. SCANNER-SPEC.md says plainly 'Count each extension-bearing COMP' with no exemption, so scanner-ts matches the spec letter and scanner.py carries an undocumented carve-out. Decision needed: document the carve-out in C8 and port it, or drop it from scanner.py."
+}

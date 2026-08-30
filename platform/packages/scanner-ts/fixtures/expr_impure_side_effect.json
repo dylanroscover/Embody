@@ -1,0 +1,56 @@
+{
+  "name": "expr_impure_side_effect",
+  "why": "DIVERGENCE PROBE: impure but not classically denylisted. The Python allowlist counts this; a denylist may wave it through.",
+  "surfaces": [
+    "file_read_exprs"
+  ],
+  "tdn": {
+    "format": "tdn",
+    "version": "1.4",
+    "generator": "parity-fixture",
+    "td_build": "099.2025.32820",
+    "exported_at": "2026-06-08T00:00:00Z",
+    "network_path": "/test",
+    "options": {
+      "include_dat_content": true,
+      "include_storage": true
+    },
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "t1",
+        "type": "transformTOP",
+        "parameters": {
+          "tx": "=op('target').destroy()"
+        }
+      }
+    ]
+  },
+  "expect_py": {
+    "verdict": "flagged",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 1,
+      "web_ops": 0,
+      "extensions": 0,
+      "storage_payloads": 0,
+      "denylisted_types": 0,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  },
+  "expect_ts": {
+    "verdict": "clean",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 0,
+      "web_ops": 0,
+      "extensions": 0,
+      "storage_payloads": 0,
+      "denylisted_types": 0,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  },
+  "divergence": "ARCHITECTURAL. scanner.py ast.parse()s the expression and applies an allowlist (is_pure_value_expression); scanner-ts has no Python parser and regex-matches a DANGEROUS_IDENTIFIERS denylist, so 'destroy' passes. The SERVER (submit gate) is the permissive side. Not closable by adding identifiers -- the denylist is unbounded. Decision needed: parse Python in TS, move the expression scan to a Python worker, or amend C8 to declare TS a coarse pre-filter with Embody-side authoritative."
+}

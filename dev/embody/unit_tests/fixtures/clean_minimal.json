@@ -1,0 +1,57 @@
+{
+  "name": "clean_minimal",
+  "why": "A pure TOP chain has no executable surface at all.",
+  "surfaces": [],
+  "tdn": {
+    "format": "tdn",
+    "version": "1.4",
+    "generator": "parity-fixture",
+    "td_build": "099.2025.32820",
+    "exported_at": "2026-06-08T00:00:00Z",
+    "network_path": "/test",
+    "options": {
+      "include_dat_content": true,
+      "include_storage": true
+    },
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "source1",
+        "type": "constantTOP"
+      },
+      {
+        "name": "null1",
+        "type": "nullTOP",
+        "inputs": [
+          "source1"
+        ]
+      }
+    ]
+  },
+  "expect_py": {
+    "verdict": "clean",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 0,
+      "web_ops": 0,
+      "extensions": 0,
+      "storage_payloads": 0,
+      "denylisted_types": 0,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  },
+  "expect_ts": {
+    "verdict": "clean",
+    "counts": {
+      "execute_dats": 0,
+      "file_read_exprs": 0,
+      "web_ops": 0,
+      "extensions": 0,
+      "storage_payloads": 0,
+      "denylisted_types": 0,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  }
+}

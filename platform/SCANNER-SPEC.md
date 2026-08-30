@@ -62,6 +62,31 @@ family, `moviefileinTOP`/`moviefileoutTOP`, `folderDAT`, `touchinTOP`/`touchoutT
   malicious-by-construction per the deny rules the platform enforces at SUBMIT (server may block;
   the Embody side never auto-runs - it presents the capability summary and default-inert imports).
 
+## Known divergences (measured 2026-08-29, the first time the corpus was executed)
+
+The shared fixtures now exist and BOTH suites run them. These two do not agree yet, and each
+is declared in its fixture's `divergence` field. The ledger check fails in BOTH directions --
+a new disagreement fails, and so does fixing one of these without deleting its note -- so a
+known gap can never go quiet.
+
+1. `expr_impure_side_effect` (`=op('target').destroy()`) -- ARCHITECTURAL.
+   `scanner.py` `ast.parse`s the expression and applies an ALLOWLIST
+   (`is_pure_value_expression`: anything not provably pure is counted). `scanner-ts` has no
+   Python parser -- it regex-matches identifiers against a `DANGEROUS_IDENTIFIERS` DENYLIST --
+   so `destroy` passes and the payload scores `clean`. The SERVER, which gates SUBMIT, is the
+   permissive side. This is NOT closable by adding identifiers: the denylist is unbounded,
+   which is exactly why the Python side abandoned it. Options: parse Python in TS, move the
+   expression scan to a Python worker, or amend this contract to declare `scanner-ts` a coarse
+   pre-filter with the Embody side authoritative -- and say so wherever users read the
+   capability summary.
+
+2. `extension_td_palette_trusted` -- POLICY. `scanner.py` exempts an extension whose object
+   resolves through a TD palette shortcut (`_is_td_palette_ref`, "TD's own trusted code").
+   `scanner-ts` has no such carve-out. The `extensions` surface above says plainly "Count each
+   extension-bearing COMP" with no exemption, so `scanner-ts` matches the letter of this spec
+   and `scanner.py` carries an undocumented carve-out. Either document the carve-out here and
+   port it, or drop it from `scanner.py`.
+
 ## Cross-impl agreement
 `scanner-ts` and `scanner.py` run the SAME fixtures in CI and must return identical `verdict` +
 `counts`. Fixtures include evasion cases (code hidden in an expression, in storage, in a nested

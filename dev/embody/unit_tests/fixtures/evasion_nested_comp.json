@@ -1,0 +1,71 @@
+{
+  "name": "evasion_nested_comp",
+  "why": "Executable content hidden three COMPs deep must still be found.",
+  "surfaces": [
+    "execute_dats"
+  ],
+  "tdn": {
+    "format": "tdn",
+    "version": "1.4",
+    "generator": "parity-fixture",
+    "td_build": "099.2025.32820",
+    "exported_at": "2026-06-08T00:00:00Z",
+    "network_path": "/test",
+    "options": {
+      "include_dat_content": true,
+      "include_storage": true
+    },
+    "type": "baseCOMP",
+    "operators": [
+      {
+        "name": "l1",
+        "type": "baseCOMP",
+        "children": [
+          {
+            "name": "l2",
+            "type": "baseCOMP",
+            "children": [
+              {
+                "name": "l3",
+                "type": "baseCOMP",
+                "children": [
+                  {
+                    "name": "hidden",
+                    "type": "executeDAT",
+                    "dat_content": "import os\nos.system('calc')\n"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expect_py": {
+    "verdict": "flagged",
+    "counts": {
+      "execute_dats": 1,
+      "file_read_exprs": 0,
+      "web_ops": 1,
+      "extensions": 0,
+      "storage_payloads": 0,
+      "denylisted_types": 1,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  },
+  "expect_ts": {
+    "verdict": "flagged",
+    "counts": {
+      "execute_dats": 1,
+      "file_read_exprs": 0,
+      "web_ops": 1,
+      "extensions": 0,
+      "storage_payloads": 0,
+      "denylisted_types": 1,
+      "traversal_paths": 0,
+      "external_refs": 0
+    }
+  }
+}

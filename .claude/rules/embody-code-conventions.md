@@ -81,11 +81,17 @@ fourth; the rest are on you.
   output) mirrors `dev/embody/Embody/Collection/scanner.py`. Editing either
   Python side is a contract change: bump it and notify the dependents, which
   include the web submit gate and D1 `scans.capability_json`.
-  **Known gap (2026-08-29):** `platform/SCANNER-SPEC.md` requires both scanners
-  to agree on shared fixtures in `platform/packages/scanner-ts/fixtures/`,
-  mirrored to `dev/embody/unit_tests/fixtures/`. **Neither directory exists**,
-  so two independent implementations of a security scanner have never been
-  checked against each other. Build the corpus before touching either scanner.
+  **Corpus built 2026-08-29** (`platform/packages/scanner-ts/fixtures/`, mirrored to
+  `dev/embody/unit_tests/fixtures/`): 21 fixtures across all eight surfaces plus
+  evasion cases, run by `scanner-ts/src/parity.test.ts` and
+  `dev/embody/unit_tests/test_scanner_parity.py`. First execution found TWO real
+  divergences, both recorded in `SCANNER-SPEC.md` under "Known divergences" and
+  pinned per-fixture. The load-bearing one is architectural: `scanner.py` parses
+  Python and applies an allowlist; `scanner-ts` cannot parse Python and regex-matches
+  a denylist, so `=op('x').destroy()` scores `clean` on the SERVER (the submit gate)
+  and `flagged` in Embody. Do not "fix" it by appending identifiers -- that denylist
+  is what the Python side deliberately abandoned. The ledger check fails both ways, so
+  closing a gap requires deleting its `divergence` note in the same change.
 
 ## Embody's Own COMP Is Edited Live, Never Through Its `.tdn`
 
