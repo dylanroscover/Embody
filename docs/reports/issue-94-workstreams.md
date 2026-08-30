@@ -35,7 +35,32 @@ publishes a proper `anyOf` with `{"type":"null"}`). Fixing them is a
 names -- so the blast radius is schema accuracy, not user permissions.
 
 Remaining beyond Optional: `TYPE_CHECKING` stubs, an `embody_types.py`, and a
-pyright leg for the Convoy host. Not started.
+pyright leg for the Convoy host.
+
+**The pyright leg is a project, not a task -- measured 2026-08-30.** Pyright
+1.1.413 in standard mode on `dev/convoy` alone: **1,039 errors across 78 files**
+in 11s. The distribution says why:
+
+| Rule | Count |
+|---|---|
+| `reportOptionalSubscript` | 364 |
+| `reportOptionalMemberAccess` | 171 |
+| `reportArgumentType` | 165 |
+| `reportAttributeAccessIssue` | 157 |
+| `reportIndexIssue` | 127 |
+
+Over half are Optional-related, and that is partly *this* work: an accurate
+`Optional[str]` annotation makes the checker correctly flag every unguarded
+`.x` on it. That is the point of typing, not a regression -- but it means the
+leg cannot be introduced as a green gate. It needs either a baseline file with
+incremental burn-down, or `basic` mode first, or per-module opt-in. Decide the
+adoption strategy before adding the workflow, or CI is red on day one and gets
+ignored.
+
+Return annotations are the related gap: **2,402 of 3,367 functions (71%) in
+`dev/embody/Embody` have none** (measured the same day). Mechanical inference is
+unsafe, so this is per-module work with the checker running -- i.e. the same
+project as the leg above.
 
 ### W7 -- C8 scanner parity
 
