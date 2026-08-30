@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.5-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.7-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-65-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -207,6 +207,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.2.7**: **The skills once-over** -- the shipped AI guidance is correct again (a literal `${ROWS}` placeholder, a frontmatter-less skill, 7 missing tool-catalog parameters -- all fixed), the always-loaded rules stop restating what the on-demand skills own (`td-python.md` 245 -> 194 lines, one canonical copy per mechanism), and the workflow skills now ship to every skills-capable client: Codex, Gemini CLI, Cursor, and Antigravity share one `.agents/skills/` folder beside Claude Code and OpenCode's `.claude/skills/`. **4,257 tests** (140 suites).
 - **6.2.5**: **The TDXN review, fixed** -- a snapshot `export_network` no longer deletes the COMP's tracked file or repoints its row; dirty detection now covers everything the export writes (DAT text, storage, dock, `allowCooking`, new custom pars, COMP connectors), so `execute_python` edits are autosaved; the autosave sweep rotates and prunes dead baselines instead of starving every root past slot 60. Plus `enable`/`enableExpr` and alpha-0 annotations round-trip, `inf` in storage no longer aborts an export, the C1 clipboard hash uses one canonical rule on both sides with a shared corpus, and every committed TDXN document validates against the shipped schema in CI. **4,256 tests** (140 suites).
 - **6.2.4**: **Type hints are a shipped practice** -- `td-python.md` (deployed into every project) now says to annotate every `def`'s arguments and return, why `x: str = None` must be `Optional[str]`, that TD's own classes are the types, and how to check softly (pyright `basic` behind a baseline); `create_extension` and `/create-extension` generate a typed skeleton. The soft half of what Function Store asked for in issue #94, beside the `opex(...).asType(..., checkType=True)` runtime half. **4,241 tests** (139 suites).
 - **6.2.3**: **The exporter's tracking hook was the third `externalizations.tsv` restamp path** -- `_trackTDNExport` ran after every export, skipped or not, and stamped the row by index, so a skipped autosave checkpoint of Embody's own COMP still dirtied the table. Verified by forcing a dirty fingerprint: drain runs, export skipped, row unchanged. **4,241 tests** (139 suites).

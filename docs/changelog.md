@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.2.7
+
+The skills once-over: what the AI guidance ships is now correct, deduplicated, and served to every skills-capable client. (v6.2.6 was a version-bump-only save, never published.)
+
+- **Shipped-broken guidance fixed**: a literal `${ROWS}` placeholder in the deployed MCP tool catalog, a skill with no frontmatter (`build-ui`), one with two frontmatter blocks (`release`), 7 missing catalog parameters (including the `override` the gating docs tell agents to pass), and the two host-only `convoy_lifecycle_*` tools now documented as such.
+- **Always-on rules deduplicated**: the storage/Dependency material lived in three places and the threading rule verbatim in two; canonical copies now live in the on-demand skills (`/parameter-design`, `/td-api-reference`) and `td-python.md` keeps tables and pointers (245 -> 194 lines). Also kills the rule's incorrect "cannot store operator references" claim.
+- **Skills for Codex, Gemini CLI, and Cursor**: all three read `.agents/skills/` (verified against vendor docs), the folder already written for Antigravity -- their registry rows now declare it, so one copy on disk serves every skills-capable client; `AGENTS.md` tells non-Claude agents where the skills live and `get_guidance` remains the path for clients with no skills folder. **4,257 tests** (140 suites).
+
 ## v6.2.5
 
 The TDXN review's findings, fixed: three data-loss shapes the format's own tests never reached, and the engine around the serializer brought in line with what the serializer writes.

@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
-build: 1172
-generator: Embody/6.2.5
+build: 1173
+generator: Embody/6.2.7
 td_build: 099.2025.33070
-source_file: Embody-6.308.toe
-exported_at: '2026-08-30T16:47:15Z'
+source_file: Embody-6.310.toe
+exported_at: '2026-08-30T19:51:58Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -902,7 +902,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.2.5
+      value: 6.2.7
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -1040,7 +1040,7 @@ annotations:
   title: Externalization Tracking
   text: Master tracking table for all externalized operators. Managed exclusively by Embody — never edit directly.
   position: [-250, -50]
-  size: [223, 279]
+  size: [223, 292]
   color: [0.18, 0.22, 0.28]
   opacity: 0.9
 - name: annotation_unit_tests
