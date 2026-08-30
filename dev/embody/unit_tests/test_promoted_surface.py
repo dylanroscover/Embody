@@ -24,6 +24,13 @@ import re
 import unittest
 from pathlib import Path
 
+# Dual-tier base. In TD the runner instantiates test classes with a
+# sandbox kwarg that plain unittest.TestCase rejects, so the whole suite
+# errored out in-TD and had only ever run under pytest. conftest supplies
+# a stand-in with the same asserts off-TD.
+runner_mod = op.unit_tests.op('TestRunnerExt').module
+EmbodyTestCase = runner_mod.EmbodyTestCase
+
 REPO = Path(__file__).resolve().parents[3]
 EMBODY_DIR = REPO / "dev" / "embody"
 CALLER_INDEX = REPO / "docs" / "reports" / "issue-94-caller-index.json"
@@ -136,7 +143,7 @@ def _all_members(cls_name):
     return set()
 
 
-class TestPromotedSurfaceCeiling(unittest.TestCase):
+class TestPromotedSurfaceCeiling(EmbodyTestCase):
     """The public surface may shrink. It may not grow by accident."""
 
     def test_A01_every_class_within_its_ceiling(self):
@@ -173,7 +180,7 @@ class TestPromotedSurfaceCeiling(unittest.TestCase):
             .format({c: slack[c] for c in stale}))
 
 
-class TestNamespaceCollisions(unittest.TestCase):
+class TestNamespaceCollisions(EmbodyTestCase):
     """Co-mounted extensions share one COMP namespace."""
 
     def test_B01_co_mounted_classes_do_not_collide(self):
@@ -194,7 +201,7 @@ class TestNamespaceCollisions(unittest.TestCase):
             "silently unreachable.".format("; ".join(clashes)))
 
 
-class TestDocumentedApiIsPromoted(unittest.TestCase):
+class TestDocumentedApiIsPromoted(EmbodyTestCase):
     """Anything we told users to call must still be callable."""
 
     _PATTERN = re.compile(r"\bop\.Embody\.([A-Z]\w*)")
@@ -209,7 +216,8 @@ class TestDocumentedApiIsPromoted(unittest.TestCase):
                 paths = [root]
             elif root.is_dir():
                 paths = [p for p in root.rglob("*.md")
-                         if "worktrees" not in p.parts]
+                         if "worktrees" not in p.parts
+                         and p.name != "changelog.md"]
             else:
                 continue
             for p in paths:
@@ -234,7 +242,7 @@ class TestDocumentedApiIsPromoted(unittest.TestCase):
             "project -- still has the old name.".format(", ".join(missing)))
 
 
-class TestInvisibleCallSites(unittest.TestCase):
+class TestInvisibleCallSites(EmbodyTestCase):
     """Callers that live only in .toe DAT text, from the WP0 caller index."""
 
     def _index(self):
@@ -265,7 +273,7 @@ class TestInvisibleCallSites(unittest.TestCase):
             "just a dead button.".format("; ".join(sorted(broken))))
 
 
-class TestStringNamedAttributes(unittest.TestCase):
+class TestStringNamedAttributes(EmbodyTestCase):
     """Attribute names written as STRINGS survive no rename.
 
     Wave 4b-2 renamed 24 class constants and updated every attribute access --
@@ -306,7 +314,7 @@ class TestStringNamedAttributes(unittest.TestCase):
             "value silently.".format("; ".join(missing)))
 
 
-class TestReceiverReachability(unittest.TestCase):
+class TestReceiverReachability(EmbodyTestCase):
     """A demoted member is unreachable ON THE COMP, only through .ext.
 
     The other tests here ask whether a name resolves SOMEWHERE. This one asks
@@ -365,7 +373,7 @@ class TestReceiverReachability(unittest.TestCase):
             .format("; ".join(offenders)))
 
 
-class TestSourceTextAssertions(unittest.TestCase):
+class TestSourceTextAssertions(EmbodyTestCase):
     """Tests that slice Embody's own source on a 'def Name' literal.
 
     This is the SILENT half of the rename problem. `src.split('def Foo', 1)[1]`
@@ -406,7 +414,7 @@ class TestSourceTextAssertions(unittest.TestCase):
             .format("; ".join(missing)))
 
 
-class TestToolbarActionsResolve(unittest.TestCase):
+class TestToolbarActionsResolve(EmbodyTestCase):
     """toolbar_config.tsv dispatches by NAME through getattr."""
 
     CONFIG = (REPO / "dev" / "embody" / "Embody" / "toolbar"

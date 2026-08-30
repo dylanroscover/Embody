@@ -339,7 +339,11 @@ class EmbodyExt:
     # Bumping it (or changing any dep below) re-stamps the spec, and
     # _environmentNeedsInstall then auto-upgrades every existing venv on its
     # next Start -- users never rebuild a venv by hand.
-    _MCP_MIN_VERSION = '2.0.0'
+    # 2.1.1 verified 2026-08-29 in a throwaway venv: mcp.server.mcpserver
+    # (MCPServer, Image) and mcp.server.transport_security
+    # (TransportSecuritySettings) all import, and MCPServer still takes
+    # the name + version kwargs EnvoyExt passes.
+    _MCP_MIN_VERSION = '2.1.1'
 
     # The venv machinery lives in mod.embody_pyenv (extracted 2026-08-19;
     # one module owns spec building, uv invocation, stamping, wiring, the

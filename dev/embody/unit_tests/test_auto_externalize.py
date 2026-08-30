@@ -169,7 +169,7 @@ class TestAutoExternalize(EmbodyTestCase):
     # --- method surface + param contract ---
 
     def test_methods_exist(self):
-        self.assertTrue(hasattr(self.embody_ext, 'AutoExternalizeNewOp'))
+        self.assertTrue(hasattr(self.embody_ext, 'autoExternalizeNewOp'))
         self.assertTrue(hasattr(self.embody_ext, '_autoExternalizeTagFor'))
         self.assertTrue(hasattr(self.embody_ext, '_scheduleAutoExternalizeFlush'))
 

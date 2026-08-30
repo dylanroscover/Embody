@@ -166,12 +166,37 @@ class TestSmokeRelease(EmbodyTestCase):
 
     def test_promoted_methods_exist(self):
         """Key promoted methods are callable on the Embody COMP."""
-        for method_name in ['Update', 'Save', 'Verify', 'Reset']:
+        for method_name in ['Update', 'Save']:
             method = getattr(self.embody, method_name, None)
             self.assertIsNotNone(method,
                 f'Promoted method {method_name} missing')
             self.assertTrue(callable(method),
                 f'{method_name} should be callable')
+
+    def test_demoted_wiring_still_resolves_through_ext(self):
+        """WP4 moved the wiring off the COMP; it must still be reachable.
+
+        Verify, Reset and UninstallHandler used to be promoted and are
+        asserted here because the release build is where a broken demotion
+        would actually bite -- a parameter pulse reaching a name that no
+        longer resolves fails silently inside a callback.
+        """
+        ext = self.embody.ext.Embody
+        for method_name in ['verify', 'reset', 'uninstallHandler',
+                            'updateHandler', 'saveTDN', 'dirtyCount']:
+            method = getattr(ext, method_name, None)
+            self.assertIsNotNone(
+                method, f'{method_name} unreachable on the extension')
+            self.assertTrue(callable(method), f'{method_name} not callable')
+
+    def test_demoted_wiring_is_not_on_the_comp(self):
+        """The point of the demotion: these must NOT be promoted any more."""
+        for method_name in ['Verify', 'Reset', 'UninstallHandler',
+                            'UpdateHandler', 'SaveTDN', 'DirtyCount']:
+            self.assertIsNone(
+                getattr(self.embody, method_name, None),
+                f'{method_name} is still promoted on the COMP -- the '
+                f'surface grew back')
 
     def test_log_method_works(self):
         """Log method executes without error."""
@@ -215,7 +240,7 @@ class TestSmokeRelease(EmbodyTestCase):
         self.assertIsNotNone(dis, 'Disable param missing')
         self.assertGreater(un.order, dis.order,
             'Uninstall should be ordered after Disable on the Embody page')
-        for method_name in ['UninstallHandler', 'Uninstall', 'PreviewUninstall']:
+        for method_name in ['Uninstall', 'PreviewUninstall']:
             method = getattr(self.embody, method_name, None)
             self.assertIsNotNone(method,
                 f'Promoted method {method_name} missing from the release build')
