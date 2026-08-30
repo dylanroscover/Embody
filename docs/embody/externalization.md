@@ -82,7 +82,7 @@ COMPs can also be externalized using the **TDXN strategy** instead of `.tox`. Th
 
     Two internal identifiers deliberately still read `tdn` and always will: the `strategy` column in `externalizations.tsv`, and the operator tag. They are not user-facing names, and changing them would orphan every tracked row and tagged COMP in every existing project.
 
-See [TDXN Format](../tdn/index.md) for format details, and ["Why TDXN"](#why-tdxn) below for the concrete wins.
+See [TDXN Format](../tdxn/index.md) for format details, and ["Why TDXN"](#why-tdxn) below for the concrete wins.
 
 ### TOX vs TDXN: pick by what you want from the file
 
@@ -212,7 +212,7 @@ The preference is stored in the **Content Safety** parameter (`Tdndatsafety`) an
     To avoid this prompt entirely, either enable **Embed DATs in TDNs** / **Embed Storage in TDNs** (stores content directly in the `.tdxn` file) or externalize your DATs with Embody tags before saving.
 
 !!! warning "Locked TOPs, CHOPs, and SOPs lose their frozen data"
-    TDXN cannot store frozen pixel, channel, or geometry data. If your network contains locked non-DAT operators, their lock flag is preserved but their content will be **empty after reload** when using Roundtrip mode. Use **TOX strategy** instead of TDXN for COMPs that contain locked TOPs, CHOPs, or SOPs. See [Lock Flag Limitation](../tdn/specification.md#lock-flag-limitation) for details.
+    TDXN cannot store frozen pixel, channel, or geometry data. If your network contains locked non-DAT operators, their lock flag is preserved but their content will be **empty after reload** when using Roundtrip mode. Use **TOX strategy** instead of TDXN for COMPs that contain locked TOPs, CHOPs, or SOPs. See [Lock Flag Limitation](../tdxn/specification.md#lock-flag-limitation) for details.
 
     The save-time warning covers only locked operators the TDXN export itself serializes. Locked content inside a **nested externalization boundary** — a child COMP with its own TOX or TDXN tag, or an exclude-tagged subtree — is that boundary's own concern and does not trigger the parent's warning: a nested TOX-strategy COMP preserves its locked content in its own `.tox`, which is exactly the recommended remedy.
 
@@ -382,7 +382,7 @@ When a TDXN export encounters a TD palette COMP (e.g. `abletonLink`, Widget comp
 
 Per-COMP stored decisions take precedence over the project-wide par, so you can mix (most COMPs auto-use the par value; specific COMPs can override). To reset a stored decision, call `op('/path/to/palette_comp').unstore('_tdn_palette_handling')`.
 
-Detection details and the shipped palette catalog are documented in [TDXN Palette Clones](../tdn/specification.md#palette-clones).
+Detection details and the shipped palette catalog are documented in [TDXN Palette Clones](../tdxn/specification.md#palette-clones).
 
 ## Resetting
 

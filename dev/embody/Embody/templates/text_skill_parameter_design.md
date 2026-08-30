@@ -302,4 +302,4 @@ default block count is *probed* from a throwaway instance rather than assumed to
 be 1, so a sequence sitting below its type default still exports its full block
 list and the shrink survives reimport; and blocks are created in import Phase 2.5,
 before Phase 3 sets parameters, so the block parameters exist before anything
-writes to them. Full detail: `docs/tdn/specification.md`.
+writes to them. Full detail: `docs/tdxn/specification.md`.

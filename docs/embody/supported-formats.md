@@ -27,7 +27,7 @@ The following DAT types can be externalized:
 | COMPs | `.tox`, `.tdxn` |
 | DATs | `.py`, `.json`, `.xml`, `.html`, `.glsl`, `.frag`, `.vert`, `.txt`, `.md`, `.rtf`, `.csv`, `.tsv`, `.dat` |
 
-`.tdxn` is a YAML document as of v2.0 (a strict JSON superset; legacy JSON `.tdn` files still import). See the [TDXN Specification](../tdn/specification.md).
+`.tdxn` is a YAML document as of v2.0 (a strict JSON superset; legacy JSON `.tdn` files still import). See the [TDXN Specification](../tdxn/specification.md).
 
 Networks externalized before Embody 6.1 carry the `.tdn` extension. Both are read, written, and round-tripped indefinitely -- Embody keeps writing whichever extension a COMP already uses, and only a *new* externalization mints `.tdxn`, so a project can hold a mix. In `externalizations.tsv` the `strategy` column reads `tdn` for both; that token is an internal identifier and is deliberately unchanged by the rename.
 

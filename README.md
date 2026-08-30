@@ -29,7 +29,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 **Convoy** — *outward velocity.* Convoy-enabled Embody nodes on a trusted LAN discover, inspect, and control each other — one AI session relaying builds, test runs, saves, screenshots, and restarts to every machine in the room. A small per-user background app keeps each node reachable even while TouchDesigner is closed. [Convoy guide](https://dylanroscover.github.io/Embody/convoy/)
 
-**[TDXN](https://dylanroscover.github.io/Embody/tdn/)** — *the substrate that makes it all possible.* TouchDesigner networks exported as human-readable YAML. The format is what lets your AI agent understand what's on the screen, what lets you diff one attempt against another, and what lets a network reconstruct itself from text on the next project open. TDXN is what makes the rest of this possible.
+**[TDXN](https://dylanroscover.github.io/Embody/tdxn/)** — *the substrate that makes it all possible.* TouchDesigner networks exported as human-readable YAML. The format is what lets your AI agent understand what's on the screen, what lets you diff one attempt against another, and what lets a network reconstruct itself from text on the next project open. TDXN is what makes the rest of this possible.
 
 ![Embody Manager UI](docs/assets/embody-screenshot.png)
 
@@ -117,7 +117,7 @@ This is the substrate. Every other capability — AI-driven building, version co
 - **Current COMP**: `ctrl + alt + e`
 - **Via Envoy**: `export_network` / `import_network` MCP tools
 
-See the [full TDXN specification](https://dylanroscover.github.io/Embody/tdn/specification/) for format details, import process, and round-trip guarantees.
+See the [full TDXN specification](https://dylanroscover.github.io/Embody/tdxn/specification/) for format details, import process, and round-trip guarantees.
 
 ---
 
@@ -207,6 +207,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.2.8**: **TDXN finishes its rename** -- the docs section moves from `/tdn/` to `/tdxn/` with permanent redirects at the old URLs; every repo, skill, and embody.tools reference follows. The schema file's name/`$id`, the `strategy` token, and `read_tdn`/`diff_tdn` stay, deliberately. **4,257 tests** (140 suites).
 - **6.2.7**: **The skills once-over** -- the shipped AI guidance is correct again (a literal `${ROWS}` placeholder, a frontmatter-less skill, 7 missing tool-catalog parameters -- all fixed), the always-loaded rules stop restating what the on-demand skills own (`td-python.md` 245 -> 194 lines, one canonical copy per mechanism), and the workflow skills now ship to every skills-capable client: Codex, Gemini CLI, Cursor, and Antigravity share one `.agents/skills/` folder beside Claude Code and OpenCode's `.claude/skills/`. **4,257 tests** (140 suites).
 - **6.2.5**: **The TDXN review, fixed** -- a snapshot `export_network` no longer deletes the COMP's tracked file or repoints its row; dirty detection now covers everything the export writes (DAT text, storage, dock, `allowCooking`, new custom pars, COMP connectors), so `execute_python` edits are autosaved; the autosave sweep rotates and prunes dead baselines instead of starving every root past slot 60. Plus `enable`/`enableExpr` and alpha-0 annotations round-trip, `inf` in storage no longer aborts an export, the C1 clipboard hash uses one canonical rule on both sides with a shared corpus, and every committed TDXN document validates against the shipped schema in CI. **4,256 tests** (140 suites).
 - **6.2.4**: **Type hints are a shipped practice** -- `td-python.md` (deployed into every project) now says to annotate every `def`'s arguments and return, why `x: str = None` must be `Optional[str]`, that TD's own classes are the types, and how to check softly (pyright `basic` behind a baseline); `create_extension` and `/create-extension` generate a typed skeleton. The soft half of what Function Store asked for in issue #94, beside the `opex(...).asType(..., checkType=True)` runtime half. **4,241 tests** (139 suites).

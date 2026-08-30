@@ -1,6 +1,6 @@
 # The Collection
 
-The [Collection](https://embody.tools/collection) is a gallery of **Specimens** — transparent TouchDesigner networks shared as [TDXN](../tdn/index.md). Every card is a real network you can read, inspect, and reuse; nothing is an opaque binary.
+The [Collection](https://embody.tools/collection) is a gallery of **Specimens** — transparent TouchDesigner networks shared as [TDXN](../tdxn/index.md). Every card is a real network you can read, inspect, and reuse; nothing is an opaque binary.
 
 ## Browse & filter
 

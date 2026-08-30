@@ -125,7 +125,7 @@ TDN_VERSION = '2.0'  # was '1.5'
 #   and safe to delete by our own docs. It is now _BACKUP_DIR
 #   ('.embody_backup'), format-neutral because it holds .tdn.bak and
 #   .tdxn.bak simultaneously and always will.
-#   See docs/tdn/specification.md.
+#   See docs/tdxn/specification.md.
 TDN_FILE_SUFFIX = '.tdxn'
 TDN_FILE_SUFFIXES = ('.tdxn', '.tdn')
 TDN_FORMAT = 'tdxn'

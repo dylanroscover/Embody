@@ -67,7 +67,7 @@ Dual-thread design: worker thread runs MCP server (no TD imports), main thread e
 
 ### TDN Network Format
 
-YAML-based on-disk format (v2.0; legacy JSON imports still read) for representing TD networks as diffable text. Non-default parameters only, expression shorthand (`=` prefix), type defaults, parameter templates. Full spec: `docs/tdn/specification.md`
+YAML-based on-disk format (v2.0; legacy JSON imports still read) for representing TD networks as diffable text. Non-default parameters only, expression shorthand (`=` prefix), type defaults, parameter templates. Full spec: `docs/tdxn/specification.md`
 
 ## Extension Referencing
 
@@ -97,4 +97,4 @@ op.Embody.ext.Embody.getExternalizedOps(COMP)   # opFamily is REQUIRED
 - **TD Wiki**: https://docs.derivative.ca/Main_Page
 - **Skill prerequisites**: `rules/skill-prerequisites.md` (always loaded) is the authoritative load-this-skill-first table
 - **Tests**: Use the `/run-tests` skill for running and writing tests
-- **TDN Spec**: See `docs/tdn/specification.md` for the full format specification
+- **TDN Spec**: See `docs/tdxn/specification.md` for the full format specification

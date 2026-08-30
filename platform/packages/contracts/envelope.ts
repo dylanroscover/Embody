@@ -31,7 +31,7 @@ export interface EmbodyTdnEnvelope {
    * "same content still on the clipboard" and is debounced).
    */
   copy_id?: string;
-  /** The full TDXN network dict. Schema: docs/tdn/specification.md (contract C7). */
+  /** The full TDXN network dict. Schema: docs/tdxn/specification.md (contract C7). */
   tdn: Record<string, unknown>;
 }
 

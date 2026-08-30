@@ -43,7 +43,7 @@ Embody is four tools working together — *lateral velocity*, *forward velocity*
 
     TouchDesigner networks exported as human-readable YAML. The format is what lets your AI agent see what's on screen, what lets you diff one attempt against another, and what lets a network rebuild itself from text. TDXN is what makes the rest of this possible.
 
-    [:octicons-arrow-right-24: Learn about TDXN](tdn/index.md)
+    [:octicons-arrow-right-24: Learn about TDXN](tdxn/index.md)
 
 </div>
 

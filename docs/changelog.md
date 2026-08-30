@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.2.8
+
+TDXN finishes its rename: the docs section moves from `/tdn/` to `/tdxn/`.
+
+- **Docs URLs say TDXN now**: `docs/tdn/` -> `docs/tdxn/` (spec, schema, import-export, examples), with permanent redirects at every old `/tdn/...` URL so published links keep working; every reference in the repo, README, CONTRIBUTING, shipped skills, and embody.tools follows. Deliberately unchanged: `tdn.schema.yaml`'s filename and `$id` (a published editor contract), the `strategy` token, the `read_tdn`/`diff_tdn` tool names, and legacy `.tdn` files themselves.
+
 ## v6.2.7
 
 The skills once-over: what the AI guidance ships is now correct, deduplicated, and served to every skills-capable client. (v6.2.6 was a version-bump-only save, never published.)
@@ -1477,7 +1483,7 @@ The on-disk `.tdn` format graduates to **TDN v2.0: YAML**. Networks now serializ
 
 ### Docs
 
-- The [TDN Specification](tdn/specification.md), [format overview](tdn/index.md), [examples](tdn/examples.md), [import/export](tdn/import-export.md), [schema guide](tdn/schema.md), and [supported formats](embody/supported-formats.md) are rewritten for v2.0 YAML, with back-compatibility, literal-block `dat_content`, chomping, and boilerplate-omission documented. `tdn.schema.json` validates the parsed structure, identical for YAML and JSON sources.
+- The [TDN Specification](tdxn/specification.md), [format overview](tdxn/index.md), [examples](tdxn/examples.md), [import/export](tdxn/import-export.md), [schema guide](tdxn/schema.md), and [supported formats](embody/supported-formats.md) are rewritten for v2.0 YAML, with back-compatibility, literal-block `dat_content`, chomping, and boilerplate-omission documented. `tdn.schema.json` validates the parsed structure, identical for YAML and JSON sources.
 
 ## v6.0.11
 

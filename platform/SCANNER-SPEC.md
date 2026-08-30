@@ -8,7 +8,7 @@ produce the SAME verdict + counts on the shared fixtures in `platform/packages/s
 see plan-embody-tools-platform.md section 10. ASCII only.
 
 ## Input + bounds (DoS-safe)
-- Input: a parsed TDXN dict (schema: docs/tdn/specification.md, docs/tdn.schema.json - contract C7).
+- Input: a parsed TDXN dict (schema: docs/tdxn/specification.md, docs/tdn.schema.json - contract C7).
 - Hard bounds BEFORE deep scan: reject if serialized size > 5 MB; cap AST recursion depth (Python
   `ast.parse` then a bounded NodeVisitor); cap total operators scanned. Exceeding a bound -> verdict
   `blocked` with a `size`/`depth` finding (never hang or crash the worker/import).

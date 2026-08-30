@@ -1,7 +1,7 @@
 """
 Test suite: every committed TDXN document validates against the shipped schema.
 
-docs/tdn.schema.yaml is contract C7 -- docs/tdn/schema.md tells users to wire
+docs/tdn.schema.yaml is contract C7 -- docs/tdxn/schema.md tells users to wire
 it into their editor. Until 2026-08-30 nothing ever ran it: the exporter had
 grown annotation `backAlpha`/`titleHeight`/`bodyFontSize` and custom-par
 `sequence` fields that the schema rejected (additionalProperties: false), so

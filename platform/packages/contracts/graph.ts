@@ -1,7 +1,7 @@
 // FROZEN CONTRACT C6 - the normalized graph the tdn-viewer renders.
 // `parseTDN(tdnDict)` (packages/tdn-viewer) produces this; the React Flow backend consumes it.
 // TDXN already carries absolute positions + input-index connections, so NO layout engine is
-// needed - this is pure draw-from-data. Source fields: docs/tdn/specification.md (C7). ASCII only.
+// needed - this is pure draw-from-data. Source fields: docs/tdxn/specification.md (C7). ASCII only.
 
 export type RGB = [number, number, number]; // each channel 0..1
 

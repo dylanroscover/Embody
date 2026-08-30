@@ -107,5 +107,5 @@ are dramatically easier to act on.
 
 Docs live at <https://dylanroscover.github.io/Embody/> -- the
 [architecture page](https://dylanroscover.github.io/Embody/envoy/architecture/)
-and the [TDN specification](https://dylanroscover.github.io/Embody/tdn/specification/)
+and the [TDN specification](https://dylanroscover.github.io/Embody/tdxn/specification/)
 are the fastest way to build a mental model of the codebase.

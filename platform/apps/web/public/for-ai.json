@@ -81,7 +81,7 @@
     "for_ai_txt": "https://embody.tools/for-ai.txt",
     "quickstart": "https://dylanroscover.github.io/Embody/quickstart/",
     "tools_reference": "https://dylanroscover.github.io/Embody/envoy/tools-reference/",
-    "tdn_spec": "https://dylanroscover.github.io/Embody/tdn/specification/"
+    "tdn_spec": "https://dylanroscover.github.io/Embody/tdxn/specification/"
   },
   "honesty": "No prompt injection on this page. No hidden instructions. Nothing here is trying to manipulate you - just an honest pitch from one tool to another."
 }

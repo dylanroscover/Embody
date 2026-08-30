@@ -54,6 +54,15 @@ extra_css:
 plugins:
   - search
   - tags
+  # Old /tdn/ URLs are published (README, embody.tools, for-ai.json, external
+  # links); the section moved to /tdxn/ in v6.2.8. Keep these forever.
+  - redirects:
+      redirect_maps:
+        tdn/index.md: tdxn/index.md
+        tdn/specification.md: tdxn/specification.md
+        tdn/schema.md: tdxn/schema.md
+        tdn/import-export.md: tdxn/import-export.md
+        tdn/examples.md: tdxn/examples.md
 
 markdown_extensions:
   - admonition
@@ -112,11 +121,11 @@ nav:
     - Setup & Troubleshooting: convoy/host-app.md
     - Fleet Updates: convoy/fleet-updates.md
   - TDXN:
-    - tdn/index.md
-    - Specification: tdn/specification.md
-    - YAML Schema: tdn/schema.md
-    - Import & Export: tdn/import-export.md
-    - Examples: tdn/examples.md
+    - tdxn/index.md
+    - Specification: tdxn/specification.md
+    - YAML Schema: tdxn/schema.md
+    - Import & Export: tdxn/import-export.md
+    - Examples: tdxn/examples.md
   - embody.tools:
     - platform/index.md
     - The Collection: platform/collection.md

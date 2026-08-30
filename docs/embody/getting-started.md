@@ -26,7 +26,7 @@ If your project is inside a git repository, Envoy automatically adds the followi
 | `CrashAutoSave*` | TouchDesigner crash auto-save files |
 | `.venv/` | The project's shared [Python environment](python-environment.md) (auto-built; machine-local) |
 | `.mcp.json` | MCP client config (auto-generated per machine) |
-| `.embody_backup/`<br>`.tdn_backup/` | Rotated crash-recovery copies (`.bak`/`.bak2`) of externalized network files — see [Read, Import & Export](../tdn/import-export.md#crash-safety-and-embody_backup). Called `.tdn_backup/` before v6.1.6; an existing one is still read, never moved. |
+| `.embody_backup/`<br>`.tdn_backup/` | Rotated crash-recovery copies (`.bak`/`.bak2`) of externalized network files — see [Read, Import & Export](../tdxn/import-export.md#crash-safety-and-embody_backup). Called `.tdn_backup/` before v6.1.6; an existing one is still read, never moved. |
 | `opencode.json` | OpenCode client config (embeds absolute venv/bridge paths, so it's machine-specific) |
 | `**/.embody/*` | Envoy runtime files (instance registry, bridge, cache). Depth-agnostic, so a `.toe` in a repo subfolder is covered too |
 | `!**/.embody/project.json` | Un-ignores the committed project metadata file (the `td_build` pin is machine-local in `.embody/local.json` now) |
