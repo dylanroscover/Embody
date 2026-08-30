@@ -12,11 +12,23 @@ import re
 # trusted code. An extension resolving through one is NOT disabled -- but only because
 # community opshortcut registration is stripped below, so these shortcuts cannot be
 # hijacked to point at attacker code.
-_TD_PALETTE_REF = re.compile(r"\bop\.TD[A-Z]\w*")
+# STRICT full-match, never a substring search. `search()` on this pattern was a
+# working bypass (found 2026-08-30 by the C8 parity corpus): any object string
+# CONTAINING op.TD<Name> anywhere was trusted, so
+#   op('./Evil').module.Evil(me)  # op.TDFunctions
+# read as TD palette code -- scanner reported extensions:0 AND safe_import left
+# the extension ENABLED on import. A dead `if True else op.TDModules` branch did
+# the same. Only a bare dotted op.TD<Name> path, optionally called with (me),
+# is trusted now; anything with a comment, conditional, quote or call argument
+# is foreign by construction.
+_TD_PALETTE_REF = re.compile(
+    r"op\.TD[A-Z]\w*(?:\.\w+)*(?:\(\s*me\s*\))?")
 
 
 def _is_td_palette_ref(text):
-    return isinstance(text, str) and bool(_TD_PALETTE_REF.search(text))
+    if not isinstance(text, str):
+        return False
+    return _TD_PALETTE_REF.fullmatch(text.strip()) is not None
 
 
 EXECUTE_DAT_TYPES = {

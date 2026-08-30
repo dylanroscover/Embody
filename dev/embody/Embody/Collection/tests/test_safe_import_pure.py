@@ -233,6 +233,36 @@ class TestPaletteTrust(unittest.TestCase):
         self.assertEqual(summary["global_shortcuts_stripped"], 1)
         self.assertNotIn("opshortcut", inert["operators"][0].get("parameters", {}))
 
+    # The palette-trust check was a SUBSTRING search until 2026-08-30, so any
+    # object string merely CONTAINING op.TD<Name> was trusted. Both payloads
+    # below then reported extensions:0 AND survived make_inert with the
+    # extension still enabled -- attacker code that runs on import. Found by the
+    # C8 parity corpus. Trust is a strict full match now.
+    BYPASS_COMMENT = "op('./Evil').module.Evil(me)  # op.TDFunctions"
+    BYPASS_BRANCH = "op('./Evil').module.Evil(me) if True else op.TDModules"
+
+    def test_palette_substring_in_a_comment_is_not_trusted(self):
+        t = self._comp_with_ext(self.BYPASS_COMMENT)
+        self.assertEqual(scanner.scan_tdn(t)["counts"]["extensions"], 1)
+        _, summary = safe_import.make_inert(t, is_pure_expr=PURE)
+        self.assertEqual(summary["extensions_disabled"], 1)
+
+    def test_palette_substring_in_a_dead_branch_is_not_trusted(self):
+        t = self._comp_with_ext(self.BYPASS_BRANCH)
+        self.assertEqual(scanner.scan_tdn(t)["counts"]["extensions"], 1)
+        _, summary = safe_import.make_inert(t, is_pure_expr=PURE)
+        self.assertEqual(summary["extensions_disabled"], 1)
+
+    def test_genuine_palette_refs_stay_trusted(self):
+        """The hardening must not break real palette components."""
+        for obj in ("op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
+                    "op.TDModules.mod.TDFunctions"):
+            with self.subTest(obj=obj):
+                t = self._comp_with_ext(obj)
+                self.assertEqual(scanner.scan_tdn(t)["counts"]["extensions"], 0)
+                _, summary = safe_import.make_inert(t, is_pure_expr=PURE)
+                self.assertEqual(summary["extensions_disabled"], 0)
+
     def test_scoped_parentshortcut_is_kept(self):
         node = tdn([{"name": "c", "type": "baseCOMP",
                      "parameters": {"parentshortcut": "Scene"}}])

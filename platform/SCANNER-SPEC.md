@@ -80,7 +80,12 @@ known gap can never go quiet.
    pre-filter with the Embody side authoritative -- and say so wherever users read the
    capability summary.
 
-2. `extension_td_palette_trusted` -- POLICY. `scanner.py` exempts an extension whose object
+2. `extension_td_palette_trusted` -- POLICY (and it hid a real bypass, fixed 2026-08-30).
+   The carve-out itself was matched with `re.search`, so ANY object string merely
+   containing `op.TD<Name>` was trusted -- `op('./Evil').module.Evil(me)  # op.TDFunctions`
+   reported `extensions: 0` AND survived `safe_import.make_inert` with the extension still
+   ENABLED. Now a strict full match. The remaining disagreement is the narrow, legitimate
+   one: `scanner.py` exempts an extension whose object
    resolves through a TD palette shortcut (`_is_td_palette_ref`, "TD's own trusted code").
    `scanner-ts` has no such carve-out. The `extensions` surface above says plainly "Count each
    extension-bearing COMP" with no exemption, so `scanner-ts` matches the letter of this spec

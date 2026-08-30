@@ -128,7 +128,17 @@ _WINDOWS_ABS_RE = re.compile(r"^[A-Za-z]:[/\\]")
 # that resolves through one of these is TD's own trusted code, NOT a stranger's --
 # safe_import strips community opshortcut registration so these shortcuts cannot be
 # hijacked to point at attacker code.
-_TD_PALETTE_REF = re.compile(r"\bop\.TD[A-Z]\w*")
+# STRICT full-match, never a substring search. `search()` on this pattern was a
+# working bypass (found 2026-08-30 by the C8 parity corpus): any object string
+# CONTAINING op.TD<Name> anywhere was trusted, so
+#   op('./Evil').module.Evil(me)  # op.TDFunctions
+# read as TD palette code -- scanner reported extensions:0 AND safe_import left
+# the extension ENABLED on import. A dead `if True else op.TDModules` branch did
+# the same. Only a bare dotted op.TD<Name> path, optionally called with (me),
+# is trusted now; anything with a comment, conditional, quote or call argument
+# is foreign by construction.
+_TD_PALETTE_REF = re.compile(
+    r"op\.TD[A-Z]\w*(?:\.\w+)*(?:\(\s*me\s*\))?")
 
 
 class _ScanState:
@@ -807,7 +817,9 @@ def _is_path_param_name(name):
 
 
 def _is_td_palette_ref(text):
-    return isinstance(text, str) and bool(_TD_PALETTE_REF.search(text))
+    if not isinstance(text, str):
+        return False
+    return _TD_PALETTE_REF.fullmatch(text.strip()) is not None
 
 
 def _sequence_has_extension(ext_sequence):
