@@ -375,7 +375,12 @@ The `custom_pars` object maps page names to arrays of parameter definitions. Unl
     `Running on port 9872` is machine state, not authored config, and
     would otherwise churn in version control on every export. Companion
     registry `_TDN_VALUE_OMIT_PARS` drops the `value` key of
-    machine-written metadata stamps (definitions still ship). Expression
+    machine-written metadata stamps (definitions still ship). The same
+    registry also holds a few **user preferences** whose live value is
+    restored per machine from `.embody/config.json` rather than from the
+    file -- `Convoyenable`, `Clipboardautopaste`, `Filecleanup`,
+    `Toxdropexpr` -- so a receipt or a released `.tox` never carries one
+    developer's (or the test runner's) setting into every project. Expression
     and bind values (the `=`/`~` shorthand) are never replaced. A
     registered parameter **sequence** exports no block values; its block
     count ships only when it differs from the type default. User COMPs
