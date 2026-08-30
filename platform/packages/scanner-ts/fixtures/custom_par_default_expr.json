@@ -1,7 +1,9 @@
 {
-  "name": "extension_td_palette_trusted",
-  "why": "An extension resolving through one of TD's OWN global shortcuts (an allowlist probed on 2025.33070: TDModules, TDResources, TDDialogs, TDAnnotate, TDTox, TDUpdater) is TD's palette code, not a danger surface -- it must not be counted. Both scanners carry the same list; community paste strips opshortcut on every path, so a pasted network cannot register one of these names itself.",
-  "surfaces": [],
+  "name": "custom_par_default_expr",
+  "why": "A custom parameter DEFINITION carrying an expression in its default. safe_import neutralizes default/menuSource, so the scanner must see them too; scanner-ts scanned only value/values (issue #94 review).",
+  "surfaces": [
+    "file_read_exprs"
+  ],
   "tdn": {
     "format": "tdn",
     "version": "1.4",
@@ -18,12 +20,12 @@
       {
         "name": "host",
         "type": "baseCOMP",
-        "sequences": {
-          "ext": [
+        "custom_pars": {
+          "Custom": [
             {
-              "object": "op.TDModules.mod.TDFunctions",
-              "name": "TDF",
-              "promote": true
+              "name": "Path",
+              "style": "Str",
+              "default": "=open('secret.txt').read()"
             }
           ]
         }
@@ -31,10 +33,10 @@
     ]
   },
   "expect_py": {
-    "verdict": "clean",
+    "verdict": "flagged",
     "counts": {
       "execute_dats": 0,
-      "file_read_exprs": 0,
+      "file_read_exprs": 1,
       "web_ops": 0,
       "extensions": 0,
       "storage_payloads": 0,
@@ -44,10 +46,10 @@
     }
   },
   "expect_ts": {
-    "verdict": "clean",
+    "verdict": "flagged",
     "counts": {
       "execute_dats": 0,
-      "file_read_exprs": 0,
+      "file_read_exprs": 1,
       "web_ops": 0,
       "extensions": 0,
       "storage_payloads": 0,

@@ -6890,28 +6890,19 @@ class EmbodyExt:
 
     def setupBuildParameters(self, oper: COMP, build_page: Any, build_num: int, touch_build: Union[str, int]) -> None:
         """Setup build tracking parameters on a COMP."""
-        # Build Number
-        # 'is None' checks throughout: truthiness on a Par EVALUATES it, so
-        # a user par named 'Build' holding 0 (or a broken expression) would
-        # wrongly append a duplicate (or raise) under 'if not par'.
-        build_par = next((p for p in oper.customPars if p.name == 'Build'), None)
-        if build_par is None:
-            build_par = build_page.appendInt('Build', label='Build Number')
-            build_par.readOnly = True
+        # Get-or-create through embody_pardef (issue #94, WP5): the schema
+        # (label, readOnly) is re-asserted on every call; the value is the
+        # build's, written below. These are Embody-owned stamps, not user
+        # settings, so assigning .val here is correct.
+        ensure = mod.embody_pardef.ensureCustomPar
+        build_par = ensure(oper, build_page, 'Build', 'Int',
+                           label='Build Number', readOnly=True)
         build_par.val = build_num
-
-        # Date
-        date_par = next((p for p in oper.customPars if p.name == 'Date'), None)
-        if date_par is None:
-            date_par = build_page.appendStr('Date', label='Build Date')
-            date_par.readOnly = True
+        date_par = ensure(oper, build_page, 'Date', 'Str',
+                          label='Build Date', readOnly=True)
         date_par.val = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-
-        # Touch Build
-        touch_par = next((p for p in oper.customPars if p.name == 'Touchbuild'), None)
-        if touch_par is None:
-            touch_par = build_page.appendStr('Touchbuild', label='Touch Build')
-            touch_par.readOnly = True
+        touch_par = ensure(oper, build_page, 'Touchbuild', 'Str',
+                           label='Touch Build', readOnly=True)
         touch_par.val = touch_build
 
     def _reconstructAboutPage(self, comp: 'COMP', comp_path: str) -> None:

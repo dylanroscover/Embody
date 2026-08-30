@@ -2,8 +2,8 @@
 
 Embody dev only -- not in `_TEMPLATE_MAP_RULES`, so it has no shipped template counterpart and is never copied into user projects.
 Some test suites exercise Embody operations that mutate the **entire live
-project**, not an isolated sandbox: `Disable()`, `ExternalizeProject()` /
-`_externalize_project_silent()`, and `Reset()` all iterate `ext.root` and touch
+project**, not an isolated sandbox: `Disable()`, `ext.Embody.externalizeProject()` /
+`_externalize_project_silent()`, and `ext.Embody.reset()` all iterate `ext.root` and touch
 every tracked operator project-wide. `Disable()` in particular `unlink()`s every
 tracked file and clears the externalizations table; a follow-on externalize
 re-tags and re-writes every COMP.
@@ -25,7 +25,7 @@ unlinks). Recovery required rebuilding the specimen `.tdxn` from the live COMPs.
 ## The rules
 
 1. **Tag destructive suites.** Any suite that calls `Disable`,
-   `ExternalizeProject` / `_externalize_project_silent`, or `Reset` on `ext.root`
+   `externalizeProject` / `_externalize_project_silent`, or `reset` on `ext.root`
    (the live project) sets a class attribute `DESTRUCTIVE = True`, with a comment
    explaining what it mutates.
 

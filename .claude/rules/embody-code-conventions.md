@@ -113,7 +113,7 @@ is committed. Re-export it explicitly:
 
     save_externalization(op_path='/embody/Embody/tagger')
 
-Never `ExternalizeProject` for this (see `destructive-tests.md`). Verified
+Never `externalizeProject` (the Externalize Full Project pulse) for this (see `destructive-tests.md`). Verified
 2026-08-29: three live parexec DATs renamed in WP4 wave 4d left `tagger.tdn`
 holding the old method names through a full save, until the per-COMP
 re-export.

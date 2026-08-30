@@ -188,7 +188,7 @@ class EnvoyLifecycleContractBase(EmbodyTestCase):
         self._patch(self.envoy, '_configureGitattributes', lambda *a, **k: None)
         self._patch(self.embody_ext, '_upgradeEnvoy', lambda *a, **k: None)
         self._patch(self.embody_ext, '_findProjectRoot', lambda *a, **k: 'no-git')
-        self._patch(self.envoy, 'ThreadManager', _FakeThreadManager(enqueue))
+        self._patch(self.envoy, '_threadManager', _FakeThreadManager(enqueue))
 
 
 class TestH1StartupStatusTruth(EnvoyLifecycleContractBase):
@@ -262,9 +262,9 @@ class TestH1StartupStatusTruth(EnvoyLifecycleContractBase):
         self.assertTrue(self.envoy._starting,
                         'starting window should be open after _continueStart')
         # Start() must short-circuit while starting.
-        before = len(self.envoy.ThreadManager.enqueued)
+        before = len(self.envoy._threadManager.enqueued)
         self.envoy.Start()
-        after = len(self.envoy.ThreadManager.enqueued)
+        after = len(self.envoy._threadManager.enqueued)
         self.assertEqual(before, after,
                          'Start() must be a no-op while a start is in progress')
 

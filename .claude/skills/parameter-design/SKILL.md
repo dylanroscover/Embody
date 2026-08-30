@@ -19,22 +19,33 @@ def ensureCustomPage(comp, name):
             return page
     return comp.appendCustomPage(name)
 
-def ensureCustomPar(comp, page, name, style):
-    """Get-or-create one custom par. Returns the Par, never a ParGroup."""
-    existing = comp.par[name]          # custom par names are a FLAT per-COMP
-    if existing is not None:           # namespace -- probe the COMP, not the page
-        if existing.style != style:
-            raise ValueError(
-                'par %s exists with style %s, declared %s' % (name, existing.style, style))
-        return existing
-    getattr(page, 'append' + style)(name)
-    return comp.par[name]              # re-read: append*() returns a ParGroup
+def ensureCustomPar(comp, page, name, style, **attrs):
+    """Get-or-create one custom par: the Par, or the ParGroup for a tuplet."""
+    # Probe the WHOLE COMP by tupletName. Names are a flat per-COMP namespace,
+    # and a multi-value style (RGB, XYZ) is stored as <name>r/<name>g/<name>b,
+    # so a probe by .name never finds it and append*() (replace=True) would
+    # re-create it on every reinit.
+    found = [p for p in comp.customPars if p.tupletName == name]
+    if not found:
+        getattr(page, 'append' + style)(name)
+        found = [p for p in comp.customPars if p.tupletName == name]
+    elif found[0].style not in STYLE_FAMILY.get(style, (style,)):
+        raise ValueError('par %s is %s, declared %s -- refusing to replace it'
+                         % (name, found[0].style, style))
+    for p in found:                          # symmetric: schema attrs re-applied
+        for key, value in attrs.items():     # on every reinit; the user's state
+            if key not in ('val', 'expr', 'bindExpr', 'mode', 'export'):
+                setattr(p, key, value)       # is never touched -- and a typo RAISES
+    return found[0] if len(found) == 1 else found[0].parGroup
+
+# TD reports a tuplet's style by family: RGB reads 'RGBA', XY/XYZ read 'XYZW'.
+STYLE_FAMILY = {'RGB': ('RGB', 'RGBA'), 'XY': ('XY', 'XYZW'), 'XYZ': ('XYZ', 'XYZW')}
 ```
 
 Four rules that make it safe:
 
 - **Probe the whole COMP, not the page.** Custom parameter names are a flat per-COMP namespace, and `append*()` defaults to `replace=True` -- a page-scoped probe will happily destroy a same-named par living on another page.
-- **Re-read after appending.** `append*()` returns a **ParGroup**; `comp.par[name]` returns the `Par`.
+- **Re-read after appending, by `tupletName`.** `append*()` returns a **ParGroup**, and a multi-value style is stored as component pars (`Tintr`/`Tintg`/`Tintb`) whose `tupletName` is the name you declared -- `comp.par['Tint']` is `None`. Embody ships this exact helper as `op.Embody.op('embody_pardef').module.ensureCustomPar`.
 - **Never `destroy()` on style drift.** `Par.destroy()` takes the user's value, expressions and exports with it. Report the mismatch and refuse; removal is a separate, deliberate act.
 - **Apply declared attributes symmetrically.** If you set `min` when creating, set it when the par already exists too, or a schema change never reaches existing installs.
 
@@ -242,7 +253,7 @@ p.startSection = True
 ## Sequence Parameters
 
 Resizable parameter blocks (glslTOP uniforms, constantCHOP channels, mathmixPOP
-combines, and custom sequences since 2023.10000). Function Store's note on issue
+combines, and custom sequences). Function Store's note on issue
 #94 -- "building sequence pars takes a bit more thinking than it should" -- is
 fair, and it is because three separate things are easy to get wrong.
 

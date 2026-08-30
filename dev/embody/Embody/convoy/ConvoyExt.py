@@ -205,7 +205,7 @@ class ConvoyExt:
         # Resolve the system COMP on the main thread exactly once. The worker
         # receives only Queue/Event/plain-callable objects and never touches
         # this TD object.
-        self.ThreadManager = op.TDResources.ThreadManager
+        self._threadManager = op.TDResources.ThreadManager
         # Worker handoff slot (a plain attribute -- never a TD object).
         # None = in flight; dict (with '_gen') = published result.
         self._result = None
@@ -1370,11 +1370,11 @@ class ConvoyExt:
             'queue': command_queue, 'shutdown': shutdown, 'ready': ready,
             'token': token, 'state': state, 'task': None, 'thread': None,
         }
-        task = self.ThreadManager.TDTask(
+        task = self._threadManager.TDTask(
             target=ConvoyExt._wakeListenerLoop,
             args=(command_queue, shutdown, ready, token, state,
                   self._WAKE_PACKET_MAX, self._WAKE_SOCKET_TIMEOUT_S))
-        thread = self.ThreadManager.EnqueueTask(task, standalone=True)
+        thread = self._threadManager.EnqueueTask(task, standalone=True)
         if thread is None:
             shutdown.set()
             state['error'] = 'ThreadManager refused the wake listener task'
@@ -1980,11 +1980,11 @@ class ConvoyExt:
                 # handle still proves EnqueueTask accepted this task.
                 return True
 
-        task = self.ThreadManager.TDTask(
+        task = self._threadManager.TDTask(
             target=ConvoyExt._workerLoop,
             args=(self._worker_queue, self._worker_shutdown,
                   self._worker_generation, self._WORKER_IDLE_S))
-        thread = self.ThreadManager.EnqueueTask(task, standalone=True)
+        thread = self._threadManager.EnqueueTask(task, standalone=True)
         if thread is None:
             return False
         self._worker_task = task
@@ -2038,13 +2038,13 @@ class ConvoyExt:
         accepted = 0
         for _worker_index in range(worker_count):
             try:
-                task = self.ThreadManager.TDTask(
+                task = self._threadManager.TDTask(
                     target=_sibling_batch_target_worker,
                     args=(client, shared, context['convoy_id'],
                           context['controller_id'], request, work_queue,
                           result_queue, start_event, cancel_event,
                           gate_event, deadline, progress))
-                thread = self.ThreadManager.EnqueueTask(
+                thread = self._threadManager.EnqueueTask(
                     task, standalone=True)
             except Exception:
                 thread = None

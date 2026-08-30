@@ -24,7 +24,18 @@ Walk every operator (and nested COMP) in the TDXN. Classify:
    AST references file/IO/dynamic-exec names.
 3. `web_ops` - operators of IO/network types (see denylist) present anywhere.
 4. `extensions` - COMPs declaring extensions (extension object + backing DAT auto-init runs
-   module-level / onInitTD code). Count each extension-bearing COMP.
+   module-level / onInitTD code). Count each extension-bearing COMP ONCE, whichever way it is
+   declared: `sequences.ext` blocks OR the flat `ext<N>object` / `ext<N>name` / `ext<N>promote`
+   parameters (every baseCOMP carries one such block by default, and TDXN import sets any
+   parameter by name -- a plain-string `ext0object` is not `=`-prefixed, so the expression scan
+   never saw it; found 2026-08-29). A block with a non-string object, or a name and no object,
+   is foreign. ONE carve-out, identical on both sides: an object that is a bare dotted path
+   through one of TD's OWN global shortcuts (`op.TDModules`, `op.TDResources`, `op.TDDialogs`,
+   `op.TDAnnotate`, `op.TDTox`, `op.TDUpdater` -- the ALLOWLIST probed on 2025.33070, optionally
+   called with `(me)`) is TD palette code and is NOT counted. It is an allowlist, not a `TD*`
+   prefix: a community network can name its own shortcut `TDEvil`. The carve-out is sound only
+   because community paste strips `opshortcut` on EVERY path (live and inert, nodes and
+   `type_defaults`), so a pasted network can never register one of those names itself.
 5. `storage_payloads` - non-empty `storage` / `startup_storage` on any operator (restored on import;
    can carry pickled/callable state).
 6. `denylisted_types` - operators whose type is on the IO/network denylist (overlaps web_ops; this
@@ -38,8 +49,15 @@ Walk every operator (and nested COMP) in the TDXN. Classify:
    import side warns. Scored as `flagged` (not `blocked`) at the scanner level so own-network
    round-trips still import.
 
-## AST allowlist (for dat_content AND every =/~ expression)
-`ast.parse` the source, then a NodeVisitor FLAGS any of:
+## Source scan: a pure-value ALLOWLIST for expressions, a DENYLIST for dat_content
+Two different rules, and the heading used to claim both were an allowlist.
+
+**Every `=`/`~` expression (Python side)** is admitted only if it is a PROVABLY PURE value
+expression (`is_pure_value_expression`: par reads, `absTime`, `math.*`, `Par.eval()`,
+arithmetic); anything not recognized counts. That is an allowlist and fails closed.
+
+**`dat_content` (both sides), and every expression on the TS side,** is a DENYLIST:
+`ast.parse` the source (TS: identifier tokens), then FLAG any of:
 `eval`, `exec`, `compile`, `__import__`, `import`/`from ... import`, attribute/calls into
 `os`, `sys`, `subprocess`, `socket`, `shutil`, `pathlib`, `open`, `requests`/`urllib`,
 TD side-effect calls (`op(...).run`, `.save`, `.store`, `mod`, `tdu`), and dynamic attribute access
@@ -62,12 +80,22 @@ family, `moviefileinTOP`/`moviefileoutTOP`, `folderDAT`, `touchinTOP`/`touchoutT
   malicious-by-construction per the deny rules the platform enforces at SUBMIT (server may block;
   the Embody side never auto-runs - it presents the capability summary and default-inert imports).
 
+## Which side is authoritative
+`scanner-ts` is a COARSE PRE-FILTER. It gates SUBMIT and stamps the stored verdict, but it
+cannot parse Python, so its expression scan is a denylist and `=op('x').destroy()` scores
+`clean` there (divergence 1 below). The Embody side (`scanner.py` + `safe_import`) runs on
+EVERY paste, holds the allowlist, and is the side whose verdict decides live-vs-inert. A
+server `clean` is therefore never a safety claim to a user: the only capability summary a user
+reads is the TD paste prompt, computed by `scanner.py`. Amended 2026-08-29 (issue #94 review);
+closing divergence 1 for real means giving the TS side a recognizer for the same pure-value
+grammar that fails closed on anything it cannot parse -- not a longer denylist.
+
 ## Known divergences (measured 2026-08-29, the first time the corpus was executed)
 
-The shared fixtures now exist and BOTH suites run them. These two do not agree yet, and each
-is declared in its fixture's `divergence` field. The ledger check fails in BOTH directions --
-a new disagreement fails, and so does fixing one of these without deleting its note -- so a
-known gap can never go quiet.
+The shared fixtures now exist and BOTH suites run them. Each open divergence is declared in
+its fixture's `divergence` field. The ledger check fails in BOTH directions -- a new
+disagreement fails, and so does fixing one of these without deleting its note -- so a known
+gap can never go quiet.
 
 1. `expr_impure_side_effect` (`=op('target').destroy()`) -- ARCHITECTURAL.
    `scanner.py` `ast.parse`s the expression and applies an ALLOWLIST
@@ -80,19 +108,20 @@ known gap can never go quiet.
    pre-filter with the Embody side authoritative -- and say so wherever users read the
    capability summary.
 
-2. `extension_td_palette_trusted` -- POLICY (and it hid a real bypass, fixed 2026-08-30).
-   The carve-out itself was matched with `re.search`, so ANY object string merely
-   containing `op.TD<Name>` was trusted -- `op('./Evil').module.Evil(me)  # op.TDFunctions`
-   reported `extensions: 0` AND survived `safe_import.make_inert` with the extension still
-   ENABLED. Now a strict full match. The remaining disagreement is the narrow, legitimate
-   one: `scanner.py` exempts an extension whose object
-   resolves through a TD palette shortcut (`_is_td_palette_ref`, "TD's own trusted code").
-   `scanner-ts` has no such carve-out. The `extensions` surface above says plainly "Count each
-   extension-bearing COMP" with no exemption, so `scanner-ts` matches the letter of this spec
-   and `scanner.py` carries an undocumented carve-out. Either document the carve-out here and
-   port it, or drop it from `scanner.py`.
+2. `extension_td_palette_trusted` -- CLOSED 2026-08-29. It hid two real bypasses on the way:
+   the carve-out was first a `re.search` substring match (a comment containing `op.TDFunctions`
+   trusted a foreign extension), then a `TD[A-Z]\w*` PREFIX match (`op.TDEvil.mod.X.X(me)` was
+   trusted, and the network could declare `opshortcut: TDEvil` itself -- the strip that made the
+   carve-out safe ran only inside `make_inert`, which a clean verdict skipped). The carve-out is
+   now the documented allowlist under surface 4, ported to `scanner-ts`, and `opshortcut` is
+   stripped on every paste path. The fixture's expectations agree and its note is gone.
+   Three more divergences found by review the same day were closed with fixtures rather than
+   declared: script OPs (`script_op_top`), custom-par `default`/`menuSource` expressions
+   (`custom_par_default_expr`) and non-Python DAT content (`dat_non_python_glsl`).
 
 ## Cross-impl agreement
 `scanner-ts` and `scanner.py` run the SAME fixtures in CI and must return identical `verdict` +
-`counts`. Fixtures include evasion cases (code hidden in an expression, in storage, in a nested
-COMP, via dynamic attr access) - a single-surface scanner that misses these FAILS the suite.
+`counts` (26 fixtures, byte-mirrored between the two directories). Fixtures include evasion
+cases (code hidden in an expression, in storage, in a nested COMP, via dynamic attr access, a
+flat `ext0object`, an attacker-named `TDEvil` shortcut) - a single-surface scanner that misses
+these FAILS the suite.

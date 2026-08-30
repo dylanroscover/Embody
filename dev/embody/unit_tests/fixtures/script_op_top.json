@@ -1,7 +1,9 @@
 {
-  "name": "extension_td_palette_trusted",
-  "why": "An extension resolving through one of TD's OWN global shortcuts (an allowlist probed on 2025.33070: TDModules, TDResources, TDDialogs, TDAnnotate, TDTox, TDUpdater) is TD's palette code, not a danger surface -- it must not be counted. Both scanners carry the same list; community paste strips opshortcut on every path, so a pasted network cannot register one of these names itself.",
-  "surfaces": [],
+  "name": "script_op_top",
+  "why": "A Script TOP/CHOP/SOP/DAT runs an authored Python callback on every cook -- an execute surface by TYPE, with no dat_content to scan. scanner.py counted it; scanner-ts had no script-op list (issue #94 review).",
+  "surfaces": [
+    "execute_dats"
+  ],
   "tdn": {
     "format": "tdn",
     "version": "1.4",
@@ -16,24 +18,18 @@
     "type": "baseCOMP",
     "operators": [
       {
-        "name": "host",
-        "type": "baseCOMP",
-        "sequences": {
-          "ext": [
-            {
-              "object": "op.TDModules.mod.TDFunctions",
-              "name": "TDF",
-              "promote": true
-            }
-          ]
+        "name": "script1",
+        "type": "scriptTOP",
+        "parameters": {
+          "callbacks": "script1_callbacks"
         }
       }
     ]
   },
   "expect_py": {
-    "verdict": "clean",
+    "verdict": "flagged",
     "counts": {
-      "execute_dats": 0,
+      "execute_dats": 1,
       "file_read_exprs": 0,
       "web_ops": 0,
       "extensions": 0,
@@ -44,9 +40,9 @@
     }
   },
   "expect_ts": {
-    "verdict": "clean",
+    "verdict": "flagged",
     "counts": {
-      "execute_dats": 0,
+      "execute_dats": 1,
       "file_read_exprs": 0,
       "web_ops": 0,
       "extensions": 0,

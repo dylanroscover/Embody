@@ -140,7 +140,7 @@ For app-spawned copies of an externalized master, use a relationship Embody's du
 
 - Only COMPs are excludable. Annotation COMPs are explicitly ineligible.
 - Whole-subtree exclusion only applies to a **direct child** of a TDXN boundary. If you nest an excluded COMP *deeper* (under a non-excluded TDXN COMP), the exclusion tag has no effect at that depth — so instead of dropping it, Embody serializes the excluded child as **ordinary content** (it round-trips and survives strip/reconstruction) and warns at export time that the tag was ignored there. The warning names the intervening COMP(s) to tag, or suggests making it a direct child, if you want the exclusion honored.
-- Exclusion governs the automatic/cascade pipeline. An explicit user export call (`SaveTDN()` directly on an excluded COMP) currently still writes the `.tdxn` — the opt-out applies to cascade, parent inlining, strip, and reconstruction, not to deliberate direct invocation.
+- Exclusion governs the automatic/cascade pipeline. An explicit user export call (`ext.Embody.saveTDN()` directly on an excluded COMP) currently still writes the `.tdxn` — the opt-out applies to cascade, parent inlining, strip, and reconstruction, not to deliberate direct invocation.
 
 ### Excluding a parameter's value (the `tdn_exclude:<par>` tag)
 

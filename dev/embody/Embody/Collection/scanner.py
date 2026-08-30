@@ -137,8 +137,17 @@ _WINDOWS_ABS_RE = re.compile(r"^[A-Za-z]:[/\\]")
 # the same. Only a bare dotted op.TD<Name> path, optionally called with (me),
 # is trusted now; anything with a comment, conditional, quote or call argument
 # is foreign by construction.
+# ALLOWLIST of TD's own global shortcuts, not a prefix: `TD[A-Z]\w*` trusted
+# `op.TDEvil.mod.Payload.Payload(me)` for any name an attacker chose, and a
+# community network can declare `opshortcut: TDEvil` itself (issue #94 review,
+# 2026-08-29). These six are the shortcuts TD 2025.33070 actually registers
+# (probed live: TDModules, TDResources, TDDialogs, TDAnnotate, TDTox,
+# TDUpdater); scanner-ts carries the same list. Extend it only after probing.
+TD_PALETTE_SHORTCUTS = frozenset((
+    "TDModules", "TDResources", "TDDialogs", "TDAnnotate", "TDTox", "TDUpdater",
+))
 _TD_PALETTE_REF = re.compile(
-    r"op\.TD[A-Z]\w*(?:\.\w+)*(?:\(\s*me\s*\))?")
+    r"op\.(TD\w+)(?:\.\w+)*(?:\(\s*me\s*\))?")
 
 
 class _ScanState:
@@ -292,7 +301,7 @@ def _scan_operator_like(op_data, op_path, type_defaults, state):
     _scan_dat_content_ast(op_data, op_path, op_type, params, state)
     _scan_parameters(params, op_path, state)
     _scan_custom_parameters(op_data.get("custom_pars"), op_path, state)
-    _scan_sequences(op_data.get("sequences"), op_path, op_type, state)
+    _scan_sequences(op_data.get("sequences"), op_path, op_type, state, params)
     _scan_storage(op_data, op_path, state)
     _scan_external_refs(op_data, op_path, state)
 
@@ -502,18 +511,23 @@ def _scan_custom_parameter_def(par_def, op_path, state):
             _scan_parameter_value(name, par_def.get(extra), op_path, state)
 
 
-def _scan_sequences(sequences, op_path, op_type, state):
+def _scan_sequences(sequences, op_path, op_type, state, params=None):
+    # One count per extension-bearing COMP, whichever way it is declared.
+    if _is_comp_type(op_type):
+        via_sequence = (isinstance(sequences, dict)
+                        and _sequence_has_extension(sequences.get("ext")))
+        via_flat = _flat_params_declare_extension(params)
+        if via_sequence or via_flat:
+            _add_count(
+                state,
+                op_path,
+                "extensions",
+                "COMP declares one or more extensions",
+                sequences.get("ext") if via_sequence else _flat_extension_blocks(params),
+            )
+
     if not isinstance(sequences, dict):
         return
-
-    if _is_comp_type(op_type) and _sequence_has_extension(sequences.get("ext")):
-        _add_count(
-            state,
-            op_path,
-            "extensions",
-            "COMP declares one or more extensions",
-            sequences.get("ext"),
-        )
 
     for sequence_name, blocks in list(sequences.items()):
         if not isinstance(blocks, list):
@@ -819,7 +833,39 @@ def _is_path_param_name(name):
 def _is_td_palette_ref(text):
     if not isinstance(text, str):
         return False
-    return _TD_PALETTE_REF.fullmatch(text.strip()) is not None
+    match = _TD_PALETTE_REF.fullmatch(text.strip())
+    return match is not None and match.group(1) in TD_PALETTE_SHORTCUTS
+
+
+# Extensions can also be declared FLAT, as ordinary parameters (ext0object /
+# ext0name / ext0promote) rather than under sequences.ext -- every baseCOMP has
+# one such block by default, and TDXN import sets any parameter by name. A
+# plain-string ext0object is not `=`-prefixed, so the expression scan never
+# saw it: a foreign extension imported LIVE with verdict clean (issue #94
+# review, 2026-08-29).
+_EXT_PARAM_RE = re.compile(r"^ext(\d+)(object|name|promote)$")
+
+
+def _flat_extension_blocks(params):
+    """{index: {'object': ..., 'name': ..., 'promote': ...}} from flat params."""
+    blocks = {}
+    if not isinstance(params, dict):
+        return blocks
+    for key, value in params.items():
+        if not isinstance(key, str):
+            continue
+        m = _EXT_PARAM_RE.match(key)
+        if m:
+            blocks.setdefault(m.group(1), {})[m.group(2)] = value
+    return blocks
+
+
+def _flat_params_declare_extension(params):
+    """True iff a FOREIGN extension is declared through ext<N>* parameters."""
+    for block in _flat_extension_blocks(params).values():
+        if _sequence_has_extension([block]):
+            return True
+    return False
 
 
 def _sequence_has_extension(ext_sequence):
@@ -839,6 +885,8 @@ def _sequence_has_extension(ext_sequence):
         if isinstance(obj, str) and obj.strip():
             if not _is_td_palette_ref(obj):
                 return True
+        elif obj is not None and not isinstance(obj, str):
+            return True  # a non-string object is unverifiable -> foreign
         elif isinstance(block.get("name"), str) and block.get("name").strip():
             return True  # a name with no verifiable trusted object -> foreign
     return False

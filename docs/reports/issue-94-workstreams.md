@@ -37,7 +37,7 @@ names -- so the blast radius is schema accuracy, not user permissions.
 Remaining beyond Optional: `TYPE_CHECKING` stubs, an `embody_types.py`, and a
 pyright leg for the Convoy host.
 
-**The pyright leg is a project, not a task -- measured 2026-08-30.** Pyright
+**The pyright leg is a project, not a task -- measured 2026-08-29.** Pyright
 1.1.413 in standard mode on `dev/convoy` alone: **1,039 errors across 78 files**
 in 11s. The distribution says why:
 

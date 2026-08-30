@@ -3,8 +3,8 @@ version: '2.0'
 build: 344
 generator: Embody/6.2.0
 td_build: 099.2025.33070
-source_file: Embody-6.303.toe
-exported_at: '2026-08-30T00:40:54Z'
+source_file: Embody-6.304.toe
+exported_at: '2026-08-30T04:03:56Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -27,6 +27,7 @@ sequences:
     promote: true
   - {}
   - {}
+  - {}
 color: [0.3, 0.5, 0.9]
 tags:
 - tdn
@@ -36,7 +37,7 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 4223
+    rows: 939
     cols: 5
   flags:
   - viewer

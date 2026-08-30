@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
 build: 1165
-generator: Embody/6.2.0
+generator: Embody/6.2.1
 td_build: 099.2025.33070
-source_file: Embody-6.303.toe
-exported_at: '2026-08-30T00:55:50Z'
+source_file: Embody-6.304.toe
+exported_at: '2026-08-30T04:03:59Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -835,7 +835,7 @@ operators:
       - Always Keep Files
       - Always Delete Files
       help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-      value: delete
+      value: keep
     - name: Toxdropexpr
       style: Menu
       label: Dropped .tox Expression
@@ -850,7 +850,6 @@ operators:
       - Always Clean
       - Always Ignore
       help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
-      value: ignore
     - name: Tdndatsafety
       style: Menu
       label: Content Safety
@@ -899,7 +898,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.2.0
+      value: 6.2.1
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -974,6 +973,7 @@ operators:
       promote: true
     - {}
     - {}
+    - {}
   position: [400, 102]
   size: [160, 130]
   color: [0.3, 0.5, 0.9]
@@ -1000,7 +1000,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 314
+    rows: 313
     cols: 11
   flags:
   - viewer

@@ -271,5 +271,95 @@ class TestPaletteTrust(unittest.TestCase):
         self.assertEqual(inert["operators"][0]["parameters"]["parentshortcut"], "Scene")
 
 
+class TestIssue94ReviewBypasses(unittest.TestCase):
+    """Two bypasses that reached LIVE import with verdict clean (2026-08-29).
+
+    Everything here goes through plan_community_paste -- the exact function
+    CollectionExt calls -- because the second bypass lived in the gate itself:
+    a clean verdict skipped make_inert, and make_inert was the only place the
+    opshortcut strip ran.
+    """
+    EVIL = {"name": "Evil", "type": "textDAT",
+            "dat_content": "class Evil:\n    def __init__(self, o):\n        pass\n"}
+
+    def _plan(self, t):
+        return safe_import.plan_community_paste(t, scanner.scan_tdn, PURE)
+
+    def test_flat_ext0object_is_counted_and_disabled(self):
+        t = tdn([{"name": "c", "type": "baseCOMP",
+                  "parameters": {"ext0object": "op('./Evil').module.Evil(me)",
+                                 "ext0promote": True},
+                  "children": [self.EVIL]}])
+        plan = self._plan(t)
+        self.assertEqual(plan["capability"]["counts"]["extensions"], 1)
+        self.assertEqual(plan["mode"], "inert")
+        self.assertEqual(plan["summary"]["extensions_disabled"], 1)
+        params = plan["tdn"]["operators"][0]["parameters"]
+        self.assertNotIn("ext0object", params)
+        self.assertNotIn("ext0promote", params)
+
+    def test_flat_ext_in_type_defaults_is_disabled(self):
+        t = tdn([{"name": "c", "type": "baseCOMP", "children": [self.EVIL]}],
+                type_defaults={"baseCOMP": {"parameters": {
+                    "ext0object": "op('./Evil').module.Evil(me)", "ext0promote": True}}})
+        inert, summary = safe_import.make_inert(t, is_pure_expr=PURE)
+        self.assertEqual(summary["extensions_disabled"], 1)
+        self.assertNotIn("ext0object", inert["type_defaults"]["baseCOMP"]["parameters"])
+
+    def test_attacker_named_td_shortcut_is_not_trusted(self):
+        """op.TDEvil is not in the allowlist: counted, disabled, shortcut gone."""
+        t = tdn([{"name": "c", "type": "baseCOMP",
+                  "parameters": {"opshortcut": "TDEvil"},
+                  "sequences": {"ext": [{"object": "op.TDEvil.mod.Evil.Evil(me)",
+                                         "name": "E", "promote": True}]},
+                  "children": [self.EVIL]}])
+        plan = self._plan(t)
+        self.assertEqual(plan["capability"]["counts"]["extensions"], 1)
+        self.assertEqual(plan["mode"], "inert")
+        self.assertEqual(plan["summary"]["extensions_disabled"], 1)
+        self.assertNotIn("opshortcut", plan["tdn"]["operators"][0]["parameters"])
+
+    def test_live_path_strips_global_shortcuts_too(self):
+        """A CLEAN network still cannot register op.X -- including a real TD name."""
+        t = tdn([{"name": "c", "type": "baseCOMP",
+                  "parameters": {"opshortcut": "TDResources"}}])
+        plan = self._plan(t)
+        self.assertEqual(plan["mode"], "live")
+        self.assertEqual(plan["summary"]["global_shortcuts_stripped"], 1)
+        self.assertNotIn("opshortcut", plan["tdn"]["operators"][0]["parameters"])
+        self.assertIn("opshortcut", t["operators"][0]["parameters"],
+                      "the caller's dict must not be mutated")
+
+    def test_type_defaults_shortcut_is_stripped_on_the_live_path(self):
+        t = tdn([{"name": "c", "type": "baseCOMP"}],
+                type_defaults={"baseCOMP": {"parameters": {"opshortcut": "TDModules"}}})
+        plan = self._plan(t)
+        self.assertEqual(plan["mode"], "live")
+        self.assertNotIn("opshortcut", plan["tdn"]["type_defaults"]["baseCOMP"]["parameters"])
+
+    def test_non_string_extension_object_is_disabled_not_ignored(self):
+        t = tdn([{"name": "c", "type": "baseCOMP",
+                  "sequences": {"ext": [{"object": ["op('./Evil')"], "name": "E",
+                                         "promote": True}]},
+                  "children": [self.EVIL]}])
+        plan = self._plan(t)
+        self.assertEqual(plan["capability"]["counts"]["extensions"], 1)
+        self.assertEqual(plan["summary"]["extensions_disabled"], 1)
+        self.assertEqual(plan["tdn"]["operators"][0]["sequences"]["ext"], [{}])
+
+    def test_genuine_palette_extension_still_imports_live(self):
+        t = tdn([{"name": "c", "type": "annotateCOMP",
+                  "sequences": {"ext": [{"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
+                                         "name": "E", "promote": True}]}}])
+        plan = self._plan(t)
+        self.assertEqual(plan["mode"], "live")
+        self.assertTrue(plan["tdn"]["operators"][0]["sequences"]["ext"][0]["object"])
+
+    def test_the_two_palette_copies_are_identical(self):
+        """scanner.py and safe_import.py each carry the allowlist + regex."""
+        self.assertEqual(scanner.TD_PALETTE_SHORTCUTS, safe_import.TD_PALETTE_SHORTCUTS)
+        self.assertEqual(scanner._TD_PALETTE_REF.pattern, safe_import._TD_PALETTE_REF.pattern)
+
+
 if __name__ == "__main__":
     unittest.main()

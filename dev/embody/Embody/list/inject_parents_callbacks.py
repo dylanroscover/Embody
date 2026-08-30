@@ -44,8 +44,11 @@ def onCook(scriptOp):
 		# DirtyState) badges this node long after the code is fine
 		# (field 2026-08-22).
 		embody_ext = parent.Embody.ext.Embody
+		# String name must track the def: the 4e rename left 'DirtyState'
+		# here, so this read '' for every row and the manager never showed
+		# dirty state (issue #94 review).
 		row['dirty'] = (embody_ext.dirtyState(path)
-			if hasattr(embody_ext, 'DirtyState') else '')
+			if hasattr(embody_ext, 'dirtyState') else '')
 		data_rows[path] = row
 		oper = op(path)
 		if oper and oper.family == 'COMP':

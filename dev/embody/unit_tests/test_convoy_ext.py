@@ -441,7 +441,7 @@ class TestConvoyRegistrations(EmbodyTestCase):
     def test_convoy_uses_one_long_lived_threadmanager_task(self):
         src = self.embody.op('convoy').op('ConvoyExt').text
         self.assertIn('op.TDResources.ThreadManager', src)
-        self.assertIn('self.ThreadManager.TDTask(', src)
+        self.assertIn('self._threadManager.TDTask(', src)
         self.assertIn('standalone=True', src)
         self.assertIn('def _workerLoop(', src)
         self.assertNotIn('threading.Thread(', src,
@@ -641,7 +641,7 @@ class ConvoyExtBase(EmbodyTestCase):
         method = self.convoy_mod.ConvoyExt._runBatchInWorkers.__get__(
             self.convoy, self.convoy_mod.ConvoyExt)
         self._patch(self.convoy, '_runBatchInWorkers', method)
-        self._patch(self.convoy, 'ThreadManager', manager)
+        self._patch(self.convoy, '_threadManager', manager)
         self._patch(self.convoy, '_runInWorker', manager.enqueue_callable)
         return manager
 

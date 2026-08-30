@@ -1,6 +1,6 @@
 {
   "name": "extension_td_palette_trusted",
-  "why": "An extension resolving through a TD palette shortcut is TD's own code, not a danger surface -- it must not be counted.",
+  "why": "An extension resolving through one of TD's OWN global shortcuts (an allowlist probed on 2025.33070: TDModules, TDResources, TDDialogs, TDAnnotate, TDTox, TDUpdater) is TD's palette code, not a danger surface -- it must not be counted. Both scanners carry the same list; community paste strips opshortcut on every path, so a pasted network cannot register one of these names itself.",
   "surfaces": [],
   "tdn": {
     "format": "tdn",
@@ -44,17 +44,16 @@
     }
   },
   "expect_ts": {
-    "verdict": "flagged",
+    "verdict": "clean",
     "counts": {
       "execute_dats": 0,
       "file_read_exprs": 0,
       "web_ops": 0,
-      "extensions": 1,
+      "extensions": 0,
       "storage_payloads": 0,
       "denylisted_types": 0,
       "traversal_paths": 0,
       "external_refs": 0
     }
-  },
-  "divergence": "POLICY. scanner.py exempts extensions resolving through a TD palette shortcut (_is_td_palette_ref: 'TD's own trusted code'); scanner-ts has no such carve-out. SCANNER-SPEC.md says plainly 'Count each extension-bearing COMP' with no exemption, so scanner-ts matches the spec letter and scanner.py carries an undocumented carve-out. Decision needed: document the carve-out in C8 and port it, or drop it from scanner.py."
+  }
 }

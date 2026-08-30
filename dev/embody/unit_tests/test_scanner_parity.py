@@ -111,8 +111,11 @@ class TestScannerParityCorpus(EmbodyTestCase):
             if not fx_name.endswith('.json'):
                 continue
             with self.subTest(fixture=fx_name):
-                a = io.open(os.path.join(_FIXTURES, fx_name), encoding='utf-8').read()
-                b = io.open(os.path.join(_TS_FIXTURES, fx_name), encoding='utf-8').read()
+                # Bytes, not text: universal newlines would hide a CRLF drift.
+                with open(os.path.join(_FIXTURES, fx_name), 'rb') as fa:
+                    a = fa.read()
+                with open(os.path.join(_TS_FIXTURES, fx_name), 'rb') as fb:
+                    b = fb.read()
                 self.assertEqual(a, b, '%s drifted between the two fixture '
                                        'directories' % fx_name)
         ours = {n for n in os.listdir(_FIXTURES) if n.endswith('.json')}

@@ -76,6 +76,33 @@ const DANGEROUS_IDENTIFIERS = new Set([
 
 const FILE_EXPR_IDENTIFIERS = new Set(["open", "os", "pathlib", "read", "file"]);
 
+// Script OPs run an authored Python callback on cook (mirror of
+// scanner.py _SCRIPT_OP_TYPES). Counted under execute_dats.
+const SCRIPT_OP_TYPES = new Set(["scriptdat", "scriptchop", "scripttop", "scriptsop"]);
+
+// DAT file extensions whose content is NOT Python (mirror of
+// scanner.py _NON_PYTHON_DAT_EXTENSIONS): a GLSL pixel DAT is specimen
+// content, not an execution surface, and token-scanning it as Python
+// false-flags every shader.
+const NON_PYTHON_DAT_EXTENSIONS = new Set([
+  "frag", "vert", "glsl", "comp", "geom", "tesc", "tese", "hlsl", "cg",
+  "txt", "json", "xml", "csv", "tsv", "md", "html", "htm", "css", "js", "yaml", "yml"
+]);
+
+// TD's own global shortcuts -- an ALLOWLIST, mirrored from
+// scanner.py TD_PALETTE_SHORTCUTS (probed on TD 2025.33070). An extension
+// whose object is a bare dotted path through one of these is TD's palette
+// code, not a community surface. A prefix match (`TD\w*`) trusted any name an
+// attacker chose; the parity corpus pins this list on both sides.
+const TD_PALETTE_SHORTCUTS = new Set([
+  "TDModules", "TDResources", "TDDialogs", "TDAnnotate", "TDTox", "TDUpdater"
+]);
+const TD_PALETTE_REF_RE = /^op\.(TD\w+)(?:\.\w+)*(?:\(\s*me\s*\))?$/;
+
+// Extensions can also be declared FLAT as ext<N>object / ext<N>name /
+// ext<N>promote parameters (every baseCOMP has one such block by default).
+const EXT_PARAM_RE = /^ext(\d+)(object|name|promote)$/;
+
 const PATH_PARAM_NAMES = new Set([
   "file",
   "syncfile",
@@ -267,11 +294,21 @@ function scanOperatorLike(
     );
   }
 
+  if (isScriptOpType(opType)) {
+    addCount(
+      state,
+      opPath,
+      "execute_dats",
+      "Script OP runs an authored Python callback on cook",
+      opType
+    );
+  }
+
   scanExecuteDat(opData, opPath, opType, state);
-  scanDatContentTokens(opData, opPath, opType, state);
+  scanDatContentTokens(opData, opPath, opType, params, state);
   scanParameters(params, opPath, state);
   scanCustomParameters(opData.custom_pars, opPath, state);
-  scanSequences(opData.sequences, opPath, opType, state);
+  scanSequences(opData.sequences, opPath, opType, params, state);
   scanStorage(opData, opPath, state);
   scanExternalRefs(opData, opPath, state);
 }
@@ -315,10 +352,12 @@ function scanDatContentTokens(
   opData: TdnRecord,
   opPath: string,
   opType: string,
+  params: TdnRecord,
   state: ScanState
 ): void {
   const content = opData.dat_content;
   if (typeof content !== "string" || !content.trim()) return;
+  if (!datContentIsPython(opType, params)) return;
 
   const result = scanPythonSource(content, false);
   if (!result.flagged) return;
@@ -437,6 +476,14 @@ function scanCustomParameterDef(
     }
   }
 
+  // default / menuSource can also carry expressions -- safe_import
+  // neutralizes them, so the scanner must see them too (mirror of scanner.py).
+  for (const extra of ["default", "menuSource"] as const) {
+    if (Object.prototype.hasOwnProperty.call(parDef, extra)) {
+      scanParameterValue(name, parDef[extra], opPath, state);
+    }
+  }
+
   if (!Array.isArray(parDef.values)) return;
 
   for (const value of parDef.values) {
@@ -451,19 +498,25 @@ function scanSequences(
   sequences: unknown,
   opPath: string,
   opType: string,
+  params: TdnRecord,
   state: ScanState
 ): void {
-  if (!isRecord(sequences)) return;
-
-  if (isCompType(opType) && sequenceHasExtension(sequences.ext)) {
-    addCount(
-      state,
-      opPath,
-      "extensions",
-      "COMP declares one or more extensions",
-      sequences.ext
-    );
+  // One count per extension-bearing COMP, whichever way it is declared.
+  if (isCompType(opType)) {
+    const viaSequence = isRecord(sequences) && sequenceHasExtension(sequences.ext);
+    const viaFlat = flatParamsDeclareExtension(params);
+    if (viaSequence || viaFlat) {
+      addCount(
+        state,
+        opPath,
+        "extensions",
+        "COMP declares one or more extensions",
+        viaSequence && isRecord(sequences) ? sequences.ext : flatExtensionBlocks(params)
+      );
+    }
   }
+
+  if (!isRecord(sequences)) return;
 
   for (const blocks of Object.values(sequences)) {
     if (!Array.isArray(blocks)) continue;
@@ -617,20 +670,71 @@ function isPathParamName(name: unknown): boolean {
   );
 }
 
+function isTdPaletteRef(text: unknown): boolean {
+  if (typeof text !== "string") return false;
+  const match = TD_PALETTE_REF_RE.exec(text.trim());
+  return match !== null && TD_PALETTE_SHORTCUTS.has(match[1] ?? "");
+}
+
+/** True iff a FOREIGN (non-TD-palette) extension is declared (mirror of scanner.py). */
 function sequenceHasExtension(extSequence: unknown): boolean {
   if (!Array.isArray(extSequence)) return false;
 
   for (const block of extSequence) {
     if (!isRecord(block)) continue;
-    for (const key of ["object", "name"] as const) {
-      const value = block[key];
-      if (typeof value === "string" && value.trim()) {
-        return true;
-      }
+    const obj = block.object;
+    if (typeof obj === "string" && obj.trim()) {
+      if (!isTdPaletteRef(obj)) return true;
+    } else if (obj !== undefined && obj !== null && typeof obj !== "string") {
+      return true; // a non-string object is unverifiable -> foreign
+    } else if (typeof block.name === "string" && block.name.trim()) {
+      return true; // a name with no verifiable trusted object -> foreign
     }
   }
 
   return false;
+}
+
+function flatExtensionBlocks(params: TdnRecord): Map<string, TdnRecord> {
+  const blocks = new Map<string, TdnRecord>();
+  for (const [key, value] of Object.entries(params)) {
+    const match = EXT_PARAM_RE.exec(key);
+    const index = match?.[1];
+    const field = match?.[2];
+    if (!index || !field) continue;
+    const block = blocks.get(index) ?? {};
+    block[field] = value;
+    blocks.set(index, block);
+  }
+  return blocks;
+}
+
+function flatParamsDeclareExtension(params: TdnRecord): boolean {
+  for (const block of flatExtensionBlocks(params).values()) {
+    if (sequenceHasExtension([block])) return true;
+  }
+  return false;
+}
+
+function isScriptOpType(opType: string): boolean {
+  return SCRIPT_OP_TYPES.has(typeKey(opType));
+}
+
+/** Mirror of scanner.py _dat_content_is_python. */
+function datContentIsPython(opType: string, params: TdnRecord): boolean {
+  if (isExecuteDatType(opType)) return true;
+  if (typeKey(opType) !== "textdat") return false;
+  const lang = params.language;
+  if (typeof lang === "string" && lang.trim()) {
+    const key = lang.trim().toLowerCase();
+    return key === "python" || key === "py";
+  }
+  const ext = params.extension;
+  if (typeof ext === "string") {
+    const key = ext.trim().replace(/^\.+/, "").toLowerCase();
+    if (NON_PYTHON_DAT_EXTENSIONS.has(key)) return false;
+  }
+  return true; // textDAT default language is Python
 }
 
 function hasStoragePayload(payload: unknown): boolean {

@@ -33,14 +33,11 @@ class CollectionExt:
         the genuinely side-effecting surfaces. The purity predicate is the scanner's
         own is_pure_value_expression, so the verdict and the neutralization agree.
         """
-        tdn = tdn if isinstance(tdn, dict) else {}
         scanner = self.ownerComp.op('scanner').module
         safe_import = self.ownerComp.op('safe_import').module
-        capability = scanner.scan_tdn(tdn)
-        if capability.get('verdict') == 'clean':
-            return {'mode': 'live', 'tdn': tdn,
-                    'capability': capability, 'summary': safe_import._empty_summary()}
-        inert_tdn, summary = safe_import.make_inert(
-            tdn, is_pure_expr=scanner.is_pure_value_expression)
-        return {'mode': 'inert', 'tdn': inert_tdn,
-                'capability': capability, 'summary': summary}
+        # Pure logic lives in safe_import.plan_community_paste so it is tested
+        # off-TD. Global shortcuts are stripped on the LIVE path too: the
+        # palette carve-out is sound only if the pasted network cannot
+        # register an op.TD<Name> itself (issue #94 review).
+        return safe_import.plan_community_paste(
+            tdn, scanner.scan_tdn, scanner.is_pure_value_expression)

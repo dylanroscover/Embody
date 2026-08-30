@@ -4691,7 +4691,7 @@ class EnvoyExt:
         self._crash_trace_f = None                    # open handle to the breadcrumb file
 
         # Get Thread Manager from TDResources
-        self.ThreadManager = op.TDResources.ThreadManager
+        self._threadManager = op.TDResources.ThreadManager
 
         # Shut down any server left over from a previous init cycle.
         # Extensions get re-initialized when TD recompiles externalized code
@@ -4789,13 +4789,13 @@ class EnvoyExt:
         - Multiple rapid reinits
         """
         try:
-            self.ThreadManager.ext.ThreadManagerExt
+            self._threadManager.ext.ThreadManagerExt
         except Exception:
             return
 
         # Log Thread Manager state before cleanup
         thread_info = []
-        for t in self.ThreadManager.ext.ThreadManagerExt.Threads:
+        for t in self._threadManager.ext.ThreadManagerExt.Threads:
             task = getattr(t, 'TDTask', None)
             target = getattr(task, 'target', None) if task else None
             name = getattr(target, '__name__', '?') if target else 'None'
@@ -4807,7 +4807,7 @@ class EnvoyExt:
                 f'{"; ".join(thread_info)}', 'DEBUG')
 
         cleaned = 0
-        for thread in list(self.ThreadManager.ext.ThreadManagerExt.Threads):
+        for thread in list(self._threadManager.ext.ThreadManagerExt.Threads):
             task = getattr(thread, 'TDTask', None)
             if task is None:
                 continue
@@ -4827,21 +4827,21 @@ class EnvoyExt:
             # onDestroyTD already cleaned the previous instance's thread,
             # and self.current_task is None (new task not created yet).
             thread.clean()
-            with self.ThreadManager.ext.ThreadManagerExt.ManagerCondition:
-                if task in self.ThreadManager.ext.ThreadManagerExt.Tasks:
-                    self.ThreadManager.ext.ThreadManagerExt.Tasks.remove(task)
+            with self._threadManager.ext.ThreadManagerExt.ManagerCondition:
+                if task in self._threadManager.ext.ThreadManagerExt.Tasks:
+                    self._threadManager.ext.ThreadManagerExt.Tasks.remove(task)
             cleaned += 1
 
         if cleaned:
             # CRITICAL: sync the Runningthreads parameter so EnqueueTask
             # sees the actual thread count, not the stale pre-cleanup value.
-            self.ThreadManager.par.Runningthreads.val = len(
-                self.ThreadManager.ext.ThreadManagerExt.Threads)
+            self._threadManager.par.Runningthreads.val = len(
+                self._threadManager.ext.ThreadManagerExt.Threads)
             self._log(
                 f'Cleaned {cleaned} stale Envoy thread(s) -- '
-                f'{len(self.ThreadManager.ext.ThreadManagerExt.Threads)}'
+                f'{len(self._threadManager.ext.ThreadManagerExt.Threads)}'
                 f' threads remain '
-                f'(capacity: {self.ThreadManager.ext.ThreadManagerExt.MaxNumberOfThreads.eval()})', 'DEBUG')
+                f'(capacity: {self._threadManager.ext.ThreadManagerExt.MaxNumberOfThreads.eval()})', 'DEBUG')
 
     def _forceCloseOldServer(self) -> bool:
         """Force-close a stuck old uvicorn server so the port is freed.
@@ -5519,7 +5519,7 @@ class EnvoyExt:
         sys._envoy_queues = _q_registry
 
         # Create and enqueue a TDTask
-        self.current_task = self.ThreadManager.TDTask(
+        self.current_task = self._threadManager.TDTask(
             target=self._runServer,
             args=(port, self.request_queue, self.response_queue,
                   self.shutdown_event, startup_event, gen),
@@ -5527,7 +5527,7 @@ class EnvoyExt:
             ExceptHook=guarded_error,
             RefreshHook=self._onRefresh
         )
-        thread = self.ThreadManager.EnqueueTask(
+        thread = self._threadManager.EnqueueTask(
             self.current_task, standalone=True)
 
         if thread is None:

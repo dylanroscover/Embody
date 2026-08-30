@@ -199,11 +199,11 @@ parent().MyExtensionProperty if parent().extensionsReady else 0
 
 ## onInitTD and TDXN Import Timing
 
-**Any initialization that sets up state inside a TDXN-strategy COMP will be destroyed when TDXN import runs.** TDXN reconstruction (`ReconstructTDNComps`) calls `ImportNetwork` with `clear_first=True`, which deletes all children and recreates them from the `.tdxn` file. If an extension's `onInitTD` creates operators, sets parameters, stores values, or builds internal state inside a TDXN COMP, that work is wiped out by the import.
+**Any initialization that sets up state inside a TDXN-strategy COMP will be destroyed when TDXN import runs.** TDXN reconstruction (`ext.Embody.reconstructTDNComps`) calls `ImportNetwork` with `clear_first=True`, which deletes all children and recreates them from the `.tdxn` file. If an extension's `onInitTD` creates operators, sets parameters, stores values, or builds internal state inside a TDXN COMP, that work is wiped out by the import.
 
 This applies to:
 
-- **Project open**: `ReconstructTDNComps` runs at frame 60. Extensions inside TDXN COMPs initialize earlier (when the COMP shell is created), so `onInitTD` fires before the import overwrites everything.
+- **Project open**: `ext.Embody.reconstructTDNComps` runs at frame 60. Extensions inside TDXN COMPs initialize earlier (when the COMP shell is created), so `onInitTD` fires before the import overwrites everything.
 - **Ctrl+S / `project.save()`**: The strip/restore cycle deletes children pre-save, then re-imports them post-save. Extensions reinitialize after the restore, but the import may still be completing.
 
 **Rules:**

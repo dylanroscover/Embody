@@ -221,11 +221,15 @@ class ToolbarExt:
 	# -- Action handlers ---------------------------------------------
 
 	def _action_toggle_disable(self):
+		# Tier-2 wiring lives on the extension, not the COMP: TD promotes
+		# only capitalized members, so emb.updateHandler() raises (shipped
+		# broken in 6.2.0 -- wave 4e's sweep matched the literal
+		# parent.Embody.x( shape and missed this alias; issue #94 review).
 		emb = self.ownerComp.parent.Embody
 		if emb.par.Status.eval() == 'Enabled':
-			emb.disableHandler()
+			emb.ext.Embody.disableHandler()
 		else:
-			emb.updateHandler()
+			emb.ext.Embody.updateHandler()
 
 	def _action_toggle_envoy(self):
 		emb = self.ownerComp.parent.Embody

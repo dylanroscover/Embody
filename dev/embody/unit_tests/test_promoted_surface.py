@@ -40,16 +40,10 @@ CALLER_INDEX = REPO / "docs" / "reports" / "issue-94-caller-index.json"
 # fails. Lower a number when you demote; raising one is a deliberate decision
 # to widen the public API and belongs in review, not in a drive-by.
 PROMOTED_CEILING = {
-    # WP4 waves 4e-1/4e-2: 44 methods demoted. The remainder is the
-    # documented op.Embody API plus the 13 tagger/panel handlers whose
-    # only callers live in .toe DAT text (wave 4f), plus Disable and
-    # Externalizations -- both collide with same-named CUSTOM PARAMETERS,
-    # and Externalizations is a @property, so par.Externalizations and
-    # self.Externalizations are indistinguishable to any mechanical rule.
-    # WP4 wave 4f: the last 13 tagger/panel handlers demoted. What remains
-    # is the documented op.Embody API plus Disable and Externalizations,
-    # which collide with same-named CUSTOM PARAMETERS (Externalizations is
-    # a @property, so par.X and self.X are textually identical).
+    # WP4 waves 4e/4f: 57 methods demoted. What remains is the documented
+    # op.Embody API plus Disable and Externalizations, which collide with
+    # same-named CUSTOM PARAMETERS (Externalizations is a @property, so
+    # par.X and self.X are textually identical to any mechanical rule).
     "EmbodyExt": 20,
     # WP4 waves 4b/4b-2: promoted class constants went 79 -> 5. The five that
     # remain are ConvoyExt's HOST_* states, which are DELIBERATELY mirrored as
@@ -68,7 +62,9 @@ PROMOTED_CEILING = {
     # caller was already a file-backed .py using .ext.<Class>., so nothing had
     # to change but the names -- which is exactly why this wave went first.
     "WindowHeaderExt": 0,
-    "EnvoyExt": 5,
+    # WP4 wave 4b-2 demoted READ_ONLY_TOOLS; the four left are the server
+    # lifecycle API: RefreshRegistry, RuntimePort, Start, Stop.
+    "EnvoyExt": 4,
     "ToolbarExt": 0,
     "CollectionExt": 2,
 }
@@ -113,6 +109,35 @@ def _all_promoted():
         for cls, names in _promoted_members(path).items():
             merged.setdefault(cls, set()).update(names)
     return merged
+
+
+def _promoted_instance_attrs():
+    """Capitalized `self.X = ...` assignments, per class.
+
+    TD promotes capitalized MEMBERS, not just class-body names (Extensions
+    wiki: "all its capitalized methods and members are available at the
+    Component level"). `self.ThreadManager = ...` in __init__ put a TD COMP
+    on op.Embody outside every ceiling above (issue #94 review).
+    """
+    out = {}
+    for path in _ext_source_files():
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef) or node.name in NOT_PRODUCT:
+                continue
+            for sub in ast.walk(node):
+                targets = []
+                if isinstance(sub, ast.Assign):
+                    targets = sub.targets
+                elif isinstance(sub, ast.AnnAssign):
+                    targets = [sub.target]
+                for tgt in targets:
+                    if (isinstance(tgt, ast.Attribute)
+                            and isinstance(tgt.value, ast.Name)
+                            and tgt.value.id == "self"
+                            and tgt.attr[:1].isupper()):
+                        out.setdefault(node.name, set()).add(tgt.attr)
+    return out
 
 
 def _all_members(cls_name):
@@ -179,6 +204,17 @@ class TestPromotedSurfaceCeiling(EmbodyTestCase):
             "high-water mark so the net keeps catching regressions."
             .format({c: slack[c] for c in stale}))
 
+    def test_A04_no_capitalized_instance_attribute_is_promoted(self):
+        """`self.Foo = ...` is promoted too, and no ceiling above counts it."""
+        offenders = sorted("{}.{}".format(cls, n)
+                           for cls, names in _promoted_instance_attrs().items()
+                           for n in names)
+        self.assertEqual(
+            offenders, [],
+            "Capitalized instance attributes are promoted onto the COMP outside "
+            "every ceiling: {}. Name them _lowerCamel (they are state, not API)."
+            .format(", ".join(offenders)))
+
 
 class TestNamespaceCollisions(EmbodyTestCase):
     """Co-mounted extensions share one COMP namespace."""
@@ -240,6 +276,46 @@ class TestDocumentedApiIsPromoted(EmbodyTestCase):
             "Documented as op.Embody.X but no longer a member: {}. A user who "
             "ever read these docs -- or a generated rule file in their own "
             "project -- still has the old name.".format(", ".join(missing)))
+
+    # Prose form: `RestoreTOXComps()` in a sentence, no receiver. C01 could not
+    # see these, and eleven survived the 6.2.0 docs (issue #94 review).
+    _PROSE = re.compile(r"`([A-Z]\w*)\(")
+
+    def test_C02_prose_mentions_of_demoted_methods_are_gone(self):
+        defs = set()
+        for path in _ext_source_files():
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef) and node.name not in NOT_PRODUCT:
+                    for item in node.body:
+                        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            defs.add(item.name)
+        roots = [REPO / "docs", REPO / ".claude", REPO / "README.md",
+                 REPO / "CLAUDE.md", REPO / "AGENTS.md",
+                 REPO / "dev" / "embody" / "Embody" / "templates"]
+        stale = []
+        for root in roots:
+            # README's version-history bullets are history, like the changelog.
+            paths = ([root] if root.is_file() and root.name != "README.md" else
+                     [p for p in root.rglob("*.md")
+                      if "worktrees" not in p.parts and "reports" not in p.parts
+                      and p.name not in ("changelog.md", "README.md")]
+                     if root.is_dir() else [])
+            for p in paths:
+                text = p.read_text(encoding="utf-8", errors="replace")
+                for m in self._PROSE.finditer(text):
+                    name = m.group(1)
+                    twin = name[:1].lower() + name[1:]
+                    # Only a name whose lowerCamel twin IS a def and whose
+                    # capitalized form is NOT is a demoted method.
+                    if name not in defs and twin in defs:
+                        stale.append("{}:{} `{}(`".format(
+                            p.relative_to(REPO), text[:m.start()].count("\n") + 1, name))
+        self.assertEqual(
+            stale, [],
+            "Prose still names a demoted method by its old capitalized form: {}. "
+            "Write it as `ext.<Name>.{{lowerCamel}}()` or drop the call form."
+            .format("; ".join(stale)))
 
 
 class TestInvisibleCallSites(EmbodyTestCase):
@@ -313,6 +389,37 @@ class TestStringNamedAttributes(EmbodyTestCase):
             "patch or probe a key nothing reads, so the test passes the wrong "
             "value silently.".format("; ".join(missing)))
 
+    # Product code, CamelCase: `hasattr(ext, 'DirtyState')` guarding a call to
+    # dirtyState() read False for every manager row after wave 4e, so the
+    # manager never showed dirty state again (issue #94 review). F01 scanned
+    # only the test suite and only ALL_CAPS names.
+    _CAMEL = re.compile(
+        r"""(?:setattr|getattr|hasattr)\(\s*[^,()]+,\s*(['"])([A-Z][a-z]\w*)\1""")
+
+    def test_F02_string_named_members_in_product_code_exist(self):
+        members = set()
+        for path in _ext_source_files():
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    members |= _all_members(node.name)
+        stale = []
+        for path in sorted((REPO / "dev" / "embody" / "Embody").rglob("*.py")):
+            if "tests" in path.parts or "worktrees" in path.parts:
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for m in self._CAMEL.finditer(text):
+                name = m.group(2)
+                twin = name[:1].lower() + name[1:]
+                if name not in members and twin in members:
+                    stale.append("{}:{} '{}' (did you mean '{}'?)".format(
+                        path.name, text[:m.start()].count("\n") + 1, name, twin))
+        self.assertEqual(
+            stale, [],
+            "Product code probes a demoted member by its OLD capitalized string: "
+            "{}. hasattr reads False forever and the guarded call silently never "
+            "runs.".format("; ".join(stale)))
+
 
 class TestReceiverReachability(EmbodyTestCase):
     """A demoted member is unreachable ON THE COMP, only through .ext.
@@ -351,10 +458,15 @@ class TestReceiverReachability(EmbodyTestCase):
         unreachable = private - self._COMP_API
         self.assertTrue(promoted, "found no promoted EmbodyExt members -- scan is broken")
 
-        pattern = re.compile(
-            r"\b(?:parent|op)\.Embody\.(" +
-            "|".join(sorted(map(re.escape, unreachable), key=len, reverse=True)) +
-            r")\s*\(")
+        names = "|".join(sorted(map(re.escape, unreachable), key=len, reverse=True))
+        # The COMP can be reached literally (parent.Embody / op.Embody), through
+        # ToolbarExt's `self.embody` property, or through a local alias --
+        # `emb = self.ownerComp.parent.Embody`, `e = parent.Embody`. The first
+        # cut matched only the literal form and passed 11/11 over three
+        # aliased call sites that shipped broken in 6.2.0 (issue #94 review).
+        alias_def = re.compile(
+            r"^\s*(\w+)\s*=\s*(?:[\w.]*\.)?(?:parent|op)\.Embody\s*(?:#.*)?$",
+            re.MULTILINE)
 
         offenders = []
         for path in sorted((REPO / "dev").rglob("*.py")):
@@ -362,6 +474,12 @@ class TestReceiverReachability(EmbodyTestCase):
                     or path.name == Path(__file__).name):
                 continue  # this file QUOTES the pattern in its own docstring
             text = path.read_text(encoding="utf-8", errors="replace")
+            # Code only: a comment explaining the bug must not BE the bug.
+            text = re.sub(r"#[^\n]*", "", text)
+            receivers = {r"(?:parent|op)\.Embody", r"self\.embody"}
+            receivers |= {re.escape(a) for a in alias_def.findall(text)}
+            pattern = re.compile(
+                r"(?<![\w.])(?:" + "|".join(sorted(receivers)) + r")\.(" + names + r")\s*\(")
             for match in pattern.finditer(text):
                 offenders.append("{}:{} {}".format(
                     path.name, text[:match.start()].count("\n") + 1, match.group(1)))

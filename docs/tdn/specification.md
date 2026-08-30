@@ -1012,7 +1012,7 @@ When a parent COMP is exported and a child COMP has its own TDXN externalization
 
 **Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) and marks it with a `_pending_tdn_restore` storage key holding the ref path. [Phase 8.6](#import-process) then imports the referenced `.tdxn` into that shell **in the same import**, re-entering the importer so deeper nesting recurses naturally; an ancestor-chain guard refuses a true ref cycle (`A.tdxn` -> `B.tdxn` -> `A.tdxn`) while two sibling shells pointing at the same file both fill. A nested externalized COMP is therefore never left empty by an import — an empty shell reads as changed content and the next automatic export would overwrite the child's own good `.tdxn`.
 
-Two callers pass `restore_tdn_shells=False` and skip Phase 8.6: **startup reconstruction** (`ReconstructTDNComps`) and the **post-save restore**. Their own depth-sorted loops already import every tracked TDXN COMP exactly once, parents before children, so filling shells inline would import the same files twice. In that mode the markers are only cleared, never acted on.
+Two callers pass `restore_tdn_shells=False` and skip Phase 8.6: **startup reconstruction** (`ext.Embody.reconstructTDNComps`) and the **post-save restore**. Their own depth-sorted loops already import every tracked TDXN COMP exactly once, parents before children, so filling shells inline would import the same files twice. In that mode the markers are only cleared, never acted on.
 
 **Cross-validation**: The `tdn_ref` value is checked against two independent sources:
 
@@ -1048,7 +1048,7 @@ The same ownership principle applies when a child COMP is externalized as `.tox`
 
 **Mutually exclusive with `children`**: When `tox_ref` is present, the operator definition does not contain a `children` array. The COMP's internal network is defined entirely in the referenced `.tox` file. This prevents the parent `.tdxn` from duplicating the contents of the child `.tox`, which would otherwise pollute `type_defaults` with the child's internal operator types and bloat the parent file.
 
-**Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) but does not populate its children. `externaltox` is **not** present in the parent `.tdxn`'s parameter dict (it's an Embody-managed parameter, excluded from TDXN export). Instead, the importer stores the `tox_ref` path on the new shell as `_pending_tox_restore` storage, then a post-import phase (`_restoreTOXShells`) sets `externaltox` from that marker and calls `_reloadTox` to load the `.tox` content immediately. This means the `.tox` content is fully restored after import — both for runtime imports (e.g. `import_network` via MCP) and for project-open reconstruction. `RestoreTOXComps` (frame 45) still handles the case where the parent `.tdxn` is not re-imported and the table is the only source.
+**Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) but does not populate its children. `externaltox` is **not** present in the parent `.tdxn`'s parameter dict (it's an Embody-managed parameter, excluded from TDXN export). Instead, the importer stores the `tox_ref` path on the new shell as `_pending_tox_restore` storage, then a post-import phase (`_restoreTOXShells`) sets `externaltox` from that marker and calls `_reloadTox` to load the `.tox` content immediately. This means the `.tox` content is fully restored after import — both for runtime imports (e.g. `import_network` via MCP) and for project-open reconstruction. `ext.Embody.restoreTOXComps` (frame 45) still handles the case where the parent `.tdxn` is not re-imported and the table is the only source.
 
 **TOX vs TDXN, when to use which**:
 
@@ -1059,7 +1059,7 @@ Both strategies receive the same ownership treatment in parent `.tdxn` files —
 
 **Backward compatibility**:
 
-- Pre-v1.4 `.tdn` files that embedded TOX children's contents still import correctly: on import, `_stripNestedTOXChildren` consults the externalizations table and clears any embedded `children` for TOX-tagged paths. The COMP shell is created and `RestoreTOXComps` loads from the `.tox` file.
+- Pre-v1.4 `.tdn` files that embedded TOX children's contents still import correctly: on import, `_stripNestedTOXChildren` consults the externalizations table and clears any embedded `children` for TOX-tagged paths. The COMP shell is created and `ext.Embody.restoreTOXComps` loads from the `.tox` file.
 - Files **with** `tox_ref` imported by an older Embody that doesn't recognize the field will silently ignore it. The strip path handles the nested COMP correctly as a fallback.
 - The `embed_all=True` export option suppresses `tox_ref` and inlines all children.
 
@@ -1218,7 +1218,7 @@ The importer accepts either a full `.tdxn` document (with metadata) or just the 
 | 1 | Early | COMP shell created (exists but empty) |
 | 2 | Early | Extension `__init__` runs |
 | 3 | End of frame | `onInitTD` fires — network may not exist yet |
-| 4 | Frame 60 | `ReconstructTDNComps` runs `ImportNetwork(clear_first=True)` |
+| 4 | Frame 60 | `ext.Embody.reconstructTDNComps` runs `ImportNetwork(clear_first=True)` |
 | 5 | Frame 60+ | All children deleted and recreated from `.tdxn` |
 
 **Timeline on save (strip/restore cycle):**

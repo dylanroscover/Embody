@@ -119,8 +119,52 @@ class TestEnsureCustomPar(EmbodyTestCase):
         self.assertEqual(5, comp.par.Build.eval())
 
 
+    def test_a_multi_value_style_is_found_by_tuplet_name(self):
+        """RGB lives as Tintr/Tintg/Tintb; a probe by .name re-appends forever.
+
+        The first cut probed `p.name == name`, so an RGB par was never found,
+        appendRGB (replace=True) re-created it on every reinit, and the
+        re-read then raised (issue #94 review).
+        """
+        comp, page = self._comp('pd_par_rgb')
+        group = _pardef().ensureCustomPar(comp, page, 'Tint', 'RGB')
+        comp.par.Tintr = 0.25
+        again = _pardef().ensureCustomPar(comp, page, 'Tint', 'RGB')
+        self.assertLen([p for p in comp.customPars if p.tupletName == 'Tint'], 3,
+                       'the tuplet must be found, not re-created')
+        self.assertEqual(0.25, comp.par.Tintr.eval(),
+                         "a re-ensure must not reset the user's component")
+        self.assertEqual(3, len(again),
+                         'a tuplet returns the 3-wide ParGroup, not one component')
+        self.assertEqual('Tint', again.name)
+
+    def test_user_expression_survives_a_re_ensure(self):
+        comp, page = self._comp('pd_par_expr')
+        par = _pardef().ensureCustomPar(comp, page, 'Build', 'Int')
+        par.expr = 'absTime.frame'
+        _pardef().ensureCustomPar(comp, page, 'Build', 'Int', expr='1', val=3)
+        self.assertEqual('absTime.frame', comp.par.Build.expr,
+                         'expr/val are user state and must never be re-applied')
+
+    def test_a_rejected_attribute_raises_instead_of_vanishing(self):
+        """A typo'd keyword silently dropped is the no-op-button shape."""
+        comp, page = self._comp('pd_par_typo')
+        with self.assertRaises(ValueError):
+            _pardef().ensureCustomPar(comp, page, 'Build', 'Int', lable='x')
+
+
 class TestCallSitesAreRouted(EmbodyTestCase):
     """The four drifted copies must not come back."""
+
+    def test_the_build_stamps_go_through_ensure_custom_par(self):
+        """setupBuildParameters is the one production caller -- keep it so."""
+        from pathlib import Path
+        src = (Path(project.folder).parent / 'dev/embody/Embody/EmbodyExt.py'
+               ).read_text(encoding='utf-8')
+        body = src.split('def setupBuildParameters', 1)[1].split('\n    def ', 1)[0]
+        self.assertIn('ensureCustomPar', body)
+        self.assertNotIn('appendInt(', body)
+        self.assertNotIn('appendStr(', body)
 
     def test_no_ad_hoc_page_lookup_remains(self):
         import re

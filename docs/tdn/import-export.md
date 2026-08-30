@@ -152,7 +152,7 @@ my-project/
             └── bar.tdxn.bak2  ← the one before that
 ```
 
-After each write the file is read back and re-parsed; if that validation fails, the newest surviving backup is restored automatically and the log names the exact file it came from. `ReconstructTDNComps` and the post-save export roll back the same way if reconstruction fails. Recovery tries `.bak` first, then `.bak2`.
+After each write the file is read back and re-parsed; if that validation fails, the newest surviving backup is restored automatically and the log names the exact file it came from. `ext.Embody.reconstructTDNComps` and the post-save export roll back the same way if reconstruction fails. Recovery tries `.bak` first, then `.bak2`.
 
 The folder holds backups of **both** `.tdxn` and `.tdn` files — a COMP externalized before v6.1.0 keeps writing `.tdn` forever — which is why the name carries no format token.
 

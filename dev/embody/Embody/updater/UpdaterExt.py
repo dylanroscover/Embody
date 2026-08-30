@@ -1133,6 +1133,9 @@ class UpdaterExt:
                 # has even announced itself.
                 message += ('\n\nThese settings no longer exist in this '
                             'version and were removed:\n' + ', '.join(retired))
+            refusal = getattr(self, '_prune_refusal', None)
+            if refusal:
+                message += '\n\n' + refusal
             self._dialog('Embody Update', message, ['OK'])
 
     def _stampAboutPars(self, manifest):
@@ -1307,12 +1310,24 @@ class UpdaterExt:
         # demonstrated failure mode, not a hypothetical, and the consumer is
         # the only place left to catch it once one is published.
         ceiling = max(5, int(len(prunable) * 0.15))
+        self._prune_refusal = None
         if len(candidates) > ceiling:
+            # Loud in BOTH places: the log for the developer, and (via the
+            # attribute VerifyUpdate's dialog reads) the user, who otherwise
+            # sees "Settings preserved" over a migration that silently did
+            # not happen. A release that genuinely retires this many pars
+            # raises the floor here, deliberately, in the same commit.
+            self._prune_refusal = (
+                f'{len(candidates)} settings this version no longer declares '
+                f'were NOT removed (safety floor: {ceiling} of {len(prunable)}). '
+                f'The release manifest looks malformed. They are harmless; '
+                f'please report this with your version numbers.')
             self._log(
                 f'REFUSED to prune {len(candidates)} of {len(prunable)} custom '
                 f'pars (ceiling {ceiling}) -- a manifest that retires this much '
                 f'at once is malformed, not a real migration. Nothing removed; '
-                f'settings are intact.', 'WARNING')
+                f'settings are intact. Candidates: {", ".join(candidates)}',
+                'WARNING')
             return []
         # Pages that were ALREADY empty before this prune. Anything in here is
         # not ours to remove -- see the sweep below.

@@ -8,13 +8,16 @@
 
 
 def _runAction(par_name):
+	# Demoted (tier-2) members are reachable only through .ext.Embody --
+	# e.updateHandler() on the COMP raises, which killed Ctrl+Shift+O/U and
+	# Ctrl+Alt+U in 6.2.0 (issue #94 review). Refresh is still promoted.
 	e = parent.Embody
 	if par_name == 'Shortcutmanager':
-		e.manager('open')
+		e.ext.Embody.manager('open')
 	elif par_name == 'Shortcutupdateall':
-		e.updateHandler()
+		e.ext.Embody.updateHandler()
 	elif par_name == 'Shortcutupdatecomp':
-		e.saveCurrentComp()
+		e.ext.Embody.saveCurrentComp()
 	elif par_name == 'Shortcutrefresh':
 		e.Refresh()
 	elif par_name == 'Shortcutexportproject':

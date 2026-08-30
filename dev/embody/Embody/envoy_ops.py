@@ -967,6 +967,11 @@ def create_extension(ext, parent_path: str, class_name: str,
     # Validate class_name
     if not class_name.isidentifier():
         return {'error': f'class_name must be a valid Python identifier, got: {class_name}'}
+    # A parent shortcut is dereferenced as parent.<Name>, so it must be an
+    # identifier too -- 'my feature' would be written verbatim and resolve nowhere.
+    if parent_shortcut is not None and not str(parent_shortcut).isidentifier():
+        return {'error': 'parent_shortcut must be a valid Python identifier '
+                         f'(it is reached as parent.<Name>), got: {parent_shortcut!r}'}
 
     # Resolve or create the target COMP
     created_comp = False
@@ -1123,10 +1128,11 @@ def create_extension(ext, parent_path: str, class_name: str,
     if auto_ext:
         result['externalized'] = auto_ext
 
-    if init_warning:
-        result['warning'] = init_warning
-    elif shortcut_warning:
-        result['warning'] = shortcut_warning
+    # Both, never one or the other: an init failure must not hide a refused
+    # shortcut (the silent-refusal shape issue #94 exists to remove).
+    warnings = [w for w in (init_warning, shortcut_warning) if w]
+    if warnings:
+        result['warning'] = ' | '.join(warnings)
 
     return result
 
