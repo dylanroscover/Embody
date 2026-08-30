@@ -1,10 +1,10 @@
-format: tdn
+format: tdxn
 version: '2.0'
 build: 57
-generator: Embody/6.0.25
-td_build: 099.2025.32820
-source_file: Embody-6.25.toe
-exported_at: '2026-06-13T05:52:38Z'
+generator: Embody/6.2.4
+td_build: 099.2025.33070
+source_file: Embody-6.307.toe
+exported_at: '2026-08-30T08:23:45Z'
 network_path: /embody/Embody/list/list1
 options:
   include_dat_content: false

@@ -820,3 +820,145 @@ class TestTDNExportImport(EmbodyTestCase):
             self.assertEqual(t_def.get('parameters', {}).get('tx'), 2.5)
         finally:
             par.val = old
+
+
+class TestTDXNReviewFixes(EmbodyTestCase):
+    """Regressions from the TDXN review of 2026-08-30 (export side)."""
+
+    def setUp(self):
+        super().setUp()
+        self.tdn = self.embody.ext.TDXN
+
+    def _entry(self, tdn, name):
+        for o in tdn.get('operators', []):
+            if o.get('name') == name:
+                return o
+        return None
+
+    def test_adhoc_export_keeps_the_canonical_file_and_row(self):
+        """export_network(output_file=<snapshot>) used to DELETE the COMP's
+        tracked file (the cleanup protected every tracked file except the
+        exported COMP's own) and repoint the row at the snapshot."""
+        import os, shutil
+        emb = self.embody_ext
+        comp = self.sandbox.create(baseCOMP, 'adhoc_victim')
+        comp.create(noiseTOP, 'noise1')
+        emb.applyTagToOperator(comp, self.embody.par.Tdntag.val)
+        emb._handleTDNAddition(comp)
+        rel = emb._getStrategyFilePath(comp.path, 'tdn')
+        canonical = str(emb.buildAbsolutePath(rel))
+        self.assertTrue(os.path.isfile(canonical), 'test setup: canonical file')
+        snap_dir = os.path.join(project.folder, 'embody', 'unit_tests',
+                                'test_sandbox', 'adhoc_snapshots')
+        snap = os.path.join(snap_dir, 'victim_snap.tdxn')
+        try:
+            r = self.tdn.ExportNetwork(root_path=comp.path, output_file=snap)
+            self.assertTrue(r.get('success'), r.get('error'))
+            self.assertTrue(os.path.isfile(snap), 'the snapshot must be written')
+            self.assertTrue(os.path.isfile(canonical),
+                            'an ad-hoc export must never delete the canonical file')
+            self.assertEqual(rel, emb._getStrategyFilePath(comp.path, 'tdn'),
+                             'an ad-hoc export must not repoint the tracking row')
+        finally:
+            emb.removeTDNEntry(comp.path, delete_file=True)
+            shutil.rmtree(snap_dir, ignore_errors=True)
+
+    def test_dat_whose_file_is_missing_is_embedded(self):
+        """A `file` par is a claim: pointing at a missing file used to drop
+        the authored text from the export (and the import restored '')."""
+        import os, tempfile
+        dat = self.sandbox.create(textDAT, 'dat_missing_file')
+        dat.par.file = os.path.join(tempfile.gettempdir(), 'never_created_xyz_%d.txt' % id(self))
+        dat.text = 'AUTHORED live content B'
+        result = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+                                        include_dat_content=False)
+        entry = self._entry(result['tdn'], 'dat_missing_file')
+        self.assertIsNotNone(entry)
+        self.assertIn('dat_content', entry,
+                      'text with no file on disk must be embedded, not dropped')
+
+    def test_dat_whose_file_diverged_is_embedded(self):
+        """syncfile off + older text on disk = the DAT is the only copy."""
+        import os, tempfile
+        backing = os.path.join(tempfile.gettempdir(), 'diverged_dat_%d.txt' % id(self))
+        with open(backing, 'w', encoding='utf-8') as f:
+            f.write('OLD FILE CONTENT ON DISK')
+        dat = self.sandbox.create(textDAT, 'dat_diverged')
+        dat.par.syncfile = False
+        dat.par.file = backing
+        dat.text = 'AUTHORED live content A'
+        try:
+            result = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+                                            include_dat_content=False)
+            entry = self._entry(result['tdn'], 'dat_diverged')
+            self.assertIn('dat_content', entry,
+                          'diverged text must be embedded -- the disk copy is stale')
+        finally:
+            os.remove(backing)
+
+    def test_custom_par_enable_and_enable_expr_round_trip(self):
+        """Neither was exported; conditional greying vanished on reconstruct."""
+        src = self.sandbox.create(baseCOMP, 'enable_src')
+        pg = src.appendCustomPage('Ctl')
+        pg.appendToggle('Active')
+        pg.appendFloat('Disabled')[0].enable = False
+        pg.appendFloat('Condexpr')[0].enableExpr = 'me.par.Active.eval()'
+        doc = self.tdn.ExportNetwork(root_path=src.path)['tdn']
+        dst = self.sandbox.create(baseCOMP, 'enable_dst')
+        r = self.tdn.ImportNetwork(target_path=dst.path, tdn=doc, clear_first=True)
+        self.assertTrue(r.get('success'), r.get('error'))
+        self.assertFalse(dst.par.Disabled.enable, 'static enable=False must round-trip')
+        self.assertEqual(dst.par.Condexpr.enableExpr, 'me.par.Active.eval()',
+                         'enableExpr must round-trip')
+
+    def test_inf_in_storage_does_not_abort_the_export(self):
+        """int(inf) raised OverflowError past the catch and failed the whole
+        export for one value; nan was already skipped as documented."""
+        comp = self.sandbox.create(baseCOMP, 'inf_store')
+        comp.store('bad_inf', float('inf'))
+        comp.store('good', 1)
+        r = self.tdn.ExportNetwork(root_path=self.sandbox.path, include_storage=True)
+        self.assertTrue(r.get('success'), r.get('error'))
+        entry = self._entry(r['tdn'], 'inf_store')
+        self.assertEqual(entry.get('storage', {}).get('good'), 1)
+        self.assertNotIn('bad_inf', entry.get('storage', {}))
+
+    def test_annotation_zero_alpha_round_trips(self):
+        """A fully transparent background could neither be written nor restored."""
+        host = self.sandbox.create(baseCOMP, 'ann_host')
+        ann = host.create(annotateCOMP, 'ann_zero')   # TD names it annotate1
+        ann.par.Backcoloralpha = 0.0
+        doc = self.tdn.ExportNetwork(root_path=host.path)['tdn']
+        anns = doc.get('annotations', [])
+        self.assertEqual(len(anns), 1, anns)
+        self.assertEqual(anns[0].get('backAlpha'), 0.0,
+                         'alpha 0 must be written, not treated as unset')
+        dst = self.sandbox.create(baseCOMP, 'ann_dst')
+        r = self.tdn.ImportNetwork(target_path=dst.path, tdn=doc, clear_first=True)
+        self.assertTrue(r.get('success'), r.get('error'))
+        restored = dst.findChildren(type=annotateCOMP, depth=1, includeUtility=True)
+        self.assertEqual(len(restored), 1)
+        self.assertEqual(restored[0].par.Backcoloralpha.eval(), 0.0)
+
+    def test_unknown_flag_name_is_ignored_not_applied(self):
+        doc = {'format': 'tdn', 'version': '2.0', 'type': 'baseCOMP',
+               'operators': [{'name': 'n1', 'type': 'nullCHOP',
+                              'flags': ['viewer', 'bogus_flag_xyz']}]}
+        dst = self.sandbox.create(baseCOMP, 'flag_dst')
+        r = self.tdn.ImportNetwork(target_path=dst.path, tdn=doc, clear_first=True)
+        self.assertTrue(r.get('success'), r.get('error'))
+        self.assertTrue(dst.op('n1').viewer)
+        self.assertFalse(hasattr(dst.op('n1'), 'bogus_flag_xyz'))
+
+    def test_unknown_template_reference_is_logged(self):
+        """The spec promises a warning; the page used to vanish silently."""
+        doc = {'format': 'tdn', 'version': '2.0', 'type': 'baseCOMP',
+               'par_templates': {},
+               'operators': [{'name': 'c', 'type': 'baseCOMP',
+                              'custom_pars': {'Ctl': {'$t': 'nope', 'Speed': 2}}}]}
+        dst = self.sandbox.create(baseCOMP, 'tmpl_dst')
+        before = self.embody_ext._log_counter
+        self.tdn.ImportNetwork(target_path=dst.path, tdn=doc, clear_first=True)
+        msgs = ' | '.join(e.get('message', '') for e in self.embody_ext._log_buffer
+                          if e['id'] > before)
+        self.assertIn('Unknown custom-parameter template', msgs)

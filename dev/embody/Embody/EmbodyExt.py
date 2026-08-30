@@ -1335,7 +1335,8 @@ class EmbodyExt:
 
         The Externalizations DAT is syncfile-backed (`externalizations.tsv`),
         so every CHANGED cell triggers a full DAT-to-file sync -- measured
-        ~15ms each on a 300-row table, while an identical scratch tableDAT with
+        ~15ms each on a 300-row table in 2026-07 (about 1.4ms on the same
+        table by 2026-08-30; the coalescing still holds), while an identical scratch tableDAT with
         no file costs 0.0ms. (The raw 46KB write is under 2ms of that; the rest
         is TD's own serialize + cook + dependency propagation. The A/B is what
         justifies this helper -- the exact sub-step does not.) A save that
@@ -4423,16 +4424,19 @@ class EmbodyExt:
         """Frame-cheap SYNCHRONOUS auto-save checkpoint of one TDXN COMP.
 
         Re-exports with stale-cleanup skipped (the ~700ms rglob is the
-        dominant save cost; a single-COMP checkpoint orphans nothing) --
-        ~6ms typical; the ~40ms fingerprint re-baseline defers one frame.
-        Gated on Perform Mode + the save window (table mutation during
-        strip = fatal crash); caller owns the perf-gate. No Build bump
-        (a checkpoint must be diff-stable vs the next Ctrl+S).
+        dominant save cost; a single-COMP checkpoint orphans nothing).
+        Cost is the export + YAML parse, not the write: ~30 ms at 100 ops,
+        200-400 ms at 500 ops (measured 2026-08-30); the fingerprint
+        re-baseline defers one frame. Gated on Perform Mode + the save
+        window (the strip re-exports on its own schedule; a checkpoint
+        interleaved with it would track a COMP that strip just emptied);
+        caller owns the perf-gate. No Build bump (a checkpoint must be
+        diff-stable vs the next Ctrl+S).
         """
         if self._performMode:
             return False
         if self.my.fetch('_suppress_dialogs', False, search=False):
-            return False  # save window open -- never mutate the table now
+            return False  # save window open -- the strip owns exports now
         if not self._tdnEnabled():
             return False
         try:
@@ -4550,9 +4554,15 @@ class EmbodyExt:
             # do NOT baseline the (newer) live state as clean. The pending
             # re-checkpoint will write the new .tdn and baseline it then.
             return
-        if self._performMode or self.my.fetch('_suppress_dialogs', False, search=False):
+        if self._performMode:
             return
-        if not self._autosavePerfOk():
+        if (self.my.fetch('_suppress_dialogs', False, search=False)
+                or not self._autosavePerfOk()):
+            # Defer, never drop: returning here left a STALE baseline after a
+            # checkpoint landed just before a save, and the pre-save's
+            # content-equal branch does not re-baseline either -- so the COMP
+            # read false-dirty until some later checkpoint happened to land
+            # outside a save window (TDXN review 2026-08-30).
             run(f"op({self.my.path!r}).ext.Embody._reBaselineCheckpoint({opPath!r})",
                 fromOP=self.my, delayFrames=15)
             return
@@ -4566,6 +4576,8 @@ class EmbodyExt:
             self.Log(f'checkpoint re-baseline failed for {opPath}', 'DEBUG', str(e))
 
     # --- Auto-save / crash checkpoint engine (event-armed idle-settle drain) ---
+    _coarse_sweep_offset = 0        # rotation of the capped coarse sweep window
+    _FLUSH_BUDGET_S = 0.25          # flushPendingCheckpoints main-thread budget
     _AUTOSAVE_IDLE_SECONDS = 1.0    # checkpoint this long after the last MCP mutation
     _AUTOSAVE_POLL_FRAMES = 12      # re-check cadence while waiting to settle
     _AUTOSAVE_FPS_FLOOR_FRAC = 0.9  # perf-gate: defer if fps < this * target
@@ -4594,7 +4606,13 @@ class EmbodyExt:
         except Exception:
             pass
 
-    _COARSE_SWEEP_CAP = 60   # roots examined in one coarse sweep (bounded work)
+    # Roots examined in ONE coarse sweep. The per-frame budget below is the
+    # frame-cost bound (the sweep is resumable); this cap is a safety valve
+    # for pathological projects, and the window ROTATES across sweeps so a
+    # project above it cannot starve its sorted tail. It was 60 -- below the
+    # dev project's own 81 roots -- so every /specimen_lab root was never
+    # examined (TDXN review 2026-08-30).
+    _COARSE_SWEEP_CAP = 500
     _COARSE_SWEEP_BUDGET_MS = 8.0   # per-frame slice of that sweep
 
     def noteCoarseCheckpointTouch(self) -> None:
@@ -4642,9 +4660,27 @@ class EmbodyExt:
         try:
             if self._coarse_sweep_cursor is None:
                 tdn_paths = self._getTDNPaths()
-                roots = set(tdn_paths) | set(self._tdn_fingerprints.keys())
-                self._coarse_sweep_cursor = sorted(
-                    roots)[:self._COARSE_SWEEP_CAP][::-1]
+                # Baselines of deleted COMPs were never pruned (rename pops,
+                # delete did not) and rode inside the .toe forever; 14 dead
+                # keys plus Embody's own 43 descendants filled the cap so
+                # every /specimen_lab root was NEVER examined (TDXN review
+                # 2026-08-30). Prune the dead here, and ROTATE the window
+                # across sweeps so a fixed sorted prefix cannot starve the
+                # tail. Embody's own COMP still participates (an agent
+                # editing the manager UI works there), but it no longer
+                # crowds the others out of a single sweep.
+                fps = self._tdn_fingerprints
+                for dead in [k for k in list(fps) if op(k) is None]:
+                    fps.pop(dead, None)
+                ordered = sorted(set(tdn_paths) | set(fps.keys()))
+                cap = self._COARSE_SWEEP_CAP
+                if len(ordered) > cap:
+                    start = self._coarse_sweep_offset % len(ordered)
+                    window = (ordered + ordered)[start:start + cap]
+                    self._coarse_sweep_offset = (start + cap) % len(ordered)
+                else:
+                    window = ordered
+                self._coarse_sweep_cursor = window[::-1]
                 # Frozen for the whole sweep: re-reading the table and the tag
                 # pars per frame would undo the point of chunking.
                 self._coarse_sweep_ctx = (
@@ -4689,16 +4725,23 @@ class EmbodyExt:
         This deliberately does NOT sweep for new dirt -- discovery is the
         post-arm's job, debounced -- so in the steady state it is an
         empty-set check costing nothing."""
+        import time
         written = 0
         try:
             if self._performMode or not self._autosaveEnabled():
                 return 0
             if self.my.fetch('_suppress_dialogs', False, search=False):
                 return 0
+            # Budgeted: one checkpoint is 200-400 ms at 500 ops (TDXN review
+            # 2026-08-30), and this runs synchronously inside every
+            # execute_python. Write what fits; the drain takes the rest.
+            deadline = time.perf_counter() + self._FLUSH_BUDGET_S
             for path in list(self._pending_checkpoint_roots):
                 if self.checkpoint(path):
                     self._pending_checkpoint_roots.discard(path)
                     written += 1
+                if time.perf_counter() >= deadline:
+                    break
         except Exception:
             pass
         return written
@@ -4739,7 +4782,7 @@ class EmbodyExt:
             self._armAutosaveDrain()  # not settled -- wait
             return
         if self.my.fetch('_suppress_dialogs', False, search=False):
-            self._armAutosaveDrain()  # save window -- table mutation now is fatal
+            self._armAutosaveDrain()  # save window -- the strip owns exports
             return
         if not self._autosavePerfOk():
             self._armAutosaveDrain()  # perf danger -- don't pile onto a hot frame
@@ -4874,8 +4917,8 @@ class EmbodyExt:
     def _preRiskyCheckpoint(self, operation: str, params: dict) -> None:
         """Synchronously checkpoint the touched TDXN root BEFORE a destructive
         delete (delete_op of a CHILD inside a tracked COMP) so an agent-induced
-        crash DURING it loses nothing since it. ~6ms one COMP; gated like
-        checkpoint. Called from EnvoyExt _execute_operation before the handler.
+        crash DURING it loses nothing since it. One COMP, tens to hundreds of
+        ms depending on size (see checkpoint); gated like checkpoint. Called from EnvoyExt _execute_operation before the handler.
 
         NOT for import_network: its .tdn is the user's source-of-truth being
         reloaded, so checkpointing the live state over it would corrupt the edit.
@@ -5939,6 +5982,57 @@ class EmbodyExt:
         return tuple(out)
 
     @staticmethod
+    def _datContentFingerprint(dat) -> str:
+        """Digest of the DAT text the export would embed.
+
+        A file-synced DAT's text lives on disk by definition (the export
+        omits it), so it is left out -- otherwise every hot-synced source
+        edit would dirty its root for a byte-identical re-export. Any other
+        DAT's text is embedded (or would be, if its file is missing or
+        stale -- see TDXNExt._isDATContentSavedOnDisk), so it counts.
+        """
+        try:
+            f = getattr(dat.par, 'file', None)
+            sync = getattr(dat.par, 'syncfile', None)
+            if f is not None and str(f.eval() or '').strip() and sync is not None and sync.eval():
+                return ''
+            import hashlib
+            return hashlib.blake2b((dat.text or '').encode('utf-8', 'replace'),
+                                   digest_size=8).hexdigest()
+        except Exception:
+            return ''
+
+    @staticmethod
+    def _storageFingerprint(oper) -> tuple:
+        """Repr-level digest of the storage the export serializes."""
+        try:
+            skip = set()
+            try:
+                skip = set(mod.TDXNExt.SKIP_STORAGE_KEYS)
+            except Exception:
+                pass
+            items = []
+            for k, v in oper.storage.items():
+                if k in skip:
+                    continue
+                items.append((str(k), repr(v)[:512]))
+            items.sort()
+            return tuple(items)
+        except Exception:
+            return ()
+
+    @staticmethod
+    def _customDefsFingerprint(comp) -> tuple:
+        """Custom-parameter DEFINITIONS: a freshly appended par sits at its
+        default, so the value fingerprint never sees it."""
+        try:
+            return tuple(sorted(
+                (p.name, p.style, p.page.name, p.label, str(p.default))
+                for p in comp.customPars))
+        except Exception:
+            return ()
+
+    @staticmethod
     def _computeTDNFingerprint(comp, tdn_paths: Optional[set] = None,
                                exclude_tag: Optional[str] = None,
                                ext_tags: Optional[frozenset] = None) -> tuple:
@@ -5966,6 +6060,8 @@ class EmbodyExt:
         # only structural/layout changes were detected -- param edits on a TDXN
         # COMP went unnoticed by dirty detection.)
         parts.append(('__self_pars__', EmbodyExt._parFingerprint(comp)))
+        parts.append(('__self_storage__', EmbodyExt._storageFingerprint(comp)))
+        parts.append(('__self_custom_defs__', EmbodyExt._customDefsFingerprint(comp)))
         for c in sorted(comp.children, key=lambda c: c.name):
             # Skip annotations -- they're fingerprinted separately below
             if c.type == 'annotate':
@@ -5978,16 +6074,39 @@ class EmbodyExt:
                 continue
             color = tuple(round(v, 4) for v in c.color)
             tags = tuple(sorted(c.tags))
+            # The export's flag set (TDXNExt.DEFAULT_FLAGS): allowCooking
+            # and cloneImmune are written, `current` is not -- so the
+            # fingerprint tracked a flag the file never records and
+            # missed one it does (TDXN review 2026-08-30).
             flags = (c.bypass, c.lock, c.display, c.render,
-                     c.viewer, c.current, c.expose)
+                     c.viewer, c.expose, c.allowCooking,
+                     getattr(c, 'cloneImmune', None))
+            dock = getattr(c, 'dock', None)
             parts.append((
                 c.name, c.type,
                 c.nodeX, c.nodeY, c.nodeWidth, c.nodeHeight,
                 color, tags, flags, c.comment,
+                dock.name if dock else '',
             ))
             for i, conn in enumerate(c.inputConnectors):
                 for link in conn.connections:
                     parts.append((c.name, 'in', i, link.owner.name))
+            # Everything else the export writes and the fingerprint used to
+            # ignore -- each one changed the file while _isTDNDirty read
+            # clean, so an execute_python edit was never autosaved (TDXN
+            # review 2026-08-30): DAT text (when the file would embed it),
+            # storage, custom-par DEFINITIONS (a new par is at its default,
+            # so _parFingerprint skips it), COMP-level connectors.
+            if c.isDAT:
+                parts.append((c.name, 'text', EmbodyExt._datContentFingerprint(c)))
+            parts.append((c.name, 'storage', EmbodyExt._storageFingerprint(c)))
+            if c.isCOMP:
+                parts.append((c.name, 'custom_defs', EmbodyExt._customDefsFingerprint(c)))
+                try:
+                    parts.append((c.name, 'comp_in',
+                                  tuple(o.name for o in c.inputCOMPs)))
+                except Exception:
+                    pass
             # A separately externalized child is REFERENCED, not embedded:
             # TDXNExt emits tdn_ref/tox_ref for a TAGGED child and stops, so
             # its content is not in this file and must not move this
@@ -6656,8 +6775,28 @@ class EmbodyExt:
             self.Log(f"Deferring externalization of '{oper.path}' until "
                      "the project is saved", "DEBUG")
             return
-        rel_path = self._buildTDNRelPath(oper)
+        # A tagged-but-untracked COMP is not always a first externalization:
+        # the Update sweep re-adds any tagged COMP whose row was lost. Minting
+        # .tdxn beside a surviving .tdn orphaned the committed file and could
+        # write an EMPTY network over nothing (TDXN review 2026-08-30). Keep
+        # the row's suffix, else adopt a legacy file on disk, and never
+        # overwrite a non-empty file from an empty shell.
+        rel_path = self._buildTDNRelPath(
+            oper, suffix=self._trackedTDNSuffix(oper.path))
+        legacy_rel = self._buildTDNRelPath(oper, suffix='.tdn')
+        if (rel_path != legacy_rel
+                and self.buildAbsolutePath(legacy_rel).is_file()
+                and not self.buildAbsolutePath(rel_path).is_file()):
+            rel_path = legacy_rel
         abs_path = self.buildAbsolutePath(rel_path)
+        if self._refusesEmptyTDNOverwrite(oper, str(abs_path)):
+            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+            self._addToTable(oper, str(rel_path), timestamp, False, 1,
+                             app.build, 'tdn')
+            self.Log(f"Adopted existing {rel_path} for empty '{oper.path}' "
+                     f"without overwriting it -- reconstruct from the file, or "
+                     f"Save from the manager to replace it", "WARNING")
+            return
 
         # Create directory
         try:
@@ -9132,6 +9271,7 @@ class EmbodyExt:
                     and self._cellVal(i, 'strategy') == 'tdn'):
                 rel_path = self._cellVal(i, 'rel_file_path')
                 self.Log(f"_removeTDNStrategy: found row {i}, rel_path='{rel_path}' delete_file={delete_file}", "INFO")
+                self._tdn_fingerprints.pop(op_path, None)
                 if delete_file and rel_path:
                     full_path = self.buildAbsolutePath(
                         self.normalizePath(rel_path)).resolve()
@@ -9139,6 +9279,13 @@ class EmbodyExt:
                     def _delete(fp=full_path, rp=rel_path, opp=op_path):
                         try:
                             debug(f"_delete executing: {fp} exists={fp.is_file()}")
+                            # Re-check at delete time: a row re-created for
+                            # this file inside the 5-frame window (delete_op
+                            # then externalize_op at the same path in one
+                            # batch) would lose its fresh file (TDXN review).
+                            if self._rowReferencesFile(rp):
+                                debug(f"_delete skipped: {rp} is tracked again")
+                                return
                             if fp.is_file() and self.my.ext.TDXN.is_tdn_network_file(fp):
                                 fp.unlink()
                                 self.Log(f'Removed TDXN externalization for {opp} ({rp})', 'SUCCESS')
@@ -9150,14 +9297,29 @@ class EmbodyExt:
                 table.deleteRow(i)
                 # Also remove orphaned child entries whose operators
                 # no longer exist (the parent COMP was deleted/lost).
-                self._removeOrphanedTDNChildren(op_path)
+                self._removeOrphanedTDNChildren(op_path, delete_file=delete_file)
                 return
 
-    def _removeOrphanedTDNChildren(self, parent_path: str) -> None:
+    def _rowReferencesFile(self, rel_path: str) -> bool:
+        """True when any externalizations row still points at rel_path."""
+        table = self.Externalizations
+        if table is None or not rel_path:
+            return False
+        want = self.normalizePath(rel_path)
+        for i in range(1, table.numRows):
+            if self.normalizePath(self._cellVal(i, 'rel_file_path') or '') == want:
+                return True
+        return False
+
+    def _removeOrphanedTDNChildren(self, parent_path: str,
+                                   delete_file: bool = False) -> None:
         """Remove table entries for children of a removed TDXN COMP.
 
         Only removes entries where the operator no longer exists,
-        preventing accidental deletion of valid entries.
+        preventing accidental deletion of valid entries. With delete_file
+        the child's own .tdn goes too: dropping the row while leaving the
+        file made an untracked orphan that no recovery path could see and
+        no cleanup could reclaim (TDXN review 2026-08-30).
         """
         table = self.Externalizations
         prefix = parent_path + '/'
@@ -9175,8 +9337,18 @@ class EmbodyExt:
         # Delete in reverse order to preserve row indices
         for i in reversed(rows_to_delete):
             rel_file = self._cellVal(i, 'rel_file_path')
-            self.Log(f"Removed orphaned child entry: {self._cellVal(i, 'path')}", "INFO")
+            child_path = self._cellVal(i, 'path')
+            self._tdn_fingerprints.pop(child_path, None)
+            self.Log(f"Removed orphaned child entry: {child_path}", "INFO")
             table.deleteRow(i)
+            if delete_file and rel_file and not self._rowReferencesFile(rel_file):
+                try:
+                    fp = self.buildAbsolutePath(self.normalizePath(rel_file))
+                    if fp.is_file() and self.my.ext.TDXN.is_tdn_network_file(fp):
+                        fp.unlink()
+                        self.Log(f"Removed orphaned child file {rel_file}", "INFO")
+                except Exception as e:
+                    self.Log(f"Could not remove orphaned child file {rel_file}: {e}", "WARNING")
 
     def _getTagColor(self, oper, tag):
         """Get appropriate color for tag on operator, or None if invalid."""
@@ -10244,8 +10416,6 @@ class EmbodyExt:
         if mode == 'off':
             self.Log('TDXN mode=off -- skipping reconstruction', 'INFO')
             return
-        if not self.my.par.Tdncreateonstart.eval():
-            return
         if mode == 'export':
             # .toe is the source of truth for COMPs that EXIST in it, so we do
             # NOT repopulate those. But a COMP ABSENT from the .toe (e.g. an agent
@@ -10255,9 +10425,17 @@ class EmbodyExt:
             # row is invisible. (Spike-verified 2026-06-27.)
             self.Log('TDXN mode=export -- additive recovery only, existing '
                      'COMPs kept (no full reconstruction)', 'INFO')
+            self._warnTDNNewerThanProject()
             self._recoverMissingTDNComps()
             return
-        # mode == 'full' -- repopulate ALL TDXN COMPs (loop below)
+        # mode == 'full' -- repopulate ALL TDXN COMPs (loop below). The
+        # create-on-start gate belongs HERE: it is greyed out in export mode
+        # (a full-only par), yet it sat above the export branch and silently
+        # switched crash recovery off (TDXN review 2026-08-30).
+        if not self.my.par.Tdncreateonstart.eval():
+            self.Log('TDXN create-on-start is off -- skipping full '
+                     'reconstruction', 'INFO')
+            return
 
         tdn_comps = self._getTDNStrategyComps()
         if not tdn_comps:
@@ -10416,6 +10594,12 @@ class EmbodyExt:
             abs_path = self.buildAbsolutePath(rel_tdn)
             if abs_path.is_file():
                 missing.append((comp_path, abs_path))
+            else:
+                # Full mode logs this; export mode was silent, so a COMP
+                # absent from BOTH the .toe and the disk simply vanished
+                # with a manager row pointing at nothing (TDXN review).
+                self.Log(f'TDXN file not found for absent COMP {comp_path}: '
+                         f'{rel_tdn} -- nothing to recover', 'WARNING')
         if not missing:
             return 0
         # Parent-before-child so an ancestor shell exists before its children.
@@ -10455,6 +10639,10 @@ class EmbodyExt:
                              f'restored by its parent import (Phase '
                              f'8.6); skipping the redundant re-import',
                              'DEBUG')
+                    # Same bookkeeping as the import branch below: without
+                    # the About page a later saveTDN never bumps the build.
+                    self._reconstructAboutPage(shell, comp_path)
+                    self.param_tracker.updateParamStore(shell)
                     self._storeTDNFingerprint(shell)
                     recovered += 1
                     continue
@@ -10475,6 +10663,37 @@ class EmbodyExt:
             self.Log(f'Auto-save recovery: rebuilt {recovered} unsaved COMP(s) '
                      f'from .tdn (crash-before-save)', 'SUCCESS')
         return recovered
+
+    def _warnTDNNewerThanProject(self) -> None:
+        """Export mode reads nothing from disk at open, so a .tdn newer than
+        the .toe (a teammate's commit, a git pull) is silently overwritten by
+        the first save. Cheap stat pass; a WARNING names the files."""
+        try:
+            toe = Path(project.folder) / project.name
+            if not toe.is_file():
+                return
+            toe_mtime = toe.stat().st_mtime
+            newer = []
+            for comp_path, rel_tdn in self._getTDNStrategyComps():
+                if op(comp_path) is None:
+                    continue
+                f = self.buildAbsolutePath(rel_tdn)
+                try:
+                    if f.is_file() and f.stat().st_mtime > toe_mtime + 2:
+                        newer.append(rel_tdn)
+                except Exception:
+                    continue
+            if newer:
+                shown = ', '.join(newer[:8]) + (
+                    f' (+{len(newer) - 8} more)' if len(newer) > 8 else '')
+                self.Log(
+                    f'{len(newer)} TDXN file(s) are newer on disk than the '
+                    f'project: {shown}. Export mode keeps the .toe network, so '
+                    f'the next save OVERWRITES them -- import the file '
+                    f'(manager Reload / import_network) to adopt it first.',
+                    'WARNING')
+        except Exception as e:
+            self.Log(f'newer-on-disk check skipped: {e}', 'DEBUG')
 
     def recoverOrphanShells(self, auto: bool = False) -> dict:
         """Detect and restore TDXN-tagged empty COMPs that lost their table row.
@@ -10692,12 +10911,19 @@ class EmbodyExt:
         # --- classify every tdn-strategy row from table + disk -------------
         plan = []          # (row_index, op_path, old_rel, new_rel, action)
         rename_map = {}    # old_rel -> new_rel, for the tdn_ref rewrite
+        embody_path = self.my.path
         for i in range(1, table.numRows):
             if self._cellVal(i, 'strategy', table=table) != 'tdn':
                 continue
             op_path = self._cellVal(i, 'path', table=table)
             old_rel = self._cellVal(i, 'rel_file_path', table=table)
             if not old_rel:
+                continue
+            # Every other lifecycle path excludes Embody's own COMP and its
+            # descendants (their .tdn files are receipts, and two repo tools
+            # name Embody.tdn); migration was the one that did not.
+            if (op_path == embody_path or op_path.startswith(embody_path + '/')
+                    or embody_path.startswith(op_path + '/')):
                 continue
             if scope and not (op_path == scope
                               or op_path.startswith(scope + '/')):

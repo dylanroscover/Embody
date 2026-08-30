@@ -3233,13 +3233,16 @@ class EnvoyMCPServer:
                           max_depth: int = None,
                           embed_all: bool = False) -> dict:
             """
-            Export a TouchDesigner network to .tdn JSON format.
+            Export a TouchDesigner network as a TDXN document (a dict over
+            MCP; YAML in a .tdxn/.tdn file on disk).
             Only non-default properties are included, keeping output minimal.
 
             Args:
                 root_path: Root COMP to export from (default "/" for entire project)
                 include_dat_content: Include DAT text/table content (default None = use Embeddatsintdns toggle)
-                output_file: File path to write JSON. Use "auto" to generate name. None returns dict only.
+                output_file: File path to write the TDXN to. Use "auto" to generate name. None returns dict only.
+                    An output_file that is NOT the COMP's tracked file is a snapshot: the
+                    tracking row and the canonical file are left alone.
                 max_depth: Maximum recursion depth (None = unlimited)
                 embed_all: If True, recurse into TDXN-tagged COMPs instead of
                     skipping their children. Produces a self-contained export.
@@ -3252,7 +3255,10 @@ class EnvoyMCPServer:
             comp.store('_tdn_palette_handling', 'blackbox').
 
             Returns:
-                Dict with the .tdn JSON document and optional file path
+                Without output_file: {'success', 'tdn': <document>}.
+                With output_file: {'success', 'file', 'summary': {network_path,
+                version, operators, annotations}, 'note'} -- the document is
+                NOT echoed back; Read the file for its contents.
             """
             return self._execute_in_td('export_network', {
                 'root_path': root_path,
@@ -3267,11 +3273,12 @@ class EnvoyMCPServer:
                           clear_first: bool = False,
                           override: bool = False) -> dict:
             """
-            Import a .tdn network into a TouchDesigner COMP, recreating all operators.
+            Import a TDXN network into a TouchDesigner COMP, recreating all operators.
 
             Args:
                 target_path: Destination COMP path to import into
-                tdn: The .tdn JSON document (full document or just the operators array)
+                tdn: The TDXN document as a dict (full document, or a dict holding
+                    just an 'operators' array)
                 clear_first: If True, delete all existing children before importing
                 override: Bypass the multi-session gate when another live
                     session claimed this COMP or wrote it very recently

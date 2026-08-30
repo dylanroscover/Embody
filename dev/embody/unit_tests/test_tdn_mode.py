@@ -135,6 +135,26 @@ class TestTdnMode(EmbodyTestCase):
         messages = ' | '.join(e.get('message', '') for e in new_logs)
         self.assertIn('mode=export', messages)
 
+    def test_export_mode_recovery_runs_with_createonstart_off(self):
+        """Tdncreateonstart is greyed out in export mode but used to gate
+        crash recovery silently (TDXN review 2026-08-30)."""
+        self._setMode('export')
+        par = self.embody.par.Tdncreateonstart
+        saved = par.eval()
+        ext = self.embody_ext
+        calls = []
+        real = ext._recoverMissingTDNComps
+        ext._recoverMissingTDNComps = lambda: calls.append(1) or 0
+        try:
+            par.val = False
+            ext.reconstructTDNComps()
+        finally:
+            if ext.__dict__.get('_recoverMissingTDNComps') is not None:
+                del ext.__dict__['_recoverMissingTDNComps']
+            par.val = saved
+        self.assertEqual(calls, [1],
+                         'export-mode recovery must run regardless of the full-only par')
+
     # ------------------------------------------------------------------
     # 4. SaveTDN gating
     # ------------------------------------------------------------------

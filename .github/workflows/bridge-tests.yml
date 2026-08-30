@@ -52,6 +52,14 @@ on:
       - 'dev/embody/unit_tests/test_scanner_parity.py'
       - 'dev/embody/unit_tests/fixtures/**'
       - 'platform/packages/scanner-ts/fixtures/**'
+      # C7 schema validation of every committed TDXN document, and the C1
+      # canonical-serialization corpus shared with scanner-ts.
+      - 'dev/embody/unit_tests/test_tdn_schema.py'
+      - 'docs/tdn.schema.yaml'
+      - 'dev/**/*.tdn'
+      - 'dev/**/*.tdxn'
+      - 'specimens/**'
+      - 'platform/packages/contracts/fixtures/**'
       - 'pytest.ini'
       - 'dev/embody/unit_tests/test_embody_pyenv.py'
       - 'dev/embody/unit_tests/test_pyenv_context.py'
@@ -95,6 +103,14 @@ on:
       - 'dev/embody/unit_tests/test_scanner_parity.py'
       - 'dev/embody/unit_tests/fixtures/**'
       - 'platform/packages/scanner-ts/fixtures/**'
+      # C7 schema validation of every committed TDXN document, and the C1
+      # canonical-serialization corpus shared with scanner-ts.
+      - 'dev/embody/unit_tests/test_tdn_schema.py'
+      - 'docs/tdn.schema.yaml'
+      - 'dev/**/*.tdn'
+      - 'dev/**/*.tdxn'
+      - 'specimens/**'
+      - 'platform/packages/contracts/fixtures/**'
       - 'pytest.ini'
       - 'dev/embody/unit_tests/test_embody_pyenv.py'
       - 'dev/embody/unit_tests/test_pyenv_context.py'

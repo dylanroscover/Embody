@@ -44,7 +44,7 @@ Use the `export_network` tool with these options:
 |-----------|---------|-------------|
 | `root_path` | `"/"` | Starting COMP path |
 | `include_dat_content` | Toggle setting | Include DAT text/table content |
-| `output_file` | `null` | File path (use `"auto"` for automatic naming, `null` for dict-only) |
+| `output_file` | `null` | File path (use `"auto"` for automatic naming, `null` for dict-only). A path other than the COMP's tracked file writes a **snapshot**: the tracked file and its table row are left untouched, and no stale-file cleanup runs. A relative path is anchored at the project folder. |
 | `max_depth` | `null` (unlimited) | Maximum recursion depth |
 | `embed_all` | `false` | Recurse into TDXN-tagged COMPs instead of writing `tdn_ref` pointers, producing a self-contained export |
 

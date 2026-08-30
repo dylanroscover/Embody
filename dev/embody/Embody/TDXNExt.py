@@ -14,8 +14,11 @@ This extension lives on the Embody COMP and is callable via:
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+import math
+import time
 import os
 import shutil
 import sys
@@ -212,6 +215,8 @@ DEFAULT_FLAGS = {
 	'viewer': False,
 	'expose': True,
 	'allowCooking': True,
+	# Authored, not runtime: a clone-immune COMP survives a clone re-sync.
+	'cloneImmune': False,
 }
 
 DEFAULT_NODE_SIZE = (200, 100)
@@ -305,6 +310,11 @@ _SYSTEM_PATH_PREFIXES = tuple(p + '/' for p in SYSTEM_PATHS)
 # below can call it directly. Trusted own-network Copy/Paste is the only thing
 # that needs it; the untrusted community layer lives in CollectionExt.
 # =============================================================================
+# Parsed-document cache for _read_existing_tdn, keyed by path; validated
+# by (mtime_ns, size) on every hit. Bounded so a long session cannot grow it.
+_EXISTING_TDN_CACHE = {}
+_EXISTING_TDN_CACHE_MAX = 512
+
 EMBODY_TDN_MARKER = "_embody_tdn"
 EMBODY_TDN_VERSION = 1
 ENVELOPE_SOURCES = ("embody", "embody.tools")
@@ -313,16 +323,86 @@ ENVELOPE_SOURCES = ("embody", "embody.tools")
 def is_embody_tdn_envelope(value) -> bool:
 	if not isinstance(value, dict):
 		return False
-	return (value.get(EMBODY_TDN_MARKER) == EMBODY_TDN_VERSION
+	marker = value.get(EMBODY_TDN_MARKER)
+	return (type(marker) is type(EMBODY_TDN_VERSION)
+			and marker == EMBODY_TDN_VERSION
 			and value.get("source") in ENVELOPE_SOURCES
 			and isinstance(value.get("sha256"), str)
 			and isinstance(value.get("tdn"), dict))
 
 
+def _js_number(value) -> str:
+	"""Format a number the way JavaScript's JSON.stringify does.
+
+	The clipboard payload crosses the wire as JSON text and the web side
+	hashes the PARSED value, which cannot tell 1.0 from 1 -- so Python's
+	repr rules (`1.0`, `-0.0`, `1e+16`) could never agree with it (TDXN
+	review 2026-08-30: six value classes hashed differently). Both sides now
+	use Number::toString semantics: integral values print as integers below
+	1e21, fixed notation for 1e-7 <= |x| < 1e21, exponent `d.ddde+N`
+	otherwise, with the shortest round-trip digits. NaN/Infinity are
+	refused on both sides.
+	"""
+	if isinstance(value, bool):
+		return 'true' if value else 'false'
+	if isinstance(value, int):
+		return str(value)
+	x = float(value)
+	if math.isnan(x) or math.isinf(x):
+		raise ValueError('TDXN payload cannot contain non-finite numbers')
+	if x == 0:
+		return '0'
+	if x == int(x) and abs(x) < 1e21:
+		return str(int(x))
+	from decimal import Decimal
+	d = Decimal(repr(abs(x)))
+	sign = '-' if x < 0 else ''
+	digits, exp = d.as_tuple().digits, d.as_tuple().exponent
+	s = ''.join(str(i) for i in digits).rstrip('0') or '0'
+	exp += len(digits) - len(s)
+	k = len(s)
+	n = k + exp
+	if k <= n <= 21:
+		return sign + s + '0' * (n - k)
+	if 0 < n <= 21:
+		return sign + s[:n] + '.' + s[n:]
+	if -6 < n <= 0:
+		return sign + '0.' + '0' * (-n) + s
+	e = n - 1
+	mant = s[0] + ('.' + s[1:] if k > 1 else '')
+	return sign + mant + 'e' + ('+' if e > 0 else '-') + str(abs(e))
+
+
+def _canonical_json(value) -> str:
+	"""Compact JSON with keys in code-point order and JS number text."""
+	if value is None:
+		return 'null'
+	if isinstance(value, (bool, int, float)):
+		return _js_number(value)
+	if isinstance(value, str):
+		return json.dumps(value, ensure_ascii=False)
+	if isinstance(value, (list, tuple)):
+		return '[' + ','.join(_canonical_json(v) for v in value) + ']'
+	if isinstance(value, dict):
+		# Python compares str by code point; the TS side sorts by code
+		# point too (not UTF-16 units), so astral keys order the same.
+		parts = []
+		for k, v in sorted(value.items(), key=lambda kv: str(kv[0])):
+			parts.append(json.dumps(str(k), ensure_ascii=False) + ':' + _canonical_json(v))
+		return '{' + ','.join(parts) + '}'
+	raise TypeError(f'TDXN payload cannot contain {type(value).__name__}')
+
+
 def canonical_tdn_bytes(tdn: dict) -> bytes:
-	"""Canonical JSON bytes used for TDXN hashing (must match the TS side)."""
-	return json.dumps(tdn, sort_keys=True, separators=(",", ":"),
-					  ensure_ascii=False).encode("utf-8")
+	"""Canonical JSON bytes used for TDXN hashing (must match the TS side).
+
+	Rules (contract C1): keys sorted by Unicode code point, separators
+	`,`/`:`, non-ASCII emitted raw, numbers per JavaScript Number::toString
+	(see _js_number), NaN/Infinity refused. platform/packages/contracts/
+	fixtures/canonical_cases.json pins both implementations to the same
+	strings.
+	"""
+	return _canonical_json(tdn).encode("utf-8")
 
 
 def tdn_sha256(tdn: dict) -> str:
@@ -870,17 +950,32 @@ class TDXNExt:
 		"""Read and parse an existing .tdn file from disk.
 
 		Returns the parsed dict, or None if the file is missing, corrupt,
-		or unreadable.
+		or unreadable. Cached by (path, mtime_ns, size): parsing the
+		existing file was 87% of a checkpoint's cost -- a no-op write
+		parsed the document three times, ~220 ms at 500 ops against a
+		~3 ms disk write (TDXN review 2026-08-30). A write changes mtime
+		and size, so the cache misses exactly when it must. Callers get a
+		deep copy: the cached document is never handed out for mutation.
 		"""
 		try:
 			p = Path(file_path)
 			if not p.is_file():
 				return None
+			st = p.stat()
+			key = str(p)
+			hit = _EXISTING_TDN_CACHE.get(key)
+			if hit is not None and hit[0] == (st.st_mtime_ns, st.st_size):
+				return copy.deepcopy(hit[1])
 			result = tdn_load(p.read_text(encoding='utf-8'))
 			# A valid .tdn is a mapping. YAML happily parses garbage like
 			# 'not valid json {{{' into a scalar string (legacy JSON would have
 			# raised), so reject any non-dict as corrupt/unreadable.
-			return result if isinstance(result, dict) else None
+			if not isinstance(result, dict):
+				return None
+			if len(_EXISTING_TDN_CACHE) >= _EXISTING_TDN_CACHE_MAX:
+				_EXISTING_TDN_CACHE.clear()
+			_EXISTING_TDN_CACHE[key] = ((st.st_mtime_ns, st.st_size), copy.deepcopy(result))
+			return result
 		except Exception:
 			return None
 
@@ -1309,12 +1404,16 @@ class TDXNExt:
 	# PROMOTED METHODS (uppercase -- callable directly on op.Embody)
 	# =========================================================================
 
+	# Per-frame budget for the chunked async export's main-thread hook.
+	_EXPORT_FRAME_BUDGET_S = 0.008
+
 	def ExportNetwork(self, root_path: str = '/', include_dat_content: Optional[bool] = None,
 					  output_file: Optional[str] = None, max_depth: Optional[int] = None,
 					  cleanup_protected: Optional[list[str]] = None,
 					  embed_all: bool = False,
 					  include_storage: Optional[bool] = None,
-					  skip_cleanup: bool = False) -> dict[str, Any]:
+					  skip_cleanup: bool = False,
+					  interactive: bool = True) -> dict[str, Any]:
 		"""
 		Export a TouchDesigner network to .tdn JSON format.
 
@@ -1327,6 +1426,9 @@ class TDXNExt:
 			cleanup_protected: List of absolute .tdn file paths that must NOT
 				be deleted by stale-file cleanup. Used by SaveTDN to protect
 				.tdn files belonging to other independently-tracked TDXN COMPs.
+			interactive: False for programmatic callers (MCP export_network):
+				the locked-content warning is logged instead of raised as a
+				modal that would pin the main thread waiting for a click.
 			embed_all: If True, recurse into TDXN-tagged COMPs instead of
 				skipping their children. Produces a self-contained export.
 
@@ -1466,6 +1568,18 @@ class TDXNExt:
 				filepath = self._resolveOutputPath(output_file, root_op)
 				content = TDXNExt._compact_json_dumps(tdn)
 
+				# An AD-HOC export (output_file is not this COMP's tracked
+				# file) neither reclaims files nor moves the row. The
+				# cleanup's protected set excluded the root's own tracked
+				# file and _trackTDNExport repointed the row at the
+				# snapshot, so export_network(output_file=...) on a tracked
+				# COMP deleted its canonical file (TDXN review 2026-08-30).
+				tracked_abs = self._trackedTDNFileFor(root_path)
+				adhoc = bool(tracked_abs) and not TDXNExt._samePath(
+					tracked_abs, filepath)
+				if adhoc:
+					skip_cleanup = True
+
 				# Stale-file cleanup scans the whole project folder with rglob,
 				# which is hundreds of ms (the dominant checkpoint cost). Autosave
 				# checkpoints pass skip_cleanup=True: a checkpoint re-writes ONE
@@ -1502,6 +1616,8 @@ class TDXNExt:
 
 				if not skip_cleanup:
 					protected = [filepath]
+					if tracked_abs:
+						protected.append(tracked_abs)
 					if cleanup_protected:
 						protected.extend(cleanup_protected)
 					stale = TDXNExt._cleanupStaleTDNFiles(
@@ -1521,7 +1637,7 @@ class TDXNExt:
 				self._trackTDNExport(root_path, filepath,
 					build_num=build_num,
 					touch_build=f'{app.version}.{app.build}',
-					skipped=skipped)
+					skipped=skipped, adhoc=adhoc)
 				self._log(
 					f'Network unchanged, kept {filepath}' if skipped
 					else f'Exported network to {filepath}', 'SUCCESS')
@@ -1532,7 +1648,8 @@ class TDXNExt:
 				if not skip_cleanup:
 					# Locked non-DAT operators whose frozen content won't
 					# survive a TDXN round-trip.
-					self._warnLockedNonDATs(root_op, context='export')
+					self._warnLockedNonDATs(
+						root_op, context='export' if interactive else 'import')
 					# One-time warning for large monolithic TDXN files.
 					if not options.get('embed_all'):
 						self._warnLargeTDN(filepath, root_path)
@@ -1655,9 +1772,18 @@ class TDXNExt:
 			protected_files = list(
 				self.ownerComp.ext.Embody._getAllTrackedTDNFiles(
 					exclude_path=root_path))
+			# The root's OWN tracked file is never a deletion candidate,
+			# and a snapshot export leaves the row alone (see ExportNetwork).
+			tracked_abs = self._trackedTDNFileFor(root_path)
+			if tracked_abs:
+				protected_files.append(tracked_abs)
+		adhoc = bool(resolved_path) and bool(
+			self._trackedTDNFileFor(root_path)) and not TDXNExt._samePath(
+			self._trackedTDNFileFor(root_path), resolved_path)
 
 		self._export_state = {
 			'paths': op_paths,
+			'adhoc': adhoc,
 			'index': 0,
 			'batch_size': max(10, int(batch_size)),
 			'cancel': False,
@@ -1794,9 +1920,11 @@ class TDXNExt:
 
 				protected = [state['output_file']] + state.get(
 					'protected_files', [])
-				stale = TDXNExt._cleanupStaleTDNFiles(
-					before_tdn, protected,
-					base_folder)
+				stale = []
+				if not state.get('adhoc'):
+					stale = TDXNExt._cleanupStaleTDNFiles(
+						before_tdn, protected,
+						base_folder)
 
 				state['result'] = {
 					'success': True,
@@ -1823,10 +1951,16 @@ class TDXNExt:
 		)
 		thread = thread_manager.EnqueueTask(task, standalone=True)
 		if thread is None:
-			self._log(
-				'Thread Manager at capacity -- export queued but may be '
-				'delayed. Try restarting Envoy to free stale threads.',
-				'WARNING')
+			# No task means no RefreshHook, so nothing would ever advance
+			# the index or set done -- the state latched and every later
+			# async export was refused as "already in progress" (TDXN
+			# review 2026-08-30). Release it and fail loud instead.
+			self._export_state = None
+			done_event.set()
+			msg = ('Thread Manager at capacity -- async export NOT started. '
+				   'Retry, or restart Envoy to free stale threads.')
+			self._log(msg, 'ERROR')
+			return {'error': msg}
 
 		self._log(
 			f'Exporting {len(op_paths)} operators from {root_path}...',
@@ -1977,7 +2111,15 @@ class TDXNExt:
 			idx = state['index']
 			batch_end = min(idx + state['batch_size'], len(paths))
 
+			# batch_size caps the COUNT; the frame budget caps the TIME.
+			# 200 nullCHOPs cost 11 ms but 200 real COMPs cost 100-500 ms
+			# (TDXN review 2026-08-30) -- the defect _queueDirtyTDNRoots
+			# was rewritten to fix. Stop early and resume next frame.
+			deadline = time.perf_counter() + TDXNExt._EXPORT_FRAME_BUDGET_S
 			for i in range(idx, batch_end):
+				if i > idx and time.perf_counter() > deadline:
+					batch_end = i
+					break
 				try:
 					target_op = op(paths[i])
 					if target_op:
@@ -2066,7 +2208,8 @@ class TDXNExt:
 			if result.get('file'):
 				self._trackTDNExport(state['root_path'], result['file'],
 					build_num=state['metadata'].get('build'),
-					touch_build=state['metadata'].get('td_build'))
+					touch_build=state['metadata'].get('td_build'),
+					adhoc=state.get('adhoc', False))
 			self._log(msg, 'SUCCESS')
 			if result.get('backup_error'):
 				self._log(
@@ -2306,8 +2449,9 @@ class TDXNExt:
 					f'Ignoring malformed type_defaults '
 					f'({type(type_defaults).__name__})', 'WARNING')
 				type_defaults = {}
-			if par_templates:
-				TDXNExt._resolve_par_templates(op_defs, par_templates)
+			# Unconditional: a `$t` page with NO templates block is exactly
+			# the unknown-reference case the resolver now warns about.
+			TDXNExt._resolve_par_templates(op_defs, par_templates or {}, log=self._log)
 			if type_defaults:
 				TDXNExt._merge_type_defaults(op_defs, type_defaults)
 
@@ -3733,6 +3877,16 @@ class TDXNExt:
 		if first_par.help:
 			par_def['help'] = first_par.help
 
+		# Conditional greying: enableExpr wins, else a static enable=False.
+		# Neither was exported before (TDXN review 2026-08-30).
+		try:
+			if first_par.enableExpr:
+				par_def['enableExpr'] = first_par.enableExpr
+			elif not first_par.enable:
+				par_def['enable'] = False
+		except Exception:
+			pass
+
 		# Momentary pars never serialize a value: an export catching a
 		# Pulse in flight writes `value: true` and import re-fires it on
 		# every load (shipped twice, v6.0.243/244). Import side agrees.
@@ -3819,13 +3973,16 @@ class TDXNExt:
 			return {}
 
 		result = {}
-		for key, value in raw_storage.items():
+		# Sorted: dict order is insertion order, so a store/unstore cycle
+		# reordered the storage: block and produced a phantom diff (the
+		# same class the sorted-tags fix closed).
+		for key, value in sorted(raw_storage.items(), key=lambda kv: str(kv[0])):
 			if key in SKIP_STORAGE_KEYS:
 				continue
 			try:
 				serialized = self._serializeStorageValue(value)
 				result[key] = serialized
-			except (TypeError, ValueError, RecursionError) as e:
+			except (TypeError, ValueError, RecursionError, OverflowError) as e:
 				self._log(
 					f'Skipping non-serializable storage key '
 					f'"{key}" on {target.path}: {type(value).__name__} - {e}',
@@ -3846,6 +4003,11 @@ class TDXNExt:
 		if isinstance(value, int):
 			return value
 		if isinstance(value, float):
+			if math.isnan(value) or math.isinf(value):
+				# int(inf) raises OverflowError, which escaped the
+				# caller's catch and aborted the WHOLE export for one
+				# value (TDXN review 2026-08-30). Skip it like nan.
+				raise ValueError('non-finite float')
 			rounded = round(value, 10)
 			if rounded == int(rounded) and abs(rounded) < 2**53:
 				return int(rounded)
@@ -3978,16 +4140,18 @@ class TDXNExt:
 			if abs(opacity - 1.0) > 1e-6:
 				data['opacity'] = round(opacity, 4)
 
+			# Zero is a value: a fully transparent background could
+			# neither be written nor restored (TDXN review 2026-08-30).
 			alpha = ann.par.Backcoloralpha.eval()
-			if abs(alpha - 1.0) > 1e-6 and alpha > 0:
+			if abs(alpha - 1.0) > 1e-6:
 				data['backAlpha'] = round(alpha, 4)
 
 			titleHeight = ann.par.Titleheight.eval()
-			if abs(titleHeight - 30) > 1e-6 and titleHeight > 0:
+			if abs(titleHeight - 30) > 1e-6:
 				data['titleHeight'] = titleHeight
 
 			bodyFontSize = ann.par.Bodyfontsize.eval()
-			if abs(bodyFontSize - 10) > 1e-6 and bodyFontSize > 0:
+			if abs(bodyFontSize - 10) > 1e-6:
 				data['bodyFontSize'] = bodyFontSize
 
 			result.append(data)
@@ -4258,8 +4422,27 @@ class TDXNExt:
 				return True
 		except Exception:
 			pass
+		# A `file` par alone is a CLAIM: the path may not exist, or the
+		# file may hold older text than the DAT (syncfile off). Both lost
+		# authored text silently on the default export path (TDXN review
+		# 2026-08-30). Trust the file only when it exists and, without
+		# syncfile, when its text matches the DAT's.
 		try:
-			return bool(dat_op.par.file.eval())
+			file_ref = str(dat_op.par.file.eval() or '').strip()
+			if not file_ref:
+				return False
+			abs_path = file_ref
+			if not os.path.isabs(abs_path):
+				abs_path = os.path.join(project.folder, abs_path)
+			if not os.path.isfile(abs_path):
+				return False
+			sync = getattr(dat_op.par, 'syncfile', None)
+			if sync is not None and sync.eval():
+				return True
+			with open(abs_path, encoding='utf-8', errors='replace') as fh:
+				disk = fh.read()
+			norm = lambda t: t.replace('\r\n', '\n').replace('\r', '\n')
+			return norm(disk) == norm(dat_op.text or '')
 		except Exception:
 			return False
 
@@ -4699,6 +4882,15 @@ class TDXNExt:
 				if par_def.get('help'):
 					par.help = par_def['help']
 
+				# Conditional greying (see _exportCustomParGroup)
+				try:
+					if par_def.get('enableExpr'):
+						par.enableExpr = par_def['enableExpr']
+					elif par_def.get('enable') is False:
+						par.enable = False
+				except Exception as e:
+					self._log(f'Could not set enable for {par_name}: {e}', 'DEBUG')
+
 			except Exception as e:
 				self._log(
 					f'Failed to create custom par "{par_name}": {e}',
@@ -5042,6 +5234,11 @@ class TDXNExt:
 			flags_data = op_def.get('flags', [])
 			if isinstance(flags_data, list):
 				for entry in flags_data:
+					# The schema pins the flag names; the importer used to
+					# setattr ANY name from the file (TDXN review 2026-08-30).
+					if not isinstance(entry, str) or entry.lstrip('-') not in DEFAULT_FLAGS:
+						self._log(f'Ignoring unknown flag {entry!r} on {target.path}', 'DEBUG')
+						continue
 					try:
 						if entry.startswith('-'):
 							setattr(target, entry[1:], False)
@@ -5395,15 +5592,15 @@ class TDXNExt:
 					ann.par.Opacity = opacity
 
 				backAlpha = ann_def.get('backAlpha')
-				if backAlpha is not None and backAlpha > 0:
+				if backAlpha is not None:
 					ann.par.Backcoloralpha = backAlpha
 
 				titleHeight = ann_def.get('titleHeight')
-				if titleHeight is not None and titleHeight > 0:
+				if titleHeight is not None:
 					ann.par.Titleheight = titleHeight
 
 				bodyFontSize = ann_def.get('bodyFontSize')
-				if bodyFontSize is not None and bodyFontSize > 0:
+				if bodyFontSize is not None:
 					ann.par.Bodyfontsize = bodyFontSize
 
 				created.append(ann.path)
@@ -6509,6 +6706,8 @@ class TDXNExt:
 		if isinstance(val, int):
 			return val
 		if isinstance(val, float):
+			if math.isnan(val) or math.isinf(val):
+				raise ValueError('non-finite parameter value')
 			# Round to avoid floating point noise
 			rounded = round(val, 10)
 			# Convert to int if it's a whole number
@@ -6626,7 +6825,7 @@ class TDXNExt:
 		walk(operators)
 
 		result = {}
-		for op_type, count in type_counts.items():
+		for op_type, count in sorted(type_counts.items()):
 			if count < 2:
 				continue
 
@@ -6634,7 +6833,7 @@ class TDXNExt:
 
 			# Parameters (dict-level merge on import)
 			unanimous = {}
-			for (pname, pval_json), pcount in type_par_counts[op_type].items():
+			for (pname, pval_json), pcount in sorted(type_par_counts[op_type].items()):
 				if pcount == count:
 					unanimous[pname] = json.loads(pval_json)
 			if unanimous:
@@ -6869,13 +7068,15 @@ class TDXNExt:
 		return final_templates, operators
 
 	@staticmethod
-	def _resolve_par_templates(op_defs, par_templates):
+	def _resolve_par_templates(op_defs, par_templates, log=None):
 		"""Resolve $t template references in custom_pars back to full definitions.
 
-		Modifies op_defs in-place.
+		Modifies op_defs in-place. `log(message, level)` voices an unknown
+		or empty template reference; the spec promises a warning and the
+		page used to vanish silently (TDXN review 2026-08-30).
 		"""
 		if not par_templates:
-			return
+			par_templates = {}
 
 		def walk(ops):
 			for op_def in ops:
@@ -6886,6 +7087,11 @@ class TDXNExt:
 							template_name = page_val['$t']
 							template_defs = par_templates.get(template_name, [])
 							if not template_defs:
+								if log:
+									log(f'Unknown custom-parameter template '
+										f'"{template_name}" referenced by page '
+										f'"{page_name}" on {op_def.get("name")} '
+										f'-- page skipped', 'WARNING')
 								continue
 							# Reconstruct full definitions with value overrides
 							resolved = []
@@ -6984,16 +7190,45 @@ class TDXNExt:
 					self._log(f'Could not resolve externalizations folder: {e}', 'WARNING')
 				return str(project_dir / f'{safe_name}{suffix}')
 			else:
-				# Non-root: use full TD path to mirror operator hierarchy
-				rel_path = root_op.path.lstrip('/') + suffix
+				# Non-root: the SAME path the tracker mints, folder included.
+				# Building it here from the TD path alone skipped the
+				# externalizations folder, so an 'auto' export on a project
+				# with a Folder par wrote beside the tracked file and
+				# repointed the row (TDXN review 2026-08-30).
+				rel_path = self.ownerComp.ext.Embody._buildTDNRelPath(
+					root_op, suffix=suffix)
 				out_path = project_dir / rel_path
 				out_path.parent.mkdir(parents=True, exist_ok=True)
 				return str(out_path)
 
+		# A relative output_file is relative to the PROJECT, never to the
+		# process cwd (moonshine fidelity audit #4).
+		# Rooted paths ('/tmp/x.tdn', a drive) are returned as-is; only a
+		# bare relative path (no root, no drive) is anchored.
+		out = Path(str(output_file))
+		if not out.is_absolute() and not out.anchor:
+			return str(Path(project.folder) / out)
 		return str(output_file)
 
+	def _trackedTDNFileFor(self, root_path):
+		"""Absolute path of the tsv row's file for a TDXN COMP, or None."""
+		try:
+			emb = self.ownerComp.ext.Embody
+			rel = emb._getStrategyFilePath(root_path, 'tdn')
+			return str(emb.buildAbsolutePath(rel)) if rel else None
+		except Exception:
+			return None
+
+	@staticmethod
+	def _samePath(a, b) -> bool:
+		try:
+			return (os.path.normcase(os.path.normpath(str(a)))
+					== os.path.normcase(os.path.normpath(str(b))))
+		except Exception:
+			return False
+
 	def _trackTDNExport(self, root_path, file_path, build_num=None, touch_build=None,
-	                    skipped=False):
+	                    skipped=False, adhoc=False):
 		"""Add/update a TDXN row in the externalizations table.
 
 		NEW rows only for TDXN-tagged COMPs (plus root '/') -- ad-hoc file
@@ -7007,7 +7242,16 @@ class TDXNExt:
 		that kept externalizations.tsv dirty after every Refresh (field
 		2026-08-29). The row is written by INDEX here, which is why a
 		path-keyed spy on _updateRowCells never saw it.
+
+		adhoc: the export went somewhere other than the row's file (a
+		snapshot). The row keeps pointing at the canonical file and the
+		recovery breadcrumb is not touched -- repointing it was the other
+		half of the canonical-file deletion (TDXN review 2026-08-30).
 		"""
+		if adhoc:
+			self._log(f'Ad-hoc export of {root_path} to {file_path}: '
+					  f'tracking row left at its canonical file', 'INFO')
+			return
 		try:
 			table = self.ownerComp.ext.Embody.Externalizations
 			if not table:

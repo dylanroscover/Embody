@@ -1,0 +1,219 @@
+{
+  "_comment": "Contract C1 canonical-serialization parity corpus. `expected` is what BOTH TDXNExt.canonical_tdn_bytes and contracts/envelope.ts canonicalTdnString must produce for `value`. Generated from the Python rules by scratchpad gen_canonical.py; regenerate there, never by hand.",
+  "cases": [
+    {
+      "name": "int_3",
+      "value": 3,
+      "expected": "3"
+    },
+    {
+      "name": "bool_true",
+      "value": true,
+      "expected": "true"
+    },
+    {
+      "name": "bool_false",
+      "value": false,
+      "expected": "false"
+    },
+    {
+      "name": "null",
+      "value": null,
+      "expected": "null"
+    },
+    {
+      "name": "neg_int",
+      "value": -17,
+      "expected": "-17"
+    },
+    {
+      "name": "whole_float_1.0",
+      "value": 1.0,
+      "expected": "1"
+    },
+    {
+      "name": "whole_float_0.0",
+      "value": 0.0,
+      "expected": "0"
+    },
+    {
+      "name": "neg_zero",
+      "value": -0.0,
+      "expected": "0"
+    },
+    {
+      "name": "color_red",
+      "value": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "expected": "[1,0,0]"
+    },
+    {
+      "name": "color_gray",
+      "value": [
+        0.5451,
+        0.5451,
+        0.5451
+      ],
+      "expected": "[0.5451,0.5451,0.5451]"
+    },
+    {
+      "name": "half",
+      "value": 0.5,
+      "expected": "0.5"
+    },
+    {
+      "name": "third",
+      "value": 0.3333333333333333,
+      "expected": "0.3333333333333333"
+    },
+    {
+      "name": "pi10",
+      "value": 3.1415926536,
+      "expected": "3.1415926536"
+    },
+    {
+      "name": "neg_frac",
+      "value": -2.75,
+      "expected": "-2.75"
+    },
+    {
+      "name": "big_float_1e16",
+      "value": 1e+16,
+      "expected": "10000000000000000"
+    },
+    {
+      "name": "big_float_1e20",
+      "value": 1e+20,
+      "expected": "100000000000000000000"
+    },
+    {
+      "name": "huge_1e21",
+      "value": 1e+21,
+      "expected": "1e+21"
+    },
+    {
+      "name": "huge_1.5e22",
+      "value": 1.5e+22,
+      "expected": "1.5e+22"
+    },
+    {
+      "name": "sci_1e-07",
+      "value": 1e-07,
+      "expected": "1e-7"
+    },
+    {
+      "name": "sci_1e-05",
+      "value": 1e-05,
+      "expected": "0.00001"
+    },
+    {
+      "name": "sci_1e-6",
+      "value": 1e-06,
+      "expected": "0.000001"
+    },
+    {
+      "name": "mant_1.5e-05",
+      "value": 1.5e-05,
+      "expected": "0.000015"
+    },
+    {
+      "name": "tiny_1.25e-10",
+      "value": 1.25e-10,
+      "expected": "1.25e-10"
+    },
+    {
+      "name": "small_0.001",
+      "value": 0.001,
+      "expected": "0.001"
+    },
+    {
+      "name": "small_0.000001",
+      "value": 1e-06,
+      "expected": "0.000001"
+    },
+    {
+      "name": "int_2_53",
+      "value": 9007199254740992,
+      "expected": "9007199254740992"
+    },
+    {
+      "name": "float_near_int",
+      "value": 2.0000000001,
+      "expected": "2.0000000001"
+    },
+    {
+      "name": "key_sort_ascii",
+      "value": {
+        "b": 1,
+        "A": 2,
+        "_": 3,
+        "a": 4
+      },
+      "expected": "{\"A\":2,\"_\":3,\"a\":4,\"b\":1}"
+    },
+    {
+      "name": "key_sort_astral",
+      "value": {
+        "￿": 1,
+        "😀": 2
+      },
+      "expected": "{\"￿\":1,\"😀\":2}"
+    },
+    {
+      "name": "unicode_str",
+      "value": "café 中文 😀",
+      "expected": "\"café 中文 😀\""
+    },
+    {
+      "name": "ctrl_str",
+      "value": "a\u0001b",
+      "expected": "\"a\\u0001b\""
+    },
+    {
+      "name": "tab_nl_str",
+      "value": "a\tb\nc",
+      "expected": "\"a\\tb\\nc\""
+    },
+    {
+      "name": "del_str",
+      "value": "ab",
+      "expected": "\"ab\""
+    },
+    {
+      "name": "quote_str",
+      "value": "he said \"hi\" \\ back",
+      "expected": "\"he said \\\"hi\\\" \\\\ back\""
+    },
+    {
+      "name": "nested",
+      "value": {
+        "z": [
+          1,
+          {
+            "y": 0.25,
+            "x": [
+              1e+16,
+              -0.0,
+              "é"
+            ]
+          }
+        ],
+        "a": null
+      },
+      "expected": "{\"a\":null,\"z\":[1,{\"x\":[10000000000000000,0,\"é\"],\"y\":0.25}]}"
+    },
+    {
+      "name": "empty",
+      "value": {},
+      "expected": "{}"
+    },
+    {
+      "name": "empty_list",
+      "value": [],
+      "expected": "[]"
+    }
+  ]
+}

@@ -181,6 +181,78 @@ exists in the three extensions; no memory growth across 20 exports; async
 chunking holds the frame at <=11.3 ms vs 253 ms synchronous; the Refresh
 sweep writes zero tsv rows; `_computeTDNFingerprint` is 0.02 ms/op.
 
+## Fix status (v6.2.5, 2026-08-30)
+
+Every finding above was worked in the same session. Status by item:
+
+**Blockers -- all fixed, each pinned by a test.**
+
+1. Ad-hoc export: `ExportNetwork` detects `output_file != tracked path`, sets
+   `skip_cleanup`, protects the tracked file, and `_trackTDNExport` leaves the
+   row alone (sync and async). The rename re-export branch protects descendants.
+   Live: canonical file survives, row unchanged.
+2. Fingerprint: DAT text, storage, `allowCooking`, `cloneImmune`, dock,
+   custom-par definitions and COMP connectors added; `current` removed.
+   `test_tdn_fingerprint::TestFingerprintMatchesExporter` runs a mutation
+   matrix against `_tdn_content_equal`.
+3. Sweep: dead baselines pruned, the window rotates (`_coarse_sweep_offset`),
+   cap raised to 500 behind the existing time budget. `test_autosave` covers
+   rotation and pruning.
+
+**Majors -- fixed unless noted.**
+
+- DAT text: `_isDATContentSavedOnDisk` requires the file to exist and, without
+  `syncfile`, to match `dat.text`.
+- `enable` / `enableExpr`: exported and imported. `password` stays unexported
+  (TD has no read-back for the flag; documented).
+- `startup_storage`: spec now says import-only.
+- `inf` in storage: skipped with a WARNING (`OverflowError` caught;
+  `_serializeValue` refuses non-finite).
+- Schema: annotation and custom-par fields added; `test_tdn_schema.py`
+  validates every committed document in CI.
+- C1 hash: one canonical rule on both sides (JS number text, code-point key
+  order, non-finite refused); 37-case corpus at
+  `platform/packages/contracts/fixtures/canonical_cases.json`, asserted by
+  `scanner-ts/src/envelope_parity.test.ts` and
+  `Collection/tests/test_tdn_envelope.py`.
+- Unknown `$t`: logged as a WARNING, page skipped (unconditional resolver).
+- `Tdncreateonstart`: the gate now sits after the export-mode branch.
+- Lost tsv row: `_handleTDNAddition` adopts the existing suffix and never
+  mints over a surviving file with an empty network.
+- `_resolveOutputPath('auto')`: non-root exports go through
+  `_buildTDNRelPath`; relative `output_file` is anchored at `project.folder`.
+- Save-window invariant: `_reBaselineCheckpoint` defers under
+  `_suppress_dialogs` instead of dropping; the docstring no longer claims
+  "no table mutation".
+- Emptied networks: `saveTDN(allow_empty=True)` is the deliberate path; the
+  `test_sandbox.tdn` residue was cleared with it. Automatic writers still
+  refuse (a deliberate data-loss guard) -- OPEN by design.
+- Stranded files: `_removeOrphanedTDNChildren` deletes unreferenced child
+  files and pops baselines; the deferred TDXN unlink re-checks the row.
+- `checkpoint()` cost: `_read_existing_tdn` caches by `(mtime_ns, size)`;
+  `flushPendingCheckpoints` is budgeted (`_FLUSH_BUDGET_S`). The 200-390 ms
+  figure is halved, not eliminated -- the remainder is the export itself.
+  OPEN: an async checkpoint path.
+- `_onExportRefresh`: time-budgeted (`_EXPORT_FRAME_BUDGET_S`) as well as
+  count-batched.
+- Async latch: a `None` from `EnqueueTask` clears `_export_state` and returns
+  an error.
+- Pre-save interlock: `_runPreSaveExternalization` cancels an in-flight async
+  export.
+- `export_network` return shape: docstring describes the `summary`/`note`
+  file case.
+
+**Minors** -- storage keys and `type_defaults` sorted; flag import limited to
+the documented names; `$type`/`$value` reserved pair, YAML 1.1 traps and the
+zero-alpha annotation round-trip documented and fixed; `cloneImmune` is a
+flag; MCP schema wording fixed; `tdn_textconv` comment fixed; export mode
+warns on a missing tracked COMP file and on a `.tdn` newer than the project;
+`migrateToTDXN` skips Embody's subtree; the parent-restored recovery branch
+does its bookkeeping; `export_network` over MCP is non-interactive (logs the
+locked-content warning instead of a modal). OPEN: PyYAML emitter parity
+across builds, a `tdn_load` alias bound, an async `ImportNetwork`, and the
+rename-then-crash duplicate.
+
 ## The 52-minute stall during the review
 
 Not a TDXN defect. The Embody log's frame counter brackets the silence:

@@ -43,9 +43,8 @@ except Exception:
 
 # Header keys written into every .tdn on export that change without the
 # network changing. Deliberate SUPERSET of TDXNExt._TDN_VOLATILE_KEYS
-# ({'build','generator','td_build','exported_at'}): 'version' is added so the
-# v1.5->v2.0 format bump does not churn the diff, and 'source_file' is dropped
-# across the migration boundary. 'format' is added for the same reason: the
+# ({'build','generator','td_build','exported_at','source_file'}): 'version'
+# is added so the v1.5->v2.0 format bump does not churn the diff. 'format' is added for the same reason: the
 # v6.1.0 tdn->tdxn identity bump would otherwise show as a one-line diff in
 # every tracked file. Do NOT 'sync' this to equality with
 # _TDN_VOLATILE_KEYS -- the broader set is correct by intent, and adding

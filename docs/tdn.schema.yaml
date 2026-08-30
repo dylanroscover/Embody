@@ -232,7 +232,7 @@ $defs:
     type: array
     items:
       type: string
-      pattern: ^-?(bypass|lock|display|render|viewer|expose|allowCooking)$
+      pattern: ^-?(bypass|lock|display|render|viewer|expose|allowCooking|cloneImmune)$
   storageValue:
     description: 'A storage value: primitive, array, object, or typed wrapper ($type/$value).'
     oneOf:
@@ -359,6 +359,15 @@ $defs:
       readOnly:
         type: boolean
         description: Whether the parameter is read-only.
+      enable:
+        type: boolean
+        description: Static enable state. Written only when false.
+      enableExpr:
+        type: string
+        description: Python expression controlling the enable state. When present, enable is omitted.
+      sequence:
+        type: string
+        description: Name of the custom sequence this definition is a template parameter of.
       help:
         type: string
         description: Tooltip help text for the parameter. Omitted when empty.
@@ -381,7 +390,12 @@ $defs:
         type: string
         description: Template name (matches a key in par_templates).
     additionalProperties:
-      $ref: '#/$defs/parameterValue'
+      oneOf:
+      - $ref: '#/$defs/parameterValue'
+      - type: array
+        items:
+          $ref: '#/$defs/parameterValue'
+        description: Per-component overrides for a multi-component template parameter.
   customParsPageGrouped:
     type: object
     description: Custom parameters grouped by page name. Each page is either an array of parameter definitions
@@ -447,6 +461,17 @@ $defs:
         minimum: 0
         maximum: 1
         description: Background opacity. Omitted when 1.0.
+      backAlpha:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Background alpha. Omitted when 1.0; 0.0 is a value.
+      titleHeight:
+        type: number
+        description: Title bar height. Omitted when 30.
+      bodyFontSize:
+        type: number
+        description: Body font size. Omitted when 10.
   operator:
     type: object
     required:

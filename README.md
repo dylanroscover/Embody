@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.4-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.5-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-65-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -176,7 +176,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **139 test suites** (4,241 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **140 test suites** (4,256 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -207,6 +207,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.2.5**: **The TDXN review, fixed** -- a snapshot `export_network` no longer deletes the COMP's tracked file or repoints its row; dirty detection now covers everything the export writes (DAT text, storage, dock, `allowCooking`, new custom pars, COMP connectors), so `execute_python` edits are autosaved; the autosave sweep rotates and prunes dead baselines instead of starving every root past slot 60. Plus `enable`/`enableExpr` and alpha-0 annotations round-trip, `inf` in storage no longer aborts an export, the C1 clipboard hash uses one canonical rule on both sides with a shared corpus, and every committed TDXN document validates against the shipped schema in CI. **4,256 tests** (140 suites).
 - **6.2.4**: **Type hints are a shipped practice** -- `td-python.md` (deployed into every project) now says to annotate every `def`'s arguments and return, why `x: str = None` must be `Optional[str]`, that TD's own classes are the types, and how to check softly (pyright `basic` behind a baseline); `create_extension` and `/create-extension` generate a typed skeleton. The soft half of what Function Store asked for in issue #94, beside the `opex(...).asType(..., checkType=True)` runtime half. **4,241 tests** (139 suites).
 - **6.2.3**: **The exporter's tracking hook was the third `externalizations.tsv` restamp path** -- `_trackTDNExport` ran after every export, skipped or not, and stamped the row by index, so a skipped autosave checkpoint of Embody's own COMP still dirtied the table. Verified by forcing a dirty fingerprint: drain runs, export skipped, row unchanged. **4,241 tests** (139 suites).
 - **6.2.2**: **`externalizations.tsv` stops dirtying itself** -- an unchanged export (the v6.1.7 no-op write) still restamped the row's timestamp, so every Refresh left a one-line diff; and the test runner's forced `Filecleanup=delete` / `Toxdropexpr=ignore` could be checkpointed into Embody's own receipt mid-run (it reached the committed `embody.tdn` at 6.2.0). Both pars are transient for export now, resting at `keep`/`ask`, restored per user from `config.json`. **4,241 tests** (139 suites).

@@ -443,6 +443,23 @@ class TestRunnerExt:
                 self.ownerComp.unstore(self._TX_KEY)
         except Exception:
             pass
+        self._clearSandboxReceipt()
+
+    def _clearSandboxReceipt(self):
+        """Re-export the emptied sandbox so test_sandbox.tdn holds no residue.
+
+        Mid-run checkpoints export the populated sandbox; after teardown the
+        COMP is empty but `_refusesEmptyTDNOverwrite` (a data-loss guard)
+        stops every automatic writer from emptying the file, so the residue
+        went dirty in git after every run (TDXN review 2026-08-30). The
+        explicit allow_empty path is the sanctioned one; the no-op guard
+        makes it free when the file is already empty."""
+        try:
+            sandbox = self.ownerComp.op('test_sandbox')
+            if sandbox is not None and not sandbox.children:
+                op.Embody.ext.Embody.saveTDN(sandbox.path, allow_empty=True)
+        except Exception as e:
+            op.Embody.Warn('Could not clear the sandbox receipt: %s' % e)
 
     def _suppressAutoexternalize(self):
         """Turn off Envoy auto-externalization for the agent-tier run.

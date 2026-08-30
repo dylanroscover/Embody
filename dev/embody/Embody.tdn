@@ -1,33 +1,33 @@
 format: tdxn
 version: '2.0'
 build: 1222
-generator: Embody/6.2.4
+generator: Embody/6.2.5
 td_build: 099.2025.33070
-source_file: Embody-6.307.toe
-exported_at: '2026-08-30T06:08:47Z'
+source_file: Embody-6.308.toe
+exported_at: '2026-08-30T16:47:15Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
   include_storage: true
 type_defaults:
-  containerCOMP:
-    parameters:
-      resizecomp: =me
-      repocomp: =me
   baseCOMP:
     size: [160, 130]
-  parameterexecuteDAT:
+  containerCOMP:
     parameters:
-      fromop: =parent()
-  textCOMP:
-    parameters:
-      resizecomp: =me
       repocomp: =me
-  tableDAT:
-    size: [130, 90]
+      resizecomp: =me
   panelexecuteDAT:
     parameters:
       fromop: =parent()
+  parameterexecuteDAT:
+    parameters:
+      fromop: =parent()
+  tableDAT:
+    size: [130, 90]
+  textCOMP:
+    parameters:
+      repocomp: =me
+      resizecomp: =me
 type: containerCOMP
 custom_pars:
   Embody:
@@ -275,11 +275,13 @@ custom_pars:
     startSection: true
     default: true
     help: When enabled, reconstructs TDXN-strategy COMP children from .tdxn files on disk when the project opens. Required for TDXN round-trip workflow where children are stripped on save.
+    enable: false
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
     default: true
     help: When enabled, strips children from TDXN-strategy COMPs during project save. Children are recreated on next open via TDXN Create on Start. Keeps .toe files minimal.
+    enable: false
   - name: Tdnpalettehandling
     style: Menu
     label: Palette Handling
@@ -410,6 +412,7 @@ custom_pars:
     style: Folder
     label: AI Project Root (Custom)
     help: Custom directory for AI/MCP config when "AI Project Root" is set to "Custom". Relative paths are resolved against the .toe directory (e.g. "../" places config one level above the .toe -- useful when multiple TouchDesigner projects share a parent folder in a monorepo). Absolute paths are used as-is. Changing this path migrates Embody state and AI config to the new location.
+    enable: false
   - name: Autoexternalize
     style: Menu
     label: Auto-Externalize New Ops
@@ -850,7 +853,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.2.4
+    value: 6.2.5
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -1101,9 +1104,9 @@ operators:
   tags:
   - tdn
   storage:
-    step: 0
     sel:
       mode: advanced
+    step: 0
   tdn_ref: embody/Embody/wizard.tdn
 - name: TDXNExt
   type: textDAT
@@ -1378,7 +1381,6 @@ operators:
   size: [160, 130]
   color: [0.67, 0.67, 0.67]
   storage:
-    omit_target: /embody/base1
     dd_trace:
     - 'hover on dropzone: [''ParGroup''] -> True'
     - 'drop on dropzone: [''Date'']'
@@ -1445,6 +1447,7 @@ operators:
       - '/embody/base1/base1 : Touchbuild'
       - Touchbuild
       - par
+    omit_target: /embody/base1
   children:
   - name: title
     type: textCOMP
@@ -2064,34 +2067,42 @@ operators:
     mode: networkbox
     size: [10, 26]
     color: [0.05, 0.544, 1.0]
+    titleHeight: 0
   - name: envoy_bot_arm_r
     mode: networkbox
     size: [10, 26]
     color: [0.05, 0.544, 1.0]
+    titleHeight: 0
   - name: envoy_bot_body
     mode: networkbox
     size: [30, 34]
     color: [0.05, 0.544, 1.0]
+    titleHeight: 0
   - name: envoy_bot_eye_l
     mode: networkbox
     size: [10, 10]
     color: [0.0, 0.0, 0.0]
+    titleHeight: 0
   - name: envoy_bot_eye_r
     mode: networkbox
     size: [10, 10]
     color: [0.0, 0.0, 0.0]
+    titleHeight: 0
   - name: envoy_bot_head
     mode: networkbox
     size: [34, 26]
     color: [0.05, 0.544, 1.0]
+    titleHeight: 0
   - name: envoy_bot_leg_l
     mode: networkbox
     size: [11, 24]
     color: [0.05, 0.544, 1.0]
+    titleHeight: 0
   - name: envoy_bot_leg_r
     mode: networkbox
     size: [11, 24]
     color: [0.05, 0.544, 1.0]
+    titleHeight: 0
   - name: envoy_bot_speech
     mode: annotate
     title: Embot

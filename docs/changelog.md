@@ -1,5 +1,19 @@
 # Changelog
 
+## v6.2.5
+
+The TDXN review's findings, fixed: three data-loss shapes the format's own tests never reached, and the engine around the serializer brought in line with what the serializer writes.
+
+- **A snapshot export no longer deletes the tracked file.** `export_network(output_file=<anything but the COMP's own file>)` protected every tracked file except the exported COMP's, unlinked its canonical `.tdxn`, and repointed the tsv row at the snapshot. An ad-hoc export now reclaims nothing and leaves the row alone (sync and async paths); the rename re-export branch protects descendants too.
+- **Dirty detection matches the export.** The fingerprint ignored DAT text, storage, `allowCooking`, dock, a newly appended custom parameter and COMP connectors -- so an `execute_python` edit of a callback DAT was never autosaved while the status read "Saved" -- and tracked `current`, which the file never records. Pinned by a mutation-matrix test.
+- **The autosave sweep reaches every root.** It examined a fixed sorted prefix of 60 while the union carried 43 of Embody's own descendants and 14 baselines of deleted COMPs, so every `/specimen_lab` root was never swept. The cap is a safety valve now, the window rotates, and dead baselines are pruned.
+- **Export fidelity**: DAT text is embedded when its `file` par points at a missing or diverged file; custom-par `enable`/`enableExpr` round-trip; annotation alpha `0` round-trips; `cloneImmune` is a flag; an `inf` in storage is skipped instead of aborting the export; storage keys and `type_defaults` are written in sorted order; an unknown `$t` template logs a warning instead of silently dropping the page; unknown flag names are ignored, never applied.
+- **Lifecycle**: `Tdncreateonstart` no longer gates export-mode crash recovery; a lost tsv row is re-adopted at the file's existing suffix and never minted over from an empty shell; deleting a tracked parent removes its orphaned children's files; the deferred TDXN unlink re-checks the row; a stale re-baseline is deferred rather than dropped; export mode warns when a `.tdn` is newer than the project or missing for an absent COMP; `migrateToTDXN` skips Embody's own subtree.
+- **Performance and concurrency**: the existing-file parse is cached (a no-op checkpoint parsed the document three times); `flushPendingCheckpoints` is time-budgeted; the async export chunks by time as well as count, cannot latch when the Thread Manager is full, and is cancelled by the pre-save strip; a programmatic `export_network` logs the locked-content warning instead of raising a modal.
+- **Contracts**: the C1 clipboard hash is computed from one canonical rule on both sides (JavaScript number text, code-point key order) with a shared 38-case corpus; `docs/tdn.schema.yaml` declares every field the exporter writes and every committed document is validated against it in CI; the spec documents `startup_storage` as import-only, the reserved `$type`/`$value` pair, YAML 1.1 hand-edit traps, and the new fields.
+
+**4,256 tests** (140 suites).
+
 ## v6.2.4
 
 Type hints become a shipped practice, not just a measurement.

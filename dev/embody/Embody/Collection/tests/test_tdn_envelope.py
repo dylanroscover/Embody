@@ -124,3 +124,32 @@ class TestTdnEnvelope(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCanonicalParityCorpus(unittest.TestCase):
+    """Contract C1: the canonical bytes must match contracts/envelope.ts.
+
+    The corpus is generated from the Python rules and asserted on BOTH sides
+    (scanner-ts/src/envelope_parity.test.ts is the other half). Whole floats,
+    -0.0, 1e16 and astral key order all hashed differently before 2026-08-30.
+    """
+    _FIXTURE = os.path.normpath(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "..",
+        "platform", "packages", "contracts", "fixtures", "canonical_cases.json"))
+
+    def test_python_reproduces_the_corpus(self):
+        import json
+        with io.open(self._FIXTURE, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        self.assertGreaterEqual(len(doc["cases"]), 30)
+        for case in doc["cases"]:
+            with self.subTest(case=case["name"]):
+                self.assertEqual(
+                    case["expected"],
+                    tdn_envelope.canonical_tdn_bytes(case["value"]).decode("utf-8"))
+
+    def test_non_finite_numbers_are_refused(self):
+        with self.assertRaises(ValueError):
+            tdn_envelope.canonical_tdn_bytes({"a": float("inf")})
+        with self.assertRaises(ValueError):
+            tdn_envelope.canonical_tdn_bytes({"a": float("nan")})

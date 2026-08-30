@@ -1938,9 +1938,16 @@ def get_externalization_status(ext, op_path: str) -> dict:
         return {'error': f'Failed to get status: {e}'}
 
 
-def export_network(ext, root_path='/', include_dat_content=True,
+def export_network(ext, root_path='/', include_dat_content=None,
                    output_file=None, max_depth=None, embed_all=False):
-    """Delegate to TDXN extension for network export."""
+    """Delegate to TDXN extension for network export.
+
+    include_dat_content=None means "the Embeddatsintdns toggle", the same
+    default the MCP tool documents (the handler used to say True).
+    interactive=False: a programmatic export must log the locked-content
+    warning, never raise a modal that pins the main thread until a click
+    (it did, for ~25 minutes, during the TDXN review of 2026-08-30).
+    """
     if not getattr(ext.ownerComp.ext, 'TDXN', None):
         return {'error': 'TDXN extension not loaded on Embody COMP'}
     # Protect .tdn files belonging to other tracked TDXN COMPs
@@ -1953,6 +1960,7 @@ def export_network(ext, root_path='/', include_dat_content=True,
         max_depth=max_depth,
         cleanup_protected=protected,
         embed_all=embed_all,
+        interactive=False,
     )
     # Token-lean: when the .tdn was written to a file, don't echo the whole
     # document back -- return a compact summary and let the caller Read the

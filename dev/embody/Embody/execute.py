@@ -263,6 +263,23 @@ def onProjectPreSave():
 
 
 def _runPreSaveExternalization():
+	# An async export still in flight would race the strip: its worker's
+	# os.replace and stale-cleanup land after Phase 1 exported, tracked and
+	# fingerprinted the same file, and its success hook then tracks a COMP
+	# the strip has just emptied (TDXN review 2026-08-30). The save
+	# re-exports everything anyway, so cancel it.
+	try:
+		tdxn = parent.Embody.ext.TDXN
+		state = getattr(tdxn, '_export_state', None)
+		if state and not state.get('done'):
+			parent.Embody.ext.Embody.Log(
+				'Cancelling an in-flight async TDXN export: the save '
+				'exports every tracked COMP itself', 'WARNING')
+			tdxn.cancelExport()
+	except Exception as e:
+		parent.Embody.ext.Embody.Log(
+			f'Could not cancel the async export before save: {e}', 'WARNING')
+
 	# Suppress the delayed Refresh pulse - the continuity check must NOT
 	# fire during the strip/restore window or it will delete files for
 	# temporarily-missing operators inside TDXN COMPs.

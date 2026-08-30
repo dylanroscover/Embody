@@ -596,6 +596,41 @@ class TestAutosave(EmbodyTestCase):
 
     # --- enabled toggle ---
 
+    def test_coarse_sweep_rotates_so_a_capped_project_starves_nothing(self):
+        """TDXN review 2026-08-30: the cap was a fixed sorted PREFIX, so with
+        more roots than the cap every /specimen_lab root was never examined.
+        Consecutive sweeps must rotate through the whole ring."""
+        ext = self.embody_ext
+        a, _ = self._make_tdn('rot_a')
+        b, _ = self._make_tdn('rot_b')
+        a.op('n1').par.period = 4.0
+        b.op('n1').par.period = 5.0
+        ext._pending_checkpoint_roots.clear()
+        ext._coarse_sweep_cursor = None
+        ext._COARSE_SWEEP_CAP = 1        # instance shadow; removed below
+        try:
+            total = len(set(ext._getTDNPaths()) | set(ext._tdn_fingerprints.keys()))
+            for _ in range(total + 2):
+                ext._queueDirtyTDNRoots()
+                if {a.path, b.path} <= ext._pending_checkpoint_roots:
+                    break
+        finally:
+            del ext._COARSE_SWEEP_CAP
+        self.assertIn(a.path, ext._pending_checkpoint_roots,
+                      'rotation must reach every root within one full ring')
+        self.assertIn(b.path, ext._pending_checkpoint_roots,
+                      'rotation must reach every root within one full ring')
+
+    def test_coarse_sweep_prunes_baselines_of_deleted_comps(self):
+        """Dead fingerprint keys rode in COMP storage forever and consumed
+        sweep slots (14 of them in the dev project, TDXN review 2026-08-30)."""
+        ext = self.embody_ext
+        ext._tdn_fingerprints['/nonexistent_fp_probe_root'] = ('x',)
+        ext._coarse_sweep_cursor = None
+        ext._queueDirtyTDNRoots()
+        self.assertNotIn('/nonexistent_fp_probe_root', ext._tdn_fingerprints,
+                         'a baseline whose COMP is gone must be pruned by the sweep')
+
     def test_autosave_enabled_reflects_toggle(self):
         p = getattr(self.embody.par, 'Autosave', None)
         self.assertIsNotNone(p)

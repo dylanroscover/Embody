@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
 build: 15
-generator: Embody/6.1.7
+generator: Embody/6.2.4
 td_build: 099.2025.33070
-source_file: Embody-6.289.toe
-exported_at: '2026-08-28T07:53:18Z'
+source_file: Embody-6.307.toe
+exported_at: '2026-08-30T08:23:44Z'
 network_path: /embody/Embody/windowHeader
 options:
   include_dat_content: false
@@ -12,13 +12,13 @@ options:
 type_defaults:
   textCOMP:
     parameters:
-      fontsizeunits: points
-      fontcolorr: =parent.Embody.par.Textcolorr
-      fontcolorg: =parent.Embody.par.Textcolorg
       fontcolorb: =parent.Embody.par.Textcolorb
-      vmode: fill
-      resizecomp: =me
+      fontcolorg: =parent.Embody.par.Textcolorg
+      fontcolorr: =parent.Embody.par.Textcolorr
+      fontsizeunits: points
       repocomp: =me
+      resizecomp: =me
+      vmode: fill
     size: [160, 130]
     color: [0.3, 0.5, 0.9]
     tags:
@@ -53,6 +53,10 @@ sequences:
   ext:
   - object: op('./WindowHeaderExt').module.WindowHeaderExt(me)
     promote: true
+  - {}
+  - {}
+  - {}
+  - {}
 color: [0.3, 0.5, 0.9]
 tags:
 - tdn

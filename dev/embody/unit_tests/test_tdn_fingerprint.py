@@ -352,3 +352,65 @@ class TestTDNFingerprintPersistence(EmbodyTestCase):
             'these live Embody storage keys would serialize into a .tdn: '
             f'{escaping} -- add each to SKIP_STORAGE_KEYS, or justify why it '
             'belongs on disk')
+
+
+class TestFingerprintMatchesExporter(EmbodyTestCase):
+    """The fingerprint must dirty on EVERYTHING the export writes.
+
+    TDXN review 2026-08-30: six field classes changed the file while
+    _isTDNDirty read clean -- DAT text, storage, allowCooking, dock, a newly
+    appended custom par, COMP connectors -- so an execute_python edit was
+    never autosaved. And `current` was fingerprinted but never exported, a
+    false-dirty. Each row here asserts export-changed == fingerprint-dirty.
+    """
+
+    def _tracked(self):
+        emb = self.embody_ext
+        root = self.sandbox.create(baseCOMP, 'fpx_root')
+        note = root.create(textDAT, 'note'); note.text = 'alpha'
+        kid = root.create(baseCOMP, 'kid')
+        n1 = root.create(nullCHOP, 'n1')
+        g1 = root.create(geometryCOMP, 'g1')
+        g2 = root.create(geometryCOMP, 'g2')
+        for i, o in enumerate((note, kid, n1, g1, g2)):
+            o.nodeX, o.nodeY = i * 200, 0
+        emb.applyTagToOperator(root, self.embody.par.Tdntag.val)
+        emb._handleTDNAddition(root)
+        return root, note, kid, n1, g1, g2
+
+    def _agree(self, root, label, mutate, expect_change=True):
+        emb, tdxn = self.embody_ext, self.embody.ext.TDXN
+        emb._storeTDNFingerprint(root)
+        before = tdxn.ExportNetwork(root_path=root.path)['tdn']
+        mutate()
+        after = tdxn.ExportNetwork(root_path=root.path)['tdn']
+        changed = not tdxn._tdn_content_equal(after, before)
+        dirty = emb._isTDNDirty(root)
+        self.assertEqual(changed, expect_change,
+                         f'{label}: the export did not behave as the test assumes')
+        self.assertEqual(dirty, changed,
+                         f'{label}: export changed={changed} but fingerprint dirty={dirty}')
+
+    def test_every_exported_field_class_dirties_the_fingerprint(self):
+        root, note, kid, n1, g1, g2 = self._tracked()
+        try:
+            self._agree(root, 'dat text', lambda: setattr(note, 'text', 'beta'))
+            self._agree(root, 'child storage', lambda: kid.store('k', 1))
+            self._agree(root, 'root storage', lambda: root.store('r', 1))
+            self._agree(root, 'allowCooking', lambda: setattr(kid, 'allowCooking', False))
+            self._agree(root, 'dock', lambda: setattr(note, 'dock', n1))
+            self._agree(root, 'new custom par at default',
+                        lambda: kid.appendCustomPage('P').appendFloat('Probe'))
+            self._agree(root, 'COMP connector',
+                        lambda: g2.inputCOMPConnectors[0].connect(g1))
+        finally:
+            self.embody_ext.removeTDNEntry(root.path, delete_file=True)
+
+    def test_current_flag_is_not_a_change(self):
+        """`current` is not exported, so it must not dirty (false-dirty churn)."""
+        root, note, kid, n1, g1, g2 = self._tracked()
+        try:
+            self._agree(root, 'current flag', lambda: setattr(n1, 'current', True),
+                        expect_change=False)
+        finally:
+            self.embody_ext.removeTDNEntry(root.path, delete_file=True)

@@ -114,7 +114,7 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `custom_pars` | object | No | Only if the operator has [custom parameters](#custom-parameters). Dict keyed by page name. |
 | `flags` | array | No | Only if any [flags](#flags) differ from their defaults. |
 | `storage` | object | No | Only if the operator has non-transient [storage entries](#operator-storage). Dict of key-value pairs. |
-| `startup_storage` | object | No | Only if the operator has [startup storage entries](#startup-storage). Values restored via `storeStartupValue()` on import. |
+| `startup_storage` | object | No | **Import-only.** Restored via `storeStartupValue()` on import; TouchDesigner exposes no read-back accessor for the startup dictionary, so the exporter never writes this field. |
 | `inputs` | array | No | Only if the operator has [operator-level connections](#operator-connections). |
 | `comp_inputs` | array | No | Only if the operator has [COMP-level connections](#comp-connections). COMPs only. |
 | `dat_content` | string or array | No | Only for DAT-family operators when `include_dat_content` is `true` (or the DAT is inside an `animationCOMP`). See [DAT Content](#dat-content). |
@@ -156,7 +156,7 @@ v2.0 is the first YAML release of the format. Because YAML is a strict superset 
 
 Migration is **lazy**: an existing JSON `.tdn` is rewritten as YAML the next time Embody saves it. A v2.0 YAML file opened by a pre-2.0 Embody build (JSON-only reader) will not parse — new builds read old files, but old builds cannot read new ones.
 
-**Hand-edit caveats** (do not apply to Embody-written files, which never emit these): a hand-written YAML float needing float typing must include a decimal point (`1.0e-07`, not `1e-07`); duplicate mapping keys are silently last-wins. Round-trip through Embody after manual edits.
+**Hand-edit caveats** (do not apply to Embody-written files, which never emit these): a hand-written YAML float needing float typing must include a decimal point (`1.0e-07`, not `1e-07`); duplicate mapping keys are silently last-wins; the loader is YAML 1.1, so an unquoted `012` is octal `10`, `0x10` is `16`, `on`/`off`/`yes`/`no` are booleans and `~` is null -- quote such strings. Round-trip through Embody after manual edits.
 
 ---
 
@@ -462,6 +462,9 @@ The `$t` field names the template. Other keys are parameter value overrides (par
 | `menuSource` | string | Dynamically populated menus | DAT path or expression that populates the menu. When present, `menuNames`/`menuLabels` are omitted. |
 | `startSection` | boolean | If `true` | Whether this parameter starts a new visual section. |
 | `readOnly` | boolean | If `true` | Whether the parameter is read-only. |
+| `enable` | boolean | If `false` | Static enable state (greyed out when `false`). Omitted when an `enableExpr` is set. |
+| `enableExpr` | string | If set | Python expression that controls the enable state (conditional greying). |
+| `sequence` | string | Template pars of a custom sequence | Name of the custom sequence this definition belongs to. |
 | `help` | string | If non-empty | Tooltip help text shown when hovering the parameter in the dialog. Omitted when empty. |
 | `value` | any | Single-component, if non-default | Current value. Can be a constant, `"=expr"` string, or `"~bind"` string. Omitted when the value equals the default. |
 | `values` | array | Multi-component, if any non-default | Current values for each component. Same format as `value` per element. Omitted when all values equal their defaults. |
@@ -666,6 +669,9 @@ The `flags` array contains string names of flags whose values differ from their 
 | `viewer` | `false` | Shows the operator's viewer on its node tile. |
 | `expose` | `true` | Whether the node is visible in the network editor. |
 | `allowCooking` | `true` | Whether the COMP is allowed to cook. **COMPs only.** |
+| `cloneImmune` | `false` | The COMP is immune to clone re-sync. **COMPs only.** |
+
+An importer ignores any flag name outside this table (it never assigns arbitrary attributes from a file).
 
 !!! note "Defaults are per-type creation values"
     The exporter compares each flag against the **creation defaults probed for that operator type** — the same catalog-probe mechanism used for [parameter creation defaults](#divergent-defaults-and-the-creation-defaults-catalog): a temporary operator of the type is created and its actual flag values recorded. The table above is the common fallback baseline, used when probing is unavailable, not a guarantee for every operator type. For a type whose creation default differs from the listed value, an omitted flag means "this type's creation default", not the value in the table.
@@ -888,7 +894,10 @@ Auto-created default docked compute DATs (the "Example Compute Shader" companion
 
 ## Operator Storage
 
-Every TouchDesigner operator has a `.storage` dictionary for persistent Python data. TDXN exports all serializable storage entries except known transient/internal keys used by Embody's runtime.
+Every TouchDesigner operator has a `.storage` dictionary for persistent Python data. TDXN exports all serializable storage entries except known transient/internal keys used by Embody's runtime. Keys are written in sorted order. A non-finite float (`nan`, `inf`) is skipped with a debug log, never aborting the export.
+
+!!! warning "Reserved keys"
+    A two-key mapping of exactly `$type` and `$value` is the wrapper the format uses for tuples, sets and bytes (see [Value Serialization](#value-serialization)); a user dictionary of that exact shape is reconstructed as the wrapped type on import. Any other dictionary containing `$type` is a plain dictionary.
 
 ### Per-COMP Storage Toggle
 
@@ -1140,6 +1149,9 @@ For nested COMPs, `annotations` appears alongside `children`:
 | `size` | `[width, height]` | Yes | Always included — annotations have no standard default size. |
 | `color` | `[r, g, b]` | No | Only if different from the default gray `[0.545, 0.545, 0.545]`. Background color. |
 | `opacity` | number | No | Only if different from `1.0`. Background opacity (0.0 to 1.0). |
+| `backAlpha` | number | No | Only if different from `1.0`. Background alpha; `0.0` is a value and round-trips. |
+| `titleHeight` | number | No | Only if different from `30`. Title bar height. |
+| `bodyFontSize` | number | No | Only if different from `10`. Body text size. |
 
 ### Export Behavior
 

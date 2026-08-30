@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
-build: 1170
-generator: Embody/6.2.4
+build: 1172
+generator: Embody/6.2.5
 td_build: 099.2025.33070
-source_file: Embody-6.307.toe
-exported_at: '2026-08-30T06:08:47Z'
+source_file: Embody-6.308.toe
+exported_at: '2026-08-30T16:47:15Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -324,11 +324,13 @@ operators:
       startSection: true
       default: true
       help: When enabled, reconstructs TDXN-strategy COMP children from .tdxn files on disk when the project opens. Required for TDXN round-trip workflow where children are stripped on save.
+      enable: false
     - name: Tdnstriponsave
       style: Toggle
       label: Strip on Save
       default: true
       help: When enabled, strips children from TDXN-strategy COMPs during project save. Children are recreated on next open via TDXN Create on Start. Keeps .toe files minimal.
+      enable: false
     - name: Tdnpalettehandling
       style: Menu
       label: Palette Handling
@@ -459,6 +461,7 @@ operators:
       style: Folder
       label: AI Project Root (Custom)
       help: Custom directory for AI/MCP config when "AI Project Root" is set to "Custom". Relative paths are resolved against the .toe directory (e.g. "../" places config one level above the .toe -- useful when multiple TouchDesigner projects share a parent folder in a monorepo). Absolute paths are used as-is. Changing this path migrates Embody state and AI config to the new location.
+      enable: false
     - name: Autoexternalize
       style: Menu
       label: Auto-Externalize New Ops
@@ -899,7 +902,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.2.4
+      value: 6.2.5
     - name: Touchbuild
       style: Str
       label: Touch Build
