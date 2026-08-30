@@ -68,7 +68,7 @@ operators:
   color: [0.3, 0.5, 0.9]
   tags:
   - tdn
-  tdn_ref: embody/unit_tests/test_sandbox.tdn
+  tdn_ref: embody/unit_tests/test_sandbox.tdxn
 - name: test_updater
   type: textDAT
   parameters:

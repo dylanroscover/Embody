@@ -446,7 +446,7 @@ class TestRunnerExt:
         self._clearSandboxReceipt()
 
     def _clearSandboxReceipt(self):
-        """Re-export the emptied sandbox so test_sandbox.tdn holds no residue.
+        """Re-export the emptied sandbox so the test_sandbox receipt holds no residue.
 
         Mid-run checkpoints export the populated sandbox; after teardown the
         COMP is empty but `_refusesEmptyTDNOverwrite` (a data-loss guard)

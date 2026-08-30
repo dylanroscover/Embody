@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.0'
-build: 2194
+build: 2196
 generator: Embody/6.2.5
 td_build: 099.2025.33070
 source_file: Embody-6.308.toe
-exported_at: '2026-08-30T16:48:19Z'
+exported_at: '2026-08-30T17:16:21Z'
 network_path: /embody/unit_tests/test_sandbox
 options:
   include_dat_content: false

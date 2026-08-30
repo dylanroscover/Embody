@@ -983,7 +983,7 @@ operators:
   color: [0.3, 0.5, 0.9]
   tags:
   - tdn
-  tdn_ref: embody/unit_tests.tdn
+  tdn_ref: embody/unit_tests.tdxn
 - name: execute_src_ctrl
   type: executeDAT
   parameters:

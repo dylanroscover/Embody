@@ -478,7 +478,7 @@ class TestTouchMapAndAdvisories(EmbodyTestCase):
         scopes = self.ext._expandFileScopes(
             ['/embody/unit_tests/test_envoy_sessions'])
         self.assertIn('file:embody/unit_tests/test_envoy_sessions.py', scopes)
-        self.assertIn('file:embody/unit_tests.tdn', scopes)
+        self.assertIn('file:embody/unit_tests.tdxn', scopes)
         self.assertNotIn('file:embody.tdn', scopes,
                          'project-root .tdn must not blanket every op')
 

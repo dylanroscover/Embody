@@ -151,7 +151,7 @@ operators:
   color: [0.3, 0.5, 0.9]
   tags:
   - tdn
-  tdn_ref: specimen_lab/noise_terrain/cam.tdn
+  tdn_ref: specimen_lab/noise_terrain/cam.tdxn
 - name: geo
   type: geometryCOMP
   parameters:
@@ -160,7 +160,7 @@ operators:
   color: [0.3, 0.5, 0.9]
   tags:
   - tdn
-  tdn_ref: specimen_lab/noise_terrain/geo.tdn
+  tdn_ref: specimen_lab/noise_terrain/geo.tdxn
 - name: out1
   type: outTOP
   parameters:
@@ -185,7 +185,7 @@ operators:
   color: [0.3, 0.5, 0.9]
   tags:
   - tdn
-  tdn_ref: specimen_lab/noise_terrain/light.tdn
+  tdn_ref: specimen_lab/noise_terrain/light.tdxn
 - name: comp_sky
   type: compositeTOP
   parameters:

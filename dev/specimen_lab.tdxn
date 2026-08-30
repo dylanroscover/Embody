@@ -155,7 +155,7 @@ operators:
       clampMax: true
       normMax: 1.5
   position: [1200, 0]
-  tdn_ref: specimen_lab/hyper_ntsc.tdn
+  tdn_ref: specimen_lab/hyper_ntsc.tdxn
 - name: murmuration
   type: baseCOMP
   custom_pars:
@@ -243,7 +243,7 @@ operators:
       Resw: 1080
       Resh: 1350
   position: [0, -800]
-  tdn_ref: specimen_lab/murmuration.tdn
+  tdn_ref: specimen_lab/murmuration.tdxn
 - name: kaleidoscope
   type: baseCOMP
   custom_pars:
@@ -302,7 +302,7 @@ operators:
       Resw: 1080
       Resh: 1350
   position: [800, -400]
-  tdn_ref: specimen_lab/kaleidoscope.tdn
+  tdn_ref: specimen_lab/kaleidoscope.tdxn
 - name: noise_terrain
   type: baseCOMP
   custom_pars:
@@ -397,7 +397,7 @@ operators:
     Output:
       $t: output_2
   position: [400, -800]
-  tdn_ref: specimen_lab/noise_terrain.tdn
+  tdn_ref: specimen_lab/noise_terrain.tdxn
 - name: packet_fabric
   type: baseCOMP
   custom_pars:
@@ -522,7 +522,7 @@ operators:
       normMin: 256.0
       normMax: 7680.0
   position: [400, -400]
-  tdn_ref: specimen_lab/packet_fabric.tdn
+  tdn_ref: specimen_lab/packet_fabric.tdxn
 - name: waveform_stack
   type: baseCOMP
   custom_pars:
@@ -685,7 +685,7 @@ operators:
       normMax: 2.0
       help: strength of the chromatic RGB separation event pulsed on the PTP beat. 0 = clean; higher = a pronounced broadcast chroma tear at each tick.
   position: [0, -400]
-  tdn_ref: specimen_lab/waveform_stack.tdn
+  tdn_ref: specimen_lab/waveform_stack.tdxn
 - name: essence_streams
   type: baseCOMP
   custom_pars:
@@ -812,7 +812,7 @@ operators:
       $t: output
       Resw: 1080
       Resh: 1350
-  tdn_ref: specimen_lab/essence_streams.tdn
+  tdn_ref: specimen_lab/essence_streams.tdxn
 - name: vertical_fibers
   type: baseCOMP
   custom_pars:
@@ -943,7 +943,7 @@ operators:
       Resw: 1080
       Resh: 1350
   position: [400, 0]
-  tdn_ref: specimen_lab/vertical_fibers.tdn
+  tdn_ref: specimen_lab/vertical_fibers.tdxn
 - name: mandelbulb_march
   type: baseCOMP
   custom_pars:
@@ -1018,7 +1018,7 @@ operators:
       Resw: 1080
       Resh: 1350
   position: [800, -800]
-  tdn_ref: specimen_lab/mandelbulb_march.tdn
+  tdn_ref: specimen_lab/mandelbulb_march.tdxn
 - name: crosspoint_matrix
   type: baseCOMP
   custom_pars:
@@ -1145,7 +1145,7 @@ operators:
     Output:
       $t: output
   position: [800, 0]
-  tdn_ref: specimen_lab/crosspoint_matrix.tdn
+  tdn_ref: specimen_lab/crosspoint_matrix.tdxn
 - name: reaction_diffusion
   type: baseCOMP
   custom_pars:
@@ -1171,7 +1171,7 @@ operators:
       normMax: 7680.0
       help: Output height (px), 4K.
   position: [1200, -400]
-  tdn_ref: specimen_lab/reaction_diffusion.tdn
+  tdn_ref: specimen_lab/reaction_diffusion.tdxn
 - name: plasma_interference
   type: baseCOMP
   custom_pars:
@@ -1234,4 +1234,4 @@ operators:
       Resw: 1080
       Resh: 1350
   position: [1200, -800]
-  tdn_ref: specimen_lab/plasma_interference.tdn
+  tdn_ref: specimen_lab/plasma_interference.tdxn
