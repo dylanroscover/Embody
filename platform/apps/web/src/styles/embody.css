@@ -1929,6 +1929,13 @@ body.is-app-shell .footer {
    (sign-in, account, github icon) were 36-40px; floor them at 44px. The
    description rows are already ~68px and are unaffected by a 44px floor. */
 @media (max-width: 860px) {
+  /* The 44px toggle -- not --nav-item-h -- is the tallest thing in the pill
+     here, so the one geometry token has to follow it. While it did not, --nav-h
+     read 41.6px against a 56px pill and EVERY consumer (main's top clearance,
+     the specimen shell's --app-top) sat 14px too high -- which is what put the
+     pill on top of the content below it (field 2026-08-28). */
+  :root { --nav-item-h: 44px; }
+
   .nav-toggle { width: 44px; height: 44px; }
   .navbar__items .navbar__item { min-height: 44px; }
   .navbar__items .navbar__item--github { min-width: 44px; }

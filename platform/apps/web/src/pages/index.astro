@@ -259,6 +259,16 @@ const jsonLd = {
     padding: clamp(5.5rem, 9vw, 7rem) 0 clamp(3rem, 6vw, 5rem);
   }
 
+  /* The hero clips (overflow:hidden contains the graph backdrop) and embody.css
+     zeroes its top padding, so the clip edge lands exactly on the content box --
+     and the leading-trimmed .eyebrow below puts its box top at the CAP line, with
+     ascenders and i-dots ~1.6px above it. Those tips got shaved (field
+     2026-08-28). Lift the clip edge; padding puts the content back untouched. */
+  .hero:first-child {
+    margin-top: -0.5rem;
+    padding-top: 0.5rem;
+  }
+
   .hero-graph {
     position: absolute;
     /* Spans the full hero width (symmetric overhang left and right) so the

@@ -791,18 +791,23 @@ function emitKey(key: string): string {
       </div>
     )}
 
-    {/* Re-open tabs for collapsed panels (mirror the keyboard shortcuts). */}
-    <button class="panel-tab panel-tab--outline" type="button" data-panel-open="outline" hidden aria-label="show overview (o)" title="overview (o)"><span class="kbd" aria-hidden="true">o</span>verview</button>
-    <button class="panel-tab panel-tab--props" type="button" data-panel-open="properties" hidden aria-label="show properties (p)" title="properties (p)"><span class="kbd" aria-hidden="true">p</span>roperties</button>
-    <button class="panel-tab panel-tab--thumb" type="button" data-panel-open="thumbnail" hidden aria-label="show rendered result (r)" title="rendered result (r)"><span class="kbd" aria-hidden="true">r</span>esult</button>
+    {/* Re-open tabs for collapsed panels (mirror the keyboard shortcuts), plus the
+        prominent TDXN source tab ('t') for the left drawer -- a wide handle docked
+        to the bottom edge, left-aligned with where the drawer opens; the old slim
+        vertical tab on the left edge was invisible to new visitors.
 
-    {/* Prominent TDXN source tab ('t') + the left drawer. A wide handle docked
-        to the bottom edge, left-aligned with where the drawer opens -- the old
-        slim vertical tab on the left edge was invisible to new visitors. */}
-    <button class="tdn-tab" type="button" data-panel-open="tdn" aria-expanded="false" aria-controls="tdn-panel" aria-label="show TDXN source (t)" title="TDXN source (t)">
-      <svg class="tdn-tab__icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6" /></svg>
-      <span class="tdn-tab__label"><span class="kbd" aria-hidden="true">t</span><span class="tdn-acr">dxn</span>&nbsp;source</span>
-    </button>
+        The wrapper is `display: contents` on desktop, so each tab still docks to
+        its own corner of .specimen-app. Below 760px it becomes the vertical rail
+        that every panel opens from -- see the drawer block in the styles. */}
+    <div class="panel-rail">
+      <button class="panel-tab panel-tab--outline" type="button" data-panel-open="outline" hidden aria-label="show overview (o)" title="overview (o)"><span class="kbd" aria-hidden="true">o</span>verview</button>
+      <button class="panel-tab panel-tab--props" type="button" data-panel-open="properties" hidden aria-label="show properties (p)" title="properties (p)"><span class="kbd" aria-hidden="true">p</span>roperties</button>
+      <button class="panel-tab panel-tab--thumb" type="button" data-panel-open="thumbnail" hidden aria-label="show rendered result (r)" title="rendered result (r)"><span class="kbd" aria-hidden="true">r</span>esult</button>
+      <button class="tdn-tab" type="button" data-panel-open="tdn" aria-expanded="false" aria-controls="tdn-panel" aria-label="show TDXN source (t)" title="TDXN source (t)">
+        <svg class="tdn-tab__icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6" /></svg>
+        <span class="tdn-tab__label"><span class="kbd" aria-hidden="true">t</span><span class="tdn-acr">dxn</span>&nbsp;source</span>
+      </button>
+    </div>
     <aside class="specimen-app__tdn app-panel is-collapsed" id="tdn-panel" data-panel="tdn" data-draggable aria-label="tdxn source">
       <header class="specimen-app__tdn-head" data-drag-handle>
         <p class="eyebrow"><span class="kbd" aria-hidden="true">t</span><span class="tdn-acr">dxn</span> source</p>
@@ -869,10 +874,14 @@ function emitKey(key: string): string {
     {
       const app = document.querySelector("[data-tdn-app]") as HTMLElement | null;
       const PANELS = [
-        { id: "outline", key: "o" },
-        { id: "properties", key: "p" },
-        { id: "thumbnail", key: "r" },
-        { id: "tdn", key: "t" }
+        // defaultOpen mirrors the SSR markup -- it is what applyLayout falls
+        // back to when localStorage holds no entry for a panel. Without it,
+        // crossing 760px upward restored nothing and left the desktop view
+        // with all four panels collapsed for the rest of the session.
+        { id: "outline", key: "o", defaultOpen: true },
+        { id: "properties", key: "p", defaultOpen: true },
+        { id: "thumbnail", key: "r", defaultOpen: true },
+        { id: "tdn", key: "t", defaultOpen: false }
       ];
       const panelEls = (id: string) =>
         Array.from(document.querySelectorAll<HTMLElement>(`[data-panel="${id}"]`));
@@ -880,6 +889,12 @@ function emitKey(key: string): string {
         Array.from(document.querySelectorAll<HTMLElement>(`[data-panel-open="${id}"]`));
       const isOpen = (id: string) =>
         panelEls(id).some((el) => !el.classList.contains("is-collapsed"));
+      // Below 760px the panels are edge drawers off a rail, not docked cards:
+      // exactly one is open at a time, they start closed so the graph owns the
+      // viewport, and their state is NEVER persisted -- it would clobber the
+      // desktop layout the same visitor comes back to.
+      const drawers = window.matchMedia("(max-width: 760px)");
+
       const setPanel = (id: string, open: boolean, persist = true) => {
         // Class-based (not the `hidden` attribute) so the panel can animate --
         // display:none can't transition.
@@ -889,7 +904,15 @@ function emitKey(key: string): string {
           el.setAttribute("aria-expanded", String(open));
         });
         app?.classList.toggle(`is-${id}-collapsed`, !open);
-        if (persist) { layout.open[id] = open; saveLayout(); }
+        if (persist && !drawers.matches) { layout.open[id] = open; saveLayout(); }
+      };
+
+      // One drawer at a time on the rail; on desktop the panels coexist.
+      const showPanel = (id: string, open: boolean) => {
+        if (open && drawers.matches) {
+          for (const p of PANELS) if (p.id !== id && isOpen(p.id)) setPanel(p.id, false);
+        }
+        setPanel(id, open);
       };
 
       document.querySelectorAll<HTMLElement>("[data-panel-collapse]").forEach((btn) => {
@@ -898,20 +921,43 @@ function emitKey(key: string): string {
       });
       document.querySelectorAll<HTMLElement>("[data-panel-open]").forEach((btn) => {
         const id = btn.getAttribute("data-panel-open");
-        if (id) btn.addEventListener("click", () => setPanel(id, true));
+        // A rail tab stays visible while its drawer is open, so it toggles; a
+        // desktop re-open tab only exists while collapsed, so it always opens.
+        if (id) btn.addEventListener("click", () => showPanel(id, !isOpen(id)));
       });
 
       // Restore persisted collapse/open states (no re-save during restore).
       // Guard with `no-anim` so a previously-collapsed panel snaps to its saved
       // state instead of animating from the SSR-open first paint; a forced reflow
       // commits it, then the next frame re-enables transitions for user toggles.
-      app?.classList.add("no-anim");
-      for (const p of PANELS) {
-        const open = layout.open[p.id];
-        if (typeof open === "boolean") setPanel(p.id, open, false);
-      }
-      if (app) void app.offsetWidth;
-      requestAnimationFrame(() => app?.classList.remove("no-anim"));
+      const applyLayout = () => {
+        app?.classList.add("no-anim");
+        for (const p of PANELS) {
+          const open = drawers.matches ? false : (layout.open[p.id] ?? p.defaultOpen);
+          if (typeof open === "boolean") setPanel(p.id, open, false);
+        }
+        if (app) void app.offsetWidth;
+        requestAnimationFrame(() => app?.classList.remove("no-anim"));
+      };
+      applyLayout();
+      // Crossing the breakpoint re-applies the model for that size -- a resized
+      // desktop window must not keep four drawers open on top of each other.
+      drawers.addEventListener("change", applyLayout);
+
+      // Selecting a node reveals its parameters without a trip to the rail. A
+      // cleared selection closes the drawer again, so tapping the canvas is also
+      // how you dismiss it.
+      document.addEventListener("tdnviewer:select", (e) => {
+        if (!drawers.matches) return;
+        const sel = (e as CustomEvent).detail as { isComp?: boolean } | null;
+        // NEVER auto-open over an enterable COMP: the drawer is fixed and ~304px
+        // wide, so it would swallow the second tap of the double-tap that drills
+        // into the sub-network (TdnViewer onNodeDoubleClick) and make every COMP
+        // unreachable on a phone. Leaf ops have nothing to enter, so the
+        // convenience is safe there.
+        if (sel && sel.isComp) return;
+        showPanel("properties", Boolean(sel));
+      });
 
       document.addEventListener("keydown", (e) => {
         if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -924,7 +970,7 @@ function emitKey(key: string): string {
         const match = PANELS.find((p) => p.key === e.key.toLowerCase());
         if (!match) return;
         e.preventDefault();
-        setPanel(match.id, !isOpen(match.id));
+        showPanel(match.id, !isOpen(match.id));
       });
     }
 
@@ -1099,13 +1145,26 @@ function emitKey(key: string): string {
           if (id) { delete layout.pos[id]; saveLayout(); }
         };
 
-        // Restore a saved position.
-        if (id && layout.pos[id]) applyPos(layout.pos[id].x, layout.pos[id].y);
+        // Restore a saved position -- but never on the mobile rail, where a
+        // desktop drag offset would push the drawer off its edge.
+        const drawers = window.matchMedia("(max-width: 760px)");
+        const syncPos = () => {
+          if (drawers.matches) {
+            delete panel.dataset.dragX;
+            delete panel.dataset.dragY;
+            panel.style.removeProperty("--drag-x");
+            panel.style.removeProperty("--drag-y");
+          } else if (id && layout.pos[id]) {
+            applyPos(layout.pos[id].x, layout.pos[id].y);
+          }
+        };
+        syncPos();
+        drawers.addEventListener("change", syncPos);
 
         let dragging = false;
         let startX = 0, startY = 0, baseX = 0, baseY = 0, moved = false;
         handle.addEventListener("pointerdown", (e) => {
-          if (e.button !== 0) return;
+          if (e.button !== 0 || drawers.matches) return;
           const t = e.target as HTMLElement | null;
           if (t && t.closest("a, button, input, textarea, select")) return;
           dragging = true;
@@ -1143,6 +1202,10 @@ function emitKey(key: string): string {
 
         // Double-click the header -> snap back to the docked position.
         handle.addEventListener("dblclick", (e) => {
+          // Not on the rail: drawers are not draggable there, and resetPos()
+          // would delete the visitor's persisted DESKTOP position -- the same
+          // clobber the persist guard in setPanel exists to prevent.
+          if (drawers.matches) return;
           const t = e.target as HTMLElement | null;
           if (t && t.closest("a, button, input, textarea, select")) return;
           resetPos();
@@ -1921,6 +1984,10 @@ function emitKey(key: string): string {
   }
 
   /* Re-open tabs shown when a panel is collapsed (mirror the keyboard shortcuts). */
+  /* The tab wrapper generates no box on desktop, so each tab still resolves its
+     absolute corner against .specimen-app. Below 760px it becomes the rail. */
+  .panel-rail { display: contents; }
+
   .panel-tab {
     position: absolute;
     z-index: 22;
@@ -1989,28 +2056,141 @@ function emitKey(key: string): string {
     overflow: auto;
   }
 
-  /* Small-screen fallback: stack the panels and let the page scroll. A proper
-     responsive pass lands in a later slice. */
+  /* Small screens: the panels are edge DRAWERS behind a vertical tab rail, not a
+     stack. The graph keeps the whole viewport, every panel is one tap away, and
+     nothing has to be scrolled to. Selecting a node opens Properties on its own
+     (see the drawer controller in the script). */
   @media (max-width: 760px) {
-    body.is-app-shell { overflow: auto; }
-    body.is-app-shell main { height: auto; min-height: 100dvh; }
     .specimen-app {
-      height: auto;
-      min-height: 100dvh;
+      /* The rail owns the right edge; drawers and owner tools dock beside it. Its
+         width is pinned onto the tabs below, so this is exact, not a guess. */
+      --rail-w: 36px;
+      /* ONE step for the whole shell -- nav pill -> drawer, drawer -> rail and
+         drawer -> bottom edge all read as the same gap. */
+      --app-gap: var(--app-side);
+      --app-top: calc(var(--safe-top, 0px) + var(--nav-top) + var(--nav-h) + var(--app-gap));
+      --app-bottom: var(--app-gap);
+    }
+
+    /* The rail: every tab stays visible (its `hidden` attribute marks "panel is
+       open", which on desktop means "show the re-open tab" -- here the tab is the
+       permanent handle), reads top-to-bottom, and hugs the right edge. */
+    .panel-rail {
+      position: fixed;
+      /* The same band as the drawers, so nav -> rail == nav -> drawer; the tabs
+         sit centred inside it and can never ride up under the pill. */
+      top: var(--app-top);
+      bottom: var(--app-bottom);
+      right: 0;
+      /* UNDER .site-header (z-index 100, embody.css:231). Nothing between the
+         rail and the root creates a stacking context -- .specimen-app is
+         position:relative with no z-index -- so a value above 100 competed with
+         the nav directly and won, opening the mobile menu BEHIND the panels. */
+      z-index: 95;
       display: flex;
       flex-direction: column;
+      align-items: flex-end;
+      /* `safe` + scroll: the four vertical tabs are ~450px tall, and a landscape
+         phone (667x375, inside this breakpoint) leaves a ~278px band. Plain
+         `center` overflows BOTH ends, and body.is-app-shell is overflow:hidden,
+         so the end tabs became permanently unreachable -- and the rail is the
+         only way to open a panel at this size. */
+      justify-content: safe center;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      gap: 8px;
     }
-    .specimen-app__canvas { position: relative; height: 60dvh; }
-    .specimen-app__left,
-    .specimen-app__props {
+    .panel-tab,
+    .tdn-tab {
       position: static;
-      width: auto;
-      max-height: none;
+      inset: auto;
+      transform: none;
+      writing-mode: vertical-rl;
+      justify-content: center;
+      /* The keycap letter is a flex ITEM here ([O] + "verview"), so any gap splits
+         the word in two; uppercase matches the TDXN tab's own label. */
+      gap: 0;
+      text-transform: uppercase;
+      padding: 12px 8px;
+      border-right: 0;
+      border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+      /* One type scale for the whole rail -- the TDXN tab's own label sets it
+         (.tdn-tab__label, 700/12/0.18em); the smaller .panel-tab default was not
+         legible turned on its side. */
+      font: 700 12px/1 var(--font-mono);
+      letter-spacing: 0.18em;
+      /* Pins the rail to exactly --rail-w, so the drawers' offset from it is a
+         real measurement rather than an estimate of the text's thickness. */
+      width: var(--rail-w);
     }
-    .specimen-app.is-owner .specimen-app__props { top: auto; max-height: none; }
-    .specimen-app :global(.tdn-viewer__breadcrumb) { top: 12px; left: 12px; }
-    .owner-tools { position: static; align-self: flex-end; }
-    .specimen-app__tdn { position: fixed; inset: 0; width: auto; z-index: 120; }
+    .panel-tab[hidden],
+    .tdn-tab[hidden] { display: inline-flex; }
+    /* The keycap chrome is meaningless without a keyboard, but the letter is the
+       first letter of the word ([O]verview) -- strip the box, keep the letter. */
+    .panel-tab .kbd,
+    .tdn-tab .kbd {
+      display: inline;
+      width: auto;
+      height: auto;
+      margin: 0;
+      border: 0;
+      background: none;
+      color: inherit;
+      font: inherit;
+    }
+    .tdn-tab__icon { display: none; }
+    .panel-tab[aria-expanded="true"],
+    .tdn-tab[aria-expanded="true"] {
+      border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+      color: var(--accent);
+    }
+
+    /* Every panel becomes the same right-edge drawer, docked against the rail. */
+    .specimen-app__left,
+    .specimen-app__props,
+    .specimen-app__thumb,
+    .specimen-app__tdn {
+      position: fixed;
+      top: var(--app-top);
+      right: calc(var(--rail-w) + var(--app-gap));
+      bottom: auto;
+      left: auto;
+      /* Under the rail (95) and under .site-header (100) -- see the rail. */
+      z-index: 92;
+      width: min(78vw, 360px);
+      max-width: calc(100vw - var(--rail-w) - var(--app-gap) - var(--app-side));
+      /* Sized to its content, capped at the viewport -- a short panel (Result)
+         reads as a card, not a full-height column of empty background. */
+      max-height: calc(100dvh - var(--app-top) - var(--app-bottom));
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    /* TDXN is a code view -- give it what the viewport can spare, full height. */
+    .specimen-app__tdn {
+      bottom: var(--app-bottom);
+      width: calc(100vw - var(--rail-w) - var(--app-gap) - var(--app-side));
+    }
+    .specimen-app__tdn-body { max-height: none; }
+
+    /* Closed = slid off the right edge (past the rail), not scaled to a corner.
+       Overrides the desktop drawer direction on .specimen-app__tdn too. */
+    .app-panel.is-collapsed,
+    .specimen-app__tdn.is-collapsed {
+      --panel-scale: 1;
+      --collapse-x: calc(100% + var(--rail-w) + var(--app-gap) + 16px);
+    }
+
+    /* Every drawer exits to the RIGHT here, so every collapse chevron has to point
+       that way. On desktop each one points at its own docking corner instead:
+       overview left, result down -- rotate those two, leave properties alone. */
+    .panel-collapse--outline svg { transform: rotate(180deg); }
+    .specimen-app__thumb .panel-collapse svg { transform: rotate(-90deg); }
+
+    .owner-tools { right: calc(var(--rail-w) + var(--app-gap)); }
+
+    /* Panels are not draggable at this size -- the header is a plain header, and
+       `touch-action: none` on it would otherwise eat the drawer's own scrolling. */
+    [data-drag-handle] { cursor: default; touch-action: auto; }
   }
 
   /* Touch devices: the engagement-row controls are mouse-sized (12px text,
