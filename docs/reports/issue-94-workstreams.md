@@ -106,7 +106,14 @@ against docs.derivative.ca before anything was written (CLAUDE.md rule 6).
    goes stale when a reader is added, fires whether or not the value changed, and
    inverts TD's cook model. With the one case where push is still correct --
    handing a value to something that is not dependency-aware.
-5. **Sequence parameters "take more thinking than they should".** **OPEN.** A DX
-   complaint, not a bug. Candidate: a worked recipe in `/parameter-design`, or a
-   `ensureSequenceBlocks`-style helper in `embody_pardef.py` beside
-   `ensureCustomPar`. Not started.
+5. **Sequence parameters "take more thinking than they should".** **DONE (docs).**
+   A "Sequence Parameters" recipe added to `/parameter-design` and its shipped
+   template: reach `comp.seq.<name>` rather than hand-building `<seq><i><par>`
+   names; `numBlocks` is the idempotent get-or-create (which is what an extension
+   reinitializing on every source save needs); shrinking destroys the block's
+   values, expressions and exports exactly like `Par.destroy()`, so grow to fit
+   and leave user-added blocks alone; and the two Embody-specific facts -- TDXN
+   keys `sequences:` by BASE name with a PROBED default block count, and creates
+   blocks in import Phase 2.5 before Phase 3 writes values. A code helper in
+   `embody_pardef.py` was NOT added -- `numBlocks` already is the get-or-create,
+   so a wrapper would add a layer without removing a decision.

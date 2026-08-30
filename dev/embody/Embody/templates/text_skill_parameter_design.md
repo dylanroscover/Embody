@@ -238,3 +238,42 @@ p.default = 1.0
 p.help = "Playback speed multiplier."
 p.startSection = True
 ```
+
+## Sequence Parameters
+
+Resizable parameter blocks (glslTOP uniforms, constantCHOP channels, mathmixPOP
+combines, and custom sequences since 2023.10000). Function Store's note on issue
+#94 -- "building sequence pars takes a bit more thinking than it should" -- is
+fair, and it is because three separate things are easy to get wrong.
+
+**Reach the sequence, not the parameter.** `comp.seq.<name>` from the operator,
+or `par.sequence` from any block parameter. The individual parameters are named
+`<seq><index><par>` (`uniname0`, `uniname1`), so never build those names by hand
+when you can go through the sequence object.
+
+**`numBlocks` is the get-or-create.** Assigning it grows or shrinks in one step
+and is idempotent, which is what you want in an extension that reinitializes on
+every source save. Use `insertBlock(i)` / `destroyBlock(i)` only when position
+matters.
+
+```python
+seq = comp.seq.uni
+seq.numBlocks = max(seq.numBlocks, len(uniforms))   # grow, never shrink blindly
+for i, u in enumerate(uniforms):
+    seq[i].par.uniname = u.name                     # block i, by index
+```
+
+**Shrinking destroys values.** `destroyBlock` / lowering `numBlocks` takes the
+block's values, expressions and exports with it, exactly like `Par.destroy()`
+(see Ownership and Lifecycle). Code owns the block COUNT only where the count is
+genuinely derived; if the user can add blocks, grow to fit and leave the excess
+alone.
+
+**In Embody's TDXN, sequences are stored by BASE name.** `sequences:` is keyed by
+sequence name, each value a list of block objects holding only non-default values
+under base names (`uniname`, not `uniname0`). Two consequences worth knowing: the
+default block count is *probed* from a throwaway instance rather than assumed to
+be 1, so a sequence sitting below its type default still exports its full block
+list and the shrink survives reimport; and blocks are created in import Phase 2.5,
+before Phase 3 sets parameters, so the block parameters exist before anything
+writes to them. Full detail: `docs/tdn/specification.md`.
