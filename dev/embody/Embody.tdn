@@ -4,7 +4,7 @@ build: 1223
 generator: Embody/6.2.5
 td_build: 099.2025.33070
 source_file: Embody-6.308.toe
-exported_at: '2026-08-30T17:16:16Z'
+exported_at: '2026-08-30T17:24:34Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -1341,9 +1341,7 @@ operators:
     file: embody/Embody/ai_clients.py
     syncfile: true
     language: python
-  flags:
-  - viewer
-  position: [-500, 200]
+  position: [-500, 300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -2019,8 +2017,6 @@ operators:
     file: embody/Embody/embody_pardef.py
     syncfile: true
     language: python
-  flags:
-  - viewer
   position: [-700, 400]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
@@ -2151,7 +2147,7 @@ operators:
     file: embody/Embody/palette_catalog.tsv
     syncfile: true
     rows: 1054
-  position: [-700, 0]
+  position: [-900, 300]
   color: [0.9, 0.3, 0.4]
   tags:
   - tsv
@@ -2173,9 +2169,7 @@ operators:
     file: embody/Embody/startup_progress.py
     syncfile: true
     language: python
-  flags:
-  - viewer
-  position: [-700, 200]
+  position: [-700, 300]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -2197,7 +2191,7 @@ operators:
     file: embody/Embody/divergent_defaults.tsv
     syncfile: true
     rows: 502
-  position: [-700, 100]
+  position: [-900, 400]
   color: [0.9, 0.3, 0.4]
   tags:
   - tsv
@@ -2498,9 +2492,9 @@ annotations:
 - name: annotation_logic
   mode: annotate
   title: Logic
-  text: Core extensions (Embody, Envoy, TDXN), lifecycle callbacks, parameter handlers, logging, and CLAUDE.md template.
-  position: [-1001, -103]
-  size: [901, 1101]
+  text: 'Columns: extension classes | embody_* modules | envoy_* modules | lifecycle callbacks (execute, parexec, fifo logging). Data DATs sit under their reader: catalog tables under CatalogManagerExt, startup_progress under the embody_* column, ai_clients under the envoy_* column. Templates live in the Envoy Config group.'
+  position: [-970, 230]
+  size: [870, 830]
   color: [0.485, 0.0, 0.2748]
   opacity: 0.9
 - name: annotation_tagging
