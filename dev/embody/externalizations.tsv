@@ -311,7 +311,3 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/unit_tests/test_ai_clients	text	py	embody/unit_tests/test_ai_clients.py	2026-08-27 18:45:10 UTC				1350	-200	0.9000,0.3000,0.4000
 /embody/Embody/embody_pardef	text	py	embody/Embody/embody_pardef.py	2026-08-29 23:28:15 UTC				-500	0	0.9000,0.3000,0.4000
 /embody/unit_tests/test_pardef	text	py	embody/unit_tests/test_pardef.py	2026-08-29 23:34:17 UTC				0	-4000	0.9000,0.3000,0.4000
-/retval/renamed/c1	baseCOMP		embody/retval/renamed/c1/c1.tox	2026-08-30 17:17:03 UTC						
-/tblupd/newscene/comp1	baseCOMP		embody/tblupd/newscene/comp1/comp1.tox	2026-08-30 17:17:04 UTC						
-/tblupd/newscene/comp2	baseCOMP		embody/tblupd/newscene/comp2/comp2.tox	2026-08-30 17:17:04 UTC						
-/tdntest/newparent/tdn_comp	baseCOMP	tdn	embody/tdntest/newparent/tdn_comp.tdn	2026-08-30 17:17:04 UTC						
