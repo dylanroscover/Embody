@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.2.3
+
+The third restamp path, found by forcing the one the 6.2.2 probe never reached.
+
+- **The exporter's tracking hook restamped the row too.** `TDXNExt._trackTDNExport` runs after every export, skipped or not, and wrote a fresh `timestamp` by row index -- so once Embody's own COMP read dirty for any transient reason, the autosave drain's skipped checkpoint still moved `externalizations.tsv`. It now leaves the timestamp alone on a skipped write. Verified by forcing a dirty fingerprint: the drain runs, the export is skipped, the row does not move, and the fingerprint re-baselines clean.
+
+**4,241 tests** (139 suites).
+
 ## v6.2.2
 
 `externalizations.tsv` stops dirtying itself, and the test runner can no longer bake its own settings into a receipt or a release.

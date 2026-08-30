@@ -1520,7 +1520,8 @@ class TDXNExt:
 					result['skipped'] = True
 				self._trackTDNExport(root_path, filepath,
 					build_num=build_num,
-					touch_build=f'{app.version}.{app.build}')
+					touch_build=f'{app.version}.{app.build}',
+					skipped=skipped)
 				self._log(
 					f'Network unchanged, kept {filepath}' if skipped
 					else f'Exported network to {filepath}', 'SUCCESS')
@@ -6991,13 +6992,21 @@ class TDXNExt:
 
 		return str(output_file)
 
-	def _trackTDNExport(self, root_path, file_path, build_num=None, touch_build=None):
+	def _trackTDNExport(self, root_path, file_path, build_num=None, touch_build=None,
+	                    skipped=False):
 		"""Add/update a TDXN row in the externalizations table.
 
 		NEW rows only for TDXN-tagged COMPs (plus root '/') -- ad-hoc file
 		exports must not subscribe untagged COMPs to the strip/reconstruct
 		lifecycle. Existing rows always update. Also stamps _tdn_rel_path
 		on the COMP as a recovery breadcrumb (RecoverOrphanShells).
+
+		skipped: the write was a no-op (identical network). The timestamp
+		column records when the FILE changed, so it is left alone -- this
+		was the third restamp path after saveTDN and checkpoint, and the one
+		that kept externalizations.tsv dirty after every Refresh (field
+		2026-08-29). The row is written by INDEX here, which is why a
+		path-keyed spy on _updateRowCells never saw it.
 		"""
 		try:
 			table = self.ownerComp.ext.Embody.Externalizations
@@ -7043,13 +7052,15 @@ class TDXNExt:
 					# ONE row write, not five cell writes: the table is
 					# syncfile-backed, so each changed cell rewrites the whole
 					# .tsv (~15ms measured). See EmbodyExt._updateRowCells.
-					self.ownerComp.ext.Embody._updateRowCells(i, {
+					cells = {
 						'rel_file_path': rel_path,
-						'timestamp': timestamp,
 						'dirty': '',
 						'build': build_str,
 						'touch_build': tb_str,
-					})
+					}
+					if not skipped:
+						cells['timestamp'] = timestamp
+					self.ownerComp.ext.Embody._updateRowCells(i, cells)
 					_stamp_recovery_pointer()
 					return
 
