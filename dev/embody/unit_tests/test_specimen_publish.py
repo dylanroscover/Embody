@@ -191,7 +191,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 	def test_absent_comp_goes_to_missing_bucket(self):
 		"""A manifest slug whose /specimen_lab COMP is absent -> missing."""
 		self._write_manifest([
-			{'slug': 'ghost-spec', 'tdn_path': 'cat/ghost.tdn'},
+			{'slug': 'ghost-spec', 'tdn_path': 'cat/ghost.tdxn'},
 		])
 		# present map is empty -> op('/specimen_lab/ghost_spec') returns None
 		self._install(present={})
@@ -206,7 +206,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		"""ExportNetwork success:False -> 'slug (export failed)' in missing."""
 		self._write_manifest([
 			{'slug': 'reaction-diffusion',
-			 'tdn_path': 'generative/reaction-diffusion.tdn'},
+			 'tdn_path': 'generative/reaction-diffusion.tdxn'},
 		])
 		comp_path = '/specimen_lab/reaction_diffusion'
 		present = {comp_path: _FakeComp(comp_path)}
@@ -226,7 +226,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		"""
 		self._write_manifest([
 			{'slug': 'reaction-diffusion',
-			 'tdn_path': 'generative/reaction-diffusion.tdn'},
+			 'tdn_path': 'generative/reaction-diffusion.tdxn'},
 		])
 		comp_path = '/specimen_lab/reaction_diffusion'
 		present = {comp_path: _FakeComp(comp_path)}
@@ -239,7 +239,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		self.assertIn('reaction-diffusion', result['written'])
 		self.assertListEqual(fake_tdn.export_calls, [comp_path])
 		# The written file landed at <root>/specimens/generative/reaction-diffusion.tdn
-		out = Path(self._spec_dir, 'generative', 'reaction-diffusion.tdn')
+		out = Path(self._spec_dir, 'generative', 'reaction-diffusion.tdxn')
 		self.assertTrue(out.exists())
 
 	# --- skip-unchanged (headless, via real comparison statics) ------------
@@ -253,7 +253,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		/specimen_lab COMP and no save required.
 		"""
 		self._write_manifest([
-			{'slug': 'noise-terrain', 'tdn_path': '3d/noise-terrain.tdn'},
+			{'slug': 'noise-terrain', 'tdn_path': '3d/noise-terrain.tdxn'},
 		])
 		comp_path = '/specimen_lab/noise_terrain'
 		present = {comp_path: _FakeComp(comp_path)}
@@ -280,7 +280,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 			return res
 
 		self._install(present=present, export_fn=export_fn)
-		out = Path(self._spec_dir, '3d', 'noise-terrain.tdn')
+		out = Path(self._spec_dir, '3d', 'noise-terrain.tdxn')
 
 		# 1st publish: nothing on disk -> written.
 		r1 = self.mod._publish()
@@ -300,7 +300,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		"""The file _publish writes must re-read via the real _read_existing_tdn
 		into a content-equal dict (compact_json_dumps + read are inverse)."""
 		self._write_manifest([
-			{'slug': 'kaleidoscope', 'tdn_path': 'compositing/kaleidoscope.tdn'},
+			{'slug': 'kaleidoscope', 'tdn_path': 'compositing/kaleidoscope.tdxn'},
 		])
 		comp_path = '/specimen_lab/kaleidoscope'
 		present = {comp_path: _FakeComp(comp_path)}
@@ -309,7 +309,7 @@ class TestSpecimenPublishBuckets(EmbodyTestCase):
 		self._install(present=present,
 					  export_result={'success': True, 'tdn': tdn})
 		self.mod._publish()
-		out = Path(self._spec_dir, 'compositing', 'kaleidoscope.tdn')
+		out = Path(self._spec_dir, 'compositing', 'kaleidoscope.tdxn')
 		self.assertTrue(out.exists())
 		reread = self.embody.ext.TDXN._read_existing_tdn(str(out))
 		self.assertIsNotNone(reread)
@@ -353,7 +353,7 @@ class TestSpecimenPublishLive(EmbodyTestCase):
 		"""First export to a fresh path writes a file; identical export to the
 		same path is content-equal and would skip."""
 		TDN = self.embody.ext.TDXN
-		out = Path(self._tmp_out, 'live.tdn')
+		out = Path(self._tmp_out, 'live.tdxn')
 		res = TDN.ExportNetwork(root_path=self._live.path,
 								include_dat_content=True, embed_all=True)
 		self.assertTrue(res.get('success'),

@@ -31,7 +31,7 @@
     },
     "embody": {
       "role": "lateral velocity",
-      "description": "Externalizes TouchDesigner operators to version-control-friendly text files on disk (.py, .tox, .tdn, .json, .xml). Externalized files are the source of truth; auto-restore on project open."
+      "description": "Externalizes TouchDesigner operators to version-control-friendly text files on disk (.py, .tox, .tdxn, .json, .xml). Externalized files are the source of truth; auto-restore on project open."
     },
     "tdn": {
       "role": "the substrate",

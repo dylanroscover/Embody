@@ -1,38 +1,38 @@
 [
   {
     "slug": "murmuration",
-    "sha256": "c799ff94ec1b93eb56d9d5dde3717b42445ee101861eac76e12563b2cc9cdfca",
-    "size": 20494,
-    "tdn_path": "/Users/rosco/Documents/Git/Embody/specimens/simulation/murmuration.tdn"
+    "sha256": "079d5f43f6b73f925c75c81d25309a63bfef4f878eeda93171dffe337e21dd2c",
+    "size": 13920,
+    "tdn_path": "C:\\Users\\admin\\Documents\\Git\\Embody\\specimens\\simulation\\murmuration.tdxn"
   },
   {
     "slug": "reaction-diffusion",
-    "sha256": "5e6e132c128411e4f0ca5bccb61fa6eb1aabd192384abed2eb00d55012902937",
-    "size": 12892,
-    "tdn_path": "/Users/rosco/Documents/Git/Embody/specimens/generative/reaction-diffusion.tdn"
+    "sha256": "b937b4edab5c91639e9b32eecf56cf9cdff8c9bcd2f391d308246affae61bcc7",
+    "size": 7165,
+    "tdn_path": "C:\\Users\\admin\\Documents\\Git\\Embody\\specimens\\generative\\reaction-diffusion.tdxn"
   },
   {
     "slug": "kaleidoscope",
-    "sha256": "9dd49408b286453c441d178acabd72bf7d1c0d38802b22bc0bdb09f5a634b66d",
-    "size": 12648,
-    "tdn_path": "/Users/rosco/Documents/Git/Embody/specimens/compositing/kaleidoscope.tdn"
+    "sha256": "203ff060bd24f8fd0b006129a12b32609e1fdb54ec6bcc76d873bb25d1534363",
+    "size": 8206,
+    "tdn_path": "C:\\Users\\admin\\Documents\\Git\\Embody\\specimens\\compositing\\kaleidoscope.tdxn"
   },
   {
     "slug": "noise-terrain",
-    "sha256": "b2daddcf508ae25ec56b4ccf97504b47356770327efea872b107566ebfaa8562",
-    "size": 30340,
-    "tdn_path": "/Users/rosco/Documents/Git/Embody/specimens/3d/noise-terrain.tdn"
+    "sha256": "471730e201682b0963577b852c7249f89006ed995c7bbdcb5c8f463f080603c2",
+    "size": 24041,
+    "tdn_path": "C:\\Users\\admin\\Documents\\Git\\Embody\\specimens\\3d\\noise-terrain.tdxn"
   },
   {
     "slug": "plasma-interference",
-    "sha256": "a751113e37b8c9a1efcf9da6765a3c18b4136bd7516fbfad9c352f31e8bfcc59",
-    "size": 12644,
-    "tdn_path": "/Users/rosco/Documents/Git/Embody/specimens/generative/plasma-interference.tdn"
+    "sha256": "fd179f050bb38be404605c54bc036c26a5aaab1f7b0e4db3b46a81b4d223a4cd",
+    "size": 7115,
+    "tdn_path": "C:\\Users\\admin\\Documents\\Git\\Embody\\specimens\\generative\\plasma-interference.tdxn"
   },
   {
     "slug": "mandelbulb-march",
-    "sha256": "da127dc0ed5e2890f650baee0a3098c3ad66be338429facf33ec8186060f479a",
-    "size": 16003,
-    "tdn_path": "/Users/rosco/Documents/Git/Embody/specimens/raymarching-sdf/mandelbulb-march.tdn"
+    "sha256": "bc2bd1a53a6f3c632e9e06c473340f60be3c707170a8c7da6e58500c86f2ff66",
+    "size": 10410,
+    "tdn_path": "C:\\Users\\admin\\Documents\\Git\\Embody\\specimens\\raymarching-sdf\\mandelbulb-march.tdxn"
   }
 ]

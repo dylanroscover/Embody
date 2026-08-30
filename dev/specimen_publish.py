@@ -1,4 +1,4 @@
-# specimen_publish -- on Ctrl+S, refresh each website Specimen .tdn from the live
+# specimen_publish -- on Ctrl+S, refresh each website Specimen .tdxn from the live
 # /specimen_lab gallery, self-contained (DAT scripts embedded) so they are
 # copy-paste ("embody it") ready. specimens/manifest.json is the curation source
 # of truth (which specimens, their slug/category/path); the live TD network is

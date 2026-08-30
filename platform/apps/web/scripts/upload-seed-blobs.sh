@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Upload each first-party Specimen .tdn into the R2 bucket under key=sha256
+# Upload each first-party Specimen .tdxn into the R2 bucket under key=sha256
 # (content-addressed). Reads scripts/.seed-blobs.manifest.json (produced by
 # build-specimen-data.py).
 #
@@ -29,4 +29,4 @@ PY
   npx wrangler r2 object put "embody-blobs/$SHA" --file="$PATH_" "$TARGET"
 done
 
-echo "Done. R2 bucket 'embody-blobs' ($TARGET) now holds the six .tdn blobs."
+echo "Done. R2 bucket 'embody-blobs' ($TARGET) now holds the six .tdxn blobs."

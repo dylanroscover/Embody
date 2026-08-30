@@ -11,10 +11,7 @@
 INSERT OR REPLACE INTO users_profile (id, handle, avatar_url, bio, trust_level)
 VALUES ('dev-user', 'envoy', '/embody-mark.svg', 'First-party Embody specimen author. Curating the transparent TDXN Collection.', 'curator');
 
--- Rebuild the FTS5 mirror from scratch. Must match migration 0005's
--- contentless_delete=1 form -- a plain content='' table breaks the
--- specimens_fts_ad delete trigger (DELETE FROM specimens_fts WHERE rowid=?),
--- so every specimen delete after a seed would error.
+-- Rebuild the FTS5 mirror (contentless_delete=1, matching migration 0005).
 DROP TABLE IF EXISTS specimens_fts;
 CREATE VIRTUAL TABLE specimens_fts USING fts5(
   slug UNINDEXED, title, description, tags, author_handle, dat_text,
@@ -61,7 +58,7 @@ INSERT OR REPLACE INTO tags (id, name, slug) VALUES
 
 -- Specimens (real first-party metadata from specimens/manifest.json).
 INSERT OR REPLACE INTO specimens (
-  id, slug, author_id, title, description, category, level, requires, op_count,
+  id, slug, author_id, title, description, category, difficulty, requires, op_count,
   family_summary, current_version_id, thumbnail_key, license, visibility, tier, scan_status,
   capability_json, likes_count, views_count, copies_count
 ) VALUES
@@ -198,17 +195,17 @@ INSERT OR REPLACE INTO specimens (
     0
   );
 
--- Versions (content-addressed: tdn_r2_key = tdn_sha256 = sha256 of the .tdn bytes).
+-- Versions (content-addressed: tdn_r2_key = tdn_sha256 = sha256 of the .tdxn bytes).
 INSERT OR REPLACE INTO specimen_versions (
   id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes, op_count, scan_id,
   signature_ref, changelog
 ) VALUES
-  ('ver-murmuration', 'sp-murmuration', 1, 'c799ff94ec1b93eb56d9d5dde3717b42445ee101861eac76e12563b2cc9cdfca', 'c799ff94ec1b93eb56d9d5dde3717b42445ee101861eac76e12563b2cc9cdfca', 20494, 18, 'scan-murmuration', NULL, 'First-party specimen.'),
-  ('ver-reaction-diffusion', 'sp-reaction-diffusion', 1, '5e6e132c128411e4f0ca5bccb61fa6eb1aabd192384abed2eb00d55012902937', '5e6e132c128411e4f0ca5bccb61fa6eb1aabd192384abed2eb00d55012902937', 12892, 14, 'scan-reaction-diffusion', NULL, 'First-party specimen.'),
-  ('ver-kaleidoscope', 'sp-kaleidoscope', 1, '9dd49408b286453c441d178acabd72bf7d1c0d38802b22bc0bdb09f5a634b66d', '9dd49408b286453c441d178acabd72bf7d1c0d38802b22bc0bdb09f5a634b66d', 12648, 11, 'scan-kaleidoscope', NULL, 'First-party specimen.'),
-  ('ver-noise-terrain', 'sp-noise-terrain', 1, 'b2daddcf508ae25ec56b4ccf97504b47356770327efea872b107566ebfaa8562', 'b2daddcf508ae25ec56b4ccf97504b47356770327efea872b107566ebfaa8562', 30340, 20, 'scan-noise-terrain', NULL, 'First-party specimen.'),
-  ('ver-plasma-interference', 'sp-plasma-interference', 1, 'a751113e37b8c9a1efcf9da6765a3c18b4136bd7516fbfad9c352f31e8bfcc59', 'a751113e37b8c9a1efcf9da6765a3c18b4136bd7516fbfad9c352f31e8bfcc59', 12644, 5, 'scan-plasma-interference', NULL, 'First-party specimen.'),
-  ('ver-mandelbulb-march', 'sp-mandelbulb-march', 1, 'da127dc0ed5e2890f650baee0a3098c3ad66be338429facf33ec8186060f479a', 'da127dc0ed5e2890f650baee0a3098c3ad66be338429facf33ec8186060f479a', 16003, 5, 'scan-mandelbulb-march', NULL, 'First-party specimen.');
+  ('ver-murmuration', 'sp-murmuration', 1, '079d5f43f6b73f925c75c81d25309a63bfef4f878eeda93171dffe337e21dd2c', '079d5f43f6b73f925c75c81d25309a63bfef4f878eeda93171dffe337e21dd2c', 13920, 18, 'scan-murmuration', NULL, 'First-party specimen.'),
+  ('ver-reaction-diffusion', 'sp-reaction-diffusion', 1, 'b937b4edab5c91639e9b32eecf56cf9cdff8c9bcd2f391d308246affae61bcc7', 'b937b4edab5c91639e9b32eecf56cf9cdff8c9bcd2f391d308246affae61bcc7', 7165, 14, 'scan-reaction-diffusion', NULL, 'First-party specimen.'),
+  ('ver-kaleidoscope', 'sp-kaleidoscope', 1, '203ff060bd24f8fd0b006129a12b32609e1fdb54ec6bcc76d873bb25d1534363', '203ff060bd24f8fd0b006129a12b32609e1fdb54ec6bcc76d873bb25d1534363', 8206, 11, 'scan-kaleidoscope', NULL, 'First-party specimen.'),
+  ('ver-noise-terrain', 'sp-noise-terrain', 1, '471730e201682b0963577b852c7249f89006ed995c7bbdcb5c8f463f080603c2', '471730e201682b0963577b852c7249f89006ed995c7bbdcb5c8f463f080603c2', 24041, 20, 'scan-noise-terrain', NULL, 'First-party specimen.'),
+  ('ver-plasma-interference', 'sp-plasma-interference', 1, 'fd179f050bb38be404605c54bc036c26a5aaab1f7b0e4db3b46a81b4d223a4cd', 'fd179f050bb38be404605c54bc036c26a5aaab1f7b0e4db3b46a81b4d223a4cd', 7115, 5, 'scan-plasma-interference', NULL, 'First-party specimen.'),
+  ('ver-mandelbulb-march', 'sp-mandelbulb-march', 1, 'bc2bd1a53a6f3c632e9e06c473340f60be3c707170a8c7da6e58500c86f2ff66', 'bc2bd1a53a6f3c632e9e06c473340f60be3c707170a8c7da6e58500c86f2ff66', 10410, 5, 'scan-mandelbulb-march', NULL, 'First-party specimen.');
 
 -- Scans (clean verdict, empty capability surface).
 INSERT OR REPLACE INTO scans (
@@ -281,9 +278,3 @@ FROM specimens WHERE id = 'sp-plasma-interference';
 INSERT OR REPLACE INTO specimens_fts (rowid, slug, title, description, tags, author_handle, dat_text)
 SELECT rowid, 'mandelbulb-march', 'Mandelbulb March', 'A raymarched 3D Mandelbulb fractal rendered entirely in one GLSL TOP. The classic distance estimator is marched per pixel against a slowly orbiting camera; orbit-trap values captured during iteration tint the surface, and soft shadows, a fresnel rim, and a proximity glow give it depth. No input, no feedback - a drop-in hero render, a looping VJ source, or a reference for distance-estimated raymarching.', 'raymarching sdf glsl fractal 3d mandelbulb', 'envoy', 'glslTOP'
 FROM specimens WHERE id = 'sp-mandelbulb-march';
-
--- Category membership (multi). Seed the join table from each specimen's primary
--- category so the collection facet filter (which reads specimen_categories) and
--- the category facets list include the seeded rows. Mirrors migration 0010.
-INSERT OR IGNORE INTO specimen_categories (specimen_id, category)
-SELECT id, category FROM specimens WHERE category IS NOT NULL AND category <> '';

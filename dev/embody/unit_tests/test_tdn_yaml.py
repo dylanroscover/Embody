@@ -75,9 +75,9 @@ class TestTDNYaml(EmbodyTestCase):
         if root is None:
             self.skipTest('specimens/ folder not found')
         names = [
-            'generative/reaction-diffusion.tdn',
-            'compositing/kaleidoscope.tdn',
-            '3d/noise-terrain.tdn',
+            'generative/reaction-diffusion.tdxn',
+            'compositing/kaleidoscope.tdxn',
+            '3d/noise-terrain.tdxn',
         ]
         checked = 0
         for rel in names:
