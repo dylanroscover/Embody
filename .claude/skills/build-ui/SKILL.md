@@ -1,3 +1,8 @@
+---
+name: build-ui
+description: "MUST READ before building or styling any TouchDesigner panel UI (dialog, wizard, HUD, control panel, buttons, text): design tokens, layout rules, component recipes, and the OP Viewer TOP verification loop. Mechanics (which panel COMP, single-window, click handling) are in td-ui-mechanics.md beside it."
+---
+
 # Build UI - visual design system for TouchDesigner panels
 
 Load BEFORE building or restyling any TD panel UI (dialogs, wizards, HUDs,

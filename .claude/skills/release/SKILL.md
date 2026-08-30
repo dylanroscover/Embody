@@ -1,8 +1,4 @@
 ---
-description: "Procedure for preparing version release commits -- changelog, README, templates, versioning"
----
-
----
 name: release
 description: MUST READ before preparing a release commit or GitHub release -- project.save() versioning, changelog, README, template sync verification, fresh-install smoke, and the post-push GitHub release procedure (references/github-release.md).
 ---

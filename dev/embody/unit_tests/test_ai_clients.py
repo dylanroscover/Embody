@@ -518,6 +518,18 @@ class TestAiClients(EmbodyTestCase):
 		self.assertEqual(row['skills']['dir'], '.agents/skills')
 		self.assertEqual(row['mcp']['path'], '.agents/mcp_config.json')
 
+	def test_G04_agents_skills_is_shared_by_every_client_that_reads_it(self):
+		"""Codex, Gemini CLI, Cursor and Antigravity all discover
+		.agents/skills (verified against each vendor's docs 2026-08-30), so
+		one copy on disk serves all four; every row that writes it must also
+		sweep it on Uninstall."""
+		for token in ('codex', 'gemini', 'cursor', 'antigravity'):
+			row = self.reg.spec(token)
+			self.assertEqual(row['skills']['dir'], '.agents/skills', token)
+			self.assertIn('.agents/skills', row['cleanup_dirs'], token)
+		for token in ('vscode', 'copilot', 'windsurf'):
+			self.assertIsNone(self.reg.spec(token).get('skills'), token)
+
 	# ------------------------------------------------------------------
 	# Group H: uninstall through the REAL plan -> execute path
 	# ------------------------------------------------------------------

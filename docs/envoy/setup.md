@@ -146,13 +146,15 @@ are written whenever any client config is generated -- that is, unless
 |---|---|
 | Claude Code | `CLAUDE.md` (merged into if you already have your own), `.claude/rules/`, `.claude/skills/` |
 | OpenCode | `opencode.json`, and shares Claude Code's `.claude/rules/` + `.claude/skills/` |
-| Codex | `.codex/config.toml` (Codex reads `AGENTS.md` natively, so it needs no rules files of its own) |
-| Gemini | `GEMINI.md` (a thin `@AGENTS.md` import), `.gemini/settings.json` |
+| Codex | `.codex/config.toml`, `.agents/skills/` (Codex reads `AGENTS.md` natively, so it needs no rules files of its own) |
+| Gemini | `GEMINI.md` (a thin `@AGENTS.md` import), `.gemini/settings.json`, `.agents/skills/` |
 | VS Code | `.vscode/mcp.json` |
 | GitHub Copilot | `.github/copilot-instructions.md`, `.github/instructions/`, and `.vscode/mcp.json` (shared with VS Code) |
-| Cursor | `.cursor/rules/*.mdc`, `.cursor/mcp.json` |
+| Cursor | `.cursor/rules/*.mdc`, `.cursor/mcp.json`, `.agents/skills/` |
 | Windsurf | `.windsurf/rules/` only — its MCP config is user-global and is never written, see above |
 | Antigravity | `.agents/rules/`, `.agents/skills/`, `.agents/mcp_config.json` |
+
+`.agents/skills/` is one folder shared by Codex, Gemini, Cursor and Antigravity -- all four read the same `SKILL.md` contract, so the skills are written once and every selected client discovers them.
 
 Serving more than one client is normal and supported: select each in turn.
 Generation is additive and never removes, so an earlier client stays configured

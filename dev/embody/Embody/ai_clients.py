@@ -173,11 +173,16 @@ CLIENTS = {
                 'style': 'toml', 'scope': 'project'},
         # Codex reads AGENTS.md natively; no per-rule dialect of its own.
         'rules': None,
-        'skills': None,
+        # Codex discovers SKILL.md folders under .agents/skills (cwd, then
+        # parents up to the repo root, then ~/.agents/skills) -- the same
+        # agentskills.io contract Claude Code uses, name + description
+        # required. Shared with Antigravity, Cursor and Gemini; the writer
+        # is idempotent so a second client re-stamps identical files.
+        'skills': {'dir': '.agents/skills'},
         'docs': [],
         'writer': None,
         'probe': [['.codex/config.toml']],
-        'cleanup_dirs': ['.codex'],
+        'cleanup_dirs': ['.codex', '.agents/skills', '.agents'],
         'cleanup_files': [],
     },
 
@@ -194,13 +199,16 @@ CLIENTS = {
         'mcp': {'path': '.gemini/settings.json', 'key': 'mcpServers',
                 'style': 'command_args', 'scope': 'project'},
         'rules': None,
-        'skills': None,
+        # Gemini CLI reads workspace skills from .gemini/skills or
+        # .agents/skills (the .agents alias wins within a tier); the
+        # shared folder means one copy on disk serves every client.
+        'skills': {'dir': '.agents/skills'},
         # GEMINI.md is a thin @import of AGENTS.md -- Gemini does not read
         # AGENTS.md itself.
         'docs': ['GEMINI.md'],
         'writer': 'gemini',
         'probe': [['GEMINI.md'], ['.gemini/settings.json']],
-        'cleanup_dirs': ['.gemini'],
+        'cleanup_dirs': ['.gemini', '.agents/skills', '.agents'],
         'cleanup_files': ['GEMINI.md'],
     },
 
@@ -252,11 +260,14 @@ CLIENTS = {
         'mcp': {'path': '.cursor/mcp.json', 'key': 'mcpServers',
                 'style': 'command_args', 'scope': 'project'},
         'rules': {'dir': '.cursor/rules', 'ext': '.mdc', 'style': 'cursor'},
-        'skills': None,
+        # Cursor loads .agents/skills, .cursor/skills and (legacy)
+        # .claude/skills; it honors disable-model-invocation and requires
+        # name + description like everyone else.
+        'skills': {'dir': '.agents/skills'},
         'docs': [],
         'writer': None,
         'probe': [['.cursor/rules'], ['.cursor/mcp.json']],
-        'cleanup_dirs': ['.cursor/rules', '.cursor'],
+        'cleanup_dirs': ['.cursor/rules', '.cursor', '.agents/skills', '.agents'],
         'cleanup_files': [],
     },
 

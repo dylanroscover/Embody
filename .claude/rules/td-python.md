@@ -118,20 +118,7 @@ Take the highest rung that resolves from where the code runs:
 | 4 | `op.CompName` | A project-wide singleton no parent shortcut can reach | the COMP sets `par.opshortcut` |
 | -- | `op('/abs/path')` | never | -- |
 
-**`iop`/`ipar` are the same family as `parent.CompName`** -- both search *up* the
-parent hierarchy by a shortcut name set on the Common page, so both survive
-renesting. The difference is granularity: `parent.Comp` hands you the component and
-you navigate down from it; `iop.Name` names one internal operator directly, and
-`ipar.Name` names a parameter-holding COMP. Reach for them when a component wants to
-publish a *stable internal address* to its own descendants without freezing the path
-between them -- a widget reaching `iop.Readout` keeps working when the readout moves.
-Two caveats: they only resolve from INSIDE the component (like `parent.Comp`), and
-an operator-valued internal parameter needs `op(ipar.Effect.Operatorpath)` to resolve
-to the operator rather than the path string. Function Store called these "a bit
-debatable" in issue #94, and the debate is real -- every shortcut is configuration
-that lives on the COMP rather than in the code, so a reader has to look at the
-Common page to follow the reference. Use them for genuinely stable internal
-addresses, not as a default.
+**`iop.Name` / `ipar.Name`** are `parent.CompName`'s siblings -- an up-search by a Common-page shortcut that names one internal op or parameter directly. Inside-only, and an operator-valued internal par needs `op(ipar.X.Opname)`. Stable internal addresses only, not a default (details: `/td-api-reference`, Operator Referencing Patterns).
 
 **`parent.CompName` is the default for reaching a component**, not a `parent()` chain. It searches *up* by shortcut name and so survives renesting, where `parent(2)` encodes the depth and breaks the moment anything moves. **Set `par.parentshortcut` when you create a reusable COMP** -- the shortcut does not exist until something sets it, which is exactly why code falls back to `parent()`.
 
@@ -159,7 +146,7 @@ addresses, not as a default.
 
 ## Threading and Background Work
 
-**Ironclad rule (a read is treated exactly like a write).** From any thread but the main thread, NEVER touch a main-thread-owned TD object: `op()`/`opex()`, a `Par`/`ParGroup` (read OR write, including `.eval()`/`.val` on a live parameter), DAT/CHOP/SOP/TOP content, `storage` (`fetch`/`store`), `tdu.Dependency` (setting `.val` recooks on the main thread), or `debug()`/`print()` (they route to the Textport / a DAT). **Never call `run()`/`td.run()` from a worker - there is NO sanctioned exception.** The call may not raise on current builds (2025.3x) and the scheduled code even executes later on the main thread, but the call itself touches TD state from the wrong thread and silently corrupts it - the crash surfaces later, far from the call site (Derivative-confirmed 2026-08-17; exactly what froze TD in the field, and why "it works when I test it" proves nothing). A worker may use ONLY: pure Python (`math`, `json`, `requests`), `tdu` math/value utilities (`tdu.clamp`/`remap`/`Vector`/`Matrix` - they do not reference TD data), parameter VALUES evaluated on the main thread and passed in, `queue.Queue`, `threading.Event`/`Lock`, `td.isMainThread()` as a guard, and the Thread Manager's `InfoQueue`/`Get/Set*Safe`/`SafeLogger`. Resolve every op path and value on the main thread BEFORE spawning the worker; the worker returns plain data for a main-thread callback to apply.
+**Ironclad rule: a worker thread touches NO TD object -- reads count as writes.** No `op()`/`opex()`, no `Par` (not even `.eval()`), no DAT/CHOP/SOP/TOP content, no `storage`, no `tdu.Dependency`, no `debug()`/`print()`, and **never `run()`/`td.run()` from a worker -- no exception**: it does not raise, the scheduled code even runs, and the crash lands later far from the call site (Derivative-confirmed 2026-08-17; this is what froze TD in the field). A worker gets pure Python, `tdu` math utilities, values resolved on the main thread and passed in, `queue`/`threading` primitives, `td.isMainThread()`, and the Thread Manager's `InfoQueue`/`SafeLogger`; it hands plain data back for a main-thread callback to apply.
 
 Rungs (full ladder + code patterns in /td-api-reference): 0-1 inline for short TD-only no-I/O one-shots; 2 native TD I/O operators (Web Client DAT, WebSocket, Web Server, OSC, File In/Folder DAT) for any fetch; 3 chunk long TD-touching work with `run(delayFrames=N)`; 4 Thread Manager workers for blocking pure-Python with zero TD access; 5 long-lived servers/loops as `standalone=True` tasks or zero-TD-access threads with a main-thread queue drain.
 
@@ -174,55 +161,17 @@ any background/long-running/blocking/HTTP work -> MUST load /td-api-reference (B
 
 ## Custom Parameters, Storage, and Dependencies -- picking one
 
-Three mechanisms hold state on a COMP and they are not interchangeable. Choose by lifetime and audience:
-
 | The state is | Use | Lives on |
 |---|---|---|
 | User-facing, persisted, part of the COMP's interface | a **custom parameter** | the COMP |
-| Durable bookkeeping the user should not see (caches, handles, flags) | **`storage`** | the COMP |
-| A derived value that must recook whatever reads it | **`tdu.Dependency`** | usually the extension instance |
+| Durable bookkeeping the user should not see | **`storage`** | the COMP -- survives an extension reinit, wiped when the contents are replaced (tox reload, TDXN reconstruction) |
+| A derived value that must recook whatever reads it | **`tdu.Dependency`** | the extension instance -- dies on every source save; rebuild it in `__init__` |
 
-**Publish the value; do not push it.** The common failure (Function Store, issue
-#94) is code that recomputes something and then *pushes* it -- writing
-`other.par.Value = x` on each consumer, or calling a method on each of them --
-where the value should be published ONCE as a dependable and let consumers pull.
-A push has to enumerate its consumers, so it silently goes stale the moment
-someone adds a reader, it fires whether or not the value changed, and it inverts
-the cook model TD already gives you. Publish through `tdu.Dependency` (derived
-runtime state), `store()` (durable bookkeeping), or a custom parameter
-(user-facing) -- then let expressions and `.eval()` read it.
-
-```python
-# push -- every new reader is a new line here, and nobody else knows
-for w in self.widgets: w.par.Scale = value
-
-# publish -- readers subscribe by reading; adding one costs nothing
-self.Scale.val = value          # tdu.Dependency built in __init__
-# reader: parent.Host.Scale.val  (or an expression, which recooks on change)
-```
-
-Push is still right for one case: handing a value to something that is NOT
-dependency-aware -- an external process, a file, a network peer.
-
-**What survives what.** Probed on TD 2025.33070; TD does not document this, so verify before relying on it in another build.
-
-| Event | Custom par | `storage` | Dependency held on the extension |
-|---|---|---|---|
-| Extension reinit -- editing the source `.py`, `initializeExtensions()` | survives | **survives** | **destroyed** (a new instance is built) |
-| External-tox reload -- `enableexternaltoxpulse`, COMP restore | survives | **wiped** | destroyed |
-| `.toe` / `.tox` save and load | survives | survives | survives only if it was put in storage |
-
-The distinction that matters: **`storage` lives on the COMP, not on the extension instance**, so a hot-sync reinit does NOT clear it -- the widespread belief that it does is wrong. What clears it is the COMP's contents being *replaced*: a tox reload, a TDXN reconstruction, a restore. Embody hits exactly that case, which is why Envoy's state machine trusts the `Envoystatus` **parameter** rather than its own `envoy_running` store.
-
-A `tdu.Dependency` assigned to `self` in `__init__` is a different lifetime again: it dies with the instance on every source save. Rebuild it in `__init__`, never treat it as persistent.
-
-- **`fetch()` searches UP the parent hierarchy** by default -- pass `search=False` for local-only lookup.
-- **`store()` of an immutable value recooks its dependents** -- storage is already dependable, so a scalar in storage does NOT need a `tdu.Dependency` wrapper. It dirties dependents, not the owner (the owner's `totalCooks` stays flat -- that is expected, not a bug).
-- **Three ways to change state silently**, all measured 2026-08-29 with a dependent parameter expression that never cooked: `comp.storage['k'] = v` (direct dict write), `comp.fetch('lst').append(x)` (in-place mutation), and a plain extension attribute `self.Scale = 42`. The value really changes; the expression keeps reading the old one. **Always write through `store()`** -- re-storing an unchanged value still notifies. A plain extension attribute is not dependable at all: that is precisely what `tdu.Dependency` is for.
-- **`fetch(key)` with no default RAISES** `tdError` -- it does not return `None`, because a stored value could legitimately BE `None`. `unstore()` is glob-matched, so never hand it a computed key.
-- **Cannot store operator references** -- store path strings and re-resolve.
-- **`tdu.Dependency`**: assign to `.val` (`dep.val = 5`); `dep = 5` destroys the object. Call `.modified()` after mutating contents in place. Read without subscribing via `.peekVal`.
-- **A Dependency is main-thread-only** -- setting `.val` recooks. Never touch one from a worker (see Threading below).
+- **Publish, don't push**: expose the value once as a dependable and let readers pull; never loop over consumers assigning `other.par.X = v`.
+- **Write through `store()`**, never `comp.storage[k] = v` or in-place mutation -- those change the value and notify nobody. A plain `self.attr` is not dependable at all.
+- `fetch(key)` with no default **raises**; `fetch()` searches UP the parents (`search=False` for local); `unstore()` is glob-matched.
+- `dep.val = 5` (assigning `dep = 5` destroys it); `.modified()` after in-place mutation; `.peekVal` reads without subscribing; main-thread only.
+- Lifetime table, measurements, pickling, op references in storage: `/parameter-design` (Parameter, Storage, or Dependency?).
 
 ## Module Access
 

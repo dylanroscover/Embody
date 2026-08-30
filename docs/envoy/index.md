@@ -155,7 +155,7 @@ Inspect the live TD Python API, check operator errors, and call operator methods
 | `get_docs` | Look up official TouchDesigner docs from the offline help mirror or docs.derivative.ca |
 
 | `get_focus` | What the user is looking at: current network, selection, current op — resolves "this operator" without guessing |
-| `get_guidance` | The project's own rules and workflow skills served over MCP — the only way non-Claude-Code clients see them |
+| `get_guidance` | The project's own rules and workflow skills served over MCP — how clients with no skills folder (VS Code, Copilot, Windsurf) see them |
 
 ### Background Jobs
 
@@ -261,7 +261,7 @@ When Envoy starts for the first time, it generates a complete AI client configur
 | `AGENTS.md` | Always written — universal AI instructions read by all major AI tools (Codex, Cursor, etc.) |
 | `CLAUDE.md` | Project context for Claude Code — what Embody is, how the network is structured, what tools to use (client-specific; written when **Configure For** is set to Claude Code) |
 | `.claude/rules/` | Claude Code — always-loaded coding conventions (TD Python patterns, parameter rules, network layout, MCP safety) |
-| `.claude/skills/` | Claude Code — on-demand reference (full MCP tool catalog, TD API reference, operator creation workflow, and more) |
+| `.claude/skills/` | Claude Code and OpenCode — on-demand reference (full MCP tool catalog, TD API reference, operator creation workflow, and more); the same skills are written to `.agents/skills/` for Codex, Cursor, Gemini CLI and Antigravity |
 | `.gitignore` / `.gitattributes` | Git entries for `.toe`/`.tox` binary handling and externalized file tracking |
 
 Regenerate at any time:

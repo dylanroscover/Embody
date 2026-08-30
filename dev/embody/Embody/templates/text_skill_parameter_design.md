@@ -101,6 +101,21 @@ Custom parameters are one of three ways to hold state on a COMP, and the choice 
 
 Do not reach for a `Dependency` where a parameter works -- a par is inspectable, persisted, exportable and free. Reach for one when a computed value has no business on the user's parameter dialog but still has to invalidate whatever reads it. A Dependency assigned to `self` in `__init__` dies with the instance on every source save; rebuild it there, never treat it as persistent.
 
+### Publish the value; do not push it
+
+The common failure (Function Store, issue #94): code recomputes something and then *pushes* it -- `other.par.Value = x` on each consumer, or a method call on each -- where it should publish ONCE as a dependable and let consumers pull. A push must enumerate its consumers, so it goes stale the moment someone adds a reader, fires whether or not the value changed, and inverts the cook model TD already gives you.
+
+```python
+# push -- every new reader is a new line here, and nobody else knows
+for w in self.widgets: w.par.Scale = value
+
+# publish -- readers subscribe by reading; adding one costs nothing
+self.Scale.val = value          # tdu.Dependency built in __init__
+# reader: parent.Host.Scale.val  (or an expression, which recooks on change)
+```
+
+Publish through `tdu.Dependency` (derived runtime state), `store()` (durable bookkeeping), or a custom parameter (user-facing). Push is still right for exactly one case: a consumer that is NOT dependency-aware -- an external process, a file, a network peer.
+
 ### What actually notifies dependents
 
 The whole point of choosing between these is whether a change *reaches* the expressions that read it. Measured on 2025.33070 with a CHOP parameter expression as the dependent:

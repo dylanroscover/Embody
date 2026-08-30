@@ -9,6 +9,8 @@ This project uses **[Embody](https://github.com/dylanroscover/Embody)** (TouchDe
 - Use the `Configure For` toggles on the Embody COMP's Envoy page to regenerate these files for your AI tool (more than one client can be on at once)
 
 > **Note:** For Claude Code users, a `CLAUDE.md` with modular `.claude/rules/` and `.claude/skills/` is also generated. This `AGENTS.md` is the universal fallback read by Codex, Cursor, GitHub Copilot, Windsurf, Gemini, and others.
+>
+> **Skills:** the same workflow skills ship as `SKILL.md` folders -- `.claude/skills/` (Claude Code, OpenCode) and `.agents/skills/` (Codex, Cursor, Gemini CLI, Antigravity). Read the matching skill BEFORE the action it governs: `create-operator` before creating or moving operators, `td-api-reference` before writing TD Python, `mcp-tools-reference` before the first MCP call, `manage-annotations`, `externalize-operator`, `parameter-design`, `visual-aesthetics`, `pop-networks`, `movie-export`, `debug-operator`, `td-recovery`, `multi-session-etiquette`, `merge-divergent-tox`, `brief`. A client with no skills folder gets the identical text over MCP: `get_guidance()` lists topics, `get_guidance(topic='create-operator')` returns one.
 
 ---
 

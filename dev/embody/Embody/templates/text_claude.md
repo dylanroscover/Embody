@@ -36,6 +36,7 @@ This is a TouchDesigner project using **Embody** for version-controlled external
     - Before building or refining any visual or rendered output (generative art, VJ visuals, shaders, scenes, renders, projections, anything shown on screen): load `/visual-aesthetics`
     - Before creating or editing POP operators, particle systems, GPU point/geometry work, or glslPOP compute: load `/pop-networks`
     - Before first MCP call in a new session: load `/mcp-tools-reference`
+    - When a merge or rebase conflicts on a `.tox`/`.toe`, or when comparing a component across branches or machines: load `/merge-divergent-tox`
 
 ## Approach Guidelines
 

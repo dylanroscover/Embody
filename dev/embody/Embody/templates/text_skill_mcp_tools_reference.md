@@ -13,8 +13,8 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one batch_operat
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `create_op` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`). Auto-positions it and hugs any docked companions below it (`docks_placed`) |
-| `create_extension` | `parent_path`, `class_name`, `name?`, `code?`, `promote?`, `ext_name?`, `ext_index?`, `existing_comp?` | Create a TD extension: baseCOMP + text DAT + extension wiring |
-| `delete_op` | `op_path` | Delete an operator |
+| `create_extension` | `parent_path`, `class_name`, `name?`, `code?`, `promote?`, `ext_name?`, `ext_index?`, `existing_comp?`, `parent_shortcut?` | Create a TD extension: baseCOMP + text DAT + extension wiring |
+| `delete_op` | `op_path`, `override?` | Delete an operator (multi-session gated; `override` bypasses, say so) |
 | `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location. Auto-positions the copy and hugs its docked companions (`docks_placed`) |
 | `rename_op` | `op_path`, `new_name` | Rename an operator |
 | `get_op` | `op_path`, `include_defaults?` | Returns NON-DEFAULT parameters by default (`include_defaults=True` for all); parameter-heavy COMPs are expensive (~3k+ tokens full) -- prefer `read_tdn` for structure reads |
@@ -106,14 +106,13 @@ return the shape and range instead.
 | `get_td_class_details` | `class_name` | Get methods, properties, docs for a TD class |
 | `get_module_help` | `module_name` | Python help text for a module |
 | `get_docs` | `query`, `section?`, `source?`, `max_chars?` | Look up official TD docs; offline mirror preferred, docs.derivative.ca fallback; normal responses return `title`, `source`, `sections_available`, `content`; ambiguous offline lookups return `matches` instead of a page |
-| `get_guidance` | `topic?` | Read THIS project's checked-in TouchDesigner doctrine (`.claude/rules/*.md`, `.claude/skills/*/SKILL.md`). Bare call lists topics; `topic` returns one document. Matching ignores case/punctuation. Answered worker-side (no TD round-trip). Complements `get_docs`: `get_docs` is official Derivative documentation, `get_guidance` is how this project wants the work done -- and it is the ONLY way non-Claude-Code clients (Codex, Cursor, opencode) see these rules |
+| `get_guidance` | `topic?` | Read THIS project's checked-in TouchDesigner doctrine (`.claude/rules/*.md`, `.claude/skills/*/SKILL.md`). Bare call lists topics; `topic` returns one document. Matching ignores case/punctuation. Answered worker-side (no TD round-trip). Complements `get_docs`: `get_docs` is official Derivative documentation, `get_guidance` is how this project wants the work done -- and it is the only way clients with no skills folder (VS Code, Copilot, Windsurf) see them; Codex, Cursor, Gemini and Antigravity read `.agents/skills/`, OpenCode reads `.claude/skills/` |
 | `get_focus` | _(none)_ | What the user is looking at: `network` (current pane), `selected`, `current`, `rollover`, plus `target`/`targetSource` and a `note`. Call it to resolve "this operator" / "fix this" before guessing a path. DISAMBIGUATION: "this" means the SELECTED/current op, NEVER the rollover (rollover is incidental mouse position). Headless TD returns `headless: true` with nulls |
 | `get_sessions` | _(none)_ | List AI client sessions connected to this Envoy (sid, label, pid, idle, last tool, `recent_scopes` = op paths/files recently modified, `claims` = scopes held, stale flag) plus `you` = caller's own sid. Check at session start and before large or destructive operations so concurrent sessions don't clobber each other. Response may include `worktrees`: in-flight durable worktree tasks, visible even after their session ended |
 | `claim_scope` | `scope`, `note?`, `ttl?` | Cooperative WRITE lease on an op-path prefix, `file:<repo-relative>` path, or `project:<name>` scope. Peers' overlapping claims are refused while yours is live; their destructive ops on it are gated. Auto-renews on your own writes; expires on TTL or session silence. `project:worktree-*` claims are DURABLE: they survive session death and Envoy restarts, expiring when the worktree directory is removed (7-day backstop) |
 | `release_scope` | `scope` | Release a lease you hold (polite; expiry also handles it) |
 | `announce_task` | `title`, `scopes?`, `note?` | Announce a unit of work to the shared task ledger (`.embody/tasks.json`) so parallel sessions see what is being worked on and what is FINISHED but uncommitted. Announce at the start of substantive work (a feature, fix, refactor); keep it honest with `update_task`. Active entries ride on `get_sessions` for every session |
 | `update_task` | `task_id`, `status?`, `note?`, `commit?` | Transition a ledger task: `done_uncommitted` when the work is finished but sitting uncommitted in the tree (the state peers MUST see), `committed` with the sha once it lands (a sha alone implies the transition), `abandoned` when dropped. Any session may update any task -- non-owner writes record `updated_by` |
-${ROWS}
 | `preflight_landing` | `worktree_path` | Landing safety check for a worktree diff -- intersects the files it would land with main-tree dirt, peer `file:` claims/touches, and unsaved live TDXN state (runtime dirty state; legacy tsv `dirty` columns still honored). Run BEFORE porting any worktree diff; verdict `conflicts` means reconcile first |
 
 ## MCP Prompts
@@ -140,8 +139,8 @@ ${ROWS}
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading >=3 operators.** Returns live network as a TDXN dict. ~20-90x fewer tokens than `get_op`+`query_network` walks thanks to default-omission, type_defaults, and par_templates. |
-| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write `.tdxn` to disk. **With `output_file` set, returns a compact summary (op/annotation counts + file path), NOT the full document** -- Read the file for details. Without `output_file`, returns the full dict like `read_tdn`. |
-| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate network from a parsed TDXN document (on-disk `.tdxn` is YAML in v2.0; reads legacy JSON) |
+| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?`, `embed_all?` | Write `.tdxn` to disk. **With `output_file` set, returns a compact summary (op/annotation counts + file path), NOT the full document** -- Read the file for details. Without `output_file`, returns the full dict like `read_tdn`. |
+| `import_network` | `target_path`, `tdn`, `clear_first?`, `override?` | Recreate network from a parsed TDXN document (on-disk `.tdxn` is YAML in v2.0; reads legacy JSON) |
 | `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What's UNSAVED in TDXN networks** (live vs on-disk `.tdxn`) -- the view git can't give. Omit `target` -> whole project (every live TDXN COMP, summarized); `target` = a COMP path OR a `.tdxn` file path/bare filename -> that one COMP in full detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` (Embody's `.tdxn` diff driver keeps those clean). Read-only. |
 
 **When to prefer `read_tdn`:** exploring or auditing >=3 operators, checking structure and parameters-as-authored, mapping connections, reading annotations. Scope cost with `comp_path`; cap with `max_depth` on large roots.
@@ -176,9 +175,9 @@ For visual work, success is verified by capturing and judging the output TOP, no
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `run_tests` | `suite_name?`, `test_name?`, `override?`, `background?` | Run Embody unit-test suites (all, one suite, or one test; 300s timeout). Destructive and agent tiers are excluded -- they run only via their dedicated entry points. Gated by the multi-session destructive-op gate; `override` bypasses it (say so when you do). `background=True` (recommended for full runs) returns a job id immediately -- poll `get_job_status`; the synchronous mode is severed by the watchdog suites' server restart |
+| `run_tests` | `suite_name?`, `test_name?`, `override?`, `background?`, `idempotency_key?` | Run Embody unit-test suites (all, one suite, or one test; 300s timeout). Destructive and agent tiers are excluded -- they run only via their dedicated entry points. Gated by the multi-session destructive-op gate; `override` bypasses it (say so when you do). `background=True` (recommended for full runs) returns a job id immediately -- poll `get_job_status`; the synchronous mode is severed by the watchdog suites' server restart |
 | `get_job_status` | `job_id?` | Status of background jobs (`run_tests background=True`, `save_project`). Disk-backed (`.embody/jobs/`), so results survive server restarts and extension reinits; omit `job_id` to list recent jobs. Finished run_tests jobs carry the summary + failing tests |
-| `save_project` | _(none)_ | Save the project as a tracked job: returns a job id immediately, the save runs a few frames later (a synchronous call is severed by the save's own main-thread block + extension reinit). Finished record carries version_before/version_after |
+| `save_project` | `idempotency_key?` | Save the project as a tracked job: returns a job id immediately, the save runs a few frames later (a synchronous call is severed by the save's own main-thread block + extension reinit). Finished record carries version_before/version_after |
 | `update_embody` | `idempotency_key?` | Self-update Embody to the latest GitHub release as a tracked job -- bounded (sha256-pinned manifest, downgrade-refusing), non-interactive, never needs the TD Python grant. Refused in Perform Mode / during test runs. Finished record carries version_before/version_after; the install restarts the server (one reconnect blip) |
 
 ## Bridge Meta-Tools
@@ -204,12 +203,13 @@ Seventeen additional meta-tools drive Convoy, relaying work to Convoy-enabled Em
 - `convoy_start_node` / `convoy_restart_node` manage node lifecycle; restarts require the node's CURRENT runtime id (from `convoy_list_nodes`) plus a unique `idempotency_key`, and the default policy refuses dirty or unverifiable project state.
 - `convoy_update_embody` self-updates Embody on one node (`node=<id|name|hostname>`) or the whole fleet (`all=true`) by dispatching the bounded `update_embody` operation as durable per-node jobs -- no TD Python grant involved; offline/disabled/Perform Mode nodes are skipped by name.
 - `convoy_owlette` is an optional read-mostly site bridge that fails closed without credentials.
+- `convoy_lifecycle_state` / `convoy_lifecycle_quit` are TD-side tools reserved for the Convoy host's own lifecycle session; any other session gets `Convoy lifecycle host session required`. Use `convoy_restart_node` instead.
 
 ## Batch Operations
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `batch_operations` | `operations` | Execute multiple operations in a single request. Reduces latency and token overhead |
+| `batch_operations` | `operations`, `override?` | Execute multiple operations in a single request. Reduces latency and token overhead; `override` applies to gated entries |
 
 **`operations`** is a list of `{"tool": str, "params": dict}` objects. Each entry maps to an existing tool name and its parameters. Stops on first error.
 

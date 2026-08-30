@@ -74,7 +74,7 @@ par.Speed.destroy()            # Remove single custom par
 ```
 
 **Naming rule:** First letter MUST be uppercase, rest lowercase/numbers. No underscores.
-- **Parameter design rules**: See `.claude/rules/parameters.md` for full conventions
+- Get-or-create (never blind `append*`), callbacks, styles, ranges, help text: `/parameter-design`
 - Docs: https://docs.derivative.ca/Custom_Parameters
 
 ## `op()` vs `opex()`
@@ -99,6 +99,7 @@ How you reference an operator matters. A wrong choice works today and breaks tom
 | 1 | `self.ownerComp` | Anywhere inside an extension. Capture it once in `__init__`. | none |
 | 2 | `parent.CompName` | Inside the COMP but outside the extension -- callback DATs, parameter expressions | the COMP sets `par.parentshortcut` |
 | 3 | `op('sibling')`, `op('./child')` | Target is in the same network or below you | none |
+| 3b | `iop.Name` / `ipar.Name` | A specific internal operator or parameter the COMP publishes for its own descendants | the COMP sets Internal OP / Internal OP Shortcut on its Common page |
 | 4 | `op.CompName` | A project-wide singleton no parent shortcut can reach | the COMP sets `par.opshortcut` |
 | -- | `op('/abs/path')` | never | -- |
 
@@ -130,6 +131,10 @@ Key properties:
 - **Reusable across instances**: Multiple COMPs can use the same Parent Shortcut name. Each descendant resolves to its own nearest matching ancestor -- so the same code works identically across every instance of a component.
 - **Only resolves from inside**: Code that is not a descendant of the COMP will not find it via `parent.CompName`. This is a feature, not a limitation -- it keeps references scoped to where they belong.
 - **Not the same as `parent()`**: `parent()` always returns the immediate parent COMP. `parent.CompName` searches upward by name and can skip multiple levels.
+
+### Internal shortcuts (`iop.Name` / `ipar.Name`) -- stable internal addresses
+
+Same family as `parent.CompName`: both search *up* the parent hierarchy by a shortcut set on the Common page, so both survive renesting. The difference is granularity -- `parent.Comp` hands you the component and you navigate down; `iop.Name` names one internal operator directly, `ipar.Name` a parameter-holding COMP. Use them when a component wants to publish a stable internal address to its own descendants without freezing the path between them (a widget reaching `iop.Readout` keeps working when the readout moves). Two caveats: they resolve only from INSIDE the component, and an operator-valued internal parameter needs `op(ipar.Effect.Operatorpath)` to yield the operator rather than the path string. Every shortcut is configuration on the COMP rather than in the code (a reader has to open the Common page to follow it), so reserve them for genuinely stable internal addresses, not as a default. (Function Store, issue #94.)
 
 ### Global OP Shortcuts (`op.CompName`) -- for project-wide access
 
@@ -214,52 +219,18 @@ This applies to:
 4. **Store persistent state outside the TDXN boundary.** If an extension needs state that survives reimport, use `store()` on the COMP itself (storage is preserved through TDXN import) or on an ancestor outside the TDXN COMP.
 
 
-
 ## Parameter, Storage, or Dependency?
 
-Three mechanisms hold state on a COMP. The choice is about lifetime and audience, not taste:
-
-| The state is | Use | Lives on |
-|---|---|---|
-| User-facing, persisted, part of the COMP's interface | **custom parameter** | the COMP |
-| Durable bookkeeping the user should not see | **`storage`** | the COMP |
-| A derived value that must recook whatever reads it | **`tdu.Dependency`** | usually the extension instance |
-
-**What survives what.** Probed on TD 2025.33070 -- TD does not document this, so re-verify on another build before relying on it.
-
-| Event | Custom par | `storage` | Dependency on the extension |
-|---|---|---|---|
-| Extension reinit -- source `.py` edit, `initializeExtensions()` | survives | **survives** | **destroyed** |
-| External-tox reload -- `enableexternaltoxpulse`, COMP restore | survives | **wiped** | destroyed |
-| `.toe` / `.tox` save and load | survives | survives | survives only if stored |
-
-`storage` lives on the COMP, not on the extension instance, so a hot-sync reinit does **not** clear it -- the widespread belief that it does is wrong. What clears it is the COMP's contents being replaced: a tox reload, a TDXN reconstruction, a restore. Embody hits that case, which is why Envoy's state machine trusts the `Envoystatus` parameter rather than its own `envoy_running` store.
-
-Prefer a parameter wherever one works: it is inspectable, persisted, exportable and free. Reach for a `Dependency` when a computed value has no business on the user's parameter dialog but still has to invalidate whatever reads it -- and rebuild it in `__init__`, because it dies with the instance on every source save.
-
-Storage round-trips more than folklore suggests: probed on 2025.33070, a `.tox` save/load preserved a plain dict, an **operator reference** (re-resolved to its path), a `Dependency` object, and a builtin callable. Cross-session behaviour, and what happens when a stored op reference's target no longer exists, is untested -- do not assume.
+Short form: user-facing state -> a **custom parameter**; hidden durable bookkeeping -> **`storage`** (lives on the COMP, survives an extension reinit, wiped by a tox reload / TDXN reconstruction); a derived value that must recook its readers -> **`tdu.Dependency`** (dies with the extension instance on every source save -- rebuild it in `__init__`). The lifetime table, what actually notifies dependents, and the storage mechanics (`fetch` without a default RAISES; `fetch` searches UP; `unstore` is glob-matched; write through `store()`, never `comp.storage[k] = v`; pickling at save; op references ARE storable) are canonical in `/parameter-design` (Parameter, Storage, or Dependency?) -- read that, do not re-derive it here.
 
 ## Operator Storage
 
 ```python
 op('base1').store('count', 42)
-val = op('base1').fetch('count', 0)  # 0 is default
-op('base1').unstore('count')
+val = op('base1').fetch('count', 0)  # 0 is default -- omit it and a miss RAISES
+op('base1').unstore('count')         # glob-matched: never a computed key
 op('base1').storeStartupValue('version', 1)  # Restored on project load
 ```
-
-**Gotchas** (verified 2026-08-29 on 2025.33070):
-
-- `fetch()` searches UP the parent hierarchy by default -- a missing local key silently resolves to an ancestor's. Use `search=False` for local-only; `fetchOwner(key)` reports which operator answered (and returns `None` rather than raising).
-- **`fetch(key)` with no default RAISES** `tdError: The fetched item was not found and no default was specified` -- it does not return `None`. Derivative's reason: a stored value could legitimately be `None`.
-- `store()` of an **immutable** value makes dependent expressions and operators re-cook automatically -- storage has dependency built in, no `tdu.Dependency` needed. Measured: a dependent CHOP expression went 11 -> 99 with `totalCooks` +1 in the same frame, no force cook.
-- **Three ways to change stored state silently** (measured, dependent never cooked): `comp.storage['k'] = v` direct dict write; `comp.fetch('lst').append(x)` in-place mutation; and a plain extension attribute `self.Scale = 42`. In every case the value really changed and the expression kept reading the old one. Always write through `store()` -- re-storing an unchanged value still notifies, so `store(k, fetch(k))` publishes an in-place mutation.
-- Dependable collections are `TDStoreTools.DependList` / `DependDict` / `DependSet`, NOT `tdu` (`tdu.DependableDict` does not exist). `DependDict` subclasses `MutableMapping`, not `dict`, so `json.dumps` raises -- use `getRaw()`.
-- `unstore()` is **glob-matched**: `unstore('sales*')` removes every key with that prefix. Never pass a computed or user-derived key.
-- Storage is **pickled** at save. An unpicklable value logs a warning and vanishes on reload while the save succeeds. An instance of a class defined in a DAT stops pickling once that DAT recompiles -- which a file-synced `.py` edit does routinely.
-- **You CAN store an operator reference.** The "store a path string instead" rule belongs to `TDStoreTools.StorageManager`, which must pickle; raw `store()` takes any Python object and TD's docs demonstrate storing an OP.
-- `storeStartupValue()` writes a separate startup dictionary that overrides the saved value on load -- use it to force a known state on open.
-
 - Docs: https://docs.derivative.ca/Storage , https://docs.derivative.ca/StorageManager_Class
 
 ## `tdu.Dependency` for Reactive Values
@@ -382,7 +353,7 @@ run(myFunction, arg1, arg2, delayFrames=5)
 ## Cook Model Gotchas
 
 - **`cook(force=True)` does NOT advance a feedback loop within a frame.** A Feedback TOP captures its target on frame boundaries, so force-cooking the chain repeatedly inside one synchronous Python loop returns the *same* state each time (`totalCooks` may not even increment). Evolution needs real frames to pass with the chain demanded -- drive it with `run(..., delayFrames=1)` or an Execute DAT `onFrameStart`, never a `for` loop.
-- **A Movie File In reload lands only across a real frame advance -- and even then not same-pass downstream.** Changing `par.file` / pulsing `reloadpulse` then `cook(force=True)` in the SAME frame can silently serve the PREVIOUS texture (no error, no warning, right resolution); a pull-based reader that nothing demands never cooks at all. Worse, when the reload DOES apply mid-pass, ops DOWNSTREAM in that same forced-cook pass can still consume the pre-reload texture -- *even with the whole chain force-cooked in dependency order* -- so the reader's own `numpyArray()` shows fresh content while the chain output lags by one frame. Verify content at the POINT OF CAPTURE (the writer's input TOP), not at the source, and let each reload settle across a real frame advance. See /movie-export ("Async file readers").
+- **A Movie File In reload lands only across a real frame advance -- and even then not same-pass downstream.** Changing `par.file` / pulsing `reloadpulse` then `cook(force=True)` in the SAME frame can silently serve the PREVIOUS texture (no error, no warning, right resolution); a pull-based reader that nothing demands never cooks at all. Worse, when the reload DOES apply mid-pass, ops DOWNSTREAM in that same forced-cook pass can still consume the pre-reload texture -- *even with the whole chain force-cooked in dependency order* -- so the reader's own `numpyArray()` shows fresh content while the chain output lags by one frame. Verify content at the POINT OF CAPTURE (the writer's input TOP), not at the source, and let each reload settle across a real frame advance. See /movie-export (Async file readers serve stale content).
 - **Animate cheaply: static source + cheap downstream.** A heavy generator (high-octave fBm, large feedback sim) cannot re-render every frame at high resolution. Make it *static* (remove every time reference so it cooks once and caches) and put the motion in a cheap downstream op -- animate the *sampling* (drift/rotate/warp the read coordinates), not the source. Verify with `cookedThisFrame`: the source reads `False`, the animated op `True`.
 
 ## Background and Long-Running Work
@@ -404,11 +375,7 @@ Engine COMP / TouchEngine offloads heavy COOKING to a separate process (TOP/CHOP
 
 **Gates.** Do not pre-optimize: a synchronous fetch that does not measurably drop a frame may not need anything above Step 2 (measurement decides whether a callback needs chunking or a worker - it never makes shipped blocking I/O acceptable on the main thread). After wiring, verify with primary evidence: `get_project_performance` shows fps/frameTime held vs baseline and `droppedFrames` flat, AND the result actually arrived (read the DAT/CHOP back; branch on `statusCode['code']` - a callback that never fires leaves TD running but empty).
 
-For code patterns (Web Client DAT example, Thread Manager Client, polling, large payloads), load `/td-api-reference`.
-
-### Code patterns
-
-### Fetch data: Web Client DAT (no threading)
+### Code pattern: Web Client DAT (no threading)
 
 The TD-native way to hit an HTTP API. `request()` is async - it returns a connection id immediately and never blocks the frame; TD does the networking on its own thread and delivers the response to the Callbacks DAT `onResponse`, which runs on the MAIN thread (so TD access there is safe).
 
@@ -436,9 +403,7 @@ def onResponse(webClientDAT, statusCode, headerDict, data):
 Then parse and shape with native ops instead of Python in the callback:
 `webclient1` -> `raw_json` (Text DAT) -> **JSON DAT** (Filter = JSONPath, Output Format = Table) -> **DAT to CHOP** -> `null_chop` / `out1`. That yields BOTH the table (DAT) and the channels (CHOP) - the canonical "CHOP and DAT" deliverable. There is no Web Client CHOP. For a quick parse you can also read `op('raw_json').jsonObject`. `request()` also accepts `authType` + basic/`appKey`/OAuth params - prefer them over hand-rolled auth headers. TD has no built-in retry: on failure, re-issue `request()` via `run(..., delayFrames=N)` with a capped attempt count, never a synchronous loop.
 
-**Triggers:** a user-driven Pulse parameter (`onPulse` / `Par.pulse()`) for a one-shot/manual fetch; a **Timer CHOP** (`onCycleStart` fires one `request()`) for periodic; an Execute DAT `onFrameStart` frame-counter only for sub-second work. Never a `sleep` loop, a self-rescheduling `run()` poller, or an auto-fetch on project open unless asked.
-
-**Pick the operator:**
+**Pick the operator** (triggers: see the ladder above -- Pulse par for one-shot, Timer CHOP `onCycleStart` for periodic):
 
 | Need | Operator | Callback (main thread) |
 |---|---|---|
@@ -480,9 +445,6 @@ op.TDResources.ThreadManager.EnqueueTask(task)              # or standalone=True
 
 ### Large payloads
 A large response is delivered to `onResponse` on the MAIN thread, so a heavy parse there still stalls the frame. For big/expensive parsing: `onResponse` validates status and copies the raw string/bytes only, then hands it to a Thread Manager worker (zero TD access) that parses and returns plain data for a main-thread drain to write. Do not "fix" it with `run()` - that defers the parse, it does not shrink it.
-
-### Not for fetching
-Engine COMP / TouchEngine runs a `.tox` in a separate PROCESS to parallelize heavy COOKING (sims, geometry, render) - it exchanges only TOP/CHOP/DAT across the boundary and does no network I/O, so it is the wrong tool for a fetch. Stock `asyncio` blocks TD's frame loop; if an advanced worker hosts an asyncio loop it still obeys the zero-TD-access + queue-handoff rules.
 
 
 ## Heavy-Build Safety: Crash Causes and Safe-Default Caps
