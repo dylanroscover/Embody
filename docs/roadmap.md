@@ -5,6 +5,26 @@ not promises -- and items move as the ecosystem moves (client support for
 new MCP protocol features in particular). Dates are deliberately absent.
 Want to influence it? [Open an issue](https://github.com/dylanroscover/Embody/issues).
 
+## Landed since the last revision (2026-08-12)
+
+Items that sat here and have since shipped -- kept one revision for the record:
+
+- **Headless fresh-install runs.** The smoke harness seeds dialog responses
+  and runs a virgin install unattended end to end (startup verdict plus a
+  feature phase: TDN round-trip, checkpoint, portable export, Envoy, Convoy).
+  What remains of the old "Next up" item is the narrower polish below.
+- **Streaming SSE bridge (A-46).** Tool responses stream incrementally with
+  idle-window and absolute caps -- the shared prerequisite the elicitation
+  item below used to be blocked on. Server-side progress notifications and
+  elicitation now wait only on client protocol adoption.
+- **Runner-forced settings can no longer bake into receipts.** The transient
+  parameter registry (v6.2.2) keeps `Filecleanup`/`Toxdropexpr` test values
+  out of exports -- the worst consequence of invisible modal-adjacent state.
+- **The whole v6.1-v6.2 line shipped and published** (TDXN rename with
+  `/tdxn/` docs URLs, per-client MCP configs, the 80% smaller promoted
+  surface, the TDXN review fixes, the skills once-over, `.agents/skills`
+  for every skills-capable client).
+
 ## Next up
 
 - **Structured decisions instead of invisible modals.** When an AI session
@@ -13,12 +33,12 @@ Want to influence it? [Open an issue](https://github.com/dylanroscover/Embody/is
   warnings), the tool should return a structured `needs_decision` payload
   -- and accept the decision as an explicit parameter -- rather than
   opening a TD modal nobody is sitting in front of. TD dialogs remain the
-  path for human-driven moments.
-- **Headless setup for automated installs.** The Setup Wizard is right for
-  humans and wrong for harnesses: the fresh-install smoke test currently
-  stalls on it. A seeded/suppressed path (apply Auto defaults, enable
-  Envoy per configuration) lets automated installs and CI-style smokes run
-  unattended.
+  path for human-driven moments. (The seeded auto-response layer the smoke
+  harness uses is the test-side half; the tool-payload half is still open.)
+- **Setup Wizard suppression for automated installs.** The seeded-response
+  path covers the smoke harness today; a first-class headless switch
+  (apply Auto defaults, enable Envoy per configuration, no dialogs armed)
+  is the remaining polish.
 
 ## Gated on MCP 2026-07-28 client adoption
 
@@ -42,12 +62,10 @@ revision with Envoy, so these wait on the ecosystem:
   embeds), the Embody manager / externalization dashboard, and eventually
   the Setup Wizard itself for agent-driven installs.
 - **True MCP elicitation.** Mid-tool questions routed to the client over
-  the protocol. Verified blocker (2026-07-29): the STDIO bridge reads each
-  HTTP response to completion and returns the first SSE event, so a
-  server-initiated question inside an open stream would deadlock the read
-  and be misrouted as the response. Real elicitation therefore requires a
-  streaming bridge rework (incremental SSE reader + bidirectional
-  routing). The structured-decision pattern above delivers the same
+  the protocol. The bridge-side blocker is gone: the old read-to-EOF
+  transport was replaced by the incremental streaming reader (A-46), so
+  what remains is bidirectional routing plus a client that speaks the new
+  revision. The structured-decision pattern above delivers the same
   workflow benefit today without protocol support.
 
 ## Hardening backlog
@@ -55,8 +73,6 @@ revision with Envoy, so these wait on the ecosystem:
 Smaller items accepted-and-deferred from recent reviews (v6.0.162's
 adversarial panel, mostly). Tracked here so they cannot silently vanish:
 
-- Streaming SSE reader in the bridge (shared prerequisite with elicitation
-  above; also enables server-side progress notifications).
 - Cross-instance install mutex: two TD instances bootstrapping the same
   project venv can race; uv's own locking and the spec-stamp self-heal
   mitigate, but a lock beside the venv would close it.
@@ -71,5 +87,5 @@ adversarial panel, mostly). Tracked here so they cannot silently vanish:
 - Multi-project-in-one-TD-process: the stale-interpreter refusal's wording
   says "upgraded on disk" when the actual cause is a second project with a
   different mcp version (the remedy it gives -- restart TD -- is correct).
-- Fresh-install smoke: suppress the Setup Wizard for headless runs (see
-  Next up) -- the settle-check race half of this landed already.
+- Fresh-install smoke: a first-class wizard-suppression switch (see Next
+  up) -- the settle-check race and the seeded-response path landed already.
