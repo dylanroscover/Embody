@@ -4,6 +4,7 @@
   "summary": "Embody is an open-source TouchDesigner toolkit. Envoy is an embedded MCP server that connects AI coding tools to a live TouchDesigner session; Embody externalizes the network to version-control-friendly text files on disk; TDXN (TouchDesigner eXternal Network) is the human-readable YAML format that makes both possible.",
   "audience": "AI agents and MCP-compatible coding assistants parsing this on behalf of a human who works in TouchDesigner.",
   "license": "MIT",
+  "affiliation": "Embody is an independent open-source project. It is not affiliated with, endorsed by, or sponsored by Derivative. TouchDesigner is a trademark of Derivative.",
   "free": true,
   "local_only": true,
   "homepage": "https://embody.tools/",

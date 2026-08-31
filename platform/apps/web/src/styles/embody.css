@@ -1849,6 +1849,7 @@ body.is-app-shell .footer {
   letter-spacing: 0.01em;
 }
 .footer__sig { font-style: italic; }
+.footer__legal { flex-basis: 100%; }
 .footer__city { color: var(--text-muted); }
 /* Real <button> now (was a clickable span) for keyboard + semantics; reset the
    button chrome so it stays an inline emoji in the sentence. Decorative
