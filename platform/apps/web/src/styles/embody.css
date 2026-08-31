@@ -1835,6 +1835,7 @@ body.is-app-shell .footer {
 .footer__tag { color: var(--text-muted); font-size: 0.95rem; margin: 0 0 0.5rem; }
 .footer__bottom {
   display: flex;
+  flex-wrap: wrap; /* the full-width legal line drops to its own row instead of squeezing the (c)/sig columns */
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
@@ -1849,7 +1850,7 @@ body.is-app-shell .footer {
   letter-spacing: 0.01em;
 }
 .footer__sig { font-style: italic; }
-.footer__legal { flex-basis: 100%; }
+.footer__legal { flex-basis: 100%; color: var(--text-faint); }
 .footer__city { color: var(--text-muted); }
 /* Real <button> now (was a clickable span) for keyboard + semantics; reset the
    button chrome so it stays an inline emoji in the sentence. Decorative
