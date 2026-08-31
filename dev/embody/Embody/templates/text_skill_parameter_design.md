@@ -154,6 +154,8 @@ class MyExt:
         self.Raw = tdu.Dependency(5)                                   # expression: op('c').Raw.val
 ```
 
+**The property's name is its access tier.** `createProperty(self, 'MyProperty', ...)` makes a capitalized instance attribute, and TD promotes those onto the COMP exactly like methods -- a dependable property named `Upper` IS tier-1 public API (the promoted-surface census counts them). Capitalize it only when users/agents should read it off the COMP; internal state stays `_lower` or `lower`.
+
 The two idioms need **different expressions**, and swapping them fails quietly: the raw form read as `op('c').Raw` evaluates the Dependency *object*, which is always truthy and never changes.
 
 - **`self.Raw = 5` destroys the Dependency** -- it rebinds the attribute to a plain int and removes the cook dependency. Nothing raises, and a Dependency reads as its underlying value, so every `print` and comparison still looks correct. Write `self.Raw.val = 5`.
