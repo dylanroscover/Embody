@@ -9,6 +9,19 @@ hide:
 
 Embody puts a team of AI builders inside your live TouchDesigner project. Describe a network in plain language and it gets built — wired, named, annotated, and laid out while you direct. Run several agents in parallel, each scoped to its own part of the network. Branch off the version that works, restore yesterday's state. The tool keeps up with you, instead of the other way around.
 
+## Quick Start
+
+1. **Download** the Embody `.tox` from the [release folder](https://github.com/dylanroscover/Embody/tree/main/release)
+2. **Drag and drop** it into your TouchDesigner project
+3. **Enable Envoy** to connect AI assistants to your session
+4. **Tag operators** by pressing ++lctrl++ twice on any COMP or DAT
+5. **Save** with ++ctrl+shift+u++ — on next project open, everything restores from disk automatically
+
+[:octicons-arrow-right-24: Five-minute Quickstart](quickstart.md){ .md-button .md-button--primary }
+[:octicons-arrow-right-24: Full setup guide](embody/getting-started.md){ .md-button }
+
+---
+
 Embody is four tools working together — *lateral velocity*, *forward velocity*, *outward velocity*, and the substrate that makes it all possible.
 
 <div class="grid cards" markdown>
@@ -91,16 +104,3 @@ You describe what you want. The AI works with your live network — operators, c
 
 - **TouchDesigner 2025.33070** or later (Windows / macOS)
 - A **git repository** is optional. Embody works in any project folder; if you happen to use git, every change is also a clean diff for free.
-
----
-
-## Quick Start
-
-1. **Download** the Embody `.tox` from the [release folder](https://github.com/dylanroscover/Embody/tree/main/release)
-2. **Drag and drop** it into your TouchDesigner project
-3. **Enable Envoy** to connect AI assistants to your session
-4. **Tag operators** by pressing ++lctrl++ twice on any COMP or DAT
-5. **Save** with ++ctrl+shift+u++ — on next project open, everything restores from disk automatically
-
-[:octicons-arrow-right-24: Five-minute Quickstart](quickstart.md){ .md-button .md-button--primary }
-[:octicons-arrow-right-24: Full setup guide](embody/getting-started.md){ .md-button }
