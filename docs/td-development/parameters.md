@@ -125,6 +125,43 @@ m.func()
 mod('/project1/utils').myFunction()
 ```
 
+## Parameter Design: ownership, lifetime, and publishing
+
+The deeper design doctrine — the same text Embody ships to AI agents as the `/parameter-design` skill — condensed for humans:
+
+**Code owns the schema; the user owns the value.** Extensions reinitialize on every source save, so every parameter-creation path must be *get-or-create*, never create-blindly: probe the whole COMP by `tupletName` (multi-value styles store component pars, so `.name` probes miss them), and never `Par.destroy()` on a style mismatch — that takes the user's value, expressions, and exports with it. Embody ships a reference helper as `op.Embody.op('embody_pardef').module.ensureCustomPar`.
+
+**Parameter, storage, or Dependency?** Pick by lifetime and audience, not taste:
+
+| The state is | Use | Survives ext reinit | Survives tox reload / TDXN rebuild |
+|---|---|---|---|
+| User-facing, part of the COMP's interface | **custom parameter** | yes | yes |
+| Durable bookkeeping the user shouldn't see | **`storage`** | **yes** | **no** (wiped) |
+| A derived value that must recook its readers | **`tdu.Dependency`** | **no** (rebuild in `__init__`) | no |
+
+(Probed on TD 2025.33070. The widespread belief that a reinit clears storage is wrong — storage lives on the COMP; what clears it is the COMP's *contents being replaced*.)
+
+**Publish the value; do not push it.** Code that recomputes something and then assigns it onto each consumer (`other.par.Value = x` in a loop) goes stale the moment someone adds a reader. Publish once as a dependable — a `tdu.Dependency`, `store()`, or a custom parameter — and let readers pull; expressions recook on change automatically. Writing `comp.storage[k] = v` directly, mutating a fetched list in place, or setting a plain `self.attr` all change the value and notify **nobody** — always write through `store()` or `dep.val`.
+
+### `TDF.createProperty` vs raw `tdu.Dependency`
+
+```python
+import TDFunctions as TDF
+
+class MyExt:
+    def __init__(self, ownerComp):
+        self.ownerComp = ownerComp
+        TDF.createProperty(self, 'Scale', value=1.0, dependable=True,
+                           readOnly=False)   # expression: op('comp').Scale
+        self.Raw = tdu.Dependency(5)          # expression: op('comp').Raw.val
+```
+
+- The two idioms need **different reader expressions** — `op('comp').Scale` for a created property, `op('comp').Raw.val` for a raw Dependency. Swapping them fails silently: the raw form without `.val` evaluates the Dependency *object*, which is always truthy and never changes.
+- **The property's name is its access tier.** `createProperty(self, 'MyProperty', ...)` makes a capitalized instance attribute, and TD promotes those onto the COMP exactly like methods — an `Upper`-named dependable property *is* public API. Capitalize only what users and agents should read off the COMP; internal state stays `_lower`.
+- `self.Raw = 5` **destroys** a raw Dependency (rebinds to a plain int, no error); write `self.Raw.val = 5`.
+- Appending bound methods to `dep.callbacks` leaks a subscriber on every source-file save — remove them in `onDestroyTD`.
+- Both are main-thread-only.
+
 ## Operator Storage
 
 Persistent data storage on any operator:
