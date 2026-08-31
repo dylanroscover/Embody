@@ -159,6 +159,7 @@ class MyExt:
 - The two idioms need **different reader expressions** — `op('comp').Scale` for a created property, `op('comp').Raw.val` for a raw Dependency. Swapping them fails silently: the raw form without `.val` evaluates the Dependency *object*, which is always truthy and never changes.
 - **The property's name is its access tier.** `createProperty(self, 'MyProperty', ...)` makes a capitalized instance attribute, and TD promotes those onto the COMP exactly like methods — an `Upper`-named dependable property *is* public API. Capitalize only what users and agents should read off the COMP; internal state stays `_lower`.
 - `self.Raw = 5` **destroys** a raw Dependency (rebinds to a plain int, no error); write `self.Raw.val = 5`.
+- **Binding is two-way.** A Dependency is a legal bind *master*: a parameter whose `bindExpr` resolves to it tracks `dep.val` — and editing the bound parameter writes back into the Dependency (verified on 2025.33070). Use bind mode when the parameter should be a control surface for the state; use an expression when it should only display it.
 - Appending bound methods to `dep.callbacks` leaks a subscriber on every source-file save — remove them in `onDestroyTD`.
 - Both are main-thread-only.
 
