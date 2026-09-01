@@ -382,7 +382,10 @@ def onPulse(par):
 		parent.Embody.ext.Embody.openTable()
 
 	elif par.name == 'Createexternalizationstable':
-		parent.Embody.ext.Embody.createExternalizationsTable()
+		# ensure, not create: the par's documented contract is "no-op if the
+		# table is already connected"; create* is the create-or-RESET variant
+		# and would clear the tracking rows on pulse (PR #95).
+		parent.Embody.ext.Embody.ensureExternalizationsTable()
 
 	elif par.name == 'Externalizeproject':
 		parent.Embody.ext.Embody.externalizeProject()
