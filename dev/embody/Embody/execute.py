@@ -120,8 +120,10 @@ def onCreate():
 	init()
 	# Same seed as onStart -- see there.
 	parent.Embody.ext.Embody.seedAutosaveStatus()
-	# Auto-create (or reconnect) the externalizations table before Verify()
-	run(f"op('{parent.Embody}').ext.Embody.createExternalizationsTable()", delayFrames=15)
+	# Auto-create (or reconnect) the externalizations table before Verify().
+	# ensure* is the non-destructive path: reconnect or build fresh, never
+	# clear an existing table (createExternalizationsTable resets).
+	run(f"op('{parent.Embody}').ext.Embody.ensureExternalizationsTable()", delayFrames=15)
 	# Verify handles update-scenario detection and Envoy opt-in
 	run(f"op('{parent.Embody}').ext.Embody.verify()", delayFrames=30)
 	# Ensure catalogs load on fresh-project drops too, not just onStart.

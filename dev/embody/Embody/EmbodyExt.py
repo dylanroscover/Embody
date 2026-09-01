@@ -3000,13 +3000,21 @@ class EmbodyExt:
 
         self.my.par.Externalizations.val = externalizations_dat
 
-    def createExternalizationsTable(self) -> None:
+    def ensureExternalizationsTable(self) -> None:
         """Recovery/init method: create or reconnect the externalizations table.
 
         Safe to call at any time. No-op if the table already exists and is
         connected via par.Externalizations. If the parameter is empty but a
         sibling named 'externalizations' exists (e.g. after an Embody upgrade),
-        reconnects to it without creating a duplicate.
+        reconnects to it without creating a duplicate. Only when neither is
+        true does it fall through to createExternalizationsTable() to build a
+        fresh one -- so, unlike that method, it never clears an existing table.
+
+        Was previously also named createExternalizationsTable, which shadowed
+        the real creator above (last def wins); the fall-through then called
+        itself and recursed until RecursionError, so on a project with no
+        table the table was never built and every downstream consumer (the
+        continuity sweep, the tagger) crashed on a None DAT.
         """
         externalizations_dat = self.Externalizations
         if not externalizations_dat:
@@ -3235,7 +3243,7 @@ class EmbodyExt:
     def verify(self) -> None:
         """Initialize or reconnect Embody on install or update.
 
-        Called from execute.py onCreate() after createExternalizationsTable()
+        Called from execute.py onCreate() after ensureExternalizationsTable()
         has already run.  Two scenarios:
 
         - Fresh install: table exists but is empty (just created) -- skip dialog,
@@ -7100,14 +7108,25 @@ class EmbodyExt:
         """Check for renamed, moved, or missing operators and update accordingly."""
         self._checkExternalToxPar()
 
+        externalizations = self.Externalizations
+        if externalizations is None:
+            # par.Externalizations is unset or points at a missing DAT (fresh
+            # or recovered project before ensureExternalizationsTable() has
+            # rebuilt it). Nothing to reconcile -- degrade to a no-op instead
+            # of raising "'NoneType' object has no attribute 'numCols'" on
+            # every Update()/save.
+            self.Log("checkOpsForContinuity: no externalizations table -- "
+                     "skipping continuity sweep", "WARNING")
+            return
+
         try:
             rows_to_check = []
             tdn_comp_paths = set()
-            headers = [self._cellVal(0, c)
-                       for c in range(self.Externalizations.numCols)]
+            headers = [self._cellVal(0, c, table=externalizations)
+                       for c in range(externalizations.numCols)]
             has_strategy = 'strategy' in headers
             embody_root = self.my.path
-            for i in range(1, self.Externalizations.numRows):
+            for i in range(1, externalizations.numRows):
                 row_path = self._cellVal(i, 'path')
                 if row_path:
                     # HARD INVARIANT: the continuity sweep must NEVER touch
