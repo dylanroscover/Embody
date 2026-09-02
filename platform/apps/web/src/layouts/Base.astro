@@ -60,6 +60,31 @@ const userInitials =
     .map((w) => w[0]!.toUpperCase())
     .join("") || "?";
 
+// GitHub star count for the nav's GitHub pill. Same doctrine as the landing
+// page's install version: fetched server-side at request time (never baked at
+// build), edge-cached, and on ANY failure the count is simply omitted -- the
+// icon stands alone. Stars move slowly, so a 1h edge TTL keeps origin hits
+// (and GitHub's 60/hr unauthenticated limit) a non-issue.
+let githubStars = "";
+try {
+  const ghRes = await fetch("https://api.github.com/repos/dylanroscover/Embody", {
+    headers: { "User-Agent": "embody-tools-web", Accept: "application/vnd.github+json" },
+    cf: { cacheTtl: 3600, cacheEverything: true },
+  } as RequestInit);
+  if (ghRes.ok) {
+    const repo = (await ghRes.json()) as { stargazers_count?: unknown };
+    const n = repo.stargazers_count;
+    if (typeof n === "number" && Number.isFinite(n) && n >= 0) {
+      githubStars =
+        n < 1000
+          ? String(n)
+          : (n / 1000).toFixed(n < 10000 ? 1 : 0).replace(/\.0$/, "") + "k";
+    }
+  }
+} catch {
+  // icon stands alone
+}
+
 // Cloudflare Web Analytics: cookieless, privacy-first page-traffic beacon.
 // The beacon is rendered ONLY when PUBLIC_CF_BEACON_TOKEN is set, so dev and
 // build stay clean when the token is absent. See README / docs for the var.
@@ -194,10 +219,15 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
           ) : (
             <a class="navbar__item navbar__item--signin" href="/signin">sign in</a>
           )}
-          <a class="navbar__item navbar__item--github" href="https://github.com/dylanroscover/Embody" aria-label="GitHub repository">
+          <a
+            class="navbar__item navbar__item--github"
+            href="https://github.com/dylanroscover/Embody"
+            aria-label={githubStars ? `GitHub repository, ${githubStars} stars` : "GitHub repository"}
+          >
             <svg class="navbar__github-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.66 7.66 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
             </svg>
+            {githubStars && <span class="navbar__github-stars">{githubStars}</span>}
           </a>
           <!-- Desktop overflow control. Hidden by default; the measure script
                shows it only when items must collapse into it (in-between widths,

@@ -472,10 +472,13 @@ pre {
   color: var(--accent);
 }
 
-/* Brand-native GitHub item: just the GitHub mark, in dark-green brand tokens.
-   A square icon button -- no label, no star count. */
+/* Brand-native GitHub item: the GitHub mark plus the live star count, in
+   dark-green brand tokens. The count is fetched server-side in Base.astro and
+   omitted entirely on any fetch failure, so this must also read as a square
+   icon-only button when the span is absent. */
 .navbar__item--github {
   justify-content: center;
+  gap: 0.4rem;
   padding-left: var(--nav-item-pad-y);
   padding-right: var(--nav-item-pad-y);
   border-color: var(--border);
@@ -491,6 +494,13 @@ pre {
 
 .navbar__github-icon {
   flex: none;
+}
+
+/* Star count beside the mark: same mono nav type, no extra letterspacing so a
+   short number reads as one unit with the icon rather than a spaced-out word. */
+.navbar__github-stars {
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Desktop overflow "..." control --------------------------------------
