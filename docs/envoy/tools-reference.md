@@ -100,7 +100,7 @@ The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view`
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `get_op_performance` | `op_path`, `include_children?` | Get CPU/GPU cook times, memory usage, cook counts |
+| `get_op_performance` | `op_path`, `include_children?` | Get CPU/GPU cook times (milliseconds), memory usage (bytes), cook counts |
 | `get_project_performance` | `include_hotspots?` | Get project-level FPS, frame time, GPU/CPU memory, dropped frames, active ops, GPU temp. Optional hotspot ranking of top N COMPs by cook time |
 
 ## Code Execution

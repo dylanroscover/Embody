@@ -20,6 +20,12 @@ Target: TouchDesigner 2025+ only. The full cause->mitigation table and detailed 
 3. **Localize regressions**: use `get_op_performance(op_path, include_children=True)` on suspicious ops and compare cook times, memory, and cook counts.
 4. **Keep layout discipline**: performance work still follows [network-layout.md](network-layout.md).
 
+## Units: every TD time metric is milliseconds
+
+`timing.frameTimeMs`, `timing.timeSliceMs`, hotspot `*CookTimeMs`, and every OP cook-time member (`cpuCookTime`, `gpuCookTime`, `childrenCPUCookTime`, `childrenGPUCookTime`) are milliseconds ([OP Class](https://docs.derivative.ca/OP_Class)). The frame budget is 16.7 ms at 60 fps, 33.3 ms at 30 fps. Convert to ms and state the unit in every timing number you report -- a us-vs-ms comparison is how a phantom "performance mystery" starts.
+
+**Never microbenchmark a Python snippet and compare it to frame time.** `time.perf_counter()`/`timeit` on an isolated snippet yields microsecond-scale numbers that do not predict frame cost: per-frame cost is dominated by how often the code runs per frame, cook scheduling, per-op overhead, and GPU sync -- a 50 us callback firing 40x per frame is 2 ms. The gap between a tiny snippet time and a 16 ms frame is EXPECTED; do not burn time explaining it. Measure at the cook level instead: `get_op_performance` deltas (cook times, `totalCooks`) on the suspect op idle vs active, and `get_project_performance` frame-time deltas across the change.
+
 ## Stop Conditions (halt and report, do not keep building)
 
 On any stop condition, immediately STOP, report the offending metric and op path, and propose a bounded alternative before resuming.

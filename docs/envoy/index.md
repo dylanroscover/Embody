@@ -125,7 +125,7 @@ Wire operators together and inspect the full connection graph. Works for all sta
 
 ### Performance Monitoring
 
-`get_op_performance` reads CPU and GPU cook times, memory usage, and cook counts for any operator. `get_project_performance` returns project-level FPS, frame time, dropped frames, active ops, GPU temperature, and an optional ranked list of the top N most expensive COMPs. The AI can identify bottlenecks without you needing to point at them.
+`get_op_performance` reads CPU and GPU cook times (in milliseconds), memory usage, and cook counts for any operator. `get_project_performance` returns project-level FPS, frame time, dropped frames, active ops, GPU temperature, and an optional ranked list of the top N most expensive COMPs. The AI can identify bottlenecks without you needing to point at them.
 
 | Tool | Description |
 |---|---|

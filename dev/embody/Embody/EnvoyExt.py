@@ -3052,7 +3052,9 @@ class EnvoyMCPServer:
                 include_children: Include aggregate children performance data
 
             Returns:
-                Dict with CPU/GPU cook times, memory usage, cook counts
+                Dict with CPU/GPU cook times in MILLISECONDS (same unit as
+                get_project_performance's frameTimeMs -- frame budget is
+                16.7ms at 60fps), memory usage in bytes, cook counts
             """
             return self._execute_in_td('get_op_performance', {
                 'op_path': op_path,

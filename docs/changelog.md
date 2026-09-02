@@ -1,5 +1,12 @@
 # Changelog
 
+## v6.2.10
+
+Two agent-guidance gaps from issue #94 field reports, closed: unit confusion in performance work, and rename sweeps that stop at DAT text. (v6.2.9 was a version-bump-only save, never published.)
+
+- **Milliseconds everywhere, and no microbenchmarks**: the always-on performance rule now states that every TD time metric -- `frameTimeMs`, hotspot cook times, every OP cook-time member -- is milliseconds, and forbids comparing a `perf_counter`/`timeit` snippet microbenchmark against frame time (microsecond snippet timings do not predict frame cost; measure cook-level deltas with `get_op_performance`/`get_project_performance` instead). The `get_op_performance` docstring and docs now state units (ms / bytes).
+- **Rename sweeps cover all five reference surfaces**: after any rename, agents must check the live network -- DAT text, `par.expr`, `par.bindExpr`, constant-mode op-reference values, and `run()` strings -- not just grep DAT content, which missed live expressions and binds in the field.
+
 ## v6.2.8
 
 TDXN finishes its rename: the docs section moves from `/tdn/` to `/tdxn/`.

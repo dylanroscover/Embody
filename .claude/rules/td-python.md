@@ -54,7 +54,7 @@ Four things that decide the tier for you:
 - **A name reachable only from a `run()` string, a parameter expression, or Python inside a `.tdxn` `dat_content` stays tier 1 until its call site is rewritten.** No static scan sees those callers, so renaming one is a silent runtime break, not a traceback. Three surfaces, and the third is the one people miss:
     - **`run()` strings resolve against the COMP.** `run(f"op('{x}').Method()")` reaches a *promoted* name; demote it and the deferred call silently stops resolving. Reroute to `.ext.<Name>.method()` **before** renaming.
     - **DAT text inside the `.toe`.** Walk it live -- `findChildren(type=DAT)` and read `.text` -- because it is in no file you can grep.
-    - **A widget's parameter expression is a COPY taken at build time.** Fixing the config table that a builder reads does NOT fix widgets already built from it; the live `par.expr` keeps the old name and the COMP forwards the miss to the extension, so the error names the *extension* and points nowhere near the config. Sweep live `par.expr` values, not just the source of truth they came from.
+    - **A widget's parameter expression is a COPY taken at build time.** Fixing the config table that a builder reads does NOT fix widgets already built from it; the live `par.expr` keeps the old name and the COMP forwards the miss to the extension, so the error names the *extension* and points nowhere near the config. Sweep live `par.expr` AND `par.bindExpr` values, not just the source of truth they came from.
 - **Demote behind a fail-loud call site.** `getattr(ext, name, None)` and `hasattr` guards turn a missed rename into a no-op button; log the miss instead of falling back.
 
 ## Type Hints
@@ -131,6 +131,8 @@ Take the highest rung that resolves from where the code runs:
 `some_op.parent()` is untouched: that is documented OP-class API, not the global. Full pattern reference (shortcut resolution, instancing behavior): `/td-api-reference` (Operator Referencing Patterns).
 
 **Always verify references resolve correctly.** After writing an expression or script that uses `op()`, `parent.X`, or `op.X`, confirm the target exists and the path resolves from the calling context. A reference that returns `None` silently (or worse, finds the wrong operator) is a latent bug.
+
+**After ANY rename (operator, method, or parameter), sweep every live reference surface -- a DAT-content grep alone misses most of them.** A name is held in five places, and only DAT text on disk is greppable: DAT text inside the `.toe` (walk `findChildren(type=DAT)` and read `.text`), parameter expressions (`par.expr`), parameter binds (`par.bindExpr`), constant-mode op-reference parameter values (`par.val` -- a Camera parameter holding `cam`), and `run()` strings composed at call time. Walk the live network checking `.expr`, `.bindExpr`, and `.val` for the old name and fix or verify each hit before declaring the rename done. (Field report: issue #94 -- an agent swept only DAT content and left stale expressions and binds behind.)
 
 ## Extensions
 
