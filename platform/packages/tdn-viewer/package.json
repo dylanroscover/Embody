@@ -14,13 +14,13 @@
   },
   "dependencies": {
     "@embody/contracts": "*",
-    "@xyflow/react": "^12.11.2",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "@xyflow/react": "^12.11.5",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@types/react": "^19.2.6",
-    "@types/react-dom": "^19.2.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
     "typescript": "^7.0.2"
   },
   "scripts": {
