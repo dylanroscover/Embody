@@ -221,9 +221,10 @@ const jsonLd = {
      globally in embody.css. */
   .hero {
     --hero-gap: clamp(2.75rem, 5.5vh, 4.5rem);
-    /* Two lanes of 80px tiles a lane-step (110px) apart, plus the annotation
-       title bar above and its padding below -- see HeroGame.astro. */
-    --game-band: 260px;
+    /* One row of 80px tiles with its annotation title bar, centred; the other
+       row rides above or below as the camera follows Embot's lane -- see
+       HeroGame.astro. */
+    --game-band: 230px;
     position: relative;
     overflow: hidden;
     display: flex;

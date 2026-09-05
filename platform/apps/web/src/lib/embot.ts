@@ -135,8 +135,9 @@ export class Embot {
   w = 0;
   h = 0;
   originY = 0;
-  /** Horizontal camera offset in px, subtracted at paint (the hero game scrolls its world). */
+  /** Camera offset in px, subtracted at paint (the hero game scrolls its world both ways). */
   offsetX = 0;
+  offsetY = 0;
   visible = true;
   driver: Driver | null = null;
   onLand: ((bot: Embot) => void) | null = null;
@@ -281,7 +282,7 @@ export class Embot {
     }
     const squinting = t < this.squintEnd;
     // --- place the parts ---
-    const ox0 = this.offsetX;
+    const ox0 = this.offsetX, oy0 = this.offsetY;
     for (const p of this.parts) {
       let ox = p.ox, oy = p.oy, gw = 1, gh = 1;
       if (active) {
@@ -306,7 +307,7 @@ export class Embot {
       const cx = px + ox * sx, cy = py + oy * sy;
       const st = p.el.style;
       st.left = `${(cx - pw / 2) * S - ox0}px`;
-      st.top = `${this.originY - (cy + ph / 2) * S}px`;
+      st.top = `${this.originY - (cy + ph / 2) * S - oy0}px`;
       st.width = `${pw * S}px`;
       st.height = `${ph * S}px`;
       st.background = p.eye ? (blinking ? skin : "#000") : skin;
@@ -316,7 +317,7 @@ export class Embot {
     bs.width = `${BUBBLE_W * S}px`;
     bs.height = `${BUBBLE_H * S}px`;
     bs.left = `${this.base.x * S - (BUBBLE_W * S) / 2 - ox0}px`;
-    bs.top = `${this.originY - (this.base.y + BUBBLE_LIFT + BUBBLE_H) * S}px`;
+    bs.top = `${this.originY - (this.base.y + BUBBLE_LIFT + BUBBLE_H) * S - oy0}px`;
     const act = this.caption;
     const shown = act.slice(0, Math.floor((t - this.speechT0) * 45));
     let line: string;

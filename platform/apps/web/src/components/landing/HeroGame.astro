@@ -40,11 +40,11 @@ import Embot from "./Embot.astro";
   const K = 0.8;
   const TILE_W = 150 * K;
   const TILE_H = 100 * K;
-  // The game draws inside the hero's graph band (.hero__game-row, a fixed
-  // 260px box the page spaces evenly between the title and the panel): lane
-  // 0's tiles sit on the band's bottom edge (less the annotation padding), and
-  // lane 1 a step above, so the two lanes plus the annotation's title bar fill
-  // the band exactly. Embot himself stands on the tiles and rises above it.
+  // The game draws inside the hero's graph band (.hero__game-row, a fixed box
+  // the page spaces evenly between the title and the panel). Lane 0's tiles
+  // sit on the band's bottom edge (less the annotation padding) and lane 1 a
+  // step above, but the camera also moves vertically: the row Embot is on is
+  // kept centred in the band, so the other row rides above or below it.
   // Lanes step by a whole tile plus its name label, so a side branch placed at
   // the same x on the next lane (a combiner's second input) never overlaps.
   const LANE_STEP = TILE_H + 30;
@@ -104,11 +104,21 @@ import Embot from "./Embot.astro";
   function start(stage: HTMLElement, root: HTMLElement, band: HTMLElement): void {
     const world = stage.querySelector(".hero-game__world") as HTMLElement;
     const wires = stage.querySelector(".hero-game__wires") as SVGSVGElement;
-    // The floor (lane 0's tile top) from the band's bottom edge, in stage px.
-    const floorFromTop = () => {
+    // The band's box in stage px: its bottom fixes the floor (lane 0's tile
+    // top), its centre is where the current row is kept. Re-read every frame,
+    // so the world follows any layout shift above it (fonts loading, resize).
+    let bandTop = 0, bandBottom = 0;
+    const readBand = (): boolean => {
       const b = band.getBoundingClientRect(), s = stage.getBoundingClientRect();
-      return b.bottom - s.top - ANNOT_PAD_BOTTOM - TILE_H;
+      const t = b.top - s.top, bo = b.bottom - s.top;
+      const moved = Math.abs(t - bandTop) > 0.5 || Math.abs(bo - bandBottom) > 0.5;
+      bandTop = t;
+      bandBottom = bo;
+      return moved;
     };
+    readBand();
+    const floorFromTop = () => bandBottom - ANNOT_PAD_BOTTOM - TILE_H;
+    const bandCenter = () => (bandTop + bandBottom) / 2;
     const tiles: Tile[] = [];
     type Annot = { x: number; w: number; el: HTMLElement; tiles: Tile[] };
     const annots: Annot[] = [];
@@ -118,6 +128,7 @@ import Embot from "./Embot.astro";
     let family: Fam = "TOP";
     let chainOpen = false; // does the next tile take a wire from the previous one?
     let camX = 0;
+    let camY = 0; // vertical camera: keeps the row he is on centred in the band
     let lastT = now();
     let current: Tile | null = null;
     let nextHopAt = Infinity;
@@ -357,13 +368,26 @@ import Embot from "./Embot.astro";
         b.say("opened a sub-network", t);
         nextHopAt = t + 0.5;
       }
-      // camera: keep him around a third of the way in; ease so the world glides
+      // the band may have moved (a layout shift above it): re-anchor the world
+      if (readBand()) {
+        relayout();
+        b.floorPx = stage.clientHeight - floorFromTop();
+        b.resize();
+        if (current) b.place(b.target.x, b.yForFeetAt(current.top));
+      }
+      // camera: keep him around a third of the way in, and the row he is on
+      // (or hopping to) centred in the band; ease both so the world glides
       const dt = Math.min(0.05, Math.max(0, t - lastT));
       lastT = t;
-      const targetCam = Math.max(0, b.base.x * b.S - W * 0.3);
-      camX += (targetCam - camX) * (1 - Math.exp(-dt * 3.5));
+      const k = 1 - Math.exp(-dt * 3.5);
+      const targetCamX = Math.max(0, b.base.x * b.S - W * 0.3);
+      camX += (targetCamX - camX) * k;
+      const rowCenter = current ? current.top + TILE_H / 2 : floorFromTop() + TILE_H / 2;
+      const targetCamY = rowCenter - bandCenter();
+      camY += (targetCamY - camY) * k;
       b.offsetX = camX;
-      world.style.transform = `translate3d(${-camX}px, 0, 0)`;
+      b.offsetY = camY;
+      world.style.transform = `translate3d(${-camX}px, ${-camY}px, 0)`;
       ensureWorld();
       if (t >= nextHopAt && b.landed && t >= b.gestureEnd) {
         const i = current ? tiles.indexOf(current) : -1;
@@ -377,6 +401,7 @@ import Embot from "./Embot.astro";
     };
 
     window.addEventListener("resize", () => {
+      readBand();
       relayout();
       bot.floorPx = stage.clientHeight - floorFromTop();
       bot.resize();
