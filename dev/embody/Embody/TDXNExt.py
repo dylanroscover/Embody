@@ -101,7 +101,7 @@ def tdn_load(text):
 	return yaml.load(text, Loader=_TDN_BaseLoader)
 
 
-TDN_VERSION = '2.1'  # was '2.0'; 2.0 was '1.5'
+TDXN_VERSION = '2.1'  # was '2.0'; 2.0 was '1.5'
 # 2.1 widened readOnly/help/enable/enableExpr/default/min/max/clamp*/norm*
 # from scalar to scalar-or-per-component-list. New KEYS need no bump (readers
 # ignore unknown fields), but a widened TYPE does: a pre-2.1 reader treats a
@@ -131,15 +131,15 @@ TDN_VERSION = '2.1'  # was '2.0'; 2.0 was '1.5'
 #   ('.embody_backup'), format-neutral because it holds .tdn.bak and
 #   .tdxn.bak simultaneously and always will.
 #   See docs/tdxn/specification.md.
-TDN_FILE_SUFFIX = '.tdxn'
-TDN_FILE_SUFFIXES = ('.tdxn', '.tdn')
-TDN_FORMAT = 'tdxn'
-TDN_ACCEPTED_FORMATS = frozenset({'tdxn', 'tdn'})
+TDXN_FILE_SUFFIX = '.tdxn'
+TDXN_FILE_SUFFIXES = ('.tdxn', '.tdn')
+TDXN_FORMAT = 'tdxn'
+TDXN_ACCEPTED_FORMATS = frozenset({'tdxn', 'tdn'})
 
 
 def is_tdn_network_file(path) -> bool:
 	"""True when `path` names a TDXN network file -- either suffix."""
-	return Path(path).suffix.lower() in TDN_FILE_SUFFIXES
+	return Path(path).suffix.lower() in TDXN_FILE_SUFFIXES
 
 
 # Parameters to always skip (Embody-managed or internal)
@@ -573,8 +573,8 @@ class TDXNExt:
 	# Format identity, mirrored so EmbodyExt can read it as
 	# self.my.ext.TDXN._FILE_SUFFIX. Distinct attribute names, not the
 	# `X = X` class-body idiom, which reads like a typo.
-	_FILE_SUFFIX = TDN_FILE_SUFFIX
-	_FILE_SUFFIXES = TDN_FILE_SUFFIXES
+	_FILE_SUFFIX = TDXN_FILE_SUFFIX
+	_FILE_SUFFIXES = TDXN_FILE_SUFFIXES
 
 	# =========================================================================
 	# CRASH SAFETY -- atomic writes, backup rotation, validation
@@ -645,7 +645,7 @@ class TDXNExt:
 		"""
 		src = Path(tdn_path)
 		names = [str(src)]
-		for suffix in TDN_FILE_SUFFIXES:
+		for suffix in TDXN_FILE_SUFFIXES:
 			alt = str(src.with_suffix(suffix))
 			if alt not in names:
 				names.append(alt)
@@ -825,7 +825,7 @@ class TDXNExt:
 		# self-check whose failure restores from .bak -- so it must move in
 		# lockstep with the two writers below, or every save silently rolls
 		# back.
-		if doc.get('format') not in TDN_ACCEPTED_FORMATS:
+		if doc.get('format') not in TDXN_ACCEPTED_FORMATS:
 			return {'valid': False,
 					'error': f'Missing or wrong format key: {doc.get("format")}'}
 		if 'operators' not in doc:
@@ -1513,8 +1513,8 @@ class TDXNExt:
 
 			build_num = self._getBuildNumber(root_op)
 			tdn = {
-				'format': TDN_FORMAT,
-				'version': TDN_VERSION,
+				'format': TDXN_FORMAT,
+				'version': TDXN_VERSION,
 				'build': build_num,
 				'generator': f'Embody/{self._getEmbodyVersion()}',
 				'td_build': f'{app.version}.{app.build}',
@@ -1871,8 +1871,8 @@ class TDXNExt:
 			par_templates, operators = TDXNExt._extract_par_templates(operators)
 
 			tdn = {
-				'format': TDN_FORMAT,
-				'version': TDN_VERSION,
+				'format': TDXN_FORMAT,
+				'version': TDXN_VERSION,
 				'build': state['metadata'].get('build'),
 				'generator': state['metadata']['generator'],
 				'td_build': state['metadata']['td_build'],
@@ -2416,13 +2416,13 @@ class TDXNExt:
 			tdn_version = tdn.get('version', '1.0')
 			try:
 				_file_newer = (tuple(int(x) for x in str(tdn_version).split('.'))
-							   > tuple(int(x) for x in TDN_VERSION.split('.')))
+							   > tuple(int(x) for x in TDXN_VERSION.split('.')))
 			except Exception:
-				_file_newer = (str(tdn_version) != TDN_VERSION)
+				_file_newer = (str(tdn_version) != TDXN_VERSION)
 			if _file_newer:
 				self._log(
 					f'TDXN file is v{tdn_version}, newer than this build '
-					f'(v{TDN_VERSION}); some content may not import', 'WARNING')
+					f'(v{TDXN_VERSION}); some content may not import', 'WARNING')
 
 			source_td = tdn.get('td_build', '')
 			current_td = f'{app.version}.{app.build}'
@@ -6359,7 +6359,7 @@ class TDXNExt:
 		# project cost 150-200ms per save to find 1 file. Root '/' full-scans.
 		prefix = root_path.lstrip('/')
 		scoped = set()
-		for suffix in TDN_FILE_SUFFIXES:
+		for suffix in TDXN_FILE_SUFFIXES:
 			own = base / f'{prefix}{suffix}'
 			if own.is_file():
 				scoped.add(str(own))

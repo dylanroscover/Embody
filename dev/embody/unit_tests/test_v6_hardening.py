@@ -8,7 +8,7 @@ test_tdn_fingerprint.py). Each class targets one seam:
   TestTDNLoadMalformedJSON
       tdn_load's narrowed-except (TDXNExt.py ~L94): a brace-prefixed doc that
       is invalid JSON AND invalid YAML must RAISE, not silently degrade to a
-      lenient default. Plus: ExportNetwork stamps the literal TDN_VERSION
+      lenient default. Plus: ExportNetwork stamps the literal TDXN_VERSION
       '2.0' (not just "a version key present").
 
   TestTDNBlockScalarFileIO
@@ -113,19 +113,19 @@ class TestTDNLoadMalformedJSON(EmbodyTestCase):
         self.assertEqual(loaded.get('version'), '1.5')
 
     def test_export_stamps_literal_tdn_version(self):
-        """ExportNetwork must stamp the LITERAL current TDN_VERSION, verified
+        """ExportNetwork must stamp the LITERAL current TDXN_VERSION, verified
         against the module constant -- not merely "a version key is present".
         Read in-memory and from a written file.
 
-        The literal below is a deliberate tripwire: bumping TDN_VERSION must
+        The literal below is a deliberate tripwire: bumping TDXN_VERSION must
         be a conscious act, so update it here in the same commit. The test
         NAME is version-agnostic so only the literal churns (2.0 -> 2.1 on
         2026-09-04, when per-component definition fields widened).
         """
-        # Resolve the module-level TDN_VERSION constant from the TDXNExt source.
-        tdn_version = self.embody.op('TDXNExt').module.TDN_VERSION
+        # Resolve the module-level TDXN_VERSION constant from the TDXNExt source.
+        tdn_version = self.embody.op('TDXNExt').module.TDXN_VERSION
         self.assertEqual(tdn_version, '2.1',
-            'precondition: TDXNExt.TDN_VERSION should be the v2.1 format')
+            'precondition: TDXNExt.TDXN_VERSION should be the v2.1 format')
 
         self.sandbox.create(baseCOMP, 'ver_check')
         # In-memory result.
@@ -139,7 +139,7 @@ class TestTDNLoadMalformedJSON(EmbodyTestCase):
         with open(fp, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
         self.assertEqual(data['version'], tdn_version,
-            f"on-disk doc['version'] must equal TDN_VERSION {tdn_version!r}")
+            f"on-disk doc['version'] must equal TDXN_VERSION {tdn_version!r}")
 
 
 # =============================================================================
