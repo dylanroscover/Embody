@@ -496,11 +496,29 @@ pre {
   flex: none;
 }
 
-/* Star count beside the mark: same mono nav type, no extra letterspacing so a
-   short number reads as one unit with the icon rather than a spaced-out word. */
+/* Star + count beside the mark: same mono nav type, no extra letterspacing so a
+   short number reads as one unit with the icon rather than a spaced-out word.
+   Its own flex line, tighter than the pill's gap, so the star and the digits
+   center on each other. */
 .navbar__github-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
   letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
+}
+
+.navbar__star-icon {
+  flex: none;
+}
+
+/* Trim the count's box to cap-height/baseline so flex centering lands on the
+   DIGITS rather than on the font's asymmetric line box. Untrimmed, the number
+   rasterizes a full pixel high in the pill at DPR 1 -- measured in headless
+   Chrome against this stylesheet (2026-09-04), and visible on a 100%-scale
+   display. Browsers without text-box keep the old line-box centering. */
+.navbar__github-count {
+  text-box: trim-both cap alphabetic;
 }
 
 /* --- Desktop overflow "..." control --------------------------------------
