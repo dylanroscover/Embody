@@ -1,10 +1,10 @@
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 9
-generator: Embody/6.1.0
+generator: Embody/6.2.10
 td_build: 099.2025.33070
-source_file: Embody-6.282.toe
-exported_at: '2026-08-27T05:33:17Z'
+source_file: Embody-6.313.toe
+exported_at: '2026-09-04T20:29:07Z'
 network_path: /embody/Embody/tagger/header/text1
 options:
   include_dat_content: false

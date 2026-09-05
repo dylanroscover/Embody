@@ -112,14 +112,20 @@ class TestTDNLoadMalformedJSON(EmbodyTestCase):
         self.assertEqual(loaded.get('format'), 'tdn')
         self.assertEqual(loaded.get('version'), '1.5')
 
-    def test_export_stamps_literal_tdn_version_2_0(self):
-        """ExportNetwork must stamp the LITERAL current TDN_VERSION ('2.0'),
-        verified against the module constant -- not merely "a version key is
-        present". Read in-memory and from a written file."""
+    def test_export_stamps_literal_tdn_version(self):
+        """ExportNetwork must stamp the LITERAL current TDN_VERSION, verified
+        against the module constant -- not merely "a version key is present".
+        Read in-memory and from a written file.
+
+        The literal below is a deliberate tripwire: bumping TDN_VERSION must
+        be a conscious act, so update it here in the same commit. The test
+        NAME is version-agnostic so only the literal churns (2.0 -> 2.1 on
+        2026-09-04, when per-component definition fields widened).
+        """
         # Resolve the module-level TDN_VERSION constant from the TDXNExt source.
         tdn_version = self.embody.op('TDXNExt').module.TDN_VERSION
-        self.assertEqual(tdn_version, '2.0',
-            'precondition: TDXNExt.TDN_VERSION should be the v2.0 format')
+        self.assertEqual(tdn_version, '2.1',
+            'precondition: TDXNExt.TDN_VERSION should be the v2.1 format')
 
         self.sandbox.create(baseCOMP, 'ver_check')
         # In-memory result.

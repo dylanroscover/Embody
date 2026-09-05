@@ -1,28 +1,22 @@
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 1
-generator: Embody/6.0.280
+generator: Embody/6.2.10
 td_build: 099.2025.33070
-source_file: Embody-6.281.toe
-exported_at: '2026-08-27T01:12:15Z'
+source_file: Embody-6.313.toe
+exported_at: '2026-09-04T20:29:03Z'
 network_path: /specimen_lab/waveform_stack
 options:
   include_dat_content: false
   include_storage: true
 type_defaults:
-  resolutionTOP:
-    parameters:
-      outputresolution: custom
-      format: rgba16float
-    size: [130, 90]
-    color: [0.67, 0.67, 0.67]
   compositeTOP:
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
   glslTOP:
     parameters:
-      outputresolution: custom
       format: rgba16float
+      outputresolution: custom
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
   infoDAT:
@@ -30,12 +24,16 @@ type_defaults:
     - viewer
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
+  resolutionTOP:
+    parameters:
+      format: rgba16float
+      outputresolution: custom
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
   textDAT:
     parameters:
-      syncfile: true
       language: glsl
-    flags:
-    - viewer
+      syncfile: true
     size: [130, 90]
     color: [0.9, 0.3, 0.4]
     tags:
@@ -347,6 +345,8 @@ operators:
   parameters:
     file: specimen_lab/waveform_stack/glsl_scope_pixel.glsl
     extension: frag
+  flags:
+  - viewer
   position: [150, -120]
   dock: glsl_scope
 - name: glsl_finish_pixel
@@ -354,12 +354,17 @@ operators:
   parameters:
     file: specimen_lab/waveform_stack/glsl_finish_pixel.glsl
     extension: frag
+  flags:
+  - viewer
   position: [4350, -120]
   dock: glsl_finish
 - name: glsl_scope_compute
   type: textDAT
   parameters:
     file: specimen_lab/waveform_stack/glsl_scope_compute.glsl
+  flags:
+  - viewer
+  - -showDocked
   position: [0, -120]
   dock: glsl_scope
 - name: glsl_bloomblur_info
@@ -373,6 +378,9 @@ operators:
   type: textDAT
   parameters:
     file: specimen_lab/waveform_stack/glsl_finish_compute.glsl
+  flags:
+  - viewer
+  - -showDocked
   position: [4200, -120]
   dock: glsl_finish
 - name: glsl_bloomblur_pixel
@@ -380,11 +388,16 @@ operators:
   parameters:
     file: specimen_lab/waveform_stack/glsl_bloomblur_pixel.glsl
     extension: frag
+  flags:
+  - viewer
   position: [3750, -120]
   dock: glsl_bloomblur
 - name: glsl_bloomblur_compute
   type: textDAT
   parameters:
     file: specimen_lab/waveform_stack/glsl_bloomblur_compute.glsl
+  flags:
+  - viewer
+  - -showDocked
   position: [3600, -120]
   dock: glsl_bloomblur

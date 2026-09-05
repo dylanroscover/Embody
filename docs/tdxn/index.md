@@ -83,6 +83,19 @@ Use the `import_network` MCP tool:
 - `tdn` — The TDXN document (parsed object)
 - `clear_first` — Delete existing children before importing
 
+## Not Supported: Embedded VFS Files
+
+TDXN does **not** capture a COMP's Virtual File System. Embedded files — fonts,
+images, shaders, anything addressed as `vfs://...` — are never exported and are
+**lost** on reconstruction. This is a permanent design decision, not a gap:
+carrying arbitrary binary inline would destroy the line-diffability TDXN exists
+to provide.
+
+For a COMP that needs embedded files, use the **TOX strategy** (a `.tox`
+preserves VFS contents) or keep the assets as files on disk and reference them
+by path. Full rationale:
+[Virtual File System (VFS) — Not Supported](specification.md#virtual-file-system-vfs-not-supported).
+
 ## TDXN as Externalization Strategy
 
 COMPs can use TDXN as their externalization strategy (instead of `.tox`). With TDXN strategy:

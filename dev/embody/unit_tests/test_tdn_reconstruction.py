@@ -619,7 +619,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertIsInstance(params, dict)
 
 	# =================================================================
-	# C. Custom Parameter Round-Trip (12 tests)
+	# C. Custom Parameter Round-Trip (28 tests)
 	# =================================================================
 
 	def test_C01_float_with_range(self):
@@ -770,6 +770,416 @@ class TestTDNReconstruction(EmbodyTestCase):
 		rc = self.sandbox.op('c')
 		self.assertEqual(rc.par.Dyn.mode, ParMode.EXPRESSION)
 		self.assertEqual(rc.par.Dyn.expr, 'absTime.seconds')
+
+	def test_C13_rgba_per_component_defaults(self):
+		"""Every component of a tuplet keeps its own default (issue #96)."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		page = c.appendCustomPage('Test')
+		pg = page.appendRGBA('Color', label='Color')
+		for par, d in zip(pg, (0.1, 0.2, 0.3, 1.0)):
+			par.default = d
+			par.val = d
+		orig, _, _ = self._roundTrip(self.sandbox)
+		entry = [o for o in orig['operators'] if o['name'] == 'c'][0]
+		par_def = entry['custom_pars']['Test'][0]
+		self.assertEqual(
+			[round(v, 3) for v in par_def['default']], [0.1, 0.2, 0.3, 1.0])
+		rc = self.sandbox.op('c')
+		for name, d in zip('rgba', (0.1, 0.2, 0.3, 1.0)):
+			self.assertAlmostEqual(
+				getattr(rc.par, 'Color' + name).default, d, places=4,
+				msg=f'Color{name} default lost')
+
+	def test_C14_wh_per_component_norm_range(self):
+		"""normMin/normMax/default survive per component (issue #96)."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		page = c.appendCustomPage('Test')
+		pg = page.appendWH('Size', label='Size')
+		pg[0].default, pg[1].default = 500, 250
+		pg[0].normMax, pg[1].normMax = 1000, 2000
+		self._roundTrip(self.sandbox)
+		rc = self.sandbox.op('c')
+		self.assertAlmostEqual(rc.par.Sizew.default, 500, places=3)
+		self.assertAlmostEqual(rc.par.Sizeh.default, 250, places=3)
+		self.assertAlmostEqual(rc.par.Sizew.normMax, 1000, places=3)
+		self.assertAlmostEqual(rc.par.Sizeh.normMax, 2000, places=3)
+
+	def test_C15_uniform_group_default_stays_scalar(self):
+		"""A tuplet whose components agree still exports one scalar."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		page = c.appendCustomPage('Test')
+		for par in page.appendXYZ('Pos', label='Pos'):
+			par.default = 2.5
+		orig, _, _ = self._roundTrip(self.sandbox)
+		entry = [o for o in orig['operators'] if o['name'] == 'c'][0]
+		par_def = entry['custom_pars']['Test'][0]
+		self.assertAlmostEqual(par_def['default'], 2.5, places=4)
+		rc = self.sandbox.op('c')
+		for name in 'xyz':
+			self.assertAlmostEqual(
+				getattr(rc.par, 'Pos' + name).default, 2.5, places=4)
+
+	def test_C16_float_size_group_definition(self):
+		"""Float size>1 groups get their definition back (issue #96).
+
+		Their base name resolves to no Par, so import used to skip every
+		definition attribute for the whole group.
+		"""
+		c = self.sandbox.create(baseCOMP, 'c')
+		page = c.appendCustomPage('Test')
+		pg = page.appendFloat('Gain', label='Gain', size=3)
+		for par, d in zip(pg, (1.0, 2.0, 3.0)):
+			par.default = d
+		pg[0].max = 10
+		self._roundTrip(self.sandbox)
+		rc = self.sandbox.op('c')
+		self.assertAlmostEqual(rc.par.Gain1.default, 1.0, places=4)
+		self.assertAlmostEqual(rc.par.Gain2.default, 2.0, places=4)
+		self.assertAlmostEqual(rc.par.Gain3.default, 3.0, places=4)
+		self.assertAlmostEqual(rc.par.Gain1.max, 10.0, places=3)
+
+	def test_C17_legacy_scalar_default_broadcasts(self):
+		"""A pre-6.2.11 scalar default fills the whole tuplet (issue #96)."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		tdn = {
+			'format': 'tdxn', 'version': '2.0', 'network_path': c.path,
+			'type': 'baseCOMP',
+			'custom_pars': {'Test': [{
+				'name': 'Tint', 'style': 'RGB', 'default': 0.25,
+				'normMax': 4}]},
+			'operators': [],
+		}
+		result = self.tdn.ImportNetwork(
+			target_path=c.path, tdn=tdn, clear_first=False)
+		self.assertTrue(result.get('success'), f'Import failed: {result}')
+		for name in 'rgb':
+			par = getattr(c.par, 'Tint' + name)
+			self.assertAlmostEqual(par.default, 0.25, places=4)
+			self.assertAlmostEqual(par.normMax, 4.0, places=3)
+
+	def test_C18_every_vector_style_definition_matrix(self):
+		"""Per-component definition attributes survive for EVERY tuplet style.
+
+		The gap issue #96 fell through: definition attributes were only ever
+		asserted on single-component pars (where group[0] IS the group), and
+		multi-component tests only ever asserted values or component arity.
+		One round trip covers the whole style x attribute matrix.
+		"""
+		styles = [
+			('appendXY', 'Axy', 'xy'),
+			('appendXYZ', 'Axyz', 'xyz'),
+			('appendXYZW', 'Axyzw', 'xyzw'),
+			('appendWH', 'Awh', 'wh'),
+			('appendUV', 'Auv', 'uv'),
+			('appendUVW', 'Auvw', 'uvw'),
+			('appendRGB', 'Argb', 'rgb'),
+			('appendRGBA', 'Argba', 'rgba'),
+		]
+		c = self.sandbox.create(baseCOMP, 'c')
+		page = c.appendCustomPage('Test')
+		expected = {}
+		for method, base, suffixes in styles:
+			pg = getattr(page, method)(base)
+			for i, par in enumerate(pg):
+				want = (round(0.1 * (i + 1), 3), 10.0 * (i + 1), 100.0 * (i + 1))
+				par.default, par.normMax, par.max = want
+				# Assert the SETUP took. Capturing expectations by reading the
+				# par back would degrade this to "preserved whatever TD had"
+				# if a write were ever refused -- passing on broken code.
+				self.assertAlmostEqual(par.default, want[0], places=4,
+									   msg=f'{base}{suffixes[i]} default refused')
+				self.assertAlmostEqual(par.normMax, want[1], places=3,
+									   msg=f'{base}{suffixes[i]} normMax refused')
+				self.assertAlmostEqual(par.max, want[2], places=3,
+									   msg=f'{base}{suffixes[i]} max refused')
+				expected[base + suffixes[i]] = want
+
+		self._roundTrip(self.sandbox)
+		rc = self.sandbox.op('c')
+		self.assertIsNotNone(rc)
+		for name, (dflt, norm_max, par_max) in expected.items():
+			par = getattr(rc.par, name, None)
+			self.assertIsNotNone(par, f'{name} missing after round trip')
+			self.assertAlmostEqual(
+				par.default, dflt, places=4, msg=f'{name} default')
+			self.assertAlmostEqual(
+				par.normMax, norm_max, places=3, msg=f'{name} normMax')
+			self.assertAlmostEqual(
+				par.max, par_max, places=3, msg=f'{name} max')
+
+	def test_C19_uv_group_stays_two_components(self):
+		"""A 2-component UV group does not grow a phantom 'w'.
+
+		TD reports style 'UVW' for both UV (2) and UVW (3), the same way it
+		reports 'RGBA' for RGB and 'XYZW' for XY -- import had downgrade
+		branches for those two families but not for UVW.
+		"""
+		c = self.sandbox.create(baseCOMP, 'c')
+		page = c.appendCustomPage('Test')
+		page.appendUV('Coord')
+		self._roundTrip(self.sandbox)
+		rc = self.sandbox.op('c')
+		names = [p.name for p in rc.customPars]
+		self.assertIn('Coordu', names)
+		self.assertIn('Coordv', names)
+		self.assertNotIn('Coordw', names,
+						 f'UV group grew a phantom w component: {names}')
+
+	def test_C20_topmulti_style_survives(self):
+		"""A TOPMulti custom par is not dropped on import.
+
+		TD reports style 'TOPMulti', which had no entry in the append map,
+		so import logged "Unknown par style" and discarded the parameter.
+		"""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.appendCustomPage('Test').appendTOPMulti('Sources')
+		self._roundTrip(self.sandbox)
+		rc = self.sandbox.op('c')
+		names = [p.name for p in rc.customPars]
+		self.assertIn('Sources', names,
+					  f'TOPMulti par dropped on import: {names}')
+
+	def test_C21_password_par_survives(self) -> None:
+		"""password masking on a custom par round-trip.
+
+		Authored definition state TDXN never exported, so the flag
+		came back False (differential round-trip probe 2026-09-04).
+		"""
+		c = self.sandbox.create(baseCOMP, 'c')
+		page = c.appendCustomPage('Test')
+		pg = page.appendStr('Secret', label='Secret')
+		pg[0].password = True
+		page.appendStr('Plain', label='Plain')
+		self._roundTrip(self.sandbox)
+		rc = self.sandbox.op('c')
+		self.assertTrue(rc.par.Secret.password,
+						'password flag lost on round-trip')
+		# A blanket set would pass the first assert; this catches it
+		self.assertFalse(rc.par.Plain.password,
+						 'password set on a par that never had it')
+
+	def test_C22_default_expr_survives(self) -> None:
+		"""A custom par's defaultExpr is definition state and must survive.
+
+		Distinct from `default` (a constant) and from the par's LIVE expr:
+		a differential round-trip probe found it silently reset to ''
+		(2026-09-04). Restoring it must not disturb mode or value.
+		"""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.appendCustomPage('Test').appendFloat('Dexpr', label='Default Expr')
+		c.par.Dexpr.defaultExpr = 'me.time.frame'
+		c.par.Dexpr.val = 0.25
+
+		orig, _reimp, _res = self._roundTrip(self.sandbox)
+
+		# A definition field carries the RAW expression -- the '=' shorthand
+		# belongs to value/values only.
+		by_name = {o.get('name'): o for o in orig.get('operators', [])}
+		defs = by_name['c'].get('custom_pars', {}).get('Test', [])
+		matches = [d for d in defs if d.get('name') == 'Dexpr']
+		self.assertEqual(len(matches), 1, f'Dexpr missing from export: {defs}')
+		self.assertEqual(matches[0].get('defaultExpr'), 'me.time.frame')
+
+		rc = self.sandbox.op('c')
+		self.assertIsNotNone(rc)
+		self.assertEqual(rc.par.Dexpr.defaultExpr, 'me.time.frame')
+		self.assertEqual(rc.par.Dexpr.mode, ParMode.CONSTANT,
+						 'restoring a default expression changed the par mode')
+		self.assertAlmostEqual(rc.par.Dexpr.eval(), 0.25, places=5)
+
+	def test_C23_style_clone_immune_survives(self) -> None:
+		"""styleCloneImmune custom par round-trip (probe 2026-09-04)."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		page = c.appendCustomPage('Test')
+		pg = page.appendFloat('Immune', label='Immune')
+		pg[0].styleCloneImmune = True
+		page.appendFloat('Normal', label='Normal')
+		self._roundTrip(self.sandbox)
+		rc = self.sandbox.op('c')
+		self.assertTrue(rc.par.Immune.styleCloneImmune)
+		# Sibling left alone must stay False -- otherwise a blanket set passes.
+		self.assertFalse(rc.par.Normal.styleCloneImmune)
+
+	def test_C24_bind_range_survives(self) -> None:
+		"""bindRange round-trips on bound pars.
+
+		bindRange was never exported, so a bound par came back with the
+		flag off and its range detached from the master (differential
+		round-trip probe 2026-09-04).
+
+		Unlike readOnly/default, bindRange is TUPLET-WIDE in TD: setting it
+		on one component sets every component, and clearing one clears all
+		(probed 2026-09-04). It therefore always exports as a scalar, and
+		this test pins that -- a per-component list here would mean TD
+		changed behavior.
+		"""
+		c = self.sandbox.create(baseCOMP, 'c')
+		page = c.appendCustomPage('Test')
+		mpg = page.appendFloat('Master', label='Master')
+		mpg[0].min = 0
+		mpg[0].max = 42
+		c.par.Master = 7.5
+
+		# Scalar: bound AND range-bound.
+		spg = page.appendFloat('Speed', label='Speed')
+		spg[0].bindExpr = 'me.par.Master'
+		spg[0].mode = ParMode.BIND
+		spg[0].bindRange = True
+
+		# Tuplet: all three bound; bindRange is set on component 0 ONLY, and
+		# TD propagates it across the tuplet.
+		vpg = page.appendFloat('Vec', label='Vec', size=3)
+		for vp in vpg:
+			vp.bindExpr = 'me.par.Master'
+			vp.mode = ParMode.BIND
+		vpg[0].bindRange = True
+		self.assertEqual(
+			[bool(vp.bindRange) for vp in vpg], [True, True, True],
+			'TD no longer propagates bindRange across a tuplet -- the export '
+			'contract below assumes it does')
+
+		_, reimp, _ = self._roundTrip(self.sandbox)
+
+		entry = [o for o in reimp['operators'] if o['name'] == 'c'][0]
+		defs = {d['name']: d for d in entry['custom_pars']['Test']}
+		self.assertTrue(defs['Speed'].get('bindRange'),
+						f"bindRange missing from export: {defs['Speed']}")
+		self.assertEqual(defs['Vec'].get('bindRange'), True,
+						 f"tuplet-wide bindRange must export as a scalar: "
+						 f"{defs['Vec']}")
+
+		rc = self.sandbox.op('c')
+		self.assertIsNotNone(rc)
+		# The bind itself must still round-trip alongside the flag.
+		self.assertEqual(rc.par.Speed.mode, ParMode.BIND)
+		self.assertEqual(rc.par.Speed.bindExpr, 'me.par.Master')
+		self.assertTrue(rc.par.Speed.bindRange)
+		self.assertEqual(
+			[bool(rc.par.Vec1.bindRange), bool(rc.par.Vec2.bindRange),
+			 bool(rc.par.Vec3.bindRange)], [True, True, True])
+		self.assertFalse(rc.par.Master.bindRange,
+						 'bindRange blanket-applied to an unflagged par')
+
+	def test_C25_vfs_is_documented_as_unsupported(self) -> None:
+		"""VFS is NOT captured by TDXN -- pins the documented contract.
+
+		Embedded VFS files are deliberately out of scope: TDXN is a
+		line-diffable text format and a VFS holds arbitrary binary. This
+		test exists so the exclusion cannot change silently in either
+		direction -- if TDXN ever starts carrying VFS payloads, this fails
+		and the decision gets revisited on purpose. See the spec,
+		"Virtual File System (VFS) - Not Supported".
+		"""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.vfs.addByteArray(b'EMBODY_VFS_CONTRACT_PROBE', 'probe.txt')
+		self.assertEqual([f.name for f in c.vfs], ['probe.txt'],
+						 'probe setup failed -- no VFS file to test with')
+
+		orig, _, _ = self._roundTrip(self.sandbox)
+
+		# Structure first: a raw-text check alone would miss the realistic
+		# implementation, which would base64 the bytes for a YAML document
+		# and so slip past a plain substring search.
+		import base64
+		entry = [o for o in orig['operators'] if o['name'] == 'c'][0]
+		self.assertNotIn('vfs', entry,
+						 'TDXN now emits a vfs key -- intentional?')
+		blob = str(orig)
+		self.assertNotIn('EMBODY_VFS_CONTRACT_PROBE', blob,
+						 'TDXN now carries VFS payloads -- intentional?')
+		self.assertNotIn(
+			base64.b64encode(b'EMBODY_VFS_CONTRACT_PROBE').decode(), blob,
+			'TDXN now carries VFS payloads base64-encoded -- intentional?')
+		rc = self.sandbox.op('c')
+		self.assertIsNotNone(rc)
+		self.assertEqual(
+			[f.name for f in rc.vfs], [],
+			'TDXN now restores VFS files -- update the spec section '
+			'"Virtual File System (VFS) - Not Supported" if this is deliberate')
+
+	def test_C26_default_mode_forced_constant_survives(self) -> None:
+		"""An authored defaultMode overrides the defaultExpr side effect.
+
+		Assigning defaultExpr auto-flips defaultMode to EXPRESSION, so a par
+		deliberately forced back to CONSTANT must reconstruct as CONSTANT --
+		otherwise it resets to the expression instead of its constant
+		(probed 2026-09-04).
+		"""
+		c = self.sandbox.create(baseCOMP, 'c')
+		page = c.appendCustomPage('Test')
+		forced = page.appendFloat('Forced')[0]
+		forced.default = 7.5
+		forced.defaultExpr = 'me.time.frame'
+		forced.defaultMode = ParMode.CONSTANT
+		self.assertEqual(forced.defaultMode, ParMode.CONSTANT,
+						 'setup refused -- TD would not force defaultMode back')
+		auto = page.appendFloat('Auto')[0]
+		auto.defaultExpr = 'me.time.frame'
+		self.assertEqual(auto.defaultMode, ParMode.EXPRESSION,
+						 'setup -- TD no longer auto-flips defaultMode')
+
+		orig, _, _ = self._roundTrip(self.sandbox)
+		entry = [o for o in orig['operators'] if o['name'] == 'c'][0]
+		defs = {d['name']: d for d in entry['custom_pars']['Test']}
+		self.assertEqual(defs['Forced'].get('defaultMode'), 'CONSTANT',
+						 f"forced CONSTANT not exported: {defs['Forced']}")
+		self.assertEqual(defs['Auto'].get('defaultMode'), 'EXPRESSION')
+
+		rc = self.sandbox.op('c')
+		self.assertEqual(
+			rc.par.Forced.defaultMode, ParMode.CONSTANT,
+			'forced CONSTANT lost -- the par now resets to its expression')
+		self.assertEqual(rc.par.Forced.defaultExpr, 'me.time.frame')
+		self.assertAlmostEqual(rc.par.Forced.default, 7.5, places=4)
+		self.assertEqual(rc.par.Auto.defaultMode, ParMode.EXPRESSION)
+
+	def test_C27_default_bind_expr_survives(self) -> None:
+		"""defaultBindExpr round-trips, stored raw with no '~' prefix."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		page = c.appendCustomPage('Test')
+		page.appendFloat('Master')
+		follower = page.appendFloat('Follower')[0]
+		follower.defaultBindExpr = 'me.par.Master'
+		self.assertEqual(follower.defaultBindExpr, 'me.par.Master',
+						 'setup refused -- defaultBindExpr not writable')
+		page.appendFloat('Plain')
+
+		orig, _, _ = self._roundTrip(self.sandbox)
+		entry = [o for o in orig['operators'] if o['name'] == 'c'][0]
+		defs = {d['name']: d for d in entry['custom_pars']['Test']}
+		self.assertEqual(
+			defs['Follower'].get('defaultBindExpr'), 'me.par.Master',
+			"stored raw -- the '~' shorthand encodes values only")
+		self.assertNotIn('defaultBindExpr', defs['Plain'])
+
+		rc = self.sandbox.op('c')
+		self.assertEqual(rc.par.Follower.defaultBindExpr, 'me.par.Master')
+		self.assertEqual(rc.par.Plain.defaultBindExpr, '',
+						 'defaultBindExpr blanket-applied to an unset par')
+
+	def test_C28_readonly_is_per_component(self) -> None:
+		"""readOnly exports as a list when a tuplet's components differ.
+
+		readOnly moved from a first_par-only export to the per-component
+		helper; every other readOnly test uses a single-component par, so
+		this is what pins the list form (issue #96 class).
+		"""
+		c = self.sandbox.create(baseCOMP, 'c')
+		pg = c.appendCustomPage('Test').appendXYZ('Pos')
+		pg[1].readOnly = True
+		self.assertEqual([bool(p.readOnly) for p in pg], [False, True, False],
+						 'setup -- TD no longer keeps readOnly per component')
+
+		orig, _, _ = self._roundTrip(self.sandbox)
+		entry = [o for o in orig['operators'] if o['name'] == 'c'][0]
+		defs = {d['name']: d for d in entry['custom_pars']['Test']}
+		self.assertEqual(defs['Pos'].get('readOnly'), [False, True, False],
+						 f"per-component readOnly collapsed: {defs['Pos']}")
+
+		rc = self.sandbox.op('c')
+		self.assertEqual(
+			[bool(rc.par.Posx.readOnly), bool(rc.par.Posy.readOnly),
+			 bool(rc.par.Posz.readOnly)], [False, True, False])
 
 	# =================================================================
 	# D. Connection Round-Trip (8 tests)
@@ -1028,7 +1438,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertEqual(len(rc.inputs), 0)
 
 	# =================================================================
-	# E. Flags Round-Trip (7 tests)
+	# E. Flags Round-Trip (13 tests)
 	# =================================================================
 
 	def test_E01_bypass_flag(self):
@@ -1104,6 +1514,92 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(result.get('success'))
 		entry = result['tdn']['operators'][0]
 		self.assertIn('lock', entry.get('flags', []))
+
+	def test_E10_component_clone_immune_flag(self) -> None:
+		"""componentCloneImmune=True round-trip (COMP_Class-only flag)."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.componentCloneImmune = True
+		self.sandbox.create(baseCOMP, 'sibling')
+		n = self.sandbox.create(noiseTOP, 'n')
+		n.bypass = True
+		orig, _reimp, _res = self._roundTrip(self.sandbox)
+		entries = {e['name']: e for e in orig['operators']}
+		self.assertIn('componentCloneImmune', entries['c'].get('flags', []))
+		rc = self.sandbox.op('c')
+		self.assertTrue(rc.componentCloneImmune)
+		# cloneImmune is a DIFFERENT OP_Class flag - must not be dragged along.
+		self.assertFalse(rc.cloneImmune)
+		# A blanket-set bug would also flip the untouched sibling.
+		self.assertFalse(self.sandbox.op('sibling').componentCloneImmune)
+		# Non-COMP must never carry the COMP-only flag, and still round-trips.
+		self.assertNotIn(
+			'componentCloneImmune', entries['n'].get('flags', []))
+		self.assertTrue(self.sandbox.op('n').bypass)
+
+	def test_E11_show_custom_only_flag(self) -> None:
+		"""showCustomOnly=True round-trip."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.showCustomOnly = True
+		self.sandbox.create(baseCOMP, 'sibling')
+		n = self.sandbox.create(noiseTOP, 'n')
+		n.bypass = True
+		orig, _reimp, _res = self._roundTrip(self.sandbox)
+		entries = {e['name']: e for e in orig['operators']}
+		self.assertIn('showCustomOnly', entries['c'].get('flags', []))
+		self.assertTrue(self.sandbox.op('c').showCustomOnly)
+		self.assertFalse(self.sandbox.op('sibling').showCustomOnly)
+		# Non-COMP sibling is untouched by the new table entries.
+		self.assertNotIn('showCustomOnly', entries['n'].get('flags', []))
+		self.assertTrue(self.sandbox.op('n').bypass)
+
+	def test_E12_show_docked_flag(self) -> None:
+		"""showDocked=False round-trip -- default is True, so the '-' path."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.showDocked = False
+		self.sandbox.create(baseCOMP, 'sibling')
+		n = self.sandbox.create(noiseTOP, 'n')
+		n.bypass = True
+		orig, _reimp, _res = self._roundTrip(self.sandbox)
+		entries = {e['name']: e for e in orig['operators']}
+		self.assertIn('-showDocked', entries['c'].get('flags', []))
+		self.assertFalse(self.sandbox.op('c').showDocked)
+		self.assertTrue(self.sandbox.op('sibling').showDocked)
+		# Non-COMP at its default emits nothing and still round-trips.
+		self.assertNotIn('-showDocked', entries['n'].get('flags', []))
+		self.assertTrue(self.sandbox.op('n').bypass)
+
+	def test_E13_comp_only_flag_skipped_on_non_comp(self) -> None:
+		"""A COMP-only flag aimed at a non-COMP is skipped, not forced.
+
+		componentCloneImmune does not exist on a TOP. A hand-written or
+		foreign TDXN naming it must not abort the import or lose the
+		legitimate flags beside it -- covers the array branch and the
+		legacy dict branch, which the export-side tests cannot reach.
+		"""
+		host = self.sandbox.create(baseCOMP, 'flag_guard_host')
+		tdn = {
+			'format': 'tdxn', 'version': '2.1', 'network_path': host.path,
+			'type': 'baseCOMP',
+			'operators': [
+				{'name': 'n', 'type': 'noiseTOP',
+				 'flags': ['componentCloneImmune', 'bypass']},
+				{'name': 'd', 'type': 'textDAT',
+				 'flags': {'componentCloneImmune': True, 'bypass': True}},
+			],
+		}
+		result = self.tdn.ImportNetwork(
+			target_path=host.path, tdn=tdn, clear_first=False)
+		self.assertTrue(result.get('success'), f'Import failed: {result}')
+
+		n = host.op('n')
+		self.assertIsNotNone(n, 'non-COMP dropped by the flag guard')
+		self.assertFalse(hasattr(n, 'componentCloneImmune'),
+						 'premise -- the attribute must not exist on a TOP')
+		self.assertTrue(n.bypass,
+						'the legitimate flag beside the skipped one was lost')
+		d = host.op('d')
+		self.assertIsNotNone(d, 'legacy dict-format flags aborted the import')
+		self.assertTrue(d.bypass)
 
 	# =================================================================
 	# F. Metadata Round-Trip (8 tests)

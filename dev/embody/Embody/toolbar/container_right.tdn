@@ -1,10 +1,10 @@
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 25
-generator: Embody/6.1.7
+generator: Embody/6.2.10
 td_build: 099.2025.33070
-source_file: Embody-6.289.toe
-exported_at: '2026-08-28T07:53:19Z'
+source_file: Embody-6.313.toe
+exported_at: '2026-09-04T20:29:04Z'
 network_path: /embody/Embody/toolbar/container_right
 options:
   include_dat_content: false
@@ -12,14 +12,14 @@ options:
 type_defaults:
   textCOMP:
     parameters:
-      fontsizeunits: points
-      fontcolorr: =parent.Embody.par.Textcolorr
-      fontcolorg: =parent.Embody.par.Textcolorg
-      fontcolorb: =parent.Embody.par.Textcolorb
-      vmode: fill
-      resizecomp: =me
-      repocomp: =me
       bgalpha: 1
+      fontcolorb: =parent.Embody.par.Textcolorb
+      fontcolorg: =parent.Embody.par.Textcolorg
+      fontcolorr: =parent.Embody.par.Textcolorr
+      fontsizeunits: points
+      repocomp: =me
+      resizecomp: =me
+      vmode: fill
     size: [160, 130]
     color: [0.3, 0.5, 0.9]
     tags:

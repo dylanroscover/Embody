@@ -1,10 +1,10 @@
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 34
-generator: Embody/6.1.19
+generator: Embody/6.2.10
 td_build: 099.2025.33070
-source_file: Embody-6.301.toe
-exported_at: '2026-08-29T22:55:39Z'
+source_file: Embody-6.313.toe
+exported_at: '2026-09-04T20:29:04Z'
 network_path: /embody/Embody/tagger
 options:
   include_dat_content: false
@@ -13,84 +13,84 @@ type_defaults:
   buttonCOMP:
     parameters:
       buttontype: momentary
-      scaletofit: onlyshrink
+      clone: =op.TDTox.op('defaultCOMPs/button')
       fontsize: 12
       h: 28
       hmode: fill
-      resizecomp: =me
       repocomp: =me
-      clone: =op.TDTox.op('defaultCOMPs/button')
+      resizecomp: =me
+      scaletofit: onlyshrink
   outCHOP:
     parameters:
-      label: =me.name
       autoexportroot: =parent()
+      label: =me.name
     flags:
     - viewer
     size: [130, 90]
+  panelexecuteDAT:
+    parameters:
+      defaultreadencoding: cp1252
+      fromop: =parent()
+      offtoon: false
+      panels: =parent()
+      panelvalue: state
+      valuechange: true
+    flags:
+    - viewer
+    size: [126, 62]
   parameterCHOP:
     parameters:
-      parameters: value0
-      custom: false
-      builtin: true
-      renameto: v1
       autoexportroot: =parent()
+      builtin: true
+      custom: false
+      parameters: value0
+      renameto: v1
+    flags:
+    - viewer
+    size: [130, 90]
+  parameterexecuteDAT:
+    parameters:
+      defaultreadencoding: cp1252
+      fromop: =parent()
+      onpulse: false
+      pars: value0
+    flags:
+    - viewer
+    size: [128, 66]
+  selectDAT:
+    parameters:
+      colexpr: =re.match('.*',me.inputCell.val) != None
+      colindexend: =me.inputTable.numCols - 1
+      extractrows: bynames
+      firstrow: true
+      rowexpr: =re.match('.*',me.inputCell.val) != None
+      rowindexend: =me.inputTable.numRows - 1
     flags:
     - viewer
     size: [130, 90]
   textCOMP:
     parameters:
-      text: =parent().par.label
-      type: multiline
-      legacyfontselection: true
-      fontsize: 12
-      fontcolorr: =parent.Embody.par.Textcolorr
-      fontcolorg: =parent.Embody.par.Textcolorg
-      fontcolorb: =parent.Embody.par.Textcolorb
-      textpaddingl: 12
       alignx: left
-      hmode: fill
-      vmode: fill
-      clickthrough: true
-      resizecomp: =me
-      repocomp: =me
-      bgcolorr: =parent.Embody.par.Listrowselectcolorr if parent().panel.rollover else parent.Embody.par.Listrowcolorr
-      bgcolorg: =parent.Embody.par.Listrowselectcolorg if parent().panel.rollover else parent.Embody.par.Listrowcolorg
-      bgcolorb: =parent.Embody.par.Listrowselectcolorb if parent().panel.rollover else parent.Embody.par.Listrowcolorb
       bgalpha: 1
+      bgcolorb: =parent.Embody.par.Listrowselectcolorb if parent().panel.rollover else parent.Embody.par.Listrowcolorb
+      bgcolorg: =parent.Embody.par.Listrowselectcolorg if parent().panel.rollover else parent.Embody.par.Listrowcolorg
+      bgcolorr: =parent.Embody.par.Listrowselectcolorr if parent().panel.rollover else parent.Embody.par.Listrowcolorr
       borderover: false
+      clickthrough: true
+      fontcolorb: =parent.Embody.par.Textcolorb
+      fontcolorg: =parent.Embody.par.Textcolorg
+      fontcolorr: =parent.Embody.par.Textcolorr
+      fontsize: 12
+      hmode: fill
+      legacyfontselection: true
+      repocomp: =me
+      resizecomp: =me
+      text: =parent().par.label
+      textpaddingl: 12
+      type: multiline
+      vmode: fill
     flags:
     - viewer
-  parameterexecuteDAT:
-    parameters:
-      fromop: =parent()
-      pars: value0
-      onpulse: false
-      defaultreadencoding: cp1252
-    flags:
-    - viewer
-    size: [128, 66]
-  panelexecuteDAT:
-    parameters:
-      fromop: =parent()
-      panels: =parent()
-      panelvalue: state
-      offtoon: false
-      valuechange: true
-      defaultreadencoding: cp1252
-    flags:
-    - viewer
-    size: [126, 62]
-  selectDAT:
-    parameters:
-      firstrow: true
-      extractrows: bynames
-      rowindexend: =me.inputTable.numRows - 1
-      rowexpr: =re.match('.*',me.inputCell.val) != None
-      colindexend: =me.inputTable.numCols - 1
-      colexpr: =re.match('.*',me.inputCell.val) != None
-    flags:
-    - viewer
-    size: [130, 90]
 type: containerCOMP
 parameters:
   w: 180

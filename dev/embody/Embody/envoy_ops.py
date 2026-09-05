@@ -477,7 +477,10 @@ def set_op_flags(ext, op_path: str, bypass: Optional[bool] = None, lock: Optiona
                  display: Optional[bool] = None, render: Optional[bool] = None,
                  viewer: Optional[bool] = None, current: Optional[bool] = None,
                  expose: Optional[bool] = None, allowCooking: Optional[bool] = None,
-                 selected: Optional[bool] = None) -> dict:
+                 selected: Optional[bool] = None, cloneImmune: Optional[bool] = None,
+                 componentCloneImmune: Optional[bool] = None,
+                 showCustomOnly: Optional[bool] = None,
+                 showDocked: Optional[bool] = None) -> dict:
     """Set flags on an operator"""
     target = ext._resolve_op(op_path)
     if not target:
@@ -502,8 +505,25 @@ def set_op_flags(ext, op_path: str, bypass: Optional[bool] = None, lock: Optiona
             target.selected = selected
         if allowCooking is not None and target.isCOMP:
             target.allowCooking = allowCooking
+        # Authored flags TDXN round-trips. componentCloneImmune is COMP-only;
+        # the rest are OP_Class. Probe rather than assume, and say so when a
+        # flag cannot be set instead of dropping it silently (2026-09-04).
+        unsupported = []
+        for name, value in (('cloneImmune', cloneImmune),
+                            ('componentCloneImmune', componentCloneImmune),
+                            ('showCustomOnly', showCustomOnly),
+                            ('showDocked', showDocked)):
+            if value is None:
+                continue
+            if not hasattr(target, name):
+                unsupported.append(name)
+                continue
+            setattr(target, name, value)
 
-        return ext._get_op_flags(op_path)
+        result = ext._get_op_flags(op_path)
+        if unsupported and isinstance(result, dict):
+            result['unsupported_flags'] = unsupported
+        return result
     except Exception as e:
         return {'error': f'Failed to set flags: {e}'}
 

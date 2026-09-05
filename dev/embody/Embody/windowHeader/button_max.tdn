@@ -1,10 +1,10 @@
-format: tdn
-version: '2.0'
+format: tdxn
+version: '2.1'
 build: 2
-generator: Embody/6.0.206
+generator: Embody/6.2.10
 td_build: 099.2025.33070
-source_file: Embody-6.207.toe
-exported_at: '2026-08-04T20:06:44Z'
+source_file: Embody-6.313.toe
+exported_at: '2026-09-04T20:29:01Z'
 network_path: /embody/Embody/windowHeader/button_max
 options:
   include_dat_content: false

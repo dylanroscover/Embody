@@ -54,7 +54,7 @@ return the shape and range instead.
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_op_flags` | `op_path` | Get all flags |
-| `set_op_flags` | `op_path`, `bypass?`, `lock?`, `display?`, `render?`, `viewer?`, `current?`, `expose?`, `allowCooking?`, `selected?` | Set one or more flags |
+| `set_op_flags` | `op_path`, `bypass?`, `lock?`, `display?`, `render?`, `viewer?`, `current?`, `expose?`, `allowCooking?`, `selected?`, `cloneImmune?`, `componentCloneImmune?`, `showCustomOnly?`, `showDocked?` | Set one or more flags. The last four are the authored flags TDXN round-trips; a flag the operator cannot carry (e.g. `componentCloneImmune` on a TOP) comes back in `unsupported_flags` rather than being silently dropped |
 
 ## Operator Positioning & Layout
 

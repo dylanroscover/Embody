@@ -1,10 +1,10 @@
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 1
-generator: Embody/6.0.280
+generator: Embody/6.2.10
 td_build: 099.2025.33070
-source_file: Embody-6.281.toe
-exported_at: '2026-08-27T01:12:16Z'
+source_file: Embody-6.313.toe
+exported_at: '2026-09-04T20:29:07Z'
 network_path: /specimen_lab/packet_fabric
 options:
   include_dat_content: false
@@ -12,11 +12,11 @@ options:
 type_defaults:
   compositeTOP:
     parameters:
+      format: rgba16float
       operand: add
       outputresolution: custom
-      resolutionw: =parent().par.Resw.eval()
       resolutionh: =parent().par.Resh.eval()
-      format: rgba16float
+      resolutionw: =parent().par.Resw.eval()
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
   glslPOP:
@@ -34,10 +34,8 @@ type_defaults:
     color: [0.67, 0.67, 0.67]
   textDAT:
     parameters:
-      syncfile: true
       language: glsl
-    flags:
-    - viewer
+      syncfile: true
     size: [130, 90]
     color: [0.9, 0.3, 0.4]
     tags:
@@ -370,6 +368,8 @@ operators:
   parameters:
     file: specimen_lab/packet_fabric/sprite_dot_pixel.glsl
     extension: frag
+  flags:
+  - viewer
   position: [150, -760]
   dock: sprite_dot
 - name: glsl_fabric_pixel
@@ -377,24 +377,33 @@ operators:
   parameters:
     file: specimen_lab/packet_fabric/glsl_fabric_pixel.glsl
     extension: frag
+  flags:
+  - viewer
   position: [150, -440]
   dock: glsl_fabric
 - name: glsl_color_compute
   type: textDAT
   parameters:
     file: specimen_lab/packet_fabric/glsl_color_compute.glsl
+  flags:
+  - viewer
   position: [2400, -120]
   dock: glsl_color
 - name: sprite_dot_compute
   type: textDAT
   parameters:
     file: specimen_lab/packet_fabric/sprite_dot_compute.glsl
+  flags:
+  - viewer
+  - -showDocked
   position: [0, -760]
   dock: sprite_dot
 - name: glsl_advect_compute
   type: textDAT
   parameters:
     file: specimen_lab/packet_fabric/glsl_advect_compute.glsl
+  flags:
+  - viewer
   position: [1200, -120]
   dock: glsl_advect
 - name: glsl_bloomblur_info
@@ -408,6 +417,9 @@ operators:
   type: textDAT
   parameters:
     file: specimen_lab/packet_fabric/glsl_fabric_compute.glsl
+  flags:
+  - viewer
+  - -showDocked
   position: [0, -440]
   dock: glsl_fabric
 - name: glsl_bloomblur_pixel
@@ -415,11 +427,16 @@ operators:
   parameters:
     file: specimen_lab/packet_fabric/glsl_bloomblur_pixel.glsl
     extension: frag
+  flags:
+  - viewer
   position: [4950, -120]
   dock: glsl_bloomblur
 - name: glsl_bloomblur_compute
   type: textDAT
   parameters:
     file: specimen_lab/packet_fabric/glsl_bloomblur_compute.glsl
+  flags:
+  - viewer
+  - -showDocked
   position: [4800, -120]
   dock: glsl_bloomblur

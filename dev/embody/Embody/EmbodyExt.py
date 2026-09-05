@@ -38,6 +38,16 @@ from typing import Optional, Union, Any
 # EVERY subprocess spawned from inside TD must pass creationflags=NO_WINDOW.
 NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 
+# Flags the TDXN exporter writes, in TDXNExt.DEFAULT_FLAGS order. The dirty
+# fingerprint must see every one of them: a flag the exporter records but the
+# fingerprint ignores leaves the COMP undirty, so the edit never reaches disk.
+# test_tdn_fingerprint asserts this list equals TDXNExt.DEFAULT_FLAGS.
+_TDN_FINGERPRINT_FLAGS = (
+    'bypass', 'lock', 'display', 'render', 'viewer', 'expose',
+    'allowCooking', 'cloneImmune', 'componentCloneImmune',
+    'showCustomOnly', 'showDocked',
+)
+
 
 class EmbodyExt:
     """
@@ -6029,13 +6039,27 @@ class EmbodyExt:
         except Exception:
             return ()
 
+    # Every definition attribute TDXNExt exports. An attribute the exporter
+    # writes but the fingerprint cannot see leaves the COMP undirty, so the
+    # edit never reaches disk -- the field looks supported and silently is
+    # not (review finding 2026-09-04). Keep in step with
+    # TDXNExt._exportCustomParGroup; test_tdn_fingerprint pins the pairing.
+    _DEF_FINGERPRINT_ATTRS = (
+        'style', 'label', 'default', 'min', 'max', 'clampMin', 'clampMax',
+        'normMin', 'normMax', 'readOnly', 'password', 'styleCloneImmune',
+        'bindRange', 'defaultExpr', 'defaultBindExpr', 'defaultMode',
+        'help', 'enable', 'enableExpr', 'startSection',
+    )
+
     @staticmethod
     def _customDefsFingerprint(comp) -> tuple:
         """Custom-parameter DEFINITIONS: a freshly appended par sits at its
         default, so the value fingerprint never sees it."""
         try:
+            attrs = EmbodyExt._DEF_FINGERPRINT_ATTRS
             return tuple(sorted(
-                (p.name, p.style, p.page.name, p.label, str(p.default))
+                (p.name, p.page.name) + tuple(
+                    str(getattr(p, a, '')) for a in attrs)
                 for p in comp.customPars))
         except Exception:
             return ()
@@ -6082,13 +6106,13 @@ class EmbodyExt:
                 continue
             color = tuple(round(v, 4) for v in c.color)
             tags = tuple(sorted(c.tags))
-            # The export's flag set (TDXNExt.DEFAULT_FLAGS): allowCooking
-            # and cloneImmune are written, `current` is not -- so the
-            # fingerprint tracked a flag the file never records and
-            # missed one it does (TDXN review 2026-08-30).
-            flags = (c.bypass, c.lock, c.display, c.render,
-                     c.viewer, c.expose, c.allowCooking,
-                     getattr(c, 'cloneImmune', None))
+            # Mirrors TDXNExt.DEFAULT_FLAGS. Hardcoding the tuple let it
+            # drift twice (2026-08-30, 2026-09-04): a flag the exporter
+            # writes but the fingerprint cannot see leaves the COMP undirty,
+            # so the change never reaches disk. Read from the shared name
+            # list; test_tdn_fingerprint asserts the two stay equal.
+            flags = tuple(getattr(c, name, None)
+                          for name in _TDN_FINGERPRINT_FLAGS)
             dock = getattr(c, 'dock', None)
             parts.append((
                 c.name, c.type,

@@ -1,10 +1,10 @@
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 2
-generator: Embody/6.2.0
+generator: Embody/6.2.10
 td_build: 099.2025.33070
-source_file: Embody-6.303.toe
-exported_at: '2026-08-30T01:03:25Z'
+source_file: Embody-6.313.toe
+exported_at: '2026-09-04T20:29:08Z'
 network_path: /specimen_lab/hyper_ntsc
 options:
   include_dat_content: false
@@ -22,10 +22,8 @@ type_defaults:
     color: [0.67, 0.67, 0.67]
   textDAT:
     parameters:
-      syncfile: true
       language: glsl
-    flags:
-    - viewer
+      syncfile: true
     size: [130, 90]
     color: [0.9, 0.3, 0.4]
     tags:
@@ -245,6 +243,8 @@ operators:
   parameters:
     file: specimen_lab/hyper_ntsc/glsl_ntsc_pixel.glsl
     extension: frag
+  flags:
+  - viewer
   position: [150, -120]
   dock: glsl_ntsc
 - name: glsl_finish_info
@@ -259,12 +259,17 @@ operators:
   parameters:
     file: specimen_lab/hyper_ntsc/glsl_finish_pixel.glsl
     extension: frag
+  flags:
+  - viewer
   position: [1350, -120]
   dock: glsl_finish
 - name: glsl_ntsc_compute
   type: textDAT
   parameters:
     file: specimen_lab/hyper_ntsc/glsl_ntsc_compute.glsl
+  flags:
+  - viewer
+  - -showDocked
   position: [-150, -120]
   dock: glsl_ntsc
 - name: glsl_bloomblur_info
@@ -278,6 +283,9 @@ operators:
   type: textDAT
   parameters:
     file: specimen_lab/hyper_ntsc/glsl_finish_compute.glsl
+  flags:
+  - viewer
+  - -showDocked
   position: [1050, -120]
   dock: glsl_finish
 - name: glsl_bloomblur_pixel
@@ -285,11 +293,16 @@ operators:
   parameters:
     file: specimen_lab/hyper_ntsc/glsl_bloomblur_pixel.glsl
     extension: frag
+  flags:
+  - viewer
   position: [750, -520]
   dock: glsl_bloomblur
 - name: glsl_bloomblur_compute
   type: textDAT
   parameters:
     file: specimen_lab/hyper_ntsc/glsl_bloomblur_compute.glsl
+  flags:
+  - viewer
+  - -showDocked
   position: [450, -520]
   dock: glsl_bloomblur

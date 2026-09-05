@@ -101,7 +101,12 @@ def tdn_load(text):
 	return yaml.load(text, Loader=_TDN_BaseLoader)
 
 
-TDN_VERSION = '2.0'  # was '1.5'
+TDN_VERSION = '2.1'  # was '2.0'; 2.0 was '1.5'
+# 2.1 widened readOnly/help/enable/enableExpr/default/min/max/clamp*/norm*
+# from scalar to scalar-or-per-component-list. New KEYS need no bump (readers
+# ignore unknown fields), but a widened TYPE does: a pre-2.1 reader treats a
+# truthy list as True and forces the whole tuplet (2026-09-04). The bump makes
+# those builds log 'newer than this build' instead of failing silently.
 
 # --- Format identity (v6.1.0: TDXN -> TDXN) -------------------------------
 # The format is "TDXN" (TouchDesigner eXternal Network). Only a FIRST
@@ -184,6 +189,7 @@ STYLE_APPEND_MAP = {
 	'OP': 'appendOP',
 	'COMP': 'appendCOMP',
 	'TOP': 'appendTOP',
+	'TOPMulti': 'appendTOPMulti',
 	'CHOP': 'appendCHOP',
 	'SOP': 'appendSOP',
 	'DAT': 'appendDAT',
@@ -217,7 +223,33 @@ DEFAULT_FLAGS = {
 	'allowCooking': True,
 	# Authored, not runtime: a clone-immune COMP survives a clone re-sync.
 	'cloneImmune': False,
+	# Authored display/clone flags, absent from this table until 2026-09-04:
+	# each round-tripped as its default and was silently lost (found by
+	# differential round-trip probe 2026-09-04).
+	'componentCloneImmune': False,
+	'showCustomOnly': False,
+	'showDocked': True,
 }
+
+# DEFAULT_FLAGS entries TD does not let every operator carry. allowCooking
+# reads True on any OP but only a COMP may disable it (OP_Class);
+# componentCloneImmune is COMP_Class-only. Every other entry is gated by a
+# plain hasattr, so a new flag needs no case here.
+COMP_ONLY_FLAGS = frozenset({'allowCooking', 'componentCloneImmune'})
+
+
+def _flagApplies(target: 'OP', flag_name: str) -> bool:
+	"""Whether a DEFAULT_FLAGS entry is readable/settable on this operator."""
+	if flag_name in COMP_ONLY_FLAGS and not target.isCOMP:
+		return False
+	try:
+		return hasattr(target, flag_name)
+	except Exception as e:
+		# Fails closed: the flag is skipped on BOTH export and import, so say
+		# so rather than letting an operator's flags vanish silently.
+		debug(f'TDXN: flag probe for {flag_name} raised on '
+			  f'{getattr(target, "path", target)}: {e}')
+		return False
 
 DEFAULT_NODE_SIZE = (200, 100)
 DEFAULT_COLOR = (0.545, 0.545, 0.545)
@@ -2739,6 +2771,8 @@ class TDXNExt:
 				if tdn_flags:
 					if isinstance(tdn_flags, list):
 						for entry in tdn_flags:
+							if not _flagApplies(dest, str(entry).lstrip('-')):
+								continue
 							try:
 								if entry.startswith('-'):
 									setattr(dest, entry[1:], False)
@@ -2750,6 +2784,8 @@ class TDXNExt:
 									f'{dest.path}: {e}', 'DEBUG')
 					elif isinstance(tdn_flags, dict):
 						for flag_name, value in tdn_flags.items():
+							if not _flagApplies(dest, flag_name):
+								continue
 							try:
 								setattr(dest, flag_name, value)
 							except Exception as e:
@@ -3327,7 +3363,7 @@ class TDXNExt:
 				temp = self._scan_workspace.create(cls, '_flagprobe')
 				try:
 					for flag_name in DEFAULT_FLAGS:
-						if flag_name == 'allowCooking' and not temp.isCOMP:
+						if not _flagApplies(temp, flag_name):
 							continue
 						try:
 							defaults[flag_name] = bool(getattr(temp, flag_name))
@@ -3834,27 +3870,22 @@ class TDXNExt:
 		if first_par.startSection:
 			par_def['startSection'] = True
 
-		# Numeric range (only non-standard values)
+		# Default and numeric range are PER-COMPONENT: every member of a
+		# tuplet carries its own default/min/max/norm range, so reading
+		# group[0] alone dropped every other component (issue #96). Scalar
+		# when the group agrees, list when it does not; a scalar broadcasts
+		# on import, which is also how pre-6.2.11 files read back.
+		default_val = self._exportGroupDefault(group)
+		if default_val is not None:
+			par_def['default'] = default_val
 		if first_par.isNumber:
-			default_val = self._serializeValue(first_par.default)
-			if default_val not in self._STANDARD_DEFAULTS:
-				par_def['default'] = default_val
-			if first_par.min != 0:
-				par_def['min'] = first_par.min
-			if first_par.max != 1:
-				par_def['max'] = first_par.max
-			if first_par.clampMin:
-				par_def['clampMin'] = True
-			if first_par.clampMax:
-				par_def['clampMax'] = True
-			if first_par.normMin != 0:
-				par_def['normMin'] = first_par.normMin
-			if first_par.normMax != 1:
-				par_def['normMax'] = first_par.normMax
-		else:
-			default_val = self._serializeValue(first_par.default)
-			if default_val not in self._STANDARD_DEFAULTS:
-				par_def['default'] = default_val
+			for attr, standard in (
+					('min', 0), ('max', 1),
+					('clampMin', False), ('clampMax', False),
+					('normMin', 0), ('normMax', 1)):
+				attr_val = self._exportGroupAttr(group, attr, standard)
+				if attr_val is not None:
+					par_def[attr] = attr_val
 
 		# Menu entries
 		if first_par.isMenu:
@@ -3869,23 +3900,76 @@ class TDXNExt:
 				if labels != names:
 					par_def['menuLabels'] = labels
 
-		# Read-only
-		if first_par.readOnly:
-			par_def['readOnly'] = True
+		# readOnly / help / enable are per-Par, not per-group: reading
+		# first_par alone exported one component's value for the whole
+		# tuplet, the same class as the range attributes above (issue #96).
+		read_only = self._exportGroupAttr(group, 'readOnly', False)
+		if read_only is not None:
+			par_def['readOnly'] = read_only
+
+		# Password masking: authored definition state, never exported, so it
+		# was silently lost (differential round-trip probe 2026-09-04). TD
+		# allows SETTING it on custom Str/Int/Float only; the member exists on
+		# every Par and reads False elsewhere, so the helper omits it.
+		password_val = self._exportGroupAttr(group, 'password', False)
+		if password_val is not None:
+			par_def['password'] = password_val
+
+		# Style clone immunity: when True the par DEFINITION is left alone on
+		# a clone sync instead of being matched to the master. Never exported,
+		# so a reconstructed cloned COMP got clobbered on its next sync
+		# (differential round-trip probe 2026-09-04).
+		style_immune = self._exportGroupAttr(group, 'styleCloneImmune', False)
+		if style_immune is not None:
+			par_def['styleCloneImmune'] = style_immune
+
+		# bindRange routes min/max/clamp/norm to the bind master. Never
+		# exported, so a bound par rebuilt with it False and silently took its
+		# own range back (differential round-trip probe 2026-09-04).
+		bind_range = self._exportGroupAttr(group, 'bindRange', False)
+		if bind_range is not None:
+			# Tuplet-wide in TD (probed 2026-09-04), and the schema pins a
+			# scalar. Collapse defensively: if TD ever lets components
+			# disagree, emit a valid file and say so rather than writing a
+			# list the published schema rejects.
+			if isinstance(bind_range, list):
+				self._log(
+					f'bindRange disagrees across the {base_name} tuplet '
+					f'({bind_range}); TD treats it as tuplet-wide -- '
+					f'exporting {bool(bind_range[0])}', 'WARNING')
+				bind_range = bool(bind_range[0])
+			par_def['bindRange'] = bind_range
+
+		# Default expression / bind: authored definition state, distinct from
+		# the constant `default` AND from the par's live expr/bindExpr. Raw
+		# strings -- the '='/'~' shorthand encodes value/values only.
+		default_expr = self._exportGroupAttr(group, 'defaultExpr', '')
+		if default_expr is not None:
+			par_def['defaultExpr'] = default_expr
+		default_bind = self._exportGroupAttr(group, 'defaultBindExpr', '')
+		if default_bind is not None:
+			par_def['defaultBindExpr'] = default_bind
+		default_mode = self._exportGroupDefaultMode(group)
+		if default_mode is not None:
+			par_def['defaultMode'] = default_mode
 
 		# Help text
-		if first_par.help:
-			par_def['help'] = first_par.help
+		help_val = self._exportGroupAttr(group, 'help', '')
+		if help_val is not None:
+			par_def['help'] = help_val
 
 		# Conditional greying: enableExpr wins, else a static enable=False.
 		# Neither was exported before (TDXN review 2026-08-30).
-		try:
-			if first_par.enableExpr:
-				par_def['enableExpr'] = first_par.enableExpr
-			elif not first_par.enable:
-				par_def['enable'] = False
-		except Exception:
-			pass
+		# Both are per-component, so they are NOT mutually exclusive across a
+		# tuplet: one component can carry an expression while another is
+		# statically disabled. Suppressing `enable` whenever any component had
+		# an expr lost that second component's state.
+		enable_expr = self._exportGroupAttr(group, 'enableExpr', '')
+		if enable_expr is not None:
+			par_def['enableExpr'] = enable_expr
+		enable_val = self._exportGroupAttr(group, 'enable', True)
+		if enable_val is not None:
+			par_def['enable'] = enable_val
 
 		# Momentary pars never serialize a value: an export catching a
 		# Pulse in flight writes `value: true` and import re-fires it on
@@ -3914,6 +3998,70 @@ class TDXNExt:
 				par_def['values'] = values
 
 		return par_def
+
+	def _exportGroupDefault(self, group):
+		"""Serialized default of a tuplet: scalar, per-component list, or None.
+
+		None when every component sits at a standard default (the field is
+		then omitted). Same scalar-vs-list contract as _exportGroupAttr.
+		"""
+		vals = []
+		for p in group:
+			try:
+				vals.append(self._serializeValue(p.default))
+			except Exception:
+				return None
+		if not vals:
+			return None
+		try:
+			if all(v in self._STANDARD_DEFAULTS for v in vals):
+				return None
+		except TypeError:
+			pass
+		if all(v == vals[0] for v in vals):
+			return vals[0]
+		return vals
+
+	def _exportGroupDefaultMode(self, group):
+		"""Per-component default MODE, as ParMode names.
+
+		Ships whenever a defaultExpr/defaultBindExpr is set, not only when the
+		mode is non-CONSTANT: assigning either auto-flips defaultMode, so a par
+		authored with a default expression but forced back to CONSTANT would
+		otherwise reconstruct as EXPRESSION and reset to the wrong value
+		(probed 2026-09-04).
+		"""
+		try:
+			names = [getattr(p.defaultMode, 'name', str(p.defaultMode))
+					 for p in group]
+			has_expr = any((getattr(p, 'defaultExpr', '')
+							or getattr(p, 'defaultBindExpr', ''))
+						   for p in group)
+		except Exception:
+			return None
+		if not names:
+			return None
+		if all(n == 'CONSTANT' for n in names) and not has_expr:
+			return None
+		if all(n == names[0] for n in names):
+			return names[0]
+		return names
+
+	def _exportGroupAttr(self, group, attr, standard):
+		"""One definition attribute read across a whole tuplet.
+
+		Returns None when every component holds TD's standard value, the
+		scalar when the group agrees, else the per-component list.
+		"""
+		try:
+			vals = [getattr(p, attr) for p in group]
+		except Exception:
+			return None
+		if not vals or all(v == standard for v in vals):
+			return None
+		if all(v == vals[0] for v in vals):
+			return vals[0]
+		return vals
 
 	def _getParValue(self, p):
 		"""Get current value/expr/bind for a parameter. Returns serialized form."""
@@ -3944,7 +4092,7 @@ class TDXNExt:
 		flags = []
 		defaults = self._getCreationFlagDefaults(target)
 		for flag_name, default_val in defaults.items():
-			if flag_name == 'allowCooking' and not target.isCOMP:
+			if not _flagApplies(target, flag_name):
 				continue
 			try:
 				actual = getattr(target, flag_name)
@@ -4745,6 +4893,91 @@ class TDXNExt:
 			base_name = par_name[:-len(suffixes[0])]
 		return base_name, comp_count
 
+	def _resolveCustomParGroup(self, target, par_def, style, base_name,
+							   def_name):
+		"""Pars of a just-created custom tuplet, in component order.
+
+		Component names come from the style's suffixes (Colorr/g/b/a) or,
+		for a Float/Int with size > 1, from the numeric suffix (Size1..N).
+		Falls back to the definition's own name for legacy defs that still
+		carry a component suffix.
+		"""
+		suffixes = STYLE_SUFFIXES.get(style, [])
+		if suffixes:
+			count = (par_def.get('size')
+					 or len(par_def.get('values') or ())
+					 or len(suffixes))
+			try:
+				count = max(1, min(int(count), len(suffixes)))
+			except (TypeError, ValueError):
+				count = len(suffixes)
+			names = [base_name + s for s in suffixes[:count]]
+		else:
+			try:
+				size = int(par_def.get('size') or 1)
+			except (TypeError, ValueError):
+				size = 1
+			if size > 1 and style in ('Float', 'Int'):
+				names = [f'{base_name}{i + 1}' for i in range(size)]
+			else:
+				names = [base_name]
+
+		pars = [p for p in (getattr(target.par, n, None) for n in names)
+				if p is not None]
+		if not pars:
+			legacy = getattr(target.par, def_name, None)
+			if legacy is not None:
+				pars = [legacy]
+		return pars
+
+	def _applyGroupDefaultMode(self, group_pars, value):
+		"""Apply ParMode names from a TDXN defaultMode field.
+
+		Must run AFTER defaultExpr/defaultBindExpr -- assigning either flips
+		defaultMode as a side effect, and the authored mode has to win.
+		"""
+		if isinstance(value, (list, tuple)):
+			vals = list(value)
+		else:
+			vals = [value] * len(group_pars)
+		for p, name in zip(group_pars, vals):
+			mode = getattr(ParMode, str(name), None)
+			if mode is None:
+				self._log(
+					f'Unknown defaultMode "{name}" for {p.name}', 'WARNING')
+				continue
+			try:
+				p.defaultMode = mode
+			except Exception as e:
+				self._log(
+					f'Could not set defaultMode on {p.name}: {e}', 'DEBUG')
+
+	def _applyGroupAttr(self, group_pars, attr, value, numbers_only=False):
+		"""Apply one definition attribute across a tuplet's components.
+
+		A list maps 1:1 (a short list leaves the rest untouched); any other
+		value broadcasts to every component.
+		"""
+		if isinstance(value, (list, tuple)):
+			vals = list(value)
+			if len(vals) != len(group_pars):
+				# Never produced by the exporter; a hand-edited or foreign file
+				# would otherwise drop the tail silently.
+				self._log(
+					f'{attr}: {len(vals)} value(s) for a '
+					f'{len(group_pars)}-component tuplet -- extra/missing '
+					f'entries ignored', 'WARNING')
+		else:
+			vals = [value] * len(group_pars)
+		for p, v in zip(group_pars, vals):
+			if numbers_only and not p.isNumber:
+				continue
+			try:
+				setattr(p, attr, v)
+			except Exception as e:
+				self._log(
+					f'Could not set {attr} on {p.name}: {e}', 'DEBUG')
+
 	def _createCustomParsOnOp(self, target, custom_par_defs):
 		"""Create custom parameters on a single operator.
 
@@ -4799,10 +5032,13 @@ class TDXNExt:
 			if suffixes:
 				actual_par_name, comp_count = self._customParGroupBase(
 					par_def, par_name, suffixes)
-				# TD reports style 'RGBA' for both RGB (3) and RGBA (4)
-				# groups, and 'XYZW' for XY/XYZ/XYZW -- pick the append
-				# variant from the true arity, never a silent downgrade
-				# to RGB for a values-less RGBA group.
+				# TD collapses every suffix family to its widest style:
+				# 'RGBA' for RGB (3) and RGBA (4), 'XYZW' for XY/XYZ/XYZW,
+				# 'UVW' for UV (2) and UVW (3) -- pick the append variant
+				# from the true arity, never a silent downgrade to RGB for a
+				# values-less RGBA group. UVW had no branch, so every UV
+				# group came back with a phantom 'w' component (found by the
+				# style x attribute matrix test, 2026-09-04).
 				if style == 'RGBA' and comp_count <= 3:
 					method_name = 'appendRGB'
 				elif style == 'XYZW':
@@ -4810,6 +5046,8 @@ class TDXNExt:
 						method_name = 'appendXY'
 					elif comp_count <= 3:
 						method_name = 'appendXYZ'
+				elif style == 'UVW' and comp_count <= 2:
+					method_name = 'appendUV'
 
 			append_method = getattr(page, method_name, None)
 			if not append_method:
@@ -4828,37 +5066,29 @@ class TDXNExt:
 
 				append_method(actual_par_name, **kwargs)
 
-				# Set properties on the created parameter(s)
-				par = getattr(target.par, par_name, None)
-				if par is None:
-					# Try with first suffix (e.g., Posx for XYZ)
-					suffixes = STYLE_SUFFIXES.get(style, [])
-					if suffixes:
-						par = getattr(
-							target.par, par_name + suffixes[0], None)
-				if par is None:
+				# Set properties on EVERY component. These attributes are
+				# per-Par, and applying them to component 0 alone brought a
+				# tuplet back with only its first component restored -- and a
+				# Float/Int size>1 group not at all, since its base name
+				# resolves to no Par (issue #96). A list maps 1:1, anything
+				# else broadcasts (how pre-6.2.11 scalars read back).
+				group_pars = self._resolveCustomParGroup(
+					target, par_def, style, actual_par_name, par_name)
+				if not group_pars:
 					continue
+				par = group_pars[0]
 
 				# Numeric range
-				if par_def.get('min') is not None and par.isNumber:
-					par.min = par_def['min']
-				if par_def.get('max') is not None and par.isNumber:
-					par.max = par_def['max']
-				if par_def.get('clampMin') is not None and par.isNumber:
-					par.clampMin = par_def['clampMin']
-				if par_def.get('clampMax') is not None and par.isNumber:
-					par.clampMax = par_def['clampMax']
-				if par_def.get('normMin') is not None and par.isNumber:
-					par.normMin = par_def['normMin']
-				if par_def.get('normMax') is not None and par.isNumber:
-					par.normMax = par_def['normMax']
+				for attr in ('min', 'max', 'clampMin', 'clampMax',
+							 'normMin', 'normMax'):
+					if par_def.get(attr) is not None:
+						self._applyGroupAttr(
+							group_pars, attr, par_def[attr], numbers_only=True)
 
 				# Default value
 				if 'default' in par_def and not par.isPulse:
-					try:
-						par.default = par_def['default']
-					except Exception as e:
-						self._log(f'Could not set default for {par_name}: {e}', 'DEBUG')
+					self._applyGroupAttr(
+						group_pars, 'default', par_def['default'])
 
 				# Menu entries
 				if par.isMenu:
@@ -4874,22 +5104,69 @@ class TDXNExt:
 				if par_def.get('startSection'):
 					par.startSection = True
 
-				# Read-only
-				if par_def.get('readOnly'):
-					par.readOnly = True
+				# Every field below is per-component: `in par_def` rather than a
+				# truthy test, so an explicit false and a per-component list both
+				# still apply (a list is never falsy-correct here).
+				if 'readOnly' in par_def:
+					self._applyGroupAttr(
+						group_pars, 'readOnly', par_def['readOnly'])
+
+				# Password masking (see _exportCustomParGroup)
+				if 'password' in par_def:
+					self._applyGroupAttr(
+						group_pars, 'password', par_def['password'])
+
+				# Style clone immunity (see _exportCustomParGroup). Order does
+				# not matter: it governs clone sync only and blocks no local
+				# write (Par_Class). Do not "restore" an ordering around it.
+				if 'styleCloneImmune' in par_def:
+					self._applyGroupAttr(
+						group_pars, 'styleCloneImmune',
+						par_def['styleCloneImmune'])
+
+				# bindRange MUST follow the range writes above: it routes
+				# min/max/clamp/norm to the bind master, so an earlier write would
+				# be overridden. Definition state -- Phase 2, never Phase 3.
+				if 'bindRange' in par_def:
+					# Scalar by contract; a hand-written list would otherwise
+					# collapse to whatever the LAST component said.
+					bind_val = par_def['bindRange']
+					if isinstance(bind_val, (list, tuple)):
+						self._log(
+							f'bindRange is tuplet-wide; taking the first of '
+							f'{list(bind_val)} for {par_name}', 'WARNING')
+						bind_val = bool(bind_val[0]) if bind_val else False
+					self._applyGroupAttr(group_pars, 'bindRange', bind_val)
+
+				# Default expression / bind, then the authored default MODE last:
+				# assigning either expression auto-flips defaultMode, so the mode
+				# has to overwrite that side effect (probed 2026-09-04). Raw
+				# strings -- never strip a leading '=' the author wrote.
+				if 'defaultExpr' in par_def:
+					self._applyGroupAttr(
+						group_pars, 'defaultExpr', par_def['defaultExpr'])
+				if 'defaultBindExpr' in par_def:
+					self._applyGroupAttr(
+						group_pars, 'defaultBindExpr',
+						par_def['defaultBindExpr'])
+				if 'defaultMode' in par_def:
+					self._applyGroupDefaultMode(
+						group_pars, par_def['defaultMode'])
 
 				# Help text
-				if par_def.get('help'):
-					par.help = par_def['help']
+				if 'help' in par_def:
+					self._applyGroupAttr(group_pars, 'help', par_def['help'])
 
-				# Conditional greying (see _exportCustomParGroup)
-				try:
-					if par_def.get('enableExpr'):
-						par.enableExpr = par_def['enableExpr']
-					elif par_def.get('enable') is False:
-						par.enable = False
-				except Exception as e:
-					self._log(f'Could not set enable for {par_name}: {e}', 'DEBUG')
+				# Conditional greying (see _exportCustomParGroup). Apply the
+				# static state first, then the expression, so a component that
+				# has an expr ends up driven by it and one that does not keeps
+				# its authored enable.
+				if 'enable' in par_def:
+					self._applyGroupAttr(
+						group_pars, 'enable', par_def['enable'])
+				if 'enableExpr' in par_def:
+					self._applyGroupAttr(
+						group_pars, 'enableExpr', par_def['enableExpr'])
 
 			except Exception as e:
 				self._log(
@@ -5239,6 +5516,10 @@ class TDXNExt:
 					if not isinstance(entry, str) or entry.lstrip('-') not in DEFAULT_FLAGS:
 						self._log(f'Ignoring unknown flag {entry!r} on {target.path}', 'DEBUG')
 						continue
+					# COMP-only flags must not be forced onto a TOP/CHOP/SOP/DAT
+					# now that the table carries them (2026-09-04).
+					if not _flagApplies(target, entry.lstrip('-')):
+						continue
 					try:
 						if entry.startswith('-'):
 							setattr(target, entry[1:], False)
@@ -5249,6 +5530,8 @@ class TDXNExt:
 			elif isinstance(flags_data, dict):
 				# Legacy dict format
 				for flag_name, value in flags_data.items():
+					if not _flagApplies(target, flag_name):
+						continue
 					try:
 						setattr(target, flag_name, value)
 					except Exception as e:

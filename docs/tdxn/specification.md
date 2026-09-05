@@ -148,6 +148,26 @@ This keeps the most common short vectors compact while longer arrays stay readab
 
 ## Back-compatibility
 
+### v2.1: widened definition fields
+
+v2.1 changes no structure and adds no required field. It exists to mark one
+thing: several custom-parameter definition fields that were always scalars can
+now also be a **per-component array** (see
+[Per-component definition fields](#per-component-definition-fields)) --
+`default`, `min`, `max`, `clampMin`, `clampMax`, `normMin`, `normMax`,
+`readOnly`, `password`, `styleCloneImmune`, `defaultExpr`, `defaultBindExpr`,
+`defaultMode`, `help`, `enable` and `enableExpr`.
+
+Purely *new* keys would not have needed a version bump -- readers are required
+to ignore unknown fields. A widened **type** on an existing key is different: a
+pre-2.1 reader evaluates `readOnly: [false, true]` as a truthy value and forces
+the whole tuplet read-only, and drops `enable: [true, false]` entirely, both
+silently. Since an array is only ever written when a tuplet's components
+genuinely disagree, most files are unaffected -- but the bump makes an older
+build log `TDXN file is v2.1, newer than this build; some content may not
+import` rather than quietly reconstructing the wrong state. Older builds still
+read v2.1 files; only mixed tuplets are misread.
+
 v2.0 is the first YAML release of the format. Because YAML is a strict superset of JSON, importers read **both** new YAML files and legacy JSON `.tdn` (versions `1.x`) transparently:
 
 - Importers parse **json-first**: a document beginning with `{` or `[` is read by the JSON parser (with any leading UTF-8 BOM and whitespace stripped first), and only otherwise by the YAML parser. Correctness is therefore independent of whether a fast YAML C library is present.
@@ -449,25 +469,66 @@ The `$t` field names the template. Other keys are parameter value overrides (par
 | `name` | string | Always | Base name of the parameter. For multi-component parameters, this is the group name without any suffix (e.g., `"Pos"` for a group of `Posx`, `Posy`, `Posz`). |
 | `label` | string | If different from `name` | Display label shown in the parameter dialog. Omitted when the label matches the parameter name. |
 | `style` | string | Always | Parameter style. See [Supported Styles](#supported-styles). |
-| `size` | integer | Multi-component `Float`/`Int`; suffix-style groups with non-full arity | Number of components when > 1 (e.g., `3` for a 3-component float). Also written for suffix-style groups (`RGBA`, `XYZW`, …) whose component count differs from the style's full size — TouchDesigner reports style `RGBA` for both RGB (3) and RGBA (4) groups, and `XYZW` for XY/XYZ/XYZW, so `size` disambiguates (e.g. `3` for an RGB group). When omitted on a suffix-style group, importers use the `values` length, else the style's full component count. |
-| `default` | any | If non-standard | Default value. Omitted when the default is a standard value (`0`, `0.0`, `""`, or `false`). |
-| `min` | number | If != `0` | Minimum value. |
-| `max` | number | If != `1` | Maximum value. |
-| `clampMin` | boolean | If `true` | Whether the value is clamped to `min`. |
-| `clampMax` | boolean | If `true` | Whether the value is clamped to `max`. |
-| `normMin` | number | If != `0` | Normalized range minimum (for slider UI). |
-| `normMax` | number | If != `1` | Normalized range maximum (for slider UI). |
+| `size` | integer | Multi-component `Float`/`Int`; suffix-style groups with non-full arity | Number of components when > 1 (e.g., `3` for a 3-component float). Also written for suffix-style groups (`RGBA`, `XYZW`, `UVW`) whose component count differs from the style's full size — TouchDesigner reports style `RGBA` for both RGB (3) and RGBA (4) groups, `XYZW` for XY/XYZ/XYZW, and `UVW` for both UV (2) and UVW (3), so `size` disambiguates (e.g. `3` for an RGB group, `2` for a UV group). When omitted on a suffix-style group, importers use the `values` length, else the style's full component count. |
+| `default` | any or array | If non-standard | Default value. Omitted when every component's default is a standard value (`0`, `0.0`, `""`, or `false`). Per-component: a scalar when the whole tuplet agrees, an array (one entry per component) when it does not. See [Per-component definition fields](#per-component-definition-fields). |
+| `min` | number or array | If != `0` | Minimum value. Per-component (see below). |
+| `max` | number or array | If != `1` | Maximum value. Per-component (see below). |
+| `clampMin` | boolean or array | If `true` | Whether the value is clamped to `min`. Per-component (see below). |
+| `clampMax` | boolean or array | If `true` | Whether the value is clamped to `max`. Per-component (see below). |
+| `normMin` | number or array | If != `0` | Normalized range minimum (for slider UI). Per-component (see below). |
+| `normMax` | number or array | If != `1` | Normalized range maximum (for slider UI). Per-component (see below). |
 | `menuNames` | array of strings | Manually defined menus | Internal names for each menu option. |
 | `menuLabels` | array of strings | If different from `menuNames` | Display labels for each menu option. Omitted when labels match names. |
 | `menuSource` | string | Dynamically populated menus | DAT path or expression that populates the menu. When present, `menuNames`/`menuLabels` are omitted. |
 | `startSection` | boolean | If `true` | Whether this parameter starts a new visual section. |
-| `readOnly` | boolean | If `true` | Whether the parameter is read-only. |
-| `enable` | boolean | If `false` | Static enable state (greyed out when `false`). Omitted when an `enableExpr` is set. |
-| `enableExpr` | string | If set | Python expression that controls the enable state (conditional greying). |
+| `readOnly` | boolean or array | If `true` | Whether the parameter is read-only. Per-component (see below). |
+| `password` | boolean or array | If `true` | Masks the value as asterisks in the parameter dialog. TouchDesigner allows it on custom `Str`/`Int`/`Float` parameters. Per-component. |
+| `styleCloneImmune` | boolean or array | If `true` | Keeps the parameter *definition* from being matched to the master on a clone sync. Per-component. |
+| `bindRange` | boolean | If `true` | Routes `min`/`max`/`clampMin`/`clampMax`/`normMin`/`normMax`/`normVal` to the bind master. **Tuplet-wide**, not per-component — TouchDesigner propagates it across every component of a group, so it always serializes as a scalar (verified 2026-09-04). |
+| `defaultExpr` | string or array | If non-empty | The parameter's default *expression*, distinct from the constant `default` and from the parameter's live `value`. Stored raw — the `=`/`~` shorthand applies to `value`/`values` only. Per-component. |
+| `defaultBindExpr` | string or array | If non-empty | The parameter's default bind expression. Stored raw, same as `defaultExpr`. Per-component. |
+| `defaultMode` | string or array | If not `CONSTANT`, or whenever `defaultExpr`/`defaultBindExpr` is set | `ParMode` name (`CONSTANT`, `EXPRESSION`, `EXPORT`, `BIND` -- all four, verified 2026-09-04) the parameter resets to. Written even when `CONSTANT` if a default expression is present: assigning `defaultExpr` auto-flips `defaultMode` to `EXPRESSION`, so a parameter authored with a default expression but forced back to `CONSTANT` would otherwise reconstruct with the wrong reset behavior (verified 2026-09-04). On import it is applied **after** the expressions, to override that side effect. Per-component. |
+| `enable` | boolean or array | If `false` | Static enable state (greyed out when `false`). Omitted when an `enableExpr` is set. Per-component. |
+| `enableExpr` | string or array | If set | Python expression that controls the enable state (conditional greying). Per-component in TDXN, though TouchDesigner documents it as shared across a ParGroup. |
 | `sequence` | string | Template pars of a custom sequence | Name of the custom sequence this definition belongs to. |
-| `help` | string | If non-empty | Tooltip help text shown when hovering the parameter in the dialog. Omitted when empty. |
+| `help` | string or array | If non-empty | Tooltip help text shown when hovering the parameter in the dialog. Omitted when empty. Per-component. |
 | `value` | any | Single-component, if non-default | Current value. Can be a constant, `"=expr"` string, or `"~bind"` string. Omitted when the value equals the default. |
 | `values` | array | Multi-component, if any non-default | Current values for each component. Same format as `value` per element. Omitted when all values equal their defaults. |
+
+#### Per-component definition fields
+
+`default`, `min`, `max`, `clampMin`, `clampMax`, `normMin`, `normMax`, `readOnly`,
+`password`, `styleCloneImmune`, `defaultExpr`, `defaultBindExpr`, `defaultMode`,
+`help`, `enable` and `enableExpr` belong to each *component* of a tuplet, not to
+the group: an `RGBA` parameter has four independent defaults, a `WH` two
+independent norm ranges, and a tuplet can be read-only in one component only.
+
+`bindRange` is the documented exception — TouchDesigner propagates it across the
+whole tuplet, so it always serializes as a scalar.
+
+- Written as a **scalar** when every component holds the same value (the common
+  case, and what single-component parameters always produce).
+- Written as an **array**, one entry per component in group order, when the
+  components differ.
+
+```yaml
+- name: Color
+  style: RGBA
+  default: [0.1, 0.2, 0.3, 1]     # per component
+- name: Size
+  style: WH
+  default: [500, 250]
+  normMax: [1000, 2000]
+- name: Pos
+  style: XYZ
+  default: 2.5                    # all three components agree
+```
+
+Readers broadcast a scalar across every component and map an array 1:1 (a short
+array leaves the remaining components untouched). Files written before Embody
+6.2.11 carry only the first component's value as a scalar; reading them
+broadcasts that value, which is why a vector parameter's defaults can shift
+once on the first re-read of an old file.
 
 ### Supported Styles
 
@@ -668,10 +729,13 @@ The `flags` array contains string names of flags whose values differ from their 
 | `render` | `false` | Marks this operator for rendering (purple flag). |
 | `viewer` | `false` | Shows the operator's viewer on its node tile. |
 | `expose` | `true` | Whether the node is visible in the network editor. |
-| `allowCooking` | `true` | Whether the COMP is allowed to cook. **COMPs only.** |
-| `cloneImmune` | `false` | The COMP is immune to clone re-sync. **COMPs only.** |
+| `allowCooking` | `true` | Whether the COMP is allowed to cook. Readable on any operator, but **only a COMP can disable it**. |
+| `cloneImmune` | `false` | The operator is immune to clone re-sync. Present on every operator, not COMPs only (verified 2026-09-04). |
+| `componentCloneImmune` | `false` | The "including children" state of the Immune flag: the COMP **and**, recursively, every node inside it are immune to clone re-sync. Paired with `cloneImmune` (which covers the node alone) as the Python half of one three-state UI flag. **COMPs only** (the attribute does not exist on other operators). |
+| `showCustomOnly` | `false` | The parameter dialog shows only custom pages. Present on every operator. |
+| `showDocked` | `true` | Docked operators are shown attached to their host. Present on every operator; being `true` by default, it serializes as `-showDocked` when turned off. |
 
-An importer ignores any flag name outside this table (it never assigns arbitrary attributes from a file).
+An importer ignores any flag name outside this table (it never assigns arbitrary attributes from a file), and additionally skips any flag the destination operator cannot carry — `componentCloneImmune` on a TOP, or `allowCooking` on anything that is not a COMP.
 
 !!! note "Defaults are per-type creation values"
     The exporter compares each flag against the **creation defaults probed for that operator type** — the same catalog-probe mechanism used for [parameter creation defaults](#divergent-defaults-and-the-creation-defaults-catalog): a temporary operator of the type is created and its actual flag values recorded. The table above is the common fallback baseline, used when probing is unavailable, not a guarantee for every operator type. For a type whose creation default differs from the listed value, an omitted flag means "this type's creation default", not the value in the table.
@@ -1278,6 +1342,39 @@ These checks are non-blocking — the import always proceeds regardless of misma
 
 ---
 
+## Virtual File System (VFS) — Not Supported
+
+**TDXN does not capture a COMP's Virtual File System, and this is not planned.**
+Files embedded in a COMP's VFS — fonts, images, shaders, lookup tables, anything
+addressed as `vfs://...` — are **not exported and are lost** when the COMP is
+reconstructed from its `.tdxn`.
+
+Verified 2026-09-04: a COMP holding one embedded file exports with no trace of
+the file or its payload, and the rebuilt COMP's VFS is empty. Any parameter or
+script referencing `vfs://` fails to resolve after reconstruction.
+
+**Why it is excluded.** TDXN's entire purpose is a line-diffable, mergeable text
+representation of a network. A VFS holds arbitrary binary payloads; carrying them
+inline (base64 or otherwise) would destroy line-level diffability and inflate
+files without bound — a single embedded font would dwarf the network it belongs
+to, and every re-export would churn the blob.
+
+**What to do instead**, for a COMP that genuinely needs embedded files:
+
+- **Externalize it with the TOX strategy rather than TDXN.** A `.tox` is
+  TouchDesigner's own container format and *does* preserve VFS contents
+  (verified 2026-09-04: embedded file and payload survive a `.tox` save and
+  re-instantiate intact). The trade is the usual one — a `.tox` is binary and
+  does not diff.
+- **Or keep the assets as real files on disk** beside the project and reference
+  them by path. Path-valued parameters round-trip through TDXN normally, so the
+  network stays diffable and the assets stay in version control as themselves.
+
+There is no warning-free middle ground: if a COMP carries VFS files and is
+externalized as TDXN, those files do not come back.
+
+---
+
 ## Round-Trip Guarantees
 
 For most networks, export → import → re-export produces identical `.tdxn` output. The format is designed to be stable across round-trips, with a few documented exceptions.
@@ -1306,6 +1403,8 @@ For most networks, export → import → re-export produces identical `.tdxn` ou
 **Type defaults recomputation** — Type defaults and parameter templates are recomputed from scratch on each export. If operator populations change between exports (operators added/removed), different properties may qualify as "unanimous" for type_defaults, and different pages may qualify as templates. The final network state is always identical, but the YAML structure may differ.
 
 **Locked non-DAT data** — When a TOP, CHOP, or SOP is locked, TDXN preserves the lock flag but not the frozen pixel, channel, or geometry data. After import, the operator is locked but empty. See [Lock Flag Limitation](#lock-flag-limitation).
+
+**Virtual File System** — A COMP's embedded VFS files are never exported and do not survive reconstruction. This is deliberate and permanent; see [Virtual File System (VFS) — Not Supported](#virtual-file-system-vfs-not-supported).
 
 ### Intentionally Excluded
 

@@ -15,6 +15,133 @@ _envoy_mod = op.Embody.op('EnvoyExt').module
 EnvoyMCPServer = _envoy_mod.EnvoyMCPServer
 
 
+class TestOpFlagsCoverTDXNSet(EmbodyTestCase):
+    """The MCP flag surface must cover every flag TDXN round-trips.
+
+    TDXN persists cloneImmune / componentCloneImmune / showCustomOnly /
+    showDocked, but get_op_flags returned a fixed 9-key dict and
+    set_op_flags had no parameters for them -- so an agent could not see or
+    set state the format keeps (review finding, 2026-09-04).
+    """
+
+    def _comp(self):
+        return self.sandbox.create(baseCOMP, 'flagcov')
+
+    def test_get_op_flags_reports_the_tdxn_flags(self):
+        c = self._comp()
+        flags = op.Embody.ext.Envoy._get_op_flags(c.path)
+        for name in ('cloneImmune', 'componentCloneImmune',
+                     'showCustomOnly', 'showDocked'):
+            self.assertIn(name, flags, f'{name} missing from get_op_flags')
+
+    def test_set_op_flags_applies_the_tdxn_flags(self):
+        c = self._comp()
+        res = op.Embody.ext.Envoy._set_op_flags(
+            c.path, componentCloneImmune=True, showCustomOnly=True,
+            showDocked=False)
+        self.assertTrue(res.get('componentCloneImmune'))
+        self.assertTrue(res.get('showCustomOnly'))
+        self.assertFalse(res.get('showDocked'))
+        self.assertTrue(c.componentCloneImmune, 'not applied to the live op')
+        self.assertFalse(c.showDocked, 'not applied to the live op')
+
+    def test_comp_only_flag_on_a_top_is_reported_not_dropped(self):
+        """componentCloneImmune does not exist on a TOP.
+
+        Silently ignoring it would let an agent believe it had set
+        something. It must come back named in unsupported_flags, while the
+        flags that DO apply are still set.
+        """
+        c = self._comp()
+        top = c.create(noiseTOP, 'n')
+        res = op.Embody.ext.Envoy._set_op_flags(
+            top.path, componentCloneImmune=True, showDocked=False)
+        self.assertEqual(res.get('unsupported_flags'),
+                         ['componentCloneImmune'])
+        self.assertNotIn('componentCloneImmune', res)
+        self.assertFalse(res.get('showDocked'),
+                         'the applicable flag must still be set')
+
+    def test_flag_surface_matches_the_exporter(self):
+        """Every DEFAULT_FLAGS entry must be reachable through get_op_flags.
+
+        This is the drift guard: adding a flag to the TDXN table without
+        exposing it here recreates the exact gap this suite exists for.
+        """
+        tdxn_mod = op.Embody.op('TDXNExt').module
+        c = self._comp()
+        flags = op.Embody.ext.Envoy._get_op_flags(c.path)
+        missing = [f for f in tdxn_mod.DEFAULT_FLAGS if f not in flags]
+        self.assertEqual([], missing,
+                         f'flags TDXN writes but MCP cannot report: {missing}')
+
+
+class TestRunTestsSaveGate(EmbodyTestCase):
+    """The full-run recovery-point gate.
+
+    The /run-tests skill has said "save the project before a full run" for
+    months and it was skipped every time -- the condition was not cheaply
+    checkable (project.dirty does not exist on TD 2025; project.modified
+    returns a LIST of operator paths and re-dirties seconds after a save).
+    On 2026-09-04 a full suite ran three times against a .toe that was 2.9
+    DAYS old. The gate moves the check out of prose and into the tool, the
+    way the destructive tier already does it.
+    """
+
+    # The gate lives on EnvoyExt (the extension class), not EnvoyMCPServer:
+    # _run_tests is a main-thread handler, and the check reads project.*.
+    _ENV = _envoy_mod.EnvoyExt
+    _MAX = _envoy_mod.EnvoyExt._RUN_TESTS_SAVE_MAX_AGE_S
+
+    def test_full_run_refused_when_no_toe_on_disk(self):
+        msg = self._ENV._saveGateRefusal(None, False, None, None)
+        self.assertIsNotNone(msg, 'a full run with no recovery point must refuse')
+        self.assertIn('NO saved .toe', msg)
+        self.assertIn('save_project', msg, 'the refusal must name the remedy')
+
+    def test_full_run_refused_when_toe_is_stale(self):
+        msg = self._ENV._saveGateRefusal(None, False, 'P.toe', self._MAX + 1.0)
+        self.assertIsNotNone(msg, 'a stale recovery point must refuse')
+        self.assertIn('P.toe', msg, 'the refusal must name the recovery point')
+        self.assertIn('confirm_saved', msg, 'the refusal must name the override')
+
+    def test_full_run_allowed_when_toe_is_fresh(self):
+        self.assertIsNone(
+            self._ENV._saveGateRefusal(None, False, 'P.toe', 60.0),
+            'a fresh save must not be gated')
+
+    def test_boundary_is_inclusive(self):
+        """Exactly at the threshold is still fresh -- no off-by-one refusal."""
+        self.assertIsNone(
+            self._ENV._saveGateRefusal(None, False, 'P.toe', self._MAX))
+
+    def test_confirm_saved_overrides_a_stale_toe(self):
+        self.assertIsNone(
+            self._ENV._saveGateRefusal(None, True, None, None),
+            'confirm_saved=True must proceed even with no recovery point')
+
+    def test_single_suite_is_never_gated(self):
+        """Targeted runs stay ungated on purpose.
+
+        They are cheap and frequent; gating them would train callers to pass
+        confirm_saved reflexively, which is how a gate stops working.
+        """
+        self.assertIsNone(
+            self._ENV._saveGateRefusal('test_path_utils', False, None, None))
+
+    def test_recovery_point_reports_a_real_file(self):
+        """_recoveryPoint must resolve to a .toe that exists, with an age."""
+        name, age = op.Embody.ext.Envoy._recoveryPoint()
+        self.assertIsNotNone(name, 'no .toe found for the live project')
+        self.assertTrue(name.endswith('.toe'), name)
+        self.assertIsNotNone(age)
+        self.assertGreaterEqual(age, 0.0)
+        import os as _os
+        self.assertTrue(
+            _os.path.isfile(_os.path.join(project.folder, name)),
+            'the reported recovery point must exist on disk')
+
+
 class TestEnvoyToolGuards(EmbodyTestCase):
 
     def tearDown(self):

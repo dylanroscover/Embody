@@ -1,6 +1,6 @@
 Load the `/run-tests` skill, then run the full Embody test suite via MCP:
 
-1. If the project holds unsaved work, `project.save()` first -- the saved `.toe` is the recovery point
+1. **Save first, unconditionally** -- call the `save_project` MCP tool. Do NOT try to decide whether there is unsaved work: `project.dirty` does not exist on TD 2025 and `project.modified` returns a LIST of operator paths (tens of thousands of characters) that re-populates within seconds of a successful save. That unanswerable condition is exactly why this step went unperformed for months. `run_tests` now REFUSES a full run when the saved `.toe` is missing or over an hour old, and reports the recovery point's age on every run; pass `confirm_saved=True` only to override that deliberately
 2. Run via the `run_tests` MCP tool (deferred runner). Do NOT call `RunTestsSync()` inside `execute_python`: the dispatch wraps that call in an undo block, which makes the undo-guard tests fail (a block is already open) and turns the whole run into one giant Ctrl+Z step. If the MCP call dies mid-run with a server-restart error (the Envoy watchdog suites restart the server it waits on), the run continues -- poll `op.unit_tests.GetResults()` via `execute_python` until the totals stop moving
 3. Report the results summary (pass/fail counts per suite)
 4. Always read `dev/logs/` afterward -- pass or fail -- and grep for `ERROR` and `WARNING` (the ring buffer only holds 200 entries)

@@ -1,10 +1,10 @@
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 24
-generator: Embody/6.2.4
+generator: Embody/6.2.10
 td_build: 099.2025.33070
-source_file: Embody-6.307.toe
-exported_at: '2026-08-30T08:23:44Z'
+source_file: Embody-6.313.toe
+exported_at: '2026-09-04T20:29:05Z'
 network_path: /embody/Embody/wizard
 options:
   include_dat_content: false
@@ -262,6 +262,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -339,6 +340,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -495,6 +497,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -505,6 +508,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -619,6 +623,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -629,6 +634,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -759,6 +765,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -769,6 +776,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -883,6 +891,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -893,6 +902,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1022,6 +1032,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1032,6 +1043,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1203,6 +1215,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1213,6 +1226,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1325,6 +1339,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1335,6 +1350,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1449,6 +1465,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1459,6 +1476,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1573,6 +1591,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1583,6 +1602,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1697,6 +1717,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1707,6 +1728,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1821,6 +1843,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1831,6 +1854,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1945,6 +1969,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -1955,6 +1980,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2085,6 +2111,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2095,6 +2122,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2209,6 +2237,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2219,6 +2248,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2347,6 +2377,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2357,6 +2388,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2472,6 +2504,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2482,6 +2515,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2597,6 +2631,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2607,6 +2642,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2732,6 +2768,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2742,6 +2779,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2855,6 +2893,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2865,6 +2904,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2978,6 +3018,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2988,6 +3029,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -2998,6 +3040,7 @@ operators:
   type: textDAT
   flags:
   - viewer
+  - -showDocked
   position: [190, 0]
   size: [160, 130]
   color: [0.67, 0.67, 0.67]
@@ -3130,6 +3173,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3140,6 +3184,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3252,6 +3297,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3262,6 +3308,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3376,6 +3423,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3386,6 +3434,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3514,6 +3563,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -180]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3524,6 +3574,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3638,6 +3689,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -180]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3648,6 +3700,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3762,6 +3815,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -180]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3772,6 +3826,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3886,6 +3941,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -180]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3896,6 +3952,7 @@ operators:
       type: textDAT
       flags:
       - viewer
+      - -showDocked
       position: [0, -160]
       size: [160, 130]
       color: [0.67, 0.67, 0.67]
@@ -3906,6 +3963,7 @@ operators:
   type: textDAT
   flags:
   - viewer
+  - -showDocked
   position: [480, -160]
   size: [160, 130]
   color: [0.67, 0.67, 0.67]
@@ -3916,6 +3974,7 @@ operators:
   type: textDAT
   flags:
   - viewer
+  - -showDocked
   position: [415, 200]
   size: [160, 130]
   color: [0.67, 0.67, 0.67]

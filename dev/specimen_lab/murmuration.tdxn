@@ -1,10 +1,10 @@
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 3
-generator: Embody/6.0.280
+generator: Embody/6.2.10
 td_build: 099.2025.33070
-source_file: Embody-6.281.toe
-exported_at: '2026-08-27T01:12:16Z'
+source_file: Embody-6.313.toe
+exported_at: '2026-09-04T20:29:07Z'
 network_path: /specimen_lab/murmuration
 options:
   include_dat_content: false
@@ -22,10 +22,8 @@ type_defaults:
     color: [0.67, 0.67, 0.67]
   textDAT:
     parameters:
-      syncfile: true
       language: glsl
-    flags:
-    - viewer
+      syncfile: true
     size: [130, 90]
     color: [0.9, 0.3, 0.4]
     tags:
@@ -289,6 +287,8 @@ operators:
   parameters:
     file: specimen_lab/murmuration/sprite_dot_pixel.glsl
     extension: frag
+  flags:
+  - viewer
   position: [150, -440]
   dock: sprite_dot
 - name: neighbor_analysis
@@ -309,18 +309,25 @@ operators:
   type: textDAT
   parameters:
     file: specimen_lab/murmuration/glsl_color_compute.glsl
+  flags:
+  - viewer
   position: [3150, -120]
   dock: glsl_color
 - name: glsl_flock_compute
   type: textDAT
   parameters:
     file: specimen_lab/murmuration/glsl_flock_compute.glsl
+  flags:
+  - viewer
   position: [1950, -120]
   dock: glsl_flock
 - name: sprite_dot_compute
   type: textDAT
   parameters:
     file: specimen_lab/murmuration/sprite_dot_compute.glsl
+  flags:
+  - viewer
+  - -showDocked
   position: [300, -440]
   dock: sprite_dot
 annotations:

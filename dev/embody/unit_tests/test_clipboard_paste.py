@@ -51,6 +51,52 @@ def _sample_tdn():
     }
 
 
+def plan_or_skip(tc, wrote):
+    """Plan a paste, and SKIP (not FAIL) if the OS clipboard was clobbered.
+
+    seedClipboard verifies the WRITE stuck, but the real clipboard is shared
+    with every process on the machine and can be taken between that write and
+    the read inside _planPasteFromClipboard. That window is what fails this
+    suite in full runs while it passes in isolation, always as a bare
+    reason='no_tdn' (2026-07-26, again 2026-09-04).
+
+    Fault detection is preserved: if the clipboard still holds what we wrote
+    and the plan is not ok, that is a real routing bug and the caller's
+    assertion fails as before. Module-level so every test class here can use
+    it -- the tests that read the clipboard span four classes.
+    """
+    plan = tc.tdn_ext._planPasteFromClipboard()
+    if not plan.get('ok'):
+        now = ui.clipboard or ''
+        if now != wrote:
+            raise SkipTest(
+                'OS clipboard clobbered between write and read by another '
+                'process -- not a routing failure. '
+                f'wrote len={len(wrote)} head={wrote[:50]!r}; '
+                f'read len={len(now)} head={now[:50]!r}')
+    return plan
+
+
+def paste_or_skip(tc, res):
+    """Clobber guard for the copy -> paste path.
+
+    Companion to plan_or_skip for tests whose clipboard text was written by
+    copyNetworkToClipboard rather than held by the test, so there is nothing
+    to compare against -- key on the envelope marker instead. Same contract:
+    a clipboard that still holds an envelope means a real paste failure and
+    the caller's assertion fires.
+    """
+    if not res.get('ok'):
+        raw = ui.clipboard or ''
+        marker = _tdn_module().EMBODY_TDN_MARKER
+        if marker not in raw:
+            raise SkipTest(
+                'OS clipboard clobbered between copy and paste by another '
+                'process -- not a paste failure. '
+                f'clipboard len={len(raw)} head={raw[:50]!r}')
+    return res
+
+
 class TestClipboardEnvelopeHeadless(EmbodyTestCase):
     """(1) Pure envelope contract -- TDXNExt's own module-level funcs."""
 
@@ -324,7 +370,8 @@ class TestClipboardLiveRoundTrip(EmbodyTestCase):
         host = self._build_small_network('rt_src')
         self._copy_verified(host)
         target = self.sandbox.create(baseCOMP, 'rt_target')
-        res = self.tdn_ext.pasteNetworkFromClipboard(target)
+        res = paste_or_skip(
+            self, self.tdn_ext.pasteNetworkFromClipboard(target))
         self.assertTrue(res.get('ok'), msg=repr(res))
         self.assertEqual(res['mode'], 'direct')
         self.assertEqual(res['source'], 'embody')
@@ -442,20 +489,9 @@ class TestClipboardPasteRouting(EmbodyTestCase):
         env = self.m.wrap_tdn(_sample_tdn(), source='embody', slug='widget')
         wrote = self.m.to_clipboard_str(env)
         self._set_clipboard(wrote)
-        plan = self.tdn_ext._planPasteFromClipboard()
-        if not plan.get('ok'):
-            # DIAGNOSTIC: this failed intermittently in full runs while
-            # passing in isolation. A bare reason='no_tdn' cannot tell a
-            # clipboard clobber from a routing bug, so capture what the
-            # clipboard actually held at read time.
-            now = ui.clipboard or ''
-            self.fail(
-                f'plan={plan!r}\n'
-                f'  wrote len={len(wrote)} head={wrote[:70]!r}\n'
-                f'  clipboard-at-read len={len(now)} head={now[:70]!r}\n'
-                f'  identical={now == wrote}\n'
-                f'  unwrap(now)={self.m.unwrap_clipboard(now) is not None}\n'
-                f'  unwrap(wrote)={self.m.unwrap_clipboard(wrote) is not None}')
+        # _plan_or_skip separates an OS clipboard clobber (SKIP) from a
+        # real routing bug (the assertion below still fails).
+        plan = plan_or_skip(self, wrote)
         self.assertTrue(plan.get('ok'), msg=repr(plan))
         self.assertEqual(plan['source'], 'embody')
         self.assertEqual(plan['mode'], 'direct')
@@ -473,8 +509,9 @@ class TestClipboardPasteRouting(EmbodyTestCase):
         self.assertFalse(si.is_inert(armed),
             'fixture must START armed (not inert) for the test to be meaningful')
         env = self.m.wrap_tdn(armed, source='embody.tools', slug='shared')
-        self._set_clipboard(self.m.to_clipboard_str(env))
-        plan = self.tdn_ext._planPasteFromClipboard()
+        wrote = self.m.to_clipboard_str(env)
+        self._set_clipboard(wrote)
+        plan = plan_or_skip(self, wrote)
         self.assertTrue(plan.get('ok'), msg=repr(plan))
         self.assertEqual(plan['source'], 'embody.tools')
         # Community content is default-inerted by the Collection sandbox.
@@ -494,8 +531,9 @@ class TestClipboardPasteRouting(EmbodyTestCase):
         armed = self._armed_tdn()
         self.assertFalse(si.is_inert(armed),
             'fixture must START armed for the test to be meaningful')
-        self._set_clipboard(json.dumps(armed))
-        plan = self.tdn_ext._planPasteFromClipboard()
+        wrote = json.dumps(armed)
+        self._set_clipboard(wrote)
+        plan = plan_or_skip(self, wrote)
         self.assertTrue(plan.get('ok'), msg=repr(plan))
         self.assertEqual(plan['source'], 'file')
         self.assertEqual(plan['mode'], 'inert')
@@ -605,8 +643,9 @@ class TestClipboardCopySelectedAndIntegrity(EmbodyTestCase):
         env['tdn']['operators'].append({'name': 'injected', 'type': 'nullTOP'})
         # sha256 no longer matches the (now-mutated) inner tdn.
         self.assertFalse(self.m.verify_envelope_integrity(env))
-        self.seedClipboard(self.m.to_clipboard_str(env))
-        plan = self.tdn_ext._planPasteFromClipboard()
+        wrote = self.m.to_clipboard_str(env)
+        self.seedClipboard(wrote)
+        plan = plan_or_skip(self, wrote)
         self.assertTrue(plan.get('ok'), msg=repr(plan))
         self.assertEqual(plan['mode'], 'direct')
         self.assertEqual(plan['source'], 'embody')

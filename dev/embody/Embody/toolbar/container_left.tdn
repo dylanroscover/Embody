@@ -1,44 +1,45 @@
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 19
-generator: Embody/6.1.20
+generator: Embody/6.2.10
 td_build: 099.2025.33070
-source_file: Embody-6.302.toe
-exported_at: '2026-08-29T23:11:06Z'
+source_file: Embody-6.313.toe
+exported_at: '2026-09-04T20:29:07Z'
 network_path: /embody/Embody/toolbar/container_left
 options:
   include_dat_content: false
   include_storage: true
 type_defaults:
-  textCOMP:
+  containerCOMP:
     parameters:
-      fontsizeunits: points
-      fontcolorr: =parent.Embody.par.Textcolorr
-      fontcolorg: =parent.Embody.par.Textcolorg
-      fontcolorb: =parent.Embody.par.Textcolorb
-      vmode: fill
-      resizecomp: =me
+      clickthrough: true
       repocomp: =me
+      resizecomp: =me
+      vmode: fill
+      w: 10
     size: [160, 130]
     color: [0.3, 0.5, 0.9]
     tags:
     - tdn
-  containerCOMP:
+  textCOMP:
     parameters:
-      w: 10
-      vmode: fill
-      clickthrough: true
-      resizecomp: =me
+      fontcolorb: =parent.Embody.par.Textcolorb
+      fontcolorg: =parent.Embody.par.Textcolorg
+      fontcolorr: =parent.Embody.par.Textcolorr
+      fontsizeunits: points
       repocomp: =me
+      resizecomp: =me
+      vmode: fill
     size: [160, 130]
     color: [0.3, 0.5, 0.9]
     tags:
     - tdn
   textDAT:
     parameters:
-      syncfile: true
       language: python
+      syncfile: true
     flags:
+    - -showDocked
     - viewer
     size: [160, 130]
     color: [0.9, 0.3, 0.4]

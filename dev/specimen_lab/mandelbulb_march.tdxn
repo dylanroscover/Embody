@@ -1,10 +1,10 @@
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 1
-generator: Embody/6.0.280
+generator: Embody/6.2.10
 td_build: 099.2025.33070
-source_file: Embody-6.281.toe
-exported_at: '2026-08-27T01:12:16Z'
+source_file: Embody-6.313.toe
+exported_at: '2026-09-04T20:29:05Z'
 network_path: /specimen_lab/mandelbulb_march
 options:
   include_dat_content: false
@@ -12,8 +12,8 @@ options:
 type_defaults:
   textDAT:
     parameters:
-      syncfile: true
       language: glsl
+      syncfile: true
     size: [130, 90]
     color: [0.9, 0.3, 0.4]
     tags:
@@ -172,6 +172,7 @@ operators:
     file: specimen_lab/mandelbulb_march/glsl_mandelbulb_compute.glsl
   flags:
   - viewer
+  - -showDocked
   position: [250, -120]
   dock: glsl_mandelbulb
 annotations:

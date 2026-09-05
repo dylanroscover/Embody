@@ -2733,7 +2733,10 @@ class EnvoyMCPServer:
                         display: bool = None, render: bool = None,
                         viewer: bool = None, current: bool = None,
                         expose: bool = None, allowCooking: bool = None,
-                        selected: bool = None) -> dict:
+                        selected: bool = None, cloneImmune: bool = None,
+                        componentCloneImmune: bool = None,
+                        showCustomOnly: bool = None,
+                        showDocked: bool = None) -> dict:
             """
             Set one or more flags/properties on an operator.
 
@@ -2748,6 +2751,11 @@ class EnvoyMCPServer:
                 expose: Expose flag
                 allowCooking: Allow cooking flag
                 selected: Selected flag in network editor
+                cloneImmune: The operator survives a clone re-sync
+                componentCloneImmune: The COMP and everything inside it
+                    survive a clone re-sync (COMPs only)
+                showCustomOnly: The parameter dialog shows only custom pages
+                showDocked: This node stays visible while docked to another
 
             Returns:
                 Dict with success status and updated flags
@@ -2762,7 +2770,11 @@ class EnvoyMCPServer:
                 'current': current,
                 'expose': expose,
                 'allowCooking': allowCooking,
-                'selected': selected
+                'selected': selected,
+                'cloneImmune': cloneImmune,
+                'componentCloneImmune': componentCloneImmune,
+                'showCustomOnly': showCustomOnly,
+                'showDocked': showDocked
             })
 
         # === Node Positioning & Layout Tools ===
@@ -3660,12 +3672,19 @@ class EnvoyMCPServer:
         @self.mcp.tool()
         def run_tests(suite_name: str = None, test_name: str = None,
                       override: bool = False, background: bool = False,
-                      idempotency_key: str = None) -> dict:
+                      idempotency_key: str = None,
+                      confirm_saved: bool = False) -> dict:
             """
             Run Embody test suites and return results.
 
-            Prerequisite: load the project's /run-tests skill (when present)
-            and save the project before a full run.
+            Prerequisite: load the project's /run-tests skill (when present).
+
+            A FULL run (no suite_name) is REFUSED when the saved .toe is
+            missing or over an hour old -- it mutates the live network for
+            ~25 minutes and that file is the only recovery point. Call
+            save_project first, or pass confirm_saved=True to accept losing
+            anything since the last save. Every response reports the
+            recovery point's age; a single-suite run is never refused.
 
             background=True is the RESILIENT mode -- recommended for full
             runs: the run starts and this call returns a job id
@@ -3687,6 +3706,9 @@ class EnvoyMCPServer:
                     reconciles to the original run's handle instead of
                     starting (or being refused as) a duplicate. Omit for a
                     one-shot run.
+                confirm_saved: Run a FULL suite even though the saved .toe
+                    is missing or stale, accepting that anything changed
+                    since that save is unrecoverable if the run goes wrong.
 
             Returns:
                 Synchronous: dict with passed/failed/error/skip counts and
@@ -3708,7 +3730,8 @@ class EnvoyMCPServer:
                 return self._execute_in_td('run_tests', {
                     'suite_name': suite_name, 'test_name': test_name,
                     'override': override, 'background': True,
-                    'idempotency_key': idempotency_key})
+                    'idempotency_key': idempotency_key,
+                    'confirm_saved': confirm_saved})
 
             # Use a dedicated Event so the worker thread can wait directly
             # for test completion -- bypasses the response_queue which is
@@ -3725,7 +3748,8 @@ class EnvoyMCPServer:
                 'id': -1,  # Sentinel -- no normal response expected
                 'operation': 'run_tests',
                 'params': {'suite_name': suite_name, 'test_name': test_name,
-                           'override': override},
+                           'override': override,
+                           'confirm_saved': confirm_saved},
                 'sid': _SESSION_CTX.get()[0],
             })
 
@@ -7201,8 +7225,63 @@ class EnvoyExt:
 
     # --- Testing ---
 
+    # A full run takes ~25 minutes and mutates the live network (sandbox
+    # COMPs, tagging, TDXN exports). Anything unsaved when it starts is at
+    # risk, and the saved .toe is the only recovery point.
+    _RUN_TESTS_SAVE_MAX_AGE_S = 3600.0
+
+    @classmethod
+    def _saveGateRefusal(cls, suite_name, confirm_saved, rp_name, rp_age):
+        """Refusal message for an ungated full run, or None to proceed.
+
+        Pure decision, separated from _run_tests so it can be tested without
+        starting a 25-minute run. Only a FULL run is gated: a single suite is
+        cheap and frequent, and gating it would train callers to pass
+        confirm_saved reflexively, which is how a gate dies.
+        """
+        if suite_name is not None or confirm_saved:
+            return None
+        if rp_age is not None and rp_age <= cls._RUN_TESTS_SAVE_MAX_AGE_S:
+            return None
+        where = (f'"{rp_name}" saved {rp_age / 60.0:.0f} min ago'
+                 if rp_name else 'NO saved .toe on disk')
+        return (f'Full test run refused: {where}. A full run mutates the live '
+                f'network for ~25 minutes and the saved .toe is the only '
+                f'recovery point. Save first (save_project), then re-run -- '
+                f'or pass confirm_saved=True to accept losing anything since '
+                f'that save. A single suite (suite_name=...) is not gated.')
+
+    @staticmethod
+    def _recoveryPoint():
+        """(name, age_seconds) of the saved .toe, or (None, None).
+
+        Main thread only -- reads project.*. The file on disk is the ONLY
+        honest signal: `project.dirty` does not exist on TD 2025 (the gate
+        silently read None), and `project.modified` re-dirties within
+        seconds of a successful save AND returns a LIST of operator paths,
+        not a bool -- which is exactly why "save first if there is unsaved
+        work" has been unactionable prose for months. Same expression the
+        destructive-tier gate uses; falls back to the newest .toe when
+        project.name has drifted to a not-yet-written increment.
+        """
+        try:
+            folder = project.folder
+            primary = os.path.join(folder, project.name)
+            if os.path.isfile(primary):
+                return (project.name,
+                        time.time() - os.path.getmtime(primary))
+            toes = [f for f in os.listdir(folder) if f.endswith('.toe')]
+            if not toes:
+                return None, None
+            newest = max(toes, key=lambda f: os.path.getmtime(
+                os.path.join(folder, f)))
+            return newest, time.time() - os.path.getmtime(
+                os.path.join(folder, newest))
+        except Exception:
+            return None, None
+
     def _run_tests(self, suite_name=None, test_name=None, background=False,
-                   idempotency_key=None):
+                   idempotency_key=None, confirm_saved=False):
         """Run Embody test suites via /embody/unit_tests extension (deferred).
 
         Starts tests with RunTestsDeferredPerTest (one test per frame) to
@@ -7216,6 +7295,30 @@ class EnvoyExt:
         dict, because the sentinel request_id=-1 would be silently dropped
         by check_responses, leaving the worker thread blocked.
         """
+        # Recovery-point gate. A FULL run is the risky one: ~25 minutes of
+        # live-network mutation with no recovery point if the .toe is stale.
+        # The age is reported on EVERY run (targeted ones too) because the
+        # prose version of this rule -- "save the project before a full run"
+        # in the /run-tests skill -- was skipped for months: it asked for a
+        # judgement the caller had no cheap way to make. (2026-09-04)
+        rp_name, rp_age = self._recoveryPoint()
+        msg = self._saveGateRefusal(suite_name, confirm_saved, rp_name, rp_age)
+        if msg:
+            self._log(msg, 'ERROR')
+            if background:
+                return {'error': msg}
+            pending = getattr(sys, '_envoy_pending_test', None)
+            if pending is not None:
+                self._signalTestError(pending, msg)
+                return None
+            return {'error': msg}
+        if rp_name:
+            self._log(f'Recovery point: "{rp_name}" saved '
+                      f'{rp_age / 60.0:.1f} min ago', 'INFO')
+        else:
+            self._log('Recovery point: NO saved .toe on disk -- nothing to '
+                      'reopen if this run goes wrong', 'WARNING')
+
         if background:
             # Job mode: start the deferred run, park progress in a disk
             # record, return the handle. No transport Event involved -- a
@@ -8476,9 +8579,15 @@ class EnvoyExt:
                      display: Optional[bool] = None, render: Optional[bool] = None,
                      viewer: Optional[bool] = None, current: Optional[bool] = None,
                      expose: Optional[bool] = None, allowCooking: Optional[bool] = None,
-                     selected: Optional[bool] = None) -> dict:
+                     selected: Optional[bool] = None, cloneImmune: Optional[bool] = None,
+                     componentCloneImmune: Optional[bool] = None,
+                     showCustomOnly: Optional[bool] = None,
+                     showDocked: Optional[bool] = None) -> dict:
         """Set flags on an operator -- see envoy_ops."""
-        return mod.envoy_ops.set_op_flags(self, op_path, bypass, lock, display, render, viewer, current, expose, allowCooking, selected)
+        return mod.envoy_ops.set_op_flags(
+            self, op_path, bypass, lock, display, render, viewer, current,
+            expose, allowCooking, selected, cloneImmune,
+            componentCloneImmune, showCustomOnly, showDocked)
 
     # === Node Positioning & Layout (Main Thread Only) ===
 

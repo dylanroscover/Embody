@@ -1,5 +1,19 @@
 # Changelog
 
+## v6.2.12
+
+Custom parameter definitions round-trip per component, not per group -- plus the two style bugs and the flag gaps found while proving it. (6.2.11 was a version-bump-only save, never published.)
+
+- **Vector parameter defaults survive (issue #96)**: `default`, `min`, `max`, `clampMin`/`clampMax` and `normMin`/`normMax` are per-component across a tuplet. An `RGBA` with defaults `[0.1, 0.2, 0.3, 1]` exported the scalar `0.1` and reconstructed with only its red component set; `readOnly`, `help`, `enable` and `enableExpr` had the same defect. A scalar is still written when every component agrees, so existing files gain nothing they did not already say.
+- **Six definition fields that were never exported**: `password`, `styleCloneImmune`, `bindRange`, `defaultExpr`, `defaultBindExpr` and `defaultMode`. `defaultMode` ships even when `CONSTANT`, because assigning a default expression auto-flips it -- without that, a parameter deliberately forced back to `CONSTANT` reset to its expression instead of its constant.
+- **Two style bugs**: a `UV` group was rebuilt with a phantom `w` component (TouchDesigner reports its style as `UVW`, and only `RGBA`/`XYZW` had downgrade branches), and a `TOPMulti` parameter was dropped entirely on import as an unknown style.
+- **Three authored flags now round-trip**: `componentCloneImmune`, `showCustomOnly` and `showDocked`. The hardcoded COMP-only check became a capability probe, so a flag an operator cannot carry is skipped rather than forced.
+- **Dirty detection sees all of it**: the export fingerprints tracked neither the new definition fields nor the new flags, so the changes never reached disk on save. Both now derive from shared lists with a test asserting they match the exporter -- that tuple had drifted twice.
+- **TDXN format 2.1**: definition fields may now be a per-component array. New keys need no version bump, but a widened type does -- a pre-2.1 reader treats `readOnly: [false, true]` as truthy and forces the whole tuplet. Older builds now log "newer than this build" instead of failing silently.
+- **VFS is documented as unsupported**: embedded files are never exported and do not survive reconstruction. Use TOX strategy (a `.tox` preserves VFS) or keep assets on disk. A contract test pins the exclusion so it cannot change silently.
+- **A full test run is gated on a recovery point**: `run_tests` refuses a full run when the saved `.toe` is missing or over an hour old, and reports its age on every run. The instruction to "save first" was prose asking for a judgement the caller could not cheaply make -- `project.dirty` does not exist on TD 2025 and `project.modified` returns a list of operator paths, not a bool.
+- **The MCP flag surface matches the format**: `get_op_flags`/`set_op_flags` cover every flag TDXN round-trips; an inapplicable flag is reported in `unsupported_flags`. **4,467 tests** (140 suites).
+
 ## v6.2.10
 
 Two agent-guidance gaps from issue #94 field reports, closed: unit confusion in performance work, and rename sweeps that stop at DAT text. (v6.2.9 was a version-bump-only save, never published.)

@@ -1433,6 +1433,17 @@ def get_op_flags(ext, op_path: str) -> dict:
             'expose': target.expose,
             'selected': target.selected,
         }
+        # Flags TDXN round-trips must be readable here too, or an agent
+        # cannot see state the format persists (2026-09-04). cloneImmune /
+        # showCustomOnly / showDocked live on OP_Class; componentCloneImmune
+        # is COMP-only, so probe rather than assume.
+        for name in ('cloneImmune', 'showCustomOnly', 'showDocked',
+                     'componentCloneImmune'):
+            try:
+                if hasattr(target, name):
+                    result[name] = bool(getattr(target, name))
+            except Exception:
+                pass
         if target.isCOMP:
             result['allowCooking'] = target.allowCooking
         return result

@@ -1,38 +1,28 @@
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 3
-generator: Embody/6.1.0
+generator: Embody/6.2.11
 td_build: 099.2025.33070
-source_file: Embody-6.281.toe
-exported_at: '2026-08-27T01:12:23Z'
+source_file: Embody-6.314.toe
+exported_at: '2026-09-04T21:05:30Z'
 network_path: /specimen_lab/noise_terrain
 options:
   include_dat_content: true
   include_storage: true
 type_defaults:
+  circlePOP:
+    parameters:
+      connectivity: surface
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
   infoDAT:
     flags:
     - viewer
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
-  textDAT:
-    parameters:
-      syncfile: true
-      language: glsl
-    flags:
-    - viewer
-    size: [130, 90]
-    color: [0.9, 0.3, 0.4]
-    tags:
-    - glsl
   mergePOP:
-    flags:
-    - viewer
-    size: [130, 90]
-    color: [0.67, 0.67, 0.67]
-  circlePOP:
-    parameters:
-      connectivity: surface
     flags:
     - viewer
     size: [130, 90]
@@ -42,6 +32,14 @@ type_defaults:
       addpts: true
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
+  textDAT:
+    parameters:
+      language: glsl
+      syncfile: true
+    size: [130, 90]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
   tubePOP:
     parameters:
       orient: z
@@ -266,6 +264,8 @@ operators:
     type: textDAT
     parameters:
       file: specimen_lab/noise_terrain/geo/glsl_terrain_compute.glsl
+    flags:
+    - viewer
     position: [335, -120]
     dock: glsl_terrain
     dat_content: |-
@@ -687,6 +687,8 @@ operators:
   parameters:
     file: specimen_lab/noise_terrain/glsl_sky_pixel.glsl
     extension: frag
+  flags:
+  - viewer
   position: [1050, -450]
   dock: glsl_sky
   dat_content: |-
@@ -716,6 +718,8 @@ operators:
   parameters:
     file: specimen_lab/noise_terrain/glsl_snow_pixel.glsl
     extension: frag
+  flags:
+  - viewer
   position: [0, -450]
   dock: glsl_snow
   dat_content: |-
@@ -769,6 +773,9 @@ operators:
   type: textDAT
   parameters:
     file: specimen_lab/noise_terrain/glsl_sky_compute.glsl
+  flags:
+  - viewer
+  - -showDocked
   position: [750, -450]
   dock: glsl_sky
 - name: glsl_snow_vertex
@@ -776,6 +783,8 @@ operators:
   parameters:
     file: specimen_lab/noise_terrain/glsl_snow_vertex.glsl
     extension: vert
+  flags:
+  - viewer
   position: [150, -450]
   dock: glsl_snow
   dat_content: |-

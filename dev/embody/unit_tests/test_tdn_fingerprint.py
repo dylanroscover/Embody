@@ -406,6 +406,51 @@ class TestFingerprintMatchesExporter(EmbodyTestCase):
         finally:
             self.embody_ext.removeTDNEntry(root.path, delete_file=True)
 
+    def test_new_definition_fields_dirty_the_fingerprint(self):
+        """Fields added 2026-09-04 must dirty, or they never reach disk.
+
+        The exporter writing a field the fingerprint cannot see leaves the
+        COMP clean on save: the edit looks supported and silently is not.
+        Review finding, 2026-09-04.
+        """
+        root, note, kid, n1, g1, g2 = self._tracked()
+        try:
+            page = kid.appendCustomPage('New')
+            probe = page.appendStr('Probe')[0]
+            vec = page.appendFloat('Vecp', size=3)
+            self._agree(root, 'password',
+                        lambda: setattr(probe, 'password', True))
+            self._agree(root, 'styleCloneImmune',
+                        lambda: setattr(probe, 'styleCloneImmune', True))
+            self._agree(root, 'defaultExpr',
+                        lambda: setattr(probe, 'defaultExpr', 'me.time.frame'))
+            self._agree(root, 'readOnly on one component',
+                        lambda: setattr(vec[1], 'readOnly', True))
+            self._agree(root, 'showDocked',
+                        lambda: setattr(n1, 'showDocked', False))
+            self._agree(root, 'showCustomOnly',
+                        lambda: setattr(kid, 'showCustomOnly', True))
+            self._agree(root, 'componentCloneImmune',
+                        lambda: setattr(kid, 'componentCloneImmune', True))
+        finally:
+            self.embody_ext.removeTDNEntry(root.path, delete_file=True)
+
+    def test_fingerprint_flag_list_matches_the_exporter(self):
+        """The fingerprint's flag list must equal TDXNExt.DEFAULT_FLAGS.
+
+        Hardcoding it let the two drift twice (2026-08-30, 2026-09-04). A
+        flag the exporter records but the fingerprint ignores leaves the
+        COMP undirty, so the change never reaches disk.
+        """
+        embody_mod = op.Embody.op('EmbodyExt').module
+        tdxn_mod = op.Embody.op('TDXNExt').module
+        self.assertEqual(
+            set(embody_mod._TDN_FINGERPRINT_FLAGS),
+            set(tdxn_mod.DEFAULT_FLAGS),
+            'fingerprint flag list drifted from TDXNExt.DEFAULT_FLAGS -- '
+            'a flag the exporter writes but the fingerprint cannot see '
+            'never reaches disk')
+
     def test_current_flag_is_not_a_change(self):
         """`current` is not exported, so it must not dirty (false-dirty churn)."""
         root, note, kid, n1, g1, g2 = self._tracked()

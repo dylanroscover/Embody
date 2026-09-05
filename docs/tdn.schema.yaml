@@ -232,7 +232,7 @@ $defs:
     type: array
     items:
       type: string
-      pattern: ^-?(bypass|lock|display|render|viewer|expose|allowCooking|cloneImmune)$
+      pattern: ^-?(bypass|lock|display|render|viewer|expose|allowCooking|cloneImmune|componentCloneImmune|showCustomOnly|showDocked)$
   storageValue:
     description: 'A storage value: primitive, array, object, or typed wrapper ($type/$value).'
     oneOf:
@@ -264,6 +264,14 @@ $defs:
       expose:
         type: boolean
       allowCooking:
+        type: boolean
+      cloneImmune:
+        type: boolean
+      componentCloneImmune:
+        type: boolean
+      showCustomOnly:
+        type: boolean
+      showDocked:
         type: boolean
   customParameterDef:
     type: object
@@ -307,6 +315,7 @@ $defs:
         - OP
         - COMP
         - TOP
+        - TOPMulti
         - CHOP
         - SOP
         - DAT
@@ -321,25 +330,100 @@ $defs:
         minimum: 2
         description: Number of components for multi-component Float/Int parameters.
       default:
-        description: Default value. Omitted when it equals a standard default (0, 0.0, "", or false).
+        description: Default value. Omitted when every component equals a standard
+          default (0, 0.0, "", or false). Per-component - an array (one entry per
+          component, in group order) when a tuplet's components differ.
       min:
-        type: number
-        description: Minimum value. Omitted when 0.
+        anyOf:
+        - type: number
+        - type: array
+          items:
+            type: number
+        description: Minimum value. Omitted when 0. Array when a tuplet's components differ.
       max:
-        type: number
-        description: Maximum value. Omitted when 1.
+        anyOf:
+        - type: number
+        - type: array
+          items:
+            type: number
+        description: Maximum value. Omitted when 1. Array when a tuplet's components differ.
       clampMin:
-        type: boolean
-        description: Whether the value is clamped to min.
+        anyOf:
+        - type: boolean
+        - type: array
+          items:
+            type: boolean
+        description: Whether the value is clamped to min. Array when a tuplet's components differ.
       clampMax:
-        type: boolean
-        description: Whether the value is clamped to max.
+        anyOf:
+        - type: boolean
+        - type: array
+          items:
+            type: boolean
+        description: Whether the value is clamped to max. Array when a tuplet's components differ.
       normMin:
-        type: number
-        description: Normalized range minimum. Omitted when 0.
+        anyOf:
+        - type: number
+        - type: array
+          items:
+            type: number
+        description: Normalized range minimum. Omitted when 0. Array when a tuplet's
+          components differ.
       normMax:
-        type: number
-        description: Normalized range maximum. Omitted when 1.
+        anyOf:
+        - type: number
+        - type: array
+          items:
+            type: number
+        description: Normalized range maximum. Omitted when 1. Array when a tuplet's
+          components differ.
+      password:
+        anyOf:
+        - type: boolean
+        - type: array
+          items:
+            type: boolean
+        description: Masks the value as asterisks in the parameter dialog. Omitted when
+          false. Array when a tuplet's components differ.
+      styleCloneImmune:
+        anyOf:
+        - type: boolean
+        - type: array
+          items:
+            type: boolean
+        description: Keeps the parameter definition from being matched to the clone master.
+          Omitted when false. Array when a tuplet's components differ.
+      bindRange:
+        type: boolean
+        description: Routes min/max/clamp/norm to the bind master. Tuplet-wide in
+          TouchDesigner, so always a scalar - never an array.
+      defaultExpr:
+        anyOf:
+        - type: string
+        - type: array
+          items:
+            type: string
+        description: Default expression, distinct from the constant default. Stored raw
+          (no '='/'~' prefix). Omitted when empty. Array when components differ.
+      defaultBindExpr:
+        anyOf:
+        - type: string
+        - type: array
+          items:
+            type: string
+        description: Default bind expression. Stored raw. Omitted when empty. Array when
+          components differ.
+      defaultMode:
+        anyOf:
+        - type: string
+          enum: [CONSTANT, EXPRESSION, EXPORT, BIND]
+        - type: array
+          items:
+            type: string
+            enum: [CONSTANT, EXPRESSION, EXPORT, BIND]
+        description: ParMode the parameter resets to. Written whenever defaultExpr or
+          defaultBindExpr is set, even when CONSTANT, because assigning either auto-flips
+          the mode. Array when components differ.
       menuNames:
         type: array
         items:
@@ -357,19 +441,35 @@ $defs:
         type: boolean
         description: Whether this parameter starts a new visual section.
       readOnly:
-        type: boolean
+        anyOf:
+        - type: boolean
+        - type: array
+          items:
+            type: boolean
         description: Whether the parameter is read-only.
       enable:
-        type: boolean
+        anyOf:
+        - type: boolean
+        - type: array
+          items:
+            type: boolean
         description: Static enable state. Written only when false.
       enableExpr:
-        type: string
+        anyOf:
+        - type: string
+        - type: array
+          items:
+            type: string
         description: Python expression controlling the enable state. When present, enable is omitted.
       sequence:
         type: string
         description: Name of the custom sequence this definition is a template parameter of.
       help:
-        type: string
+        anyOf:
+        - type: string
+        - type: array
+          items:
+            type: string
         description: Tooltip help text for the parameter. Omitted when empty.
       value:
         $ref: '#/$defs/parameterValue'

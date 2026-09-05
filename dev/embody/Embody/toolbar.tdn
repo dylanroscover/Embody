@@ -1,10 +1,10 @@
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 40
-generator: Embody/6.1.7
+generator: Embody/6.2.10
 td_build: 099.2025.33070
-source_file: Embody-6.289.toe
-exported_at: '2026-08-28T07:53:18Z'
+source_file: Embody-6.313.toe
+exported_at: '2026-09-04T20:29:09Z'
 network_path: /embody/Embody/toolbar
 options:
   include_dat_content: false
@@ -12,18 +12,18 @@ options:
 type_defaults:
   containerCOMP:
     parameters:
-      resizecomp: =me
       repocomp: =me
+      resizecomp: =me
     color: [0.3, 0.5, 0.9]
     tags:
     - tdn
   panelexecuteDAT:
     parameters:
       fromop: =parent()
-      panelvalue: '*'
       ontooff: true
-      valuechange: true
+      panelvalue: '*'
       syncfile: true
+      valuechange: true
     size: [130, 90]
     color: [0.9, 0.3, 0.4]
     tags:
@@ -62,6 +62,10 @@ sequences:
   - object: op('./ToolbarExt').module.ToolbarExt(me)
     name: ToolbarExt
     promote: true
+  - {}
+  - {}
+  - {}
+  - {}
 color: [0.3, 0.5, 0.9]
 tags:
 - tdn

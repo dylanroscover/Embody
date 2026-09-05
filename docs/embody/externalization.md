@@ -95,6 +95,7 @@ Both strategies externalize a COMP to its own file on disk. The difference is **
 | Load speed | Fast (native TD format) | Slower (parsed and rebuilt) |
 | PR review | None — binary blob | Line-by-line parameter diffs |
 | Cross-build portable | TD-build-coupled | Format-versioned, portable |
+| Embedded VFS files | Preserved | **Not supported — lost** ([details](../tdxn/specification.md#virtual-file-system-vfs-not-supported)) |
 | Best for | Palette widgets, third-party COMPs, anything you don't review at the parameter level | Anything you want code-reviewed, anything edited in a text editor, MCP/LLM workflows |
 
 **Both receive the same ownership treatment in parent `.tdxn` files.** When the parent of an externalized child is exported as TDXN, the parent emits a reference (`tdn_ref` or `tox_ref`) and **does not embed the child's internals**. The child's own file is the source of truth. This applies symmetrically — externalizing as TOX does not mean "embed me in the parent."
@@ -210,6 +211,19 @@ The preference is stored in the **Content Safety** parameter (`Tdndatsafety`) an
 
 !!! tip
     To avoid this prompt entirely, either enable **Embed DATs in TDNs** / **Embed Storage in TDNs** (stores content directly in the `.tdxn` file) or externalize your DATs with Embody tags before saving.
+
+!!! warning "Embedded VFS files are not supported by TDXN"
+    TDXN does **not** capture a COMP's Virtual File System. Files embedded in a
+    COMP — fonts, images, shaders, anything addressed as `vfs://...` — are not
+    written to the `.tdxn` and **do not come back** when the COMP is
+    reconstructed. This is deliberate and permanent: a VFS holds arbitrary
+    binary, and carrying it inline would destroy the line-diffability that is
+    TDXN's entire point.
+
+    Use **TOX strategy** for COMPs that carry embedded files — a `.tox` preserves
+    VFS contents (verified 2026-09-04) — or keep the assets as real files on disk
+    and reference them by path, which round-trips through TDXN normally. See
+    [Virtual File System (VFS) — Not Supported](../tdxn/specification.md#virtual-file-system-vfs-not-supported).
 
 !!! warning "Locked TOPs, CHOPs, and SOPs lose their frozen data"
     TDXN cannot store frozen pixel, channel, or geometry data. If your network contains locked non-DAT operators, their lock flag is preserved but their content will be **empty after reload** when using Roundtrip mode. Use **TOX strategy** instead of TDXN for COMPs that contain locked TOPs, CHOPs, or SOPs. See [Lock Flag Limitation](../tdxn/specification.md#lock-flag-limitation) for details.

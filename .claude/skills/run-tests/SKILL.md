@@ -8,6 +8,22 @@ disable-model-invocation: true
 
 Embody has 110+ test suites (2,500+ tests) under `dev/embody/unit_tests/` covering externalization, MCP tools, TDXN format, the Envoy server/bridge/jobs, install/upgrade paths, and infrastructure. Destructive and agent tiers are segregated behind their own entry points.
 
+## The save gate (read this before a full run)
+
+`run_tests` **refuses a full run** when the saved `.toe` is missing or more
+than an hour old, and reports the recovery point's age on *every* run. Call
+`save_project` first; pass `confirm_saved=True` only to deliberately accept
+losing everything since the last save. A single suite (`suite_name=...`) is
+never gated -- gating cheap frequent runs would just train callers to pass
+the override reflexively.
+
+**Never gate on "is there unsaved work".** `project.dirty` does not exist on
+TD 2025 (a `getattr` guard silently read `None` and the check was off), and
+`project.modified` returns a LIST of operator paths -- not a bool -- that
+re-populates within seconds of a successful save. Both proxies have failed
+here, in opposite directions. The age of the `.toe` on disk is the only
+honest signal, which is what the gate and `RunDestructiveTests` both use.
+
 ## Running Tests
 
 **From TouchDesigner:**
