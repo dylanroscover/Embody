@@ -1,5 +1,36 @@
 ---
-// In practice -- say it, watch it happen.
+// In practice -- one conversation with a live TouchDesigner session, four turns.
+// The three frames are straight captures of the network's Out TOP (a GLSL TOP
+// driven by five custom parameters); the fourth turn is the real TDXN diff
+// between the first frame's export and the third's. Two more capabilities
+// that have no picture follow as plain rows.
+import { Picture } from "astro:assets";
+import frameA from "../../assets/practice/kandinsky-a.jpg";
+import frameB from "../../assets/practice/kandinsky-b.jpg";
+import frameC from "../../assets/practice/kandinsky-c.jpg";
+
+const frames = [
+  {
+    img: frameA,
+    what: "Build entire networks from a sentence",
+    say: "Build me a Kandinsky-style composition. Circles, a few sharp wedges, thin black lines on paper.",
+    alt: "A Kandinsky-style composition rendered in TouchDesigner: a large dark circle with a yellow rim, translucent colored discs, red wedges and thin black lines on pale paper."
+  },
+  {
+    img: frameB,
+    what: "Try a different approach in seconds",
+    say: "Actually, make it warmer. Squares instead of circles, and push the whole cluster off-center.",
+    alt: "The same composition rebuilt from rotated squares in a warm palette on ochre paper, with the cluster shifted to the right."
+  },
+  {
+    img: frameC,
+    what: "Set any parameter",
+    say: "Set the line weight to 6.",
+    alt: "The warm square composition with every line and ring drawn noticeably heavier."
+  }
+];
+
+const sizes = "(max-width: 720px) calc(100vw - 3rem), min(530px, calc(50vw - 3rem))";
 ---
 
 <section class="section section--practice">
@@ -7,30 +38,57 @@
     <p class="eyebrow">in practice</p>
     <h2 class="section__title">say it. watch it happen.</h2>
 
-    <ul class="practice">
-      <li class="practice__row">
-        <span class="practice__what">Build entire networks from a sentence</span>
-        <span class="practice__say">"Build me a noise-driven particle system."</span>
+    <p class="lede practice__lede">
+      One conversation, one live TouchDesigner session. The frames are straight captures of the network&rsquo;s output. The fourth turn is the real diff between the first frame and the third.
+    </p>
+
+    <ol class="practice-turns">
+      {frames.map((f, i) => (
+        <li class="practice-turn">
+          <figure class="practice-turn__figure">
+            <Picture
+              src={f.img}
+              formats={["avif", "webp"]}
+              widths={[560, 840, 1120, 1500]}
+              sizes={sizes}
+              alt={f.alt}
+              loading="lazy"
+              decoding="async"
+              class="practice-turn__img"
+            />
+          </figure>
+          <p class="practice-turn__say">&ldquo;{f.say}&rdquo;</p>
+          <p class="practice-turn__what"><span class="practice-turn__num">{String(i + 1).padStart(2, "0")}</span>{f.what}</p>
+        </li>
+      ))}
+
+      <li class="practice-turn practice-turn--diff">
+        <pre class="practice-diff" aria-label="TDXN diff between the first frame and the third"><code><span class="d-meta">--- kandinsky.tdxn   frame 01
++++ kandinsky.tdxn   frame 03
+@@ custom_pars: Kandinsky @@</span>
+   - name: Shape
+     default: circle
+<span class="d-add">+    value: square</span>
+   - name: Warmth
+<span class="d-add">+    value: 1</span>
+   - name: Lineweight
+<span class="d-del">-    value: 2.5</span>
+<span class="d-add">+    value: 6</span>
+   - name: Offset
+<span class="d-add">+    values: [0.22, -0.08]</span></code></pre>
+        <p class="practice-turn__say">&ldquo;Show me what changed between this and the first one.&rdquo;</p>
+        <p class="practice-turn__what"><span class="practice-turn__num">04</span>Compare attempts</p>
       </li>
-      <li class="practice__row">
-        <span class="practice__what">Try a different approach in seconds</span>
-        <span class="practice__say">"Actually, make it react to audio instead."</span>
-      </li>
-      <li class="practice__row">
-        <span class="practice__what">Set any parameter</span>
-        <span class="practice__say">"Set the noise frequency to match the audio input."</span>
-      </li>
+    </ol>
+
+    <ul class="practice practice--more">
       <li class="practice__row">
         <span class="practice__what">Write extensions</span>
-        <span class="practice__say">"Create an extension class that manages scene transitions."</span>
+        <span class="practice__say">&ldquo;Create an extension class that manages scene transitions.&rdquo;</span>
       </li>
       <li class="practice__row">
         <span class="practice__what">Debug errors</span>
-        <span class="practice__say">"Why is my render chain producing a black output?"</span>
-      </li>
-      <li class="practice__row">
-        <span class="practice__what">Compare attempts</span>
-        <span class="practice__say">"Show me what changed between this version and the last."</span>
+        <span class="practice__say">&ldquo;Why is my render chain producing a black output?&rdquo;</span>
       </li>
     </ul>
   </div>

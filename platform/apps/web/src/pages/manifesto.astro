@@ -1,5 +1,7 @@
 ---
 import Base from "../layouts/Base.astro";
+// The essay is mirrored in docs/manifesto.md and its opening paragraph in
+// components/landing/ManifestoSection.astro -- edit all three together.
 ---
 
 <Base
@@ -10,60 +12,59 @@ import Base from "../layouts/Base.astro";
     <p class="eyebrow">manifesto</p>
     <h1>Build faster, in the open</h1>
     <p class="lede">
-      Everything is moving faster now. Everyone is shipping. We&rsquo;re entering a new era in
-      digital media, and TouchDesigner is positioned to become one of the leading
-      platforms of content creation. Embody exists to help our community build faster and
-      better than ever &mdash; open source, no strings attached, nothing SaaSy.
+      Everything is moving faster now. Everyone is shipping. We&rsquo;re entering a brand new
+      era of creativity, and Embody exists to help our community build faster and better than
+      ever &mdash; open source, no strings attached, nothing SaaSy.
     </p>
   </section>
 
   <article class="page-section tight manifesto-body">
     <p>
-      The gap between what an artist imagines and what&rsquo;s on their screen is where almost every
-      creative project has died. Not because they gave up, but because the
-      cost of executing it was higher than the cost of moving on. Embody exists to collapse
-      that gap.
+      Most ideas die in the gap between imagining them and seeing them on screen. Trying the
+      idea costs more than moving on to something safer, so people move on. Embody is built
+      to make trying cheap.
     </p>
 
     <h2>Forward velocity</h2>
 
     <p>
-      The first move is forward velocity. <strong>Envoy</strong> is an MCP server that lets
-      your AI assistant build inside your live TouchDesigner session. Say what you want
-      &mdash; &ldquo;give me a noise-driven particle system that reacts to audio&rdquo; &mdash;
-      and watch the operators appear, wired up, named, annotated, laid out. Not a screenshot
-      of a network. Not a code snippet to paste. The actual network, in front of you, ready
-      to play with. Idea to first version in seconds.
+      <strong>Envoy</strong> is an MCP server that lets your AI assistant work inside your
+      live TouchDesigner session. You describe what you want, and the operators appear in
+      your network: wired, named, laid out, annotated. Not a screenshot of a network, not a
+      code snippet to paste. The real thing, in front of you, ready to play with.
     </p>
 
     <p>
-      But forward velocity by itself is a trap. Generative tools that only go forward are
-      tools that lock you in. You ask the model for a thing, you get a thing, and now you&rsquo;re
-      stuck with a thing &mdash; because the cost of trying a different approach is starting
-      over. That&rsquo;s not flow. That&rsquo;s a fancier kind of friction.
+      The honest numbers: a small change lands in seconds. A complete network takes the agent
+      ten to twenty minutes, because it reads your network, plans, builds, and checks its own
+      work. What changes is that you don&rsquo;t have to sit through it, and you don&rsquo;t
+      have to run just one. Envoy coordinates several AI sessions on the same project. Each
+      one claims a part of the network, sees what the others are doing, and is stopped from
+      colliding with them. You direct. They build in parallel.
     </p>
 
     <h2>Lateral velocity</h2>
 
     <p>
-      So the second move is lateral velocity. <strong>Embody</strong> externalizes every
-      operator to files on disk. Branch off the version that&rsquo;s almost right. Restore
-      yesterday&rsquo;s state on the next project open. See exactly what changed from a week
-      ago. Hand the agent a snapshot of what&rsquo;s currently on the screen and ask it to
-      riff. Every direction you&rsquo;d want to move costs about as much as deciding to move
-      there.
+      A tool that only builds forward is a trap. You ask for a thing, you get a thing, and now
+      you&rsquo;re stuck with it, because trying something else means starting
+      over. <strong>Embody</strong> is the other half. Tag any operator and it lives on disk
+      as a file. Branch off the version that was almost right. Restore yesterday&rsquo;s state on
+      the next project open. See exactly what changed since last week. Hand the agent
+      what&rsquo;s on screen right now and ask for a variation. Every direction you&rsquo;d
+      want to move costs about as much as deciding to move there.
     </p>
 
     <h2>A format the network can live in</h2>
 
     <p>
-      Both of these depend on a quiet third thing: a <strong>format the network can live in
-      as text</strong>. A <code>.toe</code> file is a black box &mdash; your AI agent can&rsquo;t
-      see inside it, your diff tool can&rsquo;t read it, your filesystem can&rsquo;t store one
-      version of it next to another. TDXN &mdash; TouchDesigner eXternal Network &mdash; is what lets the network exist as something the agent
-      and the artist can both work on. Without it, none of the rest of this is possible. With
-      it, every step of the loop &mdash; generate, compare, revert, branch &mdash; runs at the
-      speed of typing.
+      Both halves depend on <strong>TDXN</strong>, a text format the network can live in.
+      A <code>.toe</code> file is opaque: your agent can&rsquo;t read it, your diff tool
+      can&rsquo;t compare it, and git can&rsquo;t keep two versions of it side by side. TDXN
+      writes a network as one YAML file, operators, parameters, connections, layout,
+      annotations, DAT content, all of it. With the network in text, compare, revert, and
+      branch run at the speed of typing, and a build becomes something you can hand off and
+      come back to.
     </p>
 
     <blockquote>
@@ -73,21 +74,14 @@ import Base from "../layouts/Base.astro";
     </blockquote>
 
     <p>
-      What this adds up to is a single promise: <strong>the tool keeps up with you, instead
-      of the other way around</strong>. The forty-minute translation tax goes away. You stay
-      in the room with the idea. The network is the conversation, not the homework after the
-      conversation.
-    </p>
-
-    <p>
-      That&rsquo;s what speed of thought looks like. It&rsquo;s not &ldquo;the AI did it for
-      you.&rdquo; It&rsquo;s &ldquo;you didn&rsquo;t have to slow down.&rdquo;
+      That is the whole promise. You stay with the idea. The agents do the translation, in
+      parallel.
     </p>
 
     <p>
       Embody is open source, runs entirely inside TouchDesigner, and works with Claude Code,
       Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot via VS Code, or any MCP-compatible
-      client. Try it on a real idea you&rsquo;ve been putting off. See how far you get in an hour.
+      client. Pick an idea you&rsquo;ve been putting off and see how far you get in an hour.
     </p>
   </article>
 </Base>

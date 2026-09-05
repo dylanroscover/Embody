@@ -1665,6 +1665,77 @@ pre {
 }
 .practice__say::before { content: '\203A '; color: var(--accent); margin-right: 0.5em; }
 
+/* Practice turns: one conversation, four turns, in a 2-up grid of 3:2
+   frames. Two-up, not four-up: the frames carry hairline strokes that a
+   quarter-width tile shrinks to nothing. The diff tile keeps the frame
+   aspect so the four turns read as one strip. */
+.practice__lede { margin-bottom: 2.5rem; }
+.practice-turns {
+  list-style: none;
+  margin: 0 0 3rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2.75rem 2.5rem;
+}
+.practice-turn { min-width: 0; display: flex; flex-direction: column; }
+.practice-turn__figure { margin: 0; }
+.practice-turn__figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-faint);
+  background: var(--bg-elevated);
+}
+.practice-turn__say {
+  margin: 1.1rem 0 0.4rem;
+  color: var(--text);
+  font-style: italic;
+  font-size: 1.02rem;
+  line-height: 1.5;
+}
+.practice-turn__say::before {
+  content: '\203A ';
+  color: var(--accent);
+  margin-right: 0.5em;
+  font-style: normal;
+}
+.practice-turn__what {
+  margin: 0;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
+}
+.practice-turn__num { color: var(--text-faint); margin-right: 0.75em; }
+.practice-diff {
+  margin: 0;
+  box-sizing: border-box;
+  aspect-ratio: 3 / 2;
+  padding: 1.3rem 1.5rem;
+  overflow: auto;
+  white-space: pre;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg-code);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-sm);
+  -webkit-overflow-scrolling: touch;
+}
+.practice-diff code { font-size: inherit; color: inherit; background: none; border: none; padding: 0; }
+.practice-diff .d-add { color: var(--accent); }
+.practice-diff .d-del { color: #d9826f; }
+.practice-diff .d-meta { color: var(--text-faint); }
+@media (max-width: 720px) {
+  .practice-turns { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+  .practice-diff { aspect-ratio: auto; }
+}
+
 /* --- TDN section --- */
 .tdn__grid {
   display: grid;

@@ -1,66 +1,79 @@
 ---
-// The format that makes it possible -- TDXN showcase with a syntax-highlighted sample.
+// TDXN showcase. The sample is the real export of the network behind the
+// practice-section frames (Embody 6.2.13, TD 2025.33070), trimmed to fit:
+// long help strings cut to their first sentence, most GLSL elided, some
+// parameters and operators dropped. Every line that remains is verbatim.
 ---
 
 <section class="section section--tdn">
   <div class="container">
-    <p class="eyebrow">the format that makes it possible</p>
+    <p class="eyebrow">the format underneath</p>
     <h2 class="section__title">meet TDXN.</h2>
 
     <p class="lede">
-      TDXN &mdash; <strong>TouchDesigner eXternal Network</strong> &mdash; exports any network as a single human-readable YAML file &mdash; operators, parameters, connections, layout, annotations, DAT content &mdash; all of it, in text. Every change becomes a clean diff. Every version is a file your AI agent can read, your team can review, and git can meaningfully compare.
+      TDXN, <strong>TouchDesigner eXternal Network</strong>, writes a network out as one human-readable YAML file: operators, parameters, connections, layout, annotations, DAT content. All of it in text, so every change is a diff, and every version is a file your agent, your team, and git can all read.
     </p>
 
     <div class="tdn__grid">
-      <pre class="code" aria-label="Sample TDXN file"><code><span class="c-k">format</span><span class="c-p">:</span> <span class="c-s">tdn</span>
-<span class="c-k">version</span><span class="c-p">:</span> <span class="c-s">'2.0'</span>
-<span class="c-k">build</span><span class="c-p">:</span> <span class="c-n">8</span>
-<span class="c-k">generator</span><span class="c-p">:</span> <span class="c-s">Embody/6.0.16</span>
-<span class="c-k">td_build</span><span class="c-p">:</span> <span class="c-s">099.2025.32820</span>
-<span class="c-k">exported_at</span><span class="c-p">:</span> <span class="c-s">'2026-04-10T08:15:00Z'</span>
-<span class="c-k">network_path</span><span class="c-p">:</span> <span class="c-s">/project1</span>
-<span class="c-k">type</span><span class="c-p">:</span> <span class="c-s">containerCOMP</span>
-<span class="c-k">options</span><span class="c-p">:</span>
-  <span class="c-k">include_dat_content</span><span class="c-p">:</span> <span class="c-n">true</span>
+      <pre class="code" aria-label="kandinsky.tdxn, the network behind the frames above, trimmed"><code><span class="c-k">format</span><span class="c-p">:</span> <span class="c-s">tdxn</span>
+<span class="c-k">version</span><span class="c-p">:</span> <span class="c-s">'2.1'</span>
+<span class="c-k">generator</span><span class="c-p">:</span> <span class="c-s">Embody/6.2.13</span>
+<span class="c-k">td_build</span><span class="c-p">:</span> <span class="c-s">099.2025.33070</span>
+<span class="c-k">source_file</span><span class="c-p">:</span> <span class="c-s">Embody-6.316.toe</span>
+<span class="c-k">exported_at</span><span class="c-p">:</span> <span class="c-s">'2026-09-05T15:47:23Z'</span>
+<span class="c-k">network_path</span><span class="c-p">:</span> <span class="c-s">/embody/kandinsky</span>
+<span class="c-k">type</span><span class="c-p">:</span> <span class="c-s">baseCOMP</span>
+<span class="c-k">custom_pars</span><span class="c-p">:</span>
+  <span class="c-k">Kandinsky</span><span class="c-p">:</span>
+  <span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">Seed</span>
+    <span class="c-k">style</span><span class="c-p">:</span> <span class="c-s">Int</span>
+    <span class="c-k">default</span><span class="c-p">:</span> <span class="c-n">7</span>
+  <span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">Shape</span>
+    <span class="c-k">style</span><span class="c-p">:</span> <span class="c-s">Menu</span>
+    <span class="c-k">default</span><span class="c-p">:</span> <span class="c-s">circle</span>
+  <span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">Lineweight</span>
+    <span class="c-k">style</span><span class="c-p">:</span> <span class="c-s">Float</span>
+    <span class="c-k">default</span><span class="c-p">:</span> <span class="c-n">1.5</span>
+    <span class="c-k">value</span><span class="c-p">:</span> <span class="c-n">2.5</span>
 <span class="c-k">operators</span><span class="c-p">:</span>
-<span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">noise1</span>
-  <span class="c-k">type</span><span class="c-p">:</span> <span class="c-s">noiseTOP</span>
+<span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">glsl_kandinsky</span>
+  <span class="c-k">type</span><span class="c-p">:</span> <span class="c-s">glslTOP</span>
   <span class="c-k">parameters</span><span class="c-p">:</span>
-    <span class="c-k">amp</span><span class="c-p">:</span> <span class="c-n">0.8</span>
-    <span class="c-k">period</span><span class="c-p">:</span> <span class="c-s">=absTime.frame * 0.1</span>
-  <span class="c-k">flags</span><span class="c-p">:</span>
-  <span class="c-p">-</span> <span class="c-s">viewer</span>
-<span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">level1</span>
-  <span class="c-k">type</span><span class="c-p">:</span> <span class="c-s">levelTOP</span>
-  <span class="c-k">parameters</span><span class="c-p">:</span>
-    <span class="c-k">opacity</span><span class="c-p">:</span> <span class="c-s">~op('ctrl').par.Fade</span>
-  <span class="c-k">flags</span><span class="c-p">:</span>
-  <span class="c-p">-</span> <span class="c-s">display</span>
-  <span class="c-p">-</span> <span class="c-s">render</span>
-  <span class="c-k">position</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">400</span><span class="c-p">,</span> <span class="c-n">0</span><span class="c-p">]</span>
+    <span class="c-k">outputresolution</span><span class="c-p">:</span> <span class="c-s">custom</span>
+    <span class="c-k">resolutionw</span><span class="c-p">:</span> <span class="c-n">1500</span>
+    <span class="c-k">resolutionh</span><span class="c-p">:</span> <span class="c-n">1000</span>
+  <span class="c-k">sequences</span><span class="c-p">:</span>
+    <span class="c-k">vec</span><span class="c-p">:</span>
+    <span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">uSeed</span>
+      <span class="c-k">valuex</span><span class="c-p">:</span> <span class="c-s">=parent.Kandinsky.par.Seed</span>
+    <span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">uLineWeight</span>
+      <span class="c-k">valuex</span><span class="c-p">:</span> <span class="c-s">=parent.Kandinsky.par.Lineweight</span>
+<span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">glsl_kandinsky_pixel</span>
+  <span class="c-k">type</span><span class="c-p">:</span> <span class="c-s">textDAT</span>
+  <span class="c-k">dock</span><span class="c-p">:</span> <span class="c-s">glsl_kandinsky</span>
+  <span class="c-k">dat_content</span><span class="c-p">:</span> <span class="c-p">|</span>
+    uniform float uSeed;
+    uniform float uLineWeight;
+    // ... 124 more lines of GLSL
+<span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">out1</span>
+  <span class="c-k">type</span><span class="c-p">:</span> <span class="c-s">outTOP</span>
+  <span class="c-k">position</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">400</span><span class="c-p">, </span><span class="c-n">0</span><span class="c-p">]</span>
   <span class="c-k">inputs</span><span class="c-p">:</span>
-  <span class="c-p">-</span> <span class="c-s">noise1</span>
+  <span class="c-p">-</span> <span class="c-s">glsl_kandinsky</span>
 <span class="c-k">annotations</span><span class="c-p">:</span>
-<span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">annot1</span>
-  <span class="c-k">mode</span><span class="c-p">:</span> <span class="c-s">annotate</span>
-  <span class="c-k">title</span><span class="c-p">:</span> <span class="c-s">noise pipeline</span>
-  <span class="c-k">position</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">-100</span><span class="c-p">,</span> <span class="c-n">-200</span><span class="c-p">]</span>
-  <span class="c-k">size</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">700</span><span class="c-p">,</span> <span class="c-n">400</span><span class="c-p">]</span></code></pre>
+<span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">annotate1</span>
+  <span class="c-k">title</span><span class="c-p">:</span> <span class="c-s">Kandinsky composition</span>
+  <span class="c-k">position</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">-220</span><span class="c-p">, </span><span class="c-n">-190</span><span class="c-p">]</span>
+  <span class="c-k">size</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">820</span><span class="c-p">, </span><span class="c-n">450</span><span class="c-p">]</span></code></pre>
 
       <ul class="tdn__bullets">
+        <li><strong>this is the file behind the frames above</strong> &mdash; the real export, trimmed to fit. The three frames are three versions of it.</li>
         <li><strong>non-default-only</strong> &mdash; only what you actually changed gets written.</li>
         <li><strong>type defaults hoisted</strong> &mdash; shared properties dedupe across operators.</li>
-        <li><strong>expression shorthand</strong> &mdash; <code>=absTime.frame * 0.1</code> instead of verbose wrapper objects.</li>
+        <li><strong>expression shorthand</strong> &mdash; <code>=parent.Kandinsky.par.Seed</code> instead of a wrapper object.</li>
         <li><strong>round-trip safe</strong> &mdash; export &rarr; edit &rarr; import yields the same network.</li>
-        <li><strong>the substrate</strong> for the entire workflow &mdash; forward velocity AND lateral velocity depend on it.</li>
       </ul>
     </div>
-
-    <p class="tdn__callout"><span class="tdn__callout-lead">diffable.</span> Any text tool, any diff viewer, any AI agent can read it.</p>
-
-    <p class="tdn__closer">
-      TDXN is what makes the rest of this possible.
-    </p>
 
     <p class="tdn__link">
       <a href="https://dylanroscover.github.io/Embody/tdxn/specification/">read the full TDXN specification <span aria-hidden="true">&rarr;</span></a>

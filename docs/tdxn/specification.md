@@ -19,7 +19,7 @@ A `.tdxn` file is a YAML document with the following top-level fields:
 
 ```yaml
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 1
 generator: Embody/6.0.4
 td_build: '2025.32050'
@@ -1457,7 +1457,7 @@ A realistic `.tdxn` file demonstrating all major features:
 
 ```yaml
 format: tdxn
-version: '2.0'
+version: '2.1'
 build: 3
 generator: Embody/6.0.4
 td_build: '2025.32050'

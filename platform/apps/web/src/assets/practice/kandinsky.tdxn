@@ -1,0 +1,296 @@
+format: tdxn
+version: '2.1'
+generator: Embody/6.2.13
+td_build: 099.2025.33070
+source_file: Embody-6.316.toe
+exported_at: '2026-09-05T15:47:23Z'
+network_path: /embody/kandinsky
+options:
+  include_dat_content: true
+  include_storage: true
+type_defaults:
+  textDAT:
+    parameters:
+      language: glsl
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Kandinsky:
+  - name: Seed
+    style: Int
+    default: 7
+    clampMin: true
+    normMax: 100.0
+    help: Random seed for the composition. Every placement, size and colour choice derives from it.
+  - name: Shape
+    style: Menu
+    default: circle
+    menuNames:
+    - circle
+    - square
+    menuLabels:
+    - Circle
+    - Square
+    help: 'Primary shape family: circles, or squares rotated per shape.'
+  - name: Warmth
+    style: Float
+    clampMin: true
+    clampMax: true
+    help: 0 = cool palette on pale paper, 1 = warm palette on ochre paper. Values between blend the two.
+  - name: Lineweight
+    style: Float
+    label: Line Weight
+    default: 1.5
+    min: 0.25
+    clampMin: true
+    normMin: 0.5
+    normMax: 6.0
+    help: Stroke width of the lines and rings, in pixels at the output resolution.
+    value: 2.5
+  - name: Offset
+    style: XYZW
+    label: Cluster Offset
+    size: 2
+    normMin: -0.5
+    normMax: 0.5
+    help: Shifts the whole cluster of shapes. Frame units; 0 0 is centred.
+parameters:
+  parentshortcut: Kandinsky
+color: [0.67, 0.67, 0.67]
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  - viewer
+  position: [400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_kandinsky
+- name: glsl_kandinsky
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_kandinsky_pixel
+    computedat: glsl_kandinsky_compute
+    outputresolution: custom
+    resolutionw: 1500
+    resolutionh: 1000
+  sequences:
+    vec:
+    - name: uSeed
+      valuex: =parent.Kandinsky.par.Seed
+    - name: uShape
+      valuex: =parent.Kandinsky.par.Shape.menuIndex
+    - name: uWarmth
+      valuex: =parent.Kandinsky.par.Warmth
+    - name: uLineWeight
+      valuex: =parent.Kandinsky.par.Lineweight
+    - name: uOffset
+      valuex: =parent.Kandinsky.par.Offsetx
+      valuey: =parent.Kandinsky.par.Offsety
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_kandinsky_info
+  type: infoDAT
+  parameters:
+    op: glsl_kandinsky
+  flags:
+  - viewer
+  position: [150, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_kandinsky
+  dat_read_only: true
+- name: glsl_kandinsky_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  flags:
+  - viewer
+  position: [0, -120]
+  dock: glsl_kandinsky
+  dat_content: |
+    // Kandinsky-style composition: SDF shapes over a paper ground.
+    // Every knob is a parent custom parameter (Seed, Shape, Warmth,
+    // Lineweight, Offset) so two frames differ by a parameter diff.
+    uniform float uSeed;
+    uniform float uShape;       // 0 = circles, 1 = squares
+    uniform float uWarmth;      // 0 = cool palette, 1 = warm palette
+    uniform float uLineWeight;  // pixels
+    uniform vec2  uOffset;      // cluster shift, frame units
+
+    out vec4 fragColor;
+
+    const vec3 COOL[6] = vec3[6](
+        vec3(0.10, 0.10, 0.12),
+        vec3(0.15, 0.30, 0.58),
+        vec3(0.82, 0.22, 0.16),
+        vec3(0.94, 0.75, 0.20),
+        vec3(0.18, 0.46, 0.42),
+        vec3(0.62, 0.45, 0.66));
+    const vec3 WARM[6] = vec3[6](
+        vec3(0.16, 0.10, 0.08),
+        vec3(0.80, 0.34, 0.16),
+        vec3(0.60, 0.12, 0.14),
+        vec3(0.96, 0.66, 0.20),
+        vec3(0.36, 0.40, 0.26),
+        vec3(0.88, 0.58, 0.44));
+
+    float hash(float n) { return fract(sin(n) * 43758.5453123); }
+    float rnd(float i, float k) { return hash(uSeed * 13.37 + i * 7.31 + k * 3.17 + 1.7); }
+    vec3 pal(int k) { return mix(COOL[k], WARM[k], uWarmth); }
+    mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
+
+    float sdCircle(vec2 p, float r) { return length(p) - r; }
+    float sdBox(vec2 p, vec2 b) {
+        vec2 d = abs(p) - b;
+        return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+    }
+    float sdSeg(vec2 p, vec2 a, vec2 b) {
+        vec2 pa = p - a, ba = b - a;
+        float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+        return length(pa - ba * h);
+    }
+    float sdTri(vec2 p, vec2 p0, vec2 p1, vec2 p2) {
+        vec2 e0 = p1 - p0, e1 = p2 - p1, e2 = p0 - p2;
+        vec2 v0 = p - p0, v1 = p - p1, v2 = p - p2;
+        vec2 pq0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);
+        vec2 pq1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);
+        vec2 pq2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);
+        float s = sign(e0.x * e2.y - e0.y * e2.x);
+        vec2 d = min(min(vec2(dot(pq0, pq0), s * (v0.x * e0.y - v0.y * e0.x)),
+                         vec2(dot(pq1, pq1), s * (v1.x * e1.y - v1.y * e1.x))),
+                         vec2(dot(pq2, pq2), s * (v2.x * e2.y - v2.y * e2.x)));
+        return -sqrt(d.x) * sign(d.y);
+    }
+    // Circle or rotated square, blended so the Shape parameter is continuous.
+    float sdShape(vec2 p, float r, float ang) {
+        float c = sdCircle(p, r);
+        float b = sdBox(rot(ang) * p, vec2(r * 0.86));
+        return mix(c, b, clamp(uShape, 0.0, 1.0));
+    }
+    float cov(float d) { float w = fwidth(d) * 0.8; return 1.0 - smoothstep(-w, w, d); }
+    void paint(inout vec3 col, vec3 c, float a) { col = mix(col, c, clamp(a, 0.0, 1.0)); }
+
+    void main() {
+        vec2 res = uTDOutputInfo.res.zw;
+        float aspect = res.x / res.y;
+        vec2 p = (vUV.st - 0.5) * vec2(aspect, 1.0);
+        float px = 1.0 / res.y;
+        vec2 c = uOffset;
+
+        // ground: paper with a soft vignette
+        vec3 paper = mix(vec3(0.93, 0.90, 0.83), vec3(0.91, 0.79, 0.60), uWarmth);
+        vec3 col = paper * (1.0 - 0.12 * smoothstep(0.35, 0.95, length(p)));
+
+        // halos: three big translucent discs behind everything
+        for (int i = 0; i < 3; i++) {
+            float fi = float(i);
+            vec2 q = c + vec2((rnd(fi, 1.0) - 0.5) * 1.1, (rnd(fi, 2.0) - 0.5) * 0.7);
+            float r = 0.16 + rnd(fi, 3.0) * 0.18;
+            float d = sdCircle(p - q, r);
+            paint(col, pal(1 + int(rnd(fi, 4.0) * 5.0)), (1.0 - smoothstep(-r * 0.6, r * 0.25, d)) * 0.28);
+        }
+
+        // hero: one big dark disc with a colored rim, upper-left of the cluster
+        {
+            vec2 q = c + vec2(-0.33, 0.20);
+            float r = 0.17;
+            float d = sdShape(p - q, r, 0.35);
+            paint(col, pal(3), cov(d - 0.035) * 0.9);
+            paint(col, pal(0), cov(d));
+            paint(col, pal(1), cov(sdShape(p - q, r * 0.55, 0.35)) * 0.55);
+        }
+
+        // medium shapes: filled, some ringed, translucent overlaps
+        for (int i = 0; i < 9; i++) {
+            float fi = float(i) + 10.0;
+            vec2 q = c + vec2((rnd(fi, 1.0) - 0.5) * 1.25, (rnd(fi, 2.0) - 0.5) * 0.85);
+            float r = 0.035 + rnd(fi, 3.0) * 0.09;
+            float ang = rnd(fi, 5.0) * 3.14159;
+            float d = sdShape(p - q, r, ang);
+            int k = 1 + int(rnd(fi, 4.0) * 5.0);
+            paint(col, pal(k), cov(d) * (0.75 + 0.25 * rnd(fi, 6.0)));
+            if (rnd(fi, 7.0) > 0.45) {
+                float ring = abs(sdShape(p - q, r * 1.35, ang)) - 0.004 - uLineWeight * px * 0.6;
+                paint(col, pal(0), cov(ring) * 0.9);
+            }
+            if (rnd(fi, 8.0) > 0.6) {
+                paint(col, pal((k + 2) % 6), cov(sdShape(p - q, r * 0.45, ang)));
+            }
+        }
+
+        // triangles: long thin wedges, mostly dark
+        for (int i = 0; i < 5; i++) {
+            float fi = float(i) + 30.0;
+            vec2 a = c + vec2((rnd(fi, 1.0) - 0.5) * 1.3, (rnd(fi, 2.0) - 0.5) * 0.9);
+            float ang = rnd(fi, 3.0) * 6.2831;
+            float len = 0.18 + rnd(fi, 4.0) * 0.32;
+            float wid = 0.02 + rnd(fi, 5.0) * 0.05;
+            vec2 dir = vec2(cos(ang), sin(ang));
+            vec2 nrm = vec2(-dir.y, dir.x);
+            float d = sdTri(p, a, a + dir * len, a + nrm * wid);
+            vec3 tc = rnd(fi, 6.0) > 0.5 ? pal(0) : pal(2);
+            paint(col, tc, cov(d) * 0.92);
+        }
+
+        // lines: singles plus one bundle radiating from a point
+        float lw = max(uLineWeight, 0.5) * px * 0.5;
+        for (int i = 0; i < 8; i++) {
+            float fi = float(i) + 50.0;
+            vec2 a = c + vec2((rnd(fi, 1.0) - 0.5) * 1.5, (rnd(fi, 2.0) - 0.5) * 1.0);
+            float ang = rnd(fi, 3.0) * 6.2831;
+            float len = 0.3 + rnd(fi, 4.0) * 0.6;
+            vec2 b = a + vec2(cos(ang), sin(ang)) * len;
+            float d = sdSeg(p, a, b) - lw * (0.6 + rnd(fi, 5.0));
+            paint(col, pal(0), cov(d) * 0.95);
+        }
+        {
+            vec2 o = c + vec2((rnd(70.0, 1.0) - 0.5) * 0.9, (rnd(70.0, 2.0) - 0.5) * 0.6);
+            float base = rnd(70.0, 3.0) * 6.2831;
+            for (int i = 0; i < 5; i++) {
+                float ang = base + float(i) * 0.16;
+                vec2 b = o + vec2(cos(ang), sin(ang)) * (0.45 + 0.08 * float(i));
+                float d = sdSeg(p, o, b) - lw * 0.7;
+                paint(col, pal(0), cov(d) * 0.95);
+            }
+        }
+
+        // dots: small accents
+        for (int i = 0; i < 12; i++) {
+            float fi = float(i) + 90.0;
+            vec2 q = c + vec2((rnd(fi, 1.0) - 0.5) * 1.4, (rnd(fi, 2.0) - 0.5) * 0.95);
+            float r = 0.005 + rnd(fi, 3.0) * 0.011;
+            float d = sdShape(p - q, r, rnd(fi, 4.0) * 3.14159);
+            int k = rnd(fi, 5.0) > 0.5 ? 0 : 2;
+            paint(col, pal(k), cov(d));
+        }
+
+        // paper grain
+        float g = hash(dot(gl_FragCoord.xy, vec2(12.9898, 78.233)) + uSeed);
+        col += (g - 0.5) * 0.025;
+
+        fragColor = TDOutputSwizzle(vec4(col, 1.0));
+    }
+  dat_content_format: text
+- name: glsl_kandinsky_compute
+  type: textDAT
+  flags:
+  - viewer
+  - -showDocked
+  position: [-150, -120]
+  dock: glsl_kandinsky
+  dat_content: "// Example Compute Shader\n\n// uniform float exampleUniform;\n\nlayout (local_size_x = 8, local_size_y = 4) in;\nvoid main()\n{\n\t// This code is running 1:1 per pixel, so early-exit\n\t// if this thread overhangs the edge of the output\n\tif (any(greaterThanEqual(ivec2(gl_GlobalInvocationID.xy), ivec2(uTDOutputInfo.res.zw))))\n\t\treturn;\n\n\tvec4 color;\n\t//color = texelFetch(sTD2DInputs[0], ivec2(gl_GlobalInvocationID.xy), 0);\n\tcolor = vec4(1.0);\n\t// We need to use TDImageStoreOutput() so that 8-bit textures that are sRGB\n\t// encoded can be written to correctly from incoming linear values.\n\t// imageStore() does not do this automatically, while pixel shader outputs do.\n\tTDImageStoreOutput(0, gl_GlobalInvocationID, color);\n}\n"
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Kandinsky composition
+  text: One SDF shader. Every knob is a custom parameter on this COMP (Seed, Shape, Warmth, Line Weight, Cluster Offset), so two frames differ by a parameter diff. out1 is the frame.
+  position: [-220, -190]
+  size: [820, 450]
+  color: [0.45, 0.45, 0.45]

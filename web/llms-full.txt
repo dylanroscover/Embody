@@ -585,8 +585,8 @@ TDXN (TouchDesigner eXternal Network) is a YAML-based file format (a strict JSON
 A `.tdxn` file is a YAML document with the following top-level fields:
 
 ```yaml
-format: tdn
-version: '2.0'
+format: tdxn
+version: '2.1'
 build: 1
 generator: Embody/6.0.4
 td_build: '2025.32050'
@@ -1802,8 +1802,8 @@ Log warnings for anything skipped so the developer can inspect the result. Never
 A realistic `.tdxn` file demonstrating all major features:
 
 ```yaml
-format: tdn
-version: '2.0'
+format: tdxn
+version: '2.1'
 build: 3
 generator: Embody/6.0.4
 td_build: '2025.32050'
