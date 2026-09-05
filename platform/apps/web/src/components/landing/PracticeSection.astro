@@ -2,28 +2,39 @@
 // In practice -- one conversation with a live TouchDesigner session, four turns.
 // The three frames are straight captures of the network's Out TOP (a GLSL TOP
 // driven by five custom parameters); the fourth turn is the real TDXN diff
-// between the first frame's export and the third's. Two more capabilities
+// between the first frame's export and the third's. Each frame carries a copy
+// button that puts that state's full TDXN export on the clipboard as an Embody
+// envelope (same component and payload as the collection pages), so a visitor
+// can paste the exact network into their own session. Two more capabilities
 // that have no picture follow as plain rows.
 import { Picture } from "astro:assets";
+import { parse } from "yaml";
+import CopyTdnEnvelopeButton from "../CopyTdnEnvelopeButton";
 import frameA from "../../assets/practice/kandinsky-a.jpg";
 import frameB from "../../assets/practice/kandinsky-b.jpg";
 import frameC from "../../assets/practice/kandinsky-c.jpg";
+import tdxn01 from "../../assets/practice/kandinsky-01.tdxn?raw";
+import tdxn02 from "../../assets/practice/kandinsky-02.tdxn?raw";
+import tdxn03 from "../../assets/practice/kandinsky-03.tdxn?raw";
 
 const frames = [
   {
     img: frameA,
+    tdn: parse(tdxn01) as Record<string, unknown>,
     what: "Build entire networks from a sentence",
     say: "Build me a Kandinsky-style composition. Circles, a few sharp wedges, thin black lines on paper.",
     alt: "A Kandinsky-style composition rendered in TouchDesigner: a large dark circle with a yellow rim, translucent colored discs, red wedges and thin black lines on pale paper."
   },
   {
     img: frameB,
+    tdn: parse(tdxn02) as Record<string, unknown>,
     what: "Try a different approach in seconds",
     say: "Actually, make it warmer. Squares instead of circles, and push the whole cluster off-center.",
     alt: "The same composition rebuilt from rotated squares in a warm palette on ochre paper, with the cluster shifted to the right."
   },
   {
     img: frameC,
+    tdn: parse(tdxn03) as Record<string, unknown>,
     what: "Set any parameter",
     say: "Set the line weight to 6.",
     alt: "The warm square composition with every line and ring drawn noticeably heavier."
@@ -39,7 +50,7 @@ const sizes = "(max-width: 720px) calc(100vw - 3rem), min(530px, calc(50vw - 3re
     <h2 class="section__title">say it. watch it happen.</h2>
 
     <p class="lede practice__lede">
-      One conversation, one live TouchDesigner session. The frames are straight captures of the network&rsquo;s output. The fourth turn is the real diff between the first frame and the third.
+      One conversation, one live TouchDesigner session. The frames are straight captures of the network&rsquo;s output, and each one copies its own TDXN so you can paste the network into yours. The fourth turn is the real diff between the first frame and the third.
     </p>
 
     <ol class="practice-turns">
@@ -55,6 +66,11 @@ const sizes = "(max-width: 720px) calc(100vw - 3rem), min(530px, calc(50vw - 3re
               loading="lazy"
               decoding="async"
               class="practice-turn__img"
+            />
+            <CopyTdnEnvelopeButton
+              tdn={f.tdn}
+              className="copy-button--corner practice-turn__copy"
+              client:visible
             />
           </figure>
           <p class="practice-turn__say">&ldquo;{f.say}&rdquo;</p>

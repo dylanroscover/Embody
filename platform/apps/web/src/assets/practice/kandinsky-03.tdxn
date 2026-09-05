@@ -3,7 +3,7 @@ version: '2.1'
 generator: Embody/6.2.13
 td_build: 099.2025.33070
 source_file: Embody-6.316.toe
-exported_at: '2026-09-05T15:47:23Z'
+exported_at: '2026-09-05T16:10:17Z'
 network_path: /embody/kandinsky
 options:
   include_dat_content: true
@@ -33,11 +33,13 @@ custom_pars:
     - Circle
     - Square
     help: 'Primary shape family: circles, or squares rotated per shape.'
+    value: square
   - name: Warmth
     style: Float
     clampMin: true
     clampMax: true
     help: 0 = cool palette on pale paper, 1 = warm palette on ochre paper. Values between blend the two.
+    value: 1
   - name: Lineweight
     style: Float
     label: Line Weight
@@ -47,7 +49,7 @@ custom_pars:
     normMin: 0.5
     normMax: 6.0
     help: Stroke width of the lines and rings, in pixels at the output resolution.
-    value: 2.5
+    value: 6
   - name: Offset
     style: XYZW
     label: Cluster Offset
@@ -55,6 +57,7 @@ custom_pars:
     normMin: -0.5
     normMax: 0.5
     help: Shifts the whole cluster of shapes. Frame units; 0 0 is centred.
+    values: [0.22, -0.08]
 parameters:
   parentshortcut: Kandinsky
 color: [0.67, 0.67, 0.67]

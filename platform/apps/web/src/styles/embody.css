@@ -462,13 +462,15 @@ pre {
    wrapped (white-space: nowrap is inherited from the shared rule). */
 .navbar__item--signin {
   border-color: var(--accent);
-  background: transparent;
+  /* Solid, like its neighbours: the nav floats over light page content (the
+     practice frames), where a transparent pill left green text on cream. */
+  background: var(--bg-elevated);
   color: var(--accent);
 }
 
 .navbar__item--signin:hover {
   border-color: var(--accent);
-  background: var(--accent-dim);
+  background: var(--bg-elevated-2);
   color: var(--accent);
 }
 
@@ -1004,11 +1006,11 @@ main > .collection-hero:first-child {
 }
 
 .eyebrow {
-  /* An eyebrow is a kicker label FOR its heading. It uses the shared vertical
-     rhythm so nav->eyebrow (main padding-top, above) == eyebrow->heading == the
-     hero's block gaps -- one uniform stack. Global: every page (the landing hero
-     overrides this to margin:0 and uses its own flex gap of the same token). */
-  margin: 0 0 var(--stack-gap);
+  /* An eyebrow is a kicker label FOR its heading, so it sits close to it: half
+     the shared stack gap (nav->eyebrow keeps the full gap via main padding-top).
+     Global: every page (the landing hero overrides this to margin:0 and uses
+     its own flex gap). */
+  margin: 0 0 calc(var(--stack-gap) * 0.5);
   color: var(--accent);
   font-family: var(--font-mono);
   font-size: 0.72rem;
@@ -1679,7 +1681,17 @@ pre {
   gap: 2.75rem 2.5rem;
 }
 .practice-turn { min-width: 0; display: flex; flex-direction: column; }
-.practice-turn__figure { margin: 0; }
+.practice-turn__figure { position: relative; margin: 0; }
+/* The copy button sits on a light frame, so it gets a solid dark chip rather
+   than the transparent default; hover keeps the shared accent fill. */
+.practice-turn__copy {
+  min-width: 32px;
+  min-height: 32px;
+  border-color: rgba(200, 208, 201, 0.25);
+  background: rgba(22, 30, 26, 0.88);
+  color: var(--text);
+}
+.practice-turn__copy.is-copied:hover { background: rgba(22, 30, 26, 0.88); }
 .practice-turn__figure img {
   display: block;
   width: 100%;
@@ -1759,10 +1771,15 @@ pre {
   -webkit-overflow-scrolling: touch;
 }
 .code code { font-size: inherit; color: inherit; background: none; border: none; padding: 0; }
-.c-k { color: var(--text); }
-.c-s { color: var(--text); }
-.c-n { color: #6ee668; }
+/* YAML sample syntax: keys teal, strings sand, numbers and booleans accent
+   green, expression shorthand lavender, punctuation faint, embedded DAT text
+   muted -- four hues that sit with the frames above, not a rainbow. */
+.c-k { color: #8fd0c4; }
+.c-s { color: #e3cf9c; }
+.c-n { color: var(--accent); }
 .c-p { color: var(--text-faint); }
+.c-e { color: #c7b6f0; }
+.c-c { color: var(--text-muted); }
 .tdn__callout {
   font-size: clamp(1.15rem, 2vw, 1.5rem);
   color: var(--text);
