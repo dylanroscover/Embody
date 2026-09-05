@@ -1,5 +1,6 @@
 ---
 import "../styles/embody.css";
+import Wordmark from "../components/Wordmark.astro";
 import { env } from "cloudflare:workers";
 import { isAdmin } from "../server/admin";
 import { SITE_ORIGIN, DEFAULT_OG_IMAGE } from "../lib/site";
@@ -160,7 +161,7 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
       <nav class="navbar" aria-label="Primary">
         <a class="navbar__mark" href="/" aria-label="embody home">
           <span class="mark__dot" aria-hidden="true"></span>
-          <span class="navbar__word">embody</span>
+          <Wordmark class="navbar__word" />
         </a>
         <div class="navbar__items" id="primary-nav" data-nav-collapse>
           <a
@@ -261,7 +262,7 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
         <div class="footer__col footer__col--brand">
           <div class="footer__mark">
             <span class="mark__dot" aria-hidden="true"></span>
-            <span class="footer__word">embody</span>
+            <Wordmark class="footer__word" />
           </div>
           <p class="footer__tag">natural language tools for <a href="https://derivative.ca">TouchDesigner</a></p>
         </div>

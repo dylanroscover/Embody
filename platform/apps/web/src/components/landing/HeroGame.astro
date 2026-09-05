@@ -24,7 +24,7 @@ import Embot from "./Embot.astro";
   </div>
 </div>
 <div class="hero__embot" aria-hidden="true">
-  <Embot mode="game" scale={1.15} />
+  <Embot mode="game" scale={0.92} />
 </div>
 
 <script>
@@ -35,16 +35,22 @@ import Embot from "./Embot.astro";
   type Tile = { x: number; top: number; w: number; h: number; lane: number; name: string; type: string; el: HTMLElement; inputs: Input[]; paths: SVGPathElement[] };
 
   const SVG_NS = "http://www.w3.org/2000/svg";
-  const TILE_W = 150;
-  const TILE_H = 100;
+  // Everything in the world is drawn at 80% of a network-editor tile at 1:1
+  // (150x100); Embot's own scale in the markup below matches.
+  const K = 0.8;
+  const TILE_W = 150 * K;
+  const TILE_H = 100 * K;
   // The game owns the hero's middle third, weighted to the upper half of the
   // screen: the floor (his feet on the lowest lane) sits at mid-height, so
   // lane 0's tiles hang just below it and the upper lanes climb toward the
   // title, where his hops and bubble cross in front of it.
   const floorFromBottom = (h: number) => h / 2 + 8;
-  const LANES = [0, 70, 140]; // tile-top heights above the floor, px
-  const GAP_MIN = 70;
-  const GAP_MAX = 140;
+  // Lanes step by a whole tile plus its name label, so a side branch placed at
+  // the same x on the next lane (a combiner's second input) never overlaps.
+  const LANE_STEP = TILE_H + 30;
+  const LANES = [0, LANE_STEP, 2 * LANE_STEP]; // tile-top heights above the floor, px
+  const GAP_MIN = 70 * K;
+  const GAP_MAX = 140 * K;
   // TD family colours (network-editor palette, lightened for the dark ground).
   const FAMILY: Record<Fam, string> = {
     TOP: "#a99bdc", CHOP: "#8fd57f", SOP: "#7fb3ea", POP: "#7fd9c9", DAT: "#e58ad0", COMP: "#b8bdb9"
@@ -98,7 +104,8 @@ import Embot from "./Embot.astro";
     const world = stage.querySelector(".hero-game__world") as HTMLElement;
     const wires = stage.querySelector(".hero-game__wires") as SVGSVGElement;
     const tiles: Tile[] = [];
-    const annots: Array<{ x: number; w: number; el: HTMLElement }> = [];
+    type Annot = { x: number; w: number; el: HTMLElement; tiles: Tile[] };
+    const annots: Annot[] = [];
     const counters: Record<string, number> = {};
     let nextX = 240;
     let lane = 0;
@@ -194,26 +201,32 @@ import Embot from "./Embot.astro";
       }
     }
 
+    // An annotation's box is derived from its tiles, so it follows them on
+    // resize exactly as the editor's would.
+    function placeAnnot(a: Annot): void {
+      const xs = a.tiles.map((t) => t.x);
+      a.x = Math.min(...xs) - 34 * K;
+      a.w = Math.max(...a.tiles.map((t) => t.x + t.w)) - Math.min(...xs) + 68 * K;
+      const top = Math.min(...a.tiles.map((t) => t.top)) - 50;
+      const bottom = Math.max(...a.tiles.map((t) => t.top + t.h)) + 24 * K;
+      a.el.style.left = `${a.x}px`;
+      a.el.style.top = `${top}px`;
+      a.el.style.width = `${a.w}px`;
+      a.el.style.height = `${bottom - top}px`;
+    }
+
     function addAnnot(run: Tile[], title: string): void {
-      const first = run[0], lastTile = run[run.length - 1];
-      if (!first || !lastTile) return;
-      const xs = run.map((t) => t.x);
-      const x = Math.min(...xs) - 34;
-      const w = Math.max(...run.map((t) => t.x + t.w)) - Math.min(...xs) + 68;
-      const top = Math.min(...run.map((t) => t.top)) - 54;
-      const bottom = Math.max(...run.map((t) => t.top + t.h)) + 24;
+      if (!run.length) return;
       const el = document.createElement("div");
       el.className = "hero-annot";
-      el.style.left = `${x}px`;
-      el.style.top = `${top}px`;
-      el.style.width = `${w}px`;
-      el.style.height = `${bottom - top}px`;
       const t = document.createElement("span");
       t.className = "hero-annot__title";
       t.textContent = title;
       el.appendChild(t);
       world.insertBefore(el, world.firstChild); // under the wires and tiles
-      annots.push({ x, w, el });
+      const a: Annot = { x: 0, w: 0, el, tiles: [...run] };
+      placeAnnot(a);
+      annots.push(a);
     }
 
     // One functional block: a generator (or the first filter after a bridge),
@@ -222,7 +235,7 @@ import Embot from "./Embot.astro";
     function addRun(): void {
       const run: Tile[] = [];
       let title: string;
-      nextX += 70; // clear space between annotation boxes, as the editor keeps
+      nextX += 70 * K; // clear space between annotation boxes, as the editor keeps
       if (!chainOpen) {
         family = pick<Fam>(["TOP", "TOP", "TOP", "CHOP", "SOP", "POP", "DAT"]);
         stepLane();
@@ -287,8 +300,8 @@ import Embot from "./Embot.astro";
         t.el.remove();
         for (const p of t.paths) p.remove();
       }
-      while (annots.length && (annots[0] as { x: number; w: number }).x + (annots[0] as { w: number }).w < camX - 700) {
-        (annots.shift() as { el: HTMLElement }).el.remove();
+      while (annots.length && (annots[0] as Annot).x + (annots[0] as Annot).w < camX - 700) {
+        (annots.shift() as Annot).el.remove();
       }
     }
 
@@ -300,6 +313,7 @@ import Embot from "./Embot.astro";
       for (const t of tiles) {
         t.inputs.forEach(([from, slot], i) => t.paths[i]?.setAttribute("d", wirePath(from, t, slot)));
       }
+      for (const a of annots) placeAnnot(a);
     }
 
     const bot = new Embot(root, { floorPx: floorFromBottom(stage.clientHeight) });

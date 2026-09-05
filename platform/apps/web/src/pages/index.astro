@@ -285,7 +285,9 @@ const jsonLd = {
      it. (The middle third is the game's; see HeroGame.astro.) */
   .hero__mid {
     display: grid;
-    grid-template-rows: 1fr auto 1fr;
+    /* Weighted toward the top of the third: the panel sits a little above
+       its centre, closer to the game. */
+    grid-template-rows: 0.55fr auto 1.45fr;
     justify-items: center;
   }
 
