@@ -512,14 +512,8 @@ pre {
   flex: none;
 }
 
-/* Trim the count's box to cap-height/baseline so flex centering lands on the
-   DIGITS rather than on the font's asymmetric line box. Untrimmed, the number
-   rasterizes a full pixel high in the pill at DPR 1 -- measured in headless
-   Chrome against this stylesheet (2026-09-04), and visible on a 100%-scale
-   display. Browsers without text-box keep the old line-box centering. */
-.navbar__github-count {
-  text-box: trim-both cap alphabetic;
-}
+/* See the nav-wide text-box trim near the end of this stylesheet: the count is
+   centered on its digits, not on the font's line box. */
 
 /* --- Desktop overflow "..." control --------------------------------------
    Lives at the right end of the inline bar. The button matches every other
@@ -1995,6 +1989,23 @@ body.is-app-shell .footer {
    refracts bright page content behind the pill. A faint shadow lifts them off
    busy backdrops without darkening the muted tone. */
 .navbar__label { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
+
+/* Optical centering for every pill's text. The pills center their contents as
+   flex items, which centers each label's LINE BOX -- and a line box carries the
+   font's asymmetric ascent/descent, so the letterforms themselves sit high in
+   it. Trimming the box to cap-height/baseline makes flex centering land on the
+   letters. Measured against this stylesheet in headless Chrome (2026-09-05):
+   the mono labels sat 0.83 css px high in their pills, a full pixel once DPR-1
+   rasterization rounded it -- which is what reads as "the whole nav is off".
+   Browsers without text-box keep the old line-box centering.
+   The lowercase wordmark is included deliberately: cap/alphabetic is the
+   typographic center for it too, with the 'y' descender hanging below. */
+.navbar__word,
+.navbar__label,
+.navbar__user-name,
+.navbar__github-count {
+  text-box: trim-both cap alphabetic;
+}
 
 /* J1 - a signed-in account name is user-derived and was excluded from the
    desktop overflow collapse with white-space:nowrap, so a long display name
