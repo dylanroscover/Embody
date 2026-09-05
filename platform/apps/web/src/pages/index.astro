@@ -213,19 +213,22 @@ const jsonLd = {
 </Base>
 
 <style>
-  /* Hero -- three equal thirds: the title, Embot's side-scrolling network
-     (HeroGame.astro; its floor is the bottom of the middle third, so his hops
-     rise in front of the title), and the download panel. The hero starts at
-     the very top of the page -- main's nav clearance is cancelled here and
-     re-applied inside the first third -- so the thirds are true thirds of the
-     viewport. Game layers are styled globally in embody.css. */
+  /* Hero -- one stack with ONE gap unit between everything: nav -> title ->
+     the graph band (Embot's side-scrolling network, HeroGame.astro, draws its
+     tiles inside .hero__game-row) -> the download panel. The hero starts at
+     the very top of the page: main's nav clearance is cancelled here and
+     re-applied, plus the gap, inside .hero__top. Game layers are styled
+     globally in embody.css. */
   .hero {
+    --hero-gap: clamp(2.75rem, 5.5vh, 4.5rem);
+    /* Two lanes of 80px tiles a lane-step (110px) apart, plus the annotation
+       title bar above and its padding below -- see HeroGame.astro. */
+    --game-band: 260px;
     position: relative;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    min-height: max(100vh, 60rem);
-    padding: 0;
+    padding: 0 0 var(--hero-gap);
     margin-top: calc(-1 * (var(--safe-top, 0px) + var(--nav-top) + var(--nav-h) + var(--stack-gap)));
   }
 
@@ -261,18 +264,16 @@ const jsonLd = {
   .hero__inner {
     position: relative;
     z-index: 2;
-    flex: 1;
-    display: grid;
-    grid-template-rows: 1fr 1fr 1fr;
+    display: flex;
+    flex-direction: column;
+    gap: var(--hero-gap);
   }
 
-  /* First third: the title, centred between the nav's bottom edge and the
-     second third, so the nav->title and title->panel gaps stay equal. */
+  /* The title: one gap below the nav's bottom edge. */
   .hero__top {
     display: flex;
-    align-items: center;
     justify-content: center;
-    padding-top: calc(var(--safe-top, 0px) + var(--nav-top) + var(--nav-h));
+    padding-top: calc(var(--safe-top, 0px) + var(--nav-top) + var(--nav-h) + var(--hero-gap));
   }
 
   .hero__headline {
@@ -281,24 +282,21 @@ const jsonLd = {
     font-size: clamp(2.4rem, 6vw, 5rem);
   }
 
-  /* Third third: the install panel at its centre, the CTA row tucked under
-     it. (The middle third is the game's; see HeroGame.astro.) */
-  .hero__mid {
-    display: grid;
-    /* Weighted toward the top of the third: the panel sits a little above
-       its centre, closer to the game. */
-    grid-template-rows: 0.55fr auto 1.45fr;
-    justify-items: center;
+  /* The graph band: the game draws its tiles inside this box. */
+  .hero__game-row {
+    height: var(--game-band);
   }
 
-  .hero__mid .install {
-    grid-row: 2;
+  /* The install panel, the CTA row tucked under it. */
+  .hero__mid {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
   }
 
   .hero__ctas {
-    grid-row: 3;
-    align-self: start;
-    margin-top: 1.25rem;
+    margin: 0;
     text-align: center;
   }
 
@@ -503,17 +501,11 @@ const jsonLd = {
     /* The game is hidden here (embody.css), so the hero is a plain stack
        again under main's own nav clearance. */
     .hero {
-      min-height: 0;
       margin-top: 0;
       padding: 0 0 3.5rem;
     }
-    .hero__inner {
-      display: flex;
-      flex-direction: column;
-      gap: var(--stack-gap);
-    }
+    .hero__inner { gap: var(--stack-gap); }
     .hero__top { padding-top: 0; }
-    .hero__mid { display: flex; flex-direction: column; gap: 1.25rem; }
     .hero__game-row { display: none; }
   }
 

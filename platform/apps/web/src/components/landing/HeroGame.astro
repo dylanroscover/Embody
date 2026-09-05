@@ -40,15 +40,16 @@ import Embot from "./Embot.astro";
   const K = 0.8;
   const TILE_W = 150 * K;
   const TILE_H = 100 * K;
-  // The game owns the hero's middle third, weighted to the upper half of the
-  // screen: the floor (his feet on the lowest lane) sits at mid-height, so
-  // lane 0's tiles hang just below it and the upper lanes climb toward the
-  // title, where his hops and bubble cross in front of it.
-  const floorFromBottom = (h: number) => h / 2 + 8;
+  // The game draws inside the hero's graph band (.hero__game-row, a fixed
+  // 260px box the page spaces evenly between the title and the panel): lane
+  // 0's tiles sit on the band's bottom edge (less the annotation padding), and
+  // lane 1 a step above, so the two lanes plus the annotation's title bar fill
+  // the band exactly. Embot himself stands on the tiles and rises above it.
   // Lanes step by a whole tile plus its name label, so a side branch placed at
   // the same x on the next lane (a combiner's second input) never overlaps.
   const LANE_STEP = TILE_H + 30;
-  const LANES = [0, LANE_STEP, 2 * LANE_STEP]; // tile-top heights above the floor, px
+  const LANES = [0, LANE_STEP]; // tile-top heights above the floor, px
+  const ANNOT_PAD_BOTTOM = 24 * K;
   const GAP_MIN = 70 * K;
   const GAP_MAX = 140 * K;
   // TD family colours (network-editor palette, lightened for the dark ground).
@@ -100,9 +101,14 @@ import Embot from "./Embot.astro";
   const famOf = (type: string): Fam => (/(TOP|CHOP|SOP|POP|DAT|COMP)$/.exec(type)?.[1] as Fam | undefined) ?? "TOP";
   const pick = <T,>(list: T[]): T => list[Math.floor(Math.random() * list.length)] as T;
 
-  function start(stage: HTMLElement, root: HTMLElement): void {
+  function start(stage: HTMLElement, root: HTMLElement, band: HTMLElement): void {
     const world = stage.querySelector(".hero-game__world") as HTMLElement;
     const wires = stage.querySelector(".hero-game__wires") as SVGSVGElement;
+    // The floor (lane 0's tile top) from the band's bottom edge, in stage px.
+    const floorFromTop = () => {
+      const b = band.getBoundingClientRect(), s = stage.getBoundingClientRect();
+      return b.bottom - s.top - ANNOT_PAD_BOTTOM - TILE_H;
+    };
     const tiles: Tile[] = [];
     type Annot = { x: number; w: number; el: HTMLElement; tiles: Tile[] };
     const annots: Annot[] = [];
@@ -117,7 +123,7 @@ import Embot from "./Embot.astro";
     let nextHopAt = Infinity;
     let started = false;
 
-    const floorY = () => stage.clientHeight - floorFromBottom(stage.clientHeight);
+    const floorY = () => floorFromTop();
 
     // A wire leaves the source's right edge at mid-height and enters the
     // destination's left edge at its input slot (upper or lower third).
@@ -164,8 +170,7 @@ import Embot from "./Embot.astro";
     }
 
     function stepLane(): void {
-      const r = Math.random();
-      lane = r < 0.55 ? lane : r < 0.8 ? Math.min(2, lane + 1) : Math.max(0, lane - 1);
+      if (Math.random() < 0.45) lane = lane === 0 ? 1 : 0;
     }
 
     const last = (): Tile | undefined => tiles[tiles.length - 1];
@@ -181,7 +186,7 @@ import Embot from "./Embot.astro";
       const forkFrom = tiles[tiles.length - 2];
       const canFork = !!forkFrom && famOf(forkFrom.type) === fam && FILTERS[fam].length > 0;
       const savedLane = lane, savedNext = nextX;
-      lane = mainPrev.lane === 0 ? 1 : mainPrev.lane - 1;
+      lane = otherLane(mainPrev.lane);
       nextX = mainPrev.x;
       const side = canFork
         ? addTile(pick(FILTERS[fam].filter((f) => !COMBINERS.has(f))), [[forkFrom as Tile, 0]])
@@ -228,6 +233,10 @@ import Embot from "./Embot.astro";
       placeAnnot(a);
       annots.push(a);
     }
+
+    // A combiner's side branch goes on the OTHER lane; with two lanes that is
+    // always defined.
+    const otherLane = (l: number) => (l === 0 ? 1 : 0);
 
     // One functional block: a generator (or the first filter after a bridge),
     // a few filters, then either a null that ends the chain or a bridge into
@@ -316,7 +325,7 @@ import Embot from "./Embot.astro";
       for (const a of annots) placeAnnot(a);
     }
 
-    const bot = new Embot(root, { floorPx: floorFromBottom(stage.clientHeight) });
+    const bot = new Embot(root, { floorPx: stage.clientHeight - floorFromTop() });
 
     bot.onLand = () => {
       const tile = current;
@@ -369,7 +378,7 @@ import Embot from "./Embot.astro";
 
     window.addEventListener("resize", () => {
       relayout();
-      bot.floorPx = floorFromBottom(stage.clientHeight);
+      bot.floorPx = stage.clientHeight - floorFromTop();
       bot.resize();
       if (current) bot.place(bot.target.x, bot.yForFeetAt(current.top));
     });
@@ -379,5 +388,6 @@ import Embot from "./Embot.astro";
 
   const stageEl = document.querySelector<HTMLElement>(".hero-game");
   const rootEl = document.querySelector<HTMLElement>(".hero__embot [data-embot]");
-  if (stageEl && rootEl && getComputedStyle(stageEl).display !== "none") start(stageEl, rootEl);
+  const bandEl = document.querySelector<HTMLElement>(".hero__game-row");
+  if (stageEl && rootEl && bandEl && getComputedStyle(stageEl).display !== "none") start(stageEl, rootEl, bandEl);
 </script>
