@@ -49,9 +49,20 @@ const gy = glyphs[5], gb = glyphs[2], ge = glyphs[0];
 const yp = pts(gy.g).filter((p) => p.y < -8);
 const cutA = yp.reduce((a, p) => (p.x < a.x ? p : a)); // (6.2, -19.5) outer end
 const cutB = yp.filter((p) => p.x < 12 && p.y > -12).reduce((a, p) => (p.x < a.x ? p : a)); // (9.2, -9.6) inner end
-const tailW = Math.hypot(cutA.x - cutB.x, cutA.y - cutB.y) * 0.97; // the cut is nearly perpendicular to the stroke
-const tailMid = { x: (cutA.x + cutB.x) / 2 + gy.x, y: (cutA.y + cutB.y) / 2 };
-const runY = tailMid.y; // the under-run keeps the hook's depth
+// The stroke starts 3 units inside the hook. Its width and depth are the
+// hook's own at that x: sample the inner and outer edges there (linear
+// between the outline's vertices; the curves are shallow here).
+const startLocalX = (cutA.x + cutB.x) / 2 + 3;
+const edgeYAt = (edge, x) => {
+  const s = edge.slice().sort((a, b) => a.x - b.x);
+  for (let i = 0; i + 1 < s.length; i++) if (s[i].x <= x && x <= s[i + 1].x) return s[i].y + (s[i + 1].y - s[i].y) * ((x - s[i].x) / (s[i + 1].x - s[i].x));
+  return s[0].y;
+};
+const inner = yp.filter((p) => p.y > -15 && p.x < 20), outer = yp.filter((p) => p.y <= -15 && p.x < 20);
+const innerY = edgeYAt(inner, startLocalX), outerY = edgeYAt(outer, startLocalX);
+const tailW = innerY - outerY;
+const runY = (innerY + outerY) / 2; // the under-run keeps the hook's depth
+const tailMid = { x: startLocalX - 3 + gy.x, y: runY };
 
 // The b's stem: vertices on its top edge.
 const bp = pts(gb.g);
@@ -70,10 +81,10 @@ const L = eLeft - 9 - W / 2; // the enclosure's left side, clear of the e
 
 const Y = (fy) => BASE - fy; // font y -> SVG y
 const d = [
-  // start inside the hook, pass through its terminal, ease level
-  `M${f1(tailMid.x + 4.5)} ${f1(Y(runY - 0.6))}`,
-  `L${f1(tailMid.x)} ${f1(Y(runY))}`,
-  `C${f1(tailMid.x - 8)} ${f1(Y(runY + 1.4))} ${f1(tailMid.x - 14)} ${f1(Y(runY))} ${f1(tailMid.x - 20)} ${f1(Y(runY))}`,
+  // start 3 units inside the hook (its slanted terminal cut would otherwise
+  // leave a notch beside a square cap) and continue straight out of it at the
+  // hook's own depth: no easing, no wobble
+  `M${f1(tailMid.x + 3)} ${f1(Y(runY))}`,
   // under the word to the e, round its left with two tight corners
   `L${f1(L + R)} ${f1(Y(runY))}`,
   `A${R} ${R} 0 0 1 ${f1(L)} ${f1(Y(runY + R))}`,
@@ -81,7 +92,7 @@ const d = [
   `A${R} ${R} 0 0 1 ${f1(L + R)} ${f1(Y(topY))}`,
   // along the ascender line into the top of the b's stem: a square corner,
   // like the stem's own top, so the stem reads as turning left into the loop
-  `L${f1(stemR + 0.4)} ${f1(Y(topY))}`
+  `L${f1(stemR - 1)} ${f1(Y(topY))}`
 ].join(" ");
 
 // viewBox centred on the x-height band (so a flex parent centres the letters'
