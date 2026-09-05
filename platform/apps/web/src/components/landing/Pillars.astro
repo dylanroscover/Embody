@@ -1,6 +1,12 @@
 ---
-// Three tools, one idea. Pillar links point at the docs sections until
+// Three tools, one idea. Each card leads with its tool's face: the Embody
+// manager screenshot (moved here from the hero), Embot standing in for Envoy
+// (live, the same figure and gestures as the network-editor bot), and a TDXN
+// excerpt for the format. Pillar links point at the docs sections until
 // dedicated tool routes exist (tracked as a follow-up to the unify migration).
+import { Picture } from "astro:assets";
+import Embot from "./Embot.astro";
+import embodyShot from "../../assets/embody-screenshot.png";
 ---
 
 <section class="section section--pillars">
@@ -10,30 +16,72 @@
 
     <div class="pillars">
       <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/">
-        <h3 class="pillar__name">Embody</h3>
-        <p class="pillar__claim">lateral velocity.</p>
-        <p class="pillar__body">
-          Tag any operator and Embody externalizes it to version-control-friendly files on disk. Diff what changed, track who changed it, collaborate across branches, and restore any previous state. Your externalized files are the source of truth &mdash; not the binary <code>.toe</code>.
-        </p>
-        <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+        <div class="pillar__media pillar__media--shot">
+          <Picture
+            src={embodyShot}
+            formats={["avif", "webp"]}
+            widths={[420, 640, 960, 1280]}
+            sizes="(max-width: 860px) calc(100vw - 3rem), 360px"
+            alt="Embody running inside TouchDesigner: the extension's manager panel, every operator externalized to readable text."
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+        <div class="pillar__text">
+          <h3 class="pillar__name">Embody</h3>
+          <p class="pillar__claim">lateral velocity.</p>
+          <p class="pillar__body">
+            Tag any operator and Embody externalizes it to version-control-friendly files on disk. Diff what changed, track who changed it, collaborate across branches, and restore any previous state. Your externalized files are the source of truth &mdash; not the binary <code>.toe</code>.
+          </p>
+          <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+        </div>
       </a>
 
       <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/envoy/">
-        <h3 class="pillar__name">Envoy</h3>
-        <p class="pillar__claim">forward velocity.</p>
-        <p class="pillar__body">
-          65 MCP tools that plug Claude Code, Codex, Gemini, Cursor, Windsurf, or GitHub Copilot via VS Code straight into your live session. Say what you want. Watch it happen. Idea to network in seconds.
-        </p>
-        <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+        <div class="pillar__media pillar__media--embot" aria-hidden="true">
+          <Embot mode="stand" scale={1.1} />
+        </div>
+        <div class="pillar__text">
+          <h3 class="pillar__name">Envoy</h3>
+          <p class="pillar__claim">forward velocity.</p>
+          <p class="pillar__body">
+            65 MCP tools that plug Claude Code, Codex, Gemini, Cursor, Windsurf, or GitHub Copilot via VS Code straight into your live session. Say what you want. Watch it happen. Idea to network in seconds.
+          </p>
+          <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+        </div>
       </a>
 
       <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdxn/specification/">
-        <h3 class="pillar__name">TDXN</h3>
-        <p class="pillar__claim">the substrate.</p>
-        <p class="pillar__body">
-          TouchDesigner eXternal Network: your networks as human-readable YAML. Your agent can read it. You can read it. Git can read it.
-        </p>
-        <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+        <div class="pillar__media pillar__media--yaml" aria-hidden="true">
+          <pre class="pillar__yaml"><code><span class="c-k">format</span><span class="c-p">:</span> <span class="c-s">tdxn</span>
+<span class="c-k">version</span><span class="c-p">:</span> <span class="c-s">'2.1'</span>
+<span class="c-k">generator</span><span class="c-p">:</span> <span class="c-s">Embody/6.2.13</span>
+<span class="c-k">network_path</span><span class="c-p">:</span> <span class="c-s">/embody/kandinsky</span>
+<span class="c-k">type</span><span class="c-p">:</span> <span class="c-s">baseCOMP</span>
+<span class="c-k">custom_pars</span><span class="c-p">:</span>
+  <span class="c-k">Kandinsky</span><span class="c-p">:</span>
+  <span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">Seed</span>
+    <span class="c-k">style</span><span class="c-p">:</span> <span class="c-s">Int</span>
+    <span class="c-k">default</span><span class="c-p">:</span> <span class="c-n">7</span>
+<span class="c-k">operators</span><span class="c-p">:</span>
+<span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">glsl_kandinsky</span>
+  <span class="c-k">type</span><span class="c-p">:</span> <span class="c-s">glslTOP</span>
+  <span class="c-k">parameters</span><span class="c-p">:</span>
+    <span class="c-k">resolutionw</span><span class="c-p">:</span> <span class="c-n">1500</span>
+    <span class="c-k">resolutionh</span><span class="c-p">:</span> <span class="c-n">1000</span>
+  <span class="c-k">sequences</span><span class="c-p">:</span>
+    <span class="c-k">vec</span><span class="c-p">:</span>
+    <span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">uSeed</span>
+      <span class="c-k">valuex</span><span class="c-p">:</span> <span class="c-e">=parent.Kandinsky.par.Seed</span></code></pre>
+        </div>
+        <div class="pillar__text">
+          <h3 class="pillar__name">TDXN</h3>
+          <p class="pillar__claim">the substrate.</p>
+          <p class="pillar__body">
+            TouchDesigner eXternal Network: your networks as human-readable YAML. Your agent can read it. You can read it. Git can read it.
+          </p>
+          <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+        </div>
       </a>
     </div>
   </div>

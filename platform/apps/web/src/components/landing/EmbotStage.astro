@@ -1,0 +1,11 @@
+---
+// The strip under the hero: Embot hops in from the left, crosses the page
+// saying what he just built, dances now and then, leaves on the right, and
+// comes back. Decorative only (aria-hidden); see Embot.astro for the port.
+import Embot from "./Embot.astro";
+---
+
+<section class="embot-stage" aria-hidden="true">
+  <div class="embot-stage__floor"></div>
+  <Embot mode="walk" scale={1.35} />
+</section>

@@ -1,6 +1,5 @@
 ---
 import { env } from "cloudflare:workers";
-import { Picture } from "astro:assets";
 import { TdnViewer } from "@embody/tdn-viewer";
 import Base from "../layouts/Base.astro";
 import { sampleTdn } from "../fixtures/sample-tdn";
@@ -8,7 +7,7 @@ import { resultImage } from "../lib/specimenThumb";
 import { fixtureSummaries } from "../lib/specimenFallback";
 import { MIN_TD_BUILD } from "../lib/tdBuild";
 import { listSpecimensForCollection } from "../server/db";
-import heroShot from "../assets/embody-screenshot.png";
+import EmbotStage from "../components/landing/EmbotStage.astro";
 import Pillars from "../components/landing/Pillars.astro";
 import PracticeSection from "../components/landing/PracticeSection.astro";
 import TdnShowcase from "../components/landing/TdnShowcase.astro";
@@ -144,23 +143,10 @@ const jsonLd = {
           Quickstart <span aria-hidden="true">&rarr;</span>
         </a>
       </div>
-
-      <figure class="hero__shot">
-        <Picture
-          src={heroShot}
-          formats={["avif", "webp"]}
-          widths={[640, 960, 1280, 1800, 2252]}
-          sizes="(max-width: 760px) calc(100vw - 3rem), min(900px, calc(100vw - 6rem))"
-          alt="Embody running inside TouchDesigner - the extension's manager panel."
-          loading="eager"
-          fetchpriority="high"
-          decoding="async"
-        />
-        <figcaption class="hero__shot__caption">The Embody manager panel &mdash; every operator externalized to readable text.</figcaption>
-      </figure>
     </div>
   </section>
 
+  <EmbotStage />
   <Pillars />
   <PracticeSection />
   <TdnShowcase />
@@ -505,12 +491,6 @@ const jsonLd = {
      command stays plain selectable text (same pattern as the no-js nav). */
   :global(html.no-js) .install__copy {
     display: none;
-  }
-
-  .hero__shot {
-    max-width: 900px;
-    align-self: center;
-    width: 100%;
   }
 
   .section--collection .card-grid {

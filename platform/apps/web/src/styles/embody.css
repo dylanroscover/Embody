@@ -1560,37 +1560,108 @@ pre {
   gap: 0.85rem;
   margin: 0;
 }
-.hero__shot { margin: 0; position: relative; }
-.hero__shot img {
-  width: 100%;
-  height: auto;
-  display: block;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  box-shadow: 0 30px 80px -25px rgba(0, 0, 0, 0.7);
-  /* Gentle reveal so the screenshot eases in rather than popping when it
-     decodes. CSS-only (works with no JS); the global prefers-reduced-motion
-     rule collapses it to an instant show. `both` holds the from-state so it
-     never flashes at full opacity first. */
-  animation: heroShotReveal 450ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-@keyframes heroShotReveal {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
-}
-.hero__shot__caption {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  color: var(--text-faint);
-  margin-top: 1rem;
-  text-align: center;
-}
-
-/* --- Pillars: landing uses a fixed 3-col of padded text cards.
-   Scoped to .section--pillars so the app's auto-fit .pillar stays intact. --- */
+/* --- Pillars: landing uses a fixed 3-col of media-topped cards (screenshot,
+   Embot, YAML). Scoped to .section--pillars so the app's auto-fit .pillar
+   stays intact. --- */
 .section--pillars .pillars { grid-template-columns: repeat(3, 1fr); }
-.section--pillars .pillar { padding: 2rem 1.85rem 2.1rem; }
+.section--pillars .pillar { padding: 0; overflow: hidden; }
+.pillar__media {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-faint);
+  background: var(--bg-code);
+}
+.pillar__media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: left top;
+}
+.pillar__media--embot {
+  background:
+    radial-gradient(ellipse at 50% 80%, rgba(110, 230, 104, 0.07), transparent 65%),
+    var(--bg-code);
+}
+.pillar__yaml {
+  box-sizing: border-box;
+  height: 100%;
+  margin: 0;
+  padding: 1rem 1.2rem;
+  overflow: hidden;
+  white-space: pre;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+/* Outranks the card's inline-chip `code` rule below, which would otherwise
+   box the whole excerpt. */
+.pillar--link .pillar__yaml code { font-size: inherit; color: inherit; background: none; border: none; padding: 0; }
+.pillar__media--yaml::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 38%;
+  background: linear-gradient(to bottom, transparent, var(--bg-code));
+  pointer-events: none;
+}
+.pillar__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 1.5rem 1.85rem 1.9rem;
+}
+/* When a card spans wider than a column (tablet's full-width third card, the
+   single mobile column) the 16:10 box would balloon; cap it and let the
+   screenshot crop, the YAML clip, and Embot centre. */
+.pillar__media { max-height: 240px; }
+
+/* --- Embot: the Envoy build-bot, ported from envoy_viz.py -- eight network-box
+   annotations (body, arms, legs, head, two eyes) plus the speech bubble. The
+   script in Embot.astro places every part per frame in TD's coordinate space,
+   scaled by --embot-scale; CSS only paints. --- */
+.embot { position: absolute; inset: 0; pointer-events: none; }
+.embot__part { position: absolute; border-radius: 2px; }
+.embot__part--eye { background: #000; }
+.embot__bubble {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  overflow: hidden;
+  padding: 0.38rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(31, 31, 43, 0.95);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+.embot__bubble-title { font-size: 0.62rem; letter-spacing: 0.08em; color: var(--text-faint); }
+.embot__bubble-text { white-space: nowrap; overflow: hidden; }
+/* The stage under the hero: a full-width strip Embot hops across, exits, and
+   re-enters. Height covers the figure, the bubble above it, and the hop arc. */
+.embot-stage {
+  position: relative;
+  height: clamp(230px, 26vw, 300px);
+  overflow: hidden;
+  border-top: 1px solid var(--border-faint);
+  border-bottom: 1px solid var(--border-faint);
+}
+.embot-stage__floor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 28px;
+  height: 1px;
+  background: var(--border);
+}
 .pillar__name {
   font-family: var(--font-display);
   font-weight: 600;
@@ -1993,7 +2064,7 @@ body.is-app-shell .footer {
   .section { padding: clamp(4rem, 12vw, 6rem) 0; }
   .section--pillars .pillars { grid-template-columns: 1fr; gap: 1rem; }
   .section--pillars .pillar:last-child { grid-column: auto; }
-  .section--pillars .pillar { padding: 1.65rem 1.5rem 1.85rem; }
+  .section--pillars .pillar__text { padding: 1.4rem 1.5rem 1.6rem; }
   .step { padding: 1.25rem 1.4rem; gap: 1rem; }
   .section--tdn .code { padding: 1.25rem 1.35rem; font-size: 0.76rem; }
   .footer__inner { grid-template-columns: 1fr; gap: 2.25rem; margin-bottom: 3rem; }
