@@ -1645,22 +1645,74 @@ pre {
 }
 .embot__bubble-title { font-size: 0.62rem; letter-spacing: 0.08em; color: var(--text-faint); }
 .embot__bubble-text { white-space: nowrap; overflow: hidden; }
-/* The stage under the hero: a full-width strip Embot hops across, exits, and
-   re-enters. Height covers the figure, the bubble above it, and the hop arc. */
-.embot-stage {
-  position: relative;
-  height: clamp(230px, 26vw, 300px);
-  overflow: hidden;
-  border-top: 1px solid var(--border-faint);
-  border-bottom: 1px solid var(--border-faint);
+/* --- Hero game: the side-scrolling network Embot hops through (HeroGame.astro).
+   Stage and Embot layer both cover the hero. The Embot layer sits above the
+   legibility veil (.hero::before, z1) but below the content (z2), and is lifted
+   to z3 for a "front" hop. Hidden under 860px, where the hero stacks. --- */
+.hero-game { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.hero-game__world { position: absolute; inset: 0; will-change: transform; }
+/* Annotations enclose a run of tiles, under them, titled by function, as the
+   network editor draws them. */
+.hero-annot {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid rgba(200, 208, 201, 0.16);
+  border-radius: 8px;
+  background: rgba(46, 58, 52, 0.22);
 }
-.embot-stage__floor {
+.hero-annot__title {
+  display: block;
+  padding: 0.38rem 0.65rem;
+  border-bottom: 1px solid rgba(200, 208, 201, 0.1);
+  border-radius: 8px 8px 0 0;
+  background: rgba(46, 58, 52, 0.38);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.hero-game__wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
+.hero-game__wires path { fill: none; stroke: rgba(200, 208, 201, 0.36); stroke-width: 1.5; }
+.hero-tile {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid rgba(200, 208, 201, 0.24);
+  border-left-width: 4px;
+  border-radius: 6px;
+  background: rgba(31, 35, 33, 0.92);
+  opacity: 0.9;
+  transition: box-shadow 450ms ease, border-color 450ms ease, opacity 450ms ease;
+}
+.hero-tile__name {
   position: absolute;
   left: 0;
-  right: 0;
-  bottom: 28px;
-  height: 1px;
-  background: var(--border);
+  top: -1.15rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.hero-tile__type {
+  position: absolute;
+  right: 0.45rem;
+  bottom: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-faint);
+}
+/* envoy_viz's node pulse (_VIZ_PULSE_COLOR, 0.45s) on the tile he lands on. */
+.hero-tile.is-hit {
+  opacity: 1;
+  border-color: rgb(38, 217, 178);
+  box-shadow: 0 0 0 2px rgba(38, 217, 178, 0.35), 0 0 24px rgba(38, 217, 178, 0.4);
+  transition: none;
+}
+/* Above both hero veils (::before and ::after sit at z1, so he is never
+   dimmed) and below the content (.hero__inner, z2, later in the DOM). */
+.hero__embot { position: absolute; inset: 0; z-index: 2; overflow: hidden; pointer-events: none; }
+@media (max-width: 860px) {
+  .hero-game, .hero__embot { display: none; }
 }
 .pillar__name {
   font-family: var(--font-display);

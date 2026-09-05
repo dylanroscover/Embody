@@ -1,13 +1,11 @@
 ---
 import { env } from "cloudflare:workers";
-import { TdnViewer } from "@embody/tdn-viewer";
 import Base from "../layouts/Base.astro";
-import { sampleTdn } from "../fixtures/sample-tdn";
 import { resultImage } from "../lib/specimenThumb";
 import { fixtureSummaries } from "../lib/specimenFallback";
 import { MIN_TD_BUILD } from "../lib/tdBuild";
 import { listSpecimensForCollection } from "../server/db";
-import EmbotStage from "../components/landing/EmbotStage.astro";
+import HeroGame from "../components/landing/HeroGame.astro";
 import Pillars from "../components/landing/Pillars.astro";
 import PracticeSection from "../components/landing/PracticeSection.astro";
 import TdnShowcase from "../components/landing/TdnShowcase.astro";
@@ -94,9 +92,7 @@ const jsonLd = {
 
   <!-- HERO -->
   <section class="hero">
-    <div class="hero-graph" aria-hidden="true">
-      <TdnViewer tdn={sampleTdn} height="100%" showAnnotations={false} client:only="react" />
-    </div>
+    <HeroGame />
     <div class="container hero__inner">
       <p class="eyebrow">open source &middot; MIT &middot; TouchDesigner 2025+</p>
       <h1 class="hero__headline">create at the<br />speed of&nbsp;thought.</h1>
@@ -146,7 +142,6 @@ const jsonLd = {
     </div>
   </section>
 
-  <EmbotStage />
   <Pillars />
   <PracticeSection />
   <TdnShowcase />
@@ -210,39 +205,19 @@ const jsonLd = {
     </div>
   </section>
 
-  <script>
-    // Fade the node-graph backdrop in once the ReactFlow island has actually
-    // rendered nodes, so it no longer pops in at the end of load. Decorative, so
-    // a safety-net timeout reveals it regardless; reduced-motion users get an
-    // instant reveal via the global prefers-reduced-motion rule.
-    const heroGraph = document.querySelector(".hero-graph");
-    if (heroGraph) {
-      const reveal = () => heroGraph.classList.add("is-ready");
-      if (heroGraph.querySelector(".react-flow__node")) {
-        reveal();
-      } else {
-        const obs = new MutationObserver(() => {
-          if (heroGraph.querySelector(".react-flow__node")) {
-            reveal();
-            obs.disconnect();
-          }
-        });
-        obs.observe(heroGraph, { childList: true, subtree: true });
-        window.setTimeout(reveal, 2500);
-      }
-    }
-  </script>
 </Base>
 
 <style>
-  /* Hero -- the node-graph motif sits behind the headline as faint texture,
-     not a chart (per the unify plan: reuse the graph instead of a radial glow). */
+  /* Hero -- Embot's side-scrolling network (HeroGame.astro) runs behind the
+     headline; its layers and tiles are styled globally in embody.css. */
   .hero {
     position: relative;
     overflow: hidden;
     /* top padding tuned so the mark -> eyebrow gap matches the eyebrow ->
        headline gap below (.hero__inner gap), for an even vertical rhythm. */
-    padding: clamp(5.5rem, 9vw, 7rem) 0 clamp(3rem, 6vw, 5rem);
+    /* Extra room at the bottom is the game's: the lower lanes and Embot run
+       under the CTAs where nothing covers them. */
+    padding: clamp(5.5rem, 9vw, 7rem) 0 clamp(9rem, 14vw, 12rem);
   }
 
   /* The hero clips (overflow:hidden contains the graph backdrop) and embody.css
@@ -255,32 +230,6 @@ const jsonLd = {
     padding-top: 0.5rem;
   }
 
-  .hero-graph {
-    position: absolute;
-    /* Spans the full hero width (symmetric overhang left and right) so the
-       network reads edge to edge rather than only in the upper-right; raised up
-       so it sits in the upper band rather than sinking into the bottom fade;
-       blur kept light so it stays a soft backdrop. */
-    inset: -150px -130px 38% -130px;
-    z-index: 0;
-    /* Starts hidden and fades in only once the ReactFlow island has rendered
-       (the .is-ready class is added by the script below), instead of popping in
-       at the end of load. Decorative, so if the script never fires it simply
-       stays as backdrop-less -- no content is hidden. */
-    opacity: 0;
-    transition: opacity 450ms ease;
-    filter: blur(2px);
-    pointer-events: none;
-  }
-  .hero-graph.is-ready { opacity: 0.3; }
-
-  .hero-graph :global(.tdn-viewer) {
-    height: 100%;
-    border: 0;
-    border-radius: 0;
-    background-color: transparent;
-  }
-
   .hero::before {
     position: absolute;
     inset: 0;
@@ -291,13 +240,19 @@ const jsonLd = {
        reads at full strength there. No longer paints opaque --bg over the left,
        which is what used to erase the network on that side. */
     background: linear-gradient(102deg, rgba(24, 30, 30, 0.48) 0%, rgba(24, 30, 30, 0.22) 50%, transparent 84%);
+    /* ...and fades out toward the bottom, where the game runs and nothing
+       needs veiling. */
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 52%, transparent 88%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 52%, transparent 88%);
     pointer-events: none;
   }
 
   .hero::after {
     position: absolute;
     inset: auto 0 0;
-    height: 42%;
+    /* Short: just enough to blend into the next section without sinking the
+       game's lower lane. */
+    height: 22%;
     z-index: 1;
     content: "";
     background: linear-gradient(transparent, var(--bg));
@@ -531,11 +486,6 @@ const jsonLd = {
     .hero {
       padding-top: 5.5rem;
     }
-
-    .hero-graph {
-      inset: -60px -220px 120px 0;
-    }
-    .hero-graph.is-ready { opacity: 0.16; }
   }
 
   /* Narrow DESKTOP windows keep the install CTA (fine pointer), it just

@@ -1,0 +1,318 @@
+---
+// The hero backdrop: a side-scrolling TouchDesigner network for Embot to hop
+// through, Mario-style. It is built the way a real network is built: runs of
+// operators within one family, wired left to right, and a family change only
+// ever through the proper bridge (topToCHOP, chopToTOP, chopToSOP, sopToCHOP,
+// sopToPOP, popToSOP, datToCHOP, or a geometryCOMP feeding a renderTOP). A
+// chain starts with a generator, runs through filters, and ends in a null.
+// Each run sits inside an annotation that encloses it, titled by function,
+// as the network editor draws them. The camera follows Embot, so the world
+// keeps sliding between hops (the forward momentum the headline promises),
+// and every tile he lands on pulses Envoy's accent exactly like the editor's
+// node pulse. He says what each op did, in EnvoyExt's own words. The first
+// chain is the network the old blurred backdrop showed. Decorative and
+// aria-hidden; hidden under 860px, where the hero stacks.
+import Embot from "./Embot.astro";
+---
+
+<div class="hero-game" aria-hidden="true">
+  <div class="hero-game__world">
+    <svg class="hero-game__wires" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
+</div>
+<div class="hero__embot" aria-hidden="true">
+  <Embot mode="game" scale={1.15} />
+</div>
+
+<script>
+  import { Embot, registerBot, reducedMotion, now, rand, OP_DESCRIPTIONS, JUMP_DUR, HOP_MIN, HOP_DWELL } from "../../lib/embot";
+
+  type Fam = "TOP" | "CHOP" | "SOP" | "POP" | "DAT" | "COMP";
+  type Tile = { x: number; top: number; w: number; h: number; lane: number; name: string; type: string; el: HTMLElement; path: SVGPathElement | null };
+
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const FLOOR = 34; // px between the hero's bottom edge and the floor his feet use
+  const TILE_W = 150;
+  const TILE_H = 100;
+  const LANES = [36, 98, 160]; // tile-top heights above the floor, px (low enough to stay under the install panel)
+  const GAP_MIN = 70;
+  const GAP_MAX = 140;
+  // TD family colours (network-editor palette, lightened for the dark ground).
+  const FAMILY: Record<Fam, string> = {
+    TOP: "#a99bdc", CHOP: "#8fd57f", SOP: "#7fb3ea", POP: "#7fd9c9", DAT: "#e58ad0", COMP: "#b8bdb9"
+  };
+  const GENERATORS: Record<Fam, string[]> = {
+    TOP: ["noiseTOP", "rampTOP", "constantTOP"], CHOP: ["lfoCHOP", "noiseCHOP"], SOP: ["gridSOP"], POP: ["gridPOP"],
+    DAT: ["webclientDAT", "textDAT"], COMP: []
+  };
+  const FILTERS: Record<Fam, string[]> = {
+    TOP: ["transformTOP", "blurTOP", "levelTOP", "edgeTOP", "compositeTOP", "hsvadjustTOP", "feedbackTOP", "glslTOP"],
+    CHOP: ["mathCHOP", "filterCHOP"], SOP: ["noiseSOP", "transformSOP"], POP: ["noisePOP"], DAT: [], COMP: []
+  };
+  const NULLS: Partial<Record<Fam, string>> = { TOP: "nullTOP", CHOP: "nullCHOP", SOP: "nullSOP", POP: "nullPOP" };
+  // Family bridges: the ONLY way a wire crosses families. "RENDER" is the
+  // geometryCOMP + renderTOP pair that brings geometry back into TOPs.
+  const BRIDGES: Record<Fam, Array<[string, Fam | "RENDER"]>> = {
+    TOP: [["topToCHOP", "CHOP"]],
+    CHOP: [["chopToTOP", "TOP"], ["chopToSOP", "SOP"]],
+    SOP: [["sopToCHOP", "CHOP"], ["sopToPOP", "POP"], ["geometryCOMP", "RENDER"]],
+    POP: [["popToSOP", "SOP"], ["geometryCOMP", "RENDER"]],
+    DAT: [["datToCHOP", "CHOP"]],
+    COMP: []
+  };
+  // What he says on the bridges (TD's table has no entries for them).
+  const BRIDGE_DESC: Record<string, string> = {
+    topToCHOP: "read the pixels into channels",
+    chopToTOP: "wrote the channels into pixels",
+    chopToSOP: "drove the points with channels",
+    sopToCHOP: "read the points into channels",
+    sopToPOP: "sent the geometry to the GPU",
+    popToSOP: "pulled the points back to the CPU",
+    datToCHOP: "turned the table into channels"
+  };
+  const TITLES: Record<Fam | "RENDER", string[]> = {
+    TOP: ["noise pipeline", "compositing", "post", "feedback loop", "output"],
+    CHOP: ["modulation", "audio analysis", "smoothing", "control"],
+    SOP: ["geometry", "terrain"], POP: ["particles", "point cloud"], DAT: ["data in"], COMP: ["scene"], RENDER: ["render"]
+  };
+  // The first chain is the sample network the old backdrop showed.
+  const SEED_CHAIN: Array<[string, string]> = [
+    ["noise_source", "noiseTOP"], ["feedback1", "feedbackTOP"], ["transform1", "transformTOP"],
+    ["composite1", "compositeTOP"], ["level1", "levelTOP"], ["out", "nullTOP"]
+  ];
+
+  const famOf = (type: string): Fam => (/(TOP|CHOP|SOP|POP|DAT|COMP)$/.exec(type)?.[1] as Fam | undefined) ?? "TOP";
+  const pick = <T,>(list: T[]): T => list[Math.floor(Math.random() * list.length)] as T;
+
+  function start(stage: HTMLElement, layer: HTMLElement, root: HTMLElement): void {
+    const world = stage.querySelector(".hero-game__world") as HTMLElement;
+    const wires = stage.querySelector(".hero-game__wires") as SVGSVGElement;
+    const tiles: Tile[] = [];
+    const annots: Array<{ x: number; w: number; el: HTMLElement }> = [];
+    const counters: Record<string, number> = {};
+    let nextX = 240;
+    let lane = 0;
+    let family: Fam = "TOP";
+    let chainOpen = false; // does the next tile take a wire from the previous one?
+    let camX = 0;
+    let lastT = now();
+    let current: Tile | null = null;
+    let nextHopAt = Infinity;
+    let started = false;
+
+    const floorY = () => stage.clientHeight - FLOOR;
+
+    function wirePath(prev: Tile, tile: Tile): string {
+      const x1 = prev.x + prev.w, y1 = prev.top + prev.h / 2;
+      const x2 = tile.x, y2 = tile.top + tile.h / 2;
+      const c = Math.max(24, (x2 - x1) / 2);
+      return `M${x1} ${y1} C${x1 + c} ${y1} ${x2 - c} ${y2} ${x2} ${y2}`;
+    }
+
+    function addTile(type: string, wired: boolean, fixedName?: string): Tile {
+      const fam = famOf(type);
+      const base = type.replace(/(TOP|CHOP|SOP|POP|DAT|COMP)$/, "").replace(/To$/, "to");
+      counters[base] = (counters[base] ?? 0) + 1;
+      const name = fixedName ?? `${base.toLowerCase()}${counters[base]}`;
+      const x = nextX;
+      nextX = x + TILE_W + rand(GAP_MIN, GAP_MAX);
+      const top = floorY() - (LANES[lane] ?? 48);
+      const el = document.createElement("div");
+      el.className = "hero-tile";
+      el.style.borderLeftColor = FAMILY[fam];
+      el.style.left = `${x}px`;
+      el.style.top = `${top}px`;
+      el.style.width = `${TILE_W}px`;
+      el.style.height = `${TILE_H}px`;
+      const nameEl = document.createElement("span");
+      nameEl.className = "hero-tile__name";
+      nameEl.textContent = name;
+      const typeEl = document.createElement("span");
+      typeEl.className = "hero-tile__type";
+      typeEl.textContent = type;
+      el.appendChild(nameEl);
+      el.appendChild(typeEl);
+      world.appendChild(el);
+      const tile: Tile = { x, top, w: TILE_W, h: TILE_H, lane, name, type, el, path: null };
+      const prev = tiles[tiles.length - 1];
+      if (prev && wired) {
+        const path = document.createElementNS(SVG_NS, "path");
+        path.setAttribute("d", wirePath(prev, tile));
+        wires.appendChild(path);
+        tile.path = path;
+      }
+      tiles.push(tile);
+      return tile;
+    }
+
+    function stepLane(): void {
+      const r = Math.random();
+      lane = r < 0.55 ? lane : r < 0.8 ? Math.min(2, lane + 1) : Math.max(0, lane - 1);
+    }
+
+    function addAnnot(run: Tile[], title: string): void {
+      const first = run[0], last = run[run.length - 1];
+      if (!first || !last) return;
+      const x = first.x - 34;
+      const w = last.x + last.w - first.x + 68;
+      const top = Math.min(...run.map((t) => t.top)) - 54;
+      const bottom = Math.max(...run.map((t) => t.top + t.h)) + 24;
+      const el = document.createElement("div");
+      el.className = "hero-annot";
+      el.style.left = `${x}px`;
+      el.style.top = `${top}px`;
+      el.style.width = `${w}px`;
+      el.style.height = `${bottom - top}px`;
+      const t = document.createElement("span");
+      t.className = "hero-annot__title";
+      t.textContent = title;
+      el.appendChild(t);
+      world.insertBefore(el, world.firstChild); // under the wires and tiles
+      annots.push({ x, w, el });
+    }
+
+    // One functional block: a generator (or the first filter after a bridge),
+    // a few filters, then either a null that ends the chain or a bridge into
+    // the next family. Wrapped in its annotation.
+    function addRun(): void {
+      const run: Tile[] = [];
+      let title: string;
+      nextX += 70; // clear space between annotation boxes, as the editor keeps
+      if (!chainOpen) {
+        family = pick<Fam>(["TOP", "TOP", "TOP", "CHOP", "SOP", "POP", "DAT"]);
+        stepLane();
+        run.push(addTile(pick(GENERATORS[family]), false));
+      } else {
+        stepLane();
+        const f = FILTERS[family];
+        if (f.length) run.push(addTile(pick(f), true));
+      }
+      title = pick(TITLES[family]);
+      const filters = FILTERS[family];
+      const n = filters.length ? Math.floor(rand(1, 4)) : 0;
+      for (let i = 0; i < n; i++) {
+        if (Math.random() < 0.3) stepLane();
+        run.push(addTile(pick(filters), true));
+      }
+      const bridges = BRIDGES[family];
+      const nullType = NULLS[family];
+      if (!bridges.length || (nullType && Math.random() < 0.35)) {
+        if (nullType) run.push(addTile(nullType, true));
+        chainOpen = false;
+        title = family === "TOP" ? "output" : title;
+      } else {
+        const [bridgeType, to] = pick(bridges);
+        if (Math.random() < 0.4) stepLane();
+        run.push(addTile(bridgeType, true));
+        if (to === "RENDER") {
+          run.push(addTile("renderTOP", true));
+          family = "TOP";
+          title = "render";
+        } else {
+          family = to;
+        }
+        chainOpen = true;
+      }
+      addAnnot(run, title);
+    }
+
+    function addSeedChain(): void {
+      const run: Tile[] = [];
+      for (const [i, [name, type]] of SEED_CHAIN.entries()) {
+        if (i === 2 || i === 4) stepLane();
+        run.push(addTile(type, i > 0, name));
+      }
+      addAnnot(run, "infinite zoom tunnel");
+      chainOpen = false;
+    }
+
+    function ensureWorld(): void {
+      const W = stage.clientWidth;
+      if (!tiles.length) addSeedChain();
+      while (nextX < camX + W + 900) addRun();
+      while (tiles.length > 2 && tiles[0] !== current && (tiles[0] as Tile).x + TILE_W < camX - 700) {
+        const t = tiles.shift() as Tile;
+        t.el.remove();
+        t.path?.remove();
+      }
+      while (annots.length && (annots[0] as { x: number; w: number }).x + (annots[0] as { w: number }).w < camX - 700) {
+        (annots.shift() as { el: HTMLElement }).el.remove();
+      }
+    }
+
+    function relayout(): void {
+      for (let i = 0; i < tiles.length; i++) {
+        const t = tiles[i] as Tile;
+        t.top = floorY() - (LANES[t.lane] ?? 48);
+        t.el.style.top = `${t.top}px`;
+        const prev = tiles[i - 1];
+        if (prev && t.path) t.path.setAttribute("d", wirePath(prev, t));
+      }
+    }
+
+    const bot = new Embot(root, { floorPx: FLOOR });
+
+    bot.onLand = () => {
+      const tile = current;
+      if (tile) {
+        tile.el.classList.add("is-hit");
+        window.setTimeout(() => tile.el.classList.remove("is-hit"), 450);
+      }
+      // TD's stepping cadence: a short dwell, shorter when the queue is deep.
+      nextHopAt = now() + rand(HOP_MIN, HOP_DWELL);
+    };
+
+    const captionFor = (tile: Tile) => OP_DESCRIPTIONS[tile.type] ?? BRIDGE_DESC[tile.type] ?? `built ${tile.name}`;
+
+    bot.driver = (b, t) => {
+      const W = stage.clientWidth;
+      if (!started) {
+        started = true;
+        ensureWorld();
+        if (reducedMotion()) {
+          const tile = tiles[1] ?? tiles[0];
+          if (tile) {
+            current = tile;
+            b.place((tile.x + tile.w / 2) / b.S, b.yForFeetAt(tile.top));
+            b.say(captionFor(tile), t - 10);
+          }
+          return;
+        }
+        b.place(-120 / b.S, 0);
+        b.say("opened a sub-network", t);
+        nextHopAt = t + 0.5;
+      }
+      // camera: keep him around a third of the way in; ease so the world glides
+      const dt = Math.min(0.05, Math.max(0, t - lastT));
+      lastT = t;
+      const targetCam = Math.max(0, b.base.x * b.S - W * 0.3);
+      camX += (targetCam - camX) * (1 - Math.exp(-dt * 3.5));
+      b.offsetX = camX;
+      world.style.transform = `translate3d(${-camX}px, 0, 0)`;
+      ensureWorld();
+      if (t >= nextHopAt && b.landed && t >= b.gestureEnd) {
+        const i = current ? tiles.indexOf(current) : -1;
+        let next = tiles[i + 1];
+        if (!next) { addRun(); next = tiles[i + 1] as Tile; }
+        b.hopTo((next.x + next.w / 2) / b.S, b.yForFeetAt(next.top), t, JUMP_DUR);
+        b.say(captionFor(next), t);
+        current = next;
+        nextHopAt = Infinity;
+      }
+    };
+
+    window.addEventListener("resize", () => {
+      relayout();
+      bot.resize();
+      if (current) bot.place(bot.target.x, bot.yForFeetAt(current.top));
+    });
+
+    registerBot(bot);
+    void layer;
+  }
+
+  const stageEl = document.querySelector<HTMLElement>(".hero-game");
+  const layerEl = document.querySelector<HTMLElement>(".hero__embot");
+  const rootEl = layerEl?.querySelector<HTMLElement>("[data-embot]");
+  if (stageEl && layerEl && rootEl && getComputedStyle(stageEl).display !== "none") start(stageEl, layerEl, rootEl);
+</script>

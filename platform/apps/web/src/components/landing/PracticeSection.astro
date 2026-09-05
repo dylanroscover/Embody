@@ -2,7 +2,8 @@
 // In practice -- one conversation with a live TouchDesigner session, four turns.
 // The three frames are straight captures of the network's Out TOP (a GLSL TOP
 // driven by five custom parameters); the fourth turn is the real TDXN diff
-// between the first frame's export and the third's. Each frame carries a copy
+// between the first frame's export and the third's (Seed, Shape, Warmth and
+// Offset gain values; Line Weight is 2.5 in both). Each frame carries a copy
 // button that puts that state's full TDXN export on the clipboard as an Embody
 // envelope (same component and payload as the collection pages), so a visitor
 // can paste the exact network into their own session. Two more capabilities
@@ -36,8 +37,8 @@ const frames = [
     img: frameC,
     tdn: parse(tdxn03) as Record<string, unknown>,
     what: "Set any parameter",
-    say: "Set the line weight to 6.",
-    alt: "The warm square composition with every line and ring drawn noticeably heavier."
+    say: "Set the seed to 42.",
+    alt: "The same warm square style re-scattered by a new seed: a large nested square upper-left, a fan of thin lines, red wedges and small squares on ochre paper."
   }
 ];
 
@@ -82,14 +83,14 @@ const sizes = "(max-width: 720px) calc(100vw - 3rem), min(530px, calc(50vw - 3re
         <pre class="practice-diff" aria-label="TDXN diff between the first frame and the third"><code><span class="d-meta">--- kandinsky.tdxn   frame 01
 +++ kandinsky.tdxn   frame 03
 @@ custom_pars: Kandinsky @@</span>
+   - name: Seed
+     default: 7
+<span class="d-add">+    value: 42</span>
    - name: Shape
      default: circle
 <span class="d-add">+    value: square</span>
    - name: Warmth
 <span class="d-add">+    value: 1</span>
-   - name: Lineweight
-<span class="d-del">-    value: 2.5</span>
-<span class="d-add">+    value: 6</span>
    - name: Offset
 <span class="d-add">+    values: [0.22, -0.08]</span></code></pre>
         <p class="practice-turn__say">&ldquo;Show me what changed between this and the first one.&rdquo;</p>
