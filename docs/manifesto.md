@@ -5,7 +5,7 @@ hide:
 
 # Create at the Speed of Thought
 
-Everything is moving faster now. Everyone is shipping. We're entering a brand new era of creativity, and Embody exists to help our community build faster and better than ever — open source, no strings attached, nothing SaaSy.
+Everything is moving faster now. Everyone is shipping. We're entering a brand new era of creativity, and Embody exists to help the TouchDesigner community build faster and better than ever — open source, no strings attached, nothing SaaSy.
 
 Most ideas die in the gap between imagining them and seeing them on screen. Trying the idea costs more than moving on to something safer, so people move on. Embody is built to make trying cheap.
 
