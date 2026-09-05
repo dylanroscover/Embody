@@ -31,10 +31,13 @@ import Embot from "./Embot.astro";
   type Tile = { x: number; top: number; w: number; h: number; lane: number; name: string; type: string; el: HTMLElement; path: SVGPathElement | null };
 
   const SVG_NS = "http://www.w3.org/2000/svg";
-  const FLOOR = 34; // px between the hero's bottom edge and the floor his feet use
   const TILE_W = 150;
   const TILE_H = 100;
-  const LANES = [36, 98, 160]; // tile-top heights above the floor, px (low enough to stay under the install panel)
+  // The floor (his feet on the lowest lane) sits one tile above the hero's
+  // bottom edge, so even lane 0's tiles stay inside the hero; the upper lanes
+  // are low enough to stay under the install panel.
+  const FLOOR = 122;
+  const LANES = [0, 56, 112]; // tile-top heights above the floor, px
   const GAP_MIN = 70;
   const GAP_MAX = 140;
   // TD family colours (network-editor palette, lightened for the dark ground).
