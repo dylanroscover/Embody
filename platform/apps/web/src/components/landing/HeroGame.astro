@@ -132,6 +132,7 @@ import Embot from "./Embot.astro";
     let lastT = now();
     let current: Tile | null = null;
     let nextHopAt = Infinity;
+    let hopsUntilThink = Math.round(rand(3, 7));
     let started = false;
 
     const floorY = () => floorFromTop();
@@ -345,7 +346,15 @@ import Embot from "./Embot.astro";
         window.setTimeout(() => tile.el.classList.remove("is-hit"), 450);
       }
       // TD's stepping cadence: a short dwell, shorter when the queue is deep.
-      nextHopAt = now() + rand(HOP_MIN, HOP_DWELL);
+      // Every few hops he stops to think instead; his colour warms over the
+      // pause (embot.ts WARM_S) and the longer ones take him all the way to red.
+      hopsUntilThink -= 1;
+      if (hopsUntilThink <= 0) {
+        hopsUntilThink = Math.round(rand(3, 7));
+        nextHopAt = now() + rand(2.5, 6.5);
+      } else {
+        nextHopAt = now() + rand(HOP_MIN, HOP_DWELL);
+      }
     };
 
     const captionFor = (tile: Tile) => OP_DESCRIPTIONS[tile.type] ?? BRIDGE_DESC[tile.type] ?? `built ${tile.name}`;
@@ -375,12 +384,13 @@ import Embot from "./Embot.astro";
         b.resize();
         if (current) b.place(b.target.x, b.yForFeetAt(current.top));
       }
-      // camera: keep him around a third of the way in, and the row he is on
-      // (or hopping to) centred in the band; ease both so the world glides
+      // camera: keep him around the middle of the band, and the row he is on
+      // (or hopping to) centred in it; ease both so the world glides. The
+      // clamp means he walks in from the left edge until the camera catches him.
       const dt = Math.min(0.05, Math.max(0, t - lastT));
       lastT = t;
       const k = 1 - Math.exp(-dt * 3.5);
-      const targetCamX = Math.max(0, b.base.x * b.S - W * 0.3);
+      const targetCamX = Math.max(0, b.base.x * b.S - W * 0.5);
       camX += (targetCamX - camX) * k;
       const rowCenter = current ? current.top + TILE_H / 2 : floorFromTop() + TILE_H / 2;
       const targetCamY = rowCenter - bandCenter();

@@ -6,9 +6,11 @@
 //
 // The loop is the y's own tail continued: Inter's y hooks left and ends in a
 // short slanted cut about 15 units below the baseline; the stroke leaves that
-// cut heading left at the hook's depth and width, runs under the word, rounds
-// the e with tight corners, comes back along the ascender line, and turns down
-// into the b's stem, matching the stem's width so the two merge.
+// cut heading left at the hook's depth and width, runs under the word, follows
+// the e's own outer curve round its left at a steady distance (an offset of
+// the glyph outline, so the loop's rounding IS the e's), comes back along the
+// ascender line, and turns down into the b's stem, matching the stem's width
+// so the two merge.
 //
 // Run:  node scripts/wordmark.mjs        (needs fontkit resolvable: either
 //       `npm i --no-save fontkit` here, or FONTKIT_DIR=<dir with node_modules>)
@@ -74,10 +76,53 @@ const stemC = (stemL + stemR) / 2;
 const W = tailW; // the stroke is the tail's width; it ends flush inside the wider stem top
 const topY = bTop - W / 2; // over-run centreline: its top edge is the stem's top
 
-// The e's left ink edge.
-const eLeft = ge.g.bbox.minX * S + ge.x;
-const R = 15; // corner radius of the enclosure
-const L = eLeft - 9 - W / 2; // the enclosure's left side, clear of the e
+// The e's outer left contour: the outline's first six quadratics run from the
+// bottom-most point round the left to the top-most point, with horizontal
+// tangents at both ends. Offsetting that arc outward gives a loop side that is
+// concentric with the e everywhere. The offset distance is set by the two
+// straight runs it has to meet: the under-run sits eBottom - runY below the e
+// and the over-run topY - eTop above it, so the gap eases between those two
+// values with height (a couple of units over the whole side, invisible) and
+// the arc lands on each run exactly tangent, no corner.
+const ecmds = ge.g.path.commands;
+const eArc = []; // flattened outer-left contour, glyph-local font units (y up)
+{
+  let cur = null;
+  for (const c of ecmds) {
+    if (c.command === "moveTo") { cur = { x: c.args[0] * S, y: c.args[1] * S }; eArc.push(cur); continue; }
+    if (c.command !== "quadraticCurveTo") break; // the arc is the leading run of quadratics
+    const [cx, cy, x1, y1] = c.args.map((a) => a * S);
+    const N = 28;
+    for (let i = 1; i <= N; i++) {
+      const t = i / N, u = 1 - t;
+      eArc.push({ x: u * u * cur.x + 2 * u * t * cx + t * t * x1, y: u * u * cur.y + 2 * u * t * cy + t * t * y1 });
+    }
+    cur = { x: x1, y: y1 };
+    if (eArc.length > 6 * N) break; // six quadratics: bottom point -> left -> top point
+  }
+}
+const eTop = ge.g.bbox.maxY * S, eBottom = ge.g.bbox.minY * S;
+const gapBottom = eBottom - runY; // centreline distance below the e at the under-run
+const gapTop = topY - eTop; // ...and above it at the over-run
+const eCentre = { x: (ge.g.bbox.minX + ge.g.bbox.maxX) * S / 2, y: (eTop + eBottom) / 2 };
+const offset = eArc.map((p, i) => {
+  const a = eArc[Math.max(0, i - 1)], b = eArc[Math.min(eArc.length - 1, i + 1)];
+  let nx = -(b.y - a.y), ny = b.x - a.x; // a normal to the local tangent
+  const len = Math.hypot(nx, ny) || 1;
+  nx /= len; ny /= len;
+  if (nx * (p.x - eCentre.x) + ny * (p.y - eCentre.y) < 0) { nx = -nx; ny = -ny; } // outward
+  const g = gapTop + (gapBottom - gapTop) * ((eTop - p.y) / (eTop - eBottom));
+  return { x: p.x + nx * g + ge.x, y: p.y + ny * g };
+});
+// Thin the polyline to ~1.2-unit steps: at this radius that is under 2 degrees
+// per segment, and round joins hide the rest.
+const side = [offset[0]];
+for (const p of offset) if (Math.hypot(p.x - side[side.length - 1].x, p.y - side[side.length - 1].y) >= 1.2) side.push(p);
+if (side[side.length - 1] !== offset[offset.length - 1]) side.push(offset[offset.length - 1]);
+const L = Math.min(...side.map((p) => p.x)); // the loop's leftmost centreline x, for the viewBox
+// Gap check for the log: clear space between the e's ink and the stroke's
+// inner edge along the side (should sit between gapTop - W/2 and gapBottom - W/2).
+const clear = side.map((q) => Math.min(...eArc.map((p) => Math.hypot(p.x + ge.x - q.x, p.y - q.y))) - W / 2);
 
 const Y = (fy) => BASE - fy; // font y -> SVG y
 const d = [
@@ -85,11 +130,9 @@ const d = [
   // leave a notch beside a square cap) and continue straight out of it at the
   // hook's own depth: no easing, no wobble
   `M${f1(tailMid.x + 3)} ${f1(Y(runY))}`,
-  // under the word to the e, round its left with two tight corners
-  `L${f1(L + R)} ${f1(Y(runY))}`,
-  `A${R} ${R} 0 0 1 ${f1(L)} ${f1(Y(runY + R))}`,
-  `L${f1(L)} ${f1(Y(topY - R))}`,
-  `A${R} ${R} 0 0 1 ${f1(L + R)} ${f1(Y(topY))}`,
+  // under the word to the e's bottom point, then round its left on the offset
+  // arc (its first point is on the under-run, its last on the over-run)
+  ...side.map((p) => `L${f1(p.x)} ${f1(Y(p.y))}`),
   // along the ascender line into the top of the b's stem: a square corner,
   // like the stem's own top, so the stem reads as turning left into the loop
   `L${f1(stemR - 1)} ${f1(Y(topY))}`
@@ -122,4 +165,4 @@ const { class: className = "" } = Astro.props;
 </svg>
 `;
 writeFileSync(OUT, astro, "utf8");
-console.log(JSON.stringify({ tailMid, tailW: f1(tailW), stemL: f1(stemL), stemR: f1(stemR), stemW: f1(stemW), W: f1(W), topY: f1(topY), eLeft: f1(eLeft), L: f1(L), viewBox: vb, height_em: f1(half * 2 / 100) }));
+console.log(JSON.stringify({ tailMid, tailW: f1(tailW), stemL: f1(stemL), stemR: f1(stemR), stemW: f1(stemW), W: f1(W), topY: f1(topY), gapTop: f1(gapTop), gapBottom: f1(gapBottom), sidePoints: side.length, L: f1(L), clearMin: f1(Math.min(...clear)), clearMax: f1(Math.max(...clear)), viewBox: vb, height_em: f1(half * 2 / 100) }));

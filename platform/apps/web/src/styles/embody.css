@@ -1625,10 +1625,14 @@ pre {
    script in Embot.astro places every part per frame in TD's coordinate space,
    scaled by --embot-scale; CSS only paints. --- */
 .embot { position: absolute; inset: 0; pointer-events: none; }
-.embot__part { position: absolute; border-radius: 2px; }
+.embot__part { position: absolute; left: 0; top: 0; border-radius: 2px; transform-origin: 0 0; will-change: transform; }
 .embot__part--eye { background: #000; }
 .embot__bubble {
   position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;

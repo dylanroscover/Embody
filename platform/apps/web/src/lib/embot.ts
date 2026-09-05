@@ -15,7 +15,7 @@
 
 export type Driver = (bot: Embot, t: number) => void;
 
-type Part = { name: string; ox: number; oy: number; w: number; h: number; eye: boolean; el: HTMLElement };
+type Part = { name: string; ox: number; oy: number; w: number; h: number; eye: boolean; el: HTMLElement; bg: string };
 
 // envoy_viz._VIZ_BOT_PARTS: name, centre offset x/y, base width/height, is_eye.
 const PART_TABLE: Array<[string, number, number, number, number, boolean]> = [
@@ -43,7 +43,9 @@ const DANCE_DUR = 3.0;
 const WAVE_LIFT = 28;
 const WAVE_FREQ = 14;
 const WAVE_AMP = 9;
-const WARM_S = 14;
+// TD ramps over 14s (_VIZ_WARM_S) because real thinking gaps run long; the
+// page's pauses are shorter, so warm faster or he never leaves cyan.
+const WARM_S = 5;
 const COOL_HUE = 0.58;
 const WARM_HUE = 0.0;
 const SQUINT_GAP_MIN = 9;
@@ -123,7 +125,21 @@ function hsv(h: number, s: number, v: number): string {
   return `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
 }
 
-export const now = (): number => performance.now() / 1000;
+// The animation clock, in seconds. It is VIRTUAL: the shared loop advances it
+// by the real frame delta clamped to one 30fps step, so a main-thread block
+// holds the animation for a frame instead of teleporting it forward by the
+// whole stall (the nav's html2canvas glass snapshot blocks 130ms + 290ms in
+// the first seconds; font swaps and GC cost less). Everything that schedules
+// -- hops, gestures, captions, the camera -- reads this, never performance.now.
+const MAX_STEP = 1 / 30;
+let clock = performance.now() / 1000;
+let realT = clock;
+export const now = (): number => clock;
+function advanceClock(): void {
+  const r = performance.now() / 1000;
+  clock += Math.min(r - realT, MAX_STEP);
+  realT = r;
+}
 
 export class Embot {
   root: HTMLElement;
@@ -169,7 +185,7 @@ export class Embot {
     this.S = parseFloat(root.dataset.scale || "1") || 1;
     this.floorPx = opts.floorPx ?? 16;
     this.parts = PART_TABLE.map(([name, ox, oy, w, h, eye]) => ({
-      name, ox, oy, w, h, eye, el: root.querySelector(`[data-part="${name}"]`) as HTMLElement
+      name, ox, oy, w, h, eye, el: root.querySelector(`[data-part="${name}"]`) as HTMLElement, bg: ""
     }));
     this.bubble = root.querySelector(".embot__bubble") as HTMLElement;
     this.bubbleText = root.querySelector(".embot__bubble-text") as HTMLElement;
@@ -185,6 +201,15 @@ export class Embot {
     this.w = r.width;
     this.h = r.height;
     this.originY = this.h - this.floorPx - FIGURE_BOTTOM * this.S;
+    // Base sizes are set once here; per-frame squash and squint ride on the
+    // transform's scale so a frame never touches layout.
+    const S = this.S;
+    for (const p of this.parts) {
+      p.el.style.width = `${p.w * S}px`;
+      p.el.style.height = `${p.h * S}px`;
+    }
+    this.bubble.style.width = `${BUBBLE_W * S}px`;
+    this.bubble.style.height = `${BUBBLE_H * S}px`;
   }
 
   /** Container width in units. */
@@ -305,19 +330,15 @@ export class Embot {
       }
       const pw = p.w * sx * gw, ph = p.h * sy * gh;
       const cx = px + ox * sx, cy = py + oy * sy;
-      const st = p.el.style;
-      st.left = `${(cx - pw / 2) * S - ox0}px`;
-      st.top = `${this.originY - (cy + ph / 2) * S - oy0}px`;
-      st.width = `${pw * S}px`;
-      st.height = `${ph * S}px`;
-      st.background = p.eye ? (blinking ? skin : "#000") : skin;
+      // Transform only (compositor work): left/top/width/height writes cost a
+      // layout every frame. Origin is the top-left, so translate lands the
+      // scaled box exactly where the old left/top put it.
+      p.el.style.transform = `translate3d(${(cx - pw / 2) * S - ox0}px, ${this.originY - (cy + ph / 2) * S - oy0}px, 0) scale(${pw / p.w}, ${ph / p.h})`;
+      const bg = p.eye ? (blinking ? skin : "#000") : skin;
+      if (bg !== p.bg) { p.bg = bg; p.el.style.background = bg; }
     }
     // --- speech bubble: follows the base position, not the dance sway ---
-    const bs = this.bubble.style;
-    bs.width = `${BUBBLE_W * S}px`;
-    bs.height = `${BUBBLE_H * S}px`;
-    bs.left = `${this.base.x * S - (BUBBLE_W * S) / 2 - ox0}px`;
-    bs.top = `${this.originY - (this.base.y + BUBBLE_LIFT + BUBBLE_H) * S - oy0}px`;
+    this.bubble.style.transform = `translate3d(${this.base.x * S - (BUBBLE_W * S) / 2 - ox0}px, ${this.originY - (this.base.y + BUBBLE_LIFT + BUBBLE_H) * S - oy0}px, 0)`;
     const act = this.caption;
     const shown = act.slice(0, Math.floor((t - this.speechT0) * 45));
     let line: string;
@@ -361,11 +382,12 @@ export function standDriver(): Driver {
   return (bot, t) => {
     if (!started || Math.abs(bot.target.x - bot.W / 2) > 0.5) {
       bot.place(bot.W / 2, 0);
-      if (!started) { started = true; bot.say(pickCaption(""), t); nextCaption = t + rand(5, 9); }
+      if (!started) { started = true; bot.say(pickCaption(""), t); nextCaption = t + rand(3, 7); }
     }
     if (t >= nextCaption) {
       bot.say(pickCaption(bot.caption), t);
-      nextCaption = t + rand(5, 9);
+      // Past WARM_S he reads red: the long end of this range gets him there.
+      nextCaption = t + rand(3, 7);
     }
   };
 }
@@ -402,6 +424,7 @@ export function registerBot(bot: Embot): void {
   loopStarted = true;
   window.addEventListener("resize", () => { for (const b of bots) b.resize(); });
   const loop = () => {
+    advanceClock();
     if (!document.hidden) {
       const t = now();
       for (const b of bots) if (b.visible) b.tick(t);
