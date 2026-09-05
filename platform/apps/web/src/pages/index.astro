@@ -215,9 +215,11 @@ const jsonLd = {
     overflow: hidden;
     /* top padding tuned so the mark -> eyebrow gap matches the eyebrow ->
        headline gap below (.hero__inner gap), for an even vertical rhythm. */
-    /* Extra room at the bottom is the game's: the lower lanes and Embot run
-       under the CTAs where nothing covers them. */
-    padding: clamp(5.5rem, 9vw, 7rem) 0 clamp(9rem, 14vw, 12rem);
+    /* The bottom room is the game's own band, sized so a tile on the top lane,
+       Embot on it, his bubble and the hop arc all clear the CTAs above: nothing
+       in the content ever covers him. (HeroGame.astro: floor 122px + top lane
+       88px + figure and bubble ~120px + arc.) */
+    padding: clamp(5.5rem, 9vw, 7rem) 0 clamp(19rem, 26vw, 22rem);
   }
 
   /* The hero clips (overflow:hidden contains the graph backdrop) and embody.css
