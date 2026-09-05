@@ -1708,9 +1708,9 @@ pre {
   box-shadow: 0 0 0 2px rgba(38, 217, 178, 0.35), 0 0 24px rgba(38, 217, 178, 0.4);
   transition: none;
 }
-/* Above both hero veils (::before and ::after sit at z1, so he is never
-   dimmed) and below the content (.hero__inner, z2, later in the DOM). */
-.hero__embot { position: absolute; inset: 0; z-index: 2; overflow: hidden; pointer-events: none; }
+/* Above the veils AND the content (.hero__inner, z2): his lanes rise out of
+   the middle third in front of the title. The tiles stay behind everything. */
+.hero__embot { position: absolute; inset: 0; z-index: 3; overflow: hidden; pointer-events: none; }
 @media (max-width: 860px) {
   .hero-game, .hero__embot { display: none; }
 }
@@ -2208,14 +2208,18 @@ body.is-app-shell .footer {
    letters. Measured against this stylesheet in headless Chrome (2026-09-05):
    the mono labels sat 0.83 css px high in their pills, a full pixel once DPR-1
    rasterization rounded it -- which is what reads as "the whole nav is off".
-   Browsers without text-box keep the old line-box centering.
-   The lowercase wordmark is included deliberately: cap/alphabetic is the
-   typographic center for it too, with the 'y' descender hanging below. */
-.navbar__word,
+   Browsers without text-box keep the old line-box centering. */
 .navbar__label,
 .navbar__user-name,
 .navbar__github-count {
   text-box: trim-both cap alphabetic;
+}
+/* The lowercase wordmark is the exception: its visual mass is the x-height
+   band (e, m, o, the bowls of b, d, y), so centering it on cap height left
+   that band ~1.3px low beside the uppercase labels. Trim to x-height instead;
+   the ascenders and the y's descender hang out of the box symmetrically. */
+.navbar__word {
+  text-box: trim-both ex alphabetic;
 }
 
 /* J1 - a signed-in account name is user-derived and was excluded from the

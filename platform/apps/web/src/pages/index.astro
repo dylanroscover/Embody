@@ -94,8 +94,13 @@ const jsonLd = {
   <section class="hero">
     <HeroGame />
     <div class="container hero__inner">
-      <h1 class="hero__headline">create at the<br />speed of&nbsp;thought.</h1>
+      <div class="hero__top">
+        <h1 class="hero__headline">create at the<br />speed of&nbsp;thought.</h1>
+      </div>
 
+      <div class="hero__game-row" aria-hidden="true"></div>
+
+      <div class="hero__mid">
       <div class="install" id="install">
         <p class="install__hint"><span class="install__prompt" aria-hidden="true">&gt;&gt;&gt;</span> paste this into a TouchDesigner Textport to install &mdash; macOS or Windows</p>
         <div class="install__bar">
@@ -137,6 +142,7 @@ const jsonLd = {
         <a class="btn btn--outline" href="https://dylanroscover.github.io/Embody/quickstart/">
           Quickstart <span aria-hidden="true">&rarr;</span>
         </a>
+      </div>
       </div>
     </div>
   </section>
@@ -207,28 +213,20 @@ const jsonLd = {
 </Base>
 
 <style>
-  /* Hero -- Embot's side-scrolling network (HeroGame.astro) runs behind the
-     headline; its layers and tiles are styled globally in embody.css. */
+  /* Hero -- three equal thirds: the title, Embot's side-scrolling network
+     (HeroGame.astro; its floor is the bottom of the middle third, so his hops
+     rise in front of the title), and the download panel. The hero starts at
+     the very top of the page -- main's nav clearance is cancelled here and
+     re-applied inside the first third -- so the thirds are true thirds of the
+     viewport. Game layers are styled globally in embody.css. */
   .hero {
     position: relative;
     overflow: hidden;
-    /* top padding tuned so the mark -> eyebrow gap matches the eyebrow ->
-       headline gap below (.hero__inner gap), for an even vertical rhythm. */
-    /* The bottom room is the game's own band, sized so a tile on the top lane,
-       Embot on it, his bubble and the hop arc all clear the CTAs above: nothing
-       in the content ever covers him. (HeroGame.astro: floor 122px + top lane
-       88px + figure and bubble ~120px + arc.) */
-    padding: clamp(5.5rem, 9vw, 7rem) 0 clamp(19rem, 26vw, 22rem);
-  }
-
-  /* The hero clips (overflow:hidden contains the graph backdrop) and embody.css
-     zeroes its top padding, so the clip edge lands exactly on the content box --
-     and the leading-trimmed .eyebrow below puts its box top at the CAP line, with
-     ascenders and i-dots ~1.6px above it. Those tips got shaved (field
-     2026-08-28). Lift the clip edge; padding puts the content back untouched. */
-  .hero:first-child {
-    margin-top: -0.5rem;
-    padding-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    min-height: max(100vh, 60rem);
+    padding: 0;
+    margin-top: calc(-1 * (var(--safe-top, 0px) + var(--nav-top) + var(--nav-h) + var(--stack-gap)));
   }
 
   .hero::before {
@@ -241,10 +239,10 @@ const jsonLd = {
        reads at full strength there. No longer paints opaque --bg over the left,
        which is what used to erase the network on that side. */
     background: linear-gradient(102deg, rgba(24, 30, 30, 0.48) 0%, rgba(24, 30, 30, 0.22) 50%, transparent 84%);
-    /* ...and fades out toward the bottom, where the game runs and nothing
-       needs veiling. */
-    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 52%, transparent 88%);
-    mask-image: linear-gradient(to bottom, #000 0%, #000 52%, transparent 88%);
+    /* ...and fades out below the title's third, where the game runs and
+       nothing needs veiling. */
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 26%, transparent 50%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 26%, transparent 50%);
     pointer-events: none;
   }
 
@@ -263,18 +261,42 @@ const jsonLd = {
   .hero__inner {
     position: relative;
     z-index: 2;
-    display: flex;
-    flex-direction: column;
-    /* Same shared rhythm token as nav->eyebrow and eyebrow->heading, so every
-       gap down the hero is identical: nav = eyebrow = headline = CTAs = shot. */
-    gap: var(--stack-gap);
+    flex: 1;
+    display: grid;
+    grid-template-rows: 1fr 1fr 1fr;
   }
 
-  /* Headline, install card and CTA row all share the container's center
-     axis: one centered column over the game. */
-  .hero__headline,
+  /* First third: the title, centred between the nav's bottom edge and the
+     second third, so the nav->title and title->panel gaps stay equal. */
+  .hero__top {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: calc(var(--safe-top, 0px) + var(--nav-top) + var(--nav-h));
+  }
+
+  .hero__headline {
+    margin: 0;
+    text-align: center;
+    font-size: clamp(2.4rem, 6vw, 5rem);
+  }
+
+  /* Third third: the install panel at its centre, the CTA row tucked under
+     it. (The middle third is the game's; see HeroGame.astro.) */
+  .hero__mid {
+    display: grid;
+    grid-template-rows: 1fr auto 1fr;
+    justify-items: center;
+  }
+
+  .hero__mid .install {
+    grid-row: 2;
+  }
+
   .hero__ctas {
-    align-self: center;
+    grid-row: 3;
+    align-self: start;
+    margin-top: 1.25rem;
     text-align: center;
   }
 
@@ -475,10 +497,22 @@ const jsonLd = {
     }
   }
 
-  @media (max-width: 760px) {
+  @media (max-width: 860px) {
+    /* The game is hidden here (embody.css), so the hero is a plain stack
+       again under main's own nav clearance. */
     .hero {
-      padding-top: 5.5rem;
+      min-height: 0;
+      margin-top: 0;
+      padding: 0 0 3.5rem;
     }
+    .hero__inner {
+      display: flex;
+      flex-direction: column;
+      gap: var(--stack-gap);
+    }
+    .hero__top { padding-top: 0; }
+    .hero__mid { display: flex; flex-direction: column; gap: 1.25rem; }
+    .hero__game-row { display: none; }
   }
 
   /* Narrow DESKTOP windows keep the install CTA (fine pointer), it just

@@ -5,13 +5,16 @@
 // ever through the proper bridge (topToCHOP, chopToTOP, chopToSOP, sopToCHOP,
 // sopToPOP, popToSOP, datToCHOP, or a geometryCOMP feeding a renderTOP). A
 // chain starts with a generator, runs through filters, and ends in a null.
-// Each run sits inside an annotation that encloses it, titled by function,
-// as the network editor draws them. The camera follows Embot, so the world
-// keeps sliding between hops (the forward momentum the headline promises),
-// and every tile he lands on pulses Envoy's accent exactly like the editor's
-// node pulse. He says what each op did, in EnvoyExt's own words. The first
-// chain is the network the old blurred backdrop showed. Decorative and
-// aria-hidden; hidden under 860px, where the hero stacks.
+// Anything that blends takes a second input: a compositeTOP gets a side branch
+// forked off the op two back (or a fresh generator when there is none),
+// converging into its lower input, so forks and deltas appear as they do in
+// a real network. Each run sits inside an annotation that encloses it, titled
+// by function. The camera follows Embot, so the world keeps sliding between
+// hops (the forward momentum the headline promises), and every tile he lands
+// on pulses Envoy's accent exactly like the editor's node pulse. He says what
+// each op did, in EnvoyExt's own words. The first chain is the network the
+// old blurred backdrop showed. Decorative and aria-hidden; hidden under 860px,
+// where the hero stacks.
 import Embot from "./Embot.astro";
 ---
 
@@ -28,16 +31,18 @@ import Embot from "./Embot.astro";
   import { Embot, registerBot, reducedMotion, now, rand, OP_DESCRIPTIONS, JUMP_DUR, HOP_MIN, HOP_DWELL } from "../../lib/embot";
 
   type Fam = "TOP" | "CHOP" | "SOP" | "POP" | "DAT" | "COMP";
-  type Tile = { x: number; top: number; w: number; h: number; lane: number; name: string; type: string; el: HTMLElement; path: SVGPathElement | null };
+  type Input = [Tile, number]; // source tile, input slot (0 = top, 1 = bottom)
+  type Tile = { x: number; top: number; w: number; h: number; lane: number; name: string; type: string; el: HTMLElement; inputs: Input[]; paths: SVGPathElement[] };
 
   const SVG_NS = "http://www.w3.org/2000/svg";
   const TILE_W = 150;
   const TILE_H = 100;
-  // The floor (his feet on the lowest lane) sits one tile above the hero's
-  // bottom edge, so even lane 0's tiles stay inside the hero; the upper lanes
-  // are low enough to stay under the install panel.
-  const FLOOR = 122;
-  const LANES = [0, 44, 88]; // tile-top heights above the floor, px; the hero's bottom padding is sized to these
+  // The game owns the hero's middle third, weighted to the upper half of the
+  // screen: the floor (his feet on the lowest lane) sits at mid-height, so
+  // lane 0's tiles hang just below it and the upper lanes climb toward the
+  // title, where his hops and bubble cross in front of it.
+  const floorFromBottom = (h: number) => h / 2 + 8;
+  const LANES = [0, 70, 140]; // tile-top heights above the floor, px
   const GAP_MIN = 70;
   const GAP_MAX = 140;
   // TD family colours (network-editor palette, lightened for the dark ground).
@@ -52,6 +57,8 @@ import Embot from "./Embot.astro";
     TOP: ["transformTOP", "blurTOP", "levelTOP", "edgeTOP", "compositeTOP", "hsvadjustTOP", "feedbackTOP", "glslTOP"],
     CHOP: ["mathCHOP", "filterCHOP"], SOP: ["noiseSOP", "transformSOP"], POP: ["noisePOP"], DAT: [], COMP: []
   };
+  // Ops that combine inputs and therefore need a second one wired in.
+  const COMBINERS = new Set(["compositeTOP"]);
   const NULLS: Partial<Record<Fam, string>> = { TOP: "nullTOP", CHOP: "nullCHOP", SOP: "nullSOP", POP: "nullPOP" };
   // Family bridges: the ONLY way a wire crosses families. "RENDER" is the
   // geometryCOMP + renderTOP pair that brings geometry back into TOPs.
@@ -87,7 +94,7 @@ import Embot from "./Embot.astro";
   const famOf = (type: string): Fam => (/(TOP|CHOP|SOP|POP|DAT|COMP)$/.exec(type)?.[1] as Fam | undefined) ?? "TOP";
   const pick = <T,>(list: T[]): T => list[Math.floor(Math.random() * list.length)] as T;
 
-  function start(stage: HTMLElement, layer: HTMLElement, root: HTMLElement): void {
+  function start(stage: HTMLElement, root: HTMLElement): void {
     const world = stage.querySelector(".hero-game__world") as HTMLElement;
     const wires = stage.querySelector(".hero-game__wires") as SVGSVGElement;
     const tiles: Tile[] = [];
@@ -103,23 +110,25 @@ import Embot from "./Embot.astro";
     let nextHopAt = Infinity;
     let started = false;
 
-    const floorY = () => stage.clientHeight - FLOOR;
+    const floorY = () => stage.clientHeight - floorFromBottom(stage.clientHeight);
 
-    function wirePath(prev: Tile, tile: Tile): string {
-      const x1 = prev.x + prev.w, y1 = prev.top + prev.h / 2;
-      const x2 = tile.x, y2 = tile.top + tile.h / 2;
+    // A wire leaves the source's right edge at mid-height and enters the
+    // destination's left edge at its input slot (upper or lower third).
+    function wirePath(from: Tile, to: Tile, slot: number): string {
+      const x1 = from.x + from.w, y1 = from.top + from.h / 2;
+      const x2 = to.x, y2 = to.top + to.h * (slot === 0 ? 0.36 : 0.64);
       const c = Math.max(24, (x2 - x1) / 2);
       return `M${x1} ${y1} C${x1 + c} ${y1} ${x2 - c} ${y2} ${x2} ${y2}`;
     }
 
-    function addTile(type: string, wired: boolean, fixedName?: string): Tile {
+    function addTile(type: string, inputs: Input[], fixedName?: string): Tile {
       const fam = famOf(type);
       const base = type.replace(/(TOP|CHOP|SOP|POP|DAT|COMP)$/, "").replace(/To$/, "to");
       counters[base] = (counters[base] ?? 0) + 1;
       const name = fixedName ?? `${base.toLowerCase()}${counters[base]}`;
       const x = nextX;
       nextX = x + TILE_W + rand(GAP_MIN, GAP_MAX);
-      const top = floorY() - (LANES[lane] ?? 48);
+      const top = floorY() - (LANES[lane] ?? 0);
       const el = document.createElement("div");
       el.className = "hero-tile";
       el.style.borderLeftColor = FAMILY[fam];
@@ -136,13 +145,12 @@ import Embot from "./Embot.astro";
       el.appendChild(nameEl);
       el.appendChild(typeEl);
       world.appendChild(el);
-      const tile: Tile = { x, top, w: TILE_W, h: TILE_H, lane, name, type, el, path: null };
-      const prev = tiles[tiles.length - 1];
-      if (prev && wired) {
+      const tile: Tile = { x, top, w: TILE_W, h: TILE_H, lane, name, type, el, inputs, paths: [] };
+      for (const [from, slot] of inputs) {
         const path = document.createElementNS(SVG_NS, "path");
-        path.setAttribute("d", wirePath(prev, tile));
+        path.setAttribute("d", wirePath(from, tile, slot));
         wires.appendChild(path);
-        tile.path = path;
+        tile.paths.push(path);
       }
       tiles.push(tile);
       return tile;
@@ -153,11 +161,45 @@ import Embot from "./Embot.astro";
       lane = r < 0.55 ? lane : r < 0.8 ? Math.min(2, lane + 1) : Math.max(0, lane - 1);
     }
 
+    const last = (): Tile | undefined => tiles[tiles.length - 1];
+
+    // A combiner takes a second input from a side branch on another lane at
+    // the previous tile's x: a filter forked off the op two back when that op
+    // is of the same family, otherwise a fresh generator. Embot visits the
+    // side tile on his way (a vertical hop), then the combiner.
+    function addCombiner(type: string, run: Tile[], fixedName?: string): Tile {
+      const mainPrev = last();
+      if (!mainPrev) return addTile(type, [], fixedName);
+      const fam = famOf(type);
+      const forkFrom = tiles[tiles.length - 2];
+      const canFork = !!forkFrom && famOf(forkFrom.type) === fam && FILTERS[fam].length > 0;
+      const savedLane = lane, savedNext = nextX;
+      lane = mainPrev.lane === 0 ? 1 : mainPrev.lane - 1;
+      nextX = mainPrev.x;
+      const side = canFork
+        ? addTile(pick(FILTERS[fam].filter((f) => !COMBINERS.has(f))), [[forkFrom as Tile, 0]])
+        : addTile(pick(GENERATORS[fam]), []);
+      run.push(side);
+      lane = savedLane;
+      nextX = savedNext;
+      return addTile(type, [[mainPrev, 0], [side, 1]], fixedName);
+    }
+
+    function addFilter(type: string, run: Tile[]): void {
+      if (COMBINERS.has(type)) {
+        run.push(addCombiner(type, run));
+      } else {
+        const prev = last();
+        run.push(addTile(type, prev ? [[prev, 0]] : []));
+      }
+    }
+
     function addAnnot(run: Tile[], title: string): void {
-      const first = run[0], last = run[run.length - 1];
-      if (!first || !last) return;
-      const x = first.x - 34;
-      const w = last.x + last.w - first.x + 68;
+      const first = run[0], lastTile = run[run.length - 1];
+      if (!first || !lastTile) return;
+      const xs = run.map((t) => t.x);
+      const x = Math.min(...xs) - 34;
+      const w = Math.max(...run.map((t) => t.x + t.w)) - Math.min(...xs) + 68;
       const top = Math.min(...run.map((t) => t.top)) - 54;
       const bottom = Math.max(...run.map((t) => t.top + t.h)) + 24;
       const el = document.createElement("div");
@@ -184,31 +226,33 @@ import Embot from "./Embot.astro";
       if (!chainOpen) {
         family = pick<Fam>(["TOP", "TOP", "TOP", "CHOP", "SOP", "POP", "DAT"]);
         stepLane();
-        run.push(addTile(pick(GENERATORS[family]), false));
+        run.push(addTile(pick(GENERATORS[family]), []));
       } else {
         stepLane();
         const f = FILTERS[family];
-        if (f.length) run.push(addTile(pick(f), true));
+        if (f.length) addFilter(pick(f), run);
       }
       title = pick(TITLES[family]);
       const filters = FILTERS[family];
       const n = filters.length ? Math.floor(rand(1, 4)) : 0;
       for (let i = 0; i < n; i++) {
         if (Math.random() < 0.3) stepLane();
-        run.push(addTile(pick(filters), true));
+        addFilter(pick(filters), run);
       }
       const bridges = BRIDGES[family];
       const nullType = NULLS[family];
+      const prev = last();
       if (!bridges.length || (nullType && Math.random() < 0.35)) {
-        if (nullType) run.push(addTile(nullType, true));
+        if (nullType && prev) run.push(addTile(nullType, [[prev, 0]]));
         chainOpen = false;
         title = family === "TOP" ? "output" : title;
       } else {
         const [bridgeType, to] = pick(bridges);
         if (Math.random() < 0.4) stepLane();
-        run.push(addTile(bridgeType, true));
+        const bridge = addTile(bridgeType, prev ? [[prev, 0]] : []);
+        run.push(bridge);
         if (to === "RENDER") {
-          run.push(addTile("renderTOP", true));
+          run.push(addTile("renderTOP", [[bridge, 0]]));
           family = "TOP";
           title = "render";
         } else {
@@ -223,7 +267,12 @@ import Embot from "./Embot.astro";
       const run: Tile[] = [];
       for (const [i, [name, type]] of SEED_CHAIN.entries()) {
         if (i === 2 || i === 4) stepLane();
-        run.push(addTile(type, i > 0, name));
+        if (COMBINERS.has(type)) {
+          run.push(addCombiner(type, run, name));
+        } else {
+          const prev = last();
+          run.push(addTile(type, i > 0 && prev ? [[prev, 0]] : [], name));
+        }
       }
       addAnnot(run, "infinite zoom tunnel");
       chainOpen = false;
@@ -233,10 +282,10 @@ import Embot from "./Embot.astro";
       const W = stage.clientWidth;
       if (!tiles.length) addSeedChain();
       while (nextX < camX + W + 900) addRun();
-      while (tiles.length > 2 && tiles[0] !== current && (tiles[0] as Tile).x + TILE_W < camX - 700) {
+      while (tiles.length > 3 && tiles[0] !== current && (tiles[0] as Tile).x + TILE_W < camX - 700) {
         const t = tiles.shift() as Tile;
         t.el.remove();
-        t.path?.remove();
+        for (const p of t.paths) p.remove();
       }
       while (annots.length && (annots[0] as { x: number; w: number }).x + (annots[0] as { w: number }).w < camX - 700) {
         (annots.shift() as { el: HTMLElement }).el.remove();
@@ -244,16 +293,16 @@ import Embot from "./Embot.astro";
     }
 
     function relayout(): void {
-      for (let i = 0; i < tiles.length; i++) {
-        const t = tiles[i] as Tile;
-        t.top = floorY() - (LANES[t.lane] ?? 48);
+      for (const t of tiles) {
+        t.top = floorY() - (LANES[t.lane] ?? 0);
         t.el.style.top = `${t.top}px`;
-        const prev = tiles[i - 1];
-        if (prev && t.path) t.path.setAttribute("d", wirePath(prev, t));
+      }
+      for (const t of tiles) {
+        t.inputs.forEach(([from, slot], i) => t.paths[i]?.setAttribute("d", wirePath(from, t, slot)));
       }
     }
 
-    const bot = new Embot(root, { floorPx: FLOOR });
+    const bot = new Embot(root, { floorPx: floorFromBottom(stage.clientHeight) });
 
     bot.onLand = () => {
       const tile = current;
@@ -306,16 +355,15 @@ import Embot from "./Embot.astro";
 
     window.addEventListener("resize", () => {
       relayout();
+      bot.floorPx = floorFromBottom(stage.clientHeight);
       bot.resize();
       if (current) bot.place(bot.target.x, bot.yForFeetAt(current.top));
     });
 
     registerBot(bot);
-    void layer;
   }
 
   const stageEl = document.querySelector<HTMLElement>(".hero-game");
-  const layerEl = document.querySelector<HTMLElement>(".hero__embot");
-  const rootEl = layerEl?.querySelector<HTMLElement>("[data-embot]");
-  if (stageEl && layerEl && rootEl && getComputedStyle(stageEl).display !== "none") start(stageEl, layerEl, rootEl);
+  const rootEl = document.querySelector<HTMLElement>(".hero__embot [data-embot]");
+  if (stageEl && rootEl && getComputedStyle(stageEl).display !== "none") start(stageEl, rootEl);
 </script>
