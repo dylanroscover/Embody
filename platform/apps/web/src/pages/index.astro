@@ -94,7 +94,6 @@ const jsonLd = {
   <section class="hero">
     <HeroGame />
     <div class="container hero__inner">
-      <p class="eyebrow">open source &middot; MIT &middot; TouchDesigner 2025+</p>
       <h1 class="hero__headline">create at the<br />speed of&nbsp;thought.</h1>
 
       <div class="install" id="install">
@@ -271,18 +270,8 @@ const jsonLd = {
     gap: var(--stack-gap);
   }
 
-  .hero__inner .eyebrow {
-    margin: 0;
-    /* Same leading-trim as the headline so the eyebrow's box hugs its ink and
-       the nav->eyebrow / eyebrow->headline gaps read as a true 48px, not the
-       font's line box. Keeps the hero stack uniform ink-to-ink. */
-    text-box-trim: trim-both;
-    text-box-edge: cap alphabetic;
-  }
-
-  /* Eyebrow, headline, install card and CTA row all share the container's
-     center axis: one centered column over the game. */
-  .hero__inner .eyebrow,
+  /* Headline, install card and CTA row all share the container's center
+     axis: one centered column over the game. */
   .hero__headline,
   .hero__ctas {
     align-self: center;
