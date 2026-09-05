@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.12-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.13-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-65-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -209,7 +209,7 @@ For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/tr
 
 Every release is documented in the [full changelog](https://dylanroscover.github.io/Embody/changelog/). Highlights:
 
-- **6.2.12** — vector custom parameter defaults survive the round trip (issue #96); six definition fields, three authored flags, and TDXN format 2.1
+- **6.2.13** — vector custom parameter defaults survive the round trip (issue #96); six definition fields, three authored flags, and TDXN format 2.1
 - **6.2.8** — the TDXN rename completes across docs, skills, and embody.tools (`/tdn/` → `/tdxn/` with permanent redirects)
 - **6.2.5** — TDXN review fixes: snapshot exports never touch tracked files, and dirty detection covers everything an export writes
 - **6.2.0** — three namespace tiers; the promoted surface drops from 214 members to 43 (issue #94 — **breaking** for undocumented names)

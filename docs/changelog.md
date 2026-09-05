@@ -1,8 +1,8 @@
 # Changelog
 
-## v6.2.12
+## v6.2.13
 
-Custom parameter definitions round-trip per component, not per group -- plus the two style bugs and the flag gaps found while proving it. (6.2.11 was a version-bump-only save, never published.)
+Custom parameter definitions round-trip per component, not per group -- plus the two style bugs and the flag gaps found while proving it. (6.2.11 was a version-bump-only save; 6.2.12 was built and fully validated but superseded before publication by the constant rename below.)
 
 - **Vector parameter defaults survive (issue #96)**: `default`, `min`, `max`, `clampMin`/`clampMax` and `normMin`/`normMax` are per-component across a tuplet. An `RGBA` with defaults `[0.1, 0.2, 0.3, 1]` exported the scalar `0.1` and reconstructed with only its red component set; `readOnly`, `help`, `enable` and `enableExpr` had the same defect. A scalar is still written when every component agrees, so existing files gain nothing they did not already say.
 - **Six definition fields that were never exported**: `password`, `styleCloneImmune`, `bindRange`, `defaultExpr`, `defaultBindExpr` and `defaultMode`. `defaultMode` ships even when `CONSTANT`, because assigning a default expression auto-flips it -- without that, a parameter deliberately forced back to `CONSTANT` reset to its expression instead of its constant.
@@ -12,6 +12,7 @@ Custom parameter definitions round-trip per component, not per group -- plus the
 - **TDXN format 2.1**: definition fields may now be a per-component array. New keys need no version bump, but a widened type does -- a pre-2.1 reader treats `readOnly: [false, true]` as truthy and forces the whole tuplet. Older builds now log "newer than this build" instead of failing silently.
 - **VFS is documented as unsupported**: embedded files are never exported and do not survive reconstruction. Use TOX strategy (a `.tox` preserves VFS) or keep assets on disk. A contract test pins the exclusion so it cannot change silently.
 - **A full test run is gated on a recovery point**: `run_tests` refuses a full run when the saved `.toe` is missing or over an hour old, and reports its age on every run. The instruction to "save first" was prose asking for a judgement the caller could not cheaply make -- `project.dirty` does not exist on TD 2025 and `project.modified` returns a list of operator paths, not a bool.
+- **Five stale `TDN_*` constants renamed to `TDXN_*`**: `TDN_VERSION`, `TDN_FILE_SUFFIX`, `TDN_FILE_SUFFIXES`, `TDN_FORMAT` and `TDN_ACCEPTED_FORMATS` kept the pre-6.1.2 prefix and were missed by the v6.2.8 sweep. Identifiers only -- every value is untouched, so `TDXN_FORMAT` is still `'tdxn'` and both `.tdxn` and `.tdn` are still accepted on read.
 - **The MCP flag surface matches the format**: `get_op_flags`/`set_op_flags` cover every flag TDXN round-trips; an inapplicable flag is reported in `unsupported_flags`. **4,467 tests** (140 suites).
 
 ## v6.2.10

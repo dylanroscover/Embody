@@ -1,20 +1,14 @@
 format: tdxn
 version: '2.1'
 build: 1197
-generator: Embody/6.2.12
+generator: Embody/6.2.13
 td_build: 099.2025.33070
-source_file: Embody-6.315.toe
-exported_at: '2026-09-04T23:46:15Z'
+source_file: Embody-6.316.toe
+exported_at: '2026-09-05T06:59:39Z'
 network_path: /embody
 options:
   include_dat_content: false
   include_storage: true
-type_defaults:
-  baseCOMP:
-    size: [160, 130]
-  noiseTOP:
-    size: [130, 90]
-    color: [0.67, 0.67, 0.67]
 type: containerCOMP
 parameters:
   w: 960
@@ -905,7 +899,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.2.12
+      value: 6.2.13
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -970,64 +964,6 @@ operators:
   tags:
   - tdn
   tdn_ref: embody/Embody.tdn
-- name: anno_dst
-  type: baseCOMP
-  position: [-12200, -3400]
-  color: [0.67, 0.67, 0.67]
-  children:
-  - name: n1
-    type: noiseTOP
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: Probe
-    text: body text
-    position: [-200, 200]
-    size: [600, 400]
-    color: [0.45, 0.45, 0.45]
-- name: anno_src
-  type: baseCOMP
-  position: [-12200, -3000]
-  color: [0.67, 0.67, 0.67]
-  children:
-  - name: n1
-    type: noiseTOP
-  annotations:
-  - name: annotate1
-    mode: annotate
-    title: Probe
-    text: body text
-    position: [-200, 200]
-    size: [600, 400]
-    color: [0.45, 0.45, 0.45]
-- name: rt_corpus
-  type: baseCOMP
-  custom_pars:
-    Output:
-    - name: Resw
-      style: Int
-      default: 3840
-      min: 256.0
-      max: 7680.0
-      clampMin: true
-      clampMax: true
-      normMin: 256.0
-      normMax: 7680.0
-      help: Output width (px), 4K. The reaction sim stays bounded 16:9; out1 upscales to this.
-    - name: Resh
-      style: Int
-      default: 2160
-      min: 256.0
-      max: 7680.0
-      clampMin: true
-      clampMax: true
-      normMin: 256.0
-      normMax: 7680.0
-      help: Output height (px), 4K.
-  position: [-11600, -3000]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdn
 - name: unit_tests
   type: baseCOMP
   parameters:
@@ -1041,6 +977,7 @@ operators:
     - {}
     - {}
   position: [400, 102]
+  size: [160, 130]
   color: [0.3, 0.5, 0.9]
   tags:
   - tdn
