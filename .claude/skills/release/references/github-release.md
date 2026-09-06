@@ -35,6 +35,14 @@ Detect the version using the **first strategy that succeeds**, in order:
 - **Prepend a project intro paragraph** before the changelog section. This serves as a landing page for visitors arriving from MCP registries or awesome lists who have no context. Use 2-3 sentences covering both Embody (externalization) and Envoy (MCP server). Include links to the docs site and changelog.
 - Present the release notes to the user for approval before creating the release.
 
+**The body is the changelog entry verbatim -- the same hard cap applies** (see
+`SKILL.md` step 2: one line of theme, max 3 bullets, under 80 words). Never
+expand it for the release page: a GitHub release is skimmed even harder than a
+changelog, and an exhaustive one reads as AI slop. The intro paragraph is 2
+sentences, plain, and never grows.
+
+Whole body target: the reader takes it in without scrolling.
+
 ## 5. Create the Release
 
 ```

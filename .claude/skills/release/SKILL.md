@@ -87,11 +87,31 @@ Add a new entry at the top of `docs/changelog.md`:
 
 One-line summary of the release themes.
 
-- **Feature/fix name**: Description of what changed and why
+- **Feature/fix name.** What changed, in 1-2 sentences.
 - ...
 ```
 
-Each bullet should describe the change clearly enough that a user who didn't write the code understands what happened. Include test counts where relevant.
+### Length is a hard cap (standing user directive)
+
+**One line of theme. Max 3 bullets, one line each. Whole entry under 80 words.**
+
+Canonical shape: `v6.0.250` in `docs/changelog.md` -- a one-line theme and ONE
+bullet, for a release carrying a PE-subsystem fix, an in-place repair path, a
+packaging refusal and 74 tests. Match it.
+
+Nobody reads a wall of bullets, and an exhaustive one reads as AI slop. Ten
+changes still get 3 bullets: group by theme, cut what a user cannot act on. The
+detail lives in the commit log and the diff.
+
+Always cut:
+
+- incident stories, repro narratives, root-cause retelling
+- internal mechanisms -- protocol shapes, private names, fallback ladders
+- a superseded version, beyond one short parenthetical
+- test counts, beyond `+N tests` folded into a bullet
+
+Then COUNT. Over 3 bullets or 80 words, cut before shipping -- never ship long
+and offer to trim after.
 
 ## 3. Update README.md
 
