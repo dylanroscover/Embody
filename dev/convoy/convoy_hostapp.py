@@ -975,6 +975,61 @@ MAX_OPERATION_CHARS = 128
 # unbounded memory/JSON operation.
 MAX_PUBLIC_NODES_PER_HOST = 256
 MAX_NETWORK_NODE_ROWS = 4096
+
+
+def same_process_key(row):
+    """Identity of the PROCESS a peer row describes, not of the row.
+
+    A node re-mints its node_id across an upgrade, a Save-As, or on a
+    daemon older than the supersede rules, so one .toe on one host can
+    arrive from a peer as two ids. The sanitized peer row keeps no
+    discriminator, so the key is (host_id, toe_name)."""
+    return (str(row.get("host_id") or ""), str(row.get("toe_name") or ""))
+
+
+def collapse_same_process_rows(rows):
+    """Keep one row per process among cached PEER rows.
+
+    TEC-C3A / transmon.1 showed as two offline rows for a week (found
+    2026-09-05): identical last_seen, versions 6.0.232 and 6.0.233 -- one
+    node seen twice by a daemon that predates rule A, cached from its
+    gossip, and its host unreachable so nothing on that side ever retires
+    the pair. Supersede runs on the OWNING host at register; this is the
+    only place a remote pair can be folded.
+
+    Rules: an online row is its own proof and is never dropped; when a
+    process has any online row, its offline rows are dropped; otherwise
+    the freshest offline row wins (smallest last_seen_age_s, then the
+    highest embody_version, then node_id for determinism). Local rows are
+    NOT passed here -- the directory governs them."""
+    groups = {}
+    order = []
+    for row in rows:
+        key = same_process_key(row)
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(row)
+
+    def freshness(row):
+        age = row.get("last_seen_age_s")
+        try:
+            age = float(age)
+        except (TypeError, ValueError):
+            age = float("inf")
+        version = tuple(int(part) if part.isdigit() else 0
+                        for part in str(row.get("embody_version") or "").split("."))
+        return (age, tuple(-v for v in version), str(row.get("node_id") or ""))
+
+    kept = []
+    for key in order:
+        group = groups[key]
+        online = [row for row in group if row.get("online")]
+        if online:
+            kept.extend(online)
+        else:
+            kept.append(min(group, key=freshness))
+    return kept
 MAX_PUBLIC_CONTROLLERS_PER_HOST = 512
 MAX_ACTIVE_JOBS_PER_CONTROLLER = 128
 MAX_NETWORK_CONTROLLER_ROWS = 4096
@@ -5589,6 +5644,9 @@ class HostApp:
             with self.lock:
                 self._peer_node_cache.update(cache_updates)
 
+        # A PROCESS can wear two node_ids on a stale peer (see
+        # collapse_same_process_rows); fold those before the address dedupe.
+        remote_rows = collapse_same_process_rows(remote_rows)
         # A node is uniquely addressed by (host_id, node_id).  Keep local
         # rows first, then one deterministic remote row per address.
         deduped = {}

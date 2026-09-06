@@ -34,9 +34,10 @@ class _SyntheticTable(EmbodyTestCase):
     def setUp(self):
         super().setUp()
         self._orig_table = self.embody.par.Externalizations.eval()
+        self._orig_link = self.embody.par.Externalizations.val  # restore the VALUE: .path is absolute
 
     def tearDown(self):
-        self.embody.par.Externalizations = self._orig_table.path
+        self.embody.par.Externalizations = self._orig_link
         super().tearDown()
 
     def _mkrow(self, path, **kw):

@@ -177,6 +177,31 @@ their intended fresh-install values (e.g. `Updatestatus` = `Disabled`, never
 blank), Envoy opt-in prompts behave, and the manager opens. The v6.0.145
 empty-Update-Status miss shipped precisely because this step was skipped.
 
+## 5b. Live Product Check -- MANDATORY before ANY readiness or confidence claim
+
+Green tests and a green smoke are NOT the product. On 2026-09-05 a full
+in-TD run (4245/4369), smoke 7/7 and an MCP probe 9/9 were all reported as
+"high confidence" while the dev instance's Convoy sat at
+`Install failed -- see log` with 0 nodes -- visible in the Embody panel
+the whole time. Dylan found it by looking. Never again: no sentence
+containing "confident", "ready", "green" or "release" is written until
+every row below has been read from the LIVE dev instance (and, for a
+release, from the fresh-install smoke instance too) AFTER the last test
+run, save, or smoke -- test runs and smoke instances mutate this state.
+
+| Surface | Read it from | Must be |
+|---|---|---|
+| Embody | `Status` par, `get_op_errors('/embody/Embody', recurse=True)` | `Enabled`, 0 errors, 0 warnings, no script errors |
+| Envoy | `Envoystatus` par, `get_td_status`, one real tool round-trip | `Running on port N`, `connected: true`, the call answers |
+| Convoy (when enabled) | `Convoystatus` par, `op.Embody.seq.Convoynodes.numBlocks` (the node table), `get_convoy_status`, `convoy_list_nodes` | `Connected`, this node listed `online` by the host with `last_seen_age_s` under a minute, host `running` at THIS version, no `Install failed` / `timed out`; the panel's node table populated |
+| Externalization | `get_externalizations` + `Externalizations` par | the table resolves, link relative, no `Invalid path` warning |
+| Settings | `Filecleanup`, `Toxdropexpr`, `Autosave` | the user's values, never the runner's (`delete` / `ignore`) |
+| Frame rate | `get_project_performance` | back at the project's cook rate, no dropped-frame climb |
+| Log | `dev/logs/` tail since the run started | no ERROR/WARNING from ConvoyExt/EnvoyExt/EmbodyExt that is not a test's own simulated failure |
+
+Any row red = NOT ready. Fix it or say so first; a confidence claim
+with a red row is the failure mode this step exists to end.
+
 ## 6. Stage and Commit
 
 - Stage all changed, added, and deleted files explicitly (avoid `git add -A`).

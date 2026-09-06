@@ -97,6 +97,11 @@ def onStart():
 	run(f"op('{parent.Embody}').ext.Embody.restoreDATs()", delayFrames=50)
 	# Reconstruct TDXN-strategy COMPs from .tdn files
 	run(f"op('{parent.Embody}').ext.Embody.reconstructTDNComps()", delayFrames=60)
+	# A project can open with a table link that resolves to nothing: one
+	# provisioned offline by embody_bootstrap (no onCreate ever fired), or
+	# one whose network was renamed. ensure* reconnects a sibling or builds
+	# a fresh table and is a no-op when the link is fine. (2026-09-05)
+	run(f"op('{parent.Embody}').ext.Embody.ensureExternalizationsTable()", delayFrames=20)
 	# Reconcile metadata for operators that exist but lost tags/colors/file params
 	run(f"op('{parent.Embody}').ext.Embody.reconcileMetadata()", delayFrames=75)
 	# Offer to restore TDXN-tagged empty shells whose table row was lost

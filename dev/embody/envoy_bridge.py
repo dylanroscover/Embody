@@ -214,6 +214,79 @@ BRIDGE_TOOLS = [
         },
     },
     {
+        "name": "list_dialogs",
+        "description": (
+            "List the modal dialogs a TouchDesigner instance currently shows "
+            "(ui.messageBox, missing-file and save-changes prompts, the license "
+            "box, file pickers). Runs on the bridge, so it works while TD's main "
+            "thread is blocked by the dialog and every Envoy tool is timing out. "
+            "TD draws its own dialogs, so their text is not readable through the "
+            "OS: pass screenshot=true to save a PNG of each one and Read it. "
+            "Returns blocked=true when a dialog is up."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "instance": {
+                    "type": "string",
+                    "description": (
+                        "Registered instance name (toe basename) to inspect. "
+                        "Omit for this session's pinned instance."
+                    ),
+                },
+                "screenshot": {
+                    "type": "boolean",
+                    "description": (
+                        "Save a PNG of each dialog window to the temp dir and "
+                        "return its path (Windows). Default false."
+                    ),
+                    "default": False,
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "dismiss_dialog",
+        "description": (
+            "Dismiss a modal dialog that is blocking a TouchDesigner instance, "
+            "then verify it is gone. Default action=auto runs the ladder close "
+            "(WM_CLOSE) -> escape -> enter until the window disappears; the "
+            "main TouchDesigner window is never a target. Use list_dialogs "
+            "(with screenshot=true) first so you know what you are dismissing: "
+            "close/escape decline a question, enter accepts its default."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "instance": {
+                    "type": "string",
+                    "description": (
+                        "Registered instance name (toe basename). Omit for "
+                        "this session's pinned instance."
+                    ),
+                },
+                "dialog": {
+                    "type": "string",
+                    "description": (
+                        "Which dialog: a title substring or the window id from "
+                        "list_dialogs. Omit to take the first listed dialog."
+                    ),
+                },
+                "action": {
+                    "type": "string",
+                    "enum": ["auto", "close", "escape", "enter"],
+                    "description": (
+                        "auto = close, then escape, then enter, stopping when "
+                        "the dialog is gone. A single rung tries only that."
+                    ),
+                    "default": "auto",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "get_convoy_status",
         "description": (
             "Report this machine's Convoy host presence and, when it is "
@@ -676,6 +749,85 @@ BRIDGE_TOOLS = [
 ]
 
 BRIDGE_TOOL_NAMES = {t["name"] for t in BRIDGE_TOOLS}
+
+
+# --- Per-call instance addressing ------------------------------------------
+#
+# Every Envoy tool accepts an optional `instance` argument naming a
+# registered TouchDesigner instance (the .toe name that get_td_status and
+# switch_instance list). The bridge strips it and routes THAT ONE CALL to the
+# named instance's Envoy, leaving this session's pin untouched -- an agent
+# can inspect the show file while pinned to the dev one without a switch that
+# every later call inherits. A failure to reach the named instance is that
+# call's error alone and never flips the pinned connection's state. Idea
+# adopted from td-mcp-rs (a pid on every call; credited in README).
+INSTANCE_ARG = "instance"
+_INSTANCE_ARG_SCHEMA = {
+    "type": "string",
+    "description": (
+        "Route this one call to a named registered TouchDesigner instance "
+        "(the .toe name, as listed by get_td_status or switch_instance) "
+        "without changing this session's pinned instance. Omit to use the "
+        "pinned instance."
+    ),
+}
+
+
+def add_instance_argument(tools):
+    """Advertise the optional `instance` argument on every Envoy tool.
+
+    Bridge meta-tools (get_td_status, launch_td, switch_instance, the
+    convoy_* family) keep their own schemas: they route themselves.
+    Idempotent, tolerant of odd shapes, returns the same list.
+    """
+    for tool in tools or []:
+        if not isinstance(tool, dict) or tool.get("name") in BRIDGE_TOOL_NAMES:
+            continue
+        schema = tool.get("inputSchema")
+        if not isinstance(schema, dict):
+            schema = {"type": "object", "properties": {}}
+            tool["inputSchema"] = schema
+        props = schema.get("properties")
+        if not isinstance(props, dict):
+            props = {}
+            schema["properties"] = props
+        if INSTANCE_ARG not in props:
+            props[INSTANCE_ARG] = dict(_INSTANCE_ARG_SCHEMA)
+    return tools
+
+
+def resolve_instance_url(config, name):
+    """(url, None, available) for a registered instance, else
+    (None, reason, available). Registry only -- never a blind port guess
+    (issue #57 follow-up)."""
+    instances = (config or {}).get("instances") or {}
+    available = sorted(k for k in instances.keys() if isinstance(k, str))
+    info = instances.get(name) if isinstance(name, str) else None
+    if not isinstance(info, dict):
+        return None, "unknown", available
+    try:
+        port = int(info.get("port"))
+    except (TypeError, ValueError):
+        return None, "no_port", available
+    return f"http://127.0.0.1:{port}/mcp", None, available
+
+
+def instance_error_result(name, reason, detail, available=None):
+    """A tools/call error result for a per-call instance route that failed.
+    Carries error_code envoy.instance.<reason> like every Envoy envelope."""
+    payload = {
+        "ok": False,
+        "reason": "instance_" + reason,
+        "instance": name,
+        "detail": detail,
+        "error_code": "envoy.instance." + reason,
+    }
+    if available is not None:
+        payload["available"] = list(available)
+    return {
+        "content": [{"type": "text", "text": json.dumps(payload)}],
+        "isError": True,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -4346,6 +4498,427 @@ def handle_restart_td(params, state):
         }
 
 
+# ---------------------------------------------------------------------------
+# OS dialogs: list / dismiss the modals that block TouchDesigner
+# ---------------------------------------------------------------------------
+#
+# TouchDesigner's blocking dialogs (ui.messageBox, missing-file and
+# save-changes prompts, the license box) are TD-DRAWN: on Windows each is a
+# top-level window of the SAME class as the main window ("TouchDesigner
+# Window"), OWNED by the main window, with no Win32 button controls -- so a
+# button click cannot be synthesized and the text is not readable through
+# Win32. What does work (probed 2026-09-05 on 2025.33070): WM_CLOSE posted to
+# the owned window closes it. The ladder is close -> escape -> enter, each rung
+# verified by the window disappearing. Standard #32770 dialogs (file pickers,
+# crash boxes) fall under the same classifier: that class is a dialog even
+# when unowned. The main window is identified as the unowned non-#32770 window
+# and is never a target -- WM_CLOSE there is a quit prompt.
+#
+# Everything here runs on the bridge process, so it works while TD's main
+# thread is parked inside the dialog and every Envoy tool is timing out.
+# The backend is injectable (tests use a fake); the Win32 one is ctypes-only.
+# Idea adopted from td-mcp-rs's `dialogs` tool (credited in README).
+
+DIALOG_MAIN_CLASS = "TouchDesigner Window"
+DIALOG_STD_CLASS = "#32770"
+DIALOG_LADDER = ("close", "escape", "enter")
+DIALOG_SETTLE_S = 0.5          # wait after each rung before checking
+
+
+def classify_windows(windows):
+    """Split a pid's top-level windows into (dialogs, main_window).
+
+    A window is a dialog when it is OWNED by another window or is the
+    standard dialog class; the unowned window of any other class is the
+    main window. Invisible windows are ignored. Pure."""
+    dialogs, main = [], None
+    for w in windows or []:
+        if not isinstance(w, dict) or not w.get("visible", True):
+            continue
+        owned = bool(w.get("owner"))
+        if owned or w.get("class") == DIALOG_STD_CLASS:
+            dialogs.append(w)
+        elif main is None:
+            main = w
+    return dialogs, main
+
+
+def _dialog_result(pid, name, dialogs, main):
+    return {
+        "ok": True,
+        "instance": name,
+        "pid": pid,
+        "blocked": bool(dialogs),
+        "dialogs": [{k: d.get(k) for k in ("id", "title", "class", "enabled")}
+                    for d in dialogs],
+        "main_window": (main or {}).get("title"),
+    }
+
+
+def _dialog_error(code, detail, **extra):
+    out = {"ok": False, "error": detail, "error_code": "envoy.dialog." + code}
+    out.update(extra)
+    return out
+
+
+class _FakeDialogBackend:
+    """Test double: scripted windows, records dismiss actions."""
+
+    def __init__(self, windows=None, gone_after=None):
+        self.windows = list(windows or [])
+        self.actions = []
+        self.gone_after = gone_after  # action name after which the dialog is gone
+        self.shots = []
+
+    def enumerate(self, pid):
+        return [dict(w) for w in self.windows if w.get("pid", pid) == pid]
+
+    def dismiss(self, win_id, action):
+        self.actions.append((win_id, action))
+        if self.gone_after is not None and action == self.gone_after:
+            self.windows = [w for w in self.windows if w.get("id") != win_id]
+        return True
+
+    def gone(self, win_id):
+        return not any(w.get("id") == win_id for w in self.windows)
+
+    def screenshot(self, win_id, path):
+        self.shots.append((win_id, path))
+        with open(path, "wb") as f:
+            f.write(b"")
+        return True
+
+
+class _UnsupportedDialogBackend:
+    def enumerate(self, pid):
+        raise RuntimeError(f"dialog inspection is not supported on {sys.platform}")
+
+    def dismiss(self, win_id, action):
+        raise RuntimeError(f"dialog dismissal is not supported on {sys.platform}")
+
+    def gone(self, win_id):
+        return False
+
+    def screenshot(self, win_id, path):
+        return False
+
+
+def _png_encode(width, height, bgra_rows):
+    """Minimal PNG writer (RGBA, filter 0) so a dialog screenshot needs no
+    image library. bgra_rows: bytes per row, BGRA, top-down."""
+    import struct
+    import zlib
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+
+    raw = bytearray()
+    for row in bgra_rows:
+        raw.append(0)
+        for i in range(0, width * 4, 4):
+            b, g, r = row[i], row[i + 1], row[i + 2]
+            raw += bytes((r, g, b, 255))
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+            + chunk(b"IDAT", zlib.compress(bytes(raw), 6)) + chunk(b"IEND", b""))
+
+
+class _Win32DialogBackend:
+    WM_CLOSE, WM_KEYDOWN, WM_KEYUP = 0x0010, 0x0100, 0x0101
+    VK_ESCAPE, VK_RETURN = 0x1B, 0x0D
+    GW_OWNER = 4
+    PW_RENDERFULLCONTENT = 0x00000002
+
+    def __init__(self):
+        import ctypes
+        import ctypes.wintypes as wt
+        self.c = ctypes
+        self.wt = wt
+        self.user32 = ctypes.windll.user32
+        self.gdi32 = ctypes.windll.gdi32
+        self._proc = ctypes.WINFUNCTYPE(ctypes.c_bool, wt.HWND, wt.LPARAM)
+
+    def _text(self, h):
+        n = self.user32.GetWindowTextLengthW(h) + 1
+        buf = self.c.create_unicode_buffer(n)
+        self.user32.GetWindowTextW(h, buf, n)
+        return buf.value
+
+    def _class(self, h):
+        buf = self.c.create_unicode_buffer(256)
+        self.user32.GetClassNameW(h, buf, 256)
+        return buf.value
+
+    def enumerate(self, pid):
+        wins = []
+
+        def cb(h, _):
+            owner_pid = self.wt.DWORD()
+            self.user32.GetWindowThreadProcessId(h, self.c.byref(owner_pid))
+            if int(owner_pid.value) == int(pid):
+                wins.append({
+                    "id": int(h),
+                    "title": self._text(h),
+                    "class": self._class(h),
+                    "owner": int(self.user32.GetWindow(h, self.GW_OWNER) or 0),
+                    "visible": bool(self.user32.IsWindowVisible(h)),
+                    "enabled": bool(self.user32.IsWindowEnabled(h)),
+                })
+            return True
+        self.user32.EnumWindows(self._proc(cb), 0)
+        return wins
+
+    def dismiss(self, win_id, action):
+        h = int(win_id)
+        if action == "close":
+            return bool(self.user32.PostMessageW(h, self.WM_CLOSE, 0, 0))
+        vk = self.VK_ESCAPE if action == "escape" else self.VK_RETURN
+        down = self.user32.PostMessageW(h, self.WM_KEYDOWN, vk, 0)
+        up = self.user32.PostMessageW(h, self.WM_KEYUP, vk, 0xC0000000)
+        return bool(down and up)
+
+    def gone(self, win_id):
+        h = int(win_id)
+        return not (self.user32.IsWindow(h) and self.user32.IsWindowVisible(h))
+
+    def screenshot(self, win_id, path):
+        c, h = self.c, int(win_id)
+        rect = self.wt.RECT()
+        if not self.user32.GetWindowRect(h, c.byref(rect)):
+            return False
+        w, hgt = rect.right - rect.left, rect.bottom - rect.top
+        if w <= 0 or hgt <= 0 or w * hgt > 40_000_000:
+            return False
+        hdc = self.user32.GetWindowDC(h)
+        mdc = self.gdi32.CreateCompatibleDC(hdc)
+        bmp = self.gdi32.CreateCompatibleBitmap(hdc, w, hgt)
+        try:
+            self.gdi32.SelectObject(mdc, bmp)
+            if not self.user32.PrintWindow(h, mdc, self.PW_RENDERFULLCONTENT):
+                return False
+
+            class BITMAPINFOHEADER(c.Structure):
+                _fields_ = [("biSize", c.c_uint32), ("biWidth", c.c_int32),
+                            ("biHeight", c.c_int32), ("biPlanes", c.c_uint16),
+                            ("biBitCount", c.c_uint16), ("biCompression", c.c_uint32),
+                            ("biSizeImage", c.c_uint32), ("biXPelsPerMeter", c.c_int32),
+                            ("biYPelsPerMeter", c.c_int32), ("biClrUsed", c.c_uint32),
+                            ("biClrImportant", c.c_uint32)]
+            bi = BITMAPINFOHEADER()
+            bi.biSize = c.sizeof(BITMAPINFOHEADER)
+            bi.biWidth, bi.biHeight = w, -hgt   # negative = top-down
+            bi.biPlanes, bi.biBitCount, bi.biCompression = 1, 32, 0
+            buf = (c.c_ubyte * (w * hgt * 4))()
+            got = self.gdi32.GetDIBits(mdc, bmp, 0, hgt, buf, c.byref(bi), 0)
+            if got != hgt:
+                return False
+            raw = bytes(buf)
+            rows = [raw[y * w * 4:(y + 1) * w * 4] for y in range(hgt)]
+            with open(path, "wb") as f:
+                f.write(_png_encode(w, hgt, rows))
+            return True
+        finally:
+            self.gdi32.DeleteObject(bmp)
+            self.gdi32.DeleteDC(mdc)
+            self.user32.ReleaseDC(h, hdc)
+
+
+class _DarwinDialogBackend:
+    """System Events via osascript. Needs Accessibility permission for the
+    terminal that runs the bridge. UNVERIFIED on a Mac (no Mac in the loop
+    on 2026-09-05); dialogs are windows whose subrole names a dialog or
+    sheet, dismissal is a keystroke to the process."""
+
+    def _osa(self, script, timeout=8):
+        import subprocess
+        out = subprocess.run(["osascript", "-e", script], capture_output=True,
+                             text=True, timeout=timeout)
+        if out.returncode != 0:
+            raise RuntimeError((out.stderr or out.stdout).strip()
+                               or "osascript failed")
+        return out.stdout.strip()
+
+    def enumerate(self, pid):
+        script = (
+            'tell application "System Events" to tell (first process whose unix id is %d) '
+            'to get {name, subrole} of every window' % int(pid))
+        raw = self._osa(script)
+        # Result shape: {{name1, name2, ...}, {subrole1, subrole2, ...}}
+        parts = [p.strip() for p in raw.strip("{}").split("}, {")]
+        names = [n.strip().strip('"') for n in parts[0].split(",")] if parts and parts[0] else []
+        subs = [n.strip().strip('"') for n in parts[1].split(",")] if len(parts) > 1 else []
+        wins = []
+        for i, name in enumerate(names):
+            sub = subs[i] if i < len(subs) else ""
+            dialog = "Dialog" in sub or "Sheet" in sub
+            wins.append({"id": i + 1, "title": name, "class": sub or "AXWindow",
+                         "owner": 1 if dialog else 0, "visible": True, "enabled": True})
+        return wins
+
+    def dismiss(self, win_id, action):
+        key = {"close": 'key code 53', "escape": 'key code 53', "enter": 'key code 36'}[action]
+        self._osa('tell application "System Events" to %s' % key)
+        return True
+
+    def gone(self, win_id):
+        return True  # re-listing is the check; keystrokes report nothing
+
+    def screenshot(self, win_id, path):
+        return False
+
+
+def dialog_backend():
+    """The platform backend, or the unsupported stub."""
+    if sys.platform.startswith("win"):
+        try:
+            return _Win32DialogBackend()
+        except Exception:
+            return _UnsupportedDialogBackend()
+    if sys.platform == "darwin":
+        return _DarwinDialogBackend()
+    return _UnsupportedDialogBackend()
+
+
+def _dialog_target(params, state):
+    """(pid, instance_name, error) for the instance a dialog tool addresses:
+    the `instance` param via the registry, else this session's pinned
+    instance and tracked pid."""
+    name = params.get("instance") if isinstance(params, dict) else None
+    with state:
+        config = state.config
+        config_path = state.config_path
+        pinned = state.pinned_instance or state.active_name
+        td_pid = state.td_pid
+    if name and name != pinned:
+        if not config:
+            config = load_config(config_path)
+        _port, pid, resolved = _resolve_from_registry(config, None, pin=name)
+        if resolved != name:
+            available = sorted((config or {}).get("instances", {}).keys())
+            return None, name, _dialog_error(
+                "unknown_instance",
+                f'Instance "{name}" is not in the registry; get_td_status lists '
+                "the registered instances.", available=available)
+        if not pid:
+            return None, name, _dialog_error(
+                "instance_not_running",
+                f'Instance "{name}" has no live TouchDesigner process.')
+        return int(pid), name, None
+    if not td_pid or not is_td_process_alive(td_pid):
+        return None, pinned, _dialog_error(
+            "no_process",
+            "No live TouchDesigner process is tracked for this session; "
+            "get_td_status shows what the bridge sees.")
+    return int(td_pid), pinned, None
+
+
+def handle_list_dialogs(params, state, backend=None):
+    """Handle the list_dialogs meta-tool."""
+    params = params or {}
+    pid, name, err = _dialog_target(params, state)
+    if err:
+        return err
+    backend = backend or dialog_backend()
+    try:
+        windows = backend.enumerate(pid)
+    except Exception as exc:
+        return _dialog_error("unsupported", str(exc), instance=name, pid=pid)
+    dialogs, main = classify_windows(windows)
+    result = _dialog_result(pid, name, dialogs, main)
+    if params.get("screenshot"):
+        for entry, win in zip(result["dialogs"], dialogs):
+            path = os.path.join(tempfile.gettempdir(),
+                                f"envoy_dialog_{pid}_{win.get('id')}.png")
+            try:
+                ok = backend.screenshot(win.get("id"), path)
+            except Exception:
+                ok = False
+            entry["screenshot"] = path if ok else None
+        if dialogs:
+            result["hint"] = ("Read each screenshot to see what the dialog says "
+                              "before choosing dismiss_dialog's action.")
+    return result
+
+
+def handle_dismiss_dialog(params, state, backend=None, sleep=time.sleep):
+    """Handle the dismiss_dialog meta-tool: pick the dialog, run the ladder,
+    verify it is gone."""
+    params = params or {}
+    pid, name, err = _dialog_target(params, state)
+    if err:
+        return err
+    backend = backend or dialog_backend()
+    try:
+        windows = backend.enumerate(pid)
+    except Exception as exc:
+        return _dialog_error("unsupported", str(exc), instance=name, pid=pid)
+    dialogs, main = classify_windows(windows)
+    want = params.get("dialog")
+    target = None
+    if want is not None and str(want).strip():
+        want_s = str(want).strip()
+        for d in dialogs:
+            if str(d.get("id")) == want_s or want_s.lower() in str(d.get("title", "")).lower():
+                target = d
+                break
+        if target is None:
+            if main and (str(main.get("id")) == want_s
+                         or want_s.lower() in str(main.get("title", "")).lower()):
+                return _dialog_error(
+                    "main_window_refused",
+                    "That is the main TouchDesigner window, not a dialog -- "
+                    "closing it would prompt a quit. Only dialogs are dismissed.",
+                    instance=name, pid=pid)
+            return _dialog_error(
+                "not_found", f'No dialog matches "{want_s}".', instance=name,
+                pid=pid, dialogs=_dialog_result(pid, name, dialogs, main)["dialogs"])
+    elif dialogs:
+        target = dialogs[0]
+    if target is None:
+        return _dialog_error("none", "No dialog is open on that instance.",
+                             instance=name, pid=pid, blocked=False)
+
+    action = str(params.get("action") or "auto").lower()
+    rungs = DIALOG_LADDER if action == "auto" else (action,)
+    if any(r not in DIALOG_LADDER for r in rungs):
+        return _dialog_error("bad_action",
+                             f'action must be one of auto, {", ".join(DIALOG_LADDER)}.')
+    tried = []
+    dismissed_by = None
+    for rung in rungs:
+        try:
+            backend.dismiss(target.get("id"), rung)
+        except Exception as exc:
+            return _dialog_error("unsupported", str(exc), instance=name, pid=pid)
+        tried.append(rung)
+        sleep(DIALOG_SETTLE_S)
+        if backend.gone(target.get("id")):
+            dismissed_by = rung
+            break
+    try:
+        remaining, _m = classify_windows(backend.enumerate(pid))
+    except Exception:
+        remaining = []
+    out = {
+        "ok": dismissed_by is not None,
+        "instance": name,
+        "pid": pid,
+        "dialog": {k: target.get(k) for k in ("id", "title", "class")},
+        "tried": tried,
+        "dismissed_by": dismissed_by,
+        "remaining": [{k: d.get(k) for k in ("id", "title")} for d in remaining],
+    }
+    if dismissed_by is None:
+        out["error"] = ("The dialog is still there after "
+                        f"{', '.join(tried)}. It may need a specific button "
+                        "TouchDesigner draws itself: list_dialogs with "
+                        "screenshot=true shows it, and a human click is the "
+                        "remaining option.")
+        out["error_code"] = "envoy.dialog.stuck"
+    return out
+
+
 def handle_bridge_tool(name, params, state):
     """Dispatch a bridge meta-tool call. Returns the tool result content."""
     if name == "get_td_status":
@@ -4356,6 +4929,10 @@ def handle_bridge_tool(name, params, state):
         result = handle_restart_td(params, state)
     elif name == "switch_instance":
         result = handle_switch_instance(params, state)
+    elif name == "list_dialogs":
+        result = handle_list_dialogs(params, state)
+    elif name == "dismiss_dialog":
+        result = handle_dismiss_dialog(params, state)
     elif name == "get_convoy_status":
         result = handle_convoy_status(params)
     elif name == "convoy_list_nodes":
@@ -4434,6 +5011,7 @@ def augment_tools_list(response):
             and "result" in response
             and "tools" in response["result"]):
         tools = response["result"]["tools"]
+        add_instance_argument(tools)
         existing = {
             tool.get("name") for tool in tools
             if isinstance(tool, dict)
@@ -5630,7 +6208,7 @@ def reconcile(state, on_tools_change, *, heartbeat):
         # If identical, this is a silent switch -- no notification.
         new_tools = fetch_tools_list(url)
         if new_tools is not None:
-            augmented = list(new_tools) + list(BRIDGE_TOOLS)
+            augmented = add_instance_argument(list(new_tools)) + list(BRIDGE_TOOLS)
             new_hash = _hash_tools(augmented)
             with state:
                 old_hash = state.cached_tools_hash
@@ -5935,6 +6513,53 @@ def main():
                     "result": {"content": content},
                 })
             continue
+
+        # --- Per-call instance addressing ---
+        # `instance` names a registered TD instance for THIS call only. It
+        # is always stripped: Envoy declares no such parameter. Naming the
+        # pinned instance, or nothing, falls through to the normal path.
+        if method == "tools/call":
+            tool_args = params.get("arguments")
+            if isinstance(tool_args, dict) and INSTANCE_ARG in tool_args:
+                target_name = tool_args.pop(INSTANCE_ARG)
+                with state:
+                    routed_config = state.config
+                    routed_cfg_path = state.config_path
+                    own_names = {state.pinned_instance, state.active_name}
+                if target_name and target_name not in own_names:
+                    if not routed_config:
+                        routed_config = load_config(routed_cfg_path)
+                    target_url, reason, available = resolve_instance_url(
+                        routed_config, target_name)
+                    routed = None
+                    if target_url is None:
+                        routed = instance_error_result(
+                            target_name, reason,
+                            f'Instance "{target_name}" is not in the registry; '
+                            "get_td_status lists the registered instances.",
+                            available)
+                    else:
+                        log(f"Routing {params.get('name')} to instance "
+                            f"'{target_name}' for this call")
+                        try:
+                            routed = forward_to_http(target_url, message)
+                        except Exception as exc:
+                            # This call's failure only: the pinned
+                            # connection's state is untouched.
+                            routed = instance_error_result(
+                                target_name, "unreachable",
+                                f'Instance "{target_name}" at {target_url} did '
+                                f"not answer ({type(exc).__name__}: {exc}). Is "
+                                "that TouchDesigner running with Envoy enabled?")
+                            log(f"Per-call route to '{target_name}' failed: "
+                                f"{type(exc).__name__}: {exc}")
+                    if not is_notification:
+                        if isinstance(routed, dict) and "jsonrpc" in routed:
+                            send_response(routed)
+                        else:
+                            send_response({"jsonrpc": "2.0", "id": request_id,
+                                           "result": routed})
+                    continue
 
         # --- Explicit session-wide Convoy selection ---
         # A selected remote/sibling node owns every ordinary tool call until

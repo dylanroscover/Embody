@@ -48,7 +48,7 @@ This is a TouchDesigner project using **Embody** for version-controlled external
 - Fail loud -- "done" is wrong if anything was skipped silently, "tests pass" is wrong if any were skipped. Surface uncertainty; don't bury it.
 - Surface conflicts, don't average them: when two patterns or rules contradict, pick one (more recent / more tested), say why, flag the other for cleanup -- never silently reconcile.
 - Visual TOP work is output-first: create an Out TOP `out1` and turn its display flag on BEFORE building the chain, then keep the working chain wired into it -- the user watches live in the network backdrop.
-- For visual or rendered output, success is a captured, assessed frame, not a clean network. Use `capture_top` to look at the result and judge it (load the `/visual-aesthetics` skill first); never declare a visual task done on a black or empty frame.
+- For visual or rendered output, success is a captured, assessed frame, not a clean network. Use `capture_top` to look at the result and judge it (`capture_op` for any non-TOP operator) (load the `/visual-aesthetics` skill first); never declare a visual task done on a black or empty frame.
 
 ## Task Briefs
 

@@ -3623,14 +3623,29 @@ class TestQuitTdPidScoping(EmbodyTestCase):
     """
 
     def test_no_app_wide_quit_in_bridge_source(self):
+        import inspect
         with open(_bridge_path, encoding='utf-8') as f:
             src = f.read()
-        for phrase in ('quit app', 'osascript', 'killall', 'pkill'):
-            self.assertNotIn(
-                phrase, src,
+        for phrase in ('quit app', 'killall', 'pkill'):
+            # assertFalse, not assertNotIn: the container is the whole
+            # bridge source and a failure would echo all 300 KB of it
+            self.assertFalse(
+                phrase in src,
                 f'The bridge must never quit TouchDesigner app-wide '
                 f'({phrase!r} found) -- quit_td is pid-scoped (SIGTERM on '
                 f'POSIX, taskkill /PID on Windows)')
+        # osascript has ONE sanctioned use (2026-09-05): System Events
+        # window queries and keystrokes in the darwin dialog backend behind
+        # dismiss_dialog. Every line naming it must sit in that class, and
+        # that class must never phrase a quit.
+        darwin = inspect.getsource(bridge._DarwinDialogBackend)
+        for line in src.splitlines():
+            if 'osascript' in line:
+                self.assertTrue(
+                    line.strip() in darwin,
+                    f'osascript outside _DarwinDialogBackend: {line.strip()!r}')
+        self.assertNotIn('quit', darwin.lower(),
+                         '_DarwinDialogBackend must never quit the app')
 
     def test_quit_td_posix_branch_is_pid_scoped(self):
         import inspect

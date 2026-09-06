@@ -394,3 +394,47 @@ def _write_lan(data_dir, obj):
     with open(os.path.join(data_dir, lan_mod.LAN_FILE), "w",
               encoding="utf-8") as f:
         f.write(json.dumps(obj))
+
+
+# -- one row per process among cached peer rows (2026-09-05) ---------------
+
+def _peer_row(node_id, toe, online=False, age=100.0, version="6.0.233",
+              host="c" * 32):
+    return {"node_id": node_id, "host_id": host, "toe_name": toe,
+            "node_name": "TEC-C3A / " + toe.rsplit(".toe", 1)[0],
+            "online": online, "status": "online" if online else "offline",
+            "last_seen_age_s": age, "embody_version": version}
+
+
+def test_two_offline_ids_for_one_toe_fold_to_the_freshest():
+    stale = _peer_row("7f" * 16, "transmon.1.toe", age=697369.7, version="6.0.232")
+    fresh = _peer_row("42" * 16, "transmon.1.toe", age=697369.7, version="6.0.233")
+    kept = ha.collapse_same_process_rows([stale, fresh])
+    assert [r["node_id"] for r in kept] == [fresh["node_id"]]
+
+
+def test_an_online_row_wins_and_online_rows_never_fold():
+    ghost = _peer_row("aa" * 16, "show.toe", age=5000.0)
+    live = _peer_row("bb" * 16, "show.toe", online=True, age=1.0)
+    other_live = _peer_row("cc" * 16, "show.toe", online=True, age=2.0)
+    kept = ha.collapse_same_process_rows([ghost, live, other_live])
+    assert sorted(r["node_id"] for r in kept) == sorted([live["node_id"], other_live["node_id"]])
+
+
+def test_different_hosts_or_toes_are_distinct_processes():
+    a = _peer_row("aa" * 16, "show.toe", host="a" * 32)
+    b = _peer_row("bb" * 16, "show.toe", host="b" * 32)
+    c = _peer_row("cc" * 16, "other.toe", host="a" * 32)
+    kept = ha.collapse_same_process_rows([a, b, c])
+    assert len(kept) == 3
+
+
+def test_freshness_prefers_newer_seen_then_version_then_is_deterministic():
+    older = _peer_row("aa" * 16, "x.toe", age=900.0, version="6.2.0")
+    newer = _peer_row("bb" * 16, "x.toe", age=100.0, version="6.1.0")
+    assert ha.collapse_same_process_rows([older, newer])[0]["node_id"] == newer["node_id"]
+    tie1 = _peer_row("bb" * 16, "y.toe", age=100.0, version="6.1.0")
+    tie2 = _peer_row("aa" * 16, "y.toe", age=100.0, version="6.1.0")
+    assert ha.collapse_same_process_rows([tie1, tie2])[0]["node_id"] == "aa" * 16
+    assert ha.collapse_same_process_rows([tie2, tie1])[0]["node_id"] == "aa" * 16
+

@@ -29,6 +29,7 @@ AgentTestCase = runner_mod.AgentTestCase
 EXPECTED_ENVOY_TOOLS = [
     'announce_task',
     'batch_operations',
+    'capture_op',
     'capture_top',
     'claim_scope',
     'connect_ops',

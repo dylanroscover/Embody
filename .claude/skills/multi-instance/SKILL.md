@@ -17,6 +17,7 @@ Claude Code  <-->  STDIO Bridge  <-->  Envoy (TD instance A, port 9870)
 
 - **One bridge process per SESSION** (spawned by each AI client's MCP client)
 - **Per-session pinning** - each bridge pins to an instance NAME and re-resolves its port from the registry every tick, so a pinned instance restarting on a new port still self-heals. The registry `active` field only seeds NEW bridges without a pin.
+- **Per-call addressing** - every Envoy tool accepts an optional `instance` argument; the bridge routes that one call to the named instance and leaves the pin alone (unknown or unreachable names fail only that call with `error_code` `envoy.instance.unknown` / `envoy.instance.unreachable`). Prefer it over switching when you only need one look at another instance.
 - **Switching is instant and session-local** - `switch_instance` re-pins THIS session's bridge in-memory; peers are untouched unless you pass `all_sessions=True` (writes the registry default and bumps `active_epoch`, which moves every session)
 - **Registration never re-routes running sessions** - a new instance takes the `active` default slot only when it is vacant or names a dead instance
 

@@ -153,7 +153,8 @@ return the shape and range instead.
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?`, `sample_grid?` | Capture a TOP output. Returns a temp file path by default; `inline=True` embeds a small preview. `sample_grid>=2` returns numeric NxN RGBA cells + channel stats instead of an image, clamped 2..32 with origin at top-left. The returned text carries a **Quality verdict** from the raw pixels (luminance + alpha stats): a `Quality: FAIL` flags a black / flat / fully-transparent frame so you can tell an empty render from a real one WITHOUT reading the image. Never declare a visual task done on a FAIL. |
+| `capture_op` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?` | Capture ANY operator's output: a TOP natively, every other family (CHOP, SOP, POP, DAT, COMP, MAT) through a transient OP Viewer TOP -- what the network editor's viewer shows; the returned text says when a viewer was used. Same temp-file return and Quality verdict as `capture_top`. |
+| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?`, `sample_grid?` | Capture a TOP output (TOP only; other families -> `capture_op`). Returns a temp file path by default; `inline=True` embeds a small preview. `sample_grid>=2` returns numeric NxN RGBA cells + channel stats instead of an image, clamped 2..32 with origin at top-left. The returned text carries a **Quality verdict** from the raw pixels (luminance + alpha stats): a `Quality: FAIL` flags a black / flat / fully-transparent frame so you can tell an empty render from a real one WITHOUT reading the image. Never declare a visual task done on a FAIL. |
 
 For visual work, success is verified by capturing and judging the output TOP, not by a clean network alone; see `/visual-aesthetics`.
 
@@ -169,7 +170,9 @@ For visual work, success is verified by capturing and judging the output TOP, no
 
 **Destructive-op gate**: `delete_op`, `import_network` with `clear_first=True`, `run_tests`, and batches containing them are REFUSED (`MULTI-SESSION GATE` error naming the holder/peer) while a live peer session claims the scope or wrote it within the last minute. Pass `override=True` only when certain, and say so. Call `get_logs` for the full history, or read the log files in Embody's logs directory (see the `Logfolder` parameter on the Embody COMP).
 
-**Auto-attached recovery hints**: when a tool returns an `error`, a `recovery_hints` list may ride along -- each entry is `{cause, action, next_tools}` keyed off the error message (path-not-found, wrong family, empty capture, thread conflict, timeout, ...). It tells you the likely cause and which tool to call next, so recover by following it rather than retrying the same failing call verbatim.
+**Auto-attached recovery hints**: when a tool returns an `error`, a `recovery_hints` list may ride along -- each entry is `{code, cause, action, next_tools}` keyed off the error message (path-not-found, wrong family, empty capture, thread conflict, timeout, ...). It tells you the likely cause and which tool to call next, so recover by following it rather than retrying the same failing call verbatim. Every error envelope also carries `error_code` (`envoy.<area>.<condition>`, `envoy.error` when unclassified) -- branch on it, not on the message text.
+
+**Write effects**: every write tool's response may carry `_effects` -- errors/warnings that appeared after YOUR write, an fps drop, and for DAT writes the compile state of every GLSL operator consuming that DAT (its dock host and any operator referencing it by parameter): `shaders_checked` (what was linted), `new_shader_errors` (failures your write introduced), `shader_errors_persist` (still failing after a later write). Fix those before building further.
 
 ## Testing
 
@@ -189,7 +192,9 @@ These run locally on the STDIO bridge - they work even when TD is not running.
 | `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness. Includes instance registry and live bridge `sessions` (from heartbeat files -- works even with TD down) |
 | `launch_td` | `timeout?` | Launch TD with the project's `.toe` file, wait for Envoy (default: 120s) |
 | `restart_td` | `timeout?` | Gracefully quit TD and relaunch, wait for Envoy (default: 120s) |
-| `switch_instance` | `instance?`, `all_sessions?` | List all registered TD instances (omit `instance`) or re-pin THIS session's bridge to a different running instance (provide toe basename without `.toe`); peers are untouched unless `all_sessions=true` (writes the registry default and bumps `active_epoch`, moving every session). See `/multi-instance` skill for workflow |
+| `list_dialogs` | `instance?`, `screenshot?` | List the modal dialogs a TD instance shows; runs on the bridge so it answers while TD is frozen behind one. TD draws its own dialogs: `screenshot=true` saves a PNG per dialog to Read. `blocked=true` when one is up. When every Envoy tool times out, call this FIRST. |
+| `dismiss_dialog` | `instance?`, `dialog?`, `action?` | Dismiss a blocking dialog and verify it is gone: `auto` runs close -> escape -> enter; close/escape decline a question, enter accepts its default, so read the screenshot before choosing. Never targets the main window; `envoy.dialog.stuck` when nothing worked. |
+| `switch_instance` | `instance?`, `all_sessions?` | List all registered TD instances (omit `instance`) or re-pin THIS session's bridge to a different running instance (provide toe basename without `.toe`). For ONE call, pass `instance=<name>` on any Envoy tool instead -- routed there without changing the pin; an unknown/unreachable name fails only that call (`envoy.instance.*`). Peers are untouched unless `all_sessions=true` (writes the registry default and bumps `active_epoch`, moving every session). See `/multi-instance` skill for workflow |
 
 ### Convoy Tools (LAN work relay)
 

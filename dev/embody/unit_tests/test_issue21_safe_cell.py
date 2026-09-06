@@ -31,14 +31,14 @@ class TestIssue21SafeCellAccess(EmbodyTestCase):
     def setUp(self):
         super().setUp()
         self._original_table = self.embody.par.Externalizations.eval()
+        self._original_link = self.embody.par.Externalizations.val  # restore the VALUE: .path is absolute
         self._bad_table = None
 
     def tearDown(self):
         # Restore the real table FIRST so other tests aren't poisoned even
         # if sandbox cleanup fails. Fail loud if restore fails - silent
         # restore failure could mask cross-test contamination.
-        original_path = self._original_table.path
-        self.embody.par.Externalizations = original_path
+        self.embody.par.Externalizations = self._original_link
         if self.embody.par.Externalizations.eval() is not self._original_table:
             raise AssertionError(
                 f"Externalizations restore failed: param value "

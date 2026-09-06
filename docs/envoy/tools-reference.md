@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 65 MCP tools for interacting with TouchDesigner, plus 21 bridge meta-tools: 4 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 66 MCP tools for interacting with TouchDesigner, plus 23 bridge meta-tools: 6 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (all listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 Two of the 62 (`convoy_lifecycle_state`, `convoy_lifecycle_quit`) are internal Convoy host-lifecycle tools: they refuse any session other than the Convoy host app's dedicated loopback session and are not for agent use.
 
@@ -146,7 +146,8 @@ The reduce-don't-dump contract for CHOP and DAT reads is adapted from the `view`
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?`, `sample_grid?` | Capture a TOP's output as an image. Saves to a temp file and returns the path -- Read that path to view it. Inline base64 previews are token-heavy, so they are **off by default** (`inline=False`); pass `inline=True` to also embed a small preview. Small images (<20 KB) include the inline MCP `ImageContent` preview when requested. Default: JPEG at 80% quality, max 640px long edge. Pass `sample_grid>=2` to return a downsampled NxN RGBA grid instead of an image: row 0 is the top of the image, stats are computed over the full-resolution texture, the requested grid clamps to 2..32, the returned `grid` is further capped to the TOP's width/height and can drop below 2 on tiny textures, and image params are ignored. Channel padding: RG -> b=0/a=1, mono -> replicated/a=1, monoalpha -> replicated + real alpha; `channels` reports the raw plane count. Every capture also returns a **Quality verdict** from the raw float pixels (`is_black` / `is_flat` / `fully_transparent` / `pass` + `fail_reasons`), surfaced as a `Quality: OK\|FAIL` line so you can tell an empty/black/transparent render from a real one without reading the image (black and fully-transparent are failures; a uniform fill is advisory, `flat_frame`). |
+| `capture_op` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?` | Capture any operator's current output as an image. A TOP is read natively; every other family (CHOP, SOP, POP, DAT, COMP, MAT) renders through a transient OP Viewer TOP -- what the network editor's viewer shows -- created inside the Embody COMP for the call and destroyed after (the capture waits a few frames for it to render, and the returned text says a viewer was used). Same temp-file return and Quality verdict as `capture_top`; `max_resolution` is the viewer's render width (16:9) for a non-TOP. |
+| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?`, `sample_grid?` | Capture a TOP's output as an image (TOP only; any other family -> `capture_op`). Saves to a temp file and returns the path -- Read that path to view it. Inline base64 previews are token-heavy, so they are **off by default** (`inline=False`); pass `inline=True` to also embed a small preview. Small images (<20 KB) include the inline MCP `ImageContent` preview when requested. Default: JPEG at 80% quality, max 640px long edge. Pass `sample_grid>=2` to return a downsampled NxN RGBA grid instead of an image: row 0 is the top of the image, stats are computed over the full-resolution texture, the requested grid clamps to 2..32, the returned `grid` is further capped to the TOP's width/height and can drop below 2 on tiny textures, and image params are ignored. Channel padding: RG -> b=0/a=1, mono -> replicated/a=1, monoalpha -> replicated + real alpha; `channels` reports the raw plane count. Every capture also returns a **Quality verdict** from the raw float pixels (`is_black` / `is_flat` / `fully_transparent` / `pass` + `fail_reasons`), surfaced as a `Quality: OK\|FAIL` line so you can tell an empty/black/transparent render from a real one without reading the image (black and fully-transparent are failures; a uniform fill is advisory, `flat_frame`). |
 
 ## Multi-Session Awareness
 
@@ -178,7 +179,13 @@ Concurrent AI sessions (multiple Claude Code windows, other MCP clients) working
     When a tool call generates `WARNING` or `ERROR` entries since the previous call, the response carries a `_logs` field with up to the last 8 of them. `INFO`/`DEBUG`/`SUCCESS` history does not ride along — fetch it on demand with `get_logs`. Warning cursors are tracked per session, so concurrent AI sessions each receive their own copy — one session polling first no longer consumes a warning meant for everyone.
 
 !!! info "Auto-attached recovery hints"
-    When a tool returns an `error`, Envoy attaches a `recovery_hints` list — each entry `{cause, action, next_tools}`, matched to the real error string (path-not-found -> `query_network`/`find_children`, parameter-not-found -> `get_op`, wrong family, empty capture -> `get_op_performance`, thread conflict, timeout -> `get_project_performance`). Additive, never clobbers, never raises — follow the hint instead of retrying the same failing call.
+    When a tool returns an `error`, Envoy attaches a `recovery_hints` list — each entry `{code, cause, action, next_tools}`, matched to the real error string (path-not-found -> `query_network`/`find_children`, parameter-not-found -> `get_op`, wrong family, empty capture -> `get_op_performance`, thread conflict, timeout -> `get_project_performance`). Additive, never clobbers, never raises — follow the hint instead of retrying the same failing call.
+
+!!! info "Stable error codes"
+    Every error envelope also carries `error_code`, a machine id of the form `envoy.<area>.<condition>`: `envoy.op.not_found`, `envoy.par.not_found`, `envoy.parent.not_comp`, `envoy.op.wrong_family`, `envoy.top.empty`, `envoy.capture.failed`, `envoy.thread.violation`, `envoy.op.unknown_type`, `envoy.timeout`, `envoy.session.gated`, `envoy.dat.wipe_refused`, `envoy.project.unsaved`, `envoy.embody.unavailable`, `envoy.docs.lookup_failed`, `envoy.job.error` — and `envoy.error` when no rule matches. Branch on the code, not the message: messages may be reworded, codes may not.
+
+!!! info "Write effects and shader lint"
+    Every write tool's response may carry `_effects`: errors and warnings that appeared after your write, a meaningful fps drop, and — for DAT writes — the compile state of every GLSL operator that consumes that DAT, whether it is the DAT's dock host or references it by parameter from anywhere in the project. `shaders_checked` lists what was linted (a quiet footer means compiled clean, not unchecked), `new_shader_errors` the failures your write introduced, and `shader_errors_persist` a shader still failing after a later write, so silence never reads as fixed.
 
 ## Background Jobs
 
@@ -192,14 +199,16 @@ Long operations that outlive the 30-second operation timeout run as disk-backed 
 
 ## Bridge Meta-Tools
 
-These tools run locally on the STDIO bridge script, not inside TouchDesigner. They work even when TD is not running — this is how Claude Code can launch or restart TD without an active Envoy connection.
+These tools run locally on the STDIO bridge script, not inside TouchDesigner. They work even when TD is not running, or is frozen behind a modal dialog — this is how Claude Code can launch or restart TD without an active Envoy connection.
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness, restart attempts remaining |
 | `launch_td` | `timeout?`, `project_path?` | Launch TD with the project's `.toe` file. Waits for Envoy to become reachable (default: 120s). Pass `project_path` (absolute, or relative to the git root) to open a different `.toe` |
 | `restart_td` | `timeout?`, `project_path?` | Gracefully quit TD and relaunch. Waits for exit before relaunching (default: 120s). Pass `project_path` to relaunch with a different `.toe`. Targets only the active instance's verified process — other running TouchDesigner instances are never touched |
-| `switch_instance` | `instance?`, `all_sessions?` | List all registered TD instances (omit `instance`) or re-pin **this session's** bridge to a different running instance; other sessions are untouched unless `all_sessions=true`. See [Multiple Instances](architecture.md#multiple-instances) |
+| `list_dialogs` | `instance?`, `screenshot?` | List the modal dialogs a TD instance shows (message boxes, missing-file and save-changes prompts, the license box, file pickers). Runs on the bridge, so it answers while TD's main thread is blocked. TouchDesigner draws its own dialogs, so their text is not readable through the OS: `screenshot=true` saves a PNG of each to the temp dir to Read. `blocked=true` when a dialog is up. macOS backend is unverified. |
+| `dismiss_dialog` | `instance?`, `dialog?`, `action?` | Dismiss a blocking dialog and verify it is gone. `action=auto` (default) runs close (WM_CLOSE) -> escape -> enter until the window disappears; a single rung tries only that. `dialog` picks by title substring or window id (default: the first). The main TouchDesigner window is never a target. Failure is `envoy.dialog.stuck` with what was tried. |
+| `switch_instance` | `instance?`, `all_sessions?` | List all registered TD instances (omit `instance`) or re-pin **this session's** bridge to a different running instance; other sessions are untouched unless `all_sessions=true`. For a single call, pass `instance=<name>` on any Envoy tool instead: the bridge routes that one call to the named instance and leaves this session's pin alone (an unknown or unreachable name fails only that call, with `error_code` `envoy.instance.unknown` / `envoy.instance.unreachable`). See [Multiple Instances](architecture.md#multiple-instances) |
 
 ### Convoy Tools (LAN work relay)
 

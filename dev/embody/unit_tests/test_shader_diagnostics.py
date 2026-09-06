@@ -84,6 +84,89 @@ class TestShaderDiagnostics(EmbodyTestCase):
         self.assertIn('_info', entry['infoDat'])
 
     # ------------------------------------------------------------------
+    # Consumers by reference (a shader DAT that is NOT the dock host's)
+    # ------------------------------------------------------------------
+
+    def _shared_source_setup(self, text=BROKEN_PIXEL):
+        shared = self.sandbox.create(textDAT, 'shared_pixel')
+        shared.text = text
+        g = self.sandbox.create(glslTOP, 'glsl_ref')
+        g.par.pixeldat = 'shared_pixel'
+        g.cook(force=True)
+        return shared, g
+
+    def test_shader_consumers_finds_reference_by_parameter(self):
+        shared, g = self._shared_source_setup()
+        found = self.read.shader_consumers(self.envoy, shared)
+        self.assertIn(g.path, [c.path for c in found])
+        # The docked default DAT is not referenced, so it has no consumer.
+        docked = self.sandbox.op('glsl_ref_pixel')
+        self.assertEqual(self.read.shader_consumers(self.envoy, docked), [])
+
+    def test_shader_consumers_ignores_non_dats_and_never_raises(self):
+        top = self.sandbox.create(noiseTOP, 'not_a_dat')
+        self.assertEqual(self.read.shader_consumers(self.envoy, top), [])
+        self.assertEqual(self.read.shader_consumers(self.envoy, None), [])
+
+    def test_is_shader_op(self):
+        g = self._broken_glsl('glsl_is')
+        self.assertTrue(self.read.is_shader_op(g))
+        self.assertFalse(self.read.is_shader_op(self.sandbox.create(noiseTOP, 'plain')))
+
+    def test_write_footer_lints_consumer_on_first_write(self):
+        """A DAT write reports its consumers' compile errors immediately --
+        on the session's FIRST write too -- and lists what it checked."""
+        shared, g = self._shared_source_setup()
+        sid = 'lint-first-' + shared.name
+        self.envoy._effects_state.pop(sid, None)
+        try:
+            res = {'success': True}
+            self.envoy._attachEffects(res, 'set_dat_content', sid, [shared.path])
+            effects = res.get('_effects') or {}
+            self.assertIn(g.path, effects.get('shaders_checked', []),
+                          'the referencing GLSL TOP must be linted')
+            paths = [e['path'] for e in effects.get('new_shader_errors', [])]
+            self.assertIn(g.path, paths)
+        finally:
+            self.envoy._effects_state.pop(sid, None)
+
+    def test_write_footer_reports_persisting_failure_again(self):
+        """A shader still broken after a later write is reported again --
+        silence must never read as fixed."""
+        shared, g = self._shared_source_setup()
+        sid = 'lint-persist-' + shared.name
+        self.envoy._effects_state.pop(sid, None)
+        try:
+            first = {'success': True}
+            self.envoy._attachEffects(first, 'set_dat_content', sid, [shared.path])
+            self.assertIn(g.path, [e['path'] for e in
+                                   first['_effects'].get('new_shader_errors', [])])
+            shared.text = BROKEN_PIXEL.replace('half x', 'half y')
+            g.cook(force=True)
+            second = {'success': True}
+            self.envoy._attachEffects(second, 'set_dat_content', sid, [shared.path])
+            eff = second.get('_effects') or {}
+            self.assertNotIn(g.path, [e['path'] for e in eff.get('new_shader_errors', [])])
+            self.assertIn(g.path, [e['path'] for e in eff.get('shader_errors_persist', [])])
+        finally:
+            self.envoy._effects_state.pop(sid, None)
+
+    def test_write_footer_healthy_consumer_is_checked_but_clean(self):
+        shared, g = self._shared_source_setup(
+            'out vec4 fragColor;\nvoid main() { fragColor = vec4(1.0); }\n')
+        sid = 'lint-clean-' + shared.name
+        self.envoy._effects_state.pop(sid, None)
+        try:
+            res = {'success': True}
+            self.envoy._attachEffects(res, 'set_dat_content', sid, [shared.path])
+            eff = res.get('_effects') or {}
+            self.assertIn(g.path, eff.get('shaders_checked', []))
+            self.assertNotIn('new_shader_errors', eff)
+            self.assertNotIn('shader_errors_persist', eff)
+        finally:
+            self.envoy._effects_state.pop(sid, None)
+
+    # ------------------------------------------------------------------
     # False positives / negatives
     # ------------------------------------------------------------------
 

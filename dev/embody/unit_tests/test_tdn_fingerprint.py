@@ -150,11 +150,12 @@ class TestTDNDirtyState(EmbodyTestCase):
     def setUp(self):
         super().setUp()
         self._orig_table = self.embody.par.Externalizations.eval()
+        self._orig_link = self.embody.par.Externalizations.val  # restore the VALUE: .path is absolute
         self._orig_tdnmode = self.embody.par.Tdnmode.eval()
         self._primed = None
 
     def tearDown(self):
-        self.embody.par.Externalizations = self._orig_table.path
+        self.embody.par.Externalizations = self._orig_link
         self.embody.par.Tdnmode = self._orig_tdnmode
         if self._primed is not None:
             self.embody_ext._tdn_fingerprints.pop(self._primed, None)

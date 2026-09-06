@@ -196,7 +196,7 @@ By default, Claude Code asks for confirmation every time it wants to use an MCP 
 | Choice | Effect |
 |---|---|
 | **Don't ask** (recommended) | Auto-approves **all** Envoy tools via the `mcp__envoy` wildcard — no prompts, and new tools are covered automatically. |
-| **Ask for some** | Auto-approves only read-only/query tools (`get_*`, `query_network`, `read_tdn`, `capture_top`, …). Anything that creates, edits, deletes, or executes still prompts. |
+| **Ask for some** | Auto-approves only read-only/query tools (`get_*`, `query_network`, `read_tdn`, `capture_top`, `capture_op`, …). Anything that creates, edits, deletes, or executes still prompts. |
 | **Ask for all** | Pre-approves nothing — Claude Code prompts before every tool (the built-in default behavior). |
 | **Leave settings alone** | Embody does not create or modify `settings.local.json` at all — you manage permissions yourself. |
 

@@ -709,8 +709,7 @@ class ConvoyExt:
             return '%dh ago' % int(age // 3600)
         return '%dd ago' % int(age // 86400)
 
-    @staticmethod
-    def _nodeStatusRows(result):
+    def _nodeStatusRows(self, result):
         """Turn a bounded client directory result into UI-only row values.
 
         Deliberately minimal -- Node Name, IP, Status, Last Seen. The node's
@@ -721,7 +720,16 @@ class ConvoyExt:
         if not isinstance(result, dict) or result.get('state') != 'nodes':
             return None
         rows = []
-        for node in result.get('nodes') or ():
+        nodes = result.get('nodes') or ()
+        # Through the one sanctioned resolver (MAIN THREAD; see _client).
+        # An older or stubbed client without the helper shows the raw list.
+        collapse = getattr(self._safeClient(), 'collapse_same_process_nodes', None)
+        if collapse is not None:
+            try:
+                nodes = collapse(nodes, result.get('host_id'))
+            except Exception as e:
+                self._log('node rows not collapsed: %s' % (e,), 'DEBUG')
+        for node in nodes:
             if not isinstance(node, dict):
                 continue
             online = bool(node.get('online'))
@@ -1526,6 +1534,7 @@ class ConvoyExt:
         except Exception:
             return
 
+        self._last_tick_at = time.monotonic()
         try:
             self._reconcile()
         except Exception as e:
@@ -1566,6 +1575,42 @@ class ConvoyExt:
         except Exception as e:
             self._log('could not accelerate the reconcile tick (%s); the '
                       'existing chain still owns it' % (e,), 'WARNING')
+
+    # The loop above is a run()-chain and a run()-chain can die silently:
+    # on 2026-09-05 the dev instance's tick stopped at ~21:12 during a full
+    # test run and nothing fired for 80 minutes -- register result never
+    # drained ('the register call timed out'), a deferred host update's
+    # result never drained ('host install call timed out'), Status latched
+    # 'Install failed -- see log' with 0 nodes while the host was healthy,
+    # and a single _kickTick() cured all of it. Cause not pinned (no DEBUG
+    # log of the last tick); the cure is structural: EnvoyExt's watchdog,
+    # an independent chain, calls ensureTickAlive every pass.
+    _LOOP_DEAD_S = 90.0
+
+    def ensureTickAlive(self):
+        """Revive the reconcile loop when no tick has run for longer than
+        _LOOP_DEAD_S (or three heartbeats at the current backoff). Returns
+        True when it had to. Cheap; meant to be called every few seconds
+        from a chain that is not this one."""
+        try:
+            if not self._enabled():
+                return False
+        except Exception:
+            return False
+        now = time.monotonic()
+        last = getattr(self, '_last_tick_at', None)
+        if last is None:
+            self._last_tick_at = now
+            return False
+        silent = now - last
+        limit = max(self._LOOP_DEAD_S, 3.0 * float(self._tick_ms) / 1000.0)
+        if silent < limit:
+            return False
+        self._log('reconcile loop silent for %.0fs (limit %.0fs) -- reviving it'
+                  % (silent, limit), 'WARNING')
+        self._last_tick_at = now
+        self._kickTick()
+        return True
 
     def _reconcile(self, force=False):
         """Compare desired state with what was sent; call at most once.

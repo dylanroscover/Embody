@@ -54,6 +54,20 @@ class EmbodyTestCase(TestCase):
         """
         return self.embody.ext.Embody
 
+    # _suppress_dialogs is the save-window flag: execute.onProjectPreSave sets
+    # it and only onProjectPostSave schedules the clear. A suite that drives
+    # PreSave directly (test_issue21_safe_cell, four times) therefore leaves
+    # the window OPEN for every later checkpoint -- six test_autosave
+    # failures on 2026-09-05 whenever that suite had run first. Snapshot and
+    # restore it around every test so suite order can never leak it.
+    _SAVE_WINDOW_KEY = '_suppress_dialogs'
+    _save_window_was = None
+
+    def setUp(self):
+        super().setUp()
+        self._save_window_was = self.embody.fetch(
+            self._SAVE_WINDOW_KEY, None, search=False)
+
     def tearDown(self):
         if self.sandbox is not None:
             for child in list(self.sandbox.children):
@@ -61,6 +75,13 @@ class EmbodyTestCase(TestCase):
                     child.destroy()
                 except Exception:
                     pass
+        try:
+            if self._save_window_was is None:
+                self.embody.unstore(self._SAVE_WINDOW_KEY)
+            else:
+                self.embody.store(self._SAVE_WINDOW_KEY, self._save_window_was)
+        except Exception:
+            pass
 
 
     def assertStartsWith(self, s, prefix, msg=None):

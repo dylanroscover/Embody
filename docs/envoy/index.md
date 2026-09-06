@@ -6,7 +6,7 @@
 
 TouchDesigner has no external API. A `.toe` file has no access surface — nothing outside TD can read it, write to it, or interact with what's running inside it. AI assistants hitting this wall have two options: describe what a network *might* look like and hope you can implement it, or stop. Neither is useful when you're mid-session with a half-built network in front of you.
 
-Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 65 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
+Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 66 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
 
 ## Key Design Principles
 
@@ -45,7 +45,7 @@ The bridge handles the MCP protocol handshake locally and keeps bridge meta-tool
 
 ## Capabilities
 
-Envoy exposes **65 MCP tools** across 17 categories, plus 21 bridge meta-tools that run on the local STDIO bridge -- 4 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (see the [Convoy guide](../convoy/index.md)).
+Envoy exposes **66 MCP tools** across 17 categories, plus 23 bridge meta-tools that run on the local STDIO bridge -- 4 TD-lifecycle tools and 17 `convoy_*` LAN work-relay tools (see the [Convoy guide](../convoy/index.md)).
 
 ### Operator Management
 
@@ -187,15 +187,16 @@ Read any COMP's live network as `.tdxn` (no disk I/O), export it to disk, or imp
 | `import_network` | Recreate a network from `.tdxn` |
 | `diff_tdn` | Diff a live network against its on-disk `.tdxn` — the *unsaved* changes git cannot see. One COMP, or a whole-project summary |
 
-### TOP Capture
+### Capture
 
-`capture_top` downloads a TOP's current frame output as an image the AI can actually *see* — not a description of it (by default the image is written to a temp file the AI reads; see below). This closes the visual feedback loop: the AI builds a compositing chain, captures the output, examines what's rendering, and iterates — without you describing the result in words.
+`capture_top` downloads a TOP's current frame output as an image the AI can actually *see* — not a description of it (by default the image is written to a temp file the AI reads; see below). `capture_op` does the same for any operator: a TOP is read natively, and every other family (CHOP, SOP, POP, DAT, COMP, MAT) is rendered through a transient OP Viewer TOP, so the AI sees what the network editor's viewer would show. This closes the visual feedback loop: the AI builds a compositing chain, captures the output, examines what's rendering, and iterates — without you describing the result in words.
 
 By default (`inline=False`) the image is saved to a temp file and the path is returned — the AI reads that path to view it, since inline base64 previews are token-heavy. Pass `inline=True` to also embed a small base64 preview in the response. JPEG (default, 80% quality) and PNG are supported, with configurable maximum resolution (default: 640px long edge). Every capture also returns a **Quality verdict** from the raw pixels (`is_black` / `is_flat` / `fully_transparent` / `pass`), surfaced as a `Quality: OK|FAIL` line so the AI can tell an empty or black render from a real one without reading the image.
 
 | Tool | Description |
 |---|---|
 | `capture_top` | Capture a TOP's current output as an image; returns a temp-file path by default (`inline=True` also embeds a small preview) |
+| `capture_op` | Capture any operator's output as an image: a TOP natively, every other family through a transient OP Viewer TOP |
 
 ### Multi-Session Awareness
 
@@ -228,7 +229,9 @@ These tools run on the local bridge process, not inside TD. They're available ev
 | `get_td_status` | Connection state, process liveness, crash detection, restart attempts, instance registry |
 | `launch_td` | Launch TD with the project's `.toe` file; waits for Envoy to become reachable |
 | `restart_td` | Gracefully quit and relaunch TD (only the active instance — other TD instances are never touched) |
-| `switch_instance` | List registered TD instances or switch to a different running instance |
+| `switch_instance` | List registered TD instances or switch to a different running instance (or pass `instance=<name>` on any tool to address one call without switching) |
+| `list_dialogs` | List the modal dialogs blocking a TD instance; `screenshot=true` saves a PNG of each so the AI can read what TD is asking |
+| `dismiss_dialog` | Dismiss a blocking dialog with a close -> escape -> enter ladder, verified gone; the main window is never touched |
 
 ### Batch Operations
 
@@ -250,6 +253,9 @@ These tools run on the local bridge process, not inside TD. They're available ev
   {"tool": "connect_ops", "params": {"source_path": "/project1/comp1", "dest_path": "/project1/null1"}}
 ]}
 ```
+
+!!! tip "No human at the machine?"
+    A render node with TouchDesigner and nothing else can be provisioned in one line, offline, from the release tox, and it comes up with Envoy enabled and no wizard: see [Provisioning a bare machine](provisioning.md).
 
 ## Auto-Configuration
 

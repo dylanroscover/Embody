@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
-build: 1197
-generator: Embody/6.2.13
+build: 1206
+generator: Embody/6.2.18
 td_build: 099.2025.33070
-source_file: Embody-6.316.toe
-exported_at: '2026-09-05T18:06:20Z'
+source_file: Embody-6.321.toe
+exported_at: '2026-09-06T06:49:07Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -68,6 +68,9 @@ operators:
     - {}
     - {}
     Convoynodes:
+    - {}
+    - {}
+    - {}
     - {}
     - {}
     - {}
@@ -458,7 +461,6 @@ operators:
       style: Folder
       label: AI Project Root (Custom)
       help: Custom directory for AI/MCP config when "AI Project Root" is set to "Custom". Relative paths are resolved against the .toe directory (e.g. "../" places config one level above the .toe -- useful when multiple TouchDesigner projects share a parent folder in a monorepo). Absolute paths are used as-is. Changing this path migrates Embody state and AI config to the new location.
-      enable: false
     - name: Autoexternalize
       style: Menu
       label: Auto-Externalize New Ops
@@ -790,7 +792,6 @@ operators:
       style: DAT
       label: Externalizations Table
       help: Reference to the externalizations tracking table DAT (stored in TSV format). Lists all externalized operators with their paths, types, timestamps, and dirty state.
-      value: /embody/externalizations
     - name: Openexternalizationstable
       style: Pulse
       label: Open Externalizations Table
@@ -899,7 +900,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.2.13
+      value: 6.2.18
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -1002,7 +1003,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 313
+    rows: 314
     cols: 11
   flags:
   - viewer

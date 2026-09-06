@@ -38,7 +38,7 @@ Embody is four tools working together — *lateral velocity*, *forward velocity*
 
     ---
 
-    An embedded [MCP](https://modelcontextprotocol.io/) server with **65 tools** that lets Claude Code, OpenCode, Codex, Gemini, Cursor, Windsurf, and GitHub Copilot via VS Code talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen in your live session. Small changes can land in seconds, depending on your model; a complete network is a 5-20 minute autonomous build you can hand off, parallelize across sessions, and check back on.
+    An embedded [MCP](https://modelcontextprotocol.io/) server with **66 tools** that lets Claude Code, OpenCode, Codex, Gemini, Cursor, Windsurf, and GitHub Copilot via VS Code talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen in your live session. Small changes can land in seconds, depending on your model; a complete network is a 5-20 minute autonomous build you can hand off, parallelize across sessions, and check back on.
 
     [:octicons-arrow-right-24: Setup Envoy](envoy/setup.md)
 
@@ -89,13 +89,13 @@ You describe what you want. The AI works with your live network — operators, c
 | | Feature | Description |
 |---|---------|-------------|
 | :material-sync: | **Automated Externalization** | Tag COMPs and DATs — or opt in to auto-tagging what the AI builds — and Embody keeps the external files in sync, auto-restoring from disk on project open |
-| :material-robot: | **Envoy MCP Server** | 65 tools connect AI assistants to your live TD session |
+| :material-robot: | **Envoy MCP Server** | 66 tools connect AI assistants to your live TD session |
 | :material-account-group: | **Multi-Session Coordination** | Run several AI sessions on one project — scoped claims, peer advisories, and gated destructive operations |
 | :material-lan: | **Convoy LAN Relay** | Convoy-enabled nodes on a trusted LAN discover, inspect, and control each other — relay test runs, saves, screenshots, restarts, and [fleet-wide Embody updates](convoy/fleet-updates.md) to other machines from one AI session ([Convoy guide](convoy/index.md)) |
 | :material-file-document: | **TDXN Format** | Export/import operator networks as diffable YAML for code review and snapshots |
 | :material-keyboard: | **Keyboard Shortcuts** | Double-tap ++lctrl++ to tag, ++ctrl+shift+u++ to save — and every binding is remappable (type or record) |
 | :material-cog: | **Parameter Tracking** | Automatically detects parameter changes and marks COMPs dirty |
-| :material-test-tube: | **123 Test Suites** | Comprehensive automated testing framework (3,684 tests) |
+| :material-test-tube: | **145 Test Suites** | Comprehensive automated testing framework (4,551 tests) |
 | :material-note-text: | **Structured Logging** | Multi-destination logging with file rotation, ring buffer, and MCP access |
 
 ---
@@ -104,3 +104,19 @@ You describe what you want. The AI works with your live network — operators, c
 
 - **TouchDesigner 2025.33070** or later (Windows / macOS)
 - A **git repository** is optional. Embody works in any project folder; if you happen to use git, every change is also a clean diff for free.
+
+---
+
+## Credits
+
+Embody stands on other people's work, and this section names it. Ideas move
+between the TouchDesigner MCP projects in both directions; where Embody took
+one, it is credited here and in the code where it landed.
+
+- **[External Tox Saver](https://github.com/franklin113/External-Tox-Saver)** by [Tim Franklin](https://github.com/franklin113) -- Embody began in 2020 as a refactor of it.
+- **TDMCP** by [Derivative](https://derivative.ca) (their experimental MCP server, a private repository at the time of writing, used with permission) -- undoable MCP mutations (one undo step per batch), the `get_docs` design (version-exact offline help first, the wiki API second), sequence-block growth on parameter writes, the transport-security hardening prompt, and treating a code-review rule as a query. Landed from v6.0.87 (2026-07-04) on.
+- **TDMCPSkills** by [Derivative](https://derivative.ca) (private at the time of writing, used with permission) -- the `pop-networks` skill is adapted from `td-pop-family`.
+- **[touchdesigner-mcp](https://github.com/8beeeaaat/touchdesigner-mcp)** by [8beeeaaat](https://github.com/8beeeaaat) -- the first widely used TouchDesigner MCP server (2025). Envoy's earliest tool vocabulary (`get_td_classes`, `get_td_class_details`, `get_td_info`, `get_module_help`, `exec_node_method`, `execute_python`) follows the names that project established.
+- **[td-mcp-rs](https://github.com/Verbalize-public/td-mcp-rs)** by [asyade](https://github.com/asyade) -- a Rust-daemon take on the same problem (2026). Its OS-dialog dismissal, per-call instance addressing, stable error codes with fix hints, any-family capture through an OP Viewer TOP, shader lint on DAT writes, and offline installation into a project file are ideas Embody adopted and built (see the [roadmap](roadmap.md)).
+
+If Embody carries an idea of yours and this list misses it, [open an issue](https://github.com/dylanroscover/Embody/issues) and it will be added.

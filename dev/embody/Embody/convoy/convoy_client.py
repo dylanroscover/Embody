@@ -1199,6 +1199,43 @@ def normalize_toe_path(toe_path, platform=None):
     return text
 
 
+def collapse_same_process_nodes(nodes, local_host_id=None):
+    """Panel-side mirror of the host's collapse_same_process_rows (canonical
+    explanation there): one row per remote process, so a daemon older than
+    that rule still renders TEC-C3A / transmon.1 once. Local rows (this
+    host's) are left to the directory."""
+    groups = {}
+    order = []
+    out = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        host = str(node.get("host_id") or "")
+        if local_host_id and host == str(local_host_id):
+            out.append(node)
+            continue
+        key = (host, str(node.get("toe_name") or ""))
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(node)
+
+    def freshness(node):
+        try:
+            age = float(node.get("last_seen_age_s"))
+        except (TypeError, ValueError):
+            age = float("inf")
+        version = tuple(int(p) if p.isdigit() else 0
+                        for p in str(node.get("embody_version") or "").split("."))
+        return (age, tuple(-v for v in version), str(node.get("node_id") or ""))
+
+    for key in order:
+        group = groups[key]
+        online = [n for n in group if n.get("online")]
+        out.extend(online if online else [min(group, key=freshness)])
+    return out
+
+
 def stable_node_discriminator(toe_path, platform=None):
     """Opaque stable discriminator for one saved .toe launch profile.
 

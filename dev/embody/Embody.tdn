@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
-build: 1225
-generator: Embody/6.2.13
+build: 1227
+generator: Embody/6.2.18
 td_build: 099.2025.33070
-source_file: Embody-6.316.toe
-exported_at: '2026-09-05T06:59:39Z'
+source_file: Embody-6.321.toe
+exported_at: '2026-09-06T06:39:51Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -412,7 +412,6 @@ custom_pars:
     style: Folder
     label: AI Project Root (Custom)
     help: Custom directory for AI/MCP config when "AI Project Root" is set to "Custom". Relative paths are resolved against the .toe directory (e.g. "../" places config one level above the .toe -- useful when multiple TouchDesigner projects share a parent folder in a monorepo). Absolute paths are used as-is. Changing this path migrates Embody state and AI config to the new location.
-    enable: false
   - name: Autoexternalize
     style: Menu
     label: Auto-Externalize New Ops
@@ -744,7 +743,6 @@ custom_pars:
     style: DAT
     label: Externalizations Table
     help: Reference to the externalizations tracking table DAT (stored in TSV format). Lists all externalized operators with their paths, types, timestamps, and dirty state.
-    value: /embody/externalizations
   - name: Openexternalizationstable
     style: Pulse
     label: Open Externalizations Table
@@ -853,7 +851,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.2.13
+    value: 6.2.18
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -945,6 +943,9 @@ sequences:
   - {}
   - {}
   Convoynodes:
+  - {}
+  - {}
+  - {}
   - {}
   - {}
   - {}
@@ -1102,9 +1103,21 @@ operators:
   tags:
   - tdn
   storage:
+    ext_needed: true
+    git_missing: false
+    needs_save: false
     sel:
       mode: advanced
+    sel_assistant: claudecode
+    sel_client: ''
+    sel_convoy: enable
+    sel_externalize: auto
+    sel_git: gitinit
+    sel_mode: auto
+    sel_permissions: all
+    sel_root: gitroot
     step: 0
+    step_id: mode
   tdn_ref: embody/Embody/wizard.tdn
 - name: TDXNExt
   type: textDAT

@@ -905,11 +905,13 @@ class TestTransientParScrub(EmbodyTestCase):
         self._cls = type(self.embody_ext)
         self._orig_registry = self._cls._TRANSIENT_STATUS_PARS
         self._orig_omit = self._cls._TDN_VALUE_OMIT_PARS
+        self._orig_storage_shortcuts = self._cls._TRANSIENT_STORAGE_SHORTCUTS
         self._tmp_dirs = []
 
     def tearDown(self):
         self._cls._TRANSIENT_STATUS_PARS = self._orig_registry
         self._cls._TDN_VALUE_OMIT_PARS = self._orig_omit
+        self._cls._TRANSIENT_STORAGE_SHORTCUTS = self._orig_storage_shortcuts
         for d in self._tmp_dirs:
             shutil.rmtree(d, ignore_errors=True)
         quiet = op(STAGING)
@@ -1321,3 +1323,87 @@ class TestTransientParScrub(EmbodyTestCase):
         self.assertEqual(
             comp.par.Teststatus.eval(), 'Running on port 999',
             'the live value must be restored even when the save fails')
+
+    # -- the table link and COMP storage (release leak, 2026-09-05) ------
+    # A bootstrap-provisioned show file opened with 'Invalid path for node
+    # /embody/externalizations' and 16 of the dev project's storage keys:
+    # both rode inside the release .tox. The link is registered for reset
+    # and written relatively; storage is emptied around the save.
+
+    def test_externalizations_link_is_registered_reset_to_default(self):
+        self.assertIn('Externalizations', self._orig_registry['Embody'])
+        self.assertIsNone(self._orig_registry['Embody']['Externalizations'])
+        self.assertEqual(self.embody.par.Externalizations.default, '')
+
+    def test_live_externalizations_link_is_relative(self):
+        """What the dev COMP holds is what the release ships."""
+        val = self.embody.par.Externalizations.val
+        self.assertFalse(val.startswith('/'), val)
+        self.assertIsNotNone(self.embody.par.Externalizations.eval())
+
+    def test_link_helper_writes_the_relative_sibling_path(self):
+        table = self.embody.par.Externalizations.eval()
+        before = self.embody.par.Externalizations.val
+        try:
+            # the state the release shipped: an absolute authoring-project path
+            self.embody.par.Externalizations.val = table.path
+            self.assertTrue(self.embody.par.Externalizations.val.startswith('/'))
+            self.embody_ext._linkExternalizationsTable(table)
+            self.assertEqual(self.embody.par.Externalizations.val, 'externalizations')
+            self.assertIs(self.embody.par.Externalizations.eval(), table)
+        finally:
+            self.embody.par.Externalizations.val = before
+
+    def test_transient_scrub_empties_the_link_and_restore_relinks(self):
+        before = self.embody.par.Externalizations.val
+        snapshot = self.embody_ext._scrubTransientPars(self.embody)
+        try:
+            self.assertEqual(self.embody.par.Externalizations.val, '')
+        finally:
+            self.embody_ext._restoreTransientPars(snapshot)
+        self.assertEqual(self.embody.par.Externalizations.val, before)
+
+    def test_storage_scrub_empties_registered_root_and_restore_puts_it_back(self):
+        comp = self._make_scrub_comp('rht_storage')
+        self._cls._TRANSIENT_STORAGE_SHORTCUTS = frozenset({self._SHORTCUT})
+        comp.store('_dirty_states', {'/a': True})
+        comp.store('expanded_paths', ['/a', '/b'])
+        snap = self.embody_ext._scrubStorage(comp)
+        self.assertEqual(dict(comp.storage), {})
+        self.assertEqual(snap['items'],
+                         {'_dirty_states': {'/a': True}, 'expanded_paths': ['/a', '/b']})
+        self.embody_ext._restoreStorage(snap)
+        self.assertEqual(comp.fetch('_dirty_states'), {'/a': True})
+        self.assertEqual(comp.fetch('expanded_paths'), ['/a', '/b'])
+
+    def test_storage_scrub_skips_unregistered_empty_and_descendants(self):
+        comp = self._make_scrub_comp('rht_storage_scope')
+        comp.store('cfg', 1)
+        # shortcut not registered for storage -> untouched
+        self.assertIsNone(self.embody_ext._scrubStorage(comp))
+        self.assertEqual(comp.fetch('cfg'), 1)
+        self._cls._TRANSIENT_STORAGE_SHORTCUTS = frozenset({self._SHORTCUT})
+        # a descendant's storage can be authored config -> root only
+        child = comp.create(baseCOMP, 'child')
+        child.store('authored', 'keep')
+        snap = self.embody_ext._scrubStorage(comp)
+        self.assertEqual(snap['items'], {'cfg': 1})
+        self.assertEqual(child.fetch('authored'), 'keep')
+        self.embody_ext._restoreStorage(snap)
+        # nothing to scrub -> None, and restoring None is a no-op
+        comp.unstore('*')
+        self.assertIsNone(self.embody_ext._scrubStorage(comp))
+        self.embody_ext._restoreStorage(None)
+
+    def test_storage_scrub_on_live_embody_roundtrips_exactly(self):
+        before = dict(self.embody.storage)
+        self.assertTrue(before, 'the live Embody COMP is expected to hold runtime storage')
+        snap = self.embody_ext._scrubStorage(self.embody)
+        try:
+            self.assertEqual(len(self.embody.storage), 0)
+        finally:
+            self.embody_ext._restoreStorage(snap)
+        after = dict(self.embody.storage)
+        self.assertEqual(set(after), set(before))
+        for key, value in before.items():
+            self.assertTrue(after[key] is value or after[key] == value, key)

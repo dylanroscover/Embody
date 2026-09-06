@@ -97,12 +97,19 @@ _RESULT_PATH_KEYS = ('path', 'new_path', 'comp_path', 'dat_path')
 # The reactive cousin of the .claude skills: the same hard-won knowledge,
 # delivered at the moment of failure rather than relying on a pre-loaded doc.
 #
-# Each entry is (compiled_regex, cause, action, next_tools). Keep it small and
-# tuned to errors an agent ACTUALLY hits -- noise here trains the agent to
-# ignore the block. `next_tools` are real Envoy tool names.
+# Each entry is (compiled_regex, code, cause, action, next_tools). Keep it
+# small and tuned to errors an agent ACTUALLY hits -- noise here trains the
+# agent to ignore the block. `next_tools` are real Envoy tool names.
+#
+# `code` is the stable machine-readable id that rides the envelope as
+# `error_code` (envoy.<area>.<condition>); messages may be reworded, codes
+# may not. Every envelope gets one -- `envoy.error` when no rule matches.
+# Idea adopted from td-mcp-rs's diagnostics catalog (credited in README).
+_ERROR_CODE_FALLBACK = 'envoy.error'
 _RECOVERY_HINT_RULES = [
     (re.compile(r'(operator|parent|source|destination|comp|op) not found'
                 r'|does not exist|no operator at', re.IGNORECASE),
+     'envoy.op.not_found',
      'the operator path does not resolve',
      "Never guess paths. Call query_network on the parent COMP (or '/') to "
      "list real children, or find_children to search by name, then retry with "
@@ -113,20 +120,33 @@ _RECOVERY_HINT_RULES = [
      ['query_network', 'find_children', 'get_op', 'get_annotations']),
 
     (re.compile(r'parameter not found|no parameter', re.IGNORECASE),
+     'envoy.par.not_found',
      'no parameter by that name on the operator',
      "List the operator's real parameters with get_op (or read_tdn for a TDXN "
      "COMP) before setting. Custom-parameter names are Capitalized; built-in "
      "names are lowercase.",
      ['get_op', 'get_parameter']),
 
-    (re.compile(r'is not a top|is not a comp|\(family:|wrong family',
+    (re.compile(r'cannot create children in', re.IGNORECASE),
+     'envoy.parent.not_comp',
+     'the parent path is not a COMP, so nothing can be created inside it',
+     "create_op needs a COMP as parent_path. Verify it with get_op (family "
+     "COMP) or query_network, and prefer the container that holds the Embody "
+     "COMP (execute_python: result = op.Embody.parent().path) over / or /local.",
+     ['get_op', 'query_network']),
+
+    (re.compile(r'is not a (top|comp|dat|chop|sop|pop|mat)|\(family:|wrong family',
                 re.IGNORECASE),
+     'envoy.op.wrong_family',
      'the operator is the wrong family for this tool',
      "Check the operator's family with get_op. capture_top needs a TOP; "
-     "connect_ops needs compatible families; annotations need a COMP.",
+     "capture_op takes every family (non-TOPs render through an OP Viewer "
+     "TOP). connect_ops needs compatible families; annotations and parents "
+     "need a COMP; DAT tools need a DAT.",
      ['get_op', 'query_network']),
 
     (re.compile(r'no pixel data available', re.IGNORECASE),
+     'envoy.top.empty',
      'the TOP produced an empty texture (zero resolution or never cooked)',
      "Check the TOP's resolution and whether it cooked "
      "(get_op_performance -> cookedThisFrame), verify a Null terminates the "
@@ -134,8 +154,18 @@ _RECOVERY_HINT_RULES = [
      "debug-operator skill.",
      ['get_op_performance', 'get_op_errors', 'get_op']),
 
+    (re.compile(r'failed to (capture|encode)|could not (create|aim) a viewer'
+                r'|destroyed before it rendered', re.IGNORECASE),
+     'envoy.capture.failed',
+     'the capture pipeline could not produce an image',
+     "Check the operator with get_op_errors and get_op_performance, then "
+     "re-capture. A non-TOP renders through an OP Viewer TOP that needs a "
+     "few frames; one retry is reasonable.",
+     ['get_op_errors', 'get_op_performance', 'capture_op', 'capture_top']),
+
     (re.compile(r'thread conflict|outside the main thread|main-thread',
                 re.IGNORECASE),
+     'envoy.thread.violation',
      'a TD object was touched off the main thread, or a raw op was returned',
      "Don't return raw op()/parent() objects from execute_python -- assign "
      "strings instead (result = op('x').path). Resolve any values on the main "
@@ -145,17 +175,75 @@ _RECOVERY_HINT_RULES = [
     (re.compile(r'unknown (op|operator) type|not a valid operator'
                 r"|has no attribute '\w+(TOP|CHOP|SOP|DAT|COMP|MAT|POP)'",
                 re.IGNORECASE),
+     'envoy.op.unknown_type',
      'the operator type name is misspelled or unavailable in this build',
      "Operator type names are exact (e.g. noiseTOP, not noise). Confirm the "
      "spelling and availability via get_docs before create_op.",
      ['get_docs', 'get_td_classes']),
 
     (re.compile(r'timed out after|operation timed out', re.IGNORECASE),
+     'envoy.timeout',
      'the operation exceeded the MCP timeout (main-thread work too heavy)',
      "Break the work into smaller steps; check get_project_performance for a "
      "cook stall, and prefer batch_operations over many single calls.",
      ['get_project_performance', 'batch_operations']),
+
+    (re.compile(r'multi-session gate|another (live )?session', re.IGNORECASE),
+     'envoy.session.gated',
+     'another live session owns or just touched this scope',
+     "Call get_sessions to see who is there and load /multi-session-etiquette; "
+     "coordinate or claim the scope, and pass override=True only with "
+     "explicit user direction.",
+     ['get_sessions', 'claim_scope']),
+
+    (re.compile(r'confirm_wipe|would (leave|empty) the dat|wipe', re.IGNORECASE),
+     'envoy.dat.wipe_refused',
+     'the write would empty the DAT and was refused',
+     "If emptying it is intended, pass confirm_wipe=True; otherwise send the "
+     "full replacement text or rows (get_dat_content shows what is there).",
+     ['set_dat_content', 'get_dat_content']),
+
+    (re.compile(r'saved \.toe|recovery point|dirty or unsaved|unsaved',
+                re.IGNORECASE),
+     'envoy.project.unsaved',
+     'the project has no fresh save to fall back on',
+     "Save first with save_project (it returns a job id; poll get_job_status), "
+     "then retry. confirm_saved=True accepts losing everything since the last "
+     "save.",
+     ['save_project', 'get_job_status']),
+
+    (re.compile(r'tdxn extension not loaded|externalizations table not found',
+                re.IGNORECASE),
+     'envoy.embody.unavailable',
+     "Embody's extension or tracking table is not ready",
+     "Check get_op_errors on the Embody COMP and get_td_info; on a fresh open "
+     "wait for the startup restore (frame 60) and retry.",
+     ['get_op_errors', 'get_td_info']),
+
+    (re.compile(r'web lookup|no page content|found no match', re.IGNORECASE),
+     'envoy.docs.lookup_failed',
+     'the documentation lookup found nothing for that query',
+     "Use the exact wiki page name with get_docs, or read the live API with "
+     "get_td_class_details / get_module_help.",
+     ['get_docs', 'get_td_class_details', 'get_module_help']),
+
+    (re.compile(r'idempotency|no job with id|job records|convoy', re.IGNORECASE),
+     'envoy.job.error',
+     'a background job or Convoy delivery could not be resolved',
+     "Check get_job_status (or get_convoy_status for fleet work); a retry "
+     "must reuse the same idempotency_key rather than start a duplicate.",
+     ['get_job_status', 'get_convoy_status']),
 ]
+
+
+def _error_code_for(message) -> str:
+    """The stable code for an error message: the first matching rule's,
+    else the fallback. Pure and side-effect free."""
+    if isinstance(message, str) and message:
+        for pattern, code, _cause, _action, _next_tools in _RECOVERY_HINT_RULES:
+            if pattern.search(message):
+                return code
+    return _ERROR_CODE_FALLBACK
 
 
 def _recovery_hints_for(message: str) -> list:
@@ -166,9 +254,10 @@ def _recovery_hints_for(message: str) -> list:
     if not message:
         return []
     hints = []
-    for pattern, cause, action, next_tools in _RECOVERY_HINT_RULES:
+    for pattern, code, cause, action, next_tools in _RECOVERY_HINT_RULES:
         if pattern.search(message):
             hints.append({
+                'code': code,
                 'cause': cause,
                 'action': action,
                 'next_tools': list(next_tools),
@@ -751,6 +840,13 @@ def _scope_overlaps(a: str, b: str) -> bool:
         shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
         return longer.startswith(shorter + '/')
     return False
+
+
+def _is_deferred(result) -> bool:
+    """A main-thread handler that needs real frames to finish returns
+    {'_defer': {'frames': N, 'continue': callable}} (see
+    EnvoyExt._scheduleDeferred). Pure."""
+    return isinstance(result, dict) and isinstance(result.get('_defer'), dict)
 
 
 def _scopes_for_operation(operation: str, params: dict, result=None) -> list:
@@ -2040,6 +2136,58 @@ class EnvoyMCPServer:
                     _queueWorkerLog(f'check_responses unexpected error: {type(e).__name__}: {e}')
                 break
             process_response(response)
+
+    def _captureResponse(self, result, inline: bool):
+        """Worker-side finish for capture_top / capture_op: save the decoded
+        image to a temp file, describe it, ride the Quality verdict along as
+        text, and embed a small preview only when asked."""
+        import base64
+        import os
+        import uuid
+
+        if not isinstance(result, dict) or 'error' in result:
+            return result
+
+        image_bytes = base64.b64decode(result['image_b64'])
+        ext = '.jpg' if result['format'] == 'jpeg' else f".{result['format']}"
+        file_path = os.path.join(tempfile.gettempdir(),
+                                 f'envoy_capture_{uuid.uuid4().hex[:8]}{ext}')
+        with open(file_path, 'wb') as f:
+            f.write(image_bytes)
+
+        size_kb = result['size_bytes'] / 1024
+        if result.get('captured_via') == 'opviewerTOP':
+            label = (f"{result.get('op_type')} ({result.get('family')}) capture "
+                     f"via OP Viewer TOP")
+        else:
+            label = 'TOP capture'
+        info = (f"{label}: {result['original_width']}x{result['original_height']}"
+                f" -> {result['width']}x{result['height']} {result['format'].upper()}"
+                f" ({size_kb:.1f} KB)\nSaved to: {file_path}")
+
+        # Surface the black/empty-frame verdict as text so the agent can
+        # branch on it WITHOUT reading the image -- enforces the
+        # "never declare a visual task done on a black frame" rule.
+        q = result.get('quality') or {}
+        if q:
+            if q.get('pass'):
+                info += (f"\nQuality: OK (max_lum={q.get('max_luminance')}, "
+                         f"std={q.get('std_luminance')})")
+            else:
+                info += (f"\nQuality: FAIL {q.get('fail_reasons')} "
+                         f"(max_lum={q.get('max_luminance')}, "
+                         f"mean_lum={q.get('mean_luminance')}"
+                         + (f", mean_alpha={q['mean_alpha']}"
+                            if 'mean_alpha' in q else '') + ") -- the frame "
+                         f"is likely black/empty/transparent. Do NOT declare "
+                         f"the task done; load /debug-operator and fix the "
+                         f"chain, then re-capture.")
+
+        # Inline base64 images are token-heavy, so only embed when the caller
+        # explicitly asks (inline=True) and the image is small.
+        if inline and result['size_bytes'] < 20000:
+            return [info, self._Image(data=image_bytes, format=result['format'])]
+        return info + "\n(Use Read tool on the file path above to view the image)"
 
     def _register_tools(self):
         """Register all MCP tools"""
@@ -3376,6 +3524,9 @@ class EnvoyMCPServer:
             """
             Capture a TOP as a temp image file or sampled RGBA grid.
 
+            TOP only -- for any other family (CHOP, SOP, POP, DAT, COMP, MAT)
+            use capture_op, which renders through an OP Viewer TOP.
+
             File path is returned by default; inline=True embeds a small preview.
             sample_grid>=2 returns an NxN RGBA grid instead, clamped 2..32 with
             row 0 at image top-left; image format args are ignored.
@@ -3398,10 +3549,6 @@ class EnvoyMCPServer:
                 Saved path text (with a Quality verdict line), inline image
                 content, or sample-grid dict
             """
-            import base64
-            import os
-            import uuid
-
             try:
                 sample_grid_value = int(sample_grid or 0)
             except Exception:
@@ -3414,51 +3561,49 @@ class EnvoyMCPServer:
                 'max_resolution': max_resolution,
                 'sample_grid': sample_grid_value,
             })
-
-            if 'error' in result:
-                return result
-
             if sample_grid_value >= 2:
                 return result
+            return self._captureResponse(result, inline)
 
-            # Decode the base64 image data from the main thread
-            image_bytes = base64.b64decode(result['image_b64'])
+        @self.mcp.tool()
+        def capture_op(op_path: str,
+                       format: Literal["jpeg", "png"] = "jpeg",
+                       quality: float = 0.8,
+                       max_resolution: int = 640, inline: bool = False) -> list:
+            """
+            Capture any operator's current output as a temp image file.
 
-            # Always save to temp file (Claude Code can Read images natively)
-            ext = '.jpg' if result['format'] == 'jpeg' else f".{result['format']}"
-            file_path = os.path.join(tempfile.gettempdir(), f'envoy_capture_{uuid.uuid4().hex[:8]}{ext}')
-            with open(file_path, 'wb') as f:
-                f.write(image_bytes)
+            A TOP is read natively (same pixels as capture_top). Every other
+            family -- CHOP, SOP, POP, DAT, COMP, MAT -- is rendered through a
+            transient OP Viewer TOP, the picture the network editor's viewer
+            shows, created inside the Embody COMP for this call and destroyed
+            after. The capture waits a few frames for the viewer to render;
+            the returned text says when a viewer was used. Use capture_top
+            when you need TOP-only features (sample grids).
 
-            size_kb = result['size_bytes'] / 1024
-            info = (f"TOP capture: {result['original_width']}x{result['original_height']}"
-                    f" -> {result['width']}x{result['height']} {result['format'].upper()}"
-                    f" ({size_kb:.1f} KB)\nSaved to: {file_path}")
+            File path is returned by default; inline=True embeds a small
+            preview. The text carries the same Quality verdict as capture_top:
+            never declare a visual task done on a FAIL.
 
-            # Surface the black/empty-frame verdict as text so the agent can
-            # branch on it WITHOUT reading the image -- enforces the
-            # "never declare a visual task done on a black frame" rule.
-            q = result.get('quality') or {}
-            if q:
-                if q.get('pass'):
-                    info += (f"\nQuality: OK (max_lum={q.get('max_luminance')}, "
-                             f"std={q.get('std_luminance')})")
-                else:
-                    info += (f"\nQuality: FAIL {q.get('fail_reasons')} "
-                             f"(max_lum={q.get('max_luminance')}, "
-                             f"mean_lum={q.get('mean_luminance')}"
-                             + (f", mean_alpha={q['mean_alpha']}"
-                                if 'mean_alpha' in q else '') + ") -- the frame "
-                             f"is likely black/empty/transparent. Do NOT declare "
-                             f"the task done; load /debug-operator and fix the "
-                             f"chain, then re-capture.")
+            Args:
+                op_path: Path to any operator
+                format: "jpeg" or "png"
+                quality: JPEG compression quality 0.0-1.0
+                max_resolution: Max pixels on longest edge (a non-TOP viewer
+                    renders at this width, 16:9); 0 = native / 1280 wide
+                inline: True embeds a small base64 preview
 
-            # Inline base64 images are token-heavy, so only embed when the caller
-            # explicitly asks (inline=True) and the image is small. By default
-            # return just the path; Read the file when actually judging a frame.
-            if inline and result['size_bytes'] < 20000:
-                return [info, self._Image(data=image_bytes, format=result['format'])]
-            return info + "\n(Use Read tool on the file path above to view the image)"
+            Returns:
+                Saved path text (with a Quality verdict line) or inline image
+                content
+            """
+            result = self._execute_in_td('capture_op', {
+                'op_path': op_path,
+                'format': format,
+                'quality': quality,
+                'max_resolution': max_resolution,
+            })
+            return self._captureResponse(result, inline)
 
         # === Logging ===
 
@@ -5731,6 +5876,18 @@ class EnvoyExt:
 
     # === Liveness watchdog (pure Python run()-loop -- no operator, no timer) ===
 
+    def _checkConvoyLoop(self) -> None:
+        """Convoy's reconcile loop is a run()-chain that can die silently
+        (2026-09-05: 80 min dead, Status latched 'Install failed'); this
+        watchdog is the independent chain that notices. See
+        ConvoyExt.ensureTickAlive."""
+        try:
+            convoy = self.ownerComp.op('convoy')
+            if convoy is not None and self.ownerComp.par.Convoyenable.eval():
+                convoy.ext.ConvoyExt.ensureTickAlive()
+        except Exception as e:
+            self.Log(f'Convoy loop check skipped: {e}', 'DEBUG')
+
     def _watchdogTick(self, gen: int = 0) -> None:
         """Self-healing liveness loop, one per extension instance.
 
@@ -5753,6 +5910,7 @@ class EnvoyExt:
                 return
         except Exception:
             pass
+        self._checkConvoyLoop()
         # Die ONLY when a reinit has replaced this instance (the new instance
         # arms its own loop). Server-generation churn must NOT end the loop.
         try:
@@ -6429,7 +6587,12 @@ class EnvoyExt:
             if not isinstance(result, dict):
                 return
             message = result.get('error')
-            if not isinstance(message, str) or 'recovery_hints' in result:
+            if not isinstance(message, str):
+                return
+            # Every error envelope carries a stable code; handlers that set
+            # their own keep it.
+            result.setdefault('error_code', _error_code_for(message))
+            if 'recovery_hints' in result:
                 return
             hints = _recovery_hints_for(message)
             if hints:
@@ -6521,6 +6684,7 @@ class EnvoyExt:
                 # touched. Never project-wide: reading an Info DAT cooks it
                 # (3.36s cold across the project, 2026-08-21).
                 touched = []
+                checked = []
                 for scope in (scopes or []):
                     if not isinstance(scope, str) or not scope.startswith('/'):
                         continue
@@ -6531,18 +6695,49 @@ class EnvoyExt:
                     # DAT, which owns no Info DAT -- the diagnostics live on
                     # its host. Walk up so set_dat_content('/x/glsl_a_pixel')
                     # still reports /x/glsl_a's compile errors.
-                    for probe in (target, getattr(target, 'dock', None)):
+                    probes = [target, getattr(target, 'dock', None)]
+                    # A shader DAT can also feed GLSL ops that are NOT its
+                    # dock host (a shared source, or one in another network);
+                    # find those by parameter and lint them too. Idea adopted
+                    # from td-mcp-rs (credited in README).
+                    if getattr(target, 'family', None) == 'DAT':
+                        probes.extend(
+                            mod.envoy_read.shader_consumers(self, target))
+                    for probe in probes:
                         if probe is None:
                             continue
+                        if (probe.path not in checked
+                                and mod.envoy_read.is_shader_op(probe)):
+                            checked.append(probe.path)
                         touched.extend(
                             mod.envoy_read.shader_errors(self, probe, True))
+                # Scoped to the ops THIS write touched, so the compile state
+                # is attributable to it: report on the session's first write
+                # too (the project-wide error differ above stays
+                # baseline-only). A shader still failing after a later write
+                # is reported again under shader_errors_persist -- silence
+                # must never read as "fixed".
+                previous_shaders = state.get('shaders') or set()
                 shaders, shader_total, shader_paths = _new_error_entries(
-                    None if first_write else state.get('shaders'),
-                    touched, _EFFECTS_ERROR_CAP)
+                    previous_shaders, touched, _EFFECTS_ERROR_CAP)
                 state['shaders'] = shader_paths
                 if shaders:
                     effects['new_shader_errors'] = shaders
                     effects['new_shader_errors_total'] = shader_total
+                persisting, seen_persist = [], set()
+                for entry in touched:
+                    path = entry.get('nodePath') or ''
+                    if path in previous_shaders and path not in seen_persist:
+                        seen_persist.add(path)
+                        persisting.append({
+                            'path': path,
+                            'message': str(entry.get('message') or '')[:200]})
+                if persisting:
+                    effects['shader_errors_persist'] = persisting[:_EFFECTS_ERROR_CAP]
+                if checked:
+                    # Which shader ops this write was linted against, so a
+                    # quiet footer reads as "compiled clean", not "unchecked".
+                    effects['shaders_checked'] = checked[:_EFFECTS_ERROR_CAP]
 
             # --- meaningful frame-rate drop ---
             fps = self._sampleProjectFps()
@@ -6580,6 +6775,74 @@ class EnvoyExt:
             'result': result
         })
 
+    def _finishOperation(self, request_id, sid, operation, params, result):
+        """Everything that follows a handler: record write touches, gather
+        peer advisories, send the response. Shared by the inline path in
+        _onRefresh and by deferred completions, so both behave alike."""
+        # Multi-session Phase 2: record write touches and gather peer
+        # advisories. Never let awareness break the operation itself.
+        try:
+            scopes = self._expandFileScopes(
+                _scopes_for_operation(operation, params, result))
+            # Failed operations didn't mutate -- don't record them as
+            # writes. Exception: a failed batch may have partially
+            # succeeded (stops on first error), so it still counts.
+            failed = isinstance(result, dict) and 'error' in result
+            if not failed or operation == 'batch_operations':
+                self._recordTouches(sid, operation, scopes)
+        except Exception:
+            scopes = []
+
+        # Deferred operations (e.g. run_tests) return None --
+        # the worker thread handles its own response via Event
+        if result is None:
+            return
+
+        try:
+            self._attachPeerAdvisories(result, sid, operation, scopes)
+        except Exception:
+            pass
+
+        self._send_response(request_id, result, sid, operation=operation,
+                            scopes=scopes)
+
+    def _scheduleDeferred(self, request_id, sid, operation, params, marker):
+        """Re-enter a deferred handler `frames` frames from now. The worker
+        keeps waiting on its Event (its 30s timeout still bounds the whole
+        wait), so nothing about the transport changes. Never raises: a
+        scheduling failure is delivered as the operation's error."""
+        spec = marker.get('_defer') or {}
+        try:
+            frames = max(1, int(spec.get('frames') or 1))
+        except Exception:
+            frames = 1
+        try:
+            run(self._completeDeferred, request_id, sid, operation, params,
+                marker, delayFrames=frames)
+        except Exception as e:
+            self._finishOperation(request_id, sid, operation, params,
+                                  {'error': f'Could not defer {operation}: {e}'})
+
+    def _completeDeferred(self, request_id, sid, operation, params, marker):
+        """The delayed half of _scheduleDeferred: call the continuation; a
+        result that is itself a deferral reschedules, anything else ships."""
+        try:
+            if self.ownerComp.ext.Envoy is not self:
+                return  # stale instance after a reinit; its worker is gone
+        except Exception:
+            return
+        spec = (marker or {}).get('_defer') or {}
+        cont = spec.get('continue')
+        try:
+            result = cont() if callable(cont) else {
+                'error': f'{operation}: deferred continuation missing'}
+        except Exception as e:
+            result = {'error': f'{operation} failed while completing: {e}'}
+        if _is_deferred(result):
+            self._scheduleDeferred(request_id, sid, operation, params, result)
+            return
+        self._finishOperation(request_id, sid, operation, params, result)
+
     def _onRefresh(self):
         """
         RefreshHook - Called every frame on main thread while task is running.
@@ -6592,6 +6855,18 @@ class EnvoyExt:
                 return
         except Exception:
             return
+
+        # One-shot housekeeping: a capture viewer parked by a continuation
+        # that never ran (extension reinit mid-capture) must not survive.
+        if not getattr(self, '_viewer_swept', False):
+            self._viewer_swept = True
+            try:
+                swept = mod.envoy_read.sweep_viewer_leftovers(self)
+                if swept:
+                    self._log(f'Destroyed {swept} leftover capture viewer(s) '
+                              'from an interrupted capture', 'WARNING')
+            except Exception:
+                pass
 
         # Deliver worker-side buffered diagnostics (workers cannot print()
         # or _log() -- both touch main-thread TD objects).
@@ -6663,32 +6938,15 @@ class EnvoyExt:
 
             result = self._execute_operation(operation, params)
 
-            # Multi-session Phase 2: record write touches and gather peer
-            # advisories. Never let awareness break the operation itself.
-            try:
-                scopes = self._expandFileScopes(
-                    _scopes_for_operation(operation, params, result))
-                # Failed operations didn't mutate -- don't record them as
-                # writes. Exception: a failed batch may have partially
-                # succeeded (stops on first error), so it still counts.
-                failed = isinstance(result, dict) and 'error' in result
-                if not failed or operation == 'batch_operations':
-                    self._recordTouches(sid, operation, scopes)
-            except Exception:
-                scopes = []
-
-            # Deferred operations (e.g. run_tests) return None --
-            # the worker thread handles its own response via Event
-            if result is None:
+            # A handler that needs real frames to finish (a non-TOP capture
+            # waiting for its OP Viewer TOP to render) hands back a deferral
+            # marker: the worker's Event keeps waiting and the handler is
+            # re-entered on a later frame. See _scheduleDeferred.
+            if _is_deferred(result):
+                self._scheduleDeferred(request_id, sid, operation, params, result)
                 continue
 
-            try:
-                self._attachPeerAdvisories(result, sid, operation, scopes)
-            except Exception:
-                pass
-
-            self._send_response(request_id, result, sid, operation=operation,
-                                scopes=scopes)
+            self._finishOperation(request_id, sid, operation, params, result)
 
         # Live build visualization (opt-in): camera follow + node pulse + the
         # dancing builder-bot. Runs every frame AFTER the drain loop. Wrapped so
@@ -6902,6 +7160,7 @@ class EnvoyExt:
             'get_logs': self._get_logs,
             # TOP capture
             'capture_top': self._capture_top,
+            'capture_op': self._capture_op,
             # Testing
             'run_tests': self._run_tests,
             'save_project': self._save_project,
@@ -8563,6 +8822,11 @@ class EnvoyExt:
 
     # === TOP Capture (Main Thread Only) ===
 
+    def _capture_op(self, op_path: str, format: str = 'jpeg',
+                    quality: float = 0.8, max_resolution: int = 640) -> dict:
+        """Capture any operator (TOP natively, else via OP Viewer TOP; deferred) -- see envoy_read."""
+        return mod.envoy_read.capture_op(self, op_path, format, quality, max_resolution)
+
     def _capture_top(self, op_path: str, format: str = 'jpeg',
                      quality: float = 0.8, max_resolution: int = 640,
                      inline: bool = False, sample_grid: int = 0) -> dict:
@@ -8786,7 +9050,7 @@ class EnvoyExt:
         'get_logs', 'get_focus', 'get_job_status',
         'get_externalizations', 'get_externalization_status', 'get_sessions',
         'query_network', 'find_children', 'get_enclosed_ops',
-        'read_tdn', 'diff_tdn', 'capture_top',
+        'read_tdn', 'diff_tdn', 'capture_top', 'capture_op',
     ]
 
     def _toolPermissionsPosture(self):

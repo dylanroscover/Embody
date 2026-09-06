@@ -2982,7 +2982,7 @@ class EmbodyExt:
             existing_sibling = self.my.parent().op(table_name)
             if existing_sibling and existing_sibling.family == 'DAT':
                 externalizations_dat = existing_sibling
-                self.my.par.Externalizations.val = externalizations_dat
+                self._linkExternalizationsTable(externalizations_dat)
                 self.Log(f"Re-connected to existing '{table_name}' tableDAT", "INFO")
 
         if not externalizations_dat:
@@ -3008,7 +3008,21 @@ class EmbodyExt:
             externalizations_dat.clear(keepFirstRow=True)
             self.Log(f"reset '{table_name}' tableDAT", "INFO")
 
-        self.my.par.Externalizations.val = externalizations_dat
+        self._linkExternalizationsTable(externalizations_dat)
+
+    def _linkExternalizationsTable(self, dat) -> None:
+        """Point par.Externalizations at `dat` by relative path -- plain
+        'externalizations' for the sibling (TD resolves an OP par on a COMP
+        against the COMP's own network). The par carried the absolute
+        '/embody/externalizations' from an early build and every release
+        .tox shipped it, invalid in any other project (found 2026-09-05 on
+        a bootstrap-provisioned show file); writing the relative form here
+        keeps it from coming back however the DAT was found."""
+        try:
+            rel = self.my.relativePath(dat)
+        except Exception:
+            rel = None
+        self.my.par.Externalizations.val = rel if rel else dat
 
     def ensureExternalizationsTable(self) -> None:
         """Recovery/init method: create or reconnect the externalizations table.
@@ -3030,11 +3044,15 @@ class EmbodyExt:
         if not externalizations_dat:
             existing_sibling = self.my.parent().op('externalizations')
             if existing_sibling and existing_sibling.family == 'DAT':
-                self.my.par.Externalizations.val = existing_sibling
+                self._linkExternalizationsTable(existing_sibling)
                 self.Log('Re-connected to existing externalizations tableDAT', 'INFO')
                 return
         if externalizations_dat:
-            self.Log('Externalizations table already exists', 'INFO')
+            # An absolute link resolves here but ships broken (see
+            # _linkExternalizationsTable); rewrite it relative whenever seen.
+            if str(self.my.par.Externalizations.val).startswith('/'):
+                self._linkExternalizationsTable(externalizations_dat)
+                self.Log('Externalizations link rewritten relative', 'DEBUG')
             return
         self.createExternalizationsTable()
 
@@ -5092,6 +5110,12 @@ class EmbodyExt:
             # config.json prefs whitelist above, which is what restores it
             # across restarts and upgrades. reset to its default (Off).
             'Convoyenable': None,
+            # The table LINK is authoring-project state: a shipped path
+            # resolves to nothing in the receiving project (or, worse, to
+            # a stranger's table). None = reset to the par's own default
+            # (''); ensureExternalizationsTable relinks on the receiving
+            # side. (2026-09-05)
+            'Externalizations': None,
             # The node's display name. It is auto-derived per machine at
             # runtime (hostname / .toe stem), so a baked value ships one
             # developer's COMPUTER NAME to every download -- the A-50 leak
@@ -5270,6 +5294,45 @@ class EmbodyExt:
             except Exception:
                 pass
 
+    # COMP storage is saved with a .tox, so the exporting Embody's runtime
+    # bookkeeping (_dirty_states, _tdn_fingerprints, expanded_paths,
+    # _test_run_owner, _suppress_dialogs, ...) shipped inside every release
+    # -- found 2026-09-05 by unpickling the `dict` line of the released
+    # Embody.n. Nothing in that storage is authored state: every key is
+    # rebuilt at startup. Scrubbed around the save, keyed by shortcut like
+    # the par registry, restored whether or not the save succeeded.
+    _TRANSIENT_STORAGE_SHORTCUTS = frozenset({'Embody'})
+
+    def _scrubStorage(self, root):
+        """Empty `root`'s storage when its shortcut is registered; return a
+        snapshot for _restoreStorage (None when nothing was scrubbed).
+        Root only: the leak lives on the Embody COMP itself, and a
+        descendant's storage can be its own authored config."""
+        try:
+            if self._registryShortcut(root) not in self._TRANSIENT_STORAGE_SHORTCUTS:
+                return None
+            items = dict(root.storage)
+            if not items:
+                return None
+            root.unstore('*')
+            return {'comp': root, 'items': items}
+        except Exception as e:
+            self.Log(f'Storage scrub skipped {getattr(root, "path", root)}: {e}',
+                     'WARNING')
+            return None
+
+    def _restoreStorage(self, snapshot) -> None:
+        """Put back what _scrubStorage removed (always runs; a None snapshot
+        is a no-op)."""
+        if not snapshot:
+            return
+        comp = snapshot.get('comp')
+        for key, value in (snapshot.get('items') or {}).items():
+            try:
+                comp.store(key, value)
+            except Exception as e:
+                self.Log(f'Storage restore skipped {key}: {e}', 'WARNING')
+
     def _restoreTransientPars(self, snapshot) -> None:
         """Reapply the values _scrubTransientPars captured (always runs,
         success or failure -- a live session must get its readouts back)."""
@@ -5388,6 +5451,7 @@ class EmbodyExt:
         saved_state = []
         saved_tags = []  # list of (op_ref, set_of_removed_tags, path)
         transient_snapshot = []  # [(par, value)] -- runtime-status scrub (A-50)
+        storage_snapshot = None  # COMP storage scrub (2026-09-05)
         success = False
         try:
             # Phase 1: Collect file references and externalization params to
@@ -5505,6 +5569,10 @@ class EmbodyExt:
             # annotation parts would ship in the portable .tox.
             self._retireVizBeforeWrite(target.path)
 
+            # Phase 2e: empty the Embody COMP's storage (see _scrubStorage);
+            # Phase 4 always puts it back.
+            storage_snapshot = self._scrubStorage(target)
+
             # Phase 3: Save the .tox.
             target.save(str(save_path))
             try:
@@ -5552,6 +5620,7 @@ class EmbodyExt:
         # on the session's real comp and must hand its status back).
         self._restoreTransientPars(transient_snapshot)
         self._restoreLogBuffers(log_snapshot)
+        self._restoreStorage(storage_snapshot)
 
         # Phase 5: Author's post_release hook -- the reset half of the
         # set/reset contract. Runs whenever pre_release did not abort,

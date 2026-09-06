@@ -163,11 +163,12 @@ class TestMCPTopCapture(EmbodyTestCase):
         self.assertDictHasKey(result, 'error')
         self.assertIn('not found', result['error'])
 
-    def test_capture_non_top_operator(self):
+    def test_capture_non_top_operator_points_at_capture_op(self):
         dat = self.sandbox.create(textDAT, 'not_a_top')
         result = self.envoy._capture_top(op_path=dat.path)
         self.assertDictHasKey(result, 'error')
         self.assertIn('not a TOP', result['error'])
+        self.assertIn('capture_op', result['error'])
 
     def test_capture_invalid_format(self):
         top = self.sandbox.create(noiseTOP, 'fmt_noise')

@@ -6,9 +6,9 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.2.13-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.2.18-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
-[![MCP Tools](https://img.shields.io/badge/MCP_tools-65-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
+[![MCP Tools](https://img.shields.io/badge/MCP_tools-66-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/dylanroscover/Embody?style=flat-square&labelColor=181e1e&color=6ee668)](https://github.com/dylanroscover/Embody/stargazers)
 [![Downloads](https://img.shields.io/github/downloads/dylanroscover/Embody/total?style=flat-square&labelColor=181e1e&color=6ee668)](https://github.com/dylanroscover/Embody/releases)
@@ -39,7 +39,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 | | What | Why it matters |
 |---|---|---|
-| 🤖 | **Envoy MCP Server** | 65 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
+| 🤖 | **Envoy MCP Server** | 66 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
 | 📄 | **TDXN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdxn` file. |
 | 📦 | **Automatic Restoration** | Externalized files are written on save, so any COMP can be recovered from disk. By default (Export-on-Save) the `.toe` stays authoritative on open; switch to Roundtrip mode to rebuild TDXN-strategy COMPs from `.tdxn` on every open. |
 | 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
@@ -57,6 +57,8 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 **Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project. The **[Setup Wizard](https://dylanroscover.github.io/Embody/embody/setup-wizard/)** opens and walks you through the choices that matter — how much autonomy Embody gets, what to externalize, whether to enable the AI assistant (Envoy) and for which tool, permissions, whether to join a trusted-LAN Convoy, and where config files live. Nothing changes until the final click, and you can re-run it anytime via the **Setup Wizard** pulse on the Embody COMP.
 
 > **Updating Embody:** Embody updates itself — pulse **Check for Update** on the About page (or set **Auto-Update** to check at startup), and a verified release is downloaded, backed up against, and swapped in place. Your settings and tracked externalizations live on disk and survive the update untouched. See the [auto-update guide](https://dylanroscover.github.io/Embody/embody/auto-update/). Manual alternative: delete the old Embody COMP and drag the new `.tox` in its place — the new version picks up your on-disk state automatically, no re-scan, no files rewritten.
+
+Provisioning a machine with no one at it (a render node, a media server)? The [bootstrap](https://dylanroscover.github.io/Embody/envoy/provisioning/) installs Embody into a `.toe` offline with TouchDesigner's own tools, in one line.
 
 ### 2. Tag and Work
 
@@ -180,7 +182,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **140 test suites** (4,467 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **145 test suites** (4,551 tests) covering core externalization, MCP tools, TDXN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, self-update, release hooks, the status readout, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -226,6 +228,20 @@ Every release is documented in the [full changelog](https://dylanroscover.github
 Originally derived from [External Tox Saver](https://github.com/franklin113/External-Tox-Saver) by [Tim Franklin](https://github.com/franklin113/). Refactored entirely by Dylan Roscover, with inspiration and guidance from Elburz Sorkhabi, Matthew Ragan and Wieland Hilker.
 
 Want to help? Start with [CONTRIBUTING.md](CONTRIBUTING.md) — this repo works differently from a typical Python project (TouchDesigner writes many of the files), and that page explains what is safe to change and how to run the tests.
+
+## Credits
+
+Embody stands on other people's work, and this section names it. Ideas move
+between the TouchDesigner MCP projects in both directions; where Embody took
+one, it is credited here and in the code where it landed.
+
+- **[External Tox Saver](https://github.com/franklin113/External-Tox-Saver)** by [Tim Franklin](https://github.com/franklin113) -- Embody began in 2020 as a refactor of it.
+- **TDMCP** by [Derivative](https://derivative.ca) (their experimental MCP server, a private repository at the time of writing, used with permission) -- undoable MCP mutations (one undo step per batch), the `get_docs` design (version-exact offline help first, the wiki API second), sequence-block growth on parameter writes, the transport-security hardening prompt, and treating a code-review rule as a query. Landed from v6.0.87 (2026-07-04) on.
+- **TDMCPSkills** by [Derivative](https://derivative.ca) (private at the time of writing, used with permission) -- the `pop-networks` skill is adapted from `td-pop-family`.
+- **[touchdesigner-mcp](https://github.com/8beeeaaat/touchdesigner-mcp)** by [8beeeaaat](https://github.com/8beeeaaat) -- the first widely used TouchDesigner MCP server (2025). Envoy's earliest tool vocabulary (`get_td_classes`, `get_td_class_details`, `get_td_info`, `get_module_help`, `exec_node_method`, `execute_python`) follows the names that project established.
+- **[td-mcp-rs](https://github.com/Verbalize-public/td-mcp-rs)** by [asyade](https://github.com/asyade) -- a Rust-daemon take on the same problem (2026). Its OS-dialog dismissal, per-call instance addressing, stable error codes with fix hints, any-family capture through an OP Viewer TOP, shader lint on DAT writes, and offline installation into a project file are ideas Embody adopted and built (see the [roadmap](docs/roadmap.md)).
+
+If Embody carries an idea of yours and this list misses it, [open an issue](https://github.com/dylanroscover/Embody/issues) and it will be added.
 
 ## Trademarks and Affiliation
 

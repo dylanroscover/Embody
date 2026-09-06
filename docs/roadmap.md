@@ -27,6 +27,27 @@ Items that sat here and have since shipped -- kept one revision for the record:
 
 ## Next up
 
+- **Ideas adopted from [td-mcp-rs](https://github.com/Verbalize-public/td-mcp-rs)**
+  (credited in the README). Five things it does that Envoy does not yet, in
+  the order they matter:
+    - **OS dialog detection and dismissal** (landed: `list_dialogs` /
+      `dismiss_dialog`, Windows verified, macOS unverified). A TD modal (missing file,
+      save-changes, crash recovery) is exactly how an Envoy call dies with a
+      timeout; the fix is a tool that lists the popups a TD process owns and
+      dismisses one, on Windows and macOS. Convoy remote launches gain the most.
+    - **Per-call instance addressing** (landed: `instance` on every tool). An optional instance argument on
+      every tool instead of the sticky `switch_instance`, which drags every
+      peer bridge along when it changes target.
+    - **Stable error codes with fix hints** (landed: `error_code` on every
+      envelope). Every failure carries a code and
+      a suggestion, with a test that the catalog is complete. Agents that
+      retry act on codes better than on prose.
+    - **Capture for every operator family** (landed: `capture_op`).
+      `capture_top` is TOP-only; rasterizing CHOP, SOP, DAT and COMP viewers
+      through an OP Viewer TOP gives the agent eyes on all of them.
+    - **Shader lint on DAT writes** (landed). A GLSL text write returns the consuming
+      operators' compile diagnostics in the same response, instead of leaving
+      them for the next `get_op_errors`.
 - **Structured decisions instead of invisible modals.** When an AI session
   drives an operation that needs a human-style decision (palette black-box
   vs full export, file-cleanup keep/delete, dropped-tox expression
@@ -35,7 +56,9 @@ Items that sat here and have since shipped -- kept one revision for the record:
   opening a TD modal nobody is sitting in front of. TD dialogs remain the
   path for human-driven moments. (The seeded auto-response layer the smoke
   harness uses is the test-side half; the tool-payload half is still open.)
-- **Setup Wizard suppression for automated installs.** The seeded-response
+- **Setup Wizard suppression for automated installs** (landed for the
+  bootstrap path: `embody_bootstrap.py` grafts a self-deleting Execute DAT
+  that applies the wizard's backend on first open). The seeded-response
   path covers the smoke harness today; a first-class headless switch
   (apply Auto defaults, enable Envoy per configuration, no dialogs armed)
   is the remaining polish.

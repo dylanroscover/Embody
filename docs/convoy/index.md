@@ -78,7 +78,9 @@ You can type a clearer display name. The name is a label only; changing it does 
 
 The automatic name is stored in the project file, so a `.toe` deployed to another computer arrives wearing the machine name it was saved on. That stamp heals itself: on the receiving machine the name refreshes to the local hostname and project the next time the node initializes, and until it does, the node list prefixes the row with the machine's live hostname -- for example `render-02 (render-01 / lobby)` -- so cloned projects always stay tellable-apart. A custom display name that does not look like an automatic stamp is never rewritten.
 
-The read-only **Convoy Nodes** sequence shows one row per known node:
+The read-only **Convoy Nodes** sequence shows one row per known node. One row means one *process*: a node that re-minted its identity (an upgrade, a Save-As, a host older than the supersede rules) can reach this machine from a peer as two ids for the same `.toe`; the host folds those when it serves the list and the panel folds them again when it renders. An online row is never hidden; among offline rows the most recently seen one is shown.
+
+Columns:
 
 | Column | Meaning |
 |---|---|

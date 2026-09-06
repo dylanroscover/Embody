@@ -11,6 +11,9 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 
 _envoy_mod = op.Embody.op('EnvoyExt').module
 _recovery_hints_for = _envoy_mod._recovery_hints_for
+_error_code_for = _envoy_mod._error_code_for
+_RULES = _envoy_mod._RECOVERY_HINT_RULES
+_FALLBACK = _envoy_mod._ERROR_CODE_FALLBACK
 
 
 class TestRecoveryHints(EmbodyTestCase):
@@ -69,6 +72,46 @@ class TestRecoveryHints(EmbodyTestCase):
         for key in ('cause', 'action', 'next_tools'):
             self.assertDictHasKey(h, key)
         self.assertIsInstance(h['next_tools'], list)
+
+    # --- Error codes: every envelope carries a stable machine id ---
+
+    def test_every_rule_has_a_well_formed_unique_code(self):
+        import re
+        codes = [rule[1] for rule in _RULES]
+        self.assertEqual(len(codes), len(set(codes)), 'codes must be unique')
+        for code in codes:
+            self.assertRegex(code, r'^envoy\.[a-z_]+(\.[a-z_]+)*$')
+            self.assertNotEqual(code, _FALLBACK)
+
+    def test_error_code_for_known_messages(self):
+        self.assertEqual(_error_code_for('Operator not found: /a'), 'envoy.op.not_found')
+        self.assertEqual(_error_code_for('Parameter not found: Tx'), 'envoy.par.not_found')
+        self.assertEqual(_error_code_for('/x is not a TOP (family: CHOP)'), 'envoy.op.wrong_family')
+        self.assertEqual(_error_code_for('/x is not a DAT (family: TOP)'), 'envoy.op.wrong_family')
+        self.assertEqual(_error_code_for('Cannot create children in /x (not a COMP)'), 'envoy.parent.not_comp')
+        self.assertEqual(_error_code_for('Operation timed out after 30 seconds.'), 'envoy.timeout')
+        self.assertEqual(_error_code_for('MULTI-SESSION GATE: refused'), 'envoy.session.gated')
+
+    def test_error_code_fallback(self):
+        self.assertEqual(_error_code_for('everything is fine'), _FALLBACK)
+        self.assertEqual(_error_code_for(''), _FALLBACK)
+        self.assertEqual(_error_code_for(None), _FALLBACK)
+
+    def test_hint_carries_its_code(self):
+        hints = _recovery_hints_for('Operator not found: /a')
+        self.assertEqual(hints[0]['code'], 'envoy.op.not_found')
+
+    def test_envelope_gets_error_code_and_keeps_a_handler_code(self):
+        env = {'error': 'Operator not found: /a'}
+        self.envoy._attachRecoveryHints(env)
+        self.assertEqual(env['error_code'], 'envoy.op.not_found')
+        own = {'error': 'Operator not found: /a', 'error_code': 'envoy.custom'}
+        self.envoy._attachRecoveryHints(own)
+        self.assertEqual(own['error_code'], 'envoy.custom')
+        unknown = {'error': 'no rule for this'}
+        self.envoy._attachRecoveryHints(unknown)
+        self.assertEqual(unknown['error_code'], _FALLBACK)
+        self.assertNotIn('recovery_hints', unknown)
 
     # --- Table is tied to REAL Envoy error strings ---
 

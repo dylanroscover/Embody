@@ -105,6 +105,8 @@ Claude Code connects to Envoy through a STDIO bridge script (`.embody/envoy-brid
 | `launch_td` | Launch TD with the project's `.toe` file and wait for Envoy to become reachable. On fresh clones (where `.embody/envoy.json`'s `td_executable` path doesn't exist locally), the bridge auto-picks a TouchDesigner install — the machine-local `.embody/local.json` build pin when present, the newest installed TD otherwise — see [Architecture](architecture.md#embodylocaljson-build-pin-machine-local-and-embodyprojectjson-committed). |
 | `restart_td` | Gracefully quit TD, then relaunch and wait for Envoy. Targets only the active instance's verified process — on machines running several TD projects, the others are never touched |
 | `switch_instance` | List all registered TD instances or switch the bridge to a different running instance |
+| `list_dialogs` | List the modal dialogs blocking TD (message boxes, missing-file prompts, the license box), with optional screenshots, even while TD's main thread is frozen |
+| `dismiss_dialog` | Dismiss a blocking dialog (close, then escape, then enter, verified gone) so the session can continue without a human at the machine |
 
 This means Claude Code can start a TD session from scratch — no need to manually open TouchDesigner first. If TD crashes, Claude can detect it and restart automatically.
 
@@ -116,6 +118,7 @@ If you have multiple TouchDesigner instances running with Envoy enabled (e.g., y
 
 - **List instances**: Call `switch_instance` with no arguments to see all registered instances and their reachability
 - **Switch**: Call `switch_instance` with the instance name (`.toe` filename without the extension) to redirect all subsequent MCP calls to that instance
+- **Address one call**: Pass `instance=<name>` on any Envoy tool (every tool advertises the optional argument) to route just that call to another registered instance without switching — inspect the show file while pinned to the dev one, then carry on
 
 Each instance gets its own port automatically (ports 9870–9879). Switching is instant — no restart required.
 

@@ -487,6 +487,60 @@ def shader_compile_log(target):
     return {'infoDat': info.path, 'lines': lines}
 
 
+# Shader-source DAT parameters by family (docs.derivative.ca GLSL_TOP,
+# GLSL_MAT, GLSL_POP, read 2026-09-05). A shader DAT can be consumed by a
+# GLSL op that is not its dock host -- a shared source, or one in another
+# network -- and only a parameter walk finds those. Idea adopted from
+# td-mcp-rs's mutate_nodes shader lint (credited in README).
+_SHADER_DAT_PARS = ('vertexdat', 'pixeldat', 'computedat',   # GLSL TOP, GLSL POP
+                    'vdat', 'pdat', 'gdat', 'predat')        # GLSL MAT
+_SHADER_CONSUMER_CAP = 64
+
+
+def is_shader_op(target) -> bool:
+    """True when the op docks an Info DAT (the GLSL families do). Reads
+    only .docked and .type, so nothing cooks."""
+    return _docked_info_dat(target) is not None
+
+
+def shader_consumers(ext, dat, cap: int = _SHADER_CONSUMER_CAP) -> list:
+    """GLSL operators whose shader-source parameters reference `dat`.
+
+    One findChildren(parName=...) per shader parameter, project-wide (a C++
+    filter, so cheap), then the parameter is evaluated to confirm it
+    resolves to this DAT. Never raises; capped so a pathological project
+    cannot stall a write.
+    """
+    found = []
+    seen = set()
+    try:
+        if dat is None or dat.family != 'DAT':
+            return found
+        root = op('/')
+        for par_name in _SHADER_DAT_PARS:
+            try:
+                candidates = root.findChildren(parName=par_name, maxDepth=99)
+            except Exception:
+                continue
+            for cand in candidates:
+                if cand.path in seen:
+                    continue
+                try:
+                    ref = getattr(cand.par, par_name).eval()
+                except Exception:
+                    continue
+                if ref is None:
+                    continue
+                if ref is dat or getattr(ref, 'path', None) == dat.path:
+                    seen.add(cand.path)
+                    found.append(cand)
+                    if len(found) >= cap:
+                        return found
+    except Exception:
+        pass
+    return found
+
+
 def shader_errors(ext, target, recurse: bool = True) -> list:
     """Shader compile errors for an op and (optionally) its descendants.
 
@@ -982,17 +1036,95 @@ def _frame_quality(arr) -> dict:
     return verdict
 
 
+# Non-TOP capture: the network editor's own viewer for every family that
+# has one (CHOP graphs, SOP/POP 3D, DAT text, COMP panels and scenes),
+# rendered through an OP Viewer TOP that lives inside the Embody COMP for
+# the length of one call and is destroyed in a finally, so nothing lands in
+# the user's network or in a save. Idea adopted from td-mcp-rs's `capture
+# preview` (credited in README).
+_VIEWER_DEFAULT_W = 1280        # width when max_resolution=0 (native)
+_VIEWER_MIN_W = 320
+_VIEWER_PARK = (-4000, -4000)   # network position, clear of Embody's own ops
+# A newly aimed OP Viewer TOP renders nothing for its first frames: probed
+# 2026-09-05 on 2025.33070, the texture was all-zero (alpha included) at
+# frames 0, 1 and 3 and populated by frame 10. So the capture cannot be
+# same-frame: it returns a deferral marker and EnvoyExt re-enters it every
+# _VIEWER_POLL_FRAMES until pixels appear or the wait cap is spent.
+_VIEWER_POLL_FRAMES = 2
+_VIEWER_MAX_WAIT_FRAMES = 40
+
+
+def _viewer_top_for(ext, target, max_resolution):
+    """A transient OP Viewer TOP aimed at `target`, or (None, error dict).
+
+    Rendered at max_resolution wide (16:9) rather than downscaled from a
+    larger frame, so viewer text stays legible. The caller destroys it.
+    """
+    import uuid
+    host = ext.ownerComp
+    try:
+        viewer = host.create(opviewerTOP, '_envoy_viewer_' + uuid.uuid4().hex[:6])
+    except Exception as e:
+        return None, {'error': f'Could not create a viewer for {target.path}: {e}'}
+    try:
+        try:
+            w = int(max_resolution or 0)
+        except Exception:
+            w = 0
+        w = max(_VIEWER_MIN_W, w if w > 0 else _VIEWER_DEFAULT_W)
+        viewer.nodeX, viewer.nodeY = _VIEWER_PARK
+        viewer.par.opviewer = viewer.relativePath(target)
+        viewer.par.outputresolution = 'custom'
+        viewer.par.resolutionw = w
+        viewer.par.resolutionh = int(round(w * 9 / 16))
+        viewer.par.outputaspect = 'resolution'
+        return viewer, None
+    except Exception as e:
+        try:
+            viewer.destroy()
+        except Exception:
+            pass
+        return None, {'error': f'Could not aim a viewer at {target.path}: {e}'}
+
+
+def _viewer_has_content(viewer) -> bool:
+    """True once the viewer has rendered anything (any non-zero channel,
+    alpha included -- an unrendered viewer is all zeros)."""
+    try:
+        arr = viewer.numpyArray()
+        return arr is not None and arr.size > 0 and float(arr.max()) > 0.0
+    except Exception:
+        return False
+
+
+def sweep_viewer_leftovers(ext) -> int:
+    """Destroy parked _envoy_viewer_* ops a lost continuation left behind
+    (an extension reinit mid-capture). Returns the count. Never raises."""
+    count = 0
+    try:
+        for child in list(ext.ownerComp.children):
+            if child.name.startswith('_envoy_viewer_'):
+                try:
+                    child.destroy()
+                    count += 1
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return count
+
+
 def capture_top(ext, op_path: str, format: str = 'jpeg',
                 quality: float = 0.8, max_resolution: int = 640,
                 inline: bool = False, sample_grid: int = 0) -> dict:
-    """Capture a TOP operator's output as a compressed image."""
-    import base64
-
+    """Capture a TOP's output as a compressed image or sampled RGBA grid.
+    TOP only -- every other family goes through capture_op."""
     target = resolve_op(ext, op_path)
     if not target:
         return {'error': f'Operator not found: {op_path}'}
     if target.family != 'TOP':
-        return {'error': f'{op_path} is not a TOP (family: {target.family})'}
+        return {'error': f'{op_path} is not a TOP (family: {target.family}); '
+                         'use capture_op for any other family'}
 
     try:
         sample_grid = int(sample_grid or 0)
@@ -1005,6 +1137,66 @@ def capture_top(ext, op_path: str, format: str = 'jpeg',
         return {'error': f'Unsupported format: {format}. Use "jpeg" or "png".'}
     if not (0.0 <= quality <= 1.0):
         return {'error': f'Quality must be between 0.0 and 1.0, got {quality}'}
+    return _capture_pixels(target, op_path, format, quality, max_resolution)
+
+
+def capture_op(ext, op_path: str, format: str = 'jpeg',
+               quality: float = 0.8, max_resolution: int = 640):
+    """Capture any operator's output as a compressed image: a TOP natively,
+    every other family through a transient OP Viewer TOP.
+
+    Non-TOP captures return {'_defer': {'frames', 'continue'}} and finish on
+    a later frame (see _VIEWER_POLL_FRAMES); EnvoyExt._onRefresh drives the
+    continuation. continue(final=True) captures whatever is there now --
+    for tests and for callers that cannot wait.
+    """
+    target = resolve_op(ext, op_path)
+    if not target:
+        return {'error': f'Operator not found: {op_path}'}
+    if format not in ('jpeg', 'png'):
+        return {'error': f'Unsupported format: {format}. Use "jpeg" or "png".'}
+    if not (0.0 <= quality <= 1.0):
+        return {'error': f'Quality must be between 0.0 and 1.0, got {quality}'}
+
+    if target.family == 'TOP':
+        return _capture_pixels(target, op_path, format, quality, max_resolution)
+
+    viewer, err = _viewer_top_for(ext, target, max_resolution)
+    if err:
+        return err
+    state = {'viewer': viewer, 'waited': 0}
+    family, op_type = target.family, target.OPType
+
+    def _finish(final: bool = False):
+        v = state['viewer']
+        if v is None or not v.valid:
+            return {'error': f'The viewer for {op_path} was destroyed before it rendered'}
+        if (not final and state['waited'] < _VIEWER_MAX_WAIT_FRAMES
+                and not _viewer_has_content(v)):
+            state['waited'] += _VIEWER_POLL_FRAMES
+            return {'_defer': {'frames': _VIEWER_POLL_FRAMES, 'continue': _finish}}
+        try:
+            result = _capture_pixels(v, op_path, format, quality, max_resolution)
+            if isinstance(result, dict) and 'error' not in result:
+                result['captured_via'] = 'opviewerTOP'
+                result['family'] = family
+                result['op_type'] = op_type
+                result['viewer_frames_waited'] = state['waited']
+            return result
+        finally:
+            try:
+                v.destroy()
+            except Exception:
+                pass
+            state['viewer'] = None
+
+    return {'_defer': {'frames': _VIEWER_POLL_FRAMES, 'continue': _finish}}
+
+
+def _capture_pixels(target, op_path: str, format: str, quality: float,
+                    max_resolution: int) -> dict:
+    """The TOP pixel pipeline: cook, read back, verdict, encode."""
+    import base64
 
     try:
         import numpy as np

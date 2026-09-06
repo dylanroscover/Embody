@@ -402,7 +402,7 @@ The `custom_pars` object maps page names to arrays of parameter definitions. Unl
     `Filecleanup`, `Toxdropexpr` -- exported with their resting value
     (`keep`, `ask`, ...) like any other registered status par, so a receipt
     or a released `.tox` never carries one developer's (or the test
-    runner's) setting into every project. Expression
+    runner's) setting into every project. The **Externalizations** table link is registered the same way (resting: its empty default) because an OP path is a location inside the authoring project, and `ExportPortableTox` additionally empties the Embody COMP's *storage* around the release save -- neither belongs in a shipped `.tox`. Expression
     and bind values (the `=`/`~` shorthand) are never replaced. A
     registered parameter **sequence** exports no block values; its block
     count ships only when it differs from the type default. User COMPs

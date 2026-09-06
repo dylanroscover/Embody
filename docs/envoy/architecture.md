@@ -113,7 +113,7 @@ Envoy supports running multiple TouchDesigner instances simultaneously in the sa
 
 **Port allocation**: Each instance picks a port from a 10-port range starting at the configured Envoy Port (default: 9870). If the base port is occupied by another instance, Envoy scans ports `base+1` through `base+9` and claims the first available one. Up to 10 simultaneous instances are supported per base port.
 
-**Bridge routing**: The STDIO bridge connects to **one active instance** at a time. The `switch_instance` meta-tool is **session-local by default**: it re-pins only this session's bridge to the new instance's port in memory, leaving `.embody/envoy.json` and every peer session untouched. Pass `all_sessions=true` to also write the new `active` field (and bump `active_epoch`, which overrides peers' own pins) — that is how you move the whole-user default. Switching is instant — no reconnection delay.
+**Bridge routing**: The STDIO bridge connects to **one active instance** at a time, and every Envoy tool also accepts an optional `instance` argument that routes **that one call** to another registered instance (the bridge strips the argument, forwards to the named instance's port, and never touches the pinned connection's state -- a failure there is that call's error alone). The `switch_instance` meta-tool is **session-local by default**: it re-pins only this session's bridge to the new instance's port in memory, leaving `.embody/envoy.json` and every peer session untouched. Pass `all_sessions=true` to also write the new `active` field (and bump `active_epoch`, which overrides peers' own pins) — that is how you move the whole-user default. Switching is instant — no reconnection delay.
 
 **Instance reachability**: The bridge verifies instances by checking both PID liveness and port responsiveness. An instance is only considered reachable when both checks pass. This filters out stale registry entries from crashed or closed instances.
 
@@ -138,6 +138,10 @@ The MCP server runs as a `standalone=True` TDTask because it is long-lived (runs
 ### Queue-Based Communication
 
 Uses `threading.Event` + `Queue` rather than locks because TD's cook cycle is frame-based — the main thread can only process requests once per frame via the RefreshHook.
+
+### Frame-Deferred Handlers
+
+Some main-thread work cannot finish in the frame it starts: an OP Viewer TOP aimed at an operator renders nothing until several frames later (measured empty at frames 0, 1 and 3, populated by frame 10 on 2025.33070). A handler that needs real frames returns `{'_defer': {'frames': N, 'continue': callable}}` instead of a result. `_onRefresh` hands that to `_scheduleDeferred`, which uses `run(..., delayFrames=N)` to re-enter the continuation on a later frame; a continuation that returns another deferral is rescheduled, and the first ordinary result goes through `_finishOperation` (write touches, peer advisories, response) exactly as an inline result would. The worker's `Event` keeps waiting throughout, so the transport is unchanged and the 30-second timeout still bounds the whole wait. `capture_op` on a non-TOP is the first user; it polls every 2 frames for pixels, capped at 40.
 
 ## Graceful Shutdown
 
@@ -181,6 +185,6 @@ Envoy handles two error categories:
 
 1. **Protocol errors** (JSON-RPC level) — unknown tools, invalid arguments, or server errors. The MCP SDK's `MCPServer` handles these automatically.
 2. **Tool execution errors** — returned in tool results via `{'error': str(e)}` dicts. These indicate the tool ran but encountered a problem (missing operator, invalid path, etc.).
-3. **Recovery hints** — when a tool returns an `{'error': ...}` result, Envoy auto-attaches a `recovery_hints` list (each entry `{cause, action, next_tools}`), matched against the real error string by a small curated table (path-not-found -> `query_network`/`find_children`; parameter-not-found -> `get_op`; wrong family; empty capture -> `get_op_performance`; thread conflict; timeout -> `get_project_performance`). Attached centrally in `_send_response` — additive, never clobbers an existing block, never raises — it steers the agent's next call instead of a blind retry of the same failing tool.
+3. **Recovery hints and error codes** — when a tool returns an `{'error': ...}` result, Envoy auto-attaches a stable `error_code` (`envoy.<area>.<condition>`, `envoy.error` when unclassified) and a `recovery_hints` list (each entry `{code, cause, action, next_tools}`), matched against the real error string by a small curated table (path-not-found -> `query_network`/`find_children`; parameter-not-found -> `get_op`; wrong family; empty capture -> `get_op_performance`; thread conflict; timeout -> `get_project_performance`). Attached centrally in `_send_response` — additive, never clobbers an existing block, never raises — it steers the agent's next call instead of a blind retry of the same failing tool.
 
 All tool handlers validate inputs before passing to TD operations and return structured error information rather than raising exceptions.

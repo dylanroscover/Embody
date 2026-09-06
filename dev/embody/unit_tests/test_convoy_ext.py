@@ -692,6 +692,31 @@ class TestNetworkStatusProjection(ConvoyExtBase):
         self.assertEqual(rows[1]['Nodestatus'], 'Offline')
         self.assertEqual(rows[1]['Lastseen'], '2m ago')
 
+    def test_a_remote_process_seen_under_two_ids_is_one_row(self):
+        """TEC-C3A / transmon.1 sat as rows 7 and 8 for a week (2026-09-05):
+        two node_ids, one .toe, one unreachable host. The panel folds them
+        even when the local daemon predates the host-side collapse; local
+        rows are never folded here."""
+        remote = lambda nid, ver: {
+            'node_id': nid * 32, 'host_id': 'c' * 32,
+            'node_name': 'TEC-C3A / transmon.1', 'toe_name': 'transmon.1.toe',
+            'ip': '192.168.88.36', 'status': 'offline', 'online': False,
+            'embody_version': ver, 'last_seen_age_s': 697369.7}
+        local = lambda nid: {
+            'node_id': nid * 32, 'host_id': 'a' * 32,
+            'node_name': 'TEC-A4D / smoke_template', 'toe_name': 'smoke_template.5.toe',
+            'ip': '192.168.88.10', 'status': 'offline', 'online': False,
+            'last_seen_age_s': 100.0}
+        rows = self.convoy._nodeStatusRows({
+            'state': 'nodes', 'host_id': 'a' * 32,
+            'nodes': [remote('7', '6.0.232'), remote('4', '6.0.233'),
+                      local('1'), local('2')]})
+        names = [r['Nodename'] for r in rows]
+        self.assertEqual(names.count('TEC-C3A / transmon.1'), 1,
+                         'one process, one row')
+        self.assertEqual(names.count('TEC-A4D / smoke_template'), 2,
+                         'local rows are the directory\'s business')
+
     def test_a_traveled_stamp_cannot_mask_the_real_hostname(self):
         """A node_name stamped on another machine travels inside the .toe;
         a whole fleet read 'TEC-A4D / Render.36' (2026-08-19). The row's
@@ -1527,6 +1552,44 @@ class TestTickHygiene(ConvoyExtBase):
         self.convoy._convoyTick(42)
         self.assertLen(self._reconciles, 1)
         self.assertLen(self._tickReschedules(), 1)
+
+    # -- loop liveness (2026-09-05: the dev tick died silently for 80 min;
+    #    Status latched 'Install failed' with the host healthy) -----------
+
+    def test_tick_stamps_its_last_run(self):
+        self.comp.store('_convoy_gen', 42)
+        before = time.monotonic()
+        self.convoy._convoyTick(42)
+        self.assertGreaterEqual(self.convoy._last_tick_at, before)
+
+    def test_ensure_tick_alive_is_quiet_while_the_loop_runs(self):
+        self._patch(self.convoy, '_enabled', lambda: True)
+        self.convoy._last_tick_at = time.monotonic()
+        self.assertFalse(self.convoy.ensureTickAlive())
+        self.assertEqual(self._tickReschedules(), [])
+
+    def test_ensure_tick_alive_revives_a_silent_loop_once(self):
+        self._patch(self.convoy, '_enabled', lambda: True)
+        self.comp.store('_convoy_gen', 42)
+        self.convoy._last_tick_at = time.monotonic() - 10000
+        self.assertTrue(self.convoy.ensureTickAlive())
+        self.assertEqual(self.comp.fetch('_convoy_gen', 0), 43,
+                         'a revive is a kick: a fresh generation is armed')
+        self.assertLen(self._tickReschedules(), 1)
+        # the stamp is reset by the revive, so the next check is quiet
+        self.assertFalse(self.convoy.ensureTickAlive())
+        self.assertLen(self._tickReschedules(), 1)
+
+    def test_ensure_tick_alive_idles_while_disabled_and_only_stamps_first(self):
+        self._patch(self.convoy, '_enabled', lambda: False)
+        self.convoy._last_tick_at = time.monotonic() - 10000
+        self.assertFalse(self.convoy.ensureTickAlive())
+        self.assertEqual(self._tickReschedules(), [])
+        self._patch(self.convoy, '_enabled', lambda: True)
+        self.convoy.__dict__.pop('_last_tick_at', None)
+        self.assertFalse(self.convoy.ensureTickAlive(),
+                         'the first check has no history: it stamps, never kicks')
+        self.assertEqual(self._tickReschedules(), [])
 
     def test_legacy_zero_generation_is_never_orphaned(self):
         self.comp.store('_convoy_gen', 42)
