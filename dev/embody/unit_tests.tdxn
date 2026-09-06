@@ -1,10 +1,10 @@
 format: tdxn
 version: '2.1'
 build: 346
-generator: Embody/6.2.18
+generator: Embody/6.2.19
 td_build: 099.2025.33070
 source_file: Embody-6.322.toe
-exported_at: '2026-09-06T07:31:06Z'
+exported_at: '2026-09-06T18:02:46Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -37,7 +37,7 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 3437
+    rows: 4375
     cols: 5
   flags:
   - viewer
@@ -83,12 +83,6 @@ operators:
   - viewer
   position: [200, 0]
   color: [0.9, 0.3, 0.4]
-- name: test_tdn_diff
-  type: textDAT
-  parameters:
-    file: embody/unit_tests/test_tdn_diff.py
-  position: [0, -3200]
-  color: [0.9, 0.3, 0.4]
 - name: test_mcp_batch
   type: textDAT
   parameters:
@@ -102,6 +96,12 @@ operators:
   parameters:
     file: embody/unit_tests/test_shortcuts.py
   position: [200, -3600]
+  color: [0.9, 0.3, 0.4]
+- name: test_tdxn_diff
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_tdxn_diff.py
+  position: [0, -3200]
   color: [0.9, 0.3, 0.4]
 - name: test_ai_clients
   type: textDAT
@@ -129,22 +129,6 @@ operators:
   - viewer
   position: [200, -800]
   color: [0.9, 0.3, 0.4]
-- name: test_tdn_file_io
-  type: textDAT
-  parameters:
-    file: embody/unit_tests/test_tdn_file_io.py
-  flags:
-  - viewer
-  position: [600, -2200]
-  color: [0.9, 0.3, 0.4]
-- name: test_tdn_helpers
-  type: textDAT
-  parameters:
-    file: embody/unit_tests/test_tdn_helpers.py
-  flags:
-  - viewer
-  position: [200, -2200]
-  color: [0.9, 0.3, 0.4]
 - name: test_update_sync
   type: textDAT
   parameters:
@@ -164,6 +148,22 @@ operators:
   parameters:
     file: embody/unit_tests/test_envoy_bridge.py
   position: [400, -2600]
+  color: [0.9, 0.3, 0.4]
+- name: test_tdxn_file_io
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_tdxn_file_io.py
+  flags:
+  - viewer
+  position: [600, -2200]
+  color: [0.9, 0.3, 0.4]
+- name: test_tdxn_helpers
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_tdxn_helpers.py
+  flags:
+  - viewer
+  position: [200, -2200]
   color: [0.9, 0.3, 0.4]
 - name: test_claude_config
   type: textDAT
@@ -206,15 +206,6 @@ operators:
   flags:
   - viewer
   position: [0, -600]
-  color: [0.9, 0.3, 0.4]
-- name: test_tdn_sequences
-  type: textDAT
-  parameters:
-    file: embody/unit_tests/test_tdn_sequences.py
-    extension: py
-  flags:
-  - viewer
-  position: [1075, -2200]
   color: [0.9, 0.3, 0.4]
 - name: test_crud_operators
   type: textDAT
@@ -267,6 +258,15 @@ operators:
   parameters:
     file: embody/unit_tests/test_tdxn_migration.py
   position: [1200, -3800]
+  color: [0.9, 0.3, 0.4]
+- name: test_tdxn_sequences
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_tdxn_sequences.py
+    extension: py
+  flags:
+  - viewer
+  position: [1075, -2200]
   color: [0.9, 0.3, 0.4]
 - name: test_externalization
   type: textDAT
@@ -344,12 +344,6 @@ operators:
     file: embody/unit_tests/test_opencode_config.py
   position: [400, -1000]
   color: [0.9, 0.3, 0.4]
-- name: test_tdn_diff_engine
-  type: textDAT
-  parameters:
-    file: embody/unit_tests/test_tdn_diff_engine.py
-  position: [200, -3200]
-  color: [0.9, 0.3, 0.4]
 - name: test_auto_externalize
   type: textDAT
   parameters:
@@ -372,12 +366,11 @@ operators:
   - viewer
   position: [0, -2600]
   color: [0.9, 0.3, 0.4]
-- name: test_tdn_crash_safety
+- name: test_tdxn_diff_engine
   type: textDAT
   parameters:
-    file: embody/unit_tests/test_tdn_crash_safety.py
-    extension: py
-  position: [800, -2200]
+    file: embody/unit_tests/test_tdxn_diff_engine.py
+  position: [200, -3200]
   color: [0.9, 0.3, 0.4]
 - name: test_custom_parameters
   type: textDAT
@@ -405,13 +398,12 @@ operators:
     file: embody/unit_tests/test_strategy_handlers.py
   position: [600, 0]
   color: [0.9, 0.3, 0.4]
-- name: test_tdn_export_import
+- name: test_tdxn_crash_safety
   type: textDAT
   parameters:
-    file: embody/unit_tests/test_tdn_export_import.py
-  flags:
-  - viewer
-  position: [0, -2200]
+    file: embody/unit_tests/test_tdxn_crash_safety.py
+    extension: py
+  position: [800, -2200]
   color: [0.9, 0.3, 0.4]
 - name: test_duplicate_handling
   type: textDAT
@@ -443,13 +435,13 @@ operators:
     file: embody/unit_tests/test_shader_diagnostics.py
   position: [800, -3800]
   color: [0.9, 0.3, 0.4]
-- name: test_tdn_reconstruction
+- name: test_tdxn_export_import
   type: textDAT
   parameters:
-    file: embody/unit_tests/test_tdn_reconstruction.py
+    file: embody/unit_tests/test_tdxn_export_import.py
   flags:
   - viewer
-  position: [400, -2200]
+  position: [0, -2200]
   color: [0.9, 0.3, 0.4]
 - name: test_convoy_host_install
   type: textDAT
@@ -471,10 +463,18 @@ operators:
     file: embody/unit_tests/test_save_path_contracts.py
   position: [1350, 0]
   color: [0.9, 0.3, 0.4]
-- name: test_tdn_palette_catalog
+- name: test_tdxn_reconstruction
   type: textDAT
   parameters:
-    file: embody/unit_tests/test_tdn_palette_catalog.py
+    file: embody/unit_tests/test_tdxn_reconstruction.py
+  flags:
+  - viewer
+  position: [400, -2200]
+  color: [0.9, 0.3, 0.4]
+- name: test_tdxn_palette_catalog
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_tdxn_palette_catalog.py
   position: [750, 0]
   color: [0.9, 0.3, 0.4]
 - name: test_catalog_default_patch

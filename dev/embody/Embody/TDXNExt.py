@@ -2054,7 +2054,7 @@ class TDXNExt:
 		The status text and bar width are ordinary parameters on COMPs
 		inside Embody, so whatever the last export left there is captured
 		by Embody's own .tdn export and committed. A test-run label
-		('sandbox_test_tdn_export_progress -- 400 / 1,000 operators (40%)')
+		('sandbox_test_tdxn_export_progress -- 400 / 1,000 operators (40%)')
 		reached the repository this way and survived several releases.
 		Resetting to the parameter defaults means the dialog contributes
 		NOTHING to the exported document (TDXN omits default values).

@@ -136,26 +136,26 @@ AI-client connectivity tier, listed separately under
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_tdn_reconstruction` | 209 | Reconstruction round-trip fidelity + script-error reporting in the rebuild report |
-| `test_tdn_file_io` | 92 | TDXN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
-| `test_tdn_helpers` | 67 | TDXN serialization utility functions |
-| `test_tdn_export_import` | 48 | Network export/import + storage round-trip |
-| `test_tdn_crash_safety` | 35 | Atomic writes, backup rotation, validation |
-| `test_tdn_sequences` | 27 | Parameter / operator sequence round-trip |
-| `test_tdn_diff_engine` | 25 | TDXN structural diff engine |
-| `test_tdn_palette_catalog` | 34 | Palette-clone detection and handling |
-| `test_tdn_exclude` | 21 | `tdn_exclude` tag (app-managed subtree invisibility) |
-| `test_tdn_stability_hardening` | 21 | Import validation, DAT editability capture, flag defaults, stale cleanup, orphan shell recovery |
-| `test_tdn_mode` | 15 | Tdnmode gating (off / export / full) |
+| `test_tdxn_reconstruction` | 209 | Reconstruction round-trip fidelity + script-error reporting in the rebuild report |
+| `test_tdxn_file_io` | 92 | TDXN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
+| `test_tdxn_helpers` | 67 | TDXN serialization utility functions |
+| `test_tdxn_export_import` | 48 | Network export/import + storage round-trip |
+| `test_tdxn_crash_safety` | 35 | Atomic writes, backup rotation, validation |
+| `test_tdxn_sequences` | 27 | Parameter / operator sequence round-trip |
+| `test_tdxn_diff_engine` | 25 | TDXN structural diff engine |
+| `test_tdxn_palette_catalog` | 34 | Palette-clone detection and handling |
+| `test_tdxn_exclude` | 21 | `tdn_exclude` tag (app-managed subtree invisibility) |
+| `test_tdxn_stability_hardening` | 21 | Import validation, DAT editability capture, flag defaults, stale cleanup, orphan shell recovery |
+| `test_tdxn_mode` | 15 | Tdnmode gating (off / export / full) |
 | `test_dat_restoration` | 20 | DAT restoration from disk on startup |
-| `test_tdn_safety_guards` | 14 | At-risk storage / callback-DAT protection |
-| `test_tdn_yaml` | 14 | TDXN v2.0 YAML emitter / parser |
-| `test_tdn_diff` | 11 | `diff_tdn` tool (live-vs-disk, project-wide) |
-| `test_tdn_fingerprint` | 15 | Param-aware dirty detection (fingerprint) |
-| `test_tdn_annotation_export` | 10 | Annotation-only `.tdxn` export (annotateCOMP not double-captured) |
-| `test_tdn_external_connections` | 6 | External wire capture/restore across strip |
-| `test_tdn_export_progress` | 6 | Chunked TDXN export progress dialog + cancellation (and that it leaves no transient state behind) |
-| `test_tdn_roundtrip_invariant` | 6 | Writer/reader contract: the exporter must never emit a document its own importer rejects (no empty sequence lists, no sequence silently dropped from an uncooked POP) |
+| `test_tdxn_safety_guards` | 14 | At-risk storage / callback-DAT protection |
+| `test_tdxn_yaml` | 14 | TDXN v2.0 YAML emitter / parser |
+| `test_tdxn_diff` | 11 | `diff_tdn` tool (live-vs-disk, project-wide) |
+| `test_tdxn_fingerprint` | 15 | Param-aware dirty detection (fingerprint) |
+| `test_tdxn_annotation_export` | 10 | Annotation-only `.tdxn` export (annotateCOMP not double-captured) |
+| `test_tdxn_external_connections` | 6 | External wire capture/restore across strip |
+| `test_tdxn_export_progress` | 6 | Chunked TDXN export progress dialog + cancellation (and that it leaves no transient state behind) |
+| `test_tdxn_roundtrip_invariant` | 6 | Writer/reader contract: the exporter must never emit a document its own importer rejects (no empty sequence lists, no sequence silently dropped from an uncooked POP) |
 
 ### Community & Collection (6 suites, 123 tests)
 

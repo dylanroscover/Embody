@@ -41,7 +41,7 @@ NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 # Flags the TDXN exporter writes, in TDXNExt.DEFAULT_FLAGS order. The dirty
 # fingerprint must see every one of them: a flag the exporter records but the
 # fingerprint ignores leaves the COMP undirty, so the edit never reaches disk.
-# test_tdn_fingerprint asserts this list equals TDXNExt.DEFAULT_FLAGS.
+# test_tdxn_fingerprint asserts this list equals TDXNExt.DEFAULT_FLAGS.
 _TDN_FINGERPRINT_FLAGS = (
     'bypass', 'lock', 'display', 'render', 'viewer', 'expose',
     'allowCooking', 'cloneImmune', 'componentCloneImmune',
@@ -6112,7 +6112,7 @@ class EmbodyExt:
     # writes but the fingerprint cannot see leaves the COMP undirty, so the
     # edit never reaches disk -- the field looks supported and silently is
     # not (review finding 2026-09-04). Keep in step with
-    # TDXNExt._exportCustomParGroup; test_tdn_fingerprint pins the pairing.
+    # TDXNExt._exportCustomParGroup; test_tdxn_fingerprint pins the pairing.
     _DEF_FINGERPRINT_ATTRS = (
         'style', 'label', 'default', 'min', 'max', 'clampMin', 'clampMax',
         'normMin', 'normMax', 'readOnly', 'password', 'styleCloneImmune',
@@ -6179,7 +6179,7 @@ class EmbodyExt:
             # drift twice (2026-08-30, 2026-09-04): a flag the exporter
             # writes but the fingerprint cannot see leaves the COMP undirty,
             # so the change never reaches disk. Read from the shared name
-            # list; test_tdn_fingerprint asserts the two stay equal.
+            # list; test_tdxn_fingerprint asserts the two stay equal.
             flags = tuple(getattr(c, name, None)
                           for name in _TDN_FINGERPRINT_FLAGS)
             dock = getattr(c, 'dock', None)
