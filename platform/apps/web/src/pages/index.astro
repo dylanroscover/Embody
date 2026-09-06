@@ -41,20 +41,29 @@ try {
 // number lies in the gap). Edge-cached 5 min; on any failure the meta
 // line simply omits the version.
 let installVersion = "";
+// The release the version names, for the notes link. Falls back to
+// /releases/latest when the manifest has no usable tag.
+let installTag = "";
 try {
   const mfRes = await fetch(
     "https://github.com/dylanroscover/Embody/releases/latest/download/embody-release.json",
     { cf: { cacheTtl: 300, cacheEverything: true } } as RequestInit
   );
   if (mfRes.ok) {
-    const mf = (await mfRes.json()) as { version?: unknown };
+    const mf = (await mfRes.json()) as { version?: unknown; tag?: unknown };
     if (typeof mf.version === "string" && /^[\w.-]+$/.test(mf.version)) {
       installVersion = mf.version;
+    }
+    if (typeof mf.tag === "string" && /^[\w.-]+$/.test(mf.tag)) {
+      installTag = mf.tag;
     }
   }
 } catch {
   // keep the meta line version-free
 }
+const RELEASE_NOTES_URL = installTag
+  ? `https://github.com/dylanroscover/Embody/releases/tag/${installTag}`
+  : "https://github.com/dylanroscover/Embody/releases/latest";
 
 const INSTALL_CMD =
   "import requests, hashlib, tempfile, os; h = {'User-Agent': 'Embody-Install'}; mf = requests.get('https://github.com/dylanroscover/Embody/releases/latest/download/embody-release.json', headers=h, timeout=30).json(); b = requests.get('https://github.com/dylanroscover/Embody/releases/download/%s/%s' % (mf['tag'], mf['asset']), headers=h, timeout=120).content; assert hashlib.sha256(b).hexdigest() == mf['sha256'], 'checksum mismatch'; f = os.path.join(tempfile.gettempdir(), mf['asset']); open(f, 'wb').write(b); n = ui.panes.current; n = n if n.type == PaneType.NETWORKEDITOR else next(x for x in ui.panes if x.type == PaneType.NETWORKEDITOR); print('Embody', mf['version'], 'installed at', n.owner.loadTox(f).path)";
@@ -123,7 +132,21 @@ const jsonLd = {
             <span class="copy-button__label">copy</span>
           </button>
         </div>
-        <p class="install__meta">{installVersion && <>v{installVersion} &middot; </>}same as tox drag and drop</p>
+        <p class="install__meta">
+          {installVersion && (
+            <>
+              v{installVersion}{" "}
+              <a
+                class="install__notes"
+                href={RELEASE_NOTES_URL}
+                aria-label={`release notes for v${installVersion}`}
+              >
+                release notes
+              </a>{" "}
+              &middot;{" "}
+            </>
+          )}same as tox drag and drop
+        </p>
       </div>
 
       <div class="hero__ctas">
@@ -471,6 +494,20 @@ const jsonLd = {
     font-size: 0.78rem;
     color: var(--text-faint);
     letter-spacing: 0.01em;
+  }
+  /* Faint like the rest of the meta line until hovered -- it is a footnote
+     beside the version, not a CTA competing with Download. */
+  .install__notes {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+    text-decoration-color: currentColor;
+    opacity: 0.85;
+  }
+  .install__notes:hover,
+  .install__notes:focus-visible {
+    color: var(--text);
+    opacity: 1;
   }
   /* Without JS the global copy handler never runs: hide the button, the
      command stays plain selectable text (same pattern as the no-js nav). */
