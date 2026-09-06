@@ -3464,10 +3464,10 @@ class EnvoyMCPServer:
             })
 
         @self.mcp.tool()
-        def read_tdn(comp_path: str = "/",
-                     include_dat_content: bool = None,
-                     max_depth: int = None,
-                     embed_all: bool = False) -> dict:
+        def read_tdxn(comp_path: str = "/",
+                      include_dat_content: bool = None,
+                      max_depth: int = None,
+                      embed_all: bool = False) -> dict:
             """
             Read live authored state under comp_path as a compact TDXN dict.
 
@@ -3489,11 +3489,26 @@ class EnvoyMCPServer:
                 'max_depth': max_depth,
                 'embed_all': embed_all,
             })
+
         @self.mcp.tool()
-        def diff_tdn(target: str = "",
-                     max_changed_ops: int = 200,
-                     max_bytes: int = 60000) -> dict:
-            """Diff live in-memory TDXN state against on-disk .tdn files.
+        def read_tdn(comp_path: str = "/",
+                     include_dat_content: bool = None,
+                     max_depth: int = None,
+                     embed_all: bool = False) -> dict:
+            """DEPRECATED alias for read_tdxn -- prefer read_tdxn.
+
+            Kept because the old name is published: it is in shipped rule
+            files, saved agent prompts and third-party integrations, and
+            removing it would break them silently. Identical behaviour.
+            """
+            return read_tdxn(comp_path, include_dat_content, max_depth,
+                             embed_all)
+
+        @self.mcp.tool()
+        def diff_tdxn(target: str = "",
+                      max_changed_ops: int = 200,
+                      max_bytes: int = 60000) -> dict:
+            """Diff live in-memory TDXN state against on-disk .tdxn files.
 
             Empty target (or "/" / "project") returns a project summary; a
             COMP path or .tdn filename returns that COMP in detail. Read-only.
@@ -3511,6 +3526,17 @@ class EnvoyMCPServer:
                 'max_changed_ops': max_changed_ops,
                 'max_bytes': max_bytes,
             })
+
+        @self.mcp.tool()
+        def diff_tdn(target: str = "",
+                     max_changed_ops: int = 200,
+                     max_bytes: int = 60000) -> dict:
+            """DEPRECATED alias for diff_tdxn -- prefer diff_tdxn.
+
+            Kept for the same reason as read_tdn: the name is published.
+            Identical behaviour.
+            """
+            return diff_tdxn(target, max_changed_ops, max_bytes)
 
 
         # === TOP Capture ===

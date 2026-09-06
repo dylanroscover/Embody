@@ -260,9 +260,30 @@ class EmbodyExt:
                 names.add(new)
                 renamed += 1
         if renamed:
+            # __init__ runs before the logging pars are readable, so this
+            # log is swallowed at migration time (that is what _logSafe is
+            # for). Re-announce it a few frames later, where the user can
+            # actually see that their parameters were renamed -- a silent
+            # migration of 19 parameter groups is not acceptable.
+            self._pending_tdxn_par_migration = renamed
+            try:
+                run(f"op('{self.my.path}').ext.Embody"
+                    f"._announceTdxnParMigration()", delayFrames=60)
+            except Exception:
+                pass
             self._logSafe(
                 f'Renamed {renamed} TDN-era parameter groups to TDXN', 'INFO')
         return renamed
+
+    def _announceTdxnParMigration(self) -> None:
+        """Deferred half of _migrateTdxnParNames' logging (see there)."""
+        n = getattr(self, '_pending_tdxn_par_migration', 0)
+        if not n:
+            return
+        self._pending_tdxn_par_migration = 0
+        self._logSafe(
+            f'Upgraded {n} TDN-era parameter groups to their TDXN names '
+            f'(values preserved; saved settings migrated with them)', 'INFO')
 
     def _logSafe(self, msg: str, level: str = 'INFO') -> None:
         """Log without ever raising -- callable from init-time migrations

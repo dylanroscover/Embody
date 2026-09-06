@@ -39,7 +39,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 | | What | Why it matters |
 |---|---|---|
-| 🤖 | **Envoy MCP Server** | 66 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
+| 🤖 | **Envoy MCP Server** | 68 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
 | 📄 | **TDXN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdxn` file. |
 | 📦 | **Automatic Restoration** | Externalized files are written on save, so any COMP can be recovered from disk. By default (Export-on-Save) the `.toe` stays authoritative on open; switch to Roundtrip mode to rebuild TDXN-strategy COMPs from `.tdxn` on every open. |
 | 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
