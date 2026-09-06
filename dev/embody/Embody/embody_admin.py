@@ -1386,6 +1386,33 @@ def defer_save_settings(ext) -> None:
         run(f"op('{ext.my}').ext.Embody._saveSettings()", delayFrames=1)
 
 
+def normalize_legacy_par_keys(params: dict, renames: dict) -> dict:
+    """Map TDN-era config.json keys onto their current TDXN names.
+
+    config.json is keyed by PARAMETER NAME, so renaming a parameter
+    without this drops that setting back to its default on every existing
+    install -- silently, because a missing key is indistinguishable from
+    "never set". Pure and side-effect free so it can be tested against a
+    real legacy config; `renames` is EmbodyExt._TDXN_PAR_RENAMES, keyed by
+    ParGroup BASE name, so RGBA components (Tdntagcolorr) are matched by
+    stripping their trailing component letter.
+
+    Keys with no mapping pass through untouched -- notably 'Tdnenable',
+    the pre-6.1 key the mode-migration nudge still reads.
+    """
+    if not renames:
+        return params
+    out = {}
+    for key, entry in params.items():
+        base, suffix = key, ''
+        if (key not in renames
+                and key[-1:] in ('r', 'g', 'b', 'a')
+                and key[:-1] in renames):
+            base, suffix = key[:-1], key[-1]
+        out[renames.get(base, base) + suffix] = entry
+    return out
+
+
 def restore_settings(ext, kick_envoy: bool = False) -> bool:
     """Restore parameter values from .embody/config.json. Returns True if restored.
     Sets _restoring_settings flag to suppress onValueChange side effects.
@@ -1431,19 +1458,9 @@ def restore_settings(ext, kick_envoy: bool = False) -> bool:
     params = data['params']
     # config.json is keyed by PARAMETER NAME, so the TDN -> TDXN rename
     # would silently drop each of these settings back to its default on
-    # every existing install. Normalize legacy keys to the current names
-    # first; the map lives on EmbodyExt beside the live-par migration.
-    renames = getattr(ext, '_TDXN_PAR_RENAMES', None) or {}
-    if renames:
-        migrated = {}
-        for key, entry in params.items():
-            base, suffix = key, ''
-            if (key not in renames
-                    and key[-1:] in ('r', 'g', 'b', 'a')
-                    and key[:-1] in renames):
-                base, suffix = key[:-1], key[-1]   # RGBA component
-            migrated[renames.get(base, base) + suffix] = entry
-        params = migrated
+    # every existing install (see normalize_legacy_par_keys).
+    params = normalize_legacy_par_keys(
+        params, getattr(ext, '_TDXN_PAR_RENAMES', None) or {})
     restored = 0
     ext._restoring_settings = True
     try:
